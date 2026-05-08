@@ -14,22 +14,27 @@
  * limitations under the License.
  */
 
-import {Routes} from '@angular/router';
-
-/**
- * Declarative routing table mapping URL paths to feature components
- * and guards within the A2UI Composer application.
- */
-export const routes: Routes = [
-  {
-    path: '',
-    loadComponent: () =>
-      import('./shell/composer-workspace.component').then(m => m.ComposerWorkspaceComponent),
-    title: 'A2UI Composer Workspace',
-  },
-  {
-    path: 'gallery',
-    loadComponent: () => import('./gallery/gallery.component').then(m => m.GalleryComponent),
-    title: 'A2UI Components Gallery',
-  },
-];
+.workspace-container {
+  display: flex;
+  gap: 16px;
+  height: 100%;
+}
+.left-panel {
+  flex: 0 0 300px;
+}
+.right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.preview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+.debug-section {
+  flex: 0 0 200px;
+  overflow-y: auto;
+}
