@@ -15,6 +15,7 @@
  */
 
 import {Injectable} from '@angular/core';
+import {QueryParser} from './query-parser';
 
 /**
  * Represents the resolved runtime configuration for the application,
@@ -60,6 +61,14 @@ export class StartupResolutionService {
         console.log('Static configuration loaded with allowOverrides: false. Locking context.');
         this.isLockedContext = true;
 
+        return this.resolvedUrl;
+      }
+    }
+
+    if (!this.isLockedContext) {
+      const queryCandidate = QueryParser.parseRendererUrl(globalThis.location?.search || '');
+      if (queryCandidate) {
+        this.resolvedUrl = queryCandidate;
         return this.resolvedUrl;
       }
     }

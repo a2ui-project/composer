@@ -41,6 +41,21 @@ describe('StartupResolutionService', () => {
     expect(service.isContextLocked()).toBe(true);
   });
 
+  it('evaluates query parameters prior to local storage when overrides are allowed', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({defaultRendererUrl: 'http://base:3000', allowOverrides: true}),
+    } as Response);
+
+    globalThis.history.pushState({}, '', '?renderer=http://query:3000');
+
+    const url = await service.resolveStartupConfiguration();
+    expect(url).toBe('http://query:3000/');
+
+    // Restore path/search to not pollute sibling test cases
+    globalThis.history.pushState({}, '', '/');
+  });
+
   it('falls back to checking storage when config fetch fails or times out', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Timeout'));
     const warnSpy = vi.spyOn(console, 'warn');
