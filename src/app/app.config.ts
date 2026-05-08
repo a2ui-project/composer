@@ -14,14 +14,27 @@
  * limitations under the License.
  */
 
-import {ApplicationConfig, provideZonelessChangeDetection} from '@angular/core';
+import {
+  ApplicationConfig,
+  provideZonelessChangeDetection,
+  provideAppInitializer,
+  inject,
+} from '@angular/core';
 import {provideRouter} from '@angular/router';
 import {routes} from './app.routes';
+import {StartupResolutionService} from './shell/startup-resolution.service';
 
 /**
  * Application-wide Angular configuration defining core providers,
  * routing mechanisms, and initializers for the Composer shell.
  */
 export const appConfig: ApplicationConfig = {
-  providers: [provideZonelessChangeDetection(), provideRouter(routes)],
+  providers: [
+    provideZonelessChangeDetection(),
+    provideRouter(routes),
+    provideAppInitializer(() => {
+      const startupResolutionService = inject(StartupResolutionService);
+      return startupResolutionService.resolveStartupConfiguration();
+    }),
+  ],
 };
