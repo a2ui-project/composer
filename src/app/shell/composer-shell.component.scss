@@ -14,15 +14,22 @@
  * limitations under the License.
  */
 
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 .composer-header {
   position: relative;
   z-index: 2;
+  flex-shrink: 0;
 }
 .spacer {
   flex: 1 1 auto;
 }
 .composer-sidenav-container {
-  height: calc(100% - 64px);
+  flex: 1;
+  min-height: 0;
 }
 .composer-sidenav {
   width: 250px;
@@ -30,4 +37,5 @@
 .composer-content {
   padding: 16px;
   box-sizing: border-box;
+  height: 100%;
 }

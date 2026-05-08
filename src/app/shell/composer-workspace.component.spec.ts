@@ -19,6 +19,7 @@ import {ComposerWorkspaceComponent} from './composer-workspace.component';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
 import {describe, it, expect, beforeEach} from 'vitest';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
 
 describe('ComposerWorkspaceComponent Dashboard', () => {
   let fixture: ComponentFixture<ComposerWorkspaceComponent>;
@@ -27,6 +28,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ComposerWorkspaceComponent],
+      providers: [provideNoopAnimations()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ComposerWorkspaceComponent);
@@ -42,5 +44,14 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     expect(await harness.getRenderedFrameHarness()).toBeTruthy();
     expect(await harness.getRawFrameHarness()).toBeTruthy();
     expect(await harness.getDataModelHarness()).toBeTruthy();
+  });
+
+  it('renders debugging components inside a mat-tab-group with appropriate labels', () => {
+    const textContent = fixture.nativeElement.textContent;
+    expect(textContent).toContain('Data Model');
+    expect(textContent).toContain('Events');
+    expect(textContent).toContain('Errors');
+    expect(textContent).toContain('Raw Messages');
+    expect(textContent).toContain('Mock Rules');
   });
 });

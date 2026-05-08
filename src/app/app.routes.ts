@@ -24,12 +24,23 @@ export const routes: Routes = [
   {
     path: '',
     loadComponent: () =>
-      import('./shell/composer-workspace.component').then(m => m.ComposerWorkspaceComponent),
-    title: 'A2UI Composer Workspace',
-  },
-  {
-    path: 'gallery',
-    loadComponent: () => import('./gallery/gallery.component').then(m => m.GalleryComponent),
-    title: 'A2UI Components Gallery',
+      import('./shell/composer-shell.component').then(m => m.ComposerShellComponent),
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./shell/composer-workspace.component').then(m => m.ComposerWorkspaceComponent),
+        title: 'A2UI Composer Workspace',
+      },
+      {
+        path: 'gallery',
+        loadComponent: () => import('./gallery/gallery.component').then(m => m.GalleryComponent),
+        title: 'A2UI Components Gallery',
+      },
+      {
+        path: '**',
+        redirectTo: '',
+      },
+    ],
   },
 ];

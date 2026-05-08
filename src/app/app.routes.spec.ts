@@ -15,29 +15,30 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {Router, provideRouter} from '@angular/router';
+import {provideRouter} from '@angular/router';
 import {routes} from './app.routes';
 import {describe, it, expect, beforeEach} from 'vitest';
 
 describe('App Routes', () => {
-  let router: Router;
-
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [provideRouter(routes)],
     });
-    router = TestBed.inject(Router);
   });
 
   it('defines routing pathway for the central workspace dashboard', () => {
-    const route = routes.find(r => r.path === '');
-    expect(route).toBeTruthy();
-    expect(route?.title).toBe('A2UI Composer Workspace');
+    const parentRoute = routes.find(r => r.path === '');
+    expect(parentRoute).toBeTruthy();
+    const childRoute = parentRoute?.children?.find(r => r.path === '');
+    expect(childRoute).toBeTruthy();
+    expect(childRoute?.title).toBe('A2UI Composer Workspace');
   });
 
   it('defines routing pathway for the components gallery placeholder', () => {
-    const route = routes.find(r => r.path === 'gallery');
-    expect(route).toBeTruthy();
-    expect(route?.title).toBe('A2UI Components Gallery');
+    const parentRoute = routes.find(r => r.path === '');
+    expect(parentRoute).toBeTruthy();
+    const childRoute = parentRoute?.children?.find(r => r.path === 'gallery');
+    expect(childRoute).toBeTruthy();
+    expect(childRoute?.title).toBe('A2UI Components Gallery');
   });
 });

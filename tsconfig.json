@@ -16,5 +16,6 @@
     "target": "ES2022",
     "module": "ESNext",
     "lib": ["ES2022", "DOM"]
-  }
+  },
+  "exclude": ["**/*.spec.ts", "playwright.config.ts", "src/test-setup.ts", "vitest.config.ts"]
 }

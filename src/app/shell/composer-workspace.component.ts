@@ -23,6 +23,7 @@ import {EventsComponent} from '../debug/events/events.component';
 import {ErrorsComponent} from '../debug/errors/errors.component';
 import {RawMessagesComponent} from '../debug/raw-messages/raw-messages.component';
 import {MockRulesComponent} from '../debug/mock-rules/mock-rules.component';
+import {MatTabsModule} from '@angular/material/tabs';
 
 @Component({
   selector: 'a2ui-composer-workspace',
@@ -36,6 +37,7 @@ import {MockRulesComponent} from '../debug/mock-rules/mock-rules.component';
     ErrorsComponent,
     RawMessagesComponent,
     MockRulesComponent,
+    MatTabsModule,
   ],
   templateUrl: './composer-workspace.component.ng.html',
   styleUrl: './composer-workspace.component.scss',
