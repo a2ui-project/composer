@@ -18,4 +18,17 @@ import {ComponentHarness} from '@angular/cdk/testing';
 
 export class ComposerShellHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-shell';
+
+  private getHeaderTitle = this.locatorFor('.composer-header span');
+  private getResetButton = this.locatorFor('button');
+
+  async getHeaderTitleText(): Promise<string> {
+    const title = await this.getHeaderTitle();
+    return title.text();
+  }
+
+  async clickResetButton(): Promise<void> {
+    const button = await this.getResetButton();
+    await button.click();
+  }
 }

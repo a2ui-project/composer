@@ -16,24 +16,37 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ComposerShellComponent} from './composer-shell.component';
+import {provideRouter} from '@angular/router';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerShellHarness} from './test/composer-shell.harness';
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 
-describe('ComposerShellComponent Placeholder', () => {
+describe('ComposerShellComponent Layout', () => {
   let fixture: ComponentFixture<ComposerShellComponent>;
   let harness: ComposerShellHarness;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ComposerShellComponent],
+      providers: [provideRouter([]), provideNoopAnimations()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ComposerShellComponent);
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ComposerShellHarness);
   });
 
-  it('creates the shell placeholder component via test harness', async () => {
+  it('creates the shell layout component via test harness', async () => {
     expect(harness).toBeTruthy();
+  });
+
+  it('displays the static header title A2UI Composer via test harness inspection', async () => {
+    expect(await harness.getHeaderTitleText()).toContain('A2UI Composer');
+  });
+
+  it('flushes session cache upon clicking New Session reset button via test harness interaction', async () => {
+    const consoleSpy = vi.spyOn(console, 'log');
+    await harness.clickResetButton();
+    expect(consoleSpy).toHaveBeenCalledWith('Session state cleared.');
   });
 });

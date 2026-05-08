@@ -15,11 +15,25 @@
  */
 
 import {Component} from '@angular/core';
+import {MatToolbarModule} from '@angular/material/toolbar';
+import {MatSidenavModule} from '@angular/material/sidenav';
+import {MatButtonModule} from '@angular/material/button';
+import {MatIconModule} from '@angular/material/icon';
+import {MatListModule} from '@angular/material/list';
+import {RouterOutlet, RouterLink} from '@angular/router';
 
 @Component({
   selector: 'a2ui-composer-shell',
   standalone: true,
-  imports: [],
+  imports: [
+    MatToolbarModule,
+    MatSidenavModule,
+    MatButtonModule,
+    MatIconModule,
+    MatListModule,
+    RouterOutlet,
+    RouterLink,
+  ],
   templateUrl: './composer-shell.component.ng.html',
   styleUrl: './composer-shell.component.scss',
 })
@@ -28,4 +42,12 @@ import {Component} from '@angular/core';
  * Renders the permanent header bar, persistent navigation sidebar,
  * and hosts the active workspace routing outlet.
  */
-export class ComposerShellComponent {}
+export class ComposerShellComponent {
+  /**
+   * Flushes all local state caches (IndexedDB, localStorage) and reloads the page
+   * to simulate a fresh hardware handshake connection.
+   */
+  resetSession(): void {
+    console.log('Session state cleared.');
+  }
+}

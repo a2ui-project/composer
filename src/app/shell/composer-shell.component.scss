@@ -14,4 +14,20 @@
  * limitations under the License.
  */
 
-/* Shell placeholder styles */
+.composer-header {
+  position: relative;
+  z-index: 2;
+}
+.spacer {
+  flex: 1 1 auto;
+}
+.composer-sidenav-container {
+  height: calc(100% - 64px);
+}
+.composer-sidenav {
+  width: 250px;
+}
+.composer-content {
+  padding: 16px;
+  box-sizing: border-box;
+}

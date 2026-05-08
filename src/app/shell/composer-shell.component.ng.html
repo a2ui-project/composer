@@ -14,4 +14,21 @@
  limitations under the License.
 -->
 
-<div class="composer-shell-placeholder">Shell Placeholder</div>
+<mat-toolbar color="primary" class="composer-header">
+  <span>A2UI Composer</span>
+  <span class="spacer"></span>
+  <button mat-raised-button color="accent" (click)="resetSession()">New Session</button>
+</mat-toolbar>
+
+<mat-sidenav-container class="composer-sidenav-container">
+  <mat-sidenav mode="side" opened class="composer-sidenav">
+    <mat-nav-list>
+      <a mat-list-item routerLink="/">Composer Workspace</a>
+      <a mat-list-item routerLink="/gallery">Components Gallery</a>
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <mat-sidenav-content class="composer-content">
+    <router-outlet></router-outlet>
+  </mat-sidenav-content>
+</mat-sidenav-container>
