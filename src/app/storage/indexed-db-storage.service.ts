@@ -65,19 +65,141 @@ export class IndexedDbStorageService {
     return this.dbPromise;
   }
 
-  async getCatalogRecord(rendererUrl: string): Promise<CachedCatalogRecord | null> {
+  private async executeTransaction<T>(
+    mode: IDBTransactionMode,
+    operation: (store: IDBObjectStore, tx: IDBTransaction) => IDBRequest<T> | void,
+    onComplete?: () => void,
+  ): Promise<T | void> {
     const db = await this.openDatabase();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readonly');
+    return new Promise<T | void>((resolve, reject) => {
+      const tx = db.transaction(this.storeName, mode);
       const store = tx.objectStore(this.storeName);
-      const request = store.get(rendererUrl);
 
-      request.onsuccess = () => {
-        const record = request.result as CachedCatalogRecord | undefined;
-        resolve(record || null);
+      let requestResult: T | void = undefined;
+      let operationRequest: IDBRequest<T> | null = null;
+
+      try {
+        const res = operation(store, tx);
+        if (res && 'onsuccess' in res) {
+          operationRequest = res as IDBRequest<T>;
+        }
+      } catch (err) {
+        reject(err);
+        return;
+      }
+
+      tx.oncomplete = () => {
+        if (onComplete) {
+          onComplete();
+        }
+        resolve(requestResult);
       };
 
-      request.onerror = () => reject(request.error);
+      tx.onabort = () => reject(tx.error);
+      tx.onerror = () => reject(tx.error);
+
+      if (operationRequest) {
+        operationRequest.onsuccess = () => {
+          requestResult = operationRequest!.result;
+        };
+        operationRequest.onerror = () => {
+          reject(operationRequest!.error);
+        };
+      }
     });
+  }
+
+  async getCatalogRecord(rendererUrl: string): Promise<CachedCatalogRecord | null> {
+    const result = await this.executeTransaction<CachedCatalogRecord | undefined>(
+      'readonly',
+      store => store.get(rendererUrl),
+    );
+    return result || null;
+  }
+
+  async saveCatalogRecord(record: CachedCatalogRecord): Promise<void> {
+    record.lastAccessed = Date.now();
+
+    await this.enforceLruCeiling(10);
+
+    try {
+      await this.executeAtomicWrite(record);
+    } catch (err: any) {
+      if (this.isQuotaError(err)) {
+        console.warn(
+          'QuotaExceededError encountered during write transaction. Triggering aggressive evict-down-to-3 fallback.',
+        );
+        await this.enforceLruCeiling(3);
+
+        try {
+          await this.executeAtomicWrite(record);
+        } catch (retryErr: any) {
+          if (this.isQuotaError(retryErr)) {
+            console.error(
+              'Extreme second QuotaExceededError encountered during retry. Flushing ALL remaining records.',
+            );
+            await this.flushAllRecords();
+            await this.executeAtomicWrite(record);
+          } else {
+            throw retryErr;
+          }
+        }
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  private async executeAtomicWrite(record: CachedCatalogRecord): Promise<void> {
+    await this.executeTransaction<void>('readwrite', store => {
+      store.put(record);
+    });
+  }
+
+  private async enforceLruCeiling(maxCapacity: number): Promise<void> {
+    const allRecords = await this.getAllCatalogRecords();
+    if (allRecords.length >= maxCapacity) {
+      allRecords.sort((a, b) => a.lastAccessed - b.lastAccessed);
+      const excessCount = allRecords.length - maxCapacity + 1;
+      const recordsToEvict = allRecords.slice(0, excessCount);
+
+      await this.executeTransaction<void>('readwrite', store => {
+        for (const r of recordsToEvict) {
+          store.delete(r.rendererUrl);
+          console.log(`Evicted oldest catalog record via LRU policy: ${r.rendererUrl}`);
+        }
+      });
+    }
+  }
+
+  async getAllCatalogRecords(): Promise<CachedCatalogRecord[]> {
+    const result = await this.executeTransaction<CachedCatalogRecord[]>('readonly', store =>
+      store.getAll(),
+    );
+    return result || [];
+  }
+
+  async deleteCatalogRecord(rendererUrl: string): Promise<void> {
+    await this.executeTransaction<void>('readwrite', store => {
+      store.delete(rendererUrl);
+    });
+  }
+
+  async flushAllRecords(): Promise<void> {
+    await this.executeTransaction<void>(
+      'readwrite',
+      store => {
+        store.clear();
+      },
+      () => {
+        console.warn('Successfully flushed all catalog records from storage.');
+      },
+    );
+  }
+
+  private isQuotaError(err: any): boolean {
+    return (
+      err && (err.name === 'QuotaExceededError' || err.message?.includes('QuotaExceededError'))
+    );
   }
 }
