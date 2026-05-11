@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {Component} from '@angular/core';
+import {Component, Inject} from '@angular/core';
 import {MatToolbarModule} from '@angular/material/toolbar';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatListModule} from '@angular/material/list';
 import {RouterOutlet, RouterLink} from '@angular/router';
-
+import {DOCUMENT} from '@angular/common';
 @Component({
   selector: 'a2ui-composer-shell',
   standalone: true,
@@ -43,6 +43,22 @@ import {RouterOutlet, RouterLink} from '@angular/router';
  * and hosts the active workspace routing outlet.
  */
 export class ComposerShellComponent {
+  isDarkTheme = false;
+
+  constructor(@Inject(DOCUMENT) private document: Document) {}
+
+  /**
+   * Switches between light and dark visual design system palettes.
+   */
+  toggleTheme(): void {
+    this.isDarkTheme = !this.isDarkTheme;
+    if (this.isDarkTheme) {
+      this.document.body.classList.add('dark-theme');
+    } else {
+      this.document.body.classList.remove('dark-theme');
+    }
+  }
+
   /**
    * Flushes all local state caches (IndexedDB, localStorage) and reloads the page
    * to simulate a fresh hardware handshake connection.

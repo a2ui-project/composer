@@ -15,12 +15,16 @@
  */
 
 import {ComponentHarness} from '@angular/cdk/testing';
+import {MatSidenavHarness} from '@angular/material/sidenav/testing';
 
 export class ComposerShellHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-shell';
 
-  private getHeaderTitle = this.locatorFor('.composer-header span');
-  private getResetButton = this.locatorFor('button');
+  private getHeaderTitle = this.locatorFor('.composer-header > span');
+  private getThemeToggleButton = this.locatorFor('button[aria-label*="theme"]');
+  private getHamburgerButton = this.locatorFor('button.hamburger-button');
+  private getSidenav = this.locatorFor(MatSidenavHarness);
+  private getResetButton = this.locatorFor('button.reset-session-button');
 
   async getHeaderTitleText(): Promise<string> {
     const title = await this.getHeaderTitle();
@@ -30,5 +34,20 @@ export class ComposerShellHarness extends ComponentHarness {
   async clickResetButton(): Promise<void> {
     const button = await this.getResetButton();
     await button.click();
+  }
+
+  async clickThemeToggleButton(): Promise<void> {
+    const button = await this.getThemeToggleButton();
+    await button.click();
+  }
+
+  async clickHamburgerButton(): Promise<void> {
+    const button = await this.getHamburgerButton();
+    await button.click();
+  }
+
+  async isSidenavOpened(): Promise<boolean> {
+    const sidenav = await this.getSidenav();
+    return sidenav.isOpen();
   }
 }

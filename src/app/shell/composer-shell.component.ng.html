@@ -14,14 +14,33 @@
  limitations under the License.
 -->
 
-<mat-toolbar color="primary" class="composer-header">
+<mat-toolbar class="composer-header">
+  <button
+    mat-icon-button
+    class="hamburger-button"
+    (click)="sidenav.toggle()"
+    aria-label="Toggle sidenav"
+  >
+    <mat-icon>menu</mat-icon>
+  </button>
   <span>A2UI Composer</span>
   <span class="spacer"></span>
-  <button mat-raised-button color="accent" (click)="resetSession()">New Session</button>
+  <button mat-button class="reset-session-button" color="primary" (click)="resetSession()">
+    New Session
+  </button>
+  <button
+    mat-icon-button
+    class="theme-toggle-button"
+    color="primary"
+    (click)="toggleTheme()"
+    [attr.aria-label]="isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'"
+  >
+    <mat-icon>{{ isDarkTheme ? 'light_mode' : 'dark_mode' }}</mat-icon>
+  </button>
 </mat-toolbar>
 
 <mat-sidenav-container class="composer-sidenav-container">
-  <mat-sidenav mode="side" opened class="composer-sidenav">
+  <mat-sidenav #sidenav mode="side" opened class="composer-sidenav">
     <mat-nav-list>
       <a mat-list-item routerLink="/">Composer Workspace</a>
       <a mat-list-item routerLink="/gallery">Components Gallery</a>

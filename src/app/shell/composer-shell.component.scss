@@ -23,6 +23,11 @@
   position: relative;
   z-index: 2;
   flex-shrink: 0;
+  background-color: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  --mat-toolbar-container-background-color: var(--mat-sys-surface-container);
+  --mat-toolbar-container-text-color: var(--mat-sys-on-surface);
 }
 .spacer {
   flex: 1 1 auto;
@@ -33,9 +38,25 @@
 }
 .composer-sidenav {
   width: 250px;
+  background-color: var(--mat-sys-surface-container);
+  border-right: 1px solid var(--mat-sys-outline-variant);
+  --mat-sidenav-container-shape: 0px;
+  --mat-drawer-container-shape: 0px;
+  border-radius: 0px;
+  --mat-sidenav-background-color: var(--mat-sys-surface-container);
+
+  ::ng-deep .mat-drawer-inner-container {
+    border-radius: 0px;
+  }
 }
 .composer-content {
   padding: 16px;
   box-sizing: border-box;
   height: 100%;
+}
+.hamburger-button {
+  margin-right: 8px;
+}
+.theme-toggle-button {
+  margin-left: 8px;
 }

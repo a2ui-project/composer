@@ -20,7 +20,8 @@ import {provideRouter} from '@angular/router';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerShellHarness} from './test/composer-shell.harness';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {DOCUMENT} from '@angular/common';
 
 describe('ComposerShellComponent Layout', () => {
   let fixture: ComponentFixture<ComposerShellComponent>;
@@ -36,6 +37,11 @@ describe('ComposerShellComponent Layout', () => {
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ComposerShellHarness);
   });
 
+  afterEach(() => {
+    const injectedDocument = TestBed.inject(DOCUMENT);
+    injectedDocument.body.classList.remove('dark-theme');
+  });
+
   it('creates the shell layout component via test harness', async () => {
     expect(harness).toBeTruthy();
   });
@@ -48,5 +54,22 @@ describe('ComposerShellComponent Layout', () => {
     const consoleSpy = vi.spyOn(console, 'log');
     await harness.clickResetButton();
     expect(consoleSpy).toHaveBeenCalledWith('Session state cleared.');
+  });
+
+  it('toggles the dark theme SCSS class on the document body upon clicking the theme toggle button via test harness interaction', async () => {
+    const injectedDocument = TestBed.inject(DOCUMENT);
+    expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
+    await harness.clickThemeToggleButton();
+    expect(injectedDocument.body.classList.contains('dark-theme')).toBe(true);
+    await harness.clickThemeToggleButton();
+    expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
+  });
+
+  it('toggles the left sidebar opened and closed states upon clicking the hamburger button via test harness interaction', async () => {
+    expect(await harness.isSidenavOpened()).toBe(true);
+    await harness.clickHamburgerButton();
+    expect(await harness.isSidenavOpened()).toBe(false);
+    await harness.clickHamburgerButton();
+    expect(await harness.isSidenavOpened()).toBe(true);
   });
 });
