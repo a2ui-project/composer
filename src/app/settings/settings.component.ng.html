@@ -14,4 +14,63 @@
  limitations under the License.
 -->
 
-<div class="settings-placeholder">Settings Placeholder</div>
+<div class="settings-container">
+  <mat-card class="settings-card">
+    <mat-card-header>
+      <mat-card-title>A2UI Composer Settings</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()">
+        <div class="form-section">
+          <h3>Renderer Application URL</h3>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Target Renderer URL</mat-label>
+            <input matInput formControlName="rendererUrl" placeholder="http://localhost:3000" />
+            @if (settingsForm.controls.rendererUrl.hasError('required')) {
+              <mat-error>Renderer URL is required.</mat-error>
+            }
+            @if (settingsForm.controls.rendererUrl.hasError('pattern')) {
+              <mat-error>Must be a valid HTTP or HTTPS URL.</mat-error>
+            }
+          </mat-form-field>
+        </div>
+
+        @if (isThirdParty()) {
+          <div class="form-section">
+            <h3>Gemini API Provisioning</h3>
+            <p class="description">
+              Operating in an external 3P environment. A personal Gemini API key is required.
+            </p>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Gemini API Key</mat-label>
+              <input
+                matInput
+                [type]="hideApiKey() ? 'password' : 'text'"
+                formControlName="apiKey"
+                placeholder="Enter your Gemini API key"
+              />
+              <button
+                mat-icon-button
+                matSuffix
+                type="button"
+                (click)="hideApiKey.set(!hideApiKey())"
+                [attr.aria-label]="hideApiKey() ? 'Show API key' : 'Hide API key'"
+              >
+                <mat-icon>{{ hideApiKey() ? 'visibility' : 'visibility_off' }}</mat-icon>
+              </button>
+              @if (settingsForm.controls.apiKey.hasError('required')) {
+                <mat-error>Gemini API key is required in external environments.</mat-error>
+              }
+              @if (settingsForm.controls.apiKey.hasError('pattern')) {
+                <mat-error>API key cannot be empty whitespace.</mat-error>
+              }
+            </mat-form-field>
+          </div>
+        }
+      </form>
+    </mat-card-content>
+    <mat-card-actions align="end">
+      <button mat-flat-button color="primary" (click)="saveSettings()">Save Settings</button>
+    </mat-card-actions>
+  </mat-card>
+</div>

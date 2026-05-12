@@ -16,24 +16,87 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {SettingsComponent} from './settings.component';
-import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {SettingsHarness} from './test/settings.harness';
-import {describe, it, expect, beforeEach} from 'vitest';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
+import {StartupResolutionService} from '../shell/startup-resolution.service';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 
-describe('SettingsComponent Placeholder', () => {
-  let fixture: ComponentFixture<SettingsComponent>;
-  let harness: SettingsHarness;
+describe('SettingsComponent Task 2.2', () => {
+  let mockStartupResolutionService: {
+    getResolvedRendererUrl: ReturnType<typeof vi.fn>;
+    isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
+  };
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [SettingsComponent],
-    }).compileComponents();
-
-    fixture = TestBed.createComponent(SettingsComponent);
-    harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    mockStartupResolutionService = {
+      getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
+      isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
+    };
   });
 
-  it('creates the settings placeholder component via test harness', async () => {
-    expect(harness).toBeTruthy();
+  async function setupComponent() {
+    await TestBed.configureTestingModule({
+      imports: [SettingsComponent],
+      providers: [
+        provideNoopAnimations(),
+        {provide: StartupResolutionService, useValue: mockStartupResolutionService},
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(SettingsComponent);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+    return {fixture, component};
+  }
+
+  it('initializes form controls cleanly in 1P mode without requiring apiKey', async () => {
+    mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(false);
+    const {component} = await setupComponent();
+
+    expect(component.isThirdParty()).toBe(false);
+    expect(component.settingsForm.controls.rendererUrl.value).toBe('http://resolved-url.com');
+
+    const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
+    vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+
+    component.settingsForm.patchValue({rendererUrl: 'http://new-url.com'});
+    component.saveSettings();
+
+    expect(removeItemSpy).toHaveBeenCalledWith('a2ui_composer_api_key');
+  });
+
+  it('enforces apiKey requirement in 3P mode and rejects empty whitespace keys', async () => {
+    mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(true);
+    const {component} = await setupComponent();
+
+    expect(component.isThirdParty()).toBe(true);
+    expect(component.settingsForm.controls.apiKey.errors?.['required']).toBeTruthy();
+
+    component.settingsForm.patchValue({
+      rendererUrl: 'http://new-url.com',
+      apiKey: '   ',
+    });
+    expect(component.settingsForm.controls.apiKey.errors?.['pattern']).toBeTruthy();
+    expect(component.settingsForm.invalid).toBe(true);
+  });
+
+  it('persists valid configurations securely in 3P environments', async () => {
+    mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(true);
+    const {component} = await setupComponent();
+
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+    const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+
+    component.settingsForm.patchValue({
+      rendererUrl: 'http://new-url.com',
+      apiKey: 'AIzaSyTestKey',
+    });
+    expect(component.settingsForm.valid).toBe(true);
+
+    component.saveSettings();
+
+    expect(setItemSpy).toHaveBeenCalledWith('a2ui_composer_renderer_url', 'http://new-url.com');
+    expect(setItemSpy).toHaveBeenCalledWith('a2ui_composer_api_key', 'AIzaSyTestKey');
+    expect(reloadSpy).toHaveBeenCalled();
   });
 });

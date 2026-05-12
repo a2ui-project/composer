@@ -14,12 +14,26 @@
  * limitations under the License.
  */
 
-import {Component} from '@angular/core';
+import {Component, OnInit, inject, signal} from '@angular/core';
+import {ReactiveFormsModule, NonNullableFormBuilder, Validators} from '@angular/forms';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatInputModule} from '@angular/material/input';
+import {MatButtonModule} from '@angular/material/button';
+import {MatIconModule} from '@angular/material/icon';
+import {MatCardModule} from '@angular/material/card';
+import {StartupResolutionService} from '../shell/startup-resolution.service';
 
 @Component({
   selector: 'a2ui-composer-settings',
   standalone: true,
-  imports: [],
+  imports: [
+    ReactiveFormsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatButtonModule,
+    MatIconModule,
+    MatCardModule,
+  ],
   templateUrl: './settings.component.ng.html',
   styleUrl: './settings.component.scss',
 })
@@ -27,4 +41,73 @@ import {Component} from '@angular/core';
  * Renders the user settings view, allowing configuration of target URL endpoints,
  * connection handshakes, and developer toggle overrides.
  */
-export class SettingsComponent {}
+export class SettingsComponent implements OnInit {
+  private fb = inject(NonNullableFormBuilder);
+  private startupResolutionService = inject(StartupResolutionService);
+
+  public isThirdParty = signal(false);
+  public hideApiKey = signal(true);
+
+  public settingsForm = this.fb.group({
+    rendererUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/i)]],
+    apiKey: [''],
+  });
+
+  public ngOnInit(): void {
+    const is3P = this.startupResolutionService.isThirdPartyEnvironment();
+    this.isThirdParty.set(is3P);
+
+    const initialUrl =
+      this.startupResolutionService.getResolvedRendererUrl() ||
+      this.getStorageItem('a2ui_composer_renderer_url') ||
+      '';
+    const initialApiKey = this.getStorageItem('a2ui_composer_api_key') || '';
+
+    this.settingsForm.patchValue({
+      rendererUrl: initialUrl,
+      apiKey: initialApiKey,
+    });
+
+    if (is3P) {
+      const apiKeyControl = this.settingsForm.controls.apiKey;
+      apiKeyControl.setValidators([Validators.required, Validators.pattern(/\S/)]);
+      apiKeyControl.updateValueAndValidity();
+    }
+  }
+
+  public saveSettings(): void {
+    if (this.settingsForm.invalid) {
+      this.settingsForm.markAllAsTouched();
+      return;
+    }
+
+    const values = this.settingsForm.getRawValue();
+    this.setStorageItem('a2ui_composer_renderer_url', values.rendererUrl.trim());
+
+    if (this.isThirdParty()) {
+      this.setStorageItem('a2ui_composer_api_key', values.apiKey.trim());
+    } else {
+      this.removeStorageItem('a2ui_composer_api_key');
+    }
+
+    this.reloadWindow();
+  }
+
+  public reloadWindow(): void {
+    if (globalThis.location) {
+      globalThis.location.assign(globalThis.location.pathname);
+    }
+  }
+
+  private getStorageItem(key: string): string | null {
+    return localStorage.getItem(key);
+  }
+
+  private setStorageItem(key: string, value: string): void {
+    localStorage.setItem(key, value);
+  }
+
+  private removeStorageItem(key: string): void {
+    localStorage.removeItem(key);
+  }
+}

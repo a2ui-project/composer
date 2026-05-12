@@ -22,6 +22,7 @@ describe('StartupResolutionService', () => {
   let service: StartupResolutionService;
 
   beforeEach(() => {
+    TestBed.resetTestingModule();
     TestBed.configureTestingModule({});
     service = TestBed.inject(StartupResolutionService);
   });
@@ -47,13 +48,10 @@ describe('StartupResolutionService', () => {
       json: async () => ({defaultRendererUrl: 'http://base:3000', allowOverrides: true}),
     } as Response);
 
-    globalThis.history.pushState({}, '', '?renderer=http://query:3000');
+    vi.spyOn(service, 'getWindowSearch').mockReturnValue('?renderer=http://query:3000');
 
     const url = await service.resolveStartupConfiguration();
     expect(url).toBe('http://query:3000/');
-
-    // Restore path/search to not pollute sibling test cases
-    globalThis.history.pushState({}, '', '/');
   });
 
   it('falls back to checking storage when config fetch fails or times out', async () => {
@@ -64,5 +62,31 @@ describe('StartupResolutionService', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Watchdog timeout or failure fetching config.json'),
     );
+  });
+
+  it('identifies 3P environment based on hostname or local override flag', () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'getItem');
+    const hostnameSpy = vi.spyOn(service, 'getWindowHostname');
+
+    // Test 1P hostname
+    hostnameSpy.mockReturnValue('subdomain.google.com');
+    setItemSpy.mockReturnValue(null);
+    expect(service.isThirdPartyEnvironment()).toBe(false);
+
+    // Test apex 1P hostname
+    hostnameSpy.mockReturnValue('google.com');
+    expect(service.isThirdPartyEnvironment()).toBe(false);
+
+    hostnameSpy.mockReturnValue('googleplex.com');
+    expect(service.isThirdPartyEnvironment()).toBe(false);
+
+    // Test 3P hostname
+    hostnameSpy.mockReturnValue('localhost');
+    expect(service.isThirdPartyEnvironment()).toBe(true);
+
+    // Test force 3P override
+    hostnameSpy.mockReturnValue('subdomain.google.com');
+    setItemSpy.mockReturnValue('true');
+    expect(service.isThirdPartyEnvironment()).toBe(true);
   });
 });
