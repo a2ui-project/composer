@@ -32,7 +32,7 @@ test.describe('Phase 1 Scaffolding Shell Integration', () => {
 
   test('navigates seamlessly between primary workspace and components gallery via sidebar routing links', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.goto('/');
 
     const galleryLink = page.locator('a', {hasText: 'Components Gallery'});
@@ -41,6 +41,13 @@ test.describe('Phase 1 Scaffolding Shell Integration', () => {
     const galleryPlaceholder = page.locator('.gallery-placeholder');
     await expect(galleryPlaceholder).toBeVisible();
     await expect(galleryPlaceholder).toContainText('Components Gallery Placeholder');
+    const screenshotBuffer = await page.screenshot({
+      path: './e2e/test-results/gallery-placeholder-navigation.png',
+    });
+    await testInfo.attach('gallery-placeholder-navigation', {
+      body: screenshotBuffer,
+      contentType: 'image/png',
+    });
 
     const workspaceLink = page.locator('a', {hasText: 'Composer Workspace'});
     await workspaceLink.click();
