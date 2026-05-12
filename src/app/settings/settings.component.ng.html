@@ -82,4 +82,27 @@
       <button mat-flat-button color="primary" (click)="saveSettings()">Save Settings</button>
     </mat-card-actions>
   </mat-card>
+
+  <mat-card class="status-card">
+    <mat-card-header>
+      <mat-card-title>Connection Status & Diagnostics</mat-card-title>
+      <mat-card-subtitle>Real-time monitoring bridge (Deferred to Phase 5)</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="status-badges">
+        <mat-chip-set>
+          <mat-chip class="status-badge" color="accent">Bridge: Disconnected</mat-chip>
+          <mat-chip class="status-badge" color="primary">Catalog Handshake: Pending</mat-chip>
+        </mat-chip-set>
+      </div>
+
+      <div class="overlay-logs">
+        <h4>Overlay Logs Preview</h4>
+        <div class="logs-console">
+          <code>[System] Initializing settings view using static placeholders...</code><br />
+          <code>[System] Active signal wiring and subscriptions deferred to Phase 5.</code>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
 </div>

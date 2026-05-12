@@ -172,6 +172,33 @@ $dark-theme: mat.define-theme(
     --mat-tab-header-inactive-hover-label-text-color: #ffffff;
     --mat-tab-header-inactive-focus-label-text-color: #ffffff;
   }
+
+  // High-contrast overrides guaranteeing clean legibility for unselected standard/outline MDC chips in dark mode.
+  // Explicitly targets unselected chips across base and colored variants with high specificity to overcome
+  // Angular Material's built-in theme mixin specificity layers, while strictly preserving selected/filled tokens.
+  // Includes both --mat-* and --mdc-* prefixes to ensure full API coverage across component versions.
+  .mat-mdc-chip:not(.mat-mdc-chip-selected),
+  .mat-mdc-chip.mat-primary:not(.mat-mdc-chip-selected),
+  .mat-mdc-chip.mat-accent:not(.mat-mdc-chip-selected),
+  .mat-mdc-chip.mat-warn:not(.mat-mdc-chip-selected) {
+    // Standard API tokens
+    --mat-chip-label-text-color: #ffffff;
+    --mat-chip-outline-color: #ffffff;
+    --mat-chip-with-icon-icon-color: #ffffff;
+    --mat-chip-with-trailing-icon-trailing-icon-color: #ffffff;
+    --mat-chip-disabled-label-text-color: #e5e2e2;
+    --mat-chip-with-icon-disabled-icon-color: #e5e2e2;
+    --mat-chip-with-trailing-icon-disabled-trailing-icon-color: #e5e2e2;
+
+    // Fallback API tokens
+    --mdc-chip-label-text-color: #ffffff;
+    --mdc-chip-outline-color: #ffffff;
+    --mdc-chip-with-icon-icon-color: #ffffff;
+    --mdc-chip-with-trailing-icon-trailing-icon-color: #ffffff;
+    --mdc-chip-disabled-label-text-color: #e5e2e2;
+    --mdc-chip-with-icon-disabled-icon-color: #e5e2e2;
+    --mdc-chip-with-trailing-icon-disabled-trailing-icon-color: #e5e2e2;
+  }
 }
 
 html,

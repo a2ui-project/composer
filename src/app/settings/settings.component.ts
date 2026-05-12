@@ -21,6 +21,7 @@ import {MatInputModule} from '@angular/material/input';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatCardModule} from '@angular/material/card';
+import {MatChipsModule} from '@angular/material/chips';
 import {StartupResolutionService} from '../shell/startup-resolution.service';
 
 @Component({
@@ -33,6 +34,7 @@ import {StartupResolutionService} from '../shell/startup-resolution.service';
     MatButtonModule,
     MatIconModule,
     MatCardModule,
+    MatChipsModule,
   ],
   templateUrl: './settings.component.ng.html',
   styleUrl: './settings.component.scss',

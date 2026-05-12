@@ -113,4 +113,15 @@ describe('SettingsComponent Task 2.3', () => {
     expect(lockedNotice).toBeTruthy();
     expect(lockedNotice.textContent).toContain('locked by enterprise policy');
   });
+
+  it('displays static connection status badges and overlay logs preview placeholders', async () => {
+    const {fixture} = await setupComponent();
+    const statusCard = fixture.nativeElement.querySelector('.status-card');
+    expect(statusCard).toBeTruthy();
+
+    const badges = statusCard.querySelectorAll('.status-badge');
+    expect(badges.length).toBeGreaterThan(0);
+    expect(statusCard.textContent).toContain('Bridge: Disconnected');
+    expect(statusCard.textContent).toContain('Deferred to Phase 5');
+  });
 });

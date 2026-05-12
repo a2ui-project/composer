@@ -50,3 +50,29 @@
   font-size: 13px;
   font-weight: 500;
 }
+
+.status-card {
+  margin-top: 24px;
+}
+
+.status-badges {
+  margin-top: 12px;
+  margin-bottom: 16px;
+}
+
+.overlay-logs {
+  h4 {
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .logs-console {
+    background-color: #1e1e1e;
+    color: #00ff00;
+    padding: 12px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+}
