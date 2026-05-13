@@ -4849,6 +4849,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"a2ui-bridge@workspace:bridge":
+  version: 0.0.0-use.local
+  resolution: "a2ui-bridge@workspace:bridge"
+  dependencies:
+    typescript: "npm:6.0.3"
+    vitest: "npm:4.1.5"
+  languageName: unknown
+  linkType: soft
+
 "a2ui-composer@workspace:.":
   version: 0.0.0-use.local
   resolution: "a2ui-composer@workspace:."

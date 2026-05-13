@@ -2,10 +2,13 @@
   "name": "a2ui-composer",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "bridge"
+  ],
   "scripts": {
     "start": "ng serve",
     "build": "ng build",
-    "test": "vitest run",
+    "test": "yarn workspaces foreach -A run test",
     "e2e": "playwright test",
     "e2e-headless": "E2E_HEADLESS=true playwright test",
     "prettier": "prettier --write . | grep -v '(unchanged)'"

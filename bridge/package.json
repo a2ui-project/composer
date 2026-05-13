@@ -1,0 +1,16 @@
+{
+  "name": "a2ui-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.bridge.json",
+    "test": "vitest run",
+    "prettier": "prettier --write . | grep -v '(unchanged)'"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vitest": "4.1.5"
+  }
+}
