@@ -2,8 +2,8 @@
   "name": "a2ui-bridge",
   "version": "0.1.0",
   "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/preview-bridge.js",
+  "types": "dist/preview-bridge.d.ts",
   "scripts": {
     "build": "tsc --project tsconfig.bridge.json",
     "test": "vitest run",
