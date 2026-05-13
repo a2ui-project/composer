@@ -14,11 +14,43 @@
  * limitations under the License.
  */
 
-import {describe, it, expect} from 'vitest';
-import './preview-bridge';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {PreviewBridge} from './preview-bridge';
 
-describe('PreviewBridge Library Stub', () => {
-  it('loads the preview bridge script successfully', () => {
-    expect(true).toBe(true);
+describe('PreviewBridge Core API Runtime', () => {
+  let bridge: PreviewBridge;
+
+  beforeEach(() => {
+    bridge = new PreviewBridge();
+  });
+
+  it('registers message processors and routes payload types perfectly', () => {
+    const handler = vi.fn();
+    bridge.registerMessageProcessor('TEST_EVENT', handler);
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'TEST_EVENT', payload: {status: 'active'}},
+      }),
+    );
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith({status: 'active'});
+  });
+
+  it('prevents duplicate message handlers from triggering multiple times naturally', () => {
+    const handler = vi.fn();
+    bridge.registerMessageProcessor('TEST_EVENT', handler);
+    bridge.registerMessageProcessor('TEST_EVENT', handler);
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'TEST_EVENT', payload: 123},
+      }),
+    );
+
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 });
