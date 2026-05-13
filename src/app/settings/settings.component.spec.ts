@@ -20,10 +20,11 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolutionService} from '../shell/startup-resolution.service';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 
-describe('SettingsComponent Task 2.2', () => {
+describe('SettingsComponent Task 2.3', () => {
   let mockStartupResolutionService: {
     getResolvedRendererUrl: ReturnType<typeof vi.fn>;
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
+    isContextLocked: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -31,6 +32,7 @@ describe('SettingsComponent Task 2.2', () => {
     mockStartupResolutionService = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
+      isContextLocked: vi.fn().mockReturnValue(false),
     };
   });
 
@@ -98,5 +100,17 @@ describe('SettingsComponent Task 2.2', () => {
     expect(setItemSpy).toHaveBeenCalledWith('a2ui_composer_renderer_url', 'http://new-url.com');
     expect(setItemSpy).toHaveBeenCalledWith('a2ui_composer_api_key', 'AIzaSyTestKey');
     expect(reloadSpy).toHaveBeenCalled();
+  });
+
+  it('disables rendererUrl form control and displays lock warning when context is locked', async () => {
+    mockStartupResolutionService.isContextLocked.mockReturnValue(true);
+    const {fixture, component} = await setupComponent();
+
+    expect(component.isLocked()).toBe(true);
+    expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
+
+    const lockedNotice = fixture.nativeElement.querySelector('.locked-notice');
+    expect(lockedNotice).toBeTruthy();
+    expect(lockedNotice.textContent).toContain('locked by enterprise policy');
   });
 });

@@ -37,3 +37,16 @@
 .full-width {
   width: 100%;
 }
+
+.locked-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background-color: #fff3e0;
+  color: #e65100;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 500;
+}

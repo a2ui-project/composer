@@ -45,6 +45,7 @@ export class SettingsComponent implements OnInit {
   private fb = inject(NonNullableFormBuilder);
   private startupResolutionService = inject(StartupResolutionService);
 
+  public isLocked = signal(false);
   public isThirdParty = signal(false);
   public hideApiKey = signal(true);
 
@@ -54,6 +55,9 @@ export class SettingsComponent implements OnInit {
   });
 
   public ngOnInit(): void {
+    const locked = this.startupResolutionService.isContextLocked();
+    this.isLocked.set(locked);
+
     const is3P = this.startupResolutionService.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
 
@@ -67,6 +71,10 @@ export class SettingsComponent implements OnInit {
       rendererUrl: initialUrl,
       apiKey: initialApiKey,
     });
+
+    if (locked) {
+      this.settingsForm.controls.rendererUrl.disable();
+    }
 
     if (is3P) {
       const apiKeyControl = this.settingsForm.controls.apiKey;
@@ -82,7 +90,10 @@ export class SettingsComponent implements OnInit {
     }
 
     const values = this.settingsForm.getRawValue();
-    this.setStorageItem('a2ui_composer_renderer_url', values.rendererUrl.trim());
+
+    if (!this.isLocked()) {
+      this.setStorageItem('a2ui_composer_renderer_url', values.rendererUrl.trim());
+    }
 
     if (this.isThirdParty()) {
       this.setStorageItem('a2ui_composer_api_key', values.apiKey.trim());

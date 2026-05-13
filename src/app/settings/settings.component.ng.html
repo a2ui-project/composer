@@ -23,6 +23,15 @@
       <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()">
         <div class="form-section">
           <h3>Renderer Application URL</h3>
+          @if (isLocked()) {
+            <div class="locked-notice">
+              <mat-icon color="warn">lock</mat-icon>
+              <span
+                >Active URL configuration is locked by enterprise policy (allowOverrides:
+                false).</span
+              >
+            </div>
+          }
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Target Renderer URL</mat-label>
             <input matInput formControlName="rendererUrl" placeholder="http://localhost:3000" />
