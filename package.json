@@ -4,6 +4,7 @@
   "workspaces": [
     "shell",
     "ng-basic-catalog",
+    "lit-basic-catalog",
     "bridge"
   ],
   "scripts": {
