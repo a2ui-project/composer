@@ -15,6 +15,7 @@
  */
 
 declare const process: any;
+import './instrumentation-overrides';
 
 export interface BridgeMessage {
   type: string;
@@ -31,6 +32,7 @@ export type MessageHandler = (payload: any) => void;
 export class PreviewBridge {
   private processors = new Map<string, Set<MessageHandler>>();
   private isListening = false;
+  private overlayElement: HTMLDivElement | null = null;
 
   constructor() {
     this.initMessageListener();
@@ -84,6 +86,12 @@ export class PreviewBridge {
       const data = event.data as BridgeMessage;
       if (!data || typeof data !== 'object' || !data.type) return;
 
+      if (data.type === 'SET_BLOCKING_STATE') {
+        const blocked = !!(data.payload && data.payload.blocked);
+        const messageStr = data.payload && data.payload.message;
+        this.handleBlockingOverlay(blocked, messageStr);
+      }
+
       const handlers = this.processors.get(data.type);
       if (handlers) {
         const payload = data.payload !== undefined ? data.payload : data;
@@ -98,6 +106,74 @@ export class PreviewBridge {
     });
 
     this.isListening = true;
+  }
+
+  private handleBlockingOverlay(blocked: boolean, customMessage?: string): void {
+    if (typeof document === 'undefined') return;
+
+    if (blocked) {
+      if (!this.overlayElement) {
+        this.overlayElement = document.createElement('div');
+        this.overlayElement.id = 'a2ui-blocking-overlay';
+        Object.assign(this.overlayElement.style, {
+          position: 'fixed',
+          top: '0',
+          left: '0',
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          zIndex: '999999',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          color: '#ffffff',
+          fontFamily: 'sans-serif',
+          backdropFilter: 'blur(4px)',
+        });
+
+        const messageNode = document.createElement('p');
+        messageNode.id = 'a2ui-blocking-message';
+        messageNode.innerText = customMessage || 'Processing framework layouts...';
+        this.overlayElement.appendChild(messageNode);
+
+        const button = document.createElement('button');
+        button.innerText = 'Force Unblock';
+        Object.assign(button.style, {
+          marginTop: '16px',
+          padding: '10px 20px',
+          fontSize: '15px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          backgroundColor: '#f44336',
+          color: '#ffffff',
+          border: 'none',
+          borderRadius: '4px',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+        });
+
+        button.addEventListener('click', () => {
+          this.sendMessage({type: 'UNBLOCK_REQUEST'});
+          this.handleBlockingOverlay(false);
+        });
+
+        this.overlayElement.appendChild(button);
+        document.body.appendChild(this.overlayElement);
+      } else {
+        const msgElement = this.overlayElement.querySelector('#a2ui-blocking-message');
+        if (msgElement) {
+          (msgElement as HTMLElement).innerText =
+            customMessage || 'Processing framework layouts...';
+        }
+      }
+    } else {
+      if (this.overlayElement) {
+        if (this.overlayElement.parentNode) {
+          this.overlayElement.parentNode.removeChild(this.overlayElement);
+        }
+        this.overlayElement = null;
+      }
+    }
   }
 
   private initLifecycleHandshake(): void {

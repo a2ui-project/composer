@@ -14,14 +14,52 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {PreviewBridge} from './preview-bridge';
+import {describe, it, expect, beforeEach, beforeAll, afterAll, afterEach, vi} from 'vitest';
+
+// Use dynamic import inside beforeAll to ensure that the module-level singleton's
+// event listener registration (run on import) is captured by our window spy.
+let PreviewBridgeClass: any;
 
 describe('PreviewBridge Core API Runtime', () => {
-  let bridge: PreviewBridge;
+  let bridge: any;
+  const listeners: {type: string; handler: any}[] = [];
+  const originalAdd = window.addEventListener.bind(window);
+  const originalRemove = window.removeEventListener.bind(window);
+
+  beforeAll(async () => {
+    window.addEventListener = vi.fn().mockImplementation((type, handler, options) => {
+      listeners.push({type, handler});
+      originalAdd(type, handler, options);
+    }) as any;
+
+    const module = await import('./preview-bridge');
+    PreviewBridgeClass = module.PreviewBridge;
+  });
+
+  afterAll(() => {
+    window.addEventListener = originalAdd;
+  });
 
   beforeEach(() => {
-    bridge = new PreviewBridge();
+    bridge = new PreviewBridgeClass();
+    const existing = document.getElementById('a2ui-blocking-overlay');
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+  });
+
+  afterEach(() => {
+    listeners.forEach(({type, handler}) => {
+      originalRemove(type, handler);
+    });
+    listeners.length = 0;
+
+    const existing = document.getElementById('a2ui-blocking-overlay');
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+
+    vi.restoreAllMocks();
   });
 
   it('registers message processors and routes payload types perfectly', () => {
@@ -83,5 +121,74 @@ describe('PreviewBridge Core API Runtime', () => {
     const response = await fetchPromise;
     const data = await response.json();
     expect(data).toEqual({items: ['BasicColumn']});
+  });
+
+  it('mounts full-viewport overlay DOM element dynamically upon SET_BLOCKING_STATE true', () => {
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'SET_BLOCKING_STATE', payload: {blocked: true, message: 'Freezing UI'}},
+      }),
+    );
+
+    const overlay = document.getElementById('a2ui-blocking-overlay');
+    expect(overlay).not.toBeNull();
+    expect(document.getElementById('a2ui-blocking-message')?.innerText).toBe('Freezing UI');
+
+    const button = overlay?.querySelector('button');
+    expect(button).not.toBeNull();
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'SET_BLOCKING_STATE', payload: {blocked: false}},
+      }),
+    );
+    expect(document.getElementById('a2ui-blocking-overlay')).toBeNull();
+  });
+
+  it('emits UNBLOCK_REQUEST signal upward to parent window when clicking Force Unblock button', () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'SET_BLOCKING_STATE', payload: {blocked: true}},
+      }),
+    );
+
+    const button = document.querySelector('#a2ui-blocking-overlay button') as HTMLButtonElement;
+    expect(button).not.toBeNull();
+    button.click();
+
+    expect(spy).toHaveBeenCalledWith({type: 'UNBLOCK_REQUEST'}, '*');
+  });
+
+  it('resets overlayElement pointer reference to null upon unblocking even if DOM node is already detached independently', () => {
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'SET_BLOCKING_STATE', payload: {blocked: true}},
+      }),
+    );
+
+    const overlay = document.getElementById('a2ui-blocking-overlay');
+    expect(overlay).not.toBeNull();
+    expect(bridge['overlayElement']).not.toBeNull();
+
+    if (overlay && overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+
+    expect(document.getElementById('a2ui-blocking-overlay')).toBeNull();
+    expect(bridge['overlayElement']).not.toBeNull();
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'SET_BLOCKING_STATE', payload: {blocked: false}},
+      }),
+    );
+
+    expect(bridge['overlayElement']).toBeNull();
   });
 });
