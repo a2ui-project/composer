@@ -53,4 +53,35 @@ describe('PreviewBridge Core API Runtime', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
   });
+
+  it('emits RENDERER_READY signal automatically upon DOM readiness', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    window.dispatchEvent(new Event('DOMContentLoaded'));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({type: 'RENDERER_READY'}), '*');
+  });
+
+  it('intercepts fetch calls targeting catalog paths and correlates async resolution using secure IDs', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const fetchPromise = fetch('/catalog');
+
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({type: 'FETCH_CATALOG_REQUEST'}), '*');
+
+    const lastCall = spy.mock.lastCall as any[];
+    const requestId = lastCall[0].payload.requestId;
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {
+          type: 'FETCH_CATALOG_RESPONSE',
+          payload: {requestId, catalog: {items: ['BasicColumn']}},
+        },
+      }),
+    );
+
+    const response = await fetchPromise;
+    const data = await response.json();
+    expect(data).toEqual({items: ['BasicColumn']});
+  });
 });

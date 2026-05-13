@@ -34,6 +34,8 @@ export class PreviewBridge {
 
   constructor() {
     this.initMessageListener();
+    this.initLifecycleHandshake();
+    this.initFetchInterceptor();
   }
 
   public registerMessageProcessor(type: string, handler: MessageHandler): void {
@@ -96,6 +98,56 @@ export class PreviewBridge {
     });
 
     this.isListening = true;
+  }
+
+  private initLifecycleHandshake(): void {
+    const emitReady = () => {
+      this.sendMessage({type: 'RENDERER_READY'});
+    };
+
+    if (typeof document !== 'undefined') {
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        setTimeout(emitReady, 0);
+      } else {
+        window.addEventListener('DOMContentLoaded', emitReady);
+      }
+    }
+  }
+
+  private initFetchInterceptor(): void {
+    if (typeof window === 'undefined' || !window.fetch) return;
+    const originalFetch = window.fetch;
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const urlString =
+        typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
+
+      if (urlString.includes('/catalog')) {
+        return new Promise(resolve => {
+          const requestId =
+            typeof crypto !== 'undefined' && crypto.randomUUID
+              ? crypto.randomUUID()
+              : Date.now().toString(36) + Math.random().toString(36).substring(2);
+
+          const responseHandler = (payload: any) => {
+            if (payload && payload.requestId === requestId) {
+              this.unregisterMessageProcessor('FETCH_CATALOG_RESPONSE', responseHandler);
+              resolve(
+                new Response(JSON.stringify(payload.catalog || {}), {
+                  status: 200,
+                  headers: {'Content-Type': 'application/json'},
+                }),
+              );
+            }
+          };
+
+          this.registerMessageProcessor('FETCH_CATALOG_RESPONSE', responseHandler);
+          this.sendMessage({type: 'FETCH_CATALOG_REQUEST', payload: {requestId}});
+        });
+      }
+
+      return originalFetch(input, init);
+    };
   }
 }
 
