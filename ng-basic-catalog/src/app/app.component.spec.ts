@@ -16,7 +16,15 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {AppComponent} from './app.component';
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
+
+vi.mock('a2ui-bridge', () => ({
+  a2uiBridge: {
+    registerMessageProcessor: vi.fn(),
+    unregisterMessageProcessor: vi.fn(),
+    sendMessage: vi.fn(),
+  },
+}));
 
 describe('Sample AppComponent Placeholder', () => {
   let fixture: ComponentFixture<AppComponent>;
