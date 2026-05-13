@@ -5,6 +5,38 @@ __metadata:
   version: 8
   cacheKey: 10c0
 
+"@a2ui/angular@npm:0.9.1":
+  version: 0.9.1
+  resolution: "@a2ui/angular@npm:0.9.1"
+  dependencies:
+    "@a2ui/web_core": "npm:^0.9.2"
+    "@preact/signals-core": "npm:^1.13.0"
+    tslib: "npm:^2.3.0"
+    zod: "npm:^3.25.76"
+  peerDependencies:
+    "@a2ui/markdown-it": ^0.0.3
+    "@angular/common": ^21.2.0
+    "@angular/core": ^21.2.0
+    "@angular/platform-browser": ^21.2.0
+  peerDependenciesMeta:
+    "@a2ui/markdown-it":
+      optional: true
+  checksum: 10c0/96c08d14c54735c6cca5a88c9ac0564c40fcfc5a110113d6926f5a56d01de66c6849ca94067238b1f1d37572657666cc084472f575861b1e9d9515484b727748
+  languageName: node
+  linkType: hard
+
+"@a2ui/web_core@npm:0.9.2, @a2ui/web_core@npm:^0.9.2":
+  version: 0.9.2
+  resolution: "@a2ui/web_core@npm:0.9.2"
+  dependencies:
+    "@preact/signals-core": "npm:^1.13.0"
+    date-fns: "npm:^4.1.0"
+    zod: "npm:^3.25.76"
+    zod-to-json-schema: "npm:^3.25.1"
+  checksum: 10c0/af0b0dcdca8a716ce676e518bcb5c541dbc3c79fdb43b1bcf8bea4f8a6311cafb3c8cee50e7ad3acc15aff6f46cae232ea20ca4721e36f65f2531f2e9389e468
+  languageName: node
+  linkType: hard
+
 "@algolia/abtesting@npm:1.14.1":
   version: 1.14.1
   resolution: "@algolia/abtesting@npm:1.14.1"
@@ -3818,6 +3850,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@preact/signals-core@npm:^1.13.0":
+  version: 1.14.2
+  resolution: "@preact/signals-core@npm:1.14.2"
+  checksum: 10c0/898e6e22a5d2a11bd3d5b109c8d9bacff0e9bc9f23c01455901b7feab8c441dc03fdd53cfd7b5f9275b0df052fcaeb8c8928f537cebb190d9e02a6f2a3ac441e
+  languageName: node
+  linkType: hard
+
 "@rolldown/binding-android-arm64@npm:1.0.0":
   version: 1.0.0
   resolution: "@rolldown/binding-android-arm64@npm:1.0.0"
@@ -5865,6 +5904,13 @@ __metadata:
     whatwg-mimetype: "npm:^5.0.0"
     whatwg-url: "npm:^16.0.0"
   checksum: 10c0/08d88ef50d8966a070ffdaa703e1e4b29f01bb2da364dfbc1612b1c2a4caa8045802c9532d81347b21781100132addb36a585071c8323b12cce97973961dee9f
+  languageName: node
+  linkType: hard
+
+"date-fns@npm:^4.1.0":
+  version: 4.2.1
+  resolution: "date-fns@npm:4.2.1"
+  checksum: 10c0/1694c57a180a76c1001401fde85925cebb3b89594d37625063be0a571eddde278a87d3c76ecad5759c3dbeabcc34a5c5757eb6b3487d89a9a61ef48571791166
   languageName: node
   linkType: hard
 
@@ -8321,6 +8367,35 @@ __metadata:
   checksum: 10c0/c2f5a604a54a8ec5438a342e1f356dff4bc33ccccdb6dc668d94fe8e5eccfc9d2c2eea6064b0967a767ba63b33763f51ccf2cd2441b461a7322656c1f06b3f5d
   languageName: node
   linkType: hard
+
+"ng-basic-catalog@workspace:ng-basic-catalog":
+  version: 0.0.0-use.local
+  resolution: "ng-basic-catalog@workspace:ng-basic-catalog"
+  dependencies:
+    "@a2ui/angular": "npm:0.9.1"
+    "@a2ui/web_core": "npm:0.9.2"
+    "@analogjs/vite-plugin-angular": "npm:2.5.0"
+    "@angular-devkit/build-angular": "npm:21.2.10"
+    "@angular/animations": "npm:21.2.12"
+    "@angular/build": "npm:21.2.10"
+    "@angular/cli": "npm:21.2.10"
+    "@angular/common": "npm:21.2.12"
+    "@angular/compiler": "npm:21.2.12"
+    "@angular/compiler-cli": "npm:21.2.12"
+    "@angular/core": "npm:21.2.12"
+    "@angular/forms": "npm:21.2.12"
+    "@angular/platform-browser": "npm:21.2.12"
+    "@angular/platform-browser-dynamic": "npm:21.2.12"
+    "@angular/router": "npm:21.2.12"
+    a2ui-bridge: "npm:0.1.0"
+    jsdom: "npm:29.1.1"
+    prettier: "npm:3.8.3"
+    rxjs: "npm:7.8.2"
+    tslib: "npm:2.6.2"
+    typescript: "npm:6.0.3"
+    vitest: "npm:4.1.5"
+  languageName: unknown
+  linkType: soft
 
 "node-addon-api@npm:^6.1.0":
   version: 6.1.0
@@ -11303,5 +11378,12 @@ __metadata:
   version: 4.4.3
   resolution: "zod@npm:4.4.3"
   checksum: 10c0/7ea31b558e88f9faf44f31dd185e2e1cbf51fed3081787fb96cc2534749b50c0acfc6da7f0922a7353ed092dd358c7d50c28ea96c94d04af64191bd33152eca3
+  languageName: node
+  linkType: hard
+
+"zod@npm:^3.25.76":
+  version: 3.25.76
+  resolution: "zod@npm:3.25.76"
+  checksum: 10c0/5718ec35e3c40b600316c5b4c5e4976f7fee68151bc8f8d90ec18a469be9571f072e1bbaace10f1e85cf8892ea12d90821b200e980ab46916a6166a4260a983c
   languageName: node
   linkType: hard

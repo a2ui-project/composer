@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "shell",
+    "ng-basic-catalog",
     "bridge"
   ],
   "scripts": {
