@@ -1,43 +1,14 @@
 {
-  "name": "a2ui-composer",
-  "version": "0.1.0",
+  "name": "a2ui-composer-root",
   "private": true,
   "workspaces": [
+    "shell",
     "bridge"
   ],
   "scripts": {
-    "start": "ng serve",
-    "build": "ng build",
     "test": "yarn workspaces foreach -A run test",
-    "e2e": "playwright test",
-    "e2e-headless": "E2E_HEADLESS=true playwright test",
-    "prettier": "prettier --write . | grep -v '(unchanged)'"
-  },
-  "dependencies": {
-    "@angular/animations": "21.2.12",
-    "@angular/cdk": "21.2.10",
-    "@angular/common": "21.2.12",
-    "@angular/compiler": "21.2.12",
-    "@angular/core": "21.2.12",
-    "@angular/forms": "21.2.12",
-    "@angular/material": "21.2.10",
-    "@angular/platform-browser": "21.2.12",
-    "@angular/router": "21.2.12",
-    "rxjs": "7.8.2",
-    "tslib": "2.6.2"
-  },
-  "devDependencies": {
-    "@analogjs/vite-plugin-angular": "2.5.0",
-    "@angular-devkit/build-angular": "21.2.10",
-    "@angular/build": "21.2.10",
-    "@angular/cli": "21.2.10",
-    "@angular/compiler-cli": "21.2.12",
-    "@angular/platform-browser-dynamic": "21.2.12",
-    "@playwright/test": "1.59.1",
-    "jsdom": "29.1.1",
-    "prettier": "3.8.3",
-    "typescript": "6.0.3",
-    "vitest": "4.1.5"
+    "build": "yarn workspaces foreach -A run build",
+    "prettier": "yarn workspaces foreach -A run prettier"
   },
   "packageManager": "yarn@4.5.0"
 }

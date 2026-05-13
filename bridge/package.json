@@ -10,6 +10,7 @@
     "prettier": "prettier --write . | grep -v '(unchanged)'"
   },
   "devDependencies": {
+    "prettier": "3.8.3",
     "typescript": "6.0.3",
     "vitest": "4.1.5"
   }

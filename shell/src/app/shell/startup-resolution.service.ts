@@ -84,12 +84,6 @@ export class StartupResolutionService {
 
     this.evaluateEnvironmentPurge();
 
-    if (!this.resolvedUrl) {
-      if (globalThis.location?.pathname !== '/settings') {
-        this.injector.get(Router).navigate(['/settings']);
-      }
-    }
-
     return this.resolvedUrl;
   }
 

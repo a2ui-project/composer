@@ -4849,18 +4849,25 @@ __metadata:
   languageName: node
   linkType: hard
 
-"a2ui-bridge@workspace:bridge":
+"a2ui-bridge@npm:0.1.0, a2ui-bridge@workspace:bridge":
   version: 0.0.0-use.local
   resolution: "a2ui-bridge@workspace:bridge"
   dependencies:
+    prettier: "npm:3.8.3"
     typescript: "npm:6.0.3"
     vitest: "npm:4.1.5"
   languageName: unknown
   linkType: soft
 
-"a2ui-composer@workspace:.":
+"a2ui-composer-root@workspace:.":
   version: 0.0.0-use.local
-  resolution: "a2ui-composer@workspace:."
+  resolution: "a2ui-composer-root@workspace:."
+  languageName: unknown
+  linkType: soft
+
+"a2ui-composer-shell@workspace:shell":
+  version: 0.0.0-use.local
+  resolution: "a2ui-composer-shell@workspace:shell"
   dependencies:
     "@analogjs/vite-plugin-angular": "npm:2.5.0"
     "@angular-devkit/build-angular": "npm:21.2.10"
@@ -4878,6 +4885,7 @@ __metadata:
     "@angular/platform-browser-dynamic": "npm:21.2.12"
     "@angular/router": "npm:21.2.12"
     "@playwright/test": "npm:1.59.1"
+    a2ui-bridge: "npm:0.1.0"
     jsdom: "npm:29.1.1"
     prettier: "npm:3.8.3"
     rxjs: "npm:7.8.2"

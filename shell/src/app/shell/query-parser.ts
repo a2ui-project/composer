@@ -19,12 +19,17 @@
  * from the window location query string, enforcing runtime constraints.
  */
 export class QueryParser {
+  private static isProhibitedKey(key: string): boolean {
+    const words = key.split(/(?=[A-Z])|[_.-]/).map(w => w.toLowerCase());
+    return words.some(w => w === 'key' || w === 'token' || w === 'secret');
+  }
+
   static parseRendererUrl(searchString: string): string | null {
     const params = new URLSearchParams(searchString);
 
     // 1. Enforce root parameters check case-insensitively
     for (const key of params.keys()) {
-      if (/key|token|secret/i.test(key)) {
+      if (this.isProhibitedKey(key)) {
         console.warn(
           'Security Violation: Prohibited credentials detected in root query string. Stripping parameters.',
         );
@@ -43,7 +48,7 @@ export class QueryParser {
         if (validUrl.protocol === 'http:' || validUrl.protocol === 'https:') {
           // 2. Prohibit keys embedded inside the inner renderer target string
           for (const innerKey of validUrl.searchParams.keys()) {
-            if (/key|token|secret/i.test(innerKey)) {
+            if (this.isProhibitedKey(innerKey)) {
               console.warn(
                 'Security Violation: Prohibited credentials embedded inside renderer target URL. Stripping candidate.',
               );

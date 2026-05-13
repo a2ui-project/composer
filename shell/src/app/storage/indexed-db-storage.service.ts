@@ -120,7 +120,7 @@ export class IndexedDbStorageService {
   async saveCatalogRecord(record: CachedCatalogRecord): Promise<void> {
     record.lastAccessed = Date.now();
 
-    await this.enforceLruCeiling(10);
+    await this.enforceLruCeiling(10, record.rendererUrl);
 
     try {
       await this.executeAtomicWrite(record);
@@ -129,7 +129,7 @@ export class IndexedDbStorageService {
         console.warn(
           'QuotaExceededError encountered during write transaction. Triggering aggressive evict-down-to-3 fallback.',
         );
-        await this.enforceLruCeiling(3);
+        await this.enforceLruCeiling(3, record.rendererUrl);
 
         try {
           await this.executeAtomicWrite(record);
@@ -156,9 +156,12 @@ export class IndexedDbStorageService {
     });
   }
 
-  private async enforceLruCeiling(maxCapacity: number): Promise<void> {
+  private async enforceLruCeiling(maxCapacity: number, keyBeingSaved?: string): Promise<void> {
     const allRecords = await this.getAllCatalogRecords();
-    if (allRecords.length >= maxCapacity) {
+    const exists = keyBeingSaved ? allRecords.some(r => r.rendererUrl === keyBeingSaved) : false;
+    const targetLimit = exists ? maxCapacity + 1 : maxCapacity;
+
+    if (allRecords.length >= targetLimit) {
       allRecords.sort((a, b) => a.lastAccessed - b.lastAccessed);
       const excessCount = allRecords.length - maxCapacity + 1;
       const recordsToEvict = allRecords.slice(0, excessCount);

@@ -18,7 +18,7 @@ import {defineConfig} from 'vitest/config';
 import angular from '@analogjs/vite-plugin-angular';
 
 export default defineConfig({
-  plugins: [angular({jit: true, tsconfig: './tsconfig.json'})],
+  plugins: [angular({jit: true, tsconfig: './tsconfig.spec.json'})],
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],

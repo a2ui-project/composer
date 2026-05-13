@@ -15,7 +15,7 @@
  */
 
 import {ComponentHarness} from '@angular/cdk/testing';
-import {ChatPanelHarness} from '../../chat/test/chat-panel.harness';
+import {ChatPanelHarness} from '../../chat/chat-panel/test/chat-panel.harness';
 import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
 import {RawFrameHarness} from '../../preview/raw/test/raw-frame.harness';
 import {DataModelHarness} from '../../debug/data-model/test/data-model.harness';

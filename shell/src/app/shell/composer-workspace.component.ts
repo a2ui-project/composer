@@ -15,7 +15,7 @@
  */
 
 import {Component} from '@angular/core';
-import {ChatPanelComponent} from '../chat/chat-panel.component';
+import {ChatPanelComponent} from '../chat/chat-panel/chat-panel.component';
 import {RawFrameComponent} from '../preview/raw/raw-frame.component';
 import {RenderedFrameComponent} from '../preview/rendered/rendered-frame.component';
 import {DataModelComponent} from '../debug/data-model/data-model.component';

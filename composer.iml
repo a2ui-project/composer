@@ -5,6 +5,8 @@
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/dist" />
       <excludeFolder url="file://$MODULE_DIR$/tmp" />
+      <excludeFolder url="file://$MODULE_DIR$/shell/e2e/playwright-report" />
+      <excludeFolder url="file://$MODULE_DIR$/shell/e2e/test-results" />
     </content>
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
