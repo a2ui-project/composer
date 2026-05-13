@@ -38,6 +38,11 @@ export const routes: Routes = [
         title: 'A2UI Components Gallery',
       },
       {
+        path: 'settings',
+        loadComponent: () => import('./settings/settings.component').then(m => m.SettingsComponent),
+        title: 'A2UI Composer Settings',
+      },
+      {
         path: '**',
         redirectTo: '',
       },

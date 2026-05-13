@@ -18,12 +18,18 @@ import {TestBed} from '@angular/core/testing';
 import {StartupResolutionService} from './startup-resolution.service';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 
+import {Router} from '@angular/router';
+
 describe('StartupResolutionService', () => {
   let service: StartupResolutionService;
+  let mockRouter: {navigate: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     TestBed.resetTestingModule();
-    TestBed.configureTestingModule({});
+    mockRouter = {navigate: vi.fn()};
+    TestBed.configureTestingModule({
+      providers: [{provide: Router, useValue: mockRouter}],
+    });
     service = TestBed.inject(StartupResolutionService);
   });
 
@@ -62,6 +68,15 @@ describe('StartupResolutionService', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Watchdog timeout or failure fetching config.json'),
     );
+  });
+
+  it('redirects to settings page when configuration resolution completely fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Timeout'));
+    vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
+
+    await service.resolveStartupConfiguration();
+
+    expect(mockRouter.navigate).toHaveBeenCalledWith(['/settings']);
   });
 
   it('identifies 3P environment based on hostname or local override flag', () => {

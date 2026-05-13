@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {Injectable, Injector, inject} from '@angular/core';
+import {Router} from '@angular/router';
 import {QueryParser} from './query-parser';
 
 /**
@@ -36,6 +37,7 @@ export interface AppConfig {
 export class StartupResolutionService {
   private resolvedUrl: string | null = null;
   private isLockedContext = false;
+  private injector = inject(Injector);
 
   public async resolveStartupConfiguration(): Promise<string | null> {
     let staticConfig: AppConfig | null = null;
@@ -81,6 +83,13 @@ export class StartupResolutionService {
     }
 
     this.evaluateEnvironmentPurge();
+
+    if (!this.resolvedUrl) {
+      if (globalThis.location?.pathname !== '/settings') {
+        this.injector.get(Router).navigate(['/settings']);
+      }
+    }
+
     return this.resolvedUrl;
   }
 
