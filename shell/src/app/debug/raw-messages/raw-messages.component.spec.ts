@@ -30,6 +30,7 @@ describe('RawMessagesComponent Placeholder', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(RawMessagesComponent);
+    fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RawMessagesHarness);
   });
 

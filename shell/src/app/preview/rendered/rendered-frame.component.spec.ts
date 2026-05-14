@@ -30,6 +30,7 @@ describe('RenderedFrameComponent Placeholder', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(RenderedFrameComponent);
+    fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RenderedFrameHarness);
   });
 

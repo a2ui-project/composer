@@ -30,6 +30,7 @@ describe('MockRulesComponent Placeholder', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(MockRulesComponent);
+    fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, MockRulesHarness);
   });
 

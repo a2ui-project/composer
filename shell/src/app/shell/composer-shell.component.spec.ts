@@ -34,6 +34,7 @@ describe('ComposerShellComponent Layout', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(ComposerShellComponent);
+    fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ComposerShellHarness);
   });
 

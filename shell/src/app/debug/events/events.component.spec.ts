@@ -30,6 +30,7 @@ describe('EventsComponent Placeholder', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(EventsComponent);
+    fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, EventsHarness);
   });
 

@@ -30,6 +30,7 @@ describe('DataModelComponent Placeholder', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(DataModelComponent);
+    fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, DataModelHarness);
   });
 

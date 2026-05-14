@@ -30,6 +30,7 @@ describe('GalleryComponent Placeholder', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(GalleryComponent);
+    fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, GalleryHarness);
   });
 

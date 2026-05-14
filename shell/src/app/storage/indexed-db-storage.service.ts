@@ -166,12 +166,10 @@ export class IndexedDbStorageService {
       const excessCount = allRecords.length - maxCapacity + 1;
       const recordsToEvict = allRecords.slice(0, excessCount);
 
-      await this.executeTransaction<void>('readwrite', store => {
-        for (const r of recordsToEvict) {
-          store.delete(r.rendererUrl);
-          console.log(`Evicted oldest catalog record via LRU policy: ${r.rendererUrl}`);
-        }
-      });
+      for (const r of recordsToEvict) {
+        await this.deleteCatalogRecord(r.rendererUrl);
+        console.log(`Evicted oldest catalog record via LRU policy: ${r.rendererUrl}`);
+      }
     }
   }
 

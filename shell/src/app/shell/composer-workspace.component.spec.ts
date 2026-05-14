@@ -32,6 +32,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(ComposerWorkspaceComponent);
+    fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ComposerWorkspaceHarness);
   });
 

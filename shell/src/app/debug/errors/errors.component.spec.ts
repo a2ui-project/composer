@@ -30,6 +30,7 @@ describe('ErrorsComponent Placeholder', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(ErrorsComponent);
+    fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ErrorsHarness);
   });
 

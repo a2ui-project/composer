@@ -30,6 +30,7 @@ describe('ChatPanelComponent Placeholder', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(ChatPanelComponent);
+    fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ChatPanelHarness);
   });
 

@@ -20,7 +20,7 @@ import {MatSidenavHarness} from '@angular/material/sidenav/testing';
 export class ComposerShellHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-shell';
 
-  private getHeaderTitle = this.locatorFor('.composer-header > span');
+  private getHeaderTitle = this.locatorFor('.composer-header .header-title');
   private getThemeToggleButton = this.locatorFor('button[aria-label*="theme"]');
   private getHamburgerButton = this.locatorFor('button.hamburger-button');
   private getSidenav = this.locatorFor(MatSidenavHarness);
