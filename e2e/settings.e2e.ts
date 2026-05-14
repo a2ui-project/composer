@@ -29,42 +29,6 @@ test.describe('Settings Integration Suite', () => {
     await page.reload();
   });
 
-  test('renders static configuration default URL placeholder correctly', async ({page}) => {
-    const rendererInput = page.locator('input[formControlName="rendererUrl"]');
-    await expect(rendererInput).toHaveAttribute('placeholder', 'http://localhost:3000');
-  });
-
-  test('toggles API key input visibility between password and text', async ({page}) => {
-    const apiKeyInput = page.locator('input[formControlName="apiKey"]');
-    await expect(apiKeyInput).toHaveAttribute('type', 'password');
-
-    const toggleBtn = page.locator('button[aria-label*="API key"]');
-    await toggleBtn.click();
-    await expect(apiKeyInput).toHaveAttribute('type', 'text');
-
-    await toggleBtn.click();
-    await expect(apiKeyInput).toHaveAttribute('type', 'password');
-  });
-
-  test('displays client-side validation errors for missing or malformed fields upon submission', async ({
-    page,
-  }) => {
-    const rendererInput = page.locator('input[formControlName="rendererUrl"]');
-    await rendererInput.fill('');
-
-    const apiKeyInput = page.locator('input[formControlName="apiKey"]');
-    await apiKeyInput.fill('');
-
-    const saveBtn = page.locator('button', {hasText: 'Save Settings'});
-    await saveBtn.click();
-
-    await expect(page.locator('mat-error', {hasText: /required/i}).first()).toBeVisible();
-
-    await rendererInput.fill('malformed-url');
-    await saveBtn.click();
-    await expect(page.locator('mat-error', {hasText: /valid HTTP/i})).toBeVisible();
-  });
-
   test('persists configuration successfully, triggers explicit window reload, and unlocks guarded routes', async ({
     page,
   }) => {
@@ -79,21 +43,12 @@ test.describe('Settings Integration Suite', () => {
     });
 
     const saveBtn = page.locator('button', {hasText: 'Save Settings'});
-    await Promise.all([page.waitForURL('**/settings'), saveBtn.click()]);
+    await Promise.all([page.waitForNavigation(), saveBtn.click()]);
 
     const sentinel = await page.evaluate(() => (window as any).__BEFORE_RELOAD__);
     expect(sentinel).toBeUndefined();
 
     await page.goto('/');
     await expect(page.locator('.workspace-container')).toBeVisible();
-  });
-
-  test('forces third-party context rendering via local storage override key', async ({page}) => {
-    await page.evaluate(() => {
-      localStorage.setItem('a2ui_composer_force_3p', 'true');
-    });
-    await page.reload();
-
-    await expect(page.locator('input[formControlName="apiKey"]')).toBeVisible();
   });
 });

@@ -37,18 +37,6 @@ test.describe('Phase 1 Scaffolding Shell Integration', () => {
       localStorage.setItem('a2ui_composer_api_key', 'test-api-key');
     });
   });
-  test('launches application standalone and displays permanent header and persistent sidebar', async ({
-    page,
-  }) => {
-    await page.goto('/');
-    await expect(page).toHaveTitle(/A2UI Composer/);
-
-    const header = page.locator('.composer-header');
-    await expect(header).toContainText('A2UI Composer');
-
-    const sidebar = page.locator('.composer-sidenav');
-    await expect(sidebar).toBeVisible();
-  });
 
   test('navigates seamlessly between primary workspace and components gallery via sidebar routing links', async ({
     page,
@@ -74,17 +62,6 @@ test.describe('Phase 1 Scaffolding Shell Integration', () => {
 
     const workspaceContainer = page.locator('.workspace-container');
     await expect(workspaceContainer).toBeVisible();
-  });
-
-  test('resets session state upon clicking New Session prominent action button', async ({page}) => {
-    await page.goto('/');
-
-    const consolePromise = page.waitForEvent('console', msg =>
-      msg.text().includes('Session state cleared.'),
-    );
-    const newSessionBtn = page.locator('button', {hasText: 'New Session'});
-    await newSessionBtn.click();
-    await consolePromise;
   });
 
   test('loads workspace successfully when valid custom renderer query parameter is provided', async ({

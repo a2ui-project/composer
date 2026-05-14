@@ -15,12 +15,13 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
+import {Validators} from '@angular/forms';
 import {SettingsComponent} from './settings.component';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolutionService} from '../shell/startup-resolution.service';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
-describe('SettingsComponent Task 2.3', () => {
+describe('SettingsComponent', () => {
   let mockStartupResolutionService: {
     getResolvedRendererUrl: ReturnType<typeof vi.fn>;
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
@@ -28,12 +29,18 @@ describe('SettingsComponent Task 2.3', () => {
   };
 
   beforeEach(() => {
+    localStorage.clear();
     TestBed.resetTestingModule();
     mockStartupResolutionService = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       isContextLocked: vi.fn().mockReturnValue(false),
     };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
   });
 
   async function setupComponent() {
@@ -123,5 +130,75 @@ describe('SettingsComponent Task 2.3', () => {
     expect(badges.length).toBeGreaterThan(0);
     expect(statusCard.textContent).toContain('Bridge: Disconnected');
     expect(statusCard.textContent).toContain('Deferred to Phase 5');
+  });
+
+  it('verifies static placeholder text on the renderer URL input', async () => {
+    const {fixture} = await setupComponent();
+    const inputElement = fixture.nativeElement.querySelector(
+      'input[formControlName="rendererUrl"]',
+    );
+    expect(inputElement.getAttribute('placeholder')).toBe('http://localhost:3000');
+  });
+
+  it('toggles API key input visibility between password and text via button clicks', async () => {
+    mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(true);
+    const {fixture} = await setupComponent();
+
+    const inputElement = fixture.nativeElement.querySelector('input[formControlName="apiKey"]');
+    const toggleButton = fixture.nativeElement.querySelector('button[matSuffix]');
+
+    expect(inputElement.type).toBe('password');
+
+    toggleButton.click();
+    fixture.detectChanges();
+    expect(inputElement.type).toBe('text');
+
+    toggleButton.click();
+    fixture.detectChanges();
+    expect(inputElement.type).toBe('password');
+  });
+
+  it('renders client-side format validation errors for missing required fields and malformed URL strings upon form submission', async () => {
+    mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(true);
+    const {fixture, component} = await setupComponent();
+
+    component.settingsForm.patchValue({rendererUrl: '', apiKey: ''});
+    component.saveSettings();
+    fixture.detectChanges();
+
+    const errors = fixture.nativeElement.querySelectorAll('mat-error');
+    expect(errors.length).toBe(2);
+    expect(errors[0].textContent).toContain('Renderer URL is required');
+    expect(errors[1].textContent).toContain('Gemini API key is required');
+
+    component.settingsForm.patchValue({rendererUrl: 'invalid-url', apiKey: 'valid-key'});
+    component.saveSettings();
+    fixture.detectChanges();
+
+    const patternErrors = fixture.nativeElement.querySelectorAll('mat-error');
+    expect(patternErrors.length).toBe(1);
+    expect(patternErrors[0].textContent).toContain('Must be a valid HTTP or HTTPS URL');
+  });
+
+  it('renders third-party context layout when a2ui_composer_force_3p storage override key is present using a real StartupResolutionService', async () => {
+    localStorage.setItem('a2ui_composer_force_3p', 'true');
+    try {
+      await TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [SettingsComponent],
+        providers: [provideNoopAnimations(), StartupResolutionService],
+      }).compileComponents();
+
+      const fixture = TestBed.createComponent(SettingsComponent);
+      const component = fixture.componentInstance;
+      fixture.detectChanges();
+
+      expect(component.isThirdParty()).toBe(true);
+      const formSections = fixture.nativeElement.querySelectorAll('.form-section');
+      expect(formSections.length).toBe(2);
+      expect(formSections[1].textContent).toContain('Gemini API Provisioning');
+    } finally {
+      localStorage.removeItem('a2ui_composer_force_3p');
+    }
   });
 });
