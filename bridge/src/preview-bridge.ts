@@ -109,10 +109,10 @@ export class PreviewBridge {
   }
 
   private handleBlockingOverlay(blocked: boolean, customMessage?: string): void {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || !document.body) return;
 
     if (blocked) {
-      if (!this.overlayElement) {
+      if (!this.overlayElement || !this.overlayElement.isConnected) {
         this.overlayElement = document.createElement('div');
         this.overlayElement.id = 'a2ui-blocking-overlay';
         Object.assign(this.overlayElement.style, {
@@ -199,15 +199,27 @@ export class PreviewBridge {
         typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
 
       if (urlString.includes('/catalog')) {
-        return new Promise(resolve => {
+        return new Promise((resolve, reject) => {
           const requestId =
             typeof crypto !== 'undefined' && crypto.randomUUID
               ? crypto.randomUUID()
               : Date.now().toString(36) + Math.random().toString(36).substring(2);
 
+          const timeoutId = setTimeout(() => {
+            this.unregisterMessageProcessor('FETCH_CATALOG_RESPONSE', responseHandler);
+            reject(new Error(`Catalog fetch interception timeout for request ID: ${requestId}`));
+          }, 5000);
+
           const responseHandler = (payload: any) => {
             if (payload && payload.requestId === requestId) {
+              clearTimeout(timeoutId);
               this.unregisterMessageProcessor('FETCH_CATALOG_RESPONSE', responseHandler);
+
+              if (payload.error) {
+                reject(new Error(payload.error.message || String(payload.error)));
+                return;
+              }
+
               resolve(
                 new Response(JSON.stringify(payload.catalog || {}), {
                   status: 200,

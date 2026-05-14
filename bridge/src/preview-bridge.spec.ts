@@ -123,6 +123,35 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(data).toEqual({items: ['BasicColumn']});
   });
 
+  it('rejects intercepted fetch promise if response times out after interval bounds', async () => {
+    vi.useFakeTimers();
+    const fetchPromise = fetch('/catalog');
+
+    vi.advanceTimersByTime(5001);
+    await expect(fetchPromise).rejects.toThrow(/Catalog fetch interception timeout/);
+    vi.useRealTimers();
+  });
+
+  it('rejects intercepted fetch promise if payload resolves explicit error properties', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const fetchPromise = fetch('/catalog');
+
+    const lastCall = spy.mock.lastCall as any[];
+    const requestId = lastCall[0].payload.requestId;
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {
+          type: 'FETCH_CATALOG_RESPONSE',
+          payload: {requestId, error: {message: 'Catalog Resolution Failed'}},
+        },
+      }),
+    );
+
+    await expect(fetchPromise).rejects.toThrow('Catalog Resolution Failed');
+  });
+
   it('mounts full-viewport overlay DOM element dynamically upon SET_BLOCKING_STATE true', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
