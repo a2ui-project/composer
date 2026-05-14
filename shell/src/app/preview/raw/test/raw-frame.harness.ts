@@ -15,7 +15,25 @@
  */
 
 import {ComponentHarness} from '@angular/cdk/testing';
+import {MatInputHarness} from '@angular/material/input/testing';
 
 export class RawFrameHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-raw-frame';
+
+  protected getInputHarness = this.locatorFor(MatInputHarness);
+
+  async isCollapsed(): Promise<boolean> {
+    const container = await this.locatorFor('.raw-frame-container')();
+    return container.hasClass('is-collapsed');
+  }
+
+  async getJsonText(): Promise<string> {
+    const input = await this.getInputHarness();
+    return input.getValue();
+  }
+
+  async setJsonText(value: string): Promise<void> {
+    const input = await this.getInputHarness();
+    return input.setValue(value);
+  }
 }

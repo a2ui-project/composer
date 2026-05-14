@@ -18,23 +18,48 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {RawFrameComponent} from './raw-frame.component';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect} from 'vitest';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
+import {IS_EXTENSION_MODE} from '../../shell/environment-tokens';
+import {signal} from '@angular/core';
 
-describe('RawFrameComponent Placeholder', () => {
-  let fixture: ComponentFixture<RawFrameComponent>;
-  let harness: RawFrameHarness;
-
-  beforeEach(async () => {
+describe('RawFrameComponent', () => {
+  async function setup(isExtension: boolean) {
+    TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [RawFrameComponent],
+      providers: [
+        provideNoopAnimations(),
+        {provide: IS_EXTENSION_MODE, useValue: signal(isExtension)},
+      ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(RawFrameComponent);
+    const fixture = TestBed.createComponent(RawFrameComponent);
     fixture.detectChanges();
-    harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RawFrameHarness);
+    const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RawFrameHarness);
+    return {fixture, harness};
+  }
+
+  it('renders the raw JSON layout inside an Angular Material form field', async () => {
+    const {harness} = await setup(false);
+    expect(await harness.getJsonText()).toContain('"createSurface"');
   });
 
-  it('creates the raw preview placeholder component via test harness', async () => {
-    expect(harness).toBeTruthy();
+  it('applies standard uncollapsed layout padding when extension mode signal is false', async () => {
+    const {harness} = await setup(false);
+    expect(await harness.isCollapsed()).toBe(false);
+  });
+
+  it('applies collapsed container styling when extension mode signal is true', async () => {
+    const {harness} = await setup(true);
+    expect(await harness.isCollapsed()).toBe(true);
+  });
+
+  it('updates backing signal when text is entered via test harness', async () => {
+    const {fixture, harness} = await setup(false);
+    await harness.setJsonText('{"updated": true}');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.layoutJson()).toBe('{"updated": true}');
   });
 });

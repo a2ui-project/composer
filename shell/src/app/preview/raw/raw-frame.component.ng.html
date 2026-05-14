@@ -13,5 +13,14 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-
-<div class="raw-frame-placeholder">Raw JSON Placeholder</div>
+<div class="raw-frame-container" [class.is-collapsed]="isExtensionMode()">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="raw-json-field">
+    <mat-label>Raw A2UI Layout JSON</mat-label>
+    <textarea
+      matInput
+      [ngModel]="layoutJson()"
+      (ngModelChange)="layoutJson.set($event)"
+      placeholder="Enter raw JSON here..."
+    ></textarea>
+  </mat-form-field>
+</div>
