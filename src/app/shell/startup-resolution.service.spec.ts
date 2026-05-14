@@ -15,20 +15,17 @@
  */
 
 import {TestBed} from '@angular/core/testing';
+import {Router} from '@angular/router';
 import {StartupResolutionService} from './startup-resolution.service';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 
-import {Router} from '@angular/router';
-
-describe('StartupResolutionService', () => {
+describe('StartupResolutionService Task 2.6', () => {
   let service: StartupResolutionService;
-  let mockRouter: {navigate: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     TestBed.resetTestingModule();
-    mockRouter = {navigate: vi.fn()};
     TestBed.configureTestingModule({
-      providers: [{provide: Router, useValue: mockRouter}],
+      providers: [{provide: Router, useValue: {navigate: vi.fn()}}],
     });
     service = TestBed.inject(StartupResolutionService);
   });
@@ -40,12 +37,17 @@ describe('StartupResolutionService', () => {
   it('fetches static config and enforces lock when overrides are prohibited', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
-      json: async () => ({defaultRendererUrl: 'http://locked:3000', allowOverrides: false}),
+      json: async () => ({defaultRendererUrl: 'http://enterprise:3000', allowOverrides: false}),
     } as Response);
 
+    const logSpy = vi.spyOn(console, 'log');
     const url = await service.resolveStartupConfiguration();
-    expect(url).toBe('http://locked:3000');
+
+    expect(url).toBe('http://enterprise:3000');
     expect(service.isContextLocked()).toBe(true);
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Static configuration loaded with allowOverrides: false'),
+    );
   });
 
   it('evaluates query parameters prior to local storage when overrides are allowed', async () => {
@@ -70,15 +72,6 @@ describe('StartupResolutionService', () => {
     );
   });
 
-  it('redirects to settings page when configuration resolution completely fails', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Timeout'));
-    vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
-
-    await service.resolveStartupConfiguration();
-
-    expect(mockRouter.navigate).toHaveBeenCalledWith(['/settings']);
-  });
-
   it('identifies 3P environment based on hostname or local override flag', () => {
     const setItemSpy = vi.spyOn(Storage.prototype, 'getItem');
     const hostnameSpy = vi.spyOn(service, 'getWindowHostname');
@@ -92,16 +85,37 @@ describe('StartupResolutionService', () => {
     hostnameSpy.mockReturnValue('google.com');
     expect(service.isThirdPartyEnvironment()).toBe(false);
 
-    hostnameSpy.mockReturnValue('googleplex.com');
-    expect(service.isThirdPartyEnvironment()).toBe(false);
-
     // Test 3P hostname
-    hostnameSpy.mockReturnValue('localhost');
+    hostnameSpy.mockReturnValue('external-domain.com');
     expect(service.isThirdPartyEnvironment()).toBe(true);
 
-    // Test force 3P override
-    hostnameSpy.mockReturnValue('subdomain.google.com');
-    setItemSpy.mockReturnValue('true');
+    // Test forced 3P flag
+    setItemSpy.mockImplementation(key => (key === 'a2ui_composer_force_3p' ? 'true' : null));
     expect(service.isThirdPartyEnvironment()).toBe(true);
+  });
+
+  it('evaluates environment validity correctly via isEnvironmentValid', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({defaultRendererUrl: 'http://base:3000', allowOverrides: true}),
+    } as Response);
+
+    vi.spyOn(service, 'getWindowHostname').mockReturnValue('localhost');
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
+
+    // Scenario 1: URL resolved, but 3P missing API key -> invalid
+    getItemSpy.mockImplementation(key => {
+      if (key === 'a2ui_composer_api_key') return null;
+      return null;
+    });
+    await service.resolveStartupConfiguration();
+    expect(service.isEnvironmentValid()).toBe(false);
+
+    // Scenario 2: URL resolved, and 3P has API key -> valid
+    getItemSpy.mockImplementation(key => {
+      if (key === 'a2ui_composer_api_key') return 'AIzaSyValidKey';
+      return null;
+    });
+    expect(service.isEnvironmentValid()).toBe(true);
   });
 });

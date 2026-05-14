@@ -117,6 +117,14 @@ export class StartupResolutionService {
     return !is1P;
   }
 
+  public isEnvironmentValid(): boolean {
+    const resolvedUrl = this.getResolvedRendererUrl();
+    const is3P = this.isThirdPartyEnvironment();
+    const hasApiKey = !!this.getStorageItem('a2ui_composer_api_key');
+
+    return !!resolvedUrl && (!is3P || hasApiKey);
+  }
+
   public getWindowSearch(): string {
     return globalThis.location?.search || '';
   }
