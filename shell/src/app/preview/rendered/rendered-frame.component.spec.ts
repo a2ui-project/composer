@@ -18,15 +18,37 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {RenderedFrameComponent} from './rendered-frame.component';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RenderedFrameHarness} from './test/rendered-frame.harness';
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {StartupResolutionService} from '../../shell/startup-resolution.service';
+import {HostCommunicationService} from '../../shell/host-communication.service';
 
-describe('RenderedFrameComponent Placeholder', () => {
+describe('RenderedFrameComponent', () => {
   let fixture: ComponentFixture<RenderedFrameComponent>;
   let harness: RenderedFrameHarness;
+  let startupResolutionServiceMock: Partial<StartupResolutionService>;
+  let hostCommunicationServiceMock: Partial<HostCommunicationService>;
 
   beforeEach(async () => {
+    startupResolutionServiceMock = {
+      getResolvedRendererUrl: vi.fn().mockReturnValue('http://localhost:3000/renderer'),
+    };
+
+    hostCommunicationServiceMock = {
+      registerIframe: vi.fn(),
+    };
+
     await TestBed.configureTestingModule({
       imports: [RenderedFrameComponent],
+      providers: [
+        {
+          provide: StartupResolutionService,
+          useValue: startupResolutionServiceMock,
+        },
+        {
+          provide: HostCommunicationService,
+          useValue: hostCommunicationServiceMock,
+        },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(RenderedFrameComponent);
@@ -34,7 +56,25 @@ describe('RenderedFrameComponent Placeholder', () => {
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RenderedFrameHarness);
   });
 
-  it('creates the rendered preview placeholder component via test harness', async () => {
-    expect(harness).toBeTruthy();
+  it('renders the iframe securely bound to the active renderer URL', async () => {
+    expect(await harness.hasIframe()).toBe(true);
+    expect(await harness.getIframeSrc()).toBe('http://localhost:3000/renderer');
+  });
+
+  it('registers the iframe contentWindow with HostCommunicationService upon view initialization', () => {
+    expect(hostCommunicationServiceMock.registerIframe).toHaveBeenCalled();
+  });
+
+  it('renders a placeholder when no renderer URL is resolved', async () => {
+    fixture.destroy();
+    startupResolutionServiceMock.getResolvedRendererUrl = vi.fn().mockReturnValue(null);
+    const nullFixture = TestBed.createComponent(RenderedFrameComponent);
+    nullFixture.detectChanges();
+    const nullHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      nullFixture,
+      RenderedFrameHarness,
+    );
+
+    expect(await nullHarness.hasIframe()).toBe(false);
   });
 });

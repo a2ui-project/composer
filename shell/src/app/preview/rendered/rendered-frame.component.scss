@@ -14,4 +14,43 @@
  * limitations under the License.
  */
 
-/* Rendered preview placeholder styles */
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.rendered-frame-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  container-type: inline-size;
+  container-name: renderedFrame;
+  overflow: hidden;
+  background-color: var(--mat-app-background-color, #fafafa);
+
+  .preview-iframe {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
+
+  .rendered-frame-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #888;
+    font-family: sans-serif;
+  }
+}
+
+@container renderedFrame (max-width: 400px) {
+  .rendered-frame-container {
+    border-radius: 0;
+  }
+}

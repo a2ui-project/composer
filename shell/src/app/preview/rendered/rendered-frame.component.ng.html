@@ -13,5 +13,16 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-
-<div class="rendered-frame-placeholder">Rendered UI Placeholder</div>
+<div class="rendered-frame-container">
+  @if (safeRendererUrl) {
+    <iframe
+      #previewIframe
+      [src]="safeRendererUrl"
+      sandbox="allow-scripts allow-same-origin allow-forms"
+      class="preview-iframe"
+      title="Rendered Preview"
+    ></iframe>
+  } @else {
+    <div class="rendered-frame-placeholder">Rendered UI Placeholder</div>
+  }
+</div>

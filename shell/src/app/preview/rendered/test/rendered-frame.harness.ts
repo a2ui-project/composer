@@ -18,4 +18,17 @@ import {ComponentHarness} from '@angular/cdk/testing';
 
 export class RenderedFrameHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-rendered-frame';
+
+  protected getIframeElement = this.locatorForOptional('iframe');
+
+  async hasIframe(): Promise<boolean> {
+    const iframe = await this.getIframeElement();
+    return !!iframe;
+  }
+
+  async getIframeSrc(): Promise<string | null> {
+    const iframe = await this.getIframeElement();
+    if (!iframe) return null;
+    return iframe.getAttribute('src');
+  }
 }

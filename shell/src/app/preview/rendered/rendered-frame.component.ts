@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-import {Component} from '@angular/core';
+import {Component, inject, ViewChild, ElementRef} from '@angular/core';
+import {DomSanitizer, SafeResourceUrl} from '@angular/platform-browser';
+import {StartupResolutionService} from '../../shell/startup-resolution.service';
+import {HostCommunicationService} from '../../shell/host-communication.service';
 
 @Component({
   selector: 'a2ui-composer-rendered-frame',
@@ -27,4 +30,26 @@ import {Component} from '@angular/core';
  * Orchestrates the secure, sandboxed iframe rendering the active preview target,
  * synchronizing layouts, data models, and diagnostic telemetry.
  */
-export class RenderedFrameComponent {}
+export class RenderedFrameComponent {
+  private sanitizer = inject(DomSanitizer);
+  private startupResolutionService = inject(StartupResolutionService);
+  private hostCommunicationService = inject(HostCommunicationService);
+
+  private cachedStringUrl: string | null = null;
+  private cachedSafeUrl: SafeResourceUrl | null = null;
+
+  @ViewChild('previewIframe') set iframeRef(ref: ElementRef<HTMLIFrameElement> | undefined) {
+    this.hostCommunicationService.registerIframe(ref?.nativeElement?.contentWindow || null);
+  }
+
+  public get safeRendererUrl(): SafeResourceUrl | null {
+    const currentUrl = this.startupResolutionService.getResolvedRendererUrl();
+    if (currentUrl !== this.cachedStringUrl) {
+      this.cachedStringUrl = currentUrl;
+      this.cachedSafeUrl = currentUrl
+        ? this.sanitizer.bypassSecurityTrustResourceUrl(currentUrl)
+        : null;
+    }
+    return this.cachedSafeUrl;
+  }
+}
