@@ -17,8 +17,6 @@
 import {TestBed} from '@angular/core/testing';
 import {CatalogManagementService} from './catalog-management.service';
 import {HostCommunicationService, MessageEnvelope} from '../shell/host-communication.service';
-import {IndexedDbStorageService} from './indexed-db-storage.service';
-import {StartupResolutionService} from '../shell/startup-resolution.service';
 import {signal, WritableSignal} from '@angular/core';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {Subject} from 'rxjs';
@@ -30,8 +28,6 @@ describe('CatalogManagementService', () => {
     messageStream$: Subject<MessageEnvelope>;
     sendMessage: ReturnType<typeof vi.fn>;
   };
-  let indexedDbStorageServiceMock: Partial<IndexedDbStorageService>;
-  let startupResolutionServiceMock: Partial<StartupResolutionService>;
 
   beforeEach(() => {
     TestBed.resetTestingModule();
@@ -43,15 +39,10 @@ describe('CatalogManagementService', () => {
       sendMessage: vi.fn(),
     };
 
-    indexedDbStorageServiceMock = {};
-    startupResolutionServiceMock = {};
-
     TestBed.configureTestingModule({
       providers: [
         CatalogManagementService,
         {provide: HostCommunicationService, useValue: hostCommunicationServiceMock},
-        {provide: IndexedDbStorageService, useValue: indexedDbStorageServiceMock},
-        {provide: StartupResolutionService, useValue: startupResolutionServiceMock},
       ],
     });
 
@@ -68,6 +59,7 @@ describe('CatalogManagementService', () => {
   it('initializes successfully with handshake not in progress', () => {
     expect(service).toBeTruthy();
     expect(service.isHandshakeInProgress()).toBe(false);
+    expect(service.catalogError()).toBeNull();
   });
 
   it('sets handshake lock to true and sends GET_CATALOG when RENDERER_READY is received', () => {
@@ -102,7 +94,7 @@ describe('CatalogManagementService', () => {
     expect(hostCommunicationServiceMock.sendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('clears handshake lock when A2UI_CATALOG is received', () => {
+  it('clears handshake lock when A2UI_CATALOG is received and hashing completes', async () => {
     hostCommunicationServiceMock.messageStream$.next({
       type: 'RENDERER_READY',
       origin: 'http://localhost',
@@ -114,7 +106,12 @@ describe('CatalogManagementService', () => {
       origin: 'http://localhost',
       payload: {},
     });
+
+    vi.useRealTimers();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
     expect(service.isHandshakeInProgress()).toBe(false);
+    expect(service.catalogError()).toBeNull();
   });
 
   it('resets handshake lock and logs error on 5-second watchdog timeout if A2UI_CATALOG is not received', () => {
@@ -131,10 +128,13 @@ describe('CatalogManagementService', () => {
       'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
     );
     expect(service.watchdogFired()).toBe(true);
+    expect(service.catalogError()).toBe(
+      'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+    );
     expect(service.isHandshakeInProgress()).toBe(false);
   });
 
-  it('clears watchdog timer when A2UI_CATALOG arrives before timeout', () => {
+  it('clears watchdog timer when A2UI_CATALOG arrives before timeout', async () => {
     hostCommunicationServiceMock.messageStream$.next({
       type: 'RENDERER_READY',
       origin: 'http://localhost',
@@ -149,9 +149,75 @@ describe('CatalogManagementService', () => {
       origin: 'http://localhost',
       payload: {},
     });
+
+    vi.useRealTimers();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
     expect(service.isHandshakeInProgress()).toBe(false);
 
     vi.advanceTimersByTime(2000);
     expect(service.watchdogFired()).toBe(false);
+  });
+
+  it('rejects malformed A2UI_CATALOG payload and sets catalogError signal', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    hostCommunicationServiceMock.messageStream$.next({
+      type: 'A2UI_CATALOG',
+      origin: 'http://localhost',
+      payload: null,
+    });
+
+    expect(service.catalogError()).toBe('Invalid or malformed A2UI_CATALOG payload received.');
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Invalid or malformed A2UI_CATALOG payload received.',
+      null,
+    );
+  });
+
+  it('sanitizes malicious HTML tags in title and description and computes deterministic SHA-256 hash', async () => {
+    const payload = {
+      title: 'Catalog Title <script>alert(1)</script>',
+      description: 'Catalog Description <img src=x onerror=alert(1)>',
+      components: [{id: 'button', name: 'Button'}],
+    };
+
+    hostCommunicationServiceMock.messageStream$.next({
+      type: 'A2UI_CATALOG',
+      origin: 'http://localhost',
+      payload,
+    });
+
+    vi.useRealTimers();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
+
+    expect(service.lastCatalogString()).toContain('Catalog Title ');
+    expect(service.lastCatalogString()).not.toContain('<script>');
+    expect(service.lastCatalogString()).toContain('Catalog Description ');
+    expect(service.lastCatalogString()).not.toContain('onerror');
+
+    const expectedHash = service.lastChecksumHash();
+    expect(expectedHash).toBeTruthy();
+    expect(expectedHash.length).toBe(64);
+
+    // Verify deterministic hashing for identical catalog structures
+    const payloadIdentical = {
+      components: [{id: 'button', name: 'Button'}],
+      title: 'Catalog Title <script>alert(1)</script>',
+      description: 'Catalog Description <img src=x onerror=alert(1)>',
+    };
+
+    hostCommunicationServiceMock.messageStream$.next({
+      type: 'A2UI_CATALOG',
+      origin: 'http://localhost',
+      payload: payloadIdentical,
+    });
+
+    vi.useRealTimers();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
+
+    expect(service.lastChecksumHash()).toBe(expectedHash);
   });
 });
