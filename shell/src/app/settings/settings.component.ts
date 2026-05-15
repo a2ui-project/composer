@@ -22,6 +22,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
+import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {StartupResolutionService} from '../shell/startup-resolution.service';
 import {DOCUMENT} from '@angular/common';
 import {HostCommunicationService} from '../shell/host-communication.service';
@@ -38,6 +39,7 @@ import {CatalogManagementService} from '../storage/catalog-management.service';
     MatIconModule,
     MatCardModule,
     MatChipsModule,
+    MatSlideToggleModule,
   ],
   templateUrl: './settings.component.ng.html',
   styleUrl: './settings.component.scss',
@@ -56,6 +58,7 @@ export class SettingsComponent implements OnInit {
   public readonly isLocked: WritableSignal<boolean> = signal(false);
   public readonly isThirdParty: WritableSignal<boolean> = signal(false);
   public readonly hideApiKey: WritableSignal<boolean> = signal(true);
+  public readonly forceThirdPartyAuth: WritableSignal<boolean> = signal(false);
 
   public readonly bridgeConnected: Signal<boolean> = computed(
     () => this.hostCommunicationService.latestEnvelope() !== null,
@@ -82,6 +85,8 @@ export class SettingsComponent implements OnInit {
 
     const is3P = this.startupResolutionService.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
+
+    this.forceThirdPartyAuth.set(this.getStorageItem('a2ui_composer_force_3p') === 'true');
 
     const initialUrl =
       this.startupResolutionService.getResolvedRendererUrl() ||
@@ -130,6 +135,20 @@ export class SettingsComponent implements OnInit {
     if (this.document.defaultView?.location) {
       this.document.defaultView.location.assign('/');
     }
+  }
+
+  public toggleForceThirdPartyAuth(): void {
+    if (this.isLocked()) {
+      return;
+    }
+    const newState = !this.forceThirdPartyAuth();
+    this.forceThirdPartyAuth.set(newState);
+    if (newState) {
+      this.setStorageItem('a2ui_composer_force_3p', 'true');
+    } else {
+      this.removeStorageItem('a2ui_composer_force_3p');
+    }
+    this.reloadWindow();
   }
 
   private getStorageItem(key: string): string | null {

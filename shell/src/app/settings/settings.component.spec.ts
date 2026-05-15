@@ -282,10 +282,51 @@ describe('SettingsComponent', () => {
 
       expect(component.isThirdParty()).toBe(true);
       const formSections = fixture.nativeElement.querySelectorAll('.form-section');
-      expect(formSections.length).toBe(2);
+      expect(formSections.length).toBe(3);
       expect(formSections[1].textContent).toContain('Gemini API Provisioning');
     } finally {
       localStorage.removeItem('a2ui_composer_force_3p');
+    }
+  });
+
+  it('toggling forceThirdPartyAuth updates localStorage with a2ui_composer_force_3p and reloads the window', async () => {
+    const {fixture, component} = await setupComponent();
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+    const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
+    const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+
+    expect(component.forceThirdPartyAuth()).toBe(false);
+
+    component.toggleForceThirdPartyAuth();
+    fixture.detectChanges();
+
+    expect(component.forceThirdPartyAuth()).toBe(true);
+    expect(setItemSpy).toHaveBeenCalledWith('a2ui_composer_force_3p', 'true');
+    expect(reloadSpy).toHaveBeenCalled();
+
+    component.toggleForceThirdPartyAuth();
+    fixture.detectChanges();
+
+    expect(component.forceThirdPartyAuth()).toBe(false);
+    expect(removeItemSpy).toHaveBeenCalledWith('a2ui_composer_force_3p');
+    expect(reloadSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('disables the slide toggle and displays the auth-locked-notice warning badge when isContextLocked returns true', async () => {
+    mockStartupResolutionService.isContextLocked.mockReturnValue(true);
+    const {fixture, component} = await setupComponent();
+
+    expect(component.isLocked()).toBe(true);
+
+    const lockedNotice = fixture.nativeElement.querySelector('.auth-locked-notice');
+    expect(lockedNotice).toBeTruthy();
+    expect(lockedNotice.textContent).toContain(
+      'Authentication mode overrides are locked by enterprise policy',
+    );
+
+    const slideToggleInput = fixture.nativeElement.querySelector('mat-slide-toggle button');
+    if (slideToggleInput) {
+      expect(slideToggleInput.disabled).toBe(true);
     }
   });
 });

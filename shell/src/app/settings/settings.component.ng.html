@@ -76,6 +76,29 @@
             </mat-form-field>
           </div>
         }
+
+        <div class="form-section developer-auth-section">
+          <h3>Developer Authentication Overrides</h3>
+          <p class="description">
+            Simulate external 3P context to verify Gemini API key provisioning workflows.
+          </p>
+          @if (isLocked()) {
+            <div class="locked-notice auth-locked-notice">
+              <mat-icon color="warn">lock</mat-icon>
+              <span>Authentication mode overrides are locked by enterprise policy.</span>
+            </div>
+          }
+          <div class="toggle-container" style="margin-top: 12px">
+            <mat-slide-toggle
+              [checked]="forceThirdPartyAuth()"
+              [disabled]="isLocked()"
+              (change)="toggleForceThirdPartyAuth()"
+              color="primary"
+            >
+              Force External Third-Party Authentication Mode
+            </mat-slide-toggle>
+          </div>
+        </div>
       </form>
     </mat-card-content>
     <mat-card-actions align="end">
