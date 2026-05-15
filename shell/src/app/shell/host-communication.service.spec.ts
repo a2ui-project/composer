@@ -61,10 +61,6 @@ describe('HostCommunicationService', () => {
       payload: {status: 'ok'},
       origin: 'http://localhost:3000',
     });
-    expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
-      {type: 'GET_CATALOG'},
-      'http://localhost:3000',
-    );
   });
 
   it('assigns undefined payload when incoming message omits payload field', () => {
@@ -84,10 +80,6 @@ describe('HostCommunicationService', () => {
       payload: undefined,
       origin: 'http://localhost:3000',
     });
-    expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
-      {type: 'GET_CATALOG'},
-      'http://localhost:3000',
-    );
   });
 
   it('rejects message and does not emit envelope when source does not match registered iframe', () => {

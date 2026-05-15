@@ -16,6 +16,7 @@
 
 import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
 import {StartupResolutionService} from './startup-resolution.service';
+import {Subject} from 'rxjs';
 
 /**
  * Schema representing a structured postMessage payload used to communicate
@@ -41,13 +42,15 @@ declare global {
  * between the primary workspace shell and rendering client frames.
  */
 export class HostCommunicationService implements OnDestroy {
-  private startupResolutionService = inject(StartupResolutionService);
+  private readonly startupResolutionService = inject(StartupResolutionService);
   private iframeWindow: Window | null = null;
-  private latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
+  private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
 
-  public latestEnvelope: Signal<MessageEnvelope | null> = this.latestEnvelopeSignal.asReadonly();
+  public readonly latestEnvelope: Signal<MessageEnvelope | null> =
+    this.latestEnvelopeSignal.asReadonly();
+  public readonly messageStream$ = new Subject<MessageEnvelope>();
 
-  private messageListener = (event: MessageEvent) => {
+  private readonly messageListener = (event: MessageEvent) => {
     if (!this.iframeWindow || event.source !== this.iframeWindow) {
       return;
     }
@@ -69,15 +72,13 @@ export class HostCommunicationService implements OnDestroy {
     const data = event.data;
     if (data && typeof data === 'object' && data.type) {
       const type = data.type;
-      this.latestEnvelopeSignal.set({
+      const envelope: MessageEnvelope = {
         type,
         payload: data.payload,
         origin: event.origin,
-      });
-
-      if (type === 'RENDERER_READY') {
-        this.sendMessage({type: 'GET_CATALOG'});
-      }
+      };
+      this.latestEnvelopeSignal.set(envelope);
+      this.messageStream$.next(envelope);
     }
   };
 
