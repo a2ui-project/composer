@@ -20,6 +20,9 @@ import {SettingsComponent} from './settings.component';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolutionService} from '../shell/startup-resolution.service';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {HostCommunicationService} from '../shell/host-communication.service';
+import {CatalogManagementService} from '../storage/catalog-management.service';
+import {signal, WritableSignal} from '@angular/core';
 
 describe('SettingsComponent', () => {
   let mockStartupResolutionService: {
@@ -27,6 +30,11 @@ describe('SettingsComponent', () => {
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
     isContextLocked: ReturnType<typeof vi.fn>;
   };
+  let mockLatestEnvelope: WritableSignal<any>;
+  let mockIsHandshakeInProgress: WritableSignal<boolean>;
+  let mockActiveCatalogTitle: WritableSignal<string>;
+  let mockActiveCatalog: WritableSignal<any>;
+  let mockCatalogError: WritableSignal<string | null>;
 
   beforeEach(() => {
     localStorage.clear();
@@ -36,6 +44,11 @@ describe('SettingsComponent', () => {
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       isContextLocked: vi.fn().mockReturnValue(false),
     };
+    mockLatestEnvelope = signal<any>(null);
+    mockIsHandshakeInProgress = signal<boolean>(false);
+    mockActiveCatalogTitle = signal<string>('');
+    mockActiveCatalog = signal<any>(null);
+    mockCatalogError = signal<string | null>(null);
   });
 
   afterEach(() => {
@@ -49,6 +62,19 @@ describe('SettingsComponent', () => {
       providers: [
         provideNoopAnimations(),
         {provide: StartupResolutionService, useValue: mockStartupResolutionService},
+        {
+          provide: HostCommunicationService,
+          useValue: {latestEnvelope: mockLatestEnvelope},
+        },
+        {
+          provide: CatalogManagementService,
+          useValue: {
+            isHandshakeInProgress: mockIsHandshakeInProgress,
+            activeCatalogTitle: mockActiveCatalogTitle,
+            activeCatalog: mockActiveCatalog,
+            catalogError: mockCatalogError,
+          },
+        },
       ],
     }).compileComponents();
 
@@ -121,7 +147,7 @@ describe('SettingsComponent', () => {
     expect(lockedNotice.textContent).toContain('locked by enterprise policy');
   });
 
-  it('displays static connection status badges and overlay logs preview placeholders', async () => {
+  it('displays default connection status badges and overlay logs console when disconnected', async () => {
     const {fixture} = await setupComponent();
     const statusCard = fixture.nativeElement.querySelector('.status-card');
     expect(statusCard).toBeTruthy();
@@ -129,7 +155,52 @@ describe('SettingsComponent', () => {
     const badges = statusCard.querySelectorAll('.status-badge');
     expect(badges.length).toBeGreaterThan(0);
     expect(statusCard.textContent).toContain('Bridge: Disconnected');
-    expect(statusCard.textContent).toContain('Deferred to Phase 5');
+    expect(statusCard.textContent).toContain('Catalog Handshake: Disconnected');
+    expect(statusCard.textContent).toContain('Bridge disconnected');
+  });
+
+  it('dynamically updates connection status badges and logs console when HostCommunicationService and CatalogManagementService signals mutate', async () => {
+    const {fixture} = await setupComponent();
+    const statusCard = fixture.nativeElement.querySelector('.status-card');
+
+    // Initial state: bridge disconnected, catalog disconnected
+    expect(statusCard.textContent).toContain('Bridge: Disconnected');
+    expect(statusCard.textContent).toContain('Catalog Handshake: Disconnected');
+    let bridgeChip = fixture.nativeElement.querySelector('.bridge-badge');
+    expect(bridgeChip.classList.contains('mat-accent')).toBe(true);
+
+    // Mutate bridge to connected
+    mockLatestEnvelope.set({type: 'RENDERER_READY', origin: 'http://localhost'});
+    fixture.detectChanges();
+    expect(statusCard.textContent).toContain('Bridge: Connected');
+    bridgeChip = fixture.nativeElement.querySelector('.bridge-badge');
+    expect(bridgeChip.classList.contains('mat-primary')).toBe(true);
+
+    // Mutate catalog to indexing
+    mockIsHandshakeInProgress.set(true);
+    fixture.detectChanges();
+    expect(statusCard.textContent).toContain('Catalog Handshake: Indexing');
+    let catalogChip = fixture.nativeElement.querySelector('.catalog-badge');
+    expect(catalogChip.classList.contains('mat-accent')).toBe(true);
+    expect(statusCard.textContent).toContain('Catalog handshake in progress');
+
+    // Mutate catalog to connected
+    mockIsHandshakeInProgress.set(false);
+    mockActiveCatalogTitle.set('My Catalog');
+    mockActiveCatalog.set({title: 'My Catalog'});
+    fixture.detectChanges();
+    expect(statusCard.textContent).toContain('Catalog Handshake: Connected');
+    catalogChip = fixture.nativeElement.querySelector('.catalog-badge');
+    expect(catalogChip.classList.contains('mat-primary')).toBe(true);
+    expect(statusCard.textContent).toContain('Catalog handshake completed successfully');
+
+    // Mutate catalog to error
+    mockCatalogError.set('Malformed catalog JSON');
+    fixture.detectChanges();
+    expect(statusCard.textContent).toContain('Catalog Handshake: Error');
+    catalogChip = fixture.nativeElement.querySelector('.catalog-badge');
+    expect(catalogChip.classList.contains('mat-warn')).toBe(true);
+    expect(statusCard.textContent).toContain('[Catalog Error] Malformed catalog JSON');
   });
 
   it('verifies static placeholder text on the renderer URL input', async () => {
@@ -186,7 +257,23 @@ describe('SettingsComponent', () => {
       await TestBed.resetTestingModule();
       await TestBed.configureTestingModule({
         imports: [SettingsComponent],
-        providers: [provideNoopAnimations(), StartupResolutionService],
+        providers: [
+          provideNoopAnimations(),
+          StartupResolutionService,
+          {
+            provide: HostCommunicationService,
+            useValue: {latestEnvelope: mockLatestEnvelope},
+          },
+          {
+            provide: CatalogManagementService,
+            useValue: {
+              isHandshakeInProgress: mockIsHandshakeInProgress,
+              activeCatalogTitle: mockActiveCatalogTitle,
+              activeCatalog: mockActiveCatalog,
+              catalogError: mockCatalogError,
+            },
+          },
+        ],
       }).compileComponents();
 
       const fixture = TestBed.createComponent(SettingsComponent);

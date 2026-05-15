@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, OnInit, inject, signal} from '@angular/core';
+import {Component, OnInit, inject, signal, computed, WritableSignal, Signal} from '@angular/core';
 import {ReactiveFormsModule, NonNullableFormBuilder, Validators} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -24,6 +24,8 @@ import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
 import {StartupResolutionService} from '../shell/startup-resolution.service';
 import {DOCUMENT} from '@angular/common';
+import {HostCommunicationService} from '../shell/host-communication.service';
+import {CatalogManagementService} from '../storage/catalog-management.service';
 
 @Component({
   selector: 'a2ui-composer-settings',
@@ -45,15 +47,31 @@ import {DOCUMENT} from '@angular/common';
  * connection handshakes, and developer toggle overrides.
  */
 export class SettingsComponent implements OnInit {
-  private fb = inject(NonNullableFormBuilder);
-  private startupResolutionService = inject(StartupResolutionService);
-  private document = inject(DOCUMENT);
+  private readonly fb = inject(NonNullableFormBuilder);
+  private readonly startupResolutionService = inject(StartupResolutionService);
+  private readonly document = inject(DOCUMENT);
+  private readonly hostCommunicationService = inject(HostCommunicationService);
+  private readonly catalogManagementService = inject(CatalogManagementService);
 
-  public isLocked = signal(false);
-  public isThirdParty = signal(false);
-  public hideApiKey = signal(true);
+  public readonly isLocked: WritableSignal<boolean> = signal(false);
+  public readonly isThirdParty: WritableSignal<boolean> = signal(false);
+  public readonly hideApiKey: WritableSignal<boolean> = signal(true);
 
-  public settingsForm = this.fb.group({
+  public readonly bridgeConnected: Signal<boolean> = computed(
+    () => this.hostCommunicationService.latestEnvelope() !== null,
+  );
+  public readonly catalogStatus: Signal<string> = computed(() => {
+    if (this.catalogManagementService.catalogError()) return 'Error';
+    if (this.catalogManagementService.isHandshakeInProgress()) return 'Indexing';
+    if (this.catalogManagementService.activeCatalog()) return 'Connected';
+    return 'Disconnected';
+  });
+
+  public readonly catalogErrorMessage: Signal<string | null> = computed(() =>
+    this.catalogManagementService.catalogError(),
+  );
+
+  public readonly settingsForm = this.fb.group({
     rendererUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/i)]],
     apiKey: [''],
   });

@@ -86,21 +86,52 @@
   <mat-card class="status-card">
     <mat-card-header>
       <mat-card-title>Connection Status & Diagnostics</mat-card-title>
-      <mat-card-subtitle>Real-time monitoring bridge (Deferred to Phase 5)</mat-card-subtitle>
+      <mat-card-subtitle>Real-time monitoring bridge</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
       <div class="status-badges">
         <mat-chip-set>
-          <mat-chip class="status-badge" color="accent">Bridge: Disconnected</mat-chip>
-          <mat-chip class="status-badge" color="primary">Catalog Handshake: Pending</mat-chip>
+          <mat-chip
+            class="status-badge bridge-badge"
+            [color]="bridgeConnected() ? 'primary' : 'accent'"
+            >Bridge: {{ bridgeConnected() ? 'Connected' : 'Disconnected' }}</mat-chip
+          >
+          <mat-chip
+            class="status-badge catalog-badge"
+            [color]="
+              catalogStatus() === 'Connected'
+                ? 'primary'
+                : catalogStatus() === 'Indexing'
+                  ? 'accent'
+                  : catalogStatus() === 'Error'
+                    ? 'warn'
+                    : undefined
+            "
+            >Catalog Handshake: {{ catalogStatus() }}</mat-chip
+          >
         </mat-chip-set>
       </div>
 
       <div class="overlay-logs">
         <h4>Overlay Logs Preview</h4>
         <div class="logs-console">
-          <code>[System] Initializing settings view using static placeholders...</code><br />
-          <code>[System] Active signal wiring and subscriptions deferred to Phase 5.</code>
+          @if (catalogErrorMessage()) {
+            <code class="error-log" style="color: #f44336; font-weight: bold"
+              >[Catalog Error] {{ catalogErrorMessage() }}</code
+            >
+          } @else if (catalogStatus() === 'Connected') {
+            <code class="success-log" style="color: #4caf50"
+              >[System] Catalog handshake completed successfully. Active catalog ready.</code
+            >
+          } @else if (catalogStatus() === 'Indexing') {
+            <code>[System] Catalog handshake in progress. Indexing metadata...</code>
+          } @else if (bridgeConnected()) {
+            <code>[System] Bridge connected. Initializing catalog handshake...</code>
+          } @else {
+            <code
+              >[System] Bridge disconnected. Waiting for iframe handshake initialization...</code
+            >
+          }
         </div>
       </div>
     </mat-card-content>
