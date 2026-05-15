@@ -14,11 +14,15 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal} from '@angular/core';
+import {Component, inject, signal, DestroyRef} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {FormsModule} from '@angular/forms';
+import {Subject} from 'rxjs';
+import {debounceTime, filter, map} from 'rxjs/operators';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens';
+import {HostCommunicationService} from '../../shell/host-communication.service';
 
 const CAR_BOOKING = `
 {"version": "v0.9", "createSurface": {"surfaceId": "car_booking_basic", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}
@@ -40,4 +44,50 @@ const CAR_BOOKING = `
 export class RawFrameComponent {
   readonly isExtensionMode = inject(IS_EXTENSION_MODE);
   readonly layoutJson = signal<string>(CAR_BOOKING);
+  public readonly isJsonInvalid = signal<boolean>(false);
+
+  private readonly hostCommunicationService = inject(HostCommunicationService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly layoutInput$ = new Subject<string>();
+
+  constructor() {
+    this.layoutInput$
+      .pipe(
+        debounceTime(300),
+        map((value: string): unknown[] | null => {
+          try {
+            const trimmed = value.trim();
+            if (!trimmed) {
+              this.isJsonInvalid.set(false);
+              return [];
+            }
+            let payload: unknown[];
+            if (trimmed.startsWith('[')) {
+              payload = JSON.parse(trimmed);
+            } else {
+              const lines = trimmed
+                .split('\n')
+                .map(l => l.trim())
+                .filter(l => l.length > 0);
+              payload = lines.map(line => JSON.parse(line));
+            }
+            this.isJsonInvalid.set(false);
+            return payload;
+          } catch (err) {
+            this.isJsonInvalid.set(true);
+            return null;
+          }
+        }),
+        filter((payload): payload is unknown[] => payload !== null),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((payload: unknown[]) => {
+        this.hostCommunicationService.sendRenderA2UI(payload);
+      });
+  }
+
+  public onLayoutChange(value: string): void {
+    this.layoutJson.set(value);
+    this.layoutInput$.next(value);
+  }
 }

@@ -36,4 +36,9 @@ export class RawFrameHarness extends ComponentHarness {
     const input = await this.getInputHarness();
     return input.setValue(value);
   }
+
+  async hasInvalidJsonBadge(): Promise<boolean> {
+    const badge = await this.locatorForOptional('.invalid-json-badge')();
+    return badge !== null;
+  }
 }
