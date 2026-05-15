@@ -145,8 +145,10 @@ export class SettingsComponent implements OnInit {
     this.forceThirdPartyAuth.set(newState);
     if (newState) {
       this.setStorageItem('a2ui_composer_force_3p', 'true');
+      this.removeStorageItem('a2ui_composer_force_1p');
     } else {
       this.removeStorageItem('a2ui_composer_force_3p');
+      this.setStorageItem('a2ui_composer_force_1p', 'true');
     }
     this.reloadWindow();
   }
