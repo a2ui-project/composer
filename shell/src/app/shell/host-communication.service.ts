@@ -17,6 +17,7 @@
 import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
 import {StartupResolutionService} from './startup-resolution.service';
 import {Subject} from 'rxjs';
+import {CrossFrameValidator} from './cross-frame-validator';
 
 /**
  * Schema representing a structured postMessage payload used to communicate
@@ -94,6 +95,11 @@ export class HostCommunicationService implements OnDestroy {
   }
 
   public sendMessage(message: {type: string; payload?: unknown}): void {
+    if (!CrossFrameValidator.validateOutgoingMessage(message)) {
+      console.error('Blocked dispatch of malformed message type...', message);
+      return;
+    }
+
     if (!this.iframeWindow) return;
     const expectedUrl = this.startupResolutionService.getResolvedRendererUrl();
     if (!expectedUrl) return;
@@ -104,6 +110,10 @@ export class HostCommunicationService implements OnDestroy {
     } catch (err) {
       // Ignore malformed URL
     }
+  }
+
+  public sendRenderA2UI(payload: unknown[]): void {
+    this.sendMessage({type: 'RENDER_A2UI', payload});
   }
 
   ngOnDestroy(): void {

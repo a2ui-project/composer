@@ -119,10 +119,52 @@ describe('HostCommunicationService', () => {
     } as unknown as Window;
     service.registerIframe(mockIframeWindow);
 
-    service.sendMessage({type: 'UPDATE_LAYOUT'});
+    service.sendMessage({type: 'GET_CATALOG'});
 
     expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
-      {type: 'UPDATE_LAYOUT'},
+      {type: 'GET_CATALOG'},
+      'http://localhost:3000',
+    );
+  });
+
+  it('blocks sendMessage when payload is malformed', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    service.sendMessage({type: 'RENDER_A2UI', payload: {invalid: 'not an array'}});
+
+    expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith('Blocked dispatch of malformed message type...', {
+      type: 'RENDER_A2UI',
+      payload: {invalid: 'not an array'},
+    });
+
+    consoleSpy.mockRestore();
+  });
+
+  it('blocks sendRenderA2UI when array items lack version v0.9', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    service.sendRenderA2UI([{updateDataModel: {surfaceId: 's-1'}}]);
+
+    expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('successfully invokes postMessage when sendRenderA2UI is called with a valid payload', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    const validPayload = [{version: 'v0.9', updateDataModel: {surfaceId: 's-1'}}];
+    service.sendRenderA2UI(validPayload);
+
+    expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
+      {type: 'RENDER_A2UI', payload: validPayload},
       'http://localhost:3000',
     );
   });
