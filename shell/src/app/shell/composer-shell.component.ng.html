@@ -23,7 +23,9 @@
   >
     <mat-icon>menu</mat-icon>
   </button>
-  <span class="header-title">A2UI Composer</span>
+  <span class="header-title" [matTooltip]="activeCatalogDescription() || ''"
+    >A2UI Composer{{ activeCatalogTitle() ? ' - ' + activeCatalogTitle() : '' }}</span
+  >
   <span class="spacer"></span>
   <button mat-button class="reset-session-button" color="primary" (click)="resetSession()">
     New Session

@@ -23,15 +23,26 @@ import {ComposerShellHarness} from './test/composer-shell.harness';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {DOCUMENT} from '@angular/common';
 import {IndexedDbStorageService} from '../storage/indexed-db-storage.service';
+import {CatalogManagementService} from '../storage/catalog-management.service';
+import {signal, WritableSignal} from '@angular/core';
 
 describe('ComposerShellComponent Layout', () => {
   let fixture: ComponentFixture<ComposerShellComponent>;
   let harness: ComposerShellHarness;
   let storageServiceMock: Partial<IndexedDbStorageService>;
+  let catalogManagementServiceMock: {
+    activeCatalogTitle: WritableSignal<string>;
+    activeCatalogDescription: WritableSignal<string>;
+  };
 
   beforeEach(async () => {
     storageServiceMock = {
       flushAllRecords: vi.fn().mockResolvedValue(undefined),
+    };
+
+    catalogManagementServiceMock = {
+      activeCatalogTitle: signal(''),
+      activeCatalogDescription: signal(''),
     };
 
     await TestBed.configureTestingModule({
@@ -42,6 +53,10 @@ describe('ComposerShellComponent Layout', () => {
         {
           provide: IndexedDbStorageService,
           useValue: storageServiceMock,
+        },
+        {
+          provide: CatalogManagementService,
+          useValue: catalogManagementServiceMock,
         },
       ],
     }).compileComponents();
@@ -62,6 +77,18 @@ describe('ComposerShellComponent Layout', () => {
 
   it('displays the static header title A2UI Composer via test harness inspection', async () => {
     expect(await harness.getHeaderTitleText()).toContain('A2UI Composer');
+  });
+
+  it('dynamically updates the header title when activeCatalogTitle mutates', async () => {
+    catalogManagementServiceMock.activeCatalogTitle.set('Test Catalog');
+    fixture.detectChanges();
+    expect(await harness.getHeaderTitleText()).toBe('A2UI Composer - Test Catalog');
+  });
+
+  it('binds the activeCatalogDescription correctly as a tooltip', async () => {
+    catalogManagementServiceMock.activeCatalogDescription.set('Sample description');
+    fixture.detectChanges();
+    expect(await harness.getHeaderTooltipText()).toBe('Sample description');
   });
 
   it('flushes session cache upon clicking New Session reset button via test harness interaction', async () => {

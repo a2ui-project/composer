@@ -23,6 +23,8 @@ import {MatListModule} from '@angular/material/list';
 import {RouterOutlet, RouterLink} from '@angular/router';
 import {DOCUMENT} from '@angular/common';
 import {IndexedDbStorageService} from '../storage/indexed-db-storage.service';
+import {MatTooltipModule} from '@angular/material/tooltip';
+import {CatalogManagementService} from '../storage/catalog-management.service';
 
 @Component({
   selector: 'a2ui-composer-shell',
@@ -35,6 +37,7 @@ import {IndexedDbStorageService} from '../storage/indexed-db-storage.service';
     MatListModule,
     RouterOutlet,
     RouterLink,
+    MatTooltipModule,
   ],
   templateUrl: './composer-shell.component.ng.html',
   styleUrl: './composer-shell.component.scss',
@@ -46,7 +49,11 @@ import {IndexedDbStorageService} from '../storage/indexed-db-storage.service';
  */
 export class ComposerShellComponent {
   isDarkTheme = signal(false);
-  private storageService = inject(IndexedDbStorageService);
+  private readonly catalogManagementService = inject(CatalogManagementService);
+  private readonly storageService = inject(IndexedDbStorageService);
+
+  activeCatalogTitle = this.catalogManagementService.activeCatalogTitle;
+  activeCatalogDescription = this.catalogManagementService.activeCatalogDescription;
 
   constructor(@Inject(DOCUMENT) private document: Document) {}
 

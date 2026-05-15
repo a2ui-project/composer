@@ -16,6 +16,7 @@
 
 import {ComponentHarness} from '@angular/cdk/testing';
 import {MatSidenavHarness} from '@angular/material/sidenav/testing';
+import {MatTooltipHarness} from '@angular/material/tooltip/testing';
 
 export class ComposerShellHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-shell';
@@ -25,10 +26,17 @@ export class ComposerShellHarness extends ComponentHarness {
   private getHamburgerButton = this.locatorFor('button.hamburger-button');
   private getSidenav = this.locatorFor(MatSidenavHarness);
   private getResetButton = this.locatorFor('button.reset-session-button');
+  private getHeaderTooltip = this.locatorFor(MatTooltipHarness);
 
   async getHeaderTitleText(): Promise<string> {
     const title = await this.getHeaderTitle();
     return title.text();
+  }
+
+  async getHeaderTooltipText(): Promise<string> {
+    const tooltip = await this.getHeaderTooltip();
+    await tooltip.show();
+    return tooltip.getTooltipText();
   }
 
   async clickResetButton(): Promise<void> {
