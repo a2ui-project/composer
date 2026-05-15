@@ -113,25 +113,6 @@ describe('HostCommunicationService', () => {
     expect(service.latestEnvelope()).toBeNull();
   });
 
-  it('recognizes the FORCE_UNBLOCK contract and maps UNBLOCK_REQUEST to FORCE_UNBLOCK', () => {
-    const mockIframeWindow = {} as Window;
-    service.registerIframe(mockIframeWindow);
-
-    const event = new MessageEvent('message', {
-      source: mockIframeWindow,
-      origin: 'http://localhost:3000',
-      data: {type: 'UNBLOCK_REQUEST', payload: {reason: 'manual'}},
-    });
-
-    window.dispatchEvent(event);
-
-    expect(service.latestEnvelope()).toEqual({
-      type: 'FORCE_UNBLOCK',
-      payload: {reason: 'manual'},
-      origin: 'http://localhost:3000',
-    });
-  });
-
   it('sends message back to registered iframe using resolved target origin', () => {
     const mockIframeWindow = {
       postMessage: vi.fn(),

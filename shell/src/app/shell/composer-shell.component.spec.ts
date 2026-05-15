@@ -22,15 +22,28 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerShellHarness} from './test/composer-shell.harness';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {DOCUMENT} from '@angular/common';
+import {IndexedDbStorageService} from '../storage/indexed-db-storage.service';
 
 describe('ComposerShellComponent Layout', () => {
   let fixture: ComponentFixture<ComposerShellComponent>;
   let harness: ComposerShellHarness;
+  let storageServiceMock: Partial<IndexedDbStorageService>;
 
   beforeEach(async () => {
+    storageServiceMock = {
+      flushAllRecords: vi.fn().mockResolvedValue(undefined),
+    };
+
     await TestBed.configureTestingModule({
       imports: [ComposerShellComponent],
-      providers: [provideRouter([]), provideNoopAnimations()],
+      providers: [
+        provideRouter([]),
+        provideNoopAnimations(),
+        {
+          provide: IndexedDbStorageService,
+          useValue: storageServiceMock,
+        },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ComposerShellComponent);

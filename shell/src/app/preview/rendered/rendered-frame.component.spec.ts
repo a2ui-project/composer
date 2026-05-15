@@ -21,6 +21,7 @@ import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {StartupResolutionService} from '../../shell/startup-resolution.service';
 import {HostCommunicationService} from '../../shell/host-communication.service';
+import {signal} from '@angular/core';
 
 describe('RenderedFrameComponent', () => {
   let fixture: ComponentFixture<RenderedFrameComponent>;
@@ -30,7 +31,7 @@ describe('RenderedFrameComponent', () => {
 
   beforeEach(async () => {
     startupResolutionServiceMock = {
-      getResolvedRendererUrl: vi.fn().mockReturnValue('http://localhost:3000/renderer'),
+      resolvedUrl: signal('http://localhost:3000/renderer'),
     };
 
     hostCommunicationServiceMock = {
@@ -67,7 +68,7 @@ describe('RenderedFrameComponent', () => {
 
   it('renders a placeholder when no renderer URL is resolved', async () => {
     fixture.destroy();
-    startupResolutionServiceMock.getResolvedRendererUrl = vi.fn().mockReturnValue(null);
+    startupResolutionServiceMock.resolvedUrl = signal(null);
     const nullFixture = TestBed.createComponent(RenderedFrameComponent);
     nullFixture.detectChanges();
     const nullHarness = await TestbedHarnessEnvironment.harnessForFixture(

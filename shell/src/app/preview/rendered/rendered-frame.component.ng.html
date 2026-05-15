@@ -14,10 +14,10 @@
  limitations under the License.
 -->
 <div class="rendered-frame-container">
-  @if (safeRendererUrl) {
+  @if (safeRendererUrl()) {
     <iframe
       #previewIframe
-      [src]="safeRendererUrl"
+      [src]="safeRendererUrl()"
       sandbox="allow-scripts allow-same-origin allow-forms"
       class="preview-iframe"
       title="Rendered Preview"

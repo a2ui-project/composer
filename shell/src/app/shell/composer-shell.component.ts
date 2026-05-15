@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, Inject} from '@angular/core';
+import {Component, Inject, inject, signal} from '@angular/core';
 import {MatToolbarModule} from '@angular/material/toolbar';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatButtonModule} from '@angular/material/button';
@@ -22,6 +22,8 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatListModule} from '@angular/material/list';
 import {RouterOutlet, RouterLink} from '@angular/router';
 import {DOCUMENT} from '@angular/common';
+import {IndexedDbStorageService} from '../storage/indexed-db-storage.service';
+
 @Component({
   selector: 'a2ui-composer-shell',
   standalone: true,
@@ -43,7 +45,8 @@ import {DOCUMENT} from '@angular/common';
  * and hosts the active workspace routing outlet.
  */
 export class ComposerShellComponent {
-  isDarkTheme = false;
+  isDarkTheme = signal(false);
+  private storageService = inject(IndexedDbStorageService);
 
   constructor(@Inject(DOCUMENT) private document: Document) {}
 
@@ -51,8 +54,8 @@ export class ComposerShellComponent {
    * Switches between light and dark visual design system palettes.
    */
   toggleTheme(): void {
-    this.isDarkTheme = !this.isDarkTheme;
-    if (this.isDarkTheme) {
+    this.isDarkTheme.set(!this.isDarkTheme());
+    if (this.isDarkTheme()) {
       this.document.body.classList.add('dark-theme');
     } else {
       this.document.body.classList.remove('dark-theme');
@@ -63,7 +66,14 @@ export class ComposerShellComponent {
    * Flushes all local state caches (IndexedDB, localStorage) and reloads the page
    * to simulate a fresh hardware handshake connection.
    */
-  resetSession(): void {
+  async resetSession(): Promise<void> {
+    await this.storageService.flushAllRecords();
+    localStorage.removeItem('a2ui_composer_session_state');
+    localStorage.removeItem('a2ui_composer_editor_cache');
+    sessionStorage.clear();
+    if (this.document.defaultView) {
+      this.document.defaultView.location.reload();
+    }
     console.log('Session state cleared.');
   }
 }

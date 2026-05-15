@@ -124,7 +124,7 @@ export class IndexedDbStorageService {
 
     try {
       await this.executeAtomicWrite(record);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (this.isQuotaError(err)) {
         console.warn(
           'QuotaExceededError encountered during write transaction. Triggering aggressive evict-down-to-3 fallback.',
@@ -133,7 +133,7 @@ export class IndexedDbStorageService {
 
         try {
           await this.executeAtomicWrite(record);
-        } catch (retryErr: any) {
+        } catch (retryErr: unknown) {
           if (this.isQuotaError(retryErr)) {
             console.error(
               'Extreme second QuotaExceededError encountered during retry. Flushing ALL remaining records.',
@@ -198,9 +198,14 @@ export class IndexedDbStorageService {
     );
   }
 
-  private isQuotaError(err: any): boolean {
+  private isQuotaError(err: unknown): boolean {
     return (
-      err && (err.name === 'QuotaExceededError' || err.message?.includes('QuotaExceededError'))
+      err !== null &&
+      typeof err === 'object' &&
+      (('name' in err && err.name === 'QuotaExceededError') ||
+        ('message' in err &&
+          typeof (err as {message?: unknown}).message === 'string' &&
+          (err as {message: string}).message.includes('QuotaExceededError')))
     );
   }
 }

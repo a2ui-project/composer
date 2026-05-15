@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, ViewChild, ElementRef} from '@angular/core';
+import {Component, inject, viewChild, ElementRef, effect, computed} from '@angular/core';
 import {DomSanitizer, SafeResourceUrl} from '@angular/platform-browser';
 import {StartupResolutionService} from '../../shell/startup-resolution.service';
 import {HostCommunicationService} from '../../shell/host-communication.service';
@@ -35,21 +35,17 @@ export class RenderedFrameComponent {
   private startupResolutionService = inject(StartupResolutionService);
   private hostCommunicationService = inject(HostCommunicationService);
 
-  private cachedStringUrl: string | null = null;
-  private cachedSafeUrl: SafeResourceUrl | null = null;
+  public iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('previewIframe');
 
-  @ViewChild('previewIframe') set iframeRef(ref: ElementRef<HTMLIFrameElement> | undefined) {
-    this.hostCommunicationService.registerIframe(ref?.nativeElement?.contentWindow || null);
-  }
+  public safeRendererUrl = computed(() => {
+    const currentUrl = this.startupResolutionService.resolvedUrl();
+    return currentUrl ? this.sanitizer.bypassSecurityTrustResourceUrl(currentUrl) : null;
+  });
 
-  public get safeRendererUrl(): SafeResourceUrl | null {
-    const currentUrl = this.startupResolutionService.getResolvedRendererUrl();
-    if (currentUrl !== this.cachedStringUrl) {
-      this.cachedStringUrl = currentUrl;
-      this.cachedSafeUrl = currentUrl
-        ? this.sanitizer.bypassSecurityTrustResourceUrl(currentUrl)
-        : null;
-    }
-    return this.cachedSafeUrl;
+  constructor() {
+    effect(() => {
+      const ref = this.iframeRef();
+      this.hostCommunicationService.registerIframe(ref?.nativeElement?.contentWindow || null);
+    });
   }
 }

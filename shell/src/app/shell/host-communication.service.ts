@@ -23,8 +23,14 @@ import {StartupResolutionService} from './startup-resolution.service';
  */
 export interface MessageEnvelope {
   type: string;
-  payload?: any;
+  payload?: unknown;
   origin: string;
+}
+
+declare global {
+  interface Window {
+    a2uiHostCommunicationService?: HostCommunicationService;
+  }
 }
 
 @Injectable({
@@ -62,19 +68,23 @@ export class HostCommunicationService implements OnDestroy {
 
     const data = event.data;
     if (data && typeof data === 'object' && data.type) {
-      const type = data.type === 'UNBLOCK_REQUEST' ? 'FORCE_UNBLOCK' : data.type;
+      const type = data.type;
       this.latestEnvelopeSignal.set({
         type,
         payload: data.payload,
         origin: event.origin,
       });
+
+      if (type === 'RENDERER_READY') {
+        this.sendMessage({type: 'GET_CATALOG'});
+      }
     }
   };
 
   constructor() {
     if (typeof window !== 'undefined') {
       window.addEventListener('message', this.messageListener);
-      (window as any).a2uiHostCommunicationService = this;
+      window.a2uiHostCommunicationService = this;
     }
   }
 
@@ -82,7 +92,7 @@ export class HostCommunicationService implements OnDestroy {
     this.iframeWindow = contentWindow;
   }
 
-  public sendMessage(message: {type: string; payload?: any}): void {
+  public sendMessage(message: {type: string; payload?: unknown}): void {
     if (!this.iframeWindow) return;
     const expectedUrl = this.startupResolutionService.getResolvedRendererUrl();
     if (!expectedUrl) return;
@@ -98,7 +108,7 @@ export class HostCommunicationService implements OnDestroy {
   ngOnDestroy(): void {
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
-      delete (window as any).a2uiHostCommunicationService;
+      delete window.a2uiHostCommunicationService;
     }
   }
 }
