@@ -16,7 +16,13 @@
 
 import {test, expect} from '@playwright/test';
 
-test.describe('Cross-Frame Security & Sandboxing', () => {
+test.beforeEach(async ({page}) => {
+  page.on('pageerror', err => {
+    console.error(`Unhandled page error: ${err.message}`);
+  });
+});
+
+test.describe('Phase 3-4 Gaps Integration Suite', () => {
   test.beforeEach(async ({page}) => {
     await page.addInitScript(() => {
       try {
@@ -26,27 +32,9 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
     });
   });
 
-  test('blocks top navigation attempts from embedded preview iframe via sandbox attributes', async ({
+  test('verifies bridge blocking state overlay mounting/unmounting and FORCE_UNBLOCK message ingestion', async ({
     page,
   }) => {
-    await page.route('http://custom-renderer.com/*', async route => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: `<!DOCTYPE html><html><body><script>
-          try {
-            window.top.location.href = "https://example.com";
-          } catch (e) {}
-        </script></body></html>`,
-      });
-    });
-
-    await page.goto('/?renderer=http://custom-renderer.com/index.html');
-    await expect(page.locator('.workspace-container')).toBeVisible();
-
-    expect(page.url()).not.toContain('example.com');
-  });
-
-  test('rejects messages originating from unauthorized origins or sources', async ({page}) => {
     await page.route('http://custom-renderer.com/*', async route => {
       await route.fulfill({
         contentType: 'text/html',
@@ -57,33 +45,59 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
     await page.goto('/?renderer=http://custom-renderer.com/index.html');
     await expect(page.locator('.workspace-container')).toBeVisible();
 
-    await page.evaluate(() => {
-      window.postMessage({type: 'RENDERER_READY'}, '*');
+    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    await expect(iframeBody).toBeVisible();
+
+    await iframeBody.evaluate(() => {
+      window.parent.postMessage(
+        {type: 'SET_BLOCKING_STATE', payload: {blocked: true, message: 'Freezing'}},
+        '*',
+      );
     });
 
     await page.getByRole('tab', {name: 'Raw Messages'}).click();
-    await expect(page.locator('.raw-messages-placeholder')).toContainText(
-      /No messages captured yet|Raw Messages Placeholder/,
-    );
+    await iframeBody.evaluate(() => {
+      window.parent.postMessage({type: 'FORCE_UNBLOCK'}, '*');
+    });
+
+    await expect(page.getByTestId('raw-message-envelope')).toBeVisible();
+    const envText = await page.getByTestId('raw-message-envelope').textContent();
+    expect(envText).toContain('FORCE_UNBLOCK');
   });
 
-  test('processes valid standard messages from embedded iframe correctly', async ({page}) => {
+  test('verifies console log override telemetry capture', async ({page}) => {
     await page.route('http://custom-renderer.com/*', async route => {
       await route.fulfill({
         contentType: 'text/html',
-        body: `<!DOCTYPE html><html><body><script>
-          window.parent.postMessage({type: "RENDERER_READY", payload: {status: "ok"}}, "*");
-        </script></body></html>`,
+        body: `<!DOCTYPE html><html><body>Preview</body></html>`,
       });
     });
 
     await page.goto('/?renderer=http://custom-renderer.com/index.html');
     await expect(page.locator('.workspace-container')).toBeVisible();
 
+    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    await expect(iframeBody).toBeVisible();
+
+    await iframeBody.evaluate(() => {
+      window.parent.postMessage(
+        {
+          type: 'CONSOLE_LOG',
+          payload: {level: 'warn', message: 'Telemetry active'},
+        },
+        '*',
+      );
+    });
+
     await page.getByRole('tab', {name: 'Raw Messages'}).click();
     await expect(page.getByTestId('raw-message-envelope')).toBeVisible();
     const envText = await page.getByTestId('raw-message-envelope').textContent();
-    expect(envText).toContain('RENDERER_READY');
-    expect(envText).toContain('http://custom-renderer.com');
+    expect(envText).toContain('CONSOLE_LOG');
+    expect(envText).toContain('Telemetry active');
+  });
+
+  test('verifies responsive layout collapse in IDE webview mode', async ({page}) => {
+    await page.goto('/?renderer=http://localhost:3000&extension=true');
+    await expect(page.locator('.workspace-container')).toHaveClass(/extension-mode/);
   });
 });

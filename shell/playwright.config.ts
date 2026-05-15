@@ -49,7 +49,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'yarn start',
+    command: 'corepack yarn start',
     url: 'http://localhost:4200',
     reuseExistingServer: !process.env['CI'],
     timeout: 120 * 1000,

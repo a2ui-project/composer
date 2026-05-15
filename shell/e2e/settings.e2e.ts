@@ -25,25 +25,30 @@ test.beforeEach(async ({page}) => {
 test.describe('Settings Integration Suite', () => {
   test.beforeEach(async ({page}) => {
     await page.goto('/settings');
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => {
+      try {
+        localStorage.clear();
+        localStorage.setItem('a2ui_composer_force_3p', 'true');
+      } catch (e) {}
+    });
     await page.reload();
   });
 
   test('persists configuration successfully, triggers explicit window reload, and unlocks guarded routes', async ({
     page,
   }) => {
-    const rendererInput = page.locator('input[formControlName="rendererUrl"]');
+    const rendererInput = page.getByLabel('Target Renderer URL');
     await rendererInput.fill('http://localhost:3000');
 
-    const apiKeyInput = page.locator('input[formControlName="apiKey"]');
+    const apiKeyInput = page.getByLabel('Gemini API Key');
     await apiKeyInput.fill('test-api-key');
 
     await page.evaluate(() => {
       (window as any).__BEFORE_RELOAD__ = true;
     });
 
-    const saveBtn = page.locator('button', {hasText: 'Save Settings'});
-    await Promise.all([page.waitForNavigation(), saveBtn.click()]);
+    const saveBtn = page.getByRole('button', {name: 'Save Settings'});
+    await Promise.all([page.waitForURL('**/settings'), saveBtn.click()]);
 
     const sentinel = await page.evaluate(() => (window as any).__BEFORE_RELOAD__);
     expect(sentinel).toBeUndefined();

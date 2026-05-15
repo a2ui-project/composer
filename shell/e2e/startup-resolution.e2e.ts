@@ -34,7 +34,10 @@ test.describe('Startup Resolution & Redirection', () => {
 test.describe('Phase 1 Scaffolding Shell Integration', () => {
   test.beforeEach(async ({page}) => {
     await page.addInitScript(() => {
-      localStorage.setItem('a2ui_composer_api_key', 'test-api-key');
+      try {
+        localStorage.setItem('a2ui_composer_force_1p', 'true');
+        localStorage.setItem('a2ui_composer_api_key', 'test-api-key');
+      } catch (e) {}
     });
   });
 
@@ -43,7 +46,7 @@ test.describe('Phase 1 Scaffolding Shell Integration', () => {
   }, testInfo) => {
     await page.goto('/');
 
-    const galleryLink = page.locator('a', {hasText: 'Components Gallery'});
+    const galleryLink = page.getByRole('link', {name: 'Components Gallery'});
     await galleryLink.click();
     await page.waitForURL('**/gallery');
 
@@ -56,7 +59,7 @@ test.describe('Phase 1 Scaffolding Shell Integration', () => {
       contentType: 'image/png',
     });
 
-    const workspaceLink = page.locator('a', {hasText: 'Composer Workspace'});
+    const workspaceLink = page.getByRole('link', {name: 'Composer Workspace'});
     await workspaceLink.click();
     await page.waitForURL('**/');
 
