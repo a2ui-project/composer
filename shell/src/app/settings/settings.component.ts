@@ -23,6 +23,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
 import {StartupResolutionService} from '../shell/startup-resolution.service';
+import {DOCUMENT} from '@angular/common';
 
 @Component({
   selector: 'a2ui-composer-settings',
@@ -46,6 +47,7 @@ import {StartupResolutionService} from '../shell/startup-resolution.service';
 export class SettingsComponent implements OnInit {
   private fb = inject(NonNullableFormBuilder);
   private startupResolutionService = inject(StartupResolutionService);
+  private document = inject(DOCUMENT);
 
   public isLocked = signal(false);
   public isThirdParty = signal(false);
@@ -107,8 +109,8 @@ export class SettingsComponent implements OnInit {
   }
 
   public reloadWindow(): void {
-    if (globalThis.location) {
-      globalThis.location.assign(globalThis.location.pathname);
+    if (this.document.defaultView?.location) {
+      this.document.defaultView.location.assign('/');
     }
   }
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component} from '@angular/core';
+import {Component, inject, signal, OnInit} from '@angular/core';
 import {ChatPanelComponent} from '../chat/chat-panel/chat-panel.component';
 import {RawFrameComponent} from '../preview/raw/raw-frame.component';
 import {RenderedFrameComponent} from '../preview/rendered/rendered-frame.component';
@@ -24,6 +24,7 @@ import {ErrorsComponent} from '../debug/errors/errors.component';
 import {RawMessagesComponent} from '../debug/raw-messages/raw-messages.component';
 import {MockRulesComponent} from '../debug/mock-rules/mock-rules.component';
 import {MatTabsModule} from '@angular/material/tabs';
+import {StartupResolutionService} from './startup-resolution.service';
 
 @Component({
   selector: 'a2ui-composer-workspace',
@@ -46,4 +47,11 @@ import {MatTabsModule} from '@angular/material/tabs';
  * The central workspace hub coordinating split-pane views between
  * the layout editors, active preview frame, and debug consoles.
  */
-export class ComposerWorkspaceComponent {}
+export class ComposerWorkspaceComponent implements OnInit {
+  private startupResolutionService = inject(StartupResolutionService);
+  public isExtension = signal(false);
+
+  public ngOnInit(): void {
+    this.isExtension.set(this.startupResolutionService.isExtensionMode());
+  }
+}

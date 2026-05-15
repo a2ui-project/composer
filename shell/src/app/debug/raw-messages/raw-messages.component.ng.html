@@ -13,5 +13,12 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-
-<div class="raw-messages-placeholder">Raw Messages Placeholder</div>
+<div class="raw-messages-container">
+  @if (latestEnvelope()) {
+    <div data-testid="raw-message-envelope" class="message-envelope">
+      <pre>{{ latestEnvelope() | json }}</pre>
+    </div>
+  } @else {
+    <div class="raw-messages-placeholder">No messages captured yet</div>
+  }
+</div>

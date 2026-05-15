@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-import {Component} from '@angular/core';
+import {Component, inject, Signal} from '@angular/core';
+import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication.service';
+import {JsonPipe} from '@angular/common';
 
 @Component({
   selector: 'a2ui-composer-raw-messages',
   standalone: true,
-  imports: [],
+  imports: [JsonPipe],
   templateUrl: './raw-messages.component.ng.html',
   styleUrl: './raw-messages.component.scss',
 })
@@ -27,4 +29,7 @@ import {Component} from '@angular/core';
  * A debug drawer component presenting a scrolling diagnostic view
  * of raw postMessage traffic across the iframe boundary.
  */
-export class RawMessagesComponent {}
+export class RawMessagesComponent {
+  private hostComm = inject(HostCommunicationService);
+  public latestEnvelope: Signal<MessageEnvelope | null> = this.hostComm.latestEnvelope;
+}

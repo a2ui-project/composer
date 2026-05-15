@@ -18,15 +18,28 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {RawMessagesComponent} from './raw-messages.component';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawMessagesHarness} from './test/raw-messages.harness';
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {HostCommunicationService} from '../../shell/host-communication.service';
+import {signal} from '@angular/core';
 
-describe('RawMessagesComponent Placeholder', () => {
+describe('RawMessagesComponent', () => {
   let fixture: ComponentFixture<RawMessagesComponent>;
   let harness: RawMessagesHarness;
+  let hostCommMock: Partial<HostCommunicationService>;
 
   beforeEach(async () => {
+    hostCommMock = {
+      latestEnvelope: signal({type: 'TEST', origin: 'http://localhost:3000'}) as any,
+    };
+
     await TestBed.configureTestingModule({
       imports: [RawMessagesComponent],
+      providers: [
+        {
+          provide: HostCommunicationService,
+          useValue: hostCommMock,
+        },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(RawMessagesComponent);
@@ -34,7 +47,13 @@ describe('RawMessagesComponent Placeholder', () => {
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RawMessagesHarness);
   });
 
-  it('creates the raw messages placeholder component via test harness', async () => {
+  it('creates the raw messages component via test harness', async () => {
     expect(harness).toBeTruthy();
+  });
+
+  it('displays the latest envelope JSON when available', () => {
+    const pre = fixture.nativeElement.querySelector('pre');
+    expect(pre).not.toBeNull();
+    expect(pre.textContent).toContain('TEST');
   });
 });

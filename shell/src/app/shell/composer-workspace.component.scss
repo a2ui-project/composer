@@ -24,6 +24,22 @@
   gap: 16px;
   height: 100%;
   box-sizing: border-box;
+
+  &.extension-mode {
+    flex-direction: column;
+
+    .left-panel {
+      flex: 0 0 auto;
+    }
+
+    .right-panel {
+      flex: 1;
+    }
+
+    .preview-section {
+      flex-direction: column;
+    }
+  }
 }
 
 .left-panel {
