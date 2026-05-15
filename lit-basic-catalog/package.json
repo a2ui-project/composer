@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "vite --port 3457",
     "dev": "vite --port 3457",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "test": "vitest run",
     "prettier": "prettier --write . | grep -v '(unchanged)'"
   },
   "dependencies": {
@@ -19,8 +21,10 @@
     "markdown-it": "14.1.1"
   },
   "devDependencies": {
+    "jsdom": "25.0.1",
     "prettier": "3.8.3",
     "typescript": "5.8.3",
-    "vite": "7.1.11"
+    "vite": "7.1.11",
+    "vitest": "2.1.0"
   }
 }
