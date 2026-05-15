@@ -14,7 +14,15 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, DestroyRef} from '@angular/core';
+import {
+  Component,
+  inject,
+  signal,
+  DestroyRef,
+  effect,
+  untracked,
+  WritableSignal,
+} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -23,6 +31,7 @@ import {Subject} from 'rxjs';
 import {debounceTime, filter, map} from 'rxjs/operators';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens';
 import {HostCommunicationService} from '../../shell/host-communication.service';
+import {CatalogManagementService} from '../../storage/catalog-management.service';
 
 const CAR_BOOKING = `
 {"version": "v0.9", "createSurface": {"surfaceId": "car_booking_basic", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}
@@ -42,37 +51,43 @@ const CAR_BOOKING = `
  * and displaying real-time parsing error indicators.
  */
 export class RawFrameComponent {
-  readonly isExtensionMode = inject(IS_EXTENSION_MODE);
-  readonly layoutJson = signal<string>(CAR_BOOKING);
-  public readonly isJsonInvalid = signal<boolean>(false);
+  public readonly isExtensionMode = inject(IS_EXTENSION_MODE);
+  public readonly layoutJson: WritableSignal<string> = signal(CAR_BOOKING);
+  public readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
 
   private readonly hostCommunicationService = inject(HostCommunicationService);
+  private readonly catalogManagementService = inject(CatalogManagementService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly layoutInput$ = new Subject<string>();
 
   constructor() {
+    effect(() => {
+      const catalog = this.catalogManagementService.activeCatalog();
+      if (catalog) {
+        const currentLayout = untracked(() => this.layoutJson());
+        try {
+          const payload = this.parseLayoutString(currentLayout);
+          if (payload !== null) {
+            this.hostCommunicationService.sendRenderA2UI(payload);
+          }
+        } catch (err) {
+          // Ignore initial parse errors
+        }
+      }
+    });
+
     this.layoutInput$
       .pipe(
         debounceTime(300),
         map((value: string): unknown[] | null => {
           try {
-            const trimmed = value.trim();
-            if (!trimmed) {
+            const payload = this.parseLayoutString(value);
+            if (payload !== null) {
               this.isJsonInvalid.set(false);
-              return [];
+              return payload;
             }
-            let payload: unknown[];
-            if (trimmed.startsWith('[')) {
-              payload = JSON.parse(trimmed);
-            } else {
-              const lines = trimmed
-                .split('\n')
-                .map(l => l.trim())
-                .filter(l => l.length > 0);
-              payload = lines.map(line => JSON.parse(line));
-            }
-            this.isJsonInvalid.set(false);
-            return payload;
+            this.isJsonInvalid.set(true);
+            return null;
           } catch (err) {
             this.isJsonInvalid.set(true);
             return null;
@@ -89,5 +104,36 @@ export class RawFrameComponent {
   public onLayoutChange(value: string): void {
     this.layoutJson.set(value);
     this.layoutInput$.next(value);
+  }
+
+  /**
+   * Parses the raw layout configuration string into an array of message objects.
+   *
+   * It supports two input formats:
+   * 1. A standard JSON array (e.g. `[ { "createSurface": ... }, ... ]`),
+   *    detected if it starts with `[`.
+   * 2. JSON Lines (JSONL) format, where each non-empty line represents a
+   *    standalone JSON object.
+   *
+   * If parsing fails, it throws a SyntaxError (which callers are expected to catch).
+   *
+   * @param value The raw layout string to parse.
+   * @returns An array of parsed JSON objects (or empty array if input is empty).
+   */
+  private parseLayoutString(value: string): unknown[] | null {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
+    }
+    // Format 1: Standard JSON Array format
+    if (trimmed.startsWith('[')) {
+      return JSON.parse(trimmed);
+    }
+    // Format 2: JSON Lines (JSONL) format. Parse each line independently.
+    const lines = trimmed
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+    return lines.map(line => JSON.parse(line));
   }
 }
