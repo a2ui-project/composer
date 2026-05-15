@@ -16,7 +16,7 @@
 
 import {a2uiBridge} from './preview-bridge';
 
-function deepCloneSafe(obj: any, ancestors = new Set<any>()): any {
+function deepCloneSafe(obj: unknown, ancestors = new Set<unknown>()): unknown {
   if (obj instanceof Error) {
     return {message: obj.message, stack: obj.stack};
   }
@@ -32,28 +32,30 @@ function deepCloneSafe(obj: any, ancestors = new Set<any>()): any {
     }
     ancestors.add(obj);
 
-    if (Array.isArray(obj)) {
-      const res = obj.map(item => deepCloneSafe(item, ancestors));
-      ancestors.delete(obj);
-      return res;
-    }
-
-    const res: Record<string, any> = {};
-    for (const key of Object.keys(obj)) {
-      try {
-        res[key] = deepCloneSafe(obj[key], ancestors);
-      } catch {
-        res[key] = '[Unserializable Property]';
+    try {
+      if (Array.isArray(obj)) {
+        return obj.map(item => deepCloneSafe(item, ancestors));
       }
+
+      const res: Record<string, unknown> = {};
+      const record = obj as Record<string, unknown>;
+      for (const key of Object.keys(record)) {
+        try {
+          res[key] = deepCloneSafe(record[key], ancestors);
+        } catch {
+          res[key] = '[Unserializable Property]';
+        }
+      }
+      return res;
+    } finally {
+      ancestors.delete(obj);
     }
-    ancestors.delete(obj);
-    return res;
   }
 
   return obj;
 }
 
-function safeSerialize(args: any[]): any[] {
+function safeSerialize(args: unknown[]): unknown[] {
   return args.map(arg => deepCloneSafe(arg));
 }
 
@@ -77,7 +79,7 @@ export function setupInstrumentationOverrides(): void {
 
   methods.forEach(method => {
     const original = console[method];
-    console[method] = (...args: any[]) => {
+    console[method] = (...args: unknown[]) => {
       original.apply(console, args);
 
       if (isSerializing) return;
@@ -85,11 +87,24 @@ export function setupInstrumentationOverrides(): void {
       try {
         isSerializing = true;
         if (a2uiBridge && typeof a2uiBridge.sendMessage === 'function') {
+          const message = args
+            .map(arg => {
+              if (arg instanceof Error) return arg.message;
+              if (typeof arg === 'string') return arg;
+              const cloned = deepCloneSafe(arg);
+              return typeof cloned === 'string' ? cloned : JSON.stringify(cloned);
+            })
+            .join(' ');
+
+          const errorArg = args.find(arg => arg instanceof Error);
+          const stack = errorArg ? (errorArg as Error).stack : undefined;
+
           a2uiBridge.sendMessage({
             type: 'CONSOLE_LOG',
             payload: {
               level: method,
-              arguments: safeSerialize(args),
+              message,
+              stack,
             },
           });
         }
@@ -106,13 +121,11 @@ export function setupInstrumentationOverrides(): void {
     try {
       if (a2uiBridge && typeof a2uiBridge.sendMessage === 'function') {
         a2uiBridge.sendMessage({
-          type: 'WINDOW_ERROR',
+          type: 'CONSOLE_LOG',
           payload: {
+            level: 'error',
             message: String(message),
-            source: source || '',
-            lineno: lineno || 0,
-            colno: colno || 0,
-            error: error ? {message: error.message, stack: error.stack} : null,
+            stack: error ? error.stack : `${source || ''}:${lineno || 0}:${colno || 0}`,
           },
         });
       }
@@ -129,15 +142,15 @@ export function setupInstrumentationOverrides(): void {
   window.addEventListener('unhandledrejection', event => {
     try {
       if (a2uiBridge && typeof a2uiBridge.sendMessage === 'function') {
-        const reasonPayload =
-          event.reason instanceof Error
-            ? {message: event.reason.message, stack: event.reason.stack}
-            : safeSerialize([event.reason])[0];
+        const message = event.reason instanceof Error ? event.reason.message : String(event.reason);
+        const stack = event.reason instanceof Error ? event.reason.stack : undefined;
 
         a2uiBridge.sendMessage({
-          type: 'UNHANDLED_REJECTION',
+          type: 'CONSOLE_LOG',
           payload: {
-            reason: reasonPayload,
+            level: 'error',
+            message: `Unhandled Rejection: ${message}`,
+            stack,
           },
         });
       }
@@ -146,5 +159,4 @@ export function setupInstrumentationOverrides(): void {
     }
   });
 }
-
 setupInstrumentationOverrides();

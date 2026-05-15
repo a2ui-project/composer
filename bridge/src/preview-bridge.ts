@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-declare const process: any;
+declare const process: {env?: {NODE_ENV?: string}} | undefined;
 import './instrumentation-overrides';
 
 export interface BridgeMessage {
   type: string;
-  payload?: any;
-  [key: string]: any;
+  payload?: unknown;
+  [key: string]: unknown;
 }
 
-export type MessageHandler = (payload: any) => void;
+export type MessageHandler = (payload: unknown) => void;
 
 /**
  * Inter-frame communication bridge establishing connection pathways
@@ -37,7 +37,7 @@ export class PreviewBridge {
   constructor() {
     this.initMessageListener();
     this.initLifecycleHandshake();
-    this.initFetchInterceptor();
+    this.initCatalogHandler();
   }
 
   public registerMessageProcessor(type: string, handler: MessageHandler): void {
@@ -87,8 +87,9 @@ export class PreviewBridge {
       if (!data || typeof data !== 'object' || !data.type) return;
 
       if (data.type === 'SET_BLOCKING_STATE') {
-        const blocked = !!(data.payload && data.payload.blocked);
-        const messageStr = data.payload && data.payload.message;
+        const payloadObj = data.payload as {blocked?: boolean; message?: string} | undefined;
+        const blocked = !!(payloadObj && payloadObj.blocked);
+        const messageStr = payloadObj && payloadObj.message;
         this.handleBlockingOverlay(blocked, messageStr);
       }
 
@@ -153,7 +154,7 @@ export class PreviewBridge {
         });
 
         button.addEventListener('click', () => {
-          this.sendMessage({type: 'UNBLOCK_REQUEST'});
+          this.sendMessage({type: 'FORCE_UNBLOCK', payload: {}});
           this.handleBlockingOverlay(false);
         });
 
@@ -190,52 +191,27 @@ export class PreviewBridge {
     }
   }
 
-  private initFetchInterceptor(): void {
-    if (typeof window === 'undefined' || !window.fetch) return;
-    const originalFetch = window.fetch;
-
-    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const urlString =
-        typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
-
-      if (urlString.includes('/catalog')) {
-        return new Promise((resolve, reject) => {
-          const requestId =
-            typeof crypto !== 'undefined' && crypto.randomUUID
-              ? crypto.randomUUID()
-              : Date.now().toString(36) + Math.random().toString(36).substring(2);
-
-          const timeoutId = setTimeout(() => {
-            this.unregisterMessageProcessor('FETCH_CATALOG_RESPONSE', responseHandler);
-            reject(new Error(`Catalog fetch interception timeout for request ID: ${requestId}`));
-          }, 5000);
-
-          const responseHandler = (payload: any) => {
-            if (payload && payload.requestId === requestId) {
-              clearTimeout(timeoutId);
-              this.unregisterMessageProcessor('FETCH_CATALOG_RESPONSE', responseHandler);
-
-              if (payload.error) {
-                reject(new Error(payload.error.message || String(payload.error)));
-                return;
-              }
-
-              resolve(
-                new Response(JSON.stringify(payload.catalog || {}), {
-                  status: 200,
-                  headers: {'Content-Type': 'application/json'},
-                }),
-              );
-            }
-          };
-
-          this.registerMessageProcessor('FETCH_CATALOG_RESPONSE', responseHandler);
-          this.sendMessage({type: 'FETCH_CATALOG_REQUEST', payload: {requestId}});
+  private initCatalogHandler(): void {
+    this.registerMessageProcessor('GET_CATALOG', async () => {
+      if (typeof window === 'undefined' || !window.fetch) return;
+      try {
+        const res = await window.fetch('/catalog');
+        if (!res.ok) {
+          throw new Error(`Catalog fetch failed with status: ${res.status}`);
+        }
+        const catalog = await res.json();
+        this.sendMessage({
+          type: 'A2UI_CATALOG',
+          payload: {catalog},
+        });
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.sendMessage({
+          type: 'A2UI_CATALOG',
+          payload: {catalog: {}, error: {message: errorMessage}},
         });
       }
-
-      return originalFetch(input, init);
-    };
+    });
   }
 }
 

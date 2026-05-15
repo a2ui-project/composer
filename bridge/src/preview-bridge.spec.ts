@@ -99,59 +99,6 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({type: 'RENDERER_READY'}), '*');
   });
 
-  it('intercepts fetch calls targeting catalog paths and correlates async resolution using secure IDs', async () => {
-    const spy = vi.spyOn(window.parent, 'postMessage');
-    const fetchPromise = fetch('/catalog');
-
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({type: 'FETCH_CATALOG_REQUEST'}), '*');
-
-    const lastCall = spy.mock.lastCall as any[];
-    const requestId = lastCall[0].payload.requestId;
-
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        source: window,
-        data: {
-          type: 'FETCH_CATALOG_RESPONSE',
-          payload: {requestId, catalog: {items: ['BasicColumn']}},
-        },
-      }),
-    );
-
-    const response = await fetchPromise;
-    const data = await response.json();
-    expect(data).toEqual({items: ['BasicColumn']});
-  });
-
-  it('rejects intercepted fetch promise if response times out after interval bounds', async () => {
-    vi.useFakeTimers();
-    const fetchPromise = fetch('/catalog');
-
-    vi.advanceTimersByTime(5001);
-    await expect(fetchPromise).rejects.toThrow(/Catalog fetch interception timeout/);
-    vi.useRealTimers();
-  });
-
-  it('rejects intercepted fetch promise if payload resolves explicit error properties', async () => {
-    const spy = vi.spyOn(window.parent, 'postMessage');
-    const fetchPromise = fetch('/catalog');
-
-    const lastCall = spy.mock.lastCall as any[];
-    const requestId = lastCall[0].payload.requestId;
-
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        source: window,
-        data: {
-          type: 'FETCH_CATALOG_RESPONSE',
-          payload: {requestId, error: {message: 'Catalog Resolution Failed'}},
-        },
-      }),
-    );
-
-    await expect(fetchPromise).rejects.toThrow('Catalog Resolution Failed');
-  });
-
   it('mounts full-viewport overlay DOM element dynamically upon SET_BLOCKING_STATE true', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -176,7 +123,7 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(document.getElementById('a2ui-blocking-overlay')).toBeNull();
   });
 
-  it('emits UNBLOCK_REQUEST signal upward to parent window when clicking Force Unblock button', () => {
+  it('emits FORCE_UNBLOCK signal upward to parent window when clicking Force Unblock button', () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -189,7 +136,129 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(button).not.toBeNull();
     button.click();
 
-    expect(spy).toHaveBeenCalledWith({type: 'UNBLOCK_REQUEST'}, '*');
+    expect(spy).toHaveBeenCalledWith({type: 'FORCE_UNBLOCK', payload: {}}, '*');
+  });
+
+  it('fetches catalog schema and transmits A2UI_CATALOG payload on GET_CATALOG message', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const mockCatalog = {items: ['BasicColumn']};
+    window.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockCatalog,
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'GET_CATALOG'},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(window.fetch).toHaveBeenCalledWith('/catalog');
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: 'A2UI_CATALOG',
+        payload: {catalog: mockCatalog},
+      },
+      '*',
+    );
+  });
+
+  it('transmits A2UI_CATALOG error payload on failed GET_CATALOG fetch', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    window.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'GET_CATALOG'},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: 'A2UI_CATALOG',
+        payload: {
+          catalog: {},
+          error: {message: 'Catalog fetch failed with status: 500'},
+        },
+      },
+      '*',
+    );
+  });
+
+  it('unregisters message processor successfully', () => {
+    const handler = vi.fn();
+    bridge.registerMessageProcessor('TEST_EVENT', handler);
+    bridge.unregisterMessageProcessor('TEST_EVENT', handler);
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'TEST_EVENT', payload: {status: 'active'}},
+      }),
+    );
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('ignores sendMessage when window.parent is null or equal to window in non-test env', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    spy.mockClear();
+    bridge.sendMessage({type: 'IGNORED'});
+    expect(spy).not.toHaveBeenCalled();
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('ignores malformed incoming message payloads without throwing', () => {
+    const handler = vi.fn();
+    bridge.registerMessageProcessor('TEST_EVENT', handler);
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: null,
+      }),
+    );
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: 'malformed string data',
+      }),
+    );
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('catches and logs errors thrown by message processor handlers', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const throwingHandler = vi.fn().mockImplementation(() => {
+      throw new Error('Handler failed');
+    });
+    bridge.registerMessageProcessor('THROWING_EVENT', throwingHandler);
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'THROWING_EVENT', payload: {}},
+      }),
+    );
+
+    expect(throwingHandler).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Error executing message processor for type THROWING_EVENT:',
+      expect.any(Error),
+    );
   });
 
   it('resets overlayElement pointer reference to null upon unblocking even if DOM node is already detached independently', () => {

@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi, MockInstance} from 'vitest';
 import {setupInstrumentationOverrides} from './instrumentation-overrides';
 import {a2uiBridge} from './preview-bridge';
 
 describe('InstrumentationOverrides Diagnostics Telemetry', () => {
-  let spy: any;
-  let originalLog: any;
-  let originalOnError: any;
+  let spy: MockInstance;
+  let originalLog: (...data: unknown[]) => void;
+  let originalOnError: OnErrorEventHandler;
 
   beforeEach(() => {
     spy = vi.spyOn(a2uiBridge, 'sendMessage').mockImplementation(() => {});
@@ -43,50 +43,53 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
       type: 'CONSOLE_LOG',
       payload: {
         level: 'log',
-        arguments: ['Diagnostic statement active', {key: 'value'}],
+        message: 'Diagnostic statement active {"key":"value"}',
+        stack: undefined,
       },
     });
   });
 
   it('hooks window.onerror capturing unhandled script exceptions reliably', () => {
+    const err = new Error('fatal');
     if (window.onerror) {
-      window.onerror('Uncaught reference error', 'app.js', 14, 2, new Error('fatal'));
+      window.onerror('Uncaught reference error', 'app.js', 14, 2, err);
     }
 
-    expect(spy).toHaveBeenCalledWith({
-      type: 'WINDOW_ERROR',
-      payload: {
-        message: 'Uncaught reference error',
-        source: 'app.js',
-        lineno: 14,
-        colno: 2,
-        error: {
-          message: 'fatal',
-          stack: expect.any(String),
-        },
-      },
-    });
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'CONSOLE_LOG',
+        payload: expect.objectContaining({
+          level: 'error',
+          message: 'Uncaught reference error',
+          stack: err.stack,
+        }),
+      }),
+    );
   });
 
-  it('serializes circular references gracefully replacing recursive depths with markers', () => {
-    const parentNode: any = {nodeId: 44};
-    const childNode: any = {nodeId: 45, parent: parentNode};
-    parentNode.firstChild = childNode;
-
-    console.log(parentNode);
+  it('serializes non-clonable primitive targets safely to prevent DataCloneError', () => {
+    const callbackFunc = () => {};
+    const uniqueSymbol = Symbol('debug-tag');
+    console.log(callbackFunc, uniqueSymbol);
 
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
-          arguments: [
-            {
-              nodeId: 44,
-              firstChild: {
-                nodeId: 45,
-                parent: '[Circular Reference]',
-              },
-            },
-          ],
+          message: '[Function Callback] Symbol(debug-tag)',
+        }),
+      }),
+    );
+  });
+
+  it('serializes circular object graphs safely without dropping non-circular fields', () => {
+    const circularObj: Record<string, unknown> = {name: 'parent'};
+    circularObj['self'] = circularObj;
+    console.log(circularObj);
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          message: '{"name":"parent","self":"[Circular Reference]"}',
         }),
       }),
     );
@@ -99,14 +102,7 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
-          arguments: [
-            {
-              errorTarget: {
-                message: 'Inner failure',
-                stack: expect.any(String),
-              },
-            },
-          ],
+          message: expect.stringContaining('Inner failure'),
         }),
       }),
     );
@@ -123,12 +119,39 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
-          arguments: [
-            {
-              leftChild: {id: 'shared-child'},
-              rightChild: {id: 'shared-child'},
-            },
-          ],
+          message: '{"leftChild":{"id":"shared-child"},"rightChild":{"id":"shared-child"}}',
+        }),
+      }),
+    );
+  });
+
+  it('serializes bigint and DOM nodes safely', () => {
+    const bigIntValue = 9007199254740991n;
+    const domNode = document.createElement('div');
+    console.log(bigIntValue, domNode, window);
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          message: '9007199254740991n [DOM Node: DIV] [Window Scope]',
+        }),
+      }),
+    );
+  });
+
+  it('handles throwing getters gracefully during object serialization', () => {
+    const objWithGetter = {
+      normalProp: 'valid',
+      get throwingProp() {
+        throw new Error('Getter threw');
+      },
+    };
+    console.log(objWithGetter);
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          message: '{"normalProp":"valid","throwingProp":"[Unserializable Property]"}',
         }),
       }),
     );

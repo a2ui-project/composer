@@ -39,7 +39,10 @@ import {a2uiBridge} from 'a2ui-bridge';
         return {
           catalogs: [basicCatalog],
           actionHandler: (action: any) => {
-            a2uiBridge.sendMessage({type: 'SEND_TO_SERVER', payload: action});
+            a2uiBridge.sendMessage({
+              type: 'SEND_TO_SERVER',
+              payload: {version: 'v0.9', action},
+            });
           },
         };
       },

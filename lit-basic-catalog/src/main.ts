@@ -33,7 +33,10 @@ export class AppRoot extends LitElement {
    * compilation to execute securely against deduplicated package graphs.
    */
   private processor = new MessageProcessor([basicCatalog as any], actionPayload => {
-    a2uiBridge.sendMessage({type: 'SEND_TO_SERVER', payload: actionPayload});
+    a2uiBridge.sendMessage({
+      type: 'SEND_TO_SERVER',
+      payload: {version: 'v0.9', action: actionPayload},
+    });
   });
 
   @state()
