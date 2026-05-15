@@ -74,15 +74,6 @@ export class PreviewBridge {
     window.addEventListener('message', (event: MessageEvent) => {
       if (event.source !== window.parent && event.source !== window) return;
 
-      if (
-        event.origin &&
-        globalThis.location &&
-        globalThis.location.origin !== 'null' &&
-        event.origin !== globalThis.location.origin
-      ) {
-        return;
-      }
-
       const data = event.data as BridgeMessage;
       if (!data || typeof data !== 'object' || !data.type) return;
 

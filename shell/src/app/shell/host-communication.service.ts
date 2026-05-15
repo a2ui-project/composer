@@ -45,6 +45,7 @@ declare global {
 export class HostCommunicationService implements OnDestroy {
   private readonly startupResolutionService = inject(StartupResolutionService);
   private iframeWindow: Window | null = null;
+  private iframeElement: HTMLIFrameElement | null = null;
   private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
 
   public readonly latestEnvelope: Signal<MessageEnvelope | null> =
@@ -52,7 +53,8 @@ export class HostCommunicationService implements OnDestroy {
   public readonly messageStream$ = new Subject<MessageEnvelope>();
 
   private readonly messageListener = (event: MessageEvent) => {
-    if (!this.iframeWindow || event.source !== this.iframeWindow) {
+    const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
+    if (!activeWindow || event.source !== activeWindow) {
       return;
     }
 
@@ -94,19 +96,25 @@ export class HostCommunicationService implements OnDestroy {
     this.iframeWindow = contentWindow;
   }
 
+  public registerIframeElement(element: HTMLIFrameElement | null): void {
+    this.iframeElement = element;
+  }
+
   public sendMessage(message: {type: string; payload?: unknown}): void {
     if (!CrossFrameValidator.validateOutgoingMessage(message)) {
       console.error('Blocked dispatch of malformed message type...', message);
       return;
     }
 
-    if (!this.iframeWindow) return;
+    const targetWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
+    if (!targetWindow) return;
+
     const expectedUrl = this.startupResolutionService.getResolvedRendererUrl();
     if (!expectedUrl) return;
 
     try {
       const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
-      this.iframeWindow.postMessage(message, targetOrigin);
+      targetWindow.postMessage(message, targetOrigin);
     } catch (err) {
       // Ignore malformed URL
     }

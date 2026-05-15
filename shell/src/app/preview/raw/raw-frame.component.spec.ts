@@ -93,14 +93,14 @@ describe('RawFrameComponent', () => {
       {
         version: 'v0.9',
         createSurface: {
-          surfaceId: 'car_booking_basic',
+          surfaceId: 'sample-surface',
           catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
         },
       },
       {
         version: 'v0.9',
         updateComponents: {
-          surfaceId: 'car_booking_basic',
+          surfaceId: 'sample-surface',
           components: [
             {
               id: 'root',
@@ -161,7 +161,7 @@ describe('RawFrameComponent', () => {
       {
         version: 'v0.9',
         updateDataModel: {
-          surfaceId: 'car_booking_basic',
+          surfaceId: 'sample-surface',
           path: '/booking',
           value: {location: '', pickupDate: '', dropoffDate: ''},
         },

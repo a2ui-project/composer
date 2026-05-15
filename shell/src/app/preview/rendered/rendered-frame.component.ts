@@ -45,7 +45,12 @@ export class RenderedFrameComponent {
   constructor() {
     effect(() => {
       const ref = this.iframeRef();
-      this.hostCommunicationService.registerIframe(ref?.nativeElement?.contentWindow || null);
+      if (typeof this.hostCommunicationService.registerIframeElement === 'function') {
+        this.hostCommunicationService.registerIframeElement(ref?.nativeElement || null);
+      }
+      if (typeof this.hostCommunicationService.registerIframe === 'function') {
+        this.hostCommunicationService.registerIframe(ref?.nativeElement?.contentWindow || null);
+      }
     });
   }
 }
