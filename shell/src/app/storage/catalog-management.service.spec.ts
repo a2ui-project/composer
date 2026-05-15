@@ -17,6 +17,8 @@
 import {TestBed} from '@angular/core/testing';
 import {CatalogManagementService} from './catalog-management.service';
 import {HostCommunicationService, MessageEnvelope} from '../shell/host-communication.service';
+import {IndexedDbStorageService} from './indexed-db-storage.service';
+import {StartupResolutionService} from '../shell/startup-resolution.service';
 import {signal, WritableSignal} from '@angular/core';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {Subject} from 'rxjs';
@@ -27,6 +29,13 @@ describe('CatalogManagementService', () => {
     latestEnvelope: WritableSignal<MessageEnvelope | null>;
     messageStream$: Subject<MessageEnvelope>;
     sendMessage: ReturnType<typeof vi.fn>;
+  };
+  let indexedDbStorageServiceMock: {
+    getCatalogRecord: ReturnType<typeof vi.fn>;
+    saveCatalogRecord: ReturnType<typeof vi.fn>;
+  };
+  let startupResolutionServiceMock: {
+    getResolvedRendererUrl: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -39,10 +48,21 @@ describe('CatalogManagementService', () => {
       sendMessage: vi.fn(),
     };
 
+    indexedDbStorageServiceMock = {
+      getCatalogRecord: vi.fn().mockResolvedValue(null),
+      saveCatalogRecord: vi.fn().mockResolvedValue(undefined),
+    };
+
+    startupResolutionServiceMock = {
+      getResolvedRendererUrl: vi.fn().mockReturnValue('http://localhost/renderer'),
+    };
+
     TestBed.configureTestingModule({
       providers: [
         CatalogManagementService,
         {provide: HostCommunicationService, useValue: hostCommunicationServiceMock},
+        {provide: IndexedDbStorageService, useValue: indexedDbStorageServiceMock},
+        {provide: StartupResolutionService, useValue: startupResolutionServiceMock},
       ],
     });
 
@@ -60,6 +80,10 @@ describe('CatalogManagementService', () => {
     expect(service).toBeTruthy();
     expect(service.isHandshakeInProgress()).toBe(false);
     expect(service.catalogError()).toBeNull();
+    expect(service.activeCatalog()).toBeNull();
+    expect(service.catalogHashDelta()).toBe(false);
+    expect(service.activeCatalogTitle()).toBe('');
+    expect(service.activeCatalogDescription()).toBe('');
   });
 
   it('sets handshake lock to true and sends GET_CATALOG when RENDERER_READY is received', () => {
@@ -219,5 +243,127 @@ describe('CatalogManagementService', () => {
     vi.useFakeTimers();
 
     expect(service.lastChecksumHash()).toBe(expectedHash);
+  });
+
+  it('executes IndexedDB write transaction on hash delta when no cached record exists', async () => {
+    indexedDbStorageServiceMock.getCatalogRecord.mockResolvedValue(null);
+
+    const payload = {
+      title: 'New Catalog',
+      description: 'New Description',
+      components: [],
+    };
+
+    hostCommunicationServiceMock.messageStream$.next({
+      type: 'A2UI_CATALOG',
+      origin: 'http://localhost',
+      payload,
+    });
+
+    vi.useRealTimers();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
+
+    expect(indexedDbStorageServiceMock.getCatalogRecord).toHaveBeenCalledWith(
+      'http://localhost/renderer',
+    );
+    expect(service.catalogHashDelta()).toBe(true);
+    expect(indexedDbStorageServiceMock.saveCatalogRecord).toHaveBeenCalledWith({
+      rendererUrl: 'http://localhost/renderer',
+      catalogString: service.lastCatalogString(),
+      checksumHash: service.lastChecksumHash(),
+      lastAccessed: expect.any(Number),
+    });
+
+    expect(service.activeCatalog()).toEqual(payload);
+    expect(service.activeCatalogTitle()).toBe('New Catalog');
+    expect(service.activeCatalogDescription()).toBe('New Description');
+  });
+
+  it('executes IndexedDB write transaction on hash delta when cached record hash differs', async () => {
+    indexedDbStorageServiceMock.getCatalogRecord.mockResolvedValue({
+      rendererUrl: 'http://localhost/renderer',
+      catalogString: '{}',
+      checksumHash: 'oldhash',
+      lastAccessed: 1000,
+    });
+
+    const payload = {
+      title: 'Updated Catalog',
+      description: 'Updated Description',
+      components: [],
+    };
+
+    hostCommunicationServiceMock.messageStream$.next({
+      type: 'A2UI_CATALOG',
+      origin: 'http://localhost',
+      payload,
+    });
+
+    vi.useRealTimers();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
+
+    expect(indexedDbStorageServiceMock.getCatalogRecord).toHaveBeenCalledWith(
+      'http://localhost/renderer',
+    );
+    expect(service.catalogHashDelta()).toBe(true);
+    expect(indexedDbStorageServiceMock.saveCatalogRecord).toHaveBeenCalledWith({
+      rendererUrl: 'http://localhost/renderer',
+      catalogString: service.lastCatalogString(),
+      checksumHash: service.lastChecksumHash(),
+      lastAccessed: expect.any(Number),
+    });
+
+    expect(service.activeCatalog()).toEqual(payload);
+    expect(service.activeCatalogTitle()).toBe('Updated Catalog');
+    expect(service.activeCatalogDescription()).toBe('Updated Description');
+  });
+
+  it('updates lastAccessed but sets catalogHashDelta to false when cached record hash matches', async () => {
+    const payload = {
+      title: 'Matching Catalog',
+      description: 'Matching Description',
+      components: [],
+    };
+
+    hostCommunicationServiceMock.messageStream$.next({
+      type: 'A2UI_CATALOG',
+      origin: 'http://localhost',
+      payload,
+    });
+
+    vi.useRealTimers();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
+
+    const computedHash = service.lastChecksumHash();
+    const computedCatalogString = service.lastCatalogString();
+    indexedDbStorageServiceMock.saveCatalogRecord.mockClear();
+
+    indexedDbStorageServiceMock.getCatalogRecord.mockResolvedValue({
+      rendererUrl: 'http://localhost/renderer',
+      catalogString: computedCatalogString,
+      checksumHash: computedHash,
+      lastAccessed: 1000,
+    });
+
+    hostCommunicationServiceMock.messageStream$.next({
+      type: 'A2UI_CATALOG',
+      origin: 'http://localhost',
+      payload,
+    });
+
+    vi.useRealTimers();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
+
+    expect(service.catalogHashDelta()).toBe(false);
+    expect(indexedDbStorageServiceMock.saveCatalogRecord).toHaveBeenCalledWith({
+      rendererUrl: 'http://localhost/renderer',
+      catalogString: computedCatalogString,
+      checksumHash: computedHash,
+      lastAccessed: expect.any(Number),
+    });
   });
 });

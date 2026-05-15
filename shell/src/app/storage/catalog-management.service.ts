@@ -21,6 +21,8 @@ import {Catalog} from './catalog-storage.model';
 import {concatMap, from, of} from 'rxjs';
 import DOMPurify from 'dompurify';
 import stringify from 'fast-json-stable-stringify';
+import {IndexedDbStorageService} from './indexed-db-storage.service';
+import {StartupResolutionService} from '../shell/startup-resolution.service';
 
 @Injectable({
   providedIn: 'root',
@@ -31,6 +33,8 @@ import stringify from 'fast-json-stable-stringify';
  */
 export class CatalogManagementService {
   private readonly hostCommunicationService = inject(HostCommunicationService);
+  private readonly indexedDbStorageService = inject(IndexedDbStorageService);
+  private readonly startupResolutionService = inject(StartupResolutionService);
 
   private readonly _isHandshakeInProgress = signal<boolean>(false);
   public readonly isHandshakeInProgress = this._isHandshakeInProgress.asReadonly();
@@ -46,6 +50,18 @@ export class CatalogManagementService {
 
   private readonly _lastChecksumHash = signal<string>('');
   public readonly lastChecksumHash = this._lastChecksumHash.asReadonly();
+
+  private readonly _activeCatalog = signal<Catalog | null>(null);
+  public readonly activeCatalog = this._activeCatalog.asReadonly();
+
+  private readonly _catalogHashDelta = signal<boolean>(false);
+  public readonly catalogHashDelta = this._catalogHashDelta.asReadonly();
+
+  private readonly _activeCatalogTitle = signal<string>('');
+  public readonly activeCatalogTitle = this._activeCatalogTitle.asReadonly();
+
+  private readonly _activeCatalogDescription = signal<string>('');
+  public readonly activeCatalogDescription = this._activeCatalogDescription.asReadonly();
 
   private watchdogTimerId: ReturnType<typeof setTimeout> | null = null;
 
@@ -116,17 +132,41 @@ export class CatalogManagementService {
             return from(
               crypto.subtle
                 .digest('SHA-256', new TextEncoder().encode(catalogString))
-                .then(hashBuffer => {
+                .then(async hashBuffer => {
                   const hashArray = Array.from(new Uint8Array(hashBuffer));
                   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
                   this._lastCatalogString.set(catalogString);
                   this._lastChecksumHash.set(hashHex);
+
+                  const rendererUrl = this.startupResolutionService.getResolvedRendererUrl();
+                  if (rendererUrl) {
+                    const existingRecord =
+                      await this.indexedDbStorageService.getCatalogRecord(rendererUrl);
+                    if (!existingRecord || existingRecord.checksumHash !== hashHex) {
+                      this._catalogHashDelta.set(true);
+                      await this.indexedDbStorageService.saveCatalogRecord({
+                        rendererUrl,
+                        catalogString,
+                        checksumHash: hashHex,
+                        lastAccessed: Date.now(),
+                      });
+                    } else {
+                      this._catalogHashDelta.set(false);
+                      existingRecord.lastAccessed = Date.now();
+                      await this.indexedDbStorageService.saveCatalogRecord(existingRecord);
+                    }
+                  }
+
+                  this._activeCatalog.set(catalogObj);
+                  this._activeCatalogTitle.set(catalogObj.title || '');
+                  this._activeCatalogDescription.set(catalogObj.description || '');
+
                   this._catalogError.set(null);
                   this._isHandshakeInProgress.set(false);
                   return null;
                 })
                 .catch(err => {
-                  const errorMsg = 'Failed to compute catalog hash.';
+                  const errorMsg = 'Failed to compute catalog hash or access storage.';
                   this._catalogError.set(errorMsg);
                   console.error(errorMsg, err);
                   this._isHandshakeInProgress.set(false);
