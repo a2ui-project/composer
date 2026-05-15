@@ -22,8 +22,8 @@ import {describe, it, expect, beforeEach, vi} from 'vitest';
 class FakeIDBRequest {
   result: unknown;
   error: unknown;
-  onsuccess: ((event?: any) => void) | null = null;
-  onerror: ((event?: any) => void) | null = null;
+  onsuccess: ((event?: unknown) => void) | null = null;
+  onerror: ((event?: unknown) => void) | null = null;
 }
 
 class FakeIDBOpenDBRequest extends FakeIDBRequest {

@@ -45,7 +45,7 @@ describe('HostCommunicationService', () => {
   });
 
   it('validates origin and emits envelope when source and origin match', () => {
-    const mockIframeWindow = {} as Window;
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
 
     const event = new MessageEvent('message', {
@@ -61,10 +61,14 @@ describe('HostCommunicationService', () => {
       payload: {status: 'ok'},
       origin: 'http://localhost:3000',
     });
+    expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
+      {type: 'GET_CATALOG'},
+      'http://localhost:3000',
+    );
   });
 
   it('assigns undefined payload when incoming message omits payload field', () => {
-    const mockIframeWindow = {} as Window;
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
 
     const event = new MessageEvent('message', {
@@ -80,11 +84,15 @@ describe('HostCommunicationService', () => {
       payload: undefined,
       origin: 'http://localhost:3000',
     });
+    expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
+      {type: 'GET_CATALOG'},
+      'http://localhost:3000',
+    );
   });
 
   it('rejects message and does not emit envelope when source does not match registered iframe', () => {
-    const mockIframeWindow = {} as Window;
-    const unauthorizedWindow = {} as Window;
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    const unauthorizedWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
 
     const event = new MessageEvent('message', {
@@ -99,7 +107,7 @@ describe('HostCommunicationService', () => {
   });
 
   it('rejects message when origin does not match resolved renderer URL', () => {
-    const mockIframeWindow = {} as Window;
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
 
     const event = new MessageEvent('message', {
