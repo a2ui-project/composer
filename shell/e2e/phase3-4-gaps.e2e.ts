@@ -60,8 +60,8 @@ test.describe('Phase 3-4 Gaps Integration Suite', () => {
       window.parent.postMessage({type: 'FORCE_UNBLOCK'}, '*');
     });
 
-    await expect(page.getByTestId('raw-message-envelope')).toBeVisible();
-    const envText = await page.getByTestId('raw-message-envelope').textContent();
+    await expect(page.getByTestId('raw-message-envelope').first()).toBeVisible();
+    const envText = await page.getByTestId('raw-message-envelope').first().textContent();
     expect(envText).toContain('FORCE_UNBLOCK');
   });
 
@@ -89,11 +89,13 @@ test.describe('Phase 3-4 Gaps Integration Suite', () => {
       );
     });
 
-    await page.getByRole('tab', {name: 'Raw Messages'}).click();
-    await expect(page.getByTestId('raw-message-envelope')).toBeVisible();
-    const envText = await page.getByTestId('raw-message-envelope').textContent();
-    expect(envText).toContain('CONSOLE_LOG');
-    expect(envText).toContain('Telemetry active');
+    await page.getByRole('tab', {name: 'Errors'}).click();
+    const errorRow = page.locator('.errors-container table tr.element-row').first();
+    await expect(errorRow).toBeVisible();
+    const rowText = await errorRow.textContent();
+    expect(rowText).toContain('warn');
+    expect(rowText).toContain('console');
+    expect(rowText).toContain('Telemetry active');
   });
 
   test('verifies responsive layout collapse in IDE webview mode', async ({page}) => {
