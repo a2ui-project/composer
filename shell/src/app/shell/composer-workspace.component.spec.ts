@@ -20,6 +20,8 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
+import {HostCommunicationService} from './host-communication.service';
+import {StartupResolutionService} from './startup-resolution.service';
 
 describe('ComposerWorkspaceComponent Dashboard', () => {
   let fixture: ComponentFixture<ComposerWorkspaceComponent>;
@@ -90,5 +92,166 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     expect(rawMsgSpy).toHaveBeenCalled();
     expect(eventsSpy).toHaveBeenCalled();
     expect(errorsSpy).toHaveBeenCalled();
+  });
+
+  describe('Unread Tab Badges', () => {
+    let hostComm: HostCommunicationService;
+
+    beforeEach(() => {
+      hostComm = TestBed.inject(HostCommunicationService);
+      fixture.componentInstance.selectedTabIndex.set(0);
+      fixture.componentInstance.unreadEventsCount.set(0);
+      fixture.componentInstance.unreadErrorsCount.set(0);
+      fixture.detectChanges();
+    });
+
+    it('increments Events unread count when a SEND_TO_SERVER message arrives and Events tab is inactive', () => {
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+
+      (hostComm as any).messageStreamSignal.set({
+        type: 'SEND_TO_SERVER',
+        payload: {action: {name: 'click-button'}},
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(1);
+    });
+
+    it('does not increment Events unread count when a SEND_TO_SERVER message arrives without an action payload', () => {
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+
+      (hostComm as any).messageStreamSignal.set({
+        type: 'SEND_TO_SERVER',
+        payload: {name: 'click-button'}, // Missing action!
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+    });
+
+    it('does not increment Events unread count when a SEND_TO_SERVER message arrives and Events tab is active (index 1)', () => {
+      fixture.componentInstance.selectedTabIndex.set(1);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+
+      (hostComm as any).messageStreamSignal.set({
+        type: 'SEND_TO_SERVER',
+        payload: {action: {name: 'click-button'}},
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+    });
+
+    it('increments Errors unread count when a CONSOLE_LOG error arrives and Errors tab is inactive', () => {
+      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
+
+      (hostComm as any).messageStreamSignal.set({
+        type: 'CONSOLE_LOG',
+        payload: {level: 'error', message: 'Failed to load'},
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadErrorsCount()).toBe(1);
+    });
+
+    it('increments Errors unread count when a DATA_MODEL_CHANGE validation error arrives and Errors tab is inactive', () => {
+      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
+
+      (hostComm as any).messageStreamSignal.set({
+        type: 'DATA_MODEL_CHANGE',
+        payload: {validationErrors: ['Invalid type']},
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadErrorsCount()).toBe(1);
+    });
+
+    it('does not increment Errors unread count when a DATA_MODEL_CHANGE arrives with empty validationErrors', () => {
+      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
+
+      (hostComm as any).messageStreamSignal.set({
+        type: 'DATA_MODEL_CHANGE',
+        payload: {validationErrors: []}, // Empty errors!
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
+    });
+
+    it('does not increment Errors unread count when error arrives and Errors tab is active (index 2)', () => {
+      fixture.componentInstance.selectedTabIndex.set(2);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
+
+      (hostComm as any).messageStreamSignal.set({
+        type: 'CONSOLE_LOG',
+        payload: {level: 'error', message: 'Failed to load'},
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
+    });
+
+    it('resets Events unread count to 0 when switching to Events tab', () => {
+      (hostComm as any).messageStreamSignal.set({
+        type: 'SEND_TO_SERVER',
+        payload: {action: {name: 'click-button'}},
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(1);
+
+      fixture.componentInstance.selectedTabIndex.set(1);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+    });
+
+    it('resets Errors unread count to 0 when switching to Errors tab', () => {
+      (hostComm as any).messageStreamSignal.set({
+        type: 'CONSOLE_LOG',
+        payload: {level: 'error', message: 'Failed'},
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.unreadErrorsCount()).toBe(1);
+
+      fixture.componentInstance.selectedTabIndex.set(2);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
+    });
+  });
+
+  it('collapses the debug panel automatically on mount when isExtensionMode is true', () => {
+    const resolutionService = TestBed.inject(StartupResolutionService);
+    vi.spyOn(resolutionService, 'isExtensionMode').mockReturnValue(true);
+
+    // Recreate fixture to trigger ngOnInit with mock return value
+    const newFixture = TestBed.createComponent(ComposerWorkspaceComponent);
+    newFixture.detectChanges();
+
+    expect(newFixture.componentInstance.isDebugCollapsed()).toBe(true);
+    const debugSection = newFixture.nativeElement.querySelector('.debug-section');
+    expect(debugSection.classList.contains('collapsed')).toBe(true);
   });
 });

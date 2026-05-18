@@ -60,18 +60,38 @@
           }}</mat-icon>
         </button>
       </div>
-      <mat-tab-group fitInkBarToContent>
+      <mat-tab-group fitInkBarToContent [(selectedIndex)]="selectedTabIndex">
         <mat-tab label="Data Model">
           <div class="tab-content-container">
             <a2ui-composer-data-model></a2ui-composer-data-model>
           </div>
         </mat-tab>
-        <mat-tab label="Events">
+        <mat-tab>
+          <ng-template mat-tab-label>
+            <span
+              [matBadge]="unreadEventsCount()"
+              [matBadgeHidden]="unreadEventsCount() === 0"
+              matBadgeOverlap="false"
+              matBadgeColor="accent"
+              class="events-badge-host"
+              >Events</span
+            >
+          </ng-template>
           <div class="tab-content-container">
             <a2ui-composer-events></a2ui-composer-events>
           </div>
         </mat-tab>
-        <mat-tab label="Errors">
+        <mat-tab>
+          <ng-template mat-tab-label>
+            <span
+              [matBadge]="unreadErrorsCount()"
+              [matBadgeHidden]="unreadErrorsCount() === 0"
+              matBadgeOverlap="false"
+              matBadgeColor="warn"
+              class="errors-badge-host"
+              >Errors</span
+            >
+          </ng-template>
           <div class="tab-content-container">
             <a2ui-composer-errors></a2ui-composer-errors>
           </div>

@@ -146,6 +146,31 @@
     max-width: calc(100% - 88px) !important;
     box-sizing: border-box;
     flex-shrink: 0;
+
+    .mat-badge:not(.mat-badge-hidden) .mat-badge-content {
+      width: 16px !important;
+      height: 16px !important;
+      min-width: 16px !important;
+      border-radius: 50% !important;
+      padding: 0 !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      line-height: 1 !important;
+      font-size: 10px !important;
+      top: -4px !important;
+      right: -18px !important;
+    }
+
+    .events-badge-host .mat-badge-content {
+      background-color: #3f51b5 !important;
+      color: #ffffff !important;
+    }
+
+    .errors-badge-host .mat-badge-content {
+      background-color: #ba1a1a !important;
+      color: #ffffff !important;
+    }
   }
 
   .mat-mdc-tab-body-wrapper {
