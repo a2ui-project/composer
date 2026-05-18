@@ -14,4 +14,79 @@
  limitations under the License.
 -->
 
-<div class="errors-placeholder">Errors Placeholder</div>
+<div class="errors-container">
+  @if (errorsLog().length > 0) {
+    <table mat-table [dataSource]="errorsLog()" class="mat-elevation-z1" multiTemplateDataRows>
+      <!-- Time Column -->
+      <ng-container matColumnDef="time">
+        <th mat-header-cell *matHeaderCellDef>Time</th>
+        <td mat-cell *matCellDef="let element">{{ element.time }}</td>
+      </ng-container>
+
+      <!-- Level Column -->
+      <ng-container matColumnDef="level">
+        <th mat-header-cell *matHeaderCellDef>Level</th>
+        <td mat-cell *matCellDef="let element">
+          <span class="level-badge" [class]="element.level">{{ element.level }}</span>
+        </td>
+      </ng-container>
+
+      <!-- Source Column -->
+      <ng-container matColumnDef="source">
+        <th mat-header-cell *matHeaderCellDef>Source</th>
+        <td mat-cell *matCellDef="let element">
+          <span class="source-badge" [class]="element.source">{{ element.source }}</span>
+        </td>
+      </ng-container>
+
+      <!-- Message Column -->
+      <ng-container matColumnDef="message">
+        <th mat-header-cell *matHeaderCellDef>Message</th>
+        <td mat-cell *matCellDef="let element">
+          <div class="message-cell">
+            <span class="error-message-text">{{ element.message }}</span>
+            @if (element.stack) {
+              <button
+                mat-icon-button
+                (click)="toggleRow(element); $event.stopPropagation()"
+                aria-label="Toggle Stack Trace"
+              >
+                <mat-icon>{{
+                  isRowExpanded(element) ? 'keyboard_arrow_up' : 'keyboard_arrow_down'
+                }}</mat-icon>
+              </button>
+            }
+          </div>
+        </td>
+      </ng-container>
+
+      <!-- Expanded Detail Column -->
+      <ng-container matColumnDef="expandedDetail">
+        <td mat-cell *matCellDef="let element" [attr.colspan]="columnsToDisplay.length">
+          <div class="element-detail">
+            @if (element.stack) {
+              <pre class="stack-preview">{{ element.stack }}</pre>
+            }
+          </div>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="columnsToDisplay"></tr>
+      <tr
+        mat-row
+        *matRowDef="let element; columns: columnsToDisplay; let i = dataIndex"
+        class="element-row"
+        [attr.data-row-index]="i"
+      ></tr>
+      <!-- Collapsible stack row -->
+      <tr
+        mat-row
+        *matRowDef="let element; columns: ['expandedDetail']"
+        class="detail-row"
+        [class.expanded]="isRowExpanded(element)"
+      ></tr>
+    </table>
+  } @else {
+    <div class="errors-placeholder">No errors captured yet</div>
+  }
+</div>
