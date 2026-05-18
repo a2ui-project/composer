@@ -14,12 +14,18 @@
  * limitations under the License.
  */
 
-import {Component} from '@angular/core';
+import {Component, inject, signal, computed, linkedSignal, effect, untracked} from '@angular/core';
+import {toObservable} from '@angular/core/rxjs-interop';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatInputModule} from '@angular/material/input';
+import {FormsModule} from '@angular/forms';
+import {debounceTime, distinctUntilChanged, filter} from 'rxjs';
+import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication.service';
 
 @Component({
   selector: 'a2ui-composer-data-model',
   standalone: true,
-  imports: [],
+  imports: [MatFormFieldModule, MatInputModule, FormsModule],
   templateUrl: './data-model.component.ng.html',
   styleUrl: './data-model.component.scss',
 })
@@ -27,4 +33,86 @@ import {Component} from '@angular/core';
  * A debug drawer component presenting a reactive, nested JSON tree explorer
  * of the active surface's underlying state data model.
  */
-export class DataModelComponent {}
+export class DataModelComponent {
+  private readonly hostComm = inject(HostCommunicationService);
+
+  private lastSurfaceId = 'sample-surface';
+  private lastPath: string | undefined = undefined;
+
+  public readonly latestModelValue = signal<unknown>(null);
+
+  public readonly dataModelJson = linkedSignal({
+    source: this.latestModelValue,
+    computation: (newModel: unknown): string => {
+      if (newModel === null) return '';
+      return typeof newModel === 'string' ? newModel : JSON.stringify(newModel, null, 2);
+    },
+  });
+
+  public readonly isJsonInvalid = computed(() => {
+    const val = this.dataModelJson();
+    if (!val) return false;
+    try {
+      JSON.parse(val);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+
+  constructor() {
+    effect(() => {
+      const streamValue = this.hostComm.messageStream();
+      if (streamValue?.type === 'DATA_MODEL_CHANGE') {
+        const payload = streamValue.payload as Record<string, unknown>;
+        const updateObj = payload?.['updateDataModel'] as Record<string, unknown>;
+        if (updateObj) {
+          if (typeof updateObj['surfaceId'] === 'string') {
+            this.lastSurfaceId = updateObj['surfaceId'];
+          }
+          if (typeof updateObj['path'] === 'string') {
+            this.lastPath = updateObj['path'];
+          } else {
+            this.lastPath = undefined;
+          }
+
+          const cleanValue = updateObj['value'];
+          untracked(() => this.latestModelValue.set(cleanValue));
+        }
+      }
+    });
+
+    toObservable(this.dataModelJson)
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        filter((jsonStr: string) => {
+          try {
+            JSON.parse(jsonStr);
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      )
+      .subscribe((validJsonStr: string) => {
+        const parsed = JSON.parse(validJsonStr);
+        const currentIncoming = this.latestModelValue();
+        const incomingStr = currentIncoming ? JSON.stringify(currentIncoming) : '';
+        const localStr = JSON.stringify(parsed);
+
+        if (incomingStr !== localStr) {
+          this.hostComm.sendMessage({
+            type: 'DATA_MODEL_CHANGE',
+            payload: {
+              updateDataModel: {
+                surfaceId: this.lastSurfaceId,
+                path: this.lastPath,
+                value: parsed,
+              },
+            },
+          });
+        }
+      });
+  }
+}

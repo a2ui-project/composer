@@ -14,4 +14,16 @@
  limitations under the License.
 -->
 
-<div class="data-model-placeholder">Data Model Placeholder</div>
+<div class="data-model-container">
+  @if (isJsonInvalid()) {
+    <div class="invalid-json-badge">⚠️ Invalid JSON syntax detected.</div>
+  }
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="data-model-field">
+    <textarea
+      matInput
+      [ngModel]="dataModelJson()"
+      (ngModelChange)="dataModelJson.set($event)"
+      placeholder="Enter data model JSON here..."
+    ></textarea>
+  </mat-form-field>
+</div>

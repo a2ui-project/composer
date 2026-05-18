@@ -15,7 +15,25 @@
  */
 
 import {ComponentHarness} from '@angular/cdk/testing';
+import {MatInputHarness} from '@angular/material/input/testing';
 
 export class DataModelHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-data-model';
+
+  protected getInputHarness = this.locatorFor(MatInputHarness);
+
+  async getModelText(): Promise<string> {
+    const input = await this.getInputHarness();
+    return input.getValue();
+  }
+
+  async setModelText(value: string): Promise<void> {
+    const input = await this.getInputHarness();
+    return input.setValue(value);
+  }
+
+  async hasInvalidJsonBadge(): Promise<boolean> {
+    const badge = await this.locatorForOptional('.invalid-json-badge')();
+    return badge !== null;
+  }
 }

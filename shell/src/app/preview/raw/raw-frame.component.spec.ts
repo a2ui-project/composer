@@ -95,6 +95,7 @@ describe('RawFrameComponent', () => {
         createSurface: {
           surfaceId: 'sample-surface',
           catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+          sendDataModel: true,
         },
       },
       {
