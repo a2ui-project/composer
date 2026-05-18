@@ -96,6 +96,19 @@ export class AppComponent implements OnDestroy {
       this.subscriptions.push(modelSub);
     });
     this.subscriptions.push(sub);
+
+    // Inject simulated log diagnostics to demonstrate the debug drawers reactively badging in the composer
+    setTimeout(() => {
+      console.log('Basic Catalog Angular Sandbox initialized successfully.');
+    }, 500);
+    setTimeout(() => {
+      console.warn('Basic Catalog warning: Simulated database synchronization latency spike.');
+    }, 2000);
+    setTimeout(() => {
+      console.error(
+        'Basic Catalog error: Simulated telemetry diagnostic sync crash (status: 503 Service Unavailable).',
+      );
+    }, 4000);
   }
 
   public ngOnDestroy(): void {
