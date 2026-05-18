@@ -51,6 +51,8 @@ export class AppRoot extends LitElement {
     }
   };
 
+  private subscriptions: Array<{unsubscribe(): void}> = [];
+
   constructor() {
     super();
   }
@@ -58,11 +60,31 @@ export class AppRoot extends LitElement {
   public connectedCallback(): void {
     super.connectedCallback();
     a2uiBridge.registerMessageProcessor('RENDER_A2UI', this.renderHandler);
+
+    const sub = this.processor.model.onSurfaceCreated.subscribe(surface => {
+      const modelSub = surface.dataModel.subscribe('', newValue => {
+        a2uiBridge.sendMessage({
+          type: 'DATA_MODEL_CHANGE',
+          payload: {
+            updateDataModel: {
+              surfaceId: surface.id,
+              value: newValue,
+            },
+          },
+        });
+      });
+      this.subscriptions.push(modelSub);
+    });
+    this.subscriptions.push(sub);
   }
 
   public disconnectedCallback(): void {
     super.disconnectedCallback();
     a2uiBridge.unregisterMessageProcessor('RENDER_A2UI', this.renderHandler);
+    for (const sub of this.subscriptions) {
+      sub.unsubscribe();
+    }
+    this.subscriptions = [];
   }
 
   protected render(): TemplateResult {

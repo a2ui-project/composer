@@ -14,9 +14,17 @@
  * limitations under the License.
  */
 
-import {Component, inject, Signal} from '@angular/core';
-import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication.service';
+import {
+  Component,
+  inject,
+  signal,
+  effect,
+  viewChild,
+  afterRenderEffect,
+  ElementRef,
+} from '@angular/core';
 import {JsonPipe} from '@angular/common';
+import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication.service';
 
 @Component({
   selector: 'a2ui-composer-raw-messages',
@@ -30,8 +38,47 @@ import {JsonPipe} from '@angular/common';
  * of raw postMessage traffic across the iframe boundary.
  */
 export class RawMessagesComponent {
-  private hostComm = inject(HostCommunicationService);
-  public latestEnvelope: Signal<MessageEnvelope | null> = this.hostComm.latestEnvelope;
+  private readonly hostComm = inject(HostCommunicationService);
 
-  public clearLogs(): void {}
+  public readonly messageHistory = signal<{envelope: MessageEnvelope; timestampStr: string}[]>([]);
+  public readonly logContainer = viewChild<ElementRef<HTMLDivElement>>('logContainer');
+
+  constructor() {
+    effect(() => {
+      const envelope = this.hostComm.messageStream();
+      if (envelope && envelope.type !== 'CONSOLE_LOG') {
+        const timestampStr = this.formatTimestamp(envelope.timestamp);
+        this.messageHistory.update(history => {
+          const newHistory = [{envelope, timestampStr}, ...history];
+          if (newHistory.length > 100) {
+            newHistory.pop();
+          }
+          return newHistory;
+        });
+      }
+    });
+
+    afterRenderEffect(() => {
+      // Reactively depend on message history changes to run after each list render
+      this.messageHistory();
+
+      const container = this.logContainer()?.nativeElement;
+      if (container) {
+        container.scrollTop = 0;
+      }
+    });
+  }
+
+  public clearLogs(): void {
+    this.messageHistory.set([]);
+  }
+
+  private formatTimestamp(epoch: number): string {
+    const date = new Date(epoch);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const ms = String(date.getMilliseconds()).padStart(3, '0');
+    return `${hours}:${minutes}:${seconds}.${ms}`;
+  }
 }

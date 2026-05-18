@@ -18,4 +18,32 @@ import {ComponentHarness} from '@angular/cdk/testing';
 
 export class RawMessagesHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-raw-messages';
+
+  async getLoggedMessagesCount(): Promise<number> {
+    const list = await this.locatorForAll('[data-testid="raw-message-envelope"]')();
+    return list.length;
+  }
+
+  async getMessageTextAt(index: number): Promise<string> {
+    const list = await this.locatorForAll('[data-testid="raw-message-envelope"]')();
+    if (index < 0 || index >= list.length) {
+      throw new Error(`Index ${index} out of bounds for raw messages list!`);
+    }
+    return list[index].text();
+  }
+
+  async getMessageTimestampAt(index: number): Promise<string> {
+    const list = await this.locatorForAll(
+      '[data-testid="raw-message-envelope"] .envelope-header .timestamp',
+    )();
+    if (index < 0 || index >= list.length) {
+      throw new Error(`Index ${index} out of bounds for raw messages list!`);
+    }
+    return list[index].text();
+  }
+
+  async hasPlaceholder(): Promise<boolean> {
+    const placeholder = await this.locatorForOptional('.raw-messages-placeholder')();
+    return placeholder !== null;
+  }
 }

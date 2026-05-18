@@ -13,11 +13,18 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-<div class="raw-messages-container">
-  @if (latestEnvelope()) {
-    <div data-testid="raw-message-envelope" class="message-envelope">
-      <pre>{{ latestEnvelope() | json }}</pre>
-    </div>
+<div #logContainer class="raw-messages-container">
+  @if (messageHistory().length > 0) {
+    @for (item of messageHistory(); track item.envelope.timestamp) {
+      <div data-testid="raw-message-envelope" class="message-envelope">
+        <div class="envelope-header">
+          <span class="timestamp">{{ item.timestampStr }}</span>
+          <span class="message-type">{{ item.envelope.type }}</span>
+          <span class="origin">{{ item.envelope.origin }}</span>
+        </div>
+        <pre>{{ item.envelope.payload | json }}</pre>
+      </div>
+    }
   } @else {
     <div class="raw-messages-placeholder">No messages captured yet</div>
   }

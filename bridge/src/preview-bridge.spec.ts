@@ -14,34 +14,15 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, beforeEach, beforeAll, afterAll, afterEach, vi} from 'vitest';
-
-// Use dynamic import inside beforeAll to ensure that the module-level singleton's
-// event listener registration (run on import) is captured by our window spy.
-let PreviewBridgeClass: any;
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {PreviewBridge, a2uiBridge} from './preview-bridge';
 
 describe('PreviewBridge Core API Runtime', () => {
-  let bridge: any;
-  const listeners: {type: string; handler: any}[] = [];
-  const originalAdd = window.addEventListener.bind(window);
-  const originalRemove = window.removeEventListener.bind(window);
-
-  beforeAll(async () => {
-    window.addEventListener = vi.fn().mockImplementation((type, handler, options) => {
-      listeners.push({type, handler});
-      originalAdd(type, handler, options);
-    }) as any;
-
-    const module = await import('./preview-bridge');
-    PreviewBridgeClass = module.PreviewBridge;
-  });
-
-  afterAll(() => {
-    window.addEventListener = originalAdd;
-  });
+  let bridge: PreviewBridge;
 
   beforeEach(() => {
-    bridge = new PreviewBridgeClass();
+    a2uiBridge.destroy(); // Cleanly disable and destroy module-level global instance
+    bridge = new PreviewBridge();
     const existing = document.getElementById('a2ui-blocking-overlay');
     if (existing && existing.parentNode) {
       existing.parentNode.removeChild(existing);
@@ -49,10 +30,7 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   afterEach(() => {
-    listeners.forEach(({type, handler}) => {
-      originalRemove(type, handler);
-    });
-    listeners.length = 0;
+    bridge.destroy();
 
     const existing = document.getElementById('a2ui-blocking-overlay');
     if (existing && existing.parentNode) {
@@ -144,7 +122,7 @@ describe('PreviewBridge Core API Runtime', () => {
     const mockCatalog = {items: ['BasicColumn']};
     window.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => mockCatalog,
+      text: async () => JSON.stringify(mockCatalog),
     });
 
     window.dispatchEvent(
@@ -157,6 +135,41 @@ describe('PreviewBridge Core API Runtime', () => {
     await new Promise(resolve => setTimeout(resolve, 10));
 
     expect(window.fetch).toHaveBeenCalledWith('/catalog');
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: 'A2UI_CATALOG',
+        payload: {catalog: mockCatalog},
+      },
+      '*',
+    );
+  });
+
+  it('falls back to /catalog.json if /catalog returns HTML (SPA fallback scenario)', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const mockCatalog = {items: ['BasicColumn']};
+
+    window.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => '<!doctype html><html>SPA Fallback</html>',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify(mockCatalog),
+      });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: 'GET_CATALOG'},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog');
+    expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json');
     expect(spy).toHaveBeenCalledWith(
       {
         type: 'A2UI_CATALOG',

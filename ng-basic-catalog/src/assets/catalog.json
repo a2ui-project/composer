@@ -1,0 +1,26 @@
+{
+  "$schema": "https://a2ui.org/specification/v0_9/catalog.json",
+  "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json",
+  "title": "Basic Catalog",
+  "description": "The standard A2UI components list for the basic catalog.",
+  "components": {
+    "Text": {"name": "Text"},
+    "Image": {"name": "Image"},
+    "Icon": {"name": "Icon"},
+    "Video": {"name": "Video"},
+    "AudioPlayer": {"name": "AudioPlayer"},
+    "Row": {"name": "Row"},
+    "Column": {"name": "Column"},
+    "List": {"name": "List"},
+    "Card": {"name": "Card"},
+    "Tabs": {"name": "Tabs"},
+    "Modal": {"name": "Modal"},
+    "Divider": {"name": "Divider"},
+    "Button": {"name": "Button"},
+    "TextField": {"name": "TextField"},
+    "CheckBox": {"name": "CheckBox"},
+    "ChoicePicker": {"name": "ChoicePicker"},
+    "Slider": {"name": "Slider"},
+    "DateTimeInput": {"name": "DateTimeInput"}
+  }
+}

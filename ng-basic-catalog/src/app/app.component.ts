@@ -68,6 +68,7 @@ export class AppComponent implements OnDestroy {
   public readonly surfaceId = 'sample-surface';
   public isInitialized = signal(false);
   private rendererService = inject(A2uiRendererService);
+  private subscriptions: Array<{unsubscribe(): void}> = [];
   private renderHandler = (payload: any) => {
     if (Array.isArray(payload)) {
       this.rendererService.processMessages(payload);
@@ -79,9 +80,28 @@ export class AppComponent implements OnDestroy {
 
   constructor() {
     a2uiBridge.registerMessageProcessor('RENDER_A2UI', this.renderHandler);
+
+    const sub = this.rendererService.surfaceGroup.onSurfaceCreated.subscribe(surface => {
+      const modelSub = surface.dataModel.subscribe('', newValue => {
+        a2uiBridge.sendMessage({
+          type: 'DATA_MODEL_CHANGE',
+          payload: {
+            updateDataModel: {
+              surfaceId: surface.id,
+              value: newValue,
+            },
+          },
+        });
+      });
+      this.subscriptions.push(modelSub);
+    });
+    this.subscriptions.push(sub);
   }
 
   public ngOnDestroy(): void {
     a2uiBridge.unregisterMessageProcessor('RENDER_A2UI', this.renderHandler);
+    for (const sub of this.subscriptions) {
+      sub.unsubscribe();
+    }
   }
 }

@@ -14,4 +14,45 @@
  limitations under the License.
 -->
 
-<div class="events-placeholder">Events Placeholder</div>
+<div class="events-container">
+  @if (eventsLog().length > 0) {
+    <table mat-table [dataSource]="eventsLog()" class="mat-elevation-z1">
+      <!-- Time Column -->
+      <ng-container matColumnDef="time">
+        <th mat-header-cell *matHeaderCellDef>Time</th>
+        <td mat-cell *matCellDef="let element">{{ element.time }}</td>
+      </ng-container>
+
+      <!-- Action Name Column -->
+      <ng-container matColumnDef="action">
+        <th mat-header-cell *matHeaderCellDef>Action Name</th>
+        <td mat-cell *matCellDef="let element">{{ element.action }}</td>
+      </ng-container>
+
+      <!-- Surface ID Column -->
+      <ng-container matColumnDef="surface">
+        <th mat-header-cell *matHeaderCellDef>Surface ID</th>
+        <td mat-cell *matCellDef="let element">{{ element.surface }}</td>
+      </ng-container>
+
+      <!-- Source Component Column -->
+      <ng-container matColumnDef="component">
+        <th mat-header-cell *matHeaderCellDef>Source Component</th>
+        <td mat-cell *matCellDef="let element">{{ element.component }}</td>
+      </ng-container>
+
+      <!-- Context Column -->
+      <ng-container matColumnDef="context">
+        <th mat-header-cell *matHeaderCellDef>Context</th>
+        <td mat-cell *matCellDef="let element">
+          <pre class="context-preview">{{ element.context | json }}</pre>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns" class="element-row"></tr>
+    </table>
+  } @else {
+    <div class="events-placeholder">No events captured yet</div>
+  }
+</div>
