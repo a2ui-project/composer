@@ -16,11 +16,11 @@
 
 import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {HostCommunicationService, MessageEnvelope} from '../shell/host-communication.service';
-import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
+import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {Catalog} from './catalog-storage.model';
-import {concatMap, from, of} from 'rxjs';
+import {concatMap, filter, from, of} from 'rxjs';
 import DOMPurify from 'dompurify';
-import stringify from 'fast-json-stable-stringify';
+import stringify from 'safe-stable-stringify';
 import {IndexedDbStorageService} from './indexed-db-storage.service';
 import {StartupResolutionService} from '../shell/startup-resolution.service';
 
@@ -74,9 +74,10 @@ export class CatalogManagementService {
       }
     });
 
-    this.hostCommunicationService.messageStream$
+    toObservable(this.hostCommunicationService.messageStream)
       .pipe(
-        takeUntilDestroyed(destroyRef),
+        filter((envelope): envelope is MessageEnvelope => envelope !== null),
+        takeUntilDestroyed(),
         concatMap((envelope: MessageEnvelope) => {
           if (envelope.type === 'RENDERER_READY') {
             if (this._isHandshakeInProgress()) {
@@ -128,6 +129,17 @@ export class CatalogManagementService {
             }
 
             const catalogString = stringify(catalogObj);
+
+            if (!globalThis.crypto?.subtle) {
+              const errorMsg = 'Failed to compute catalog hash or access storage.';
+              this._catalogError.set(errorMsg);
+              console.error(
+                errorMsg,
+                new TypeError("Cannot read properties of undefined (reading 'digest')"),
+              );
+              this._isHandshakeInProgress.set(false);
+              return of(null);
+            }
 
             return from(
               crypto.subtle

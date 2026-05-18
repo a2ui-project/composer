@@ -4835,15 +4835,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/fast-json-stable-stringify@npm:2.1.2":
-  version: 2.1.2
-  resolution: "@types/fast-json-stable-stringify@npm:2.1.2"
-  dependencies:
-    fast-json-stable-stringify: "npm:*"
-  checksum: 10c0/809e27812c82216966bc23e00f8d1ad945d02a38db5098a86e039af27916bd02aef705d6d487352e754ed9e830fe14d1a7ec5260353cbd91258591f075c92f3f
-  languageName: node
-  linkType: hard
-
 "@types/http-errors@npm:*":
   version: 2.0.5
   resolution: "@types/http-errors@npm:2.0.5"
@@ -5279,13 +5270,12 @@ __metadata:
     "@angular/router": "npm:21.2.12"
     "@playwright/test": "npm:1.59.1"
     "@types/dompurify": "npm:3.2.0"
-    "@types/fast-json-stable-stringify": "npm:2.1.2"
     a2ui-bridge: "npm:0.1.0"
     dompurify: "npm:3.4.3"
-    fast-json-stable-stringify: "npm:2.1.0"
     jsdom: "npm:29.1.1"
     prettier: "npm:3.8.3"
     rxjs: "npm:7.8.2"
+    safe-stable-stringify: "npm:2.4.3"
     tslib: "npm:2.6.2"
     typescript: "npm:6.0.3"
     vitest: "npm:4.1.5"
@@ -7161,13 +7151,6 @@ __metadata:
     merge2: "npm:^1.3.0"
     micromatch: "npm:^4.0.8"
   checksum: 10c0/f6aaa141d0d3384cf73cbcdfc52f475ed293f6d5b65bfc5def368b09163a9f7e5ec2b3014d80f733c405f58e470ee0cc451c2937685045cddcdeaa24199c43fe
-  languageName: node
-  linkType: hard
-
-"fast-json-stable-stringify@npm:*, fast-json-stable-stringify@npm:2.1.0":
-  version: 2.1.0
-  resolution: "fast-json-stable-stringify@npm:2.1.0"
-  checksum: 10c0/7f081eb0b8a64e0057b3bb03f974b3ef00135fbf36c1c710895cd9300f13c94ba809bb3a81cf4e1b03f6e5285610a61abbd7602d0652de423144dfee5a389c9b
   languageName: node
   linkType: hard
 
@@ -10495,6 +10478,13 @@ __metadata:
   version: 5.1.2
   resolution: "safe-buffer@npm:5.1.2"
   checksum: 10c0/780ba6b5d99cc9a40f7b951d47152297d0e260f0df01472a1b99d4889679a4b94a13d644f7dbc4f022572f09ae9005fa2fbb93bbbd83643316f365a3e9a45b21
+  languageName: node
+  linkType: hard
+
+"safe-stable-stringify@npm:2.4.3":
+  version: 2.4.3
+  resolution: "safe-stable-stringify@npm:2.4.3"
+  checksum: 10c0/81dede06b8f2ae794efd868b1e281e3c9000e57b39801c6c162267eb9efda17bd7a9eafa7379e1f1cacd528d4ced7c80d7460ad26f62ada7c9e01dec61b2e768
   languageName: node
   linkType: hard
 

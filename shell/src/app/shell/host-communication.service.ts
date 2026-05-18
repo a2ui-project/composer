@@ -16,7 +16,6 @@
 
 import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
 import {StartupResolutionService} from './startup-resolution.service';
-import {Subject} from 'rxjs';
 import {CrossFrameValidator} from './cross-frame-validator';
 
 /**
@@ -27,6 +26,7 @@ export interface MessageEnvelope {
   type: string;
   payload?: unknown;
   origin: string;
+  timestamp: number;
 }
 
 declare global {
@@ -50,7 +50,9 @@ export class HostCommunicationService implements OnDestroy {
 
   public readonly latestEnvelope: Signal<MessageEnvelope | null> =
     this.latestEnvelopeSignal.asReadonly();
-  public readonly messageStream$ = new Subject<MessageEnvelope>();
+
+  private readonly messageStreamSignal = signal<MessageEnvelope | null>(null);
+  public readonly messageStream = this.messageStreamSignal.asReadonly();
 
   private readonly messageListener = (event: MessageEvent) => {
     const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
@@ -79,9 +81,10 @@ export class HostCommunicationService implements OnDestroy {
         type,
         payload: data.payload,
         origin: event.origin,
+        timestamp: Date.now(),
       };
       this.latestEnvelopeSignal.set(envelope);
-      this.messageStream$.next(envelope);
+      this.messageStreamSignal.set(envelope);
     }
   };
 

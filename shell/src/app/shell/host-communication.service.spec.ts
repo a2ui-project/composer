@@ -17,7 +17,7 @@
 import {TestBed} from '@angular/core/testing';
 import {HostCommunicationService} from './host-communication.service';
 import {StartupResolutionService} from './startup-resolution.service';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
 describe('HostCommunicationService', () => {
   let service: HostCommunicationService;
@@ -40,6 +40,10 @@ describe('HostCommunicationService', () => {
     service = TestBed.inject(HostCommunicationService);
   });
 
+  afterEach(() => {
+    service.ngOnDestroy();
+  });
+
   it('initializes successfully', () => {
     expect(service).toBeTruthy();
   });
@@ -60,6 +64,7 @@ describe('HostCommunicationService', () => {
       type: 'RENDERER_READY',
       payload: {status: 'ok'},
       origin: 'http://localhost:3000',
+      timestamp: expect.any(Number),
     });
   });
 
@@ -79,6 +84,7 @@ describe('HostCommunicationService', () => {
       type: 'RENDERER_READY',
       payload: undefined,
       origin: 'http://localhost:3000',
+      timestamp: expect.any(Number),
     });
   });
 
@@ -167,5 +173,114 @@ describe('HostCommunicationService', () => {
       {type: 'RENDER_A2UI', payload: validPayload},
       'http://localhost:3000',
     );
+  });
+
+  it('validates origin and emits envelope when message is received from registered iframe element', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    const mockIFrameElement = {contentWindow: mockIframeWindow} as unknown as HTMLIFrameElement;
+    service.registerIframeElement(mockIFrameElement);
+
+    const event = new MessageEvent('message', {
+      source: mockIframeWindow,
+      origin: 'http://localhost:3000',
+      data: {type: 'RENDERER_READY', payload: {status: 'ok'}},
+    });
+
+    window.dispatchEvent(event);
+
+    expect(service.latestEnvelope()).toEqual({
+      type: 'RENDERER_READY',
+      payload: {status: 'ok'},
+      origin: 'http://localhost:3000',
+      timestamp: expect.any(Number),
+    });
+  });
+
+  it('sends message back to registered iframe element', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    const mockIFrameElement = {contentWindow: mockIframeWindow} as unknown as HTMLIFrameElement;
+    service.registerIframeElement(mockIFrameElement);
+
+    service.sendMessage({type: 'GET_CATALOG'});
+
+    expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
+      {type: 'GET_CATALOG'},
+      'http://localhost:3000',
+    );
+  });
+
+  it('ignores incoming message if event data is null, non-object, or missing type', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    const events = [
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: null,
+      }),
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: 'string-data',
+      }),
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {payload: {}},
+      }),
+    ];
+
+    for (const event of events) {
+      window.dispatchEvent(event);
+      expect(service.latestEnvelope()).toBeNull();
+    }
+  });
+
+  it('ignores incoming messages and blocks sendMessage when resolved renderer URL is null', () => {
+    startupResolutionServiceMock.getResolvedRendererUrl = vi.fn().mockReturnValue(null);
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    const event = new MessageEvent('message', {
+      source: mockIframeWindow,
+      origin: 'http://localhost:3000',
+      data: {type: 'RENDERER_READY'},
+    });
+
+    window.dispatchEvent(event);
+    expect(service.latestEnvelope()).toBeNull();
+
+    service.sendMessage({type: 'GET_CATALOG'});
+    expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('handles malformed resolved renderer URL gracefully in messageListener and sendMessage', () => {
+    startupResolutionServiceMock.getResolvedRendererUrl = vi.fn().mockReturnValue('http://[');
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    const event = new MessageEvent('message', {
+      source: mockIframeWindow,
+      origin: 'http://localhost:3000',
+      data: {type: 'RENDERER_READY'},
+    });
+
+    window.dispatchEvent(event);
+    expect(service.latestEnvelope()).toBeNull();
+
+    expect(() => service.sendMessage({type: 'GET_CATALOG'})).not.toThrow();
+    expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('cleans up global window event listeners and properties upon destruction', () => {
+    const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
+
+    service.ngOnDestroy();
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('message', expect.any(Function));
+    expect(window.a2uiHostCommunicationService).toBeUndefined();
+
+    removeEventListenerSpy.mockRestore();
   });
 });
