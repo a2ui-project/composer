@@ -32,4 +32,6 @@ import {JsonPipe} from '@angular/common';
 export class RawMessagesComponent {
   private hostComm = inject(HostCommunicationService);
   public latestEnvelope: Signal<MessageEnvelope | null> = this.hostComm.latestEnvelope;
+
+  public clearLogs(): void {}
 }

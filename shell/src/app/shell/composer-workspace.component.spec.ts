@@ -18,7 +18,7 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ComposerWorkspaceComponent} from './composer-workspace.component';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 
 describe('ComposerWorkspaceComponent Dashboard', () => {
@@ -54,5 +54,41 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     expect(textContent).toContain('Errors');
     expect(textContent).toContain('Raw Messages');
     expect(textContent).toContain('Mock Rules');
+  });
+
+  it('toggles collapse signal and updates the .debug-section.collapsed layout class', () => {
+    const component = fixture.componentInstance;
+    const debugSection = fixture.nativeElement.querySelector('.debug-section');
+
+    expect(component.isDebugCollapsed()).toBe(false);
+    expect(debugSection.classList.contains('collapsed')).toBe(false);
+
+    // Call toggleDebugCollapse()
+    component.toggleDebugCollapse();
+    fixture.detectChanges();
+
+    expect(component.isDebugCollapsed()).toBe(true);
+    expect(debugSection.classList.contains('collapsed')).toBe(true);
+
+    // Toggle back
+    component.toggleDebugCollapse();
+    fixture.detectChanges();
+
+    expect(component.isDebugCollapsed()).toBe(false);
+    expect(debugSection.classList.contains('collapsed')).toBe(false);
+  });
+
+  it('delegates clearLogs to all queried child components when clearAllLogs is called', () => {
+    const component = fixture.componentInstance;
+
+    const rawMsgSpy = vi.spyOn(component.rawMessagesComponent()!, 'clearLogs');
+    const eventsSpy = vi.spyOn(component.eventsComponent()!, 'clearLogs');
+    const errorsSpy = vi.spyOn(component.errorsComponent()!, 'clearLogs');
+
+    component.clearAllLogs();
+
+    expect(rawMsgSpy).toHaveBeenCalled();
+    expect(eventsSpy).toHaveBeenCalled();
+    expect(errorsSpy).toHaveBeenCalled();
   });
 });

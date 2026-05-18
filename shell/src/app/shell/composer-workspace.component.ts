@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, OnInit} from '@angular/core';
+import {Component, inject, signal, viewChild, OnInit} from '@angular/core';
 import {ChatPanelComponent} from '../chat/chat-panel/chat-panel.component';
 import {RawFrameComponent} from '../preview/raw/raw-frame.component';
 import {RenderedFrameComponent} from '../preview/rendered/rendered-frame.component';
@@ -24,6 +24,9 @@ import {ErrorsComponent} from '../debug/errors/errors.component';
 import {RawMessagesComponent} from '../debug/raw-messages/raw-messages.component';
 import {MockRulesComponent} from '../debug/mock-rules/mock-rules.component';
 import {MatTabsModule} from '@angular/material/tabs';
+import {MatIconModule} from '@angular/material/icon';
+import {MatButtonModule} from '@angular/material/button';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {StartupResolutionService} from './startup-resolution.service';
 
 @Component({
@@ -39,6 +42,9 @@ import {StartupResolutionService} from './startup-resolution.service';
     RawMessagesComponent,
     MockRulesComponent,
     MatTabsModule,
+    MatIconModule,
+    MatButtonModule,
+    MatTooltipModule,
   ],
   templateUrl: './composer-workspace.component.ng.html',
   styleUrl: './composer-workspace.component.scss',
@@ -50,8 +56,23 @@ import {StartupResolutionService} from './startup-resolution.service';
 export class ComposerWorkspaceComponent implements OnInit {
   private startupResolutionService = inject(StartupResolutionService);
   public isExtension = signal(false);
+  public isDebugCollapsed = signal(false);
+
+  public readonly rawMessagesComponent = viewChild(RawMessagesComponent);
+  public readonly eventsComponent = viewChild(EventsComponent);
+  public readonly errorsComponent = viewChild(ErrorsComponent);
 
   public ngOnInit(): void {
     this.isExtension.set(this.startupResolutionService.isExtensionMode());
+  }
+
+  public toggleDebugCollapse(): void {
+    this.isDebugCollapsed.update(c => !c);
+  }
+
+  public clearAllLogs(): void {
+    this.rawMessagesComponent()?.clearLogs();
+    this.eventsComponent()?.clearLogs();
+    this.errorsComponent()?.clearLogs();
   }
 }

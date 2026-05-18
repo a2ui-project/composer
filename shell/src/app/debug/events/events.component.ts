@@ -27,4 +27,6 @@ import {Component} from '@angular/core';
  * A debug drawer component displaying interactive event hooks and custom
  * event transmissions triggered by layout elements.
  */
-export class EventsComponent {}
+export class EventsComponent {
+  public clearLogs(): void {}
+}

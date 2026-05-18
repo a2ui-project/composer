@@ -37,7 +37,29 @@
         </div>
       </div>
     </div>
-    <div class="debug-section">
+    <div class="debug-section" [class.collapsed]="isDebugCollapsed()">
+      <div class="debug-header-controls">
+        <button
+          mat-icon-button
+          (click)="clearAllLogs()"
+          aria-label="Clear Logs"
+          matTooltip="Clear all log tabs"
+          matTooltipPosition="left"
+        >
+          <mat-icon>delete</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          (click)="toggleDebugCollapse()"
+          aria-label="Toggle Debug Panel"
+          [matTooltip]="isDebugCollapsed() ? 'Expand Debug Panel' : 'Collapse Debug Panel'"
+          matTooltipPosition="left"
+        >
+          <mat-icon>{{
+            isDebugCollapsed() ? 'keyboard_arrow_up' : 'keyboard_arrow_down'
+          }}</mat-icon>
+        </button>
+      </div>
       <mat-tab-group fitInkBarToContent>
         <mat-tab label="Data Model">
           <div class="tab-content-container">

@@ -27,4 +27,6 @@ import {Component} from '@angular/core';
  * A debug drawer component presenting captured error stacks, warnings,
  * and connection failures piped from the renderer application.
  */
-export class ErrorsComponent {}
+export class ErrorsComponent {
+  public clearLogs(): void {}
+}
