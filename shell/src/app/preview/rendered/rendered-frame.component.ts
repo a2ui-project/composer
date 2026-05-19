@@ -39,7 +39,29 @@ export class RenderedFrameComponent {
 
   public safeRendererUrl = computed(() => {
     const currentUrl = this.startupResolutionService.resolvedUrl();
-    return currentUrl ? this.sanitizer.bypassSecurityTrustResourceUrl(currentUrl) : null;
+    if (!currentUrl) return null;
+
+    try {
+      // Fallback to empty string if globalThis.location is undefined (e.g., in Server-Side Rendering).
+      const baseOrigin = globalThis.location?.origin || '';
+
+      // Construct a URL object. Passing baseOrigin as the second argument ensures that
+      // relative URLs (e.g., "/renderer") are parsed correctly relative to the current
+      // domain. Absolute URLs will ignore this base parameter.
+      const url = new URL(currentUrl, baseOrigin);
+
+      // Append the parent origin as the 'origin' query parameter. The Boq backend is annotated
+      // with @OriginCheckRequired(param = "origin"), which strictly validates this parameter
+      // against a list of allowed internal domains (such as localhost.corp.google.com) to prevent
+      // unauthorized cross-site framing.
+      url.searchParams.set('origin', baseOrigin);
+
+      return this.sanitizer.bypassSecurityTrustResourceUrl(url.toString());
+    } catch (e) {
+      // Fallback if currentUrl is not a valid absolute or relative URL (e.g., malformed strings),
+      // bypassing safety checks to render what we can.
+      return this.sanitizer.bypassSecurityTrustResourceUrl(currentUrl);
+    }
   });
 
   constructor() {
