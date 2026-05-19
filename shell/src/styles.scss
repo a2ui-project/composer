@@ -199,6 +199,28 @@ $dark-theme: mat.define-theme(
     --mdc-chip-with-icon-disabled-icon-color: #e5e2e2;
     --mdc-chip-with-trailing-icon-disabled-trailing-icon-color: #e5e2e2;
   }
+
+  // High-contrast overrides guaranteeing clean legibility for primary buttons and icon buttons in dark mode.
+  .mat-mdc-button.mat-primary,
+  .mat-mdc-outlined-button.mat-primary,
+  .mat-mdc-raised-button.mat-primary,
+  .mat-mdc-unelevated-button.mat-primary,
+  .mat-mdc-icon-button.mat-primary {
+    --mat-button-text-label-text-color: var(--mat-sys-primary);
+    --mat-button-outlined-label-text-color: var(--mat-sys-primary);
+    --mat-button-filled-label-text-color: var(--mat-sys-on-primary);
+    --mat-button-filled-container-color: var(--mat-sys-primary);
+    --mat-icon-button-icon-color: var(--mat-sys-primary);
+  }
+
+  // High-contrast overrides guaranteeing clean legibility for active tab labels and indicators in dark mode.
+  .mat-mdc-tab-group,
+  .mat-mdc-tab-nav-bar {
+    --mat-tab-active-label-text-color: var(--mat-sys-primary);
+    --mat-tab-active-indicator-color: var(--mat-sys-primary);
+    --mat-tab-header-active-label-text-color: var(--mat-sys-primary);
+    --mat-tab-header-active-indicator-color: var(--mat-sys-primary);
+  }
 }
 
 html,
