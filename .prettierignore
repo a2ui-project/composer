@@ -13,10 +13,10 @@
 # limitations under the License.
 
 node_modules
-dist
-build
+**/dist/
+**/build/
+**/e2e/
 .git
-.dart_tool
 .venv
 *.min.js
 agent_sdks/conformance/test_data/**
