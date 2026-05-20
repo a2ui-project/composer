@@ -16,9 +16,9 @@
 
 import {LitElement, html, TemplateResult} from 'lit';
 import {customElement, state} from 'lit/decorators.js';
-import {MessageProcessor, SurfaceModel} from '@a2ui/web_core/v0_9';
+import {MessageProcessor, SurfaceModel, MessageProcessorCatalog} from '@a2ui/web_core/v0_9';
 import {basicCatalog} from '@a2ui/lit/v0_9';
-import {a2uiBridge} from 'a2ui-bridge';
+import {a2uiBridge, SurfaceStateSubscription} from 'a2ui-bridge';
 
 /**
  * Core catalog provider interface hosting and exposing Lit-based
@@ -26,67 +26,54 @@ import {a2uiBridge} from 'a2ui-bridge';
  */
 @customElement('app-root')
 export class AppRoot extends LitElement {
-  /**
-   * Constructs the message processor consuming official basic catalog renderers.
-   * Note: Casting basicCatalog as any is structurally required to suppress static compiler private
-   * property mapping validations across nested monorepo dependency checkouts, allowing Vite runtime
-   * compilation to execute securely against deduplicated package graphs.
-   */
-  private processor = new MessageProcessor([basicCatalog as any], actionPayload => {
-    a2uiBridge.sendMessage({
-      type: 'SEND_TO_SERVER',
-      payload: {version: 'v0.9', action: actionPayload},
-    });
-  });
+  /** The core basic catalog message processor consuming postMessage instructions. */
+  private processor = new MessageProcessor(
+    [basicCatalog as unknown as MessageProcessorCatalog],
+    action => {
+      a2uiBridge.sendAction(action);
+    },
+  );
 
+  /** The active reactive Surface Model mapped for template rendering. */
   @state()
-  private surface: SurfaceModel<any> | undefined;
+  private surface: SurfaceModel<unknown> | undefined;
 
-  private renderHandler = (payload: any) => {
-    if (Array.isArray(payload)) {
-      this.processor.processMessages(payload);
-      this.surface = this.processor.model.getSurface('sample-surface');
-    } else {
-      console.warn('Unexpected non-array RENDER_A2UI payload received:', payload);
-    }
-  };
+  /** The active Preview Bridge connection handle managing surface data synchronization. */
+  private rendererConnection: SurfaceStateSubscription | null = null;
 
-  private subscriptions: Array<{unsubscribe(): void}> = [];
-
-  constructor() {
-    super();
-  }
-
+  /**
+   * Custom element lifecycle hook called when the catalog sandbox is attached to the DOM.
+   * Wires the global Preview Bridge connection and dynamically resolves surface IDs.
+   */
   public connectedCallback(): void {
     super.connectedCallback();
-    a2uiBridge.registerMessageProcessor('RENDER_A2UI', this.renderHandler);
 
-    const sub = this.processor.model.onSurfaceCreated.subscribe(surface => {
-      const modelSub = surface.dataModel.subscribe('', newValue => {
-        a2uiBridge.sendMessage({
-          type: 'DATA_MODEL_CHANGE',
-          payload: {
-            updateDataModel: {
-              surfaceId: surface.id,
-              value: newValue,
-            },
-          },
-        });
-      });
-      this.subscriptions.push(modelSub);
+    this.rendererConnection?.unsubscribe();
+    this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
+      surfaceGroup: this.processor.model,
+      onSurfaceReady: (surfaceId: string) => {
+        this.surface = this.processor.model.getSurface(surfaceId);
+        this.requestUpdate();
+      },
+      onSurfaceCleared: () => {
+        this.surface = undefined;
+      },
     });
-    this.subscriptions.push(sub);
   }
 
+  /**
+   * Custom element lifecycle hook called when the catalog sandbox is detached from the DOM.
+   * Cleans up the bridge connection to prevent leaks.
+   */
   public disconnectedCallback(): void {
     super.disconnectedCallback();
-    a2uiBridge.unregisterMessageProcessor('RENDER_A2UI', this.renderHandler);
-    for (const sub of this.subscriptions) {
-      sub.unsubscribe();
+    if (this.rendererConnection) {
+      this.rendererConnection.unsubscribe();
+      this.rendererConnection = null;
     }
-    this.subscriptions = [];
   }
 
+  /** Renders the reactive sandbox catalog layout template or loading active state indicators. */
   protected render(): TemplateResult {
     if (!this.surface) {
       return html`<p style="color: #666;">

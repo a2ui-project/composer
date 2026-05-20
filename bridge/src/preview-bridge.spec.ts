@@ -15,7 +15,7 @@
  */
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {PreviewBridge, a2uiBridge} from './preview-bridge';
+import {PreviewBridge, a2uiBridge, SurfaceGroupLike, SurfaceInstance} from './preview-bridge';
 
 describe('PreviewBridge Core API Runtime', () => {
   let bridge: PreviewBridge;
@@ -38,11 +38,12 @@ describe('PreviewBridge Core API Runtime', () => {
     }
 
     vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('registers message processors and routes payload types perfectly', () => {
     const handler = vi.fn();
-    bridge.registerMessageProcessor('TEST_EVENT', handler);
+    bridge['registerMessageProcessor']('TEST_EVENT', handler);
 
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -57,8 +58,8 @@ describe('PreviewBridge Core API Runtime', () => {
 
   it('prevents duplicate message handlers from triggering multiple times naturally', () => {
     const handler = vi.fn();
-    bridge.registerMessageProcessor('TEST_EVENT', handler);
-    bridge.registerMessageProcessor('TEST_EVENT', handler);
+    bridge['registerMessageProcessor']('TEST_EVENT', handler);
+    bridge['registerMessageProcessor']('TEST_EVENT', handler);
 
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -209,8 +210,8 @@ describe('PreviewBridge Core API Runtime', () => {
 
   it('unregisters message processor successfully', () => {
     const handler = vi.fn();
-    bridge.registerMessageProcessor('TEST_EVENT', handler);
-    bridge.unregisterMessageProcessor('TEST_EVENT', handler);
+    bridge['registerMessageProcessor']('TEST_EVENT', handler);
+    bridge['unregisterMessageProcessor']('TEST_EVENT', handler);
 
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -234,7 +235,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
   it('ignores malformed incoming message payloads without throwing', () => {
     const handler = vi.fn();
-    bridge.registerMessageProcessor('TEST_EVENT', handler);
+    bridge['registerMessageProcessor']('TEST_EVENT', handler);
 
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -258,7 +259,7 @@ describe('PreviewBridge Core API Runtime', () => {
     const throwingHandler = vi.fn().mockImplementation(() => {
       throw new Error('Handler failed');
     });
-    bridge.registerMessageProcessor('THROWING_EVENT', throwingHandler);
+    bridge['registerMessageProcessor']('THROWING_EVENT', throwingHandler);
 
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -272,6 +273,247 @@ describe('PreviewBridge Core API Runtime', () => {
       'Error executing message processor for type THROWING_EVENT:',
       expect.any(Error),
     );
+  });
+
+  describe('sendAction and connectSurfaceGroup APIs', () => {
+    it('packages and transmits custom actions upward via sendAction', () => {
+      const spy = vi.spyOn(window.parent, 'postMessage');
+      bridge.sendAction({click: 'button'}, 'v0.9');
+      expect(spy).toHaveBeenCalledWith(
+        {
+          type: 'SEND_TO_SERVER',
+          payload: {version: 'v0.9', action: {click: 'button'}},
+        },
+        '*',
+      );
+    });
+
+    it('encapsulates surface creation and data model change routing correctly', () => {
+      const parentSpy = vi.spyOn(window.parent, 'postMessage');
+      let surfaceCallback: (surface: SurfaceInstance) => void = () => {};
+      const surfaceGroupMock: SurfaceGroupLike = {
+        onSurfaceCreated: {
+          subscribe: vi.fn().mockImplementation(cb => {
+            surfaceCallback = cb;
+            return {unsubscribe: vi.fn()};
+          }),
+        },
+      };
+
+      bridge['connectSurfaceGroup'](surfaceGroupMock);
+      expect(surfaceGroupMock.onSurfaceCreated.subscribe).toHaveBeenCalled();
+
+      let modelCallback: (val: unknown) => void = () => {};
+      const surfaceMock: SurfaceInstance = {
+        id: 'surf-1',
+        dataModel: {
+          subscribe: vi.fn().mockImplementation((path, cb) => {
+            modelCallback = cb;
+            return {unsubscribe: vi.fn()};
+          }),
+        },
+      };
+
+      surfaceCallback(surfaceMock);
+
+      expect(surfaceMock.dataModel.subscribe).toHaveBeenCalledWith('', expect.any(Function));
+
+      modelCallback('new-model-value');
+
+      expect(parentSpy).toHaveBeenCalledWith(
+        {
+          type: 'DATA_MODEL_CHANGE',
+          payload: {
+            updateDataModel: {
+              surfaceId: 'surf-1',
+              value: 'new-model-value',
+            },
+          },
+        },
+        '*',
+      );
+    });
+
+    it('should completely unsubscribe group subscription and all surface subscriptions on disconnect', () => {
+      const groupUnsubscribe = vi.fn();
+      const surfaceUnsubscribe = vi.fn();
+
+      let surfaceCallback: (surface: SurfaceInstance) => void = () => {};
+      const surfaceGroupMock: SurfaceGroupLike = {
+        onSurfaceCreated: {
+          subscribe: vi.fn().mockImplementation(cb => {
+            surfaceCallback = cb;
+            return {unsubscribe: groupUnsubscribe};
+          }),
+        },
+      };
+
+      const connection = bridge['connectSurfaceGroup'](surfaceGroupMock);
+
+      const surfaceMock: SurfaceInstance = {
+        id: 'surf-1',
+        dataModel: {
+          subscribe: vi.fn().mockImplementation(() => {
+            return {unsubscribe: surfaceUnsubscribe};
+          }),
+        },
+      };
+
+      surfaceCallback(surfaceMock);
+
+      connection.unsubscribe();
+
+      expect(groupUnsubscribe).toHaveBeenCalledTimes(1);
+      expect(surfaceUnsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('should unsubscribe older listeners when a surface with the same ID is re-registered', () => {
+      const firstSurfaceUnsubscribe = vi.fn();
+      const secondSurfaceUnsubscribe = vi.fn();
+
+      let surfaceCallback: (surface: SurfaceInstance) => void = () => {};
+      const surfaceGroupMock: SurfaceGroupLike = {
+        onSurfaceCreated: {
+          subscribe: vi.fn().mockImplementation(cb => {
+            surfaceCallback = cb;
+            return {unsubscribe: vi.fn()};
+          }),
+        },
+      };
+
+      bridge['connectSurfaceGroup'](surfaceGroupMock);
+
+      const surfaceMock1: SurfaceInstance = {
+        id: 'surf-duplicate',
+        dataModel: {
+          subscribe: vi.fn().mockImplementation(() => {
+            return {unsubscribe: firstSurfaceUnsubscribe};
+          }),
+        },
+      };
+
+      const surfaceMock2: SurfaceInstance = {
+        id: 'surf-duplicate',
+        dataModel: {
+          subscribe: vi.fn().mockImplementation(() => {
+            return {unsubscribe: secondSurfaceUnsubscribe};
+          }),
+        },
+      };
+
+      surfaceCallback(surfaceMock1);
+      surfaceCallback(surfaceMock2);
+
+      expect(firstSurfaceUnsubscribe).toHaveBeenCalledTimes(1);
+      expect(secondSurfaceUnsubscribe).not.toHaveBeenCalled();
+    });
+
+    it('handles defensive inputs and mock objects safely without throwing', () => {
+      let surfaceCallback: (surface: SurfaceInstance) => void = () => {};
+      const surfaceGroupMock: SurfaceGroupLike = {
+        onSurfaceCreated: {
+          subscribe: vi.fn().mockImplementation(cb => {
+            surfaceCallback = cb;
+            return {unsubscribe: vi.fn()};
+          }),
+        },
+      };
+
+      bridge['connectSurfaceGroup'](surfaceGroupMock);
+
+      expect(() => {
+        surfaceCallback(null as unknown as SurfaceInstance);
+        surfaceCallback({} as unknown as SurfaceInstance);
+        surfaceCallback({id: 'only-id'} as unknown as SurfaceInstance);
+      }).not.toThrow();
+    });
+  });
+
+  describe('Memory-safety and timeout cleanups on destroy', () => {
+    it('DOMContentLoaded handshake timeout is cleanly cleared upon destroy()', () => {
+      vi.useFakeTimers();
+      const spy = vi.spyOn(window.parent, 'postMessage');
+
+      const tempBridge = new PreviewBridge();
+      tempBridge.destroy();
+
+      vi.runAllTimers();
+      expect(spy).not.toHaveBeenCalledWith(expect.objectContaining({type: 'RENDERER_READY'}), '*');
+      vi.useRealTimers();
+    });
+
+    it('All active surface group connections registered in the bridge are cleanly unsubscribed and evicted when bridge.destroy() is called', () => {
+      const groupUnsubscribe = vi.fn();
+      const surfaceGroupMock: SurfaceGroupLike = {
+        onSurfaceCreated: {
+          subscribe: vi.fn().mockImplementation(() => {
+            return {unsubscribe: groupUnsubscribe};
+          }),
+        },
+      };
+
+      bridge['connectSurfaceGroup'](surfaceGroupMock);
+      bridge.destroy();
+
+      expect(groupUnsubscribe).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Two-Step Dispatch and Lifecycle Routing', () => {
+    it('intercepts RENDER_A2UI messages and performs a two-step dispatch when createSurface is present', async () => {
+      vi.useFakeTimers();
+      const handler = vi.fn();
+      bridge['registerMessageProcessor']('RENDER_A2UI', handler);
+
+      const payload = [
+        {
+          version: 'v0.9',
+          createSurface: {surfaceId: 'sample-surface', catalogId: 'basic-catalog'},
+        },
+      ];
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {type: 'RENDER_A2UI', payload},
+        }),
+      );
+
+      // Step 1: Immediate dispatch of null to trigger unmounting/reset
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenNthCalledWith(1, null);
+
+      // Step 2: Advance timer tick to trigger deferred render payload
+      vi.advanceTimersByTime(0);
+
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(handler).toHaveBeenNthCalledWith(2, payload);
+
+      vi.useRealTimers();
+    });
+
+    it('intercepts RENDER_A2UI messages and dispatches immediately without reset if createSurface is absent', () => {
+      const handler = vi.fn();
+      bridge['registerMessageProcessor']('RENDER_A2UI', handler);
+
+      const payload = [
+        {
+          version: 'v0.9',
+          updateComponents: {surfaceId: 'sample-surface', components: []},
+        },
+      ];
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {type: 'RENDER_A2UI', payload},
+        }),
+      );
+
+      // Standard updates bypass the two-step dispatch to prevent visual flicker
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(payload);
+    });
   });
 
   it('resets overlayElement pointer reference to null upon unblocking even if DOM node is already detached independently', () => {

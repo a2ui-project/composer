@@ -22,9 +22,9 @@ import {A2UI_RENDERER_CONFIG} from '@a2ui/angular/v0_9';
 
 vi.mock('a2ui-bridge', () => ({
   a2uiBridge: {
-    registerMessageProcessor: vi.fn(),
-    unregisterMessageProcessor: vi.fn(),
+    attachRenderer: vi.fn().mockReturnValue({unsubscribe: vi.fn()}),
     sendMessage: vi.fn(),
+    sendAction: vi.fn(),
   },
 }));
 
@@ -51,36 +51,67 @@ describe('AppComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('registers RENDER_A2UI message processor upon construction', () => {
-    expect(a2uiBridge.registerMessageProcessor).toHaveBeenCalledWith(
-      'RENDER_A2UI',
-      expect.any(Function),
+  it('attaches renderer upon construction', () => {
+    expect(a2uiBridge.attachRenderer).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        surfaceGroup: expect.anything(),
+        onSurfaceReady: expect.any(Function),
+        onSurfaceCleared: expect.any(Function),
+      }),
     );
   });
 
-  it('unregisters RENDER_A2UI message processor upon ngOnDestroy', () => {
+  it('unsubscribes renderer upon ngOnDestroy', () => {
+    const mockUnsubscribe = vi.mocked(a2uiBridge.attachRenderer).mock.results[0].value.unsubscribe;
     fixture.destroy();
-    expect(a2uiBridge.unregisterMessageProcessor).toHaveBeenCalledWith(
-      'RENDER_A2UI',
-      expect.any(Function),
-    );
+    expect(mockUnsubscribe).toHaveBeenCalled();
   });
 
-  it('processes RENDER_A2UI array payload and sets isInitialized to true', () => {
-    const registerCall = (a2uiBridge.registerMessageProcessor as any).mock.calls[0];
-    const handler = registerCall[1];
-    handler([{type: 'SURFACE', id: 'sample-surface'}]);
-    expect(component.isInitialized()).toBe(true);
+  it('sets isInitialized to true and surfaceId when onSurfaceReady is called', () => {
+    const attachCall = vi.mocked(a2uiBridge.attachRenderer).mock.calls[0];
+    const {onSurfaceReady} = attachCall[1];
+
+    // Check initial state
+    expect(
+      (
+        component as unknown as {isInitialized: () => boolean; surfaceId: () => string}
+      ).isInitialized(),
+    ).toBe(false);
+
+    onSurfaceReady('test-surface-id');
+
+    expect(
+      (
+        component as unknown as {isInitialized: () => boolean; surfaceId: () => string}
+      ).isInitialized(),
+    ).toBe(true);
+    expect(
+      (component as unknown as {isInitialized: () => boolean; surfaceId: () => string}).surfaceId(),
+    ).toBe('test-surface-id');
   });
 
-  it('logs warning on non-array RENDER_A2UI payload', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const registerCall = (a2uiBridge.registerMessageProcessor as any).mock.calls[0];
-    const handler = registerCall[1];
-    handler({type: 'UNEXPECTED'});
-    expect(warnSpy).toHaveBeenCalledWith('Unexpected non-array RENDER_A2UI payload received:', {
-      type: 'UNEXPECTED',
-    });
+  it('resets initialization state when onSurfaceCleared is called', () => {
+    const attachCall = vi.mocked(a2uiBridge.attachRenderer).mock.calls[0];
+    const {onSurfaceReady, onSurfaceCleared} = attachCall[1];
+
+    onSurfaceReady('test-surface-id');
+    expect(
+      (
+        component as unknown as {isInitialized: () => boolean; surfaceId: () => string}
+      ).isInitialized(),
+    ).toBe(true);
+
+    onSurfaceCleared?.();
+
+    expect(
+      (
+        component as unknown as {isInitialized: () => boolean; surfaceId: () => string}
+      ).isInitialized(),
+    ).toBe(false);
+    expect(
+      (component as unknown as {isInitialized: () => boolean; surfaceId: () => string}).surfaceId(),
+    ).toBe('');
   });
 
   it('dispatches actions wrapped in version v0.9 envelope to SEND_TO_SERVER', () => {
@@ -95,9 +126,6 @@ describe('AppComponent', () => {
     if (config.actionHandler) {
       config.actionHandler(dummyAction);
     }
-    expect(a2uiBridge.sendMessage).toHaveBeenCalledWith({
-      type: 'SEND_TO_SERVER',
-      payload: {version: 'v0.9', action: dummyAction},
-    });
+    expect(a2uiBridge.sendAction).toHaveBeenCalledWith(dummyAction);
   });
 });

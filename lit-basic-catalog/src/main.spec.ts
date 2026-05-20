@@ -41,14 +41,14 @@ describe('AppRoot Lit Element', () => {
       {
         version: 'v0.9',
         createSurface: {
-          surfaceId: 'sample-surface',
+          surfaceId: 'dynamic-surface-123',
           catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
         },
       },
       {
         version: 'v0.9',
         updateComponents: {
-          surfaceId: 'sample-surface',
+          surfaceId: 'dynamic-surface-123',
           components: [
             {
               component: 'BasicColumn',
@@ -83,14 +83,17 @@ describe('AppRoot Lit Element', () => {
     );
 
     await new Promise(resolve => setTimeout(resolve, 15));
-    expect(warnSpy).toHaveBeenCalledWith('Unexpected non-array RENDER_A2UI payload received:', {
-      invalid: true,
-    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      'PreviewBridge: Unexpected non-array RENDER_A2UI payload received:',
+      {
+        invalid: true,
+      },
+    );
   });
 
   it('unregisters processor on disconnection', () => {
-    const unregisterSpy = vi.spyOn(a2uiBridge, 'unregisterMessageProcessor');
+    const attachSpy = vi.spyOn(element['rendererConnection']!, 'unsubscribe');
     element.disconnectedCallback();
-    expect(unregisterSpy).toHaveBeenCalledWith('RENDER_A2UI', expect.any(Function));
+    expect(attachSpy).toHaveBeenCalled();
   });
 });

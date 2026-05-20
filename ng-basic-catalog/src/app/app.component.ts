@@ -22,7 +22,7 @@ import {
   SurfaceComponent,
   provideMarkdownRenderer,
 } from '@a2ui/angular/v0_9';
-import {a2uiBridge} from 'a2ui-bridge';
+import {a2uiBridge, RendererProcessor, SurfaceStateSubscription} from 'a2ui-bridge';
 
 @Component({
   selector: 'app-root',
@@ -38,11 +38,8 @@ import {a2uiBridge} from 'a2ui-bridge';
         const basicCatalog = inject(BasicCatalog);
         return {
           catalogs: [basicCatalog],
-          actionHandler: (action: any) => {
-            a2uiBridge.sendMessage({
-              type: 'SEND_TO_SERVER',
-              payload: {version: 'v0.9', action},
-            });
+          actionHandler: (action: unknown) => {
+            a2uiBridge.sendAction(action);
           },
         };
       },
@@ -51,7 +48,8 @@ import {a2uiBridge} from 'a2ui-bridge';
   template: `
     <main class="sandbox-shell">
       @if (isInitialized()) {
-        <a2ui-v09-surface [surfaceId]="surfaceId"></a2ui-v09-surface>
+        <!-- Dynamically injected surfaceId -->
+        <a2ui-v09-surface [surfaceId]="surfaceId()"></a2ui-v09-surface>
       } @else {
         <p style="padding: 24px; color: #666;">
           A2UI Angular Basic Catalog Sandbox active. Waiting for RENDER_A2UI payloads...
@@ -60,61 +58,68 @@ import {a2uiBridge} from 'a2ui-bridge';
     </main>
   `,
 })
-/**
- * Core catalog provider interface hosting and exposing basic Angular-based
- * component templates to the central Composer.
- */
 export class AppComponent implements OnDestroy {
-  public readonly surfaceId = 'sample-surface';
-  public isInitialized = signal(false);
+  /** The dynamic target surface layout identifier rendered within this sandbox element. */
+  protected surfaceId = signal('');
+  /** The Angular reactive Signal tracking whether initial RENDER_A2UI payloads have been processed. */
+  protected isInitialized = signal(false);
+
+  /** The injected core Angular A2uiRendererService handling message state. */
   private rendererService = inject(A2uiRendererService);
-  private subscriptions: Array<{unsubscribe(): void}> = [];
-  private renderHandler = (payload: any) => {
-    if (Array.isArray(payload)) {
-      this.rendererService.processMessages(payload);
-      this.isInitialized.set(true);
-    } else {
-      console.warn('Unexpected non-array RENDER_A2UI payload received:', payload);
-    }
-  };
+  /** The active Preview Bridge connection handle managing surface data synchronization. */
+  private rendererConnection: SurfaceStateSubscription | null = null;
+  /** The collection of scheduled simulated diagnostic timers running in the background. */
+  private diagnosticTimers: Array<ReturnType<typeof setTimeout>> = [];
 
+  /**
+   * Initializes the AppComponent sandbox. Wires global message handlers via the Bridge,
+   * connects the core surface group, and schedules active simulated diagnostic log telemetry.
+   */
   constructor() {
-    a2uiBridge.registerMessageProcessor('RENDER_A2UI', this.renderHandler);
+    this.rendererConnection = a2uiBridge.attachRenderer(
+      this.rendererService as unknown as RendererProcessor,
+      {
+        surfaceGroup: this.rendererService.surfaceGroup,
+        onSurfaceReady: (surfaceId: string) => {
+          this.surfaceId.set(surfaceId);
+          this.isInitialized.set(true);
+        },
+        onSurfaceCleared: () => {
+          this.isInitialized.set(false);
+          this.surfaceId.set('');
+        },
+      },
+    );
 
-    const sub = this.rendererService.surfaceGroup.onSurfaceCreated.subscribe(surface => {
-      const modelSub = surface.dataModel.subscribe('', newValue => {
-        a2uiBridge.sendMessage({
-          type: 'DATA_MODEL_CHANGE',
-          payload: {
-            updateDataModel: {
-              surfaceId: surface.id,
-              value: newValue,
-            },
-          },
-        });
-      });
-      this.subscriptions.push(modelSub);
-    });
-    this.subscriptions.push(sub);
-
-    // Inject simulated log diagnostics to demonstrate the debug drawers reactively badging in the composer
-    setTimeout(() => {
-      console.log('Basic Catalog Angular Sandbox initialized successfully.');
-    }, 500);
-    setTimeout(() => {
-      console.warn('Basic Catalog warning: Simulated database synchronization latency spike.');
-    }, 2000);
-    setTimeout(() => {
-      console.error(
-        'Basic Catalog error: Simulated telemetry diagnostic sync crash (status: 503 Service Unavailable).',
-      );
-    }, 4000);
+    this.diagnosticTimers.push(
+      setTimeout(() => {
+        console.log('Basic Catalog Angular Sandbox initialized successfully.');
+      }, 500),
+    );
+    this.diagnosticTimers.push(
+      setTimeout(() => {
+        console.warn('Basic Catalog warning: Simulated database synchronization latency spike.');
+      }, 2000),
+    );
+    this.diagnosticTimers.push(
+      setTimeout(() => {
+        console.error(
+          'Basic Catalog error: Simulated telemetry diagnostic sync crash (status: 503 Service Unavailable).',
+        );
+      }, 4000),
+    );
   }
 
+  /**
+   * Angular lifecycle teardown hook. Cleans up the active bridge connection and
+   * pre-emptively clears all background diagnostic timers to prevent test log pollution.
+   */
   public ngOnDestroy(): void {
-    a2uiBridge.unregisterMessageProcessor('RENDER_A2UI', this.renderHandler);
-    for (const sub of this.subscriptions) {
-      sub.unsubscribe();
+    if (this.rendererConnection) {
+      this.rendererConnection.unsubscribe();
+      this.rendererConnection = null;
     }
+    this.diagnosticTimers.forEach(timer => clearTimeout(timer));
+    this.diagnosticTimers = [];
   }
 }
