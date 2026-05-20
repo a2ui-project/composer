@@ -48,10 +48,18 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: 'corepack yarn start',
-    url: 'http://localhost:4200',
-    reuseExistingServer: !process.env['CI'],
-    timeout: 120 * 1000,
-  },
+  webServer: [
+    {
+      command: 'corepack yarn start',
+      url: 'http://localhost:4200',
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120 * 1000,
+    },
+    {
+      command: 'corepack yarn workspace ng-basic-catalog start',
+      url: 'http://localhost:3456',
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120 * 1000,
+    },
+  ],
 });
