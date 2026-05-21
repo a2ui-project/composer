@@ -403,7 +403,7 @@ describe('PreviewBridge Core API Runtime', () => {
       );
     });
 
-    it('completely unsubscribes group subscription and all surface subscriptions on disconnect', () => {
+    it('unsubscribes group subscription and all surface subscriptions completely on disconnect', () => {
       const groupUnsubscribe = vi.fn();
       const surfaceUnsubscribe = vi.fn();
 
@@ -499,7 +499,7 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   describe('Memory-safety and timeout cleanups on destroy', () => {
-    it('deferred render layout timeout is cleanly cleared upon destroy()', () => {
+    it('clears deferred render layout timeout cleanly upon destroy()', () => {
       vi.useFakeTimers();
 
       const mockGroup = {
@@ -551,7 +551,7 @@ describe('PreviewBridge Core API Runtime', () => {
       vi.useRealTimers();
     });
 
-    it('All active surface group connections registered in the bridge are cleanly unsubscribed and evicted when bridge.destroy() is called', () => {
+    it('unsubscribes and evicts all active surface group connections registered in the bridge when bridge.destroy() is called', () => {
       const groupUnsubscribe = vi.fn();
       const surfaceGroupMock: SurfaceGroupLike = {
         onSurfaceCreated: {
@@ -657,6 +657,684 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(processMessagesSpy).toHaveBeenCalledWith(payload);
 
       conn.unsubscribe();
+    });
+  });
+
+  describe('Coverage Edge Cases & Telemetry Guardrails', () => {
+    it('logs error and returns empty subscription handle when attachRenderer is called without a surfaceGroup', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const processor = {processMessages: vi.fn()};
+
+      const conn = bridge.attachRenderer(processor, {
+        onSurfaceReady: vi.fn(),
+      } as unknown as RendererConfig);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'PreviewBridge: surfaceGroup parameter is required in RendererConfig.',
+      );
+      expect(conn).toBeDefined();
+      expect(conn.unsubscribe).toBeTypeOf('function');
+      conn.unsubscribe();
+    });
+
+    it('handles incoming DATA_MODEL_CHANGE messages and updates active rendering layout with standard data model updates', () => {
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+      const processSpy = vi.fn();
+
+      const conn = bridge.attachRenderer(
+        {processMessages: processSpy},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+            payload: {updateDataModel: {surfaceId: 'surf-1', value: 'dynamic-change'}},
+          },
+        }),
+      );
+
+      expect(processSpy).toHaveBeenCalledWith([
+        {
+          version: 'v0.9',
+          updateDataModel: {surfaceId: 'surf-1', value: 'dynamic-change'},
+        },
+      ]);
+      conn.unsubscribe();
+    });
+
+    it('logs warning when an unrecognized incoming message type is received', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: 'UNRECOGNIZED_TEST_MESSAGE_TYPE',
+            payload: {},
+          },
+        }),
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'PreviewBridge: Unrecognized incoming message type: UNRECOGNIZED_TEST_MESSAGE_TYPE',
+      );
+    });
+
+    it('logs error when active renderer clear throws during RENDER_A2UI reset dispatching', () => {
+      vi.useFakeTimers();
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+
+      const throwingClearedMock = vi.fn().mockImplementation(() => {
+        throw new Error('Callback failed');
+      });
+
+      const conn = bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+          onSurfaceCleared: throwingClearedMock,
+        },
+      );
+
+      // Track a surface to trigger the reset
+      bridge['activeRenderer']?.activeSurfaceIds.add('surf-trigger');
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [
+              {
+                version: 'v0.9',
+                createSurface: {surfaceId: 'new-surf'},
+              },
+            ],
+          },
+        }),
+      );
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'PreviewBridge: Error during RENDER_A2UI null reset dispatch:',
+        expect.any(Error),
+      );
+
+      vi.runAllTimers();
+      conn.unsubscribe();
+      vi.useRealTimers();
+    });
+
+    it('cancels pending deferred rendering timeout when a subsequent layout message arrives rapidly', () => {
+      vi.useFakeTimers();
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+      const processSpy = vi.fn();
+
+      const conn = bridge.attachRenderer(
+        {processMessages: processSpy},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      // Dispatch 1st message triggering deferred mount
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [{version: 'v0.9', createSurface: {surfaceId: 'surf-1'}}],
+          },
+        }),
+      );
+
+      const firstTimerId = bridge['renderTimeoutId'];
+      expect(firstTimerId).toBeDefined();
+
+      // Dispatch 2nd message rapidly
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [{version: 'v0.9', createSurface: {surfaceId: 'surf-2'}}],
+          },
+        }),
+      );
+
+      const secondTimerId = bridge['renderTimeoutId'];
+      expect(secondTimerId).toBeDefined();
+      expect(firstTimerId).not.toBe(secondTimerId);
+
+      vi.runAllTimers();
+
+      // Ensure second payload is processed after clearing first
+      expect(processSpy).toHaveBeenLastCalledWith([
+        {version: 'v0.9', createSurface: {surfaceId: 'surf-2'}},
+      ]);
+      expect(processSpy).toHaveBeenCalledTimes(1);
+
+      conn.unsubscribe();
+      vi.useRealTimers();
+    });
+
+    it('logs error when deferred RENDER_A2UI layout processing throws in macro-task timer', () => {
+      vi.useFakeTimers();
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+
+      const throwingProcessor = {
+        processMessages: vi.fn().mockImplementation(() => {
+          throw new Error('Failed to render deferred payload');
+        }),
+      };
+
+      const conn = bridge.attachRenderer(throwingProcessor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+      });
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [{version: 'v0.9', createSurface: {surfaceId: 'surf-throw'}}],
+          },
+        }),
+      );
+
+      vi.runAllTimers();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'PreviewBridge: Error during deferred RENDER_A2UI payload dispatch:',
+        expect.any(Error),
+      );
+
+      conn.unsubscribe();
+      vi.useRealTimers();
+    });
+
+    it('logs warning when createSurface command is processed without surfaceId', () => {
+      vi.useFakeTimers();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+
+      const conn = bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [{version: 'v0.9', createSurface: {}}],
+          },
+        }),
+      );
+
+      vi.runAllTimers();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'PreviewBridge: createSurface command found, but no surfaceId present.',
+      );
+      conn.unsubscribe();
+      vi.useRealTimers();
+    });
+
+    it('logs warning when unexpected non-array RENDER_A2UI layout payload is received', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+
+      const conn = bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: {notAnArray: true},
+          },
+        }),
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'PreviewBridge: Unexpected non-array RENDER_A2UI payload received:',
+        expect.objectContaining({notAnArray: true}),
+      );
+      conn.unsubscribe();
+    });
+
+    it('logs warning when dynamic surface clearing fails during active renderer reset', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+
+      const throwingProcessor = {
+        processMessages: vi.fn().mockImplementation(payload => {
+          if (Array.isArray(payload) && payload.some(p => 'deleteSurface' in p)) {
+            throw new Error('Failed to delete surface');
+          }
+        }),
+      };
+
+      const conn = bridge.attachRenderer(throwingProcessor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+        onSurfaceCleared: vi.fn(),
+      });
+
+      // Track an active surface
+      bridge['activeRenderer']?.activeSurfaceIds.add('surf-to-clear');
+
+      // Trigger reset by sending null payload
+      bridge['handleRenderA2ui'](null);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'PreviewBridge: Error clearing surface surf-to-clear during reset:',
+        expect.any(Error),
+      );
+      conn.unsubscribe();
+    });
+
+    it('logs error when data model subscription fails for a dynamically registered surface', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let surfaceCallback: (surface: SurfaceInstance) => void = () => {};
+      const surfaceGroupMock: SurfaceGroupLike = {
+        onSurfaceCreated: {
+          subscribe: vi.fn().mockImplementation(cb => {
+            surfaceCallback = cb;
+            return {unsubscribe: vi.fn()};
+          }),
+        },
+      };
+
+      bridge['connectSurfaceGroup'](surfaceGroupMock);
+
+      const brokenSurfaceMock: SurfaceInstance = {
+        id: 'surf-broken',
+        dataModel: {
+          subscribe: vi.fn().mockImplementation(() => {
+            throw new Error('Subscription crashed');
+          }),
+        },
+      };
+
+      surfaceCallback(brokenSurfaceMock);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Error subscribing to data model for surface surf-broken:',
+        expect.any(Error),
+      );
+    });
+
+    it('updates blocking overlay message text dynamically upon receiving subsequent SET_BLOCKING_STATE messages', () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+            payload: {blocked: true, message: 'Message One'},
+          },
+        }),
+      );
+
+      const overlay = document.getElementById('a2ui-blocking-overlay');
+      expect(overlay).not.toBeNull();
+      expect(document.getElementById('a2ui-blocking-message')?.innerText).toBe('Message One');
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+            payload: {blocked: true, message: 'Message Two'},
+          },
+        }),
+      );
+
+      expect(document.getElementById('a2ui-blocking-message')?.innerText).toBe('Message Two');
+
+      // Update blocking state again with omitted/falsy message to test default fallback path on update (line 551 branch)
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+            payload: {blocked: true}, // message omitted!
+          },
+        }),
+      );
+
+      expect(document.getElementById('a2ui-blocking-message')?.innerText).toBe(
+        'Processing framework layouts...',
+      );
+    });
+
+    it('transmits A2UI_CATALOG error payload when catalog fetch returns HTML and subsequent fallback also fails', async () => {
+      const spy = vi.spyOn(window.parent, 'postMessage');
+
+      window.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => '<!doctype html><html>SPA Fallback</html>',
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+        });
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog');
+      expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json');
+      expect(spy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: {
+            catalog: {},
+            error: {
+              message:
+                'Catalog fetch returned HTML and fallback to /catalog.json failed with status: 404',
+            },
+          },
+        },
+        '*',
+      );
+    });
+
+    it('logs warning when a postMessage is received but no active renderer is attached', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [{version: 'v0.9', createSurface: {surfaceId: 'surf-1'}}],
+          },
+        }),
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'PreviewBridge: Received RENDER_A2UI but no active renderer is attached. Ignoring payload.',
+      );
+    });
+
+    it('handles overlay updates gracefully if the message node is missing in the DOM', () => {
+      // 1. Show the overlay
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+            payload: {blocked: true, message: 'Initial Message'},
+          },
+        }),
+      );
+
+      const messageNode = document.getElementById('a2ui-blocking-message');
+      expect(messageNode).not.toBeNull();
+
+      // 2. Manually destroy/remove the message node to simulate outer DOM corruption/edge-case
+      messageNode?.remove();
+
+      // 3. Trigger another blocking state update (should not throw despite missing text container)
+      expect(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: window,
+            data: {
+              type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+              payload: {blocked: true, message: 'Updated Message'},
+            },
+          }),
+        );
+      }).not.toThrow();
+
+      // Message node was not updated (since it's gone), overlay remains connected
+      expect(document.getElementById('a2ui-blocking-message')).toBeNull();
+      expect(document.getElementById('a2ui-blocking-overlay')).not.toBeNull();
+    });
+
+    it('strips JSON vulnerability safety prefix successfully when present in the raw catalog text payload', async () => {
+      const spy = vi.spyOn(window.parent, 'postMessage');
+      const mockCatalog = {items: ['BasicColumn']};
+      const rawTextWithPrefix = ")]}'\n" + JSON.stringify(mockCatalog);
+
+      window.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => rawTextWithPrefix,
+      });
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(window.fetch).toHaveBeenCalledWith('/catalog');
+      expect(spy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: {catalog: mockCatalog},
+        },
+        '*',
+      );
+    });
+
+    it('handles generic non-Error exception types thrown during catalog fetching processes', async () => {
+      const spy = vi.spyOn(window.parent, 'postMessage');
+
+      // We throw a plain string instead of an Error object
+      window.fetch = vi.fn().mockImplementation(() => {
+        throw 'Network target unreachable (generic)';
+      });
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(spy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: {
+            catalog: {},
+            error: {message: 'Network target unreachable (generic)'},
+          },
+        },
+        '*',
+      );
+    });
+
+    it('handles deferred layout execution gracefully if the active renderer is detached prior to macro-task execution', () => {
+      vi.useFakeTimers();
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+      const processSpy = vi.fn();
+
+      const conn = bridge.attachRenderer(
+        {processMessages: processSpy},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      // 1. Dispatch layout (schedules macro-task)
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [{version: 'v0.9', createSurface: {surfaceId: 'surf-deferred'}}],
+          },
+        }),
+      );
+
+      // 2. Synchronously unsubscribe (detaches activeRenderer)
+      conn.unsubscribe();
+      expect(bridge['activeRenderer']).toBeNull();
+
+      // 3. Advance timers so macro-task fires
+      expect(() => {
+        vi.runAllTimers();
+      }).not.toThrow();
+
+      // processMessages should NOT have been called with the mount payload since there was no active renderer!
+      expect(processSpy).not.toHaveBeenCalledWith([
+        {version: 'v0.9', createSurface: {surfaceId: 'surf-deferred'}},
+      ]);
+
+      vi.useRealTimers();
+    });
+
+    it('skips active renderer reset early-returning if no renderer is attached', () => {
+      expect(bridge['activeRenderer']).toBeNull();
+
+      expect(() => {
+        bridge['resetActiveRendererState']();
+      }).not.toThrow();
+    });
+
+    it('logs warning and falls back to entire message payload when RENDER_A2UI data payload field is omitted', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+
+      const conn = bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      // Dispatch RENDER_A2UI but omitting the payload field
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            // payload: is missing!
+          },
+        }),
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'PreviewBridge: Unexpected non-array RENDER_A2UI payload received:',
+        expect.objectContaining({type: PreviewBridgeMessageType.RENDER_A2UI}),
+      );
+      conn.unsubscribe();
+    });
+
+    it('ignores DATA_MODEL_CHANGE messages when the payload is missing or updateDataModel field is absent', () => {
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+      const processSpy = vi.fn();
+
+      const conn = bridge.attachRenderer(
+        {processMessages: processSpy},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      // 1. Send DATA_MODEL_CHANGE but with undefined payload
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+            // payload is undefined
+          },
+        }),
+      );
+
+      // 2. Send DATA_MODEL_CHANGE but with empty payload object (missing updateDataModel)
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+            payload: {},
+          },
+        }),
+      );
+
+      expect(processSpy).not.toHaveBeenCalled();
+      conn.unsubscribe();
+    });
+
+    it('ignores blocking overlay updates gracefully if the global document object is undefined', () => {
+      // Stub global document to undefined
+      vi.stubGlobal('document', undefined);
+
+      expect(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: window,
+            data: {
+              type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+              payload: {blocked: true},
+            },
+          }),
+        );
+      }).not.toThrow();
+
+      vi.unstubAllGlobals();
     });
   });
 

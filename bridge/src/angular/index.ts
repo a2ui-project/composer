@@ -28,27 +28,21 @@ import {a2uiBridge, RendererProcessor, SurfaceStateSubscription} from '../previe
  * sandbox view elements.
  */
 @Injectable()
-export class A2uiSandboxManager implements OnDestroy {
+export class A2uiSandboxConnection implements OnDestroy {
   /**
    * The active surface canvas identifier mounted by the host container. Bind
-   * this value the HTML template.
+   * this value to the HTML template.
    */
   readonly surfaceId = signal('');
 
-  /**
-   * Maps the current sandbox initialization state. Resolves to `true` when a
-   * valid surface ready payload is received and attached.
-   */
-  readonly isInitialized = signal(false);
-
-  /** Resolves the central catalog service manager provider from the injector context. */
+  /** Resolves the central rendering service provider from the injector context. */
   private rendererService = inject(A2uiRendererService);
 
-  /** The dynamic teardown handle for active telemetry stream observers and listeners. */
+  /** The dynamic teardown handle for the active framework renderer connection subscription. */
   private rendererConnection: SurfaceStateSubscription | null = null;
 
   /**
-   * Initializes a new instance of the sandbox manager, automatically establishing
+   * Initializes a new instance of the sandbox connection, automatically establishing
    * the message transport pipeline.
    *
    * Subscribes to the global preview bridge singleton, mapping dynamic renderer callbacks
@@ -61,10 +55,8 @@ export class A2uiSandboxManager implements OnDestroy {
         surfaceGroup: this.rendererService.surfaceGroup,
         onSurfaceReady: surfaceId => {
           this.surfaceId.set(surfaceId);
-          this.isInitialized.set(true);
         },
         onSurfaceCleared: () => {
-          this.isInitialized.set(false);
           this.surfaceId.set('');
         },
       },
@@ -85,10 +77,10 @@ export class A2uiSandboxManager implements OnDestroy {
 }
 
 /**
- * Dynamic Angular dependency injection provider configuration mapping helper.
+ * Provides a unified array of Angular dependency injection providers configured for the A2UI sandbox.
  *
- * Exposes a standardized provider registration block targeting the catalog, central rendering,
- * and sandbox service providers to keep catalog bootstraps highly clean and modular.
+ * Exposes a standardized registration block that includes catalog component classes, the central
+ * rendering service, and the sandbox connection state to keep catalog bootstrap clean and modular.
  *
  * @param catalogsClasses The array of catalog component provider classes (e.g. BasicCatalog) to register and manage.
  * @param markdownRendererFn Optional. A custom async rendering function mapping catalog Markdown formatting.
@@ -101,8 +93,8 @@ export function provideA2uiSandbox(
   return [
     A2uiRendererService,
     {
-      provide: A2uiSandboxManager,
-      useFactory: () => new A2uiSandboxManager(),
+      provide: A2uiSandboxConnection,
+      useFactory: () => new A2uiSandboxConnection(),
     },
     ...catalogsClasses,
     provideMarkdownRenderer(markdownRendererFn),

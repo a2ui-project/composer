@@ -17,7 +17,7 @@
 // @vitest-environment jsdom
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {AppComponent} from './app/app.component';
-import {A2uiSandboxManager, provideA2uiSandbox} from 'a2ui-bridge/angular';
+import {A2uiSandboxConnection, provideA2uiSandbox} from 'a2ui-bridge/angular';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {A2uiRendererService, A2UI_RENDERER_CONFIG, BasicCatalog} from '@a2ui/angular/v0_9';
 import {a2uiBridge} from 'a2ui-bridge';
@@ -36,7 +36,7 @@ vi.mock('a2ui-bridge', () => ({
 describe('A2uiSandbox', () => {
   let fixture: ComponentFixture<AppComponent>;
   let component: AppComponent;
-  let sandbox: A2uiSandboxManager;
+  let sandbox: A2uiSandboxConnection;
 
   beforeEach(async () => {
     vi.restoreAllMocks();
@@ -56,7 +56,7 @@ describe('A2uiSandbox', () => {
 
     fixture = TestBed.createComponent(AppComponent);
     component = fixture.componentInstance;
-    sandbox = fixture.debugElement.injector.get(A2uiSandboxManager);
+    sandbox = fixture.debugElement.injector.get(A2uiSandboxConnection);
     fixture.detectChanges();
   });
 
@@ -87,30 +87,27 @@ describe('A2uiSandbox', () => {
     expect(mockUnsubscribe).toHaveBeenCalled();
   });
 
-  it('sets isInitialized to true and surfaceId signal when onSurfaceReady is called', () => {
+  it('sets surfaceId signal when onSurfaceReady is called', () => {
     const attachCall = vi.mocked(a2uiBridge.attachRenderer).mock.calls[0];
     const {onSurfaceReady} = attachCall[1];
 
     // Check initial signal states
-    expect(sandbox.isInitialized()).toBe(false);
     expect(sandbox.surfaceId()).toBe('');
 
     onSurfaceReady('test-surface-angular-id');
 
-    expect(sandbox.isInitialized()).toBe(true);
     expect(sandbox.surfaceId()).toBe('test-surface-angular-id');
   });
 
-  it('resets initialization state when onSurfaceCleared is called', () => {
+  it('resets surfaceId when onSurfaceCleared is called', () => {
     const attachCall = vi.mocked(a2uiBridge.attachRenderer).mock.calls[0];
     const {onSurfaceReady, onSurfaceCleared} = attachCall[1];
 
     onSurfaceReady('test-surface-angular-id');
-    expect(sandbox.isInitialized()).toBe(true);
+    expect(sandbox.surfaceId()).toBe('test-surface-angular-id');
 
     onSurfaceCleared?.();
 
-    expect(sandbox.isInitialized()).toBe(false);
     expect(sandbox.surfaceId()).toBe('');
   });
 
@@ -134,7 +131,7 @@ describe('A2uiSandbox', () => {
     });
 
     expect(injector.get(A2uiRendererService)).toBeDefined();
-    expect(injector.get(A2uiSandboxManager)).toBeDefined();
+    expect(injector.get(A2uiSandboxConnection)).toBeDefined();
     expect(injector.get(BasicCatalog)).toBeDefined();
     expect(injector.get(A2UI_RENDERER_CONFIG)).toBeDefined();
   });

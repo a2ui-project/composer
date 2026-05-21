@@ -15,32 +15,48 @@
     "./angular": {
       "types": "./dist/angular/index.d.ts",
       "default": "./dist/angular/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
     }
   },
   "scripts": {
-    "build": "esbuild src/preview-bridge.ts src/lit/index.ts src/angular/index.ts --bundle --format=esm --target=es2022 --outdir=dist --tsconfig=tsconfig.bridge.json --external:lit '--external:@angular/*' '--external:@a2ui/*' --external:../preview-bridge.js && tsc --project tsconfig.bridge.json --emitDeclarationOnly",
+    "build": "esbuild src/preview-bridge.ts src/lit/index.ts src/angular/index.ts src/react/index.ts --bundle --format=esm --target=es2022 --outdir=dist --tsconfig=tsconfig.bridge.json --external:lit '--external:@angular/*' '--external:@a2ui/*' '--external:react' '--external:react-dom' --external:../preview-bridge.js && tsc --project tsconfig.bridge.json --emitDeclarationOnly",
     "clean": "rm -rf dist",
     "test": "NODE_ENV=test vitest run",
     "prettier": "prettier --write . | grep -v '(unchanged)'"
   },
   "devDependencies": {
     "@angular/core": "21.2.12",
+    "@types/react": "19.0.8",
+    "@types/react-dom": "19.0.3",
     "esbuild": "0.28.0",
     "jsdom": "29.1.1",
     "lit": "3.3.1",
     "prettier": "3.8.3",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
     "typescript": "6.0.3",
     "vitest": "4.1.5"
   },
   "peerDependencies": {
     "@angular/core": "21.2.12",
-    "lit": "3.3.1"
+    "lit": "3.3.1",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
   },
   "peerDependenciesMeta": {
     "@angular/core": {
       "optional": true
     },
     "lit": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
       "optional": true
     }
   }

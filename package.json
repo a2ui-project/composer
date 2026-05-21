@@ -5,6 +5,7 @@
     "shell",
     "samples/ng-basic-catalog",
     "samples/lit-basic-catalog",
+    "samples/react-basic-catalog",
     "bridge"
   ],
   "scripts": {
@@ -12,6 +13,9 @@
     "build": "yarn workspaces foreach -A run build",
     "prettier": "yarn workspaces foreach -A run prettier",
     "tsc": "yarn --cwd shell tsc --noEmit && yarn --cwd bridge tsc --project tsconfig.bridge.json --noEmit"
+  },
+  "resolutions": {
+    "@a2ui/web_core": "0.9.2"
   },
   "packageManager": "yarn@4.5.0"
 }

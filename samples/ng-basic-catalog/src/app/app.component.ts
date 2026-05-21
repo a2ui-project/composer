@@ -16,7 +16,7 @@
 
 import {Component, inject} from '@angular/core';
 import {SurfaceComponent} from '@a2ui/angular/v0_9';
-import {A2uiSandboxManager} from 'a2ui-bridge/angular';
+import {A2uiSandboxConnection} from 'a2ui-bridge/angular';
 
 /**
  * The component for the sandboxed renderer client application.
@@ -27,7 +27,7 @@ import {A2uiSandboxManager} from 'a2ui-bridge/angular';
   imports: [SurfaceComponent],
   template: `
     <main class="sandbox-shell">
-      @if (sandbox.isInitialized()) {
+      @if (sandbox.surfaceId()) {
         <a2ui-v09-surface [surfaceId]="sandbox.surfaceId()"></a2ui-v09-surface>
       } @else {
         <p style="padding: 24px; color: #666; font-family: sans-serif; text-align: center;">
@@ -42,5 +42,5 @@ export class AppComponent {
    * Leverage the library-provided provider factory to bind cross-frame window
    * telemetries reactively.
    */
-  protected sandbox = inject(A2uiSandboxManager);
+  protected sandbox = inject(A2uiSandboxConnection);
 }

@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-declare const process: {env?: {NODE_ENV?: string}} | undefined;
 import './instrumentation-overrides';
 
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
@@ -89,8 +87,8 @@ interface ActiveRenderer {
  *
  * #### Phase 1: Bootstrapping & Handshake
  * Instantiated on module load. Immediately hooks into window postMessage events.
- * Listens to `DOMContentLoaded` (or reads browser state synchronously) and queues a macro-task
- * tick (`setTimeout`) to dispatch the `RENDERER_READY` handshake signal upward to the parent Shell.
+ * The handshake signal `RENDERER_READY` is deferred until a dynamic framework renderer
+ * has been successfully bootstrapped and attached, structurally resolving dynamic inter-frame timing races.
  *
  * #### Phase 2: Renderer Registration
  * Framework catalogs (Angular, Lit) wire themselves into the bridge context using {@link attachRenderer}.
@@ -108,7 +106,7 @@ interface ActiveRenderer {
  * #### Phase 4: Reactive State Mapping
  * Upon surface registration, the bridge constructs a dynamic, deep reactive observer map
  * mapping surface events to data model mutations, converting state changes to outbox posts.
- * A central Map Connection Registry manages subscription lifecycle hooks, preventing linear leak growth.
+ * A central connection registry manages active surface subscriptions, preventing linear memory leak growth.
  *
  * #### Phase 5: Complete Teardown
  * When the parent frame refreshes, hot-reloads, or in test environments, the {@link destroy} method
@@ -139,7 +137,7 @@ export class PreviewBridge {
 
   /**
    * Initializes a new PreviewBridge instance.
-   * Sets up the message listener and starts the lifecycle handshake timer.
+   * Sets up the global window message listener.
    */
   constructor() {
     this.initMessageListener();
@@ -233,7 +231,8 @@ export class PreviewBridge {
       typeof window !== 'undefined' &&
       window.parent &&
       (window.parent !== window ||
-        (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test'))
+        (globalThis as unknown as {process?: {env?: {NODE_ENV?: string}}}).process?.env
+          ?.NODE_ENV === 'test')
     ) {
       window.parent.postMessage(message, '*');
     }
