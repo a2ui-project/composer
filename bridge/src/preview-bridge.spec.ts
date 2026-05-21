@@ -15,7 +15,13 @@
  */
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {PreviewBridge, a2uiBridge, SurfaceGroupLike, SurfaceInstance} from './preview-bridge';
+import {
+  PreviewBridge,
+  a2uiBridge,
+  SurfaceGroupLike,
+  SurfaceInstance,
+  PreviewBridgeMessageType,
+} from './preview-bridge';
 
 describe('PreviewBridge Core API Runtime', () => {
   let bridge: PreviewBridge;
@@ -75,14 +81,20 @@ describe('PreviewBridge Core API Runtime', () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
     window.dispatchEvent(new Event('DOMContentLoaded'));
     await new Promise(resolve => setTimeout(resolve, 10));
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({type: 'RENDERER_READY'}), '*');
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({type: PreviewBridgeMessageType.RENDERER_READY}),
+      '*',
+    );
   });
 
   it('mounts full-viewport overlay DOM element dynamically upon SET_BLOCKING_STATE true', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window,
-        data: {type: 'SET_BLOCKING_STATE', payload: {blocked: true, message: 'Freezing UI'}},
+        data: {
+          type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+          payload: {blocked: true, message: 'Freezing UI'},
+        },
       }),
     );
 
@@ -96,7 +108,7 @@ describe('PreviewBridge Core API Runtime', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window,
-        data: {type: 'SET_BLOCKING_STATE', payload: {blocked: false}},
+        data: {type: PreviewBridgeMessageType.SET_BLOCKING_STATE, payload: {blocked: false}},
       }),
     );
     expect(document.getElementById('a2ui-blocking-overlay')).toBeNull();
@@ -107,7 +119,7 @@ describe('PreviewBridge Core API Runtime', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window,
-        data: {type: 'SET_BLOCKING_STATE', payload: {blocked: true}},
+        data: {type: PreviewBridgeMessageType.SET_BLOCKING_STATE, payload: {blocked: true}},
       }),
     );
 
@@ -115,7 +127,10 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(button).not.toBeNull();
     button.click();
 
-    expect(spy).toHaveBeenCalledWith({type: 'FORCE_UNBLOCK', payload: {}}, '*');
+    expect(spy).toHaveBeenCalledWith(
+      {type: PreviewBridgeMessageType.FORCE_UNBLOCK, payload: {}},
+      '*',
+    );
   });
 
   it('fetches catalog schema and transmits A2UI_CATALOG payload on GET_CATALOG message', async () => {
@@ -129,7 +144,7 @@ describe('PreviewBridge Core API Runtime', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window,
-        data: {type: 'GET_CATALOG'},
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
     );
 
@@ -138,7 +153,7 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(window.fetch).toHaveBeenCalledWith('/catalog');
     expect(spy).toHaveBeenCalledWith(
       {
-        type: 'A2UI_CATALOG',
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: {catalog: mockCatalog},
       },
       '*',
@@ -163,7 +178,7 @@ describe('PreviewBridge Core API Runtime', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window,
-        data: {type: 'GET_CATALOG'},
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
     );
 
@@ -173,7 +188,7 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json');
     expect(spy).toHaveBeenCalledWith(
       {
-        type: 'A2UI_CATALOG',
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: {catalog: mockCatalog},
       },
       '*',
@@ -190,7 +205,7 @@ describe('PreviewBridge Core API Runtime', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window,
-        data: {type: 'GET_CATALOG'},
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
     );
 
@@ -198,7 +213,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     expect(spy).toHaveBeenCalledWith(
       {
-        type: 'A2UI_CATALOG',
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: {
           catalog: {},
           error: {message: 'Catalog fetch failed with status: 500'},
@@ -228,7 +243,7 @@ describe('PreviewBridge Core API Runtime', () => {
     process.env.NODE_ENV = 'production';
     const spy = vi.spyOn(window.parent, 'postMessage');
     spy.mockClear();
-    bridge.sendMessage({type: 'IGNORED'});
+    bridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG});
     expect(spy).not.toHaveBeenCalled();
     process.env.NODE_ENV = originalEnv;
   });
@@ -281,7 +296,7 @@ describe('PreviewBridge Core API Runtime', () => {
       bridge.sendAction({click: 'button'}, 'v0.9');
       expect(spy).toHaveBeenCalledWith(
         {
-          type: 'SEND_TO_SERVER',
+          type: PreviewBridgeMessageType.SEND_TO_SERVER,
           payload: {version: 'v0.9', action: {click: 'button'}},
         },
         '*',
@@ -322,7 +337,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       expect(parentSpy).toHaveBeenCalledWith(
         {
-          type: 'DATA_MODEL_CHANGE',
+          type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
           payload: {
             updateDataModel: {
               surfaceId: 'surf-1',
@@ -438,7 +453,10 @@ describe('PreviewBridge Core API Runtime', () => {
       tempBridge.destroy();
 
       vi.runAllTimers();
-      expect(spy).not.toHaveBeenCalledWith(expect.objectContaining({type: 'RENDERER_READY'}), '*');
+      expect(spy).not.toHaveBeenCalledWith(
+        expect.objectContaining({type: PreviewBridgeMessageType.RENDERER_READY}),
+        '*',
+      );
       vi.useRealTimers();
     });
 
@@ -463,7 +481,7 @@ describe('PreviewBridge Core API Runtime', () => {
     it('intercepts RENDER_A2UI messages and performs a two-step dispatch when createSurface is present', async () => {
       vi.useFakeTimers();
       const handler = vi.fn();
-      bridge['registerMessageProcessor']('RENDER_A2UI', handler);
+      bridge['registerMessageProcessor'](PreviewBridgeMessageType.RENDER_A2UI, handler);
 
       const payload = [
         {
@@ -475,7 +493,7 @@ describe('PreviewBridge Core API Runtime', () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           source: window,
-          data: {type: 'RENDER_A2UI', payload},
+          data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload},
         }),
       );
 
@@ -494,7 +512,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     it('intercepts RENDER_A2UI messages and dispatches immediately without reset if createSurface is absent', () => {
       const handler = vi.fn();
-      bridge['registerMessageProcessor']('RENDER_A2UI', handler);
+      bridge['registerMessageProcessor'](PreviewBridgeMessageType.RENDER_A2UI, handler);
 
       const payload = [
         {
@@ -506,7 +524,7 @@ describe('PreviewBridge Core API Runtime', () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           source: window,
-          data: {type: 'RENDER_A2UI', payload},
+          data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload},
         }),
       );
 

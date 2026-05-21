@@ -21,6 +21,7 @@ import {MatInputModule} from '@angular/material/input';
 import {FormsModule} from '@angular/forms';
 import {debounceTime, distinctUntilChanged, filter} from 'rxjs';
 import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication.service';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 @Component({
   selector: 'a2ui-composer-data-model',
@@ -63,7 +64,7 @@ export class DataModelComponent {
   constructor() {
     effect(() => {
       const streamValue = this.hostComm.messageStream();
-      if (streamValue?.type === 'DATA_MODEL_CHANGE') {
+      if (streamValue?.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
         const payload = streamValue.payload as Record<string, unknown>;
         const updateObj = payload?.['updateDataModel'] as Record<string, unknown>;
         if (updateObj) {
@@ -103,7 +104,7 @@ export class DataModelComponent {
 
         if (incomingStr !== localStr) {
           this.hostComm.sendMessage({
-            type: 'DATA_MODEL_CHANGE',
+            type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
             payload: {
               updateDataModel: {
                 surfaceId: this.lastSurfaceId,

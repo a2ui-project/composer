@@ -22,6 +22,7 @@ import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {HostCommunicationService} from './host-communication.service';
 import {StartupResolutionService} from './startup-resolution.service';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 describe('ComposerWorkspaceComponent Dashboard', () => {
   let fixture: ComponentFixture<ComposerWorkspaceComponent>;
@@ -109,7 +110,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
       expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
 
       (hostComm as any).messageStreamSignal.set({
-        type: 'SEND_TO_SERVER',
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
         payload: {action: {name: 'click-button'}},
         origin: 'http://localhost',
         timestamp: Date.now(),
@@ -123,7 +124,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
       expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
 
       (hostComm as any).messageStreamSignal.set({
-        type: 'SEND_TO_SERVER',
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
         payload: {name: 'click-button'}, // Missing action!
         origin: 'http://localhost',
         timestamp: Date.now(),
@@ -140,7 +141,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
       expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
 
       (hostComm as any).messageStreamSignal.set({
-        type: 'SEND_TO_SERVER',
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
         payload: {action: {name: 'click-button'}},
         origin: 'http://localhost',
         timestamp: Date.now(),
@@ -154,7 +155,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
 
       (hostComm as any).messageStreamSignal.set({
-        type: 'CONSOLE_LOG',
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
         payload: {level: 'error', message: 'Failed to load'},
         origin: 'http://localhost',
         timestamp: Date.now(),
@@ -168,7 +169,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
 
       (hostComm as any).messageStreamSignal.set({
-        type: 'DATA_MODEL_CHANGE',
+        type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
         payload: {validationErrors: ['Invalid type']},
         origin: 'http://localhost',
         timestamp: Date.now(),
@@ -182,7 +183,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
 
       (hostComm as any).messageStreamSignal.set({
-        type: 'DATA_MODEL_CHANGE',
+        type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
         payload: {validationErrors: []}, // Empty errors!
         origin: 'http://localhost',
         timestamp: Date.now(),
@@ -199,7 +200,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
 
       (hostComm as any).messageStreamSignal.set({
-        type: 'CONSOLE_LOG',
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
         payload: {level: 'error', message: 'Failed to load'},
         origin: 'http://localhost',
         timestamp: Date.now(),
@@ -211,7 +212,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
 
     it('resets Events unread count to 0 when switching to Events tab', () => {
       (hostComm as any).messageStreamSignal.set({
-        type: 'SEND_TO_SERVER',
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
         payload: {action: {name: 'click-button'}},
         origin: 'http://localhost',
         timestamp: Date.now(),
@@ -227,7 +228,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
 
     it('resets Errors unread count to 0 when switching to Errors tab', () => {
       (hostComm as any).messageStreamSignal.set({
-        type: 'CONSOLE_LOG',
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
         payload: {level: 'error', message: 'Failed'},
         origin: 'http://localhost',
         timestamp: Date.now(),

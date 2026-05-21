@@ -17,7 +17,7 @@
 // @vitest-environment jsdom
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {AppRoot} from './main';
-import {a2uiBridge} from 'a2ui-bridge';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 describe('AppRoot Lit Element', () => {
   let element: AppRoot;
@@ -63,7 +63,7 @@ describe('AppRoot Lit Element', () => {
       new MessageEvent('message', {
         source: window,
         origin: window.location.origin,
-        data: {type: 'RENDER_A2UI', payload: mockPayload},
+        data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload: mockPayload},
       }),
     );
 
@@ -78,7 +78,7 @@ describe('AppRoot Lit Element', () => {
       new MessageEvent('message', {
         source: window,
         origin: window.location.origin,
-        data: {type: 'RENDER_A2UI', payload: {invalid: true}},
+        data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload: {invalid: true}},
       }),
     );
 

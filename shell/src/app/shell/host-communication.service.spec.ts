@@ -18,6 +18,7 @@ import {TestBed} from '@angular/core/testing';
 import {HostCommunicationService} from './host-communication.service';
 import {StartupResolutionService} from './startup-resolution.service';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 describe('HostCommunicationService', () => {
   let service: HostCommunicationService;
@@ -55,13 +56,13 @@ describe('HostCommunicationService', () => {
     const event = new MessageEvent('message', {
       source: mockIframeWindow,
       origin: 'http://localhost:3000',
-      data: {type: 'RENDERER_READY', payload: {status: 'ok'}},
+      data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {status: 'ok'}},
     });
 
     window.dispatchEvent(event);
 
     expect(service.latestEnvelope()).toEqual({
-      type: 'RENDERER_READY',
+      type: PreviewBridgeMessageType.RENDERER_READY,
       payload: {status: 'ok'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
@@ -75,13 +76,13 @@ describe('HostCommunicationService', () => {
     const event = new MessageEvent('message', {
       source: mockIframeWindow,
       origin: 'http://localhost:3000',
-      data: {type: 'RENDERER_READY'},
+      data: {type: PreviewBridgeMessageType.RENDERER_READY},
     });
 
     window.dispatchEvent(event);
 
     expect(service.latestEnvelope()).toEqual({
-      type: 'RENDERER_READY',
+      type: PreviewBridgeMessageType.RENDERER_READY,
       payload: undefined,
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
@@ -96,7 +97,7 @@ describe('HostCommunicationService', () => {
     const event = new MessageEvent('message', {
       source: unauthorizedWindow,
       origin: 'http://localhost:3000',
-      data: {type: 'RENDERER_READY'},
+      data: {type: PreviewBridgeMessageType.RENDERER_READY},
     });
 
     window.dispatchEvent(event);
@@ -111,7 +112,7 @@ describe('HostCommunicationService', () => {
     const event = new MessageEvent('message', {
       source: mockIframeWindow,
       origin: 'http://malicious-origin.com',
-      data: {type: 'RENDERER_READY'},
+      data: {type: PreviewBridgeMessageType.RENDERER_READY},
     });
 
     window.dispatchEvent(event);
@@ -125,10 +126,10 @@ describe('HostCommunicationService', () => {
     } as unknown as Window;
     service.registerIframe(mockIframeWindow);
 
-    service.sendMessage({type: 'GET_CATALOG'});
+    service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
 
     expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
-      {type: 'GET_CATALOG'},
+      {type: PreviewBridgeMessageType.GET_CATALOG},
       'http://localhost:3000',
     );
   });
@@ -138,11 +139,14 @@ describe('HostCommunicationService', () => {
     service.registerIframe(mockIframeWindow);
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    service.sendMessage({type: 'RENDER_A2UI', payload: {invalid: 'not an array'}});
+    service.sendMessage({
+      type: PreviewBridgeMessageType.RENDER_A2UI,
+      payload: {invalid: 'not an array'},
+    });
 
     expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
     expect(consoleSpy).toHaveBeenCalledWith('Blocked dispatch of malformed message type...', {
-      type: 'RENDER_A2UI',
+      type: PreviewBridgeMessageType.RENDER_A2UI,
       payload: {invalid: 'not an array'},
     });
 
@@ -170,7 +174,7 @@ describe('HostCommunicationService', () => {
     service.sendRenderA2UI(validPayload);
 
     expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
-      {type: 'RENDER_A2UI', payload: validPayload},
+      {type: PreviewBridgeMessageType.RENDER_A2UI, payload: validPayload},
       'http://localhost:3000',
     );
   });
@@ -183,13 +187,13 @@ describe('HostCommunicationService', () => {
     const event = new MessageEvent('message', {
       source: mockIframeWindow,
       origin: 'http://localhost:3000',
-      data: {type: 'RENDERER_READY', payload: {status: 'ok'}},
+      data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {status: 'ok'}},
     });
 
     window.dispatchEvent(event);
 
     expect(service.latestEnvelope()).toEqual({
-      type: 'RENDERER_READY',
+      type: PreviewBridgeMessageType.RENDERER_READY,
       payload: {status: 'ok'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
@@ -201,10 +205,10 @@ describe('HostCommunicationService', () => {
     const mockIFrameElement = {contentWindow: mockIframeWindow} as unknown as HTMLIFrameElement;
     service.registerIframeElement(mockIFrameElement);
 
-    service.sendMessage({type: 'GET_CATALOG'});
+    service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
 
     expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
-      {type: 'GET_CATALOG'},
+      {type: PreviewBridgeMessageType.GET_CATALOG},
       'http://localhost:3000',
     );
   });
@@ -245,13 +249,13 @@ describe('HostCommunicationService', () => {
     const event = new MessageEvent('message', {
       source: mockIframeWindow,
       origin: 'http://localhost:3000',
-      data: {type: 'RENDERER_READY'},
+      data: {type: PreviewBridgeMessageType.RENDERER_READY},
     });
 
     window.dispatchEvent(event);
     expect(service.latestEnvelope()).toBeNull();
 
-    service.sendMessage({type: 'GET_CATALOG'});
+    service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
     expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
   });
 
@@ -263,13 +267,13 @@ describe('HostCommunicationService', () => {
     const event = new MessageEvent('message', {
       source: mockIframeWindow,
       origin: 'http://localhost:3000',
-      data: {type: 'RENDERER_READY'},
+      data: {type: PreviewBridgeMessageType.RENDERER_READY},
     });
 
     window.dispatchEvent(event);
     expect(service.latestEnvelope()).toBeNull();
 
-    expect(() => service.sendMessage({type: 'GET_CATALOG'})).not.toThrow();
+    expect(() => service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG})).not.toThrow();
     expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
   });
 

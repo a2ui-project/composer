@@ -25,6 +25,7 @@ import {
 } from '@angular/core';
 import {JsonPipe} from '@angular/common';
 import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication.service';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 @Component({
   selector: 'a2ui-composer-raw-messages',
@@ -46,7 +47,7 @@ export class RawMessagesComponent {
   constructor() {
     effect(() => {
       const envelope = this.hostComm.messageStream();
-      if (envelope && envelope.type !== 'CONSOLE_LOG') {
+      if (envelope && envelope.type !== PreviewBridgeMessageType.CONSOLE_LOG) {
         const timestampStr = this.formatTimestamp(envelope.timestamp);
         this.messageHistory.update(history => {
           const newHistory = [{envelope, timestampStr}, ...history];

@@ -23,6 +23,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {HostCommunicationService} from '../shell/host-communication.service';
 import {CatalogManagementService} from '../storage/catalog-management.service';
 import {signal, WritableSignal} from '@angular/core';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 describe('SettingsComponent', () => {
   let mockStartupResolutionService: {
@@ -170,7 +171,10 @@ describe('SettingsComponent', () => {
     expect(bridgeChip.classList.contains('mat-accent')).toBe(true);
 
     // Mutate bridge to connected
-    mockLatestEnvelope.set({type: 'RENDERER_READY', origin: 'http://localhost'});
+    mockLatestEnvelope.set({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+    });
     fixture.detectChanges();
     expect(statusCard.textContent).toContain('Bridge: Connected');
     bridgeChip = fixture.nativeElement.querySelector('.bridge-badge');

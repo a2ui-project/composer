@@ -15,6 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 test.describe('Cross-Frame Security & Sandboxing', () => {
   test.beforeEach(async ({page}) => {
@@ -57,9 +58,9 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
     await page.goto('/?renderer=http://custom-renderer.com/index.html');
     await expect(page.locator('.workspace-container')).toBeVisible();
 
-    await page.evaluate(() => {
-      window.postMessage({type: 'RENDERER_READY'}, '*');
-    });
+    await page.evaluate(type => {
+      window.postMessage({type}, '*');
+    }, PreviewBridgeMessageType.RENDERER_READY);
 
     await page.getByRole('tab', {name: 'Raw Messages'}).click();
     await expect(page.locator('.raw-messages-placeholder')).toContainText(
@@ -83,7 +84,7 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
     await page.getByRole('tab', {name: 'Raw Messages'}).click();
     await expect(page.getByTestId('raw-message-envelope')).toBeVisible();
     const envText = await page.getByTestId('raw-message-envelope').textContent();
-    expect(envText).toContain('RENDERER_READY');
+    expect(envText).toContain(PreviewBridgeMessageType.RENDERER_READY);
     expect(envText).toContain('http://custom-renderer.com');
   });
 });

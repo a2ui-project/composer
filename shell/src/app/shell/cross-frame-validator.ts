@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
+
 /**
  * Hardens postMessage channels by validating outgoing layout schemas,
  * component hierarchies, and data binding payloads prior to transmission.
@@ -31,7 +33,7 @@ export class CrossFrameValidator {
     }
 
     switch (message.type) {
-      case 'GET_CATALOG': {
+      case PreviewBridgeMessageType.GET_CATALOG: {
         if (message.payload !== undefined && message.payload !== null) {
           if (typeof message.payload !== 'object' || Array.isArray(message.payload)) {
             console.error(
@@ -43,7 +45,7 @@ export class CrossFrameValidator {
         return true;
       }
 
-      case 'RENDER_A2UI': {
+      case PreviewBridgeMessageType.RENDER_A2UI: {
         if (!message.payload || !Array.isArray(message.payload)) {
           console.error('Malformed payload for RENDER_A2UI: must be an Array.');
           return false;
@@ -145,7 +147,7 @@ export class CrossFrameValidator {
         return true;
       }
 
-      case 'SET_BLOCKING_STATE': {
+      case PreviewBridgeMessageType.SET_BLOCKING_STATE: {
         if (
           !message.payload ||
           typeof message.payload !== 'object' ||
@@ -171,7 +173,7 @@ export class CrossFrameValidator {
         return true;
       }
 
-      case 'DATA_MODEL_CHANGE': {
+      case PreviewBridgeMessageType.DATA_MODEL_CHANGE: {
         if (
           !message.payload ||
           typeof message.payload !== 'object' ||

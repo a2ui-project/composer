@@ -16,7 +16,7 @@
 
 import {describe, it, expect, beforeEach, afterEach, vi, MockInstance} from 'vitest';
 import {setupInstrumentationOverrides} from './instrumentation-overrides';
-import {a2uiBridge} from './preview-bridge';
+import {a2uiBridge, PreviewBridgeMessageType} from './preview-bridge';
 
 describe('InstrumentationOverrides Diagnostics Telemetry', () => {
   let spy: MockInstance;
@@ -40,7 +40,7 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
     console.log('Diagnostic statement active', {key: 'value'});
 
     expect(spy).toHaveBeenCalledWith({
-      type: 'CONSOLE_LOG',
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
       payload: {
         level: 'log',
         message: 'Diagnostic statement active {"key":"value"}',
@@ -57,7 +57,7 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
 
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'CONSOLE_LOG',
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
         payload: expect.objectContaining({
           level: 'error',
           message: 'Uncaught reference error',

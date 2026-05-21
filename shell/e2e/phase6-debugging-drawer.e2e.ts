@@ -15,6 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -59,39 +60,35 @@ test.describe('Phase 6 Interactive Debugging Panels', () => {
     await expect(iframeBody).toBeVisible();
     await page.waitForTimeout(1000);
 
-    await iframeBody.evaluate(() => {
-      window.parent.postMessage(
-        {
-          type: 'SEND_TO_SERVER',
-          payload: {
-            version: 'v0.9',
-            action: {
-              name: 'e2e_button_click',
-              surfaceId: 'e2e_surface',
-              sourceComponentId: 'e2e_btn',
-              context: {test: true},
-            },
-          },
+    const clickMsg = {
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: 'v0.9',
+        action: {
+          name: 'e2e_button_click',
+          surfaceId: 'e2e_surface',
+          sourceComponentId: 'e2e_btn',
+          context: {test: true},
         },
-        '*',
-      );
-    });
+      },
+    };
+    await iframeBody.evaluate((_, msg) => {
+      window.parent.postMessage(msg, '*');
+    }, clickMsg);
 
     await page.waitForTimeout(100);
 
-    await iframeBody.evaluate(() => {
-      window.parent.postMessage(
-        {
-          type: 'CONSOLE_LOG',
-          payload: {
-            level: 'error',
-            message: 'E2E Exception trace',
-            stack: 'Error: E2E Failure\n  at e2e.ts:20',
-          },
-        },
-        '*',
-      );
-    });
+    const errorMsg = {
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
+      payload: {
+        level: 'error',
+        message: 'E2E Exception trace',
+        stack: 'Error: E2E Failure\n  at e2e.ts:20',
+      },
+    };
+    await iframeBody.evaluate((_, msg) => {
+      window.parent.postMessage(msg, '*');
+    }, errorMsg);
 
     // 5. Switch to Events tab to verify it mapped the event correctly
     await page.getByRole('tab', {name: 'Events'}).click();
@@ -156,36 +153,32 @@ test.describe('Phase 6 Interactive Debugging Panels', () => {
     await expect(iframeBody).toBeVisible();
     await page.waitForTimeout(1000);
 
-    await iframeBody.evaluate(() => {
-      window.parent.postMessage(
-        {
-          type: 'SEND_TO_SERVER',
-          payload: {
-            version: 'v0.9',
-            action: {
-              name: 'click_unread',
-              surfaceId: 's_unread',
-            },
-          },
+    const unreadClickMsg = {
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: 'v0.9',
+        action: {
+          name: 'click_unread',
+          surfaceId: 's_unread',
         },
-        '*',
-      );
-    });
+      },
+    };
+    await iframeBody.evaluate((_, msg) => {
+      window.parent.postMessage(msg, '*');
+    }, unreadClickMsg);
 
     await page.waitForTimeout(100);
 
-    await iframeBody.evaluate(() => {
-      window.parent.postMessage(
-        {
-          type: 'CONSOLE_LOG',
-          payload: {
-            level: 'error',
-            message: 'Telemetry Crash log',
-          },
-        },
-        '*',
-      );
-    });
+    const crashMsg = {
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
+      payload: {
+        level: 'error',
+        message: 'Telemetry Crash log',
+      },
+    };
+    await iframeBody.evaluate((_, msg) => {
+      window.parent.postMessage(msg, '*');
+    }, crashMsg);
 
     // Assert unread badges incremented and appear visible
     await expect(eventsBadge).toBeVisible();

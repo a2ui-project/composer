@@ -23,6 +23,7 @@ import DOMPurify from 'dompurify';
 import stringify from 'safe-stable-stringify';
 import {IndexedDbStorageService} from './indexed-db-storage.service';
 import {StartupResolutionService} from '../shell/startup-resolution.service';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 @Injectable({
   providedIn: 'root',
@@ -79,7 +80,7 @@ export class CatalogManagementService {
         filter((envelope): envelope is MessageEnvelope => envelope !== null),
         takeUntilDestroyed(),
         concatMap((envelope: MessageEnvelope) => {
-          if (envelope.type === 'RENDERER_READY') {
+          if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
             if (this._isHandshakeInProgress()) {
               console.warn('Handshake already in progress. Ignoring RENDERER_READY.');
               return of(null);
@@ -88,7 +89,7 @@ export class CatalogManagementService {
             this._isHandshakeInProgress.set(true);
             this._watchdogFired.set(false);
             this._catalogError.set(null);
-            this.hostCommunicationService.sendMessage({type: 'GET_CATALOG'});
+            this.hostCommunicationService.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
 
             this.watchdogTimerId = setTimeout(() => {
               if (this.watchdogTimerId === null) {
@@ -104,7 +105,7 @@ export class CatalogManagementService {
             }, 5000);
 
             return of(null);
-          } else if (envelope.type === 'A2UI_CATALOG') {
+          } else if (envelope.type === PreviewBridgeMessageType.A2UI_CATALOG) {
             if (this.watchdogTimerId !== null) {
               clearTimeout(this.watchdogTimerId);
               this.watchdogTimerId = null;

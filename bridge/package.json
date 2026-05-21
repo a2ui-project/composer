@@ -2,14 +2,17 @@
   "name": "a2ui-bridge",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "main": "dist/preview-bridge.js",
   "types": "dist/preview-bridge.d.ts",
   "scripts": {
-    "build": "tsc --project tsconfig.bridge.json",
+    "build": "esbuild src/preview-bridge.ts --bundle --format=esm --target=es2022 --outfile=dist/preview-bridge.js && tsc --project tsconfig.bridge.json --emitDeclarationOnly",
+    "clean": "rm -rf dist",
     "test": "NODE_ENV=test vitest run",
     "prettier": "prettier --write . | grep -v '(unchanged)'"
   },
   "devDependencies": {
+    "esbuild": "0.28.0",
     "jsdom": "29.1.1",
     "prettier": "3.8.3",
     "typescript": "6.0.3",

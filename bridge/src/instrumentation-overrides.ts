@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {a2uiBridge} from './preview-bridge';
+import {a2uiBridge, PreviewBridgeMessageType} from './preview-bridge';
 
 /**
  * Safely and deeply clones a value or object, resolving potential serialization
@@ -125,28 +125,26 @@ export function setupInstrumentationOverrides(): void {
 
       try {
         isSerializing = true;
-        if (a2uiBridge && typeof a2uiBridge.sendMessage === 'function') {
-          const message = args
-            .map(arg => {
-              if (arg instanceof Error) return arg.message;
-              if (typeof arg === 'string') return arg;
-              const cloned = deepCloneSafe(arg);
-              return typeof cloned === 'string' ? cloned : JSON.stringify(cloned);
-            })
-            .join(' ');
+        const message = args
+          .map(arg => {
+            if (arg instanceof Error) return arg.message;
+            if (typeof arg === 'string') return arg;
+            const cloned = deepCloneSafe(arg);
+            return typeof cloned === 'string' ? cloned : JSON.stringify(cloned);
+          })
+          .join(' ');
 
-          const errorArg = args.find(arg => arg instanceof Error);
-          const stack = errorArg ? (errorArg as Error).stack : undefined;
+        const errorArg = args.find(arg => arg instanceof Error);
+        const stack = errorArg ? (errorArg as Error).stack : undefined;
 
-          a2uiBridge.sendMessage({
-            type: 'CONSOLE_LOG',
-            payload: {
-              level: method,
-              message,
-              stack,
-            },
-          });
-        }
+        a2uiBridge.sendMessage({
+          type: PreviewBridgeMessageType.CONSOLE_LOG,
+          payload: {
+            level: method,
+            message,
+            stack,
+          },
+        });
       } catch (err) {
         originalConsoleError.call(console, 'A2UI Bridge Telemetry Error (Console):', err);
       } finally {
@@ -165,16 +163,14 @@ export function setupInstrumentationOverrides(): void {
     error: Error | undefined,
   ): boolean => {
     try {
-      if (a2uiBridge && typeof a2uiBridge.sendMessage === 'function') {
-        a2uiBridge.sendMessage({
-          type: 'CONSOLE_LOG',
-          payload: {
-            level: 'error',
-            message: String(message),
-            stack: error ? error.stack : `${source || ''}:${lineno || 0}:${colno || 0}`,
-          },
-        });
-      }
+      a2uiBridge.sendMessage({
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {
+          level: 'error',
+          message: String(message),
+          stack: error ? error.stack : `${source || ''}:${lineno || 0}:${colno || 0}`,
+        },
+      });
     } catch (err) {
       originalConsoleError.call(console, 'A2UI Bridge Telemetry Error (Window Error):', err);
     }
@@ -189,24 +185,22 @@ export function setupInstrumentationOverrides(): void {
 
   window.addEventListener('unhandledrejection', event => {
     try {
-      if (a2uiBridge && typeof a2uiBridge.sendMessage === 'function') {
-        // Extracts the rejection reason from the event, determining whether it
-        // is a standard `Error` object (retaining its message and stack trace)
-        // or a generic type (coerced to a string).
-        // The details are sent to the host as an error-level `CONSOLE_LOG`
-        // telemetry message over the `a2uiBridge`.
-        const message = event.reason instanceof Error ? event.reason.message : String(event.reason);
-        const stack = event.reason instanceof Error ? event.reason.stack : undefined;
+      // Extracts the rejection reason from the event, determining whether it
+      // is a standard `Error` object (retaining its message and stack trace)
+      // or a generic type (coerced to a string).
+      // The details are sent to the host as an error-level `CONSOLE_LOG`
+      // telemetry message over the `a2uiBridge`.
+      const message = event.reason instanceof Error ? event.reason.message : String(event.reason);
+      const stack = event.reason instanceof Error ? event.reason.stack : undefined;
 
-        a2uiBridge.sendMessage({
-          type: 'CONSOLE_LOG',
-          payload: {
-            level: 'error',
-            message: `Unhandled Rejection: ${message}`,
-            stack,
-          },
-        });
-      }
+      a2uiBridge.sendMessage({
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {
+          level: 'error',
+          message: `Unhandled Rejection: ${message}`,
+          stack,
+        },
+      });
     } catch (err) {
       originalConsoleError.call(console, 'A2UI Bridge Telemetry Error (Unhandled Rejection):', err);
     }

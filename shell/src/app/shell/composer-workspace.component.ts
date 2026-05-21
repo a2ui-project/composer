@@ -30,6 +30,7 @@ import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatBadgeModule} from '@angular/material/badge';
 import {StartupResolutionService} from './startup-resolution.service';
 import {HostCommunicationService} from './host-communication.service';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 const EVENTS_TAB_INDEX = 1;
 const ERRORS_TAB_INDEX = 2;
@@ -83,15 +84,18 @@ export class ComposerWorkspaceComponent implements OnInit {
 
       untracked(() => {
         const activeTab = this.selectedTabIndex();
-        if (envelope.type === 'SEND_TO_SERVER' && payload?.action) {
+        if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.action) {
           if (activeTab !== EVENTS_TAB_INDEX) {
             this.unreadEventsCount.update(count => count + 1);
           }
-        } else if (envelope.type === 'CONSOLE_LOG') {
+        } else if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
           if (activeTab !== ERRORS_TAB_INDEX) {
             this.unreadErrorsCount.update(count => count + 1);
           }
-        } else if (envelope.type === 'DATA_MODEL_CHANGE' && payload?.validationErrors) {
+        } else if (
+          envelope.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE &&
+          payload?.validationErrors
+        ) {
           const validationErrors = payload.validationErrors;
           const hasErrors = Array.isArray(validationErrors)
             ? validationErrors.length > 0

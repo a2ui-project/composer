@@ -19,6 +19,7 @@ import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {HostCommunicationService} from '../../shell/host-communication.service';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 /**
  * A structured telemetry record capturing uncaught exceptions and
@@ -58,7 +59,7 @@ export class ErrorsComponent {
       const payload = envelope.payload as any;
       if (!payload) return;
 
-      if (envelope.type === 'CONSOLE_LOG') {
+      if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
         const msg = payload.message || '';
         const isException =
           msg.includes('Unhandled Rejection') || msg.includes('Uncaught') || !!payload.stack;
@@ -80,7 +81,10 @@ export class ErrorsComponent {
             return newLogs;
           });
         });
-      } else if (envelope.type === 'DATA_MODEL_CHANGE' && payload.validationErrors) {
+      } else if (
+        envelope.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE &&
+        payload.validationErrors
+      ) {
         const validationErrors = payload.validationErrors;
         const hasErrors = Array.isArray(validationErrors)
           ? validationErrors.length > 0

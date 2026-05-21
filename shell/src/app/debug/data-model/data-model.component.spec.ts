@@ -22,6 +22,7 @@ import {describe, it, expect, beforeEach, vi, afterEach} from 'vitest';
 import {DataModelComponent} from './data-model.component';
 import {DataModelHarness} from './test/data-model.harness';
 import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication.service';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 describe('DataModelComponent', () => {
   let fixture: ComponentFixture<DataModelComponent>;
@@ -71,13 +72,13 @@ describe('DataModelComponent', () => {
       },
     };
     mockHostComm.messageStream.set({
-      type: 'DATA_MODEL_CHANGE',
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload,
       origin: 'http://localhost',
       timestamp: Date.now(),
     });
 
-    TestBed.flushEffects();
+    TestBed.tick();
     fixture.detectChanges();
 
     const text = await harness.getModelText();
@@ -88,7 +89,7 @@ describe('DataModelComponent', () => {
     expect(await harness.hasInvalidJsonBadge()).toBe(false);
 
     await harness.setModelText('{ invalid json }');
-    TestBed.flushEffects();
+    TestBed.tick();
     fixture.detectChanges();
 
     expect(await harness.hasInvalidJsonBadge()).toBe(true);
@@ -99,16 +100,16 @@ describe('DataModelComponent', () => {
     const jsonStr = JSON.stringify(localValue);
 
     await harness.setModelText(jsonStr);
-    TestBed.flushEffects();
+    TestBed.tick();
     fixture.detectChanges();
 
     expect(mockHostComm.sendMessage).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(300);
-    TestBed.flushEffects();
+    TestBed.tick();
 
     expect(mockHostComm.sendMessage).toHaveBeenCalledWith({
-      type: 'DATA_MODEL_CHANGE',
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload: {
         updateDataModel: {
           surfaceId: 'sample-surface',
@@ -121,18 +122,18 @@ describe('DataModelComponent', () => {
 
   it('does not dispatch invalid JSON edits to host service', async () => {
     await harness.setModelText('{ invalid-json');
-    TestBed.flushEffects();
+    TestBed.tick();
     fixture.detectChanges();
 
     await vi.advanceTimersByTimeAsync(300);
-    TestBed.flushEffects();
+    TestBed.tick();
 
     expect(mockHostComm.sendMessage).not.toHaveBeenCalled();
   });
 
   it('retains developer manual edits when irrelevant messages are received', async () => {
     await harness.setModelText('{"manual": true}');
-    TestBed.flushEffects();
+    TestBed.tick();
     fixture.detectChanges();
 
     mockHostComm.messageStream.set({
@@ -142,7 +143,7 @@ describe('DataModelComponent', () => {
       timestamp: Date.now(),
     });
 
-    TestBed.flushEffects();
+    TestBed.tick();
     fixture.detectChanges();
 
     const text = await harness.getModelText();
@@ -151,7 +152,7 @@ describe('DataModelComponent', () => {
 
   it('resets the editor text to empty when remote state resets to null', async () => {
     mockHostComm.messageStream.set({
-      type: 'DATA_MODEL_CHANGE',
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload: {
         updateDataModel: {
           surfaceId: 'sample-surface',
@@ -161,13 +162,13 @@ describe('DataModelComponent', () => {
       origin: 'http://localhost',
       timestamp: Date.now(),
     });
-    TestBed.flushEffects();
+    TestBed.tick();
     fixture.detectChanges();
 
     expect(JSON.parse(await harness.getModelText())).toEqual({foo: 'bar'});
 
     component.latestModelValue.set(null);
-    TestBed.flushEffects();
+    TestBed.tick();
     fixture.detectChanges();
 
     expect(await harness.getModelText()).toBe('');

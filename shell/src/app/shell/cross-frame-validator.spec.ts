@@ -16,6 +16,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {CrossFrameValidator} from './cross-frame-validator';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 describe('CrossFrameValidator', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
@@ -64,34 +65,48 @@ describe('CrossFrameValidator', () => {
 
   describe('GET_CATALOG', () => {
     it('accepts valid GET_CATALOG with no payload', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'GET_CATALOG'})).toBe(true);
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({type: PreviewBridgeMessageType.GET_CATALOG}),
+      ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('accepts valid GET_CATALOG with undefined payload', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'GET_CATALOG', payload: undefined}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_CATALOG,
+          payload: undefined,
+        }),
       ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('accepts valid GET_CATALOG with null payload', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'GET_CATALOG', payload: null}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_CATALOG,
+          payload: null,
+        }),
       ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('accepts valid GET_CATALOG with object payload', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'GET_CATALOG', payload: {}})).toBe(
-        true,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_CATALOG,
+          payload: {},
+        }),
+      ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('rejects GET_CATALOG with primitive payload (string)', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'GET_CATALOG', payload: 'invalid'}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_CATALOG,
+          payload: 'invalid',
+        }),
       ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for GET_CATALOG: must be an object, null, or undefined.',
@@ -99,18 +114,24 @@ describe('CrossFrameValidator', () => {
     });
 
     it('rejects GET_CATALOG with primitive payload (number)', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'GET_CATALOG', payload: 123})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_CATALOG,
+          payload: 123,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for GET_CATALOG: must be an object, null, or undefined.',
       );
     });
 
     it('rejects GET_CATALOG with array payload', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'GET_CATALOG', payload: []})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_CATALOG,
+          payload: [],
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for GET_CATALOG: must be an object, null, or undefined.',
       );
@@ -119,14 +140,19 @@ describe('CrossFrameValidator', () => {
 
   describe('RENDER_A2UI', () => {
     it('rejects RENDER_A2UI with missing payload', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI'})).toBe(false);
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({type: PreviewBridgeMessageType.RENDER_A2UI}),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith('Malformed payload for RENDER_A2UI: must be an Array.');
     });
 
     it('accepts RENDER_A2UI with empty array', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload: []})).toBe(
-        true,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload: [],
+        }),
+      ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
@@ -141,9 +167,12 @@ describe('CrossFrameValidator', () => {
           },
         },
       ];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        true,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
@@ -157,9 +186,12 @@ describe('CrossFrameValidator', () => {
           },
         },
       ];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        true,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
@@ -174,9 +206,12 @@ describe('CrossFrameValidator', () => {
           },
         },
       ];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        true,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
@@ -189,9 +224,12 @@ describe('CrossFrameValidator', () => {
           },
         },
       ];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        true,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
@@ -211,22 +249,31 @@ describe('CrossFrameValidator', () => {
           },
         },
       ];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        true,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('rejects RENDER_A2UI with non-array payload', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload: {}})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload: {},
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith('Malformed payload for RENDER_A2UI: must be an Array.');
     });
 
     it('rejects RENDER_A2UI when an item is not an object', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload: ['invalid']}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload: ['invalid'],
+        }),
       ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: array items must be objects.',
@@ -235,7 +282,10 @@ describe('CrossFrameValidator', () => {
 
     it('rejects RENDER_A2UI when an item is null', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload: [null]}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload: [null],
+        }),
       ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: array items must be objects.',
@@ -244,7 +294,10 @@ describe('CrossFrameValidator', () => {
 
     it('rejects RENDER_A2UI when an item is an array', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload: [[]]}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload: [[]],
+        }),
       ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: array items must be objects.',
@@ -253,9 +306,12 @@ describe('CrossFrameValidator', () => {
 
     it('rejects RENDER_A2UI when an item lacks version v0.9', () => {
       const payload = [{updateComponents: {surfaceId: 's-1', components: []}}];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: array items must specify version "v0.9".',
       );
@@ -264,7 +320,7 @@ describe('CrossFrameValidator', () => {
     it('rejects RENDER_A2UI when an item lacks any update property', () => {
       expect(
         CrossFrameValidator.validateOutgoingMessage({
-          type: 'RENDER_A2UI',
+          type: PreviewBridgeMessageType.RENDER_A2UI,
           payload: [{version: 'v0.9'}],
         }),
       ).toBe(false);
@@ -286,9 +342,12 @@ describe('CrossFrameValidator', () => {
           },
         },
       ];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: item must contain exactly one update property, but found: createSurface, deleteSurface.',
       );
@@ -296,9 +355,12 @@ describe('CrossFrameValidator', () => {
 
     it('rejects RENDER_A2UI when createSurface property is not an object', () => {
       const payload = [{version: 'v0.9', createSurface: 'invalid'}];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: createSurface property must be an object.',
       );
@@ -306,9 +368,12 @@ describe('CrossFrameValidator', () => {
 
     it('rejects RENDER_A2UI when createSurface lacks surfaceId', () => {
       const payload = [{version: 'v0.9', createSurface: {catalogId: 'cat-1'}}];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: createSurface must contain a valid surfaceId string.',
       );
@@ -316,9 +381,12 @@ describe('CrossFrameValidator', () => {
 
     it('rejects RENDER_A2UI when createSurface lacks catalogId', () => {
       const payload = [{version: 'v0.9', createSurface: {surfaceId: 's-1'}}];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: createSurface must contain a valid catalogId string.',
       );
@@ -331,9 +399,12 @@ describe('CrossFrameValidator', () => {
           createSurface: {surfaceId: 's-1', catalogId: 'c-1', sendDataModel: 'true'},
         },
       ];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: createSurface sendDataModel must be a boolean if present.',
       );
@@ -341,9 +412,12 @@ describe('CrossFrameValidator', () => {
 
     it('rejects RENDER_A2UI when updateComponents lacks surfaceId', () => {
       const payload = [{version: 'v0.9', updateComponents: {components: []}}];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: updateComponents must contain a valid surfaceId string.',
       );
@@ -351,9 +425,12 @@ describe('CrossFrameValidator', () => {
 
     it('rejects RENDER_A2UI when updateComponents components is not an array', () => {
       const payload = [{version: 'v0.9', updateComponents: {surfaceId: 's-1', components: {}}}];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: updateComponents must contain a components Array.',
       );
@@ -363,9 +440,12 @@ describe('CrossFrameValidator', () => {
       const payload = [
         {version: 'v0.9', updateComponents: {surfaceId: 's-1', components: ['invalid']}},
       ];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: updateComponents components array items must be objects.',
       );
@@ -373,9 +453,12 @@ describe('CrossFrameValidator', () => {
 
     it('rejects RENDER_A2UI when updateDataModel lacks surfaceId', () => {
       const payload = [{version: 'v0.9', updateDataModel: {path: 'user'}}];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: updateDataModel must contain a valid surfaceId string.',
       );
@@ -383,9 +466,12 @@ describe('CrossFrameValidator', () => {
 
     it('rejects RENDER_A2UI when updateDataModel path is not a string', () => {
       const payload = [{version: 'v0.9', updateDataModel: {surfaceId: 's-1', path: 123}}];
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'RENDER_A2UI', payload})).toBe(
-        false,
-      );
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for RENDER_A2UI: updateDataModel path must be a string if present.',
       );
@@ -396,13 +482,20 @@ describe('CrossFrameValidator', () => {
     it('accepts valid SET_BLOCKING_STATE payload', () => {
       const payload = {blocked: true, message: 'Processing...'};
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'SET_BLOCKING_STATE', payload}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+          payload,
+        }),
       ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('rejects SET_BLOCKING_STATE with missing payload', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'SET_BLOCKING_STATE'})).toBe(false);
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for SET_BLOCKING_STATE: must be an object.',
       );
@@ -410,7 +503,10 @@ describe('CrossFrameValidator', () => {
 
     it('rejects SET_BLOCKING_STATE with array payload', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'SET_BLOCKING_STATE', payload: []}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+          payload: [],
+        }),
       ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for SET_BLOCKING_STATE: must be an object.',
@@ -420,7 +516,10 @@ describe('CrossFrameValidator', () => {
     it('rejects SET_BLOCKING_STATE missing blocked', () => {
       const payload = {message: 'Processing...'};
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'SET_BLOCKING_STATE', payload}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+          payload,
+        }),
       ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for SET_BLOCKING_STATE: must contain boolean property blocked.',
@@ -430,7 +529,10 @@ describe('CrossFrameValidator', () => {
     it('rejects SET_BLOCKING_STATE with non-string message', () => {
       const payload = {blocked: true, message: 123};
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'SET_BLOCKING_STATE', payload}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+          payload,
+        }),
       ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for SET_BLOCKING_STATE: message property must be a string if present.',
@@ -448,13 +550,20 @@ describe('CrossFrameValidator', () => {
         },
       };
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'DATA_MODEL_CHANGE', payload}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+          payload,
+        }),
       ).toBe(true);
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('rejects DATA_MODEL_CHANGE with missing payload', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 'DATA_MODEL_CHANGE'})).toBe(false);
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+        }),
+      ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for DATA_MODEL_CHANGE: must be an object.',
       );
@@ -462,7 +571,10 @@ describe('CrossFrameValidator', () => {
 
     it('rejects DATA_MODEL_CHANGE missing updateDataModel', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'DATA_MODEL_CHANGE', payload: {}}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+          payload: {},
+        }),
       ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for DATA_MODEL_CHANGE: must contain an updateDataModel object.',
@@ -472,7 +584,10 @@ describe('CrossFrameValidator', () => {
     it('rejects DATA_MODEL_CHANGE with malformed updateDataModel', () => {
       const payload = {updateDataModel: {path: 'user'}};
       expect(
-        CrossFrameValidator.validateOutgoingMessage({type: 'DATA_MODEL_CHANGE', payload}),
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+          payload,
+        }),
       ).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
         'Malformed payload for DATA_MODEL_CHANGE: updateDataModel must contain a valid surfaceId string.',

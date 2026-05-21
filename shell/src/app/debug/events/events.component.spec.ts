@@ -23,6 +23,7 @@ import {HostCommunicationService, MessageEnvelope} from '../../shell/host-commun
 import {signal} from '@angular/core';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatTableModule} from '@angular/material/table';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 describe('EventsComponent', () => {
   let fixture: ComponentFixture<EventsComponent>;
@@ -74,7 +75,7 @@ describe('EventsComponent', () => {
   it('processes and displays SEND_TO_SERVER actions correctly', async () => {
     const actionTimestamp = new Date('2026-05-18T12:30:05.123Z').getTime();
     mockMessageStream.set({
-      type: 'SEND_TO_SERVER',
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
       payload: {
         action: {
           name: 'test-action',
@@ -103,7 +104,7 @@ describe('EventsComponent', () => {
   it('supports contextParameters and null context fallback mappings safely', async () => {
     // 1. Test contextParameters fallback
     mockMessageStream.set({
-      type: 'SEND_TO_SERVER',
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
       payload: {
         action: {
           name: 'action-fallback-1',
@@ -122,7 +123,7 @@ describe('EventsComponent', () => {
 
     // 2. Test null context fallback
     mockMessageStream.set({
-      type: 'SEND_TO_SERVER',
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
       payload: {
         action: {
           name: 'action-fallback-2',
@@ -141,7 +142,7 @@ describe('EventsComponent', () => {
 
   it('safely parses stringified action JSON payloads', async () => {
     mockMessageStream.set({
-      type: 'SEND_TO_SERVER',
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
       payload: {
         action: JSON.stringify({
           name: 'stringified-action',
@@ -167,7 +168,7 @@ describe('EventsComponent', () => {
 
     // 1. Payload is null
     mockMessageStream.set({
-      type: 'SEND_TO_SERVER',
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
       payload: null,
       origin: 'http://localhost',
       timestamp: Date.now(),
@@ -177,7 +178,7 @@ describe('EventsComponent', () => {
 
     // 2. Action is null
     mockMessageStream.set({
-      type: 'SEND_TO_SERVER',
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
       payload: {action: null},
       origin: 'http://localhost',
       timestamp: Date.now(),
@@ -187,7 +188,7 @@ describe('EventsComponent', () => {
 
     // 3. Action is non-parseable string
     mockMessageStream.set({
-      type: 'SEND_TO_SERVER',
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
       payload: {action: 'not-a-json-string'},
       origin: 'http://localhost',
       timestamp: Date.now(),
@@ -198,7 +199,7 @@ describe('EventsComponent', () => {
 
   it('prepends newer events at index 0', async () => {
     mockMessageStream.set({
-      type: 'SEND_TO_SERVER',
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
       payload: {
         action: {
           name: 'action-1',
@@ -213,7 +214,7 @@ describe('EventsComponent', () => {
     fixture.detectChanges();
 
     mockMessageStream.set({
-      type: 'SEND_TO_SERVER',
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
       payload: {
         action: {
           name: 'action-2',
@@ -237,7 +238,7 @@ describe('EventsComponent', () => {
   it('caps history at 100 entries strictly', async () => {
     for (let i = 0; i < 120; i++) {
       mockMessageStream.set({
-        type: 'SEND_TO_SERVER',
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
         payload: {
           action: {
             name: `action-${i}`,
@@ -261,7 +262,7 @@ describe('EventsComponent', () => {
 
   it('clears logs and restores placeholder on clearLogs()', async () => {
     mockMessageStream.set({
-      type: 'SEND_TO_SERVER',
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
       payload: {
         action: {
           name: 'some-action',

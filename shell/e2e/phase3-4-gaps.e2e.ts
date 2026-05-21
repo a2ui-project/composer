@@ -15,6 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -48,21 +49,23 @@ test.describe('Phase 3-4 Gaps Integration Suite', () => {
     const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
     await expect(iframeBody).toBeVisible();
 
-    await iframeBody.evaluate(() => {
-      window.parent.postMessage(
-        {type: 'SET_BLOCKING_STATE', payload: {blocked: true, message: 'Freezing'}},
-        '*',
-      );
-    });
+    const blockingMsg = {
+      type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+      payload: {blocked: true, message: 'Freezing'},
+    };
+    await iframeBody.evaluate((_, msg) => {
+      window.parent.postMessage(msg, '*');
+    }, blockingMsg);
 
     await page.getByRole('tab', {name: 'Raw Messages'}).click();
-    await iframeBody.evaluate(() => {
-      window.parent.postMessage({type: 'FORCE_UNBLOCK'}, '*');
-    });
+    const unblockMsg = {type: PreviewBridgeMessageType.FORCE_UNBLOCK};
+    await iframeBody.evaluate((_, msg) => {
+      window.parent.postMessage(msg, '*');
+    }, unblockMsg);
 
     await expect(page.getByTestId('raw-message-envelope').first()).toBeVisible();
     const envText = await page.getByTestId('raw-message-envelope').first().textContent();
-    expect(envText).toContain('FORCE_UNBLOCK');
+    expect(envText).toContain(PreviewBridgeMessageType.FORCE_UNBLOCK);
   });
 
   test('verifies console log override telemetry capture', async ({page}) => {
@@ -79,15 +82,13 @@ test.describe('Phase 3-4 Gaps Integration Suite', () => {
     const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
     await expect(iframeBody).toBeVisible();
 
-    await iframeBody.evaluate(() => {
-      window.parent.postMessage(
-        {
-          type: 'CONSOLE_LOG',
-          payload: {level: 'warn', message: 'Telemetry active'},
-        },
-        '*',
-      );
-    });
+    const logMsg = {
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
+      payload: {level: 'warn', message: 'Telemetry active'},
+    };
+    await iframeBody.evaluate((_, msg) => {
+      window.parent.postMessage(msg, '*');
+    }, logMsg);
 
     await page.getByRole('tab', {name: 'Errors'}).click();
     const errorRow = page.locator('.errors-container table tr.element-row').first();

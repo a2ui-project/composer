@@ -15,6 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -40,9 +41,15 @@ test.describe('ng-basic-catalog Integration Suite', () => {
     await page.locator('.raw-messages-container .message-envelope').first().hover({trial: true});
     const envelopes = page.getByTestId('raw-message-envelope');
     await expect(envelopes).toHaveCount(3);
-    await expect(envelopes.nth(0).locator('.message-type')).toHaveText('DATA_MODEL_CHANGE');
-    await expect(envelopes.nth(1).locator('.message-type')).toHaveText('A2UI_CATALOG');
-    await expect(envelopes.nth(2).locator('.message-type')).toHaveText('RENDERER_READY');
+    await expect(envelopes.nth(0).locator('.message-type')).toHaveText(
+      PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+    );
+    await expect(envelopes.nth(1).locator('.message-type')).toHaveText(
+      PreviewBridgeMessageType.A2UI_CATALOG,
+    );
+    await expect(envelopes.nth(2).locator('.message-type')).toHaveText(
+      PreviewBridgeMessageType.RENDERER_READY,
+    );
   });
 
   test('synchronizes "pick-up date" from preview iframe to data model tab', async ({page}) => {
@@ -68,6 +75,10 @@ test.describe('ng-basic-catalog Integration Suite', () => {
     await page.goto('/?renderer=http://localhost:3456');
     await expect(page.locator('.workspace-container')).toBeVisible();
 
+    // Wait for preview iframe to finish handshake and render before checking data model
+    const iframe = page.frameLocator('iframe.preview-iframe');
+    await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+
     await page.getByRole('tab', {name: 'Data Model'}).click();
     await expect(page.locator('.data-model-container textarea')).toBeVisible();
     const dataModelTextarea = page.locator('.data-model-field textarea');
@@ -82,7 +93,6 @@ test.describe('ng-basic-catalog Integration Suite', () => {
     await dataModelTextarea.fill(JSON.stringify(parsedModel, null, 2));
     await page.waitForTimeout(1000);
 
-    const iframe = page.frameLocator('iframe.preview-iframe');
     const locationInput = iframe.locator(
       '.a2ui-text-field-container:has-text("Pick-up Location") input',
     );
@@ -147,7 +157,9 @@ test.describe('ng-basic-catalog Integration Suite', () => {
     // Without this, the animation could still be running.
     await page.locator('.raw-messages-container .message-envelope').first().hover({trial: true});
     const latestEnvelope = page.getByTestId('raw-message-envelope').first();
-    await expect(latestEnvelope.locator('.message-type')).toHaveText('SEND_TO_SERVER');
+    await expect(latestEnvelope.locator('.message-type')).toHaveText(
+      PreviewBridgeMessageType.SEND_TO_SERVER,
+    );
     await expect(latestEnvelope.locator('pre')).toContainText('"name": "searchCars"');
     await expect(latestEnvelope.locator('pre')).toContainText('"sourceComponentId": "book_button"');
     await expect(latestEnvelope.locator('pre')).toContainText('"location": ""');

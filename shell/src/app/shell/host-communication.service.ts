@@ -17,6 +17,7 @@
 import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
 import {StartupResolutionService} from './startup-resolution.service';
 import {CrossFrameValidator} from './cross-frame-validator';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 /**
  * Schema representing a structured postMessage payload used to communicate
@@ -103,7 +104,7 @@ export class HostCommunicationService implements OnDestroy {
     this.iframeElement = element;
   }
 
-  public sendMessage(message: {type: string; payload?: unknown}): void {
+  public sendMessage(message: {type: PreviewBridgeMessageType; payload?: unknown}): void {
     if (!CrossFrameValidator.validateOutgoingMessage(message)) {
       console.error('Blocked dispatch of malformed message type...', message);
       return;
@@ -124,7 +125,7 @@ export class HostCommunicationService implements OnDestroy {
   }
 
   public sendRenderA2UI(payload: unknown[]): void {
-    this.sendMessage({type: 'RENDER_A2UI', payload});
+    this.sendMessage({type: PreviewBridgeMessageType.RENDER_A2UI, payload});
   }
 
   ngOnDestroy(): void {

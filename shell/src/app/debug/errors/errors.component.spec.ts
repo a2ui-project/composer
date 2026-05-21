@@ -23,6 +23,7 @@ import {HostCommunicationService, MessageEnvelope} from '../../shell/host-commun
 import {signal} from '@angular/core';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatTableModule} from '@angular/material/table';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 describe('ErrorsComponent', () => {
   let fixture: ComponentFixture<ErrorsComponent>;
@@ -73,7 +74,7 @@ describe('ErrorsComponent', () => {
 
   it('processes CONSOLE_LOG error level messages and maps console source correctly', async () => {
     mockMessageStream.set({
-      type: 'CONSOLE_LOG',
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
       payload: {
         level: 'error',
         message: 'Simple console error message',
@@ -95,7 +96,7 @@ describe('ErrorsComponent', () => {
   it('maps console error containing exception markers as exception source', async () => {
     // 1. Check stack presence
     mockMessageStream.set({
-      type: 'CONSOLE_LOG',
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
       payload: {
         level: 'error',
         message: 'Error occurred',
@@ -111,7 +112,7 @@ describe('ErrorsComponent', () => {
 
     // 2. Check Uncaught marker
     mockMessageStream.set({
-      type: 'CONSOLE_LOG',
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
       payload: {
         level: 'error',
         message: 'Uncaught TypeError: Cannot read property',
@@ -128,7 +129,7 @@ describe('ErrorsComponent', () => {
   it('processes DATA_MODEL_CHANGE non-empty validation errors correctly', async () => {
     // 1. Check non-empty validation errors array
     mockMessageStream.set({
-      type: 'DATA_MODEL_CHANGE',
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload: {
         validationErrors: ['Missing required field title', 'Invalid surface id'],
       },
@@ -146,7 +147,7 @@ describe('ErrorsComponent', () => {
 
     // 2. Check validation errors object
     mockMessageStream.set({
-      type: 'DATA_MODEL_CHANGE',
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload: {
         validationErrors: {field: 'required'},
       },
@@ -162,7 +163,7 @@ describe('ErrorsComponent', () => {
 
   it('ignores empty or null validationErrors payloads gracefully', async () => {
     mockMessageStream.set({
-      type: 'DATA_MODEL_CHANGE',
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload: {
         validationErrors: [],
       },
@@ -177,7 +178,7 @@ describe('ErrorsComponent', () => {
 
   it('prepends newer errors at index 0', async () => {
     mockMessageStream.set({
-      type: 'CONSOLE_LOG',
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
       payload: {
         level: 'error',
         message: 'Error 1',
@@ -188,7 +189,7 @@ describe('ErrorsComponent', () => {
     fixture.detectChanges();
 
     mockMessageStream.set({
-      type: 'CONSOLE_LOG',
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
       payload: {
         level: 'error',
         message: 'Error 2',
@@ -208,7 +209,7 @@ describe('ErrorsComponent', () => {
   it('caps history at 100 entries strictly', async () => {
     for (let i = 0; i < 120; i++) {
       mockMessageStream.set({
-        type: 'CONSOLE_LOG',
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
         payload: {
           level: 'error',
           message: `Error-${i}`,
@@ -228,7 +229,7 @@ describe('ErrorsComponent', () => {
 
   it('handles collapsible stack trace traces correctly', async () => {
     mockMessageStream.set({
-      type: 'CONSOLE_LOG',
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
       payload: {
         level: 'error',
         message: 'Exception with stack',
@@ -256,7 +257,7 @@ describe('ErrorsComponent', () => {
 
   it('clears logs and resets expanded rows cleanly on clearLogs()', async () => {
     mockMessageStream.set({
-      type: 'CONSOLE_LOG',
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
       payload: {
         level: 'error',
         message: 'Clean error',

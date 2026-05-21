@@ -18,6 +18,7 @@ import {Component, inject, signal, effect, untracked} from '@angular/core';
 import {MatTableModule} from '@angular/material/table';
 import {JsonPipe} from '@angular/common';
 import {HostCommunicationService} from '../../shell/host-communication.service';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 /**
  * A structured telemetry record representing a custom event or interaction
@@ -51,7 +52,7 @@ export class EventsComponent {
   constructor() {
     effect(() => {
       const envelope = this.hostComm.messageStream();
-      if (envelope?.type === 'SEND_TO_SERVER') {
+      if (envelope?.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
         const payload = envelope.payload as any;
         if (payload && payload.action) {
           let action = payload.action;
