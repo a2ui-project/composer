@@ -14,25 +14,35 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, beforeEach, afterEach, vi, MockInstance} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, beforeAll, vi, MockInstance} from 'vitest';
+
+const consoleErrorSpy = vi.hoisted(() => {
+  return vi.spyOn(console, 'error').mockImplementation(() => {});
+});
 import {setupInstrumentationOverrides} from './instrumentation-overrides';
-import {a2uiBridge, PreviewBridgeMessageType} from './preview-bridge';
+import {a2uiBridge} from './preview-bridge';
+import {PreviewBridgeMessageType} from './bridge-message';
 
 describe('InstrumentationOverrides Diagnostics Telemetry', () => {
   let spy: MockInstance;
   let originalLog: (...data: unknown[]) => void;
   let originalOnError: OnErrorEventHandler;
 
+  beforeAll(() => {
+    setupInstrumentationOverrides();
+  });
+
   beforeEach(() => {
     spy = vi.spyOn(a2uiBridge, 'sendMessage').mockImplementation(() => {});
     originalLog = console.log;
     originalOnError = window.onerror;
-    setupInstrumentationOverrides();
   });
 
   afterEach(() => {
     console.log = originalLog;
     window.onerror = originalOnError;
+    consoleErrorSpy.mockClear();
+    spy.mockClear();
     vi.restoreAllMocks();
   });
 
@@ -152,6 +162,155 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
       expect.objectContaining({
         payload: expect.objectContaining({
           message: '{"normalProp":"valid","throwingProp":"[Unserializable Property]"}',
+        }),
+      }),
+    );
+  });
+
+  it('captures unhandled promise rejection events and routes error telemetry', () => {
+    const error = new Error('Promise target crashed');
+    const event = new PromiseRejectionEvent('unhandledrejection', {
+      promise: Promise.resolve(),
+      reason: error,
+    });
+    window.dispatchEvent(event);
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: expect.objectContaining({
+          level: 'error',
+          message: 'Unhandled Rejection: Promise target crashed',
+          stack: error.stack,
+        }),
+      }),
+    );
+  });
+
+  it('captures unhandled promise rejection with a string reason safely without stack', () => {
+    const event = new PromiseRejectionEvent('unhandledrejection', {
+      promise: Promise.resolve(),
+      reason: 'Fatal rejection string',
+    });
+    window.dispatchEvent(event);
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {
+          level: 'error',
+          message: 'Unhandled Rejection: Fatal rejection string',
+          stack: undefined,
+        },
+      }),
+    );
+  });
+
+  it('serializes arrays and nested arrays safely', () => {
+    console.log([42, [100, 'nested-item']]);
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          message: '[42,[100,"nested-item"]]',
+        }),
+      }),
+    );
+  });
+
+  it('catches and reports telemetry errors on original console in case of bridge message failures', () => {
+    spy.mockImplementationOnce(() => {
+      throw new Error('Bridge transport crashed');
+    });
+
+    console.log('Telemetry payload');
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'A2UI Bridge Telemetry Error (Console):',
+      expect.any(Error),
+    );
+  });
+
+  it('catches and reports telemetry errors on original console in case of window.onerror message failures', () => {
+    spy.mockImplementationOnce(() => {
+      throw new Error('Bridge transport crashed');
+    });
+
+    if (window.onerror) {
+      window.onerror('Uncaught exception', 'app.js', 10, 5);
+    }
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'A2UI Bridge Telemetry Error (Window Error):',
+      expect.any(Error),
+    );
+  });
+
+  it('catches and reports telemetry errors on original console in case of unhandledrejection message failures', () => {
+    spy.mockImplementationOnce(() => {
+      throw new Error('Bridge transport crashed');
+    });
+
+    const event = new PromiseRejectionEvent('unhandledrejection', {
+      promise: Promise.resolve(),
+      reason: 'Async failure',
+    });
+    window.dispatchEvent(event);
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'A2UI Bridge Telemetry Error (Unhandled Rejection):',
+      expect.any(Error),
+    );
+  });
+
+  it('delegates to the original window.onerror handler after capturing error telemetry', () => {
+    const originalOnErrorMock = vi.fn();
+    window.onerror = originalOnErrorMock;
+
+    setupInstrumentationOverrides();
+
+    if (window.onerror) {
+      window.onerror('Script failed', 'app.js', 20, 10);
+    }
+
+    expect(originalOnErrorMock).toHaveBeenCalledWith('Script failed', 'app.js', 20, 10, undefined);
+  });
+
+  it('handles window.onerror missing/undefined parameters gracefully routing default trace telemetry', () => {
+    if (window.onerror) {
+      window.onerror('Minimal failure message', undefined, undefined, undefined);
+    }
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {
+          level: 'error',
+          message: 'Minimal failure message',
+          stack: ':0:0',
+        },
+      }),
+    );
+  });
+
+  it('prevents infinite telemetry cycles by using recursion guard early-return', () => {
+    let innerCallCount = 0;
+
+    // Mock bridge sendMessage to call console.log, creating dynamic recursion
+    spy.mockImplementation(() => {
+      innerCallCount++;
+      console.log('Recursive inner log message');
+    });
+
+    console.log('Main external log trigger');
+
+    // Recursive log should be captured but early return prevents infinite telemetry loops
+    expect(innerCallCount).toBe(1);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          message: 'Main external log trigger',
         }),
       }),
     );

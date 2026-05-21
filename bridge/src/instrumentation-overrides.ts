@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {a2uiBridge, PreviewBridgeMessageType} from './preview-bridge';
+import {a2uiBridge} from './preview-bridge';
+import {PreviewBridgeMessageType} from './bridge-message';
 
 /**
  * Safely and deeply clones a value or object, resolving potential serialization
@@ -74,25 +75,13 @@ function deepCloneSafe(obj: unknown, ancestors: Set<unknown> = new Set<unknown>(
 }
 
 /**
- * Safely serializes an array of arguments by mapping each argument through `deepCloneSafe`.
- * Useful for processing variadic function inputs (such as console log parameters)
- * before they are passed through the communication bridge to the host.
- *
- * @param args An array of arguments to serialize.
- * @returns A new array containing the safely cloned arguments.
- */
-function safeSerialize(args: unknown[]): unknown[] {
-  return args.map(arg => deepCloneSafe(arg));
-}
-
-/**
  * Injects telemetry hooks and overrides into global console functions and window-level
  * error events within a browser environment.
  *
  * Specifically, this function:
  * 1. Intercepts global logging methods (`console.log`, `console.warn`, `console.error`,
  *    `console.info`, and `console.debug`), forwarding the logged content as a `CONSOLE_LOG`
- *    telemetry message over the `a2uiBridge` before passing them to the original implementation.
+ *    telemetry message over the `a2uiBridge` after passing them to the original implementation.
  * 2. Installs a custom `window.onerror` handler to capture and forward unhandled synchronous
  *    runtime errors.
  * 3. Installs a window-level listener for `'unhandledrejection'` events to capture and forward
@@ -116,9 +105,19 @@ export function setupInstrumentationOverrides(): void {
     'debug',
   ];
 
+  interface InstrumentedConsoleMethod {
+    (...args: unknown[]): void;
+    __a2uiOriginal?: (...args: unknown[]) => void;
+  }
+
   methods.forEach(method => {
-    const original = console[method];
-    console[method] = (...args: unknown[]) => {
+    const current = console[method] as InstrumentedConsoleMethod;
+    if (current && current.__a2uiOriginal) {
+      // Already instrumented, skip re-wrapping to prevent nested closures and leaks
+      return;
+    }
+    const original = current;
+    const wrapper = (...args: unknown[]) => {
       original.apply(console, args);
 
       if (isSerializing) return;
@@ -151,6 +150,8 @@ export function setupInstrumentationOverrides(): void {
         isSerializing = false;
       }
     };
+    (wrapper as InstrumentedConsoleMethod).__a2uiOriginal = original;
+    console[method] = wrapper;
   });
 
   const originalOnError = window.onerror;

@@ -16,7 +16,7 @@
 
 import {LitElement, html, TemplateResult} from 'lit';
 import {customElement, state} from 'lit/decorators.js';
-import {MessageProcessor, SurfaceModel, MessageProcessorCatalog} from '@a2ui/web_core/v0_9';
+import {MessageProcessor, SurfaceModel, Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {basicCatalog} from '@a2ui/lit/v0_9';
 import {a2uiBridge, SurfaceStateSubscription} from 'a2ui-bridge';
 
@@ -28,7 +28,7 @@ import {a2uiBridge, SurfaceStateSubscription} from 'a2ui-bridge';
 export class AppRoot extends LitElement {
   /** The core basic catalog message processor consuming postMessage instructions. */
   private processor = new MessageProcessor(
-    [basicCatalog as unknown as MessageProcessorCatalog],
+    [basicCatalog as unknown as Catalog<ComponentApi>],
     action => {
       a2uiBridge.sendAction(action);
     },
@@ -36,7 +36,7 @@ export class AppRoot extends LitElement {
 
   /** The active reactive Surface Model mapped for template rendering. */
   @state()
-  private surface: SurfaceModel<unknown> | undefined;
+  private surface: SurfaceModel<ComponentApi> | undefined;
 
   /** The active Preview Bridge connection handle managing surface data synchronization. */
   private rendererConnection: SurfaceStateSubscription | null = null;

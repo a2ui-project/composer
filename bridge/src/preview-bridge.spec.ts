@@ -15,13 +15,9 @@
  */
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {
-  PreviewBridge,
-  a2uiBridge,
-  SurfaceGroupLike,
-  SurfaceInstance,
-  PreviewBridgeMessageType,
-} from './preview-bridge';
+import {PreviewBridge, a2uiBridge, SurfaceGroupLike, SurfaceInstance} from './preview-bridge';
+import {PreviewBridgeMessageType} from './bridge-message';
+import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
 describe('PreviewBridge Core API Runtime', () => {
   let bridge: PreviewBridge;
@@ -47,34 +43,65 @@ describe('PreviewBridge Core API Runtime', () => {
     vi.clearAllMocks();
   });
 
-  it('registers message processors and routes payload types perfectly', () => {
-    const handler = vi.fn();
-    bridge['registerMessageProcessor']('TEST_EVENT', handler);
-
+  it('routes SET_BLOCKING_STATE events correctly and handles overlays', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window,
-        data: {type: 'TEST_EVENT', payload: {status: 'active'}},
+        data: {
+          type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+          payload: {blocked: true, message: 'Freezing UI'},
+        },
       }),
     );
 
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith({status: 'active'});
+    const overlay = document.getElementById('a2ui-blocking-overlay');
+    expect(overlay).not.toBeNull();
+    expect(document.getElementById('a2ui-blocking-message')?.innerText).toBe('Freezing UI');
   });
 
-  it('prevents duplicate message handlers from triggering multiple times naturally', () => {
-    const handler = vi.fn();
-    bridge['registerMessageProcessor']('TEST_EVENT', handler);
-    bridge['registerMessageProcessor']('TEST_EVENT', handler);
+  it('replaces the previous active renderer and warns when attachRenderer is invoked repeatedly', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const mockGroup1 = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const mockGroup2 = {onSurfaceCreated: {subscribe: vi.fn()}};
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        source: window,
-        data: {type: 'TEST_EVENT', payload: 123},
-      }),
+    const processor1 = {processMessages: vi.fn()};
+    const processor2 = {processMessages: vi.fn()};
+
+    const conn1 = bridge.attachRenderer(processor1, {
+      surfaceGroup: mockGroup1 as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+    });
+
+    const conn2 = bridge.attachRenderer(processor2, {
+      surfaceGroup: mockGroup2 as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'PreviewBridge: A renderer is already attached. Replacing the previous renderer.',
     );
+    expect(bridge['activeRenderer']?.processor).toBe(processor2);
 
-    expect(handler).toHaveBeenCalledTimes(1);
+    conn1.unsubscribe();
+    conn2.unsubscribe();
+  });
+
+  it('clears the activeRenderer reference hook upon unsubscription', () => {
+    const mockGroup = {
+      onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+    };
+    const processor = {processMessages: vi.fn()};
+
+    const conn = bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+    });
+
+    expect(bridge['activeRenderer']?.processor).toBe(processor);
+
+    conn.unsubscribe();
+
+    expect(bridge['activeRenderer']).toBeNull();
   });
 
   it('emits RENDERER_READY signal automatically upon DOM readiness', async () => {
@@ -223,21 +250,6 @@ describe('PreviewBridge Core API Runtime', () => {
     );
   });
 
-  it('unregisters message processor successfully', () => {
-    const handler = vi.fn();
-    bridge['registerMessageProcessor']('TEST_EVENT', handler);
-    bridge['unregisterMessageProcessor']('TEST_EVENT', handler);
-
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        source: window,
-        data: {type: 'TEST_EVENT', payload: {status: 'active'}},
-      }),
-    );
-
-    expect(handler).not.toHaveBeenCalled();
-  });
-
   it('ignores sendMessage when window.parent is null or equal to window in non-test env', () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
@@ -249,45 +261,75 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('ignores malformed incoming message payloads without throwing', () => {
-    const handler = vi.fn();
-    bridge['registerMessageProcessor']('TEST_EVENT', handler);
+    const mockGroup = {
+      onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+    };
+    const processor = {processMessages: vi.fn()};
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        source: window,
-        data: null,
-      }),
-    );
+    const conn = bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+    });
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        source: window,
-        data: 'malformed string data',
-      }),
-    );
+    expect(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: null,
+        }),
+      );
 
-    expect(handler).not.toHaveBeenCalled();
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: 'malformed string data',
+        }),
+      );
+    }).not.toThrow();
+
+    expect(processor.processMessages).not.toHaveBeenCalled();
+    conn.unsubscribe();
   });
 
-  it('catches and logs errors thrown by message processor handlers', () => {
+  it('catches and logs errors thrown by the attached dynamic renderer during RENDER_A2UI dispatching', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const throwingHandler = vi.fn().mockImplementation(() => {
-      throw new Error('Handler failed');
+    const mockGroup = {
+      onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+    };
+
+    const throwingProcessor = {
+      processMessages: vi.fn().mockImplementation(() => {
+        throw new Error('Dynamic renderer compilation error');
+      }),
+    };
+
+    const conn = bridge.attachRenderer(throwingProcessor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
     });
-    bridge['registerMessageProcessor']('THROWING_EVENT', throwingHandler);
 
     window.dispatchEvent(
       new MessageEvent('message', {
         source: window,
-        data: {type: 'THROWING_EVENT', payload: {}},
+        data: {
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload: [
+            {
+              version: 'v0.9',
+              updateComponents: {surfaceId: 'surf-1', components: []},
+            },
+          ],
+        },
       }),
     );
 
-    expect(throwingHandler).toHaveBeenCalled();
+    expect(throwingProcessor.processMessages).toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledWith(
-      'Error executing message processor for type THROWING_EVENT:',
+      'PreviewBridge: Error during direct RENDER_A2UI payload dispatch:',
       expect.any(Error),
     );
+
+    conn.unsubscribe();
   });
 
   describe('sendAction and connectSurfaceGroup APIs', () => {
@@ -480,8 +522,24 @@ describe('PreviewBridge Core API Runtime', () => {
   describe('Two-Step Dispatch and Lifecycle Routing', () => {
     it('intercepts RENDER_A2UI messages and performs a two-step dispatch when createSurface is present', async () => {
       vi.useFakeTimers();
-      const handler = vi.fn();
-      bridge['registerMessageProcessor'](PreviewBridgeMessageType.RENDER_A2UI, handler);
+
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+      const processMessagesSpy = vi.fn();
+      const onSurfaceClearedSpy = vi.fn();
+
+      const conn = bridge.attachRenderer(
+        {processMessages: processMessagesSpy},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+          onSurfaceCleared: onSurfaceClearedSpy,
+        },
+      );
+
+      // Pre-track an old active surface
+      bridge['activeRenderer']?.activeSurfaceIds.add('old-surface');
 
       const payload = [
         {
@@ -497,22 +555,39 @@ describe('PreviewBridge Core API Runtime', () => {
         }),
       );
 
-      // Step 1: Immediate dispatch of null to trigger unmounting/reset
-      expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenNthCalledWith(1, null);
+      // Step 1: Immediate dispatch of null to trigger unmounting/reset of old-surface
+      expect(processMessagesSpy).toHaveBeenCalledTimes(1);
+      expect(processMessagesSpy).toHaveBeenNthCalledWith(1, [
+        {
+          version: 'v0.9',
+          deleteSurface: {surfaceId: 'old-surface'},
+        } as A2uiMessage,
+      ]);
+      expect(onSurfaceClearedSpy).toHaveBeenCalledTimes(1);
 
       // Step 2: Advance timer tick to trigger deferred render payload
       vi.advanceTimersByTime(0);
 
-      expect(handler).toHaveBeenCalledTimes(2);
-      expect(handler).toHaveBeenNthCalledWith(2, payload);
+      expect(processMessagesSpy).toHaveBeenCalledTimes(2);
+      expect(processMessagesSpy).toHaveBeenNthCalledWith(2, payload as A2uiMessage[]);
 
+      conn.unsubscribe();
       vi.useRealTimers();
     });
 
     it('intercepts RENDER_A2UI messages and dispatches immediately without reset if createSurface is absent', () => {
-      const handler = vi.fn();
-      bridge['registerMessageProcessor'](PreviewBridgeMessageType.RENDER_A2UI, handler);
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+      const processMessagesSpy = vi.fn();
+
+      const conn = bridge.attachRenderer(
+        {processMessages: processMessagesSpy},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
 
       const payload = [
         {
@@ -529,8 +604,10 @@ describe('PreviewBridge Core API Runtime', () => {
       );
 
       // Standard updates bypass the two-step dispatch to prevent visual flicker
-      expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(payload);
+      expect(processMessagesSpy).toHaveBeenCalledTimes(1);
+      expect(processMessagesSpy).toHaveBeenCalledWith(payload);
+
+      conn.unsubscribe();
     });
   });
 

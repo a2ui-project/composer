@@ -19,80 +19,24 @@ import './instrumentation-overrides';
 
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
-/**
- * Enum representing the supported message types transmitted across the Preview Bridge.
- */
-export enum PreviewBridgeMessageType {
-  A2UI_CATALOG = 'A2UI_CATALOG',
-  CONSOLE_LOG = 'CONSOLE_LOG',
-  DATA_MODEL_CHANGE = 'DATA_MODEL_CHANGE',
-  FORCE_UNBLOCK = 'FORCE_UNBLOCK',
-  GET_CATALOG = 'GET_CATALOG',
-  RENDER_A2UI = 'RENDER_A2UI',
-  RENDERER_READY = 'RENDERER_READY',
-  SEND_TO_SERVER = 'SEND_TO_SERVER',
-  SET_BLOCKING_STATE = 'SET_BLOCKING_STATE',
-}
+import {PreviewBridgeMessageType, BridgeMessage} from './bridge-message';
+export * from './bridge-message';
 
-/**
- * Represents a message structure transmitted across the Preview Bridge iframe boundary.
- */
-export interface BridgeMessage {
-  /** The unique type identifier representing the event. */
-  type: PreviewBridgeMessageType;
-  /** Optional payload data associated with the message event. */
-  payload?: unknown;
-  /** Extensible custom properties. */
-  [key: string]: unknown;
-}
+import type {
+  DataModelObservable,
+  SurfaceInstance,
+  SurfaceGroupLike,
+  RendererConfig,
+  SurfaceStateSubscription,
+} from './render-config';
 
-/**
- * A callback function signature for handling dispatched Bridge Messages.
- *
- * @param payload The un-enveloped event payload data.
- */
-export type MessageProcessor = (payload: unknown) => void;
-
-/**
- * A lightweight, framework-agnostic representation of an observable data model stream.
- * Enables subscribing to reactive updates on component value states.
- */
-export interface DataModelObservable {
-  /**
-   * Subscribes a callback function to be notified of data model updates.
-   *
-   * @param path The nested object path to observe (empty string for the root model).
-   * @param cb The callback executed with the updated data model value payload.
-   * @returns A subscription handle exposing an unsubscribe cleanup method.
-   */
-  subscribe(path: string, cb: (val: unknown) => void): {unsubscribe(): void};
-}
-
-/**
- * Represents an active component surface instance rendered within a sandbox container.
- */
-export interface SurfaceInstance {
-  /** The unique identifier of the surface, corresponding to a Composer surface layout. */
-  id: string;
-  /** The reactive data model observable facilitating component value synchronization. */
-  dataModel: DataModelObservable;
-}
-
-/**
- * A framework-agnostic structural interface representing a collection or group of rendering surfaces.
- */
-export interface SurfaceGroupLike {
-  /** An observable stream emitting notifications when a new surface instance is created. */
-  onSurfaceCreated: {
-    /**
-     * Subscribes a callback to listen to new surface creation events.
-     *
-     * @param cb The callback executed with the newly created surface instance.
-     * @returns A subscription handle exposing an unsubscribe cleanup method.
-     */
-    subscribe(cb: (surface: SurfaceInstance) => void): {unsubscribe(): void};
-  };
-}
+export type {
+  DataModelObservable,
+  SurfaceInstance,
+  SurfaceGroupLike,
+  RendererConfig,
+  SurfaceStateSubscription,
+};
 
 /**
  * A framework-agnostic processor interface that handles A2UI protocol payloads.
@@ -106,32 +50,74 @@ export interface RendererProcessor {
   processMessages(payload: A2uiMessage[]): void;
 }
 
-/** Configuration and lifecycle callbacks for attaching a renderer. */
-export interface RendererConfig {
-  /** The reactive surface group model to connect for data synchronization. */
-  surfaceGroup: SurfaceGroupLike;
-  /** Invoked with the dynamic surfaceId when a new surface layout is built. */
-  onSurfaceReady: (surfaceId: string) => void;
-  /** Invoked when the surface needs to unmount or reset. */
-  onSurfaceCleared?: () => void;
-}
+/**
+ * Represents an active dynamic rendering connection hook mapped inside the bridge.
+ */
+interface ActiveRenderer {
+  /** The framework-specific message processor instance. */
+  processor: RendererProcessor;
 
-/** A subscription handle to detach a renderer and clean up connections. */
-export interface SurfaceStateSubscription {
-  /** Unsubscribes the renderer and cleans up all active bridge bindings. */
-  unsubscribe(): void;
+  /** The configurations and dynamic callbacks. */
+  config: RendererConfig;
+
+  /** Active dynamic surface IDs tracked for deletion/reset. */
+  activeSurfaceIds: Set<string>;
 }
 
 /**
- * Inter-frame communication bridge establishing connection pathways
- * between the catalog container and the rendering shell host.
+ * Core inter-frame communication transport orchestrating A2UI protocol synchronization
+ * between the parent Shell container and the isolated sandbox frame running the renderer stack.
+ *
+ * Registered as a global runtime singleton (`window.a2uiBridge`), the bridge acts as the
+ * bidirectional messaging gateway that translates JSON postMessage signals into reactive framework
+ * states and handles cross-origin handshakes, user interactions, overlay states, and SPA redirects.
+ *
+ * ### 🔄 Bidirectional Interaction Signals
+ * 1. **Shell ➡️ Bridge (Incoming Messages)**:
+ *    - `RENDER_A2UI`: Raw protocol layout payloads containing component layout blueprints.
+ *    - `DATA_MODEL_CHANGE`: Incremental state mutations synchronized across frame contexts.
+ *    - `SET_BLOCKING_STATE`: Blocks browser interactions by launching a full-screen dynamic overlay.
+ *    - `GET_CATALOG`: Fetches catalog metadata definitions, stripping potential JS security prefixes.
+ *
+ * 2. **Bridge ➡️ Shell (Outgoing Messages)**:
+ *    - `RENDERER_READY`: Bootstrap handshake signal dispatched when the sandbox window is ready.
+ *    - `SEND_TO_SERVER`: Relays user inputs and interactions (clicks, keyups) from components back to the composer.
+ *    - `DATA_MODEL_CHANGE`: Transmits state value modifications back upward for cross-surface bindings.
+ *    - `FORCE_UNBLOCK`: Emergency override signal allowing users to force-unblock locked frames.
+ *
+ * ### 🕒 Lifecycle Phases
+ *
+ * #### Phase 1: Bootstrapping & Handshake
+ * Instantiated on module load. Immediately hooks into window postMessage events.
+ * Listens to `DOMContentLoaded` (or reads browser state synchronously) and queues a macro-task
+ * tick (`setTimeout`) to dispatch the `RENDERER_READY` handshake signal upward to the parent Shell.
+ *
+ * #### Phase 2: Renderer Registration
+ * Framework catalogs (Angular, Lit) wire themselves into the bridge context using {@link attachRenderer}.
+ * This sets up core processing hooks, lifecycle state handlers (`onSurfaceReady`, `onSurfaceCleared`),
+ * and reactive data binding pipelines.
+ *
+ * #### Phase 3: The "Two-Step Layout Dispatch"
+ * To prevent rendering race-conditions, flickers, and memory leaks on hot-reloads or template swaps,
+ * the bridge utilizes a specialized double-tick scheduling model upon receiving `createSurface` commands:
+ * - **Step 1 (Sync Reset)**: Synchronously dispatches a `null` payload to immediately trigger unmounting/reset
+ *   of any active rendering layout.
+ * - **Step 2 (Deferred Mount)**: Defers rendering the actual blueprint layout to the next event loop tick
+ *   using `setTimeout(..., 0)` to guarantee clean canvas initialization.
+ *
+ * #### Phase 4: Reactive State Mapping
+ * Upon surface registration, the bridge constructs a dynamic, deep reactive observer map
+ * mapping surface events to data model mutations, converting state changes to outbox posts.
+ * A central Map Connection Registry manages subscription lifecycle hooks, preventing linear leak growth.
+ *
+ * #### Phase 5: Complete Teardown
+ * When the parent frame refreshes, hot-reloads, or in test environments, the {@link destroy} method
+ * fully cleanses the runtime space: removing window listeners, canceling pending macro-task timers,
+ * destroying overlays, and invoking connection unsubscriptions to guarantee a clean slate.
  */
 export class PreviewBridge {
-  /**
-   * A registry mapping message type string keys to a set of registered callback functions.
-   * Used to dispatch incoming messages from the parent frame to their respective processors.
-   */
-  private processors = new Map<PreviewBridgeMessageType | string, Set<MessageProcessor>>();
+  /** The single active framework rendering stack connection hook. */
+  private activeRenderer: ActiveRenderer | null = null;
 
   /**
    * A state flag indicating whether the bridge is actively listening to global window message events.
@@ -156,13 +142,11 @@ export class PreviewBridge {
 
   /**
    * Initializes a new PreviewBridge instance.
-   * Sets up the message listener, starts the lifecycle handshake timer, and registers
-   * the catalog query handlers to establish frame communication.
+   * Sets up the message listener and starts the lifecycle handshake timer.
    */
   constructor() {
     this.initMessageListener();
     this.initLifecycleHandshake();
-    this.createCatalogProcessor();
   }
 
   /**
@@ -179,15 +163,27 @@ export class PreviewBridge {
       return {unsubscribe: () => {}};
     }
 
+    if (this.activeRenderer) {
+      console.warn(
+        'PreviewBridge: A renderer is already attached. Replacing the previous renderer.',
+      );
+      this.resetActiveRendererState();
+    }
+
     const surfaceConnection = this.connectSurfaceGroup(config.surfaceGroup);
     const activeSurfaceIds = new Set<string>();
 
-    const renderProcessor = this.createRenderProcessor(activeSurfaceIds, processor, config);
-    this.registerMessageProcessor(PreviewBridgeMessageType.RENDER_A2UI, renderProcessor);
+    this.activeRenderer = {
+      processor,
+      config,
+      activeSurfaceIds,
+    };
 
     const attachConnection = {
       unsubscribe: () => {
-        this.unregisterMessageProcessor(PreviewBridgeMessageType.RENDER_A2UI, renderProcessor);
+        if (this.activeRenderer?.processor === processor) {
+          this.activeRenderer = null;
+        }
         surfaceConnection.unsubscribe();
         this.activeConnections.delete(attachConnection);
       },
@@ -212,9 +208,13 @@ export class PreviewBridge {
       clearTimeout(this.handshakeTimeoutId);
       this.handshakeTimeoutId = undefined;
     }
-    this.processors.clear();
+    if (this.renderTimeoutId !== undefined) {
+      clearTimeout(this.renderTimeoutId);
+      this.renderTimeoutId = undefined;
+    }
     this.handleBlockingOverlay(false);
     this.isListening = false;
+    this.activeRenderer = null;
 
     // Clean up active connections
     for (const connection of this.activeConnections) {
@@ -259,8 +259,7 @@ export class PreviewBridge {
    * Event listener callback for the incoming messages from the Shell.
    *
    * Safely filters messages to ensure they originate from the same window or the parent window,
-   * handles blocking state transitions (`SET_BLOCKING_STATE`), and dispatches the payload
-   * to any registered message processor callbacks.
+   * and dispatches incoming messaging events to specialized static methods.
    *
    * @param event The raw window message event.
    */
@@ -270,89 +269,162 @@ export class PreviewBridge {
     const data = event.data as BridgeMessage;
     if (!data || typeof data !== 'object' || !data.type) return;
 
-    if (data.type === PreviewBridgeMessageType.SET_BLOCKING_STATE) {
-      const payloadObj = data.payload as {blocked?: boolean; message?: string} | undefined;
-      const blocked = !!(payloadObj && payloadObj.blocked);
-      const messageStr = payloadObj && payloadObj.message;
-      this.handleBlockingOverlay(blocked, messageStr);
-    }
+    switch (data.type) {
+      case PreviewBridgeMessageType.SET_BLOCKING_STATE:
+        this.handleSetBlockingState(data.payload);
+        break;
 
-    // Central Interceptor: Route Composer Data Model debugger edits directly to RENDER_A2UI
-    if (data.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
-      const payloadObj = data.payload as {updateDataModel?: unknown} | undefined;
-      if (payloadObj && payloadObj.updateDataModel) {
-        const renderPayload = [
-          {
-            version: 'v0.9',
-            updateDataModel: payloadObj.updateDataModel,
-          },
-        ];
-        const rendererHandlers = this.processors.get(PreviewBridgeMessageType.RENDER_A2UI);
-        if (rendererHandlers) {
-          Array.from(rendererHandlers).forEach(handler => {
-            try {
-              handler(renderPayload);
-            } catch (err) {
-              console.error('PreviewBridge: Error dispatching RENDER_A2UI payload:', err);
-            }
-          });
-        }
-        return;
-      }
-    }
+      case PreviewBridgeMessageType.DATA_MODEL_CHANGE:
+        this.handleIncomingDataModelChange(data.payload);
+        break;
 
-    // Central Interceptor: Enforce robust Two-Step Dispatch on layout re-creation
-    if (data.type === PreviewBridgeMessageType.RENDER_A2UI) {
-      const payload = data.payload !== undefined ? data.payload : data;
-      const renderHandlers = this.processors.get(PreviewBridgeMessageType.RENDER_A2UI);
-      if (renderHandlers) {
-        const hasCreateSurface =
-          Array.isArray(payload) &&
-          payload.some(item => item && typeof item === 'object' && 'createSurface' in item);
+      case PreviewBridgeMessageType.RENDER_A2UI:
+        this.dispatchRenderA2ui(data.payload !== undefined ? data.payload : data);
+        break;
 
-        if (hasCreateSurface) {
-          // Step 1: Synchronously dispatch null to trigger unmounting/reset
-          Array.from(renderHandlers).forEach(handler => {
-            try {
-              handler(null);
-            } catch (err) {
-              console.error(
-                'PreviewBridge: Error dispatching RENDER_A2UI null reset payload:',
-                err,
-              );
-            }
-          });
+      case PreviewBridgeMessageType.GET_CATALOG:
+        void this.handleGetCatalog();
+        break;
 
-          // Step 2: Defer actual payload dispatch to the next event loop tick to trigger clean remount
-          if (this.renderTimeoutId) {
-            clearTimeout(this.renderTimeoutId);
-          }
-          this.renderTimeoutId = setTimeout(() => {
-            Array.from(renderHandlers).forEach(handler => {
-              try {
-                handler(payload);
-              } catch (err) {
-                console.error('PreviewBridge: Error dispatching RENDER_A2UI actual payload:', err);
-              }
-            });
-          }, 0);
-          return;
-        }
-      }
-    }
-
-    const handlers = this.processors.get(data.type);
-    if (handlers) {
-      const payload = data.payload !== undefined ? data.payload : data;
-      Array.from(handlers).forEach(handler => {
-        try {
-          handler(payload);
-        } catch (err) {
-          console.error(`Error executing message processor for type ${data.type}:`, err);
-        }
-      });
+      default:
+        console.warn(`PreviewBridge: Unrecognized incoming message type: ${data.type}`);
     }
   };
+
+  /**
+   * Handles incoming blocking overlay requests.
+   */
+  private handleSetBlockingState(payload: unknown): void {
+    const payloadObj = payload as {blocked?: boolean; message?: string} | undefined;
+    const blocked = !!(payloadObj && payloadObj.blocked);
+    const messageStr = payloadObj && payloadObj.message;
+    this.handleBlockingOverlay(blocked, messageStr);
+  }
+
+  /**
+   * Dynamic interceptor mapping incoming state changes back into a standard render lifecycle payload.
+   */
+  private handleIncomingDataModelChange(payload: unknown): void {
+    const payloadObj = payload as {updateDataModel?: unknown} | undefined;
+    if (payloadObj && payloadObj.updateDataModel) {
+      const renderPayload = [
+        {
+          version: 'v0.9',
+          updateDataModel: payloadObj.updateDataModel,
+        },
+      ];
+      this.dispatchRenderA2ui(renderPayload);
+    }
+  }
+
+  /**
+   * Orchestrates applying rendering payloads using the Two-Step Dispatch pattern.
+   * If a createSurface instruction is present, it synchronously triggers a clear/unmount,
+   * then defers the rendering actual layout command payload to a clean event cycle task.
+   */
+  private dispatchRenderA2ui(payload: unknown): void {
+    if (!this.activeRenderer) {
+      console.warn('PreviewBridge: Received RENDER_A2UI but no active renderer is attached.');
+      return;
+    }
+
+    const hasCreateSurface =
+      Array.isArray(payload) &&
+      payload.some(item => item && typeof item === 'object' && 'createSurface' in item);
+
+    if (hasCreateSurface) {
+      // Step 1: Synchronously dispatch null to trigger unmounting/reset
+      try {
+        this.handleRenderA2ui(null);
+      } catch (err) {
+        console.error('PreviewBridge: Error during RENDER_A2UI null reset dispatch:', err);
+      }
+
+      // Step 2: Defer actual payload dispatch to the next event loop tick to trigger clean remount
+      if (this.renderTimeoutId) {
+        clearTimeout(this.renderTimeoutId);
+      }
+      this.renderTimeoutId = setTimeout(() => {
+        try {
+          this.handleRenderA2ui(payload);
+        } catch (err) {
+          console.error('PreviewBridge: Error during deferred RENDER_A2UI payload dispatch:', err);
+        }
+      }, 0);
+    } else {
+      // Incremental state updates bypass the unmounting phase to prevent flicker
+      try {
+        this.handleRenderA2ui(payload);
+      } catch (err) {
+        console.error('PreviewBridge: Error during direct RENDER_A2UI payload dispatch:', err);
+      }
+    }
+  }
+
+  /**
+   * Renders the specified payload array, mapping surface creation handles,
+   * or delegates a resetting null command.
+   */
+  private handleRenderA2ui(payload: unknown): void {
+    if (!this.activeRenderer) return;
+
+    if (payload === null) {
+      this.resetActiveRendererState();
+      return;
+    }
+
+    if (Array.isArray(payload)) {
+      const createSurfaceCommand = payload.find(
+        (item: unknown) => item && typeof item === 'object' && 'createSurface' in item,
+      ) as {createSurface?: {surfaceId?: string}} | undefined;
+
+      if (createSurfaceCommand && createSurfaceCommand.createSurface) {
+        const surfaceId = createSurfaceCommand.createSurface.surfaceId;
+        if (surfaceId) {
+          // Track the surface BEFORE processing. If a subsequent command in
+          // the payload has a typo and throws an error, we still want to
+          // clean this surface up next time.
+          this.activeRenderer.activeSurfaceIds.add(surfaceId);
+        } else {
+          console.warn('PreviewBridge: createSurface command found, but no surfaceId present.');
+        }
+      }
+
+      this.activeRenderer.processor.processMessages(payload as A2uiMessage[]);
+
+      if (createSurfaceCommand && createSurfaceCommand.createSurface?.surfaceId) {
+        this.activeRenderer.config.onSurfaceReady(createSurfaceCommand.createSurface.surfaceId);
+      }
+    } else {
+      console.warn('PreviewBridge: Unexpected non-array RENDER_A2UI payload received:', payload);
+    }
+  }
+
+  /**
+   * Resets active renderer properties, clearing tracking handles and posting delete signals.
+   */
+  private resetActiveRendererState(): void {
+    if (!this.activeRenderer) return;
+
+    const {processor, config, activeSurfaceIds} = this.activeRenderer;
+    for (const surfaceId of activeSurfaceIds) {
+      try {
+        processor.processMessages([
+          {
+            version: 'v0.9',
+            deleteSurface: {surfaceId},
+          } as A2uiMessage,
+        ]);
+      } catch (e: unknown) {
+        console.warn(`PreviewBridge: Error clearing surface ${surfaceId} during reset:`, e);
+      }
+    }
+    activeSurfaceIds.clear();
+
+    if (config.onSurfaceCleared) {
+      config.onSurfaceCleared();
+    }
+  }
 
   /**
    * Event listener callback executed when the DOM content is fully loaded.
@@ -363,104 +435,11 @@ export class PreviewBridge {
   };
 
   /**
-   * Registers a callback function to handle incoming bridge messages of a specific type.
-   * Multiple handlers can be registered for a single message type.
-   *
-   * @param type The unique message event type identifier.
-   * @param handler The callback function executed with the message payload.
-   */
-  private registerMessageProcessor(
-    type: PreviewBridgeMessageType | string,
-    handler: MessageProcessor,
-  ): void {
-    if (!this.processors.has(type)) {
-      this.processors.set(type, new Set<MessageProcessor>());
-    }
-    this.processors.get(type)!.add(handler);
-  }
-
-  /**
-   * Unregisters a previously registered message handler from a specific message type.
-   * If no handlers remain for the type, the type is removed from the registry to reclaim memory.
-   *
-   * @param type The unique message event type identifier.
-   * @param handler The callback function to remove.
-   */
-  private unregisterMessageProcessor(
-    type: PreviewBridgeMessageType | string,
-    handler: MessageProcessor,
-  ): void {
-    const handlers = this.processors.get(type);
-    if (handlers) {
-      handlers.delete(handler);
-      if (handlers.size === 0) {
-        this.processors.delete(type);
-      }
-    }
-  }
-
-  private createRenderProcessor(
-    activeSurfaceIds: Set<string>,
-    processor: RendererProcessor,
-    config: RendererConfig,
-  ) {
-    return (payload: unknown) => {
-      if (payload === null) {
-        for (const surfaceId of activeSurfaceIds) {
-          try {
-            processor.processMessages([
-              {
-                version: 'v0.9',
-                deleteSurface: {surfaceId},
-              } as A2uiMessage,
-            ]);
-          } catch (e: unknown) {
-            console.warn(`PreviewBridge: Error clearing surface ${surfaceId} during reset:`, e);
-          }
-        }
-        activeSurfaceIds.clear();
-
-        if (config.onSurfaceCleared) {
-          config.onSurfaceCleared();
-        }
-
-        return;
-      }
-
-      if (Array.isArray(payload)) {
-        const createSurfaceCommand = payload.find(
-          (item: unknown) => item && typeof item === 'object' && 'createSurface' in item,
-        ) as {createSurface?: {surfaceId?: string}} | undefined;
-
-        if (createSurfaceCommand && createSurfaceCommand.createSurface) {
-          const surfaceId = createSurfaceCommand.createSurface.surfaceId;
-          if (surfaceId) {
-            // Track the surface BEFORE processing. If a subsequent command in
-            // the payload has a typo and throws an error, we still want to
-            // clean this surface up next time.
-            activeSurfaceIds.add(surfaceId);
-          } else {
-            console.warn('PreviewBridge: createSurface command found, but no surfaceId present.');
-          }
-        }
-
-        processor.processMessages(payload as A2uiMessage[]);
-
-        if (createSurfaceCommand && createSurfaceCommand.createSurface?.surfaceId) {
-          config.onSurfaceReady(createSurfaceCommand.createSurface.surfaceId);
-        }
-      } else {
-        console.warn('PreviewBridge: Unexpected non-array RENDER_A2UI payload received:', payload);
-      }
-    };
-  }
-
-  /**
    * Encapsulates the multi-level reactive subscription pipeline between surface lifecycle
    * events and data model mutations, automatically formatting and transmitting synchronization
    * payloads (`DATA_MODEL_CHANGE`) back to the parent Composer window.
    * Incorporates defensive guards for mock structures and a Map Connection Registry to prevent
-   * duplicate listeners and linear memory leaks during tab switching or hot-reloading.
+   * duplicate listeners and memory leaks during tab switching or hot-reloading.
    *
    * @param surfaceGroup The surface group or catalog renderer service model to connect.
    * @returns A unified teardown handle exposing a single unsubscribe method to cleanly reclaim all child observers.
@@ -620,53 +599,51 @@ export class PreviewBridge {
   }
 
   /**
-   * Registers a message handler for retrieving the catalog definition configurations.
+   * Handles static requests to retrieve catalog configuration definitions.
    * Attempts to fetch from the catalog endpoint, implements fallback mechanisms to handle SPA
    * router redirects, strips JSON vulnerability safety prefixes, and transmits the resulting
    * JSON payload or error status back to the host container.
    */
-  private createCatalogProcessor(): void {
-    this.registerMessageProcessor(PreviewBridgeMessageType.GET_CATALOG, async () => {
-      if (typeof window === 'undefined' || !window.fetch) return;
-      try {
-        let res = await window.fetch('/catalog');
-        if (!res.ok) {
-          throw new Error(`Catalog fetch failed with status: ${res.status}`);
-        }
-        let rawText = await res.text();
-
-        // Detect if the server fell back to serving HTML (SPA fallback)
-        const isHtml =
-          rawText.trim().startsWith('<!doctype html') ||
-          rawText.trim().toLowerCase().startsWith('<html');
-        if (isHtml) {
-          const fallbackRes = await window.fetch('/catalog.json');
-          if (!fallbackRes.ok) {
-            throw new Error(
-              `Catalog fetch returned HTML and fallback to /catalog.json failed with status: ${fallbackRes.status}`,
-            );
-          }
-          res = fallbackRes;
-          rawText = await res.text();
-        }
-
-        const safetyPrefix = ")]}'\n";
-        const jsonText = rawText.startsWith(safetyPrefix)
-          ? rawText.substring(safetyPrefix.length)
-          : rawText;
-        const catalog = JSON.parse(jsonText);
-        this.sendMessage({
-          type: PreviewBridgeMessageType.A2UI_CATALOG,
-          payload: {catalog},
-        });
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        this.sendMessage({
-          type: PreviewBridgeMessageType.A2UI_CATALOG,
-          payload: {catalog: {}, error: {message: errorMessage}},
-        });
+  private async handleGetCatalog(): Promise<void> {
+    if (typeof window === 'undefined' || !window.fetch) return;
+    try {
+      let res = await window.fetch('/catalog');
+      if (!res.ok) {
+        throw new Error(`Catalog fetch failed with status: ${res.status}`);
       }
-    });
+      let rawText = await res.text();
+
+      // Detect if the server fell back to serving HTML (SPA fallback)
+      const isHtml =
+        rawText.trim().startsWith('<!doctype html') ||
+        rawText.trim().toLowerCase().startsWith('<html');
+      if (isHtml) {
+        const fallbackRes = await window.fetch('/catalog.json');
+        if (!fallbackRes.ok) {
+          throw new Error(
+            `Catalog fetch returned HTML and fallback to /catalog.json failed with status: ${fallbackRes.status}`,
+          );
+        }
+        res = fallbackRes;
+        rawText = await res.text();
+      }
+
+      const safetyPrefix = ")]}'\n";
+      const jsonText = rawText.startsWith(safetyPrefix)
+        ? rawText.substring(safetyPrefix.length)
+        : rawText;
+      const catalog = JSON.parse(jsonText);
+      this.sendMessage({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: {catalog},
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.sendMessage({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: {catalog: {}, error: {message: errorMessage}},
+      });
+    }
   }
 }
 
