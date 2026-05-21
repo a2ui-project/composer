@@ -14,76 +14,13 @@
  * limitations under the License.
  */
 
-import {LitElement, html, TemplateResult} from 'lit';
-import {customElement, state} from 'lit/decorators.js';
-import {MessageProcessor, SurfaceModel, Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
+import {bootstrapLitSandbox} from 'a2ui-bridge/lit';
 import {basicCatalog} from '@a2ui/lit/v0_9';
-import {a2uiBridge, SurfaceStateSubscription} from 'a2ui-bridge';
+import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 
-/**
- * Core catalog provider interface hosting and exposing Lit-based
- * component templates to the central Composer.
- */
-@customElement('app-root')
-export class AppRoot extends LitElement {
-  /** The core basic catalog message processor consuming postMessage instructions. */
-  private processor = new MessageProcessor(
-    [basicCatalog as unknown as Catalog<ComponentApi>],
-    action => {
-      a2uiBridge.sendAction(action);
-    },
-  );
+// Export AppRoot class constructor value with a safe double cast to bypass duplicate-dependency nominal mismatches:
+export const AppRoot = bootstrapLitSandbox([basicCatalog as unknown as Catalog<ComponentApi>]);
 
-  /** The active reactive Surface Model mapped for template rendering. */
-  @state()
-  private surface: SurfaceModel<ComponentApi> | undefined;
-
-  /** The active Preview Bridge connection handle managing surface data synchronization. */
-  private rendererConnection: SurfaceStateSubscription | null = null;
-
-  /**
-   * Custom element lifecycle hook called when the catalog sandbox is attached to the DOM.
-   * Wires the global Preview Bridge connection and dynamically resolves surface IDs.
-   */
-  public connectedCallback(): void {
-    super.connectedCallback();
-
-    this.rendererConnection?.unsubscribe();
-    this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
-      surfaceGroup: this.processor.model,
-      onSurfaceReady: (surfaceId: string) => {
-        this.surface = this.processor.model.getSurface(surfaceId);
-        this.requestUpdate();
-      },
-      onSurfaceCleared: () => {
-        this.surface = undefined;
-      },
-    });
-  }
-
-  /**
-   * Custom element lifecycle hook called when the catalog sandbox is detached from the DOM.
-   * Cleans up the bridge connection to prevent leaks.
-   */
-  public disconnectedCallback(): void {
-    super.disconnectedCallback();
-    if (this.rendererConnection) {
-      this.rendererConnection.unsubscribe();
-      this.rendererConnection = null;
-    }
-  }
-
-  /** Renders the reactive sandbox catalog layout template or loading active state indicators. */
-  protected render(): TemplateResult {
-    if (!this.surface) {
-      return html`<p style="color: #666;">
-        A2UI Lit Basic Catalog Sandbox active. Waiting for RENDER_A2UI payloads...
-      </p>`;
-    }
-    return html`
-      <main>
-        <a2ui-surface .surface=${this.surface}></a2ui-surface>
-      </main>
-    `;
-  }
-}
+// Export AppRoot instance type under same name (type/value namespace merging)
+// to ensure 100% backward-compatibility with test suites without touching test code:
+export type AppRoot = InstanceType<typeof AppRoot>;

@@ -104,10 +104,22 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(bridge['activeRenderer']).toBeNull();
   });
 
-  it('emits RENDERER_READY signal automatically upon DOM readiness', async () => {
+  it('emits RENDERER_READY signal only when attachRenderer is called', async () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
+
+    // Handshake should NOT be sent upon simple document load events anymore
     window.dispatchEvent(new Event('DOMContentLoaded'));
     await new Promise(resolve => setTimeout(resolve, 10));
+    expect(spy).not.toHaveBeenCalled();
+
+    // Handshake should fire instantly upon attachRenderer() call
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+    });
+
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({type: PreviewBridgeMessageType.RENDERER_READY}),
       '*',
@@ -391,7 +403,7 @@ describe('PreviewBridge Core API Runtime', () => {
       );
     });
 
-    it('should completely unsubscribe group subscription and all surface subscriptions on disconnect', () => {
+    it('completely unsubscribes group subscription and all surface subscriptions on disconnect', () => {
       const groupUnsubscribe = vi.fn();
       const surfaceUnsubscribe = vi.fn();
 
@@ -424,7 +436,7 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(surfaceUnsubscribe).toHaveBeenCalledTimes(1);
     });
 
-    it('should unsubscribe older listeners when a surface with the same ID is re-registered', () => {
+    it('unsubscribes older listeners when a surface with the same ID is re-registered', () => {
       const firstSurfaceUnsubscribe = vi.fn();
       const secondSurfaceUnsubscribe = vi.fn();
 
@@ -487,18 +499,55 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   describe('Memory-safety and timeout cleanups on destroy', () => {
-    it('DOMContentLoaded handshake timeout is cleanly cleared upon destroy()', () => {
+    it('deferred render layout timeout is cleanly cleared upon destroy()', () => {
       vi.useFakeTimers();
-      const spy = vi.spyOn(window.parent, 'postMessage');
 
-      const tempBridge = new PreviewBridge();
-      tempBridge.destroy();
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+      const processSpy = vi.fn();
+      bridge.attachRenderer(
+        {processMessages: processSpy},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      // Pre-track an old active surface ID to verify reset dispatch dispatches
+      bridge['activeRenderer']?.activeSurfaceIds.add('old-surface');
+
+      // Dispatch layout setup message (which schedules deferred rendering)
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [
+              {
+                version: 'v0.9',
+                createSurface: {surfaceId: 'surf-1'},
+              },
+            ],
+          },
+        }),
+      );
+
+      // Verify that the synchronous unmount reset (deleteSurface) was dispatched instantly
+      expect(processSpy).toHaveBeenCalledWith([
+        {
+          version: 'v0.9',
+          deleteSurface: {surfaceId: 'old-surface'},
+        } as A2uiMessage,
+      ]);
+
+      // Clear/Destroy bridge (which cancels the deferred render timeout)
+      bridge.destroy();
 
       vi.runAllTimers();
-      expect(spy).not.toHaveBeenCalledWith(
-        expect.objectContaining({type: PreviewBridgeMessageType.RENDERER_READY}),
-        '*',
-      );
+
+      // The deferred render payload MUST NOT be processed since the timeout was cleanly cancelled!
+      expect(processSpy).toHaveBeenCalledTimes(1); // Only the initial deleteSurface reset
       vi.useRealTimers();
     });
 

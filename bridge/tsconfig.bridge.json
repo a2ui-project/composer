@@ -11,6 +11,8 @@
     "isolatedModules": true,
     "esModuleInterop": true,
     "declaration": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
     "lib": ["ES2022", "DOM"]
   },
   "include": ["src/**/*.ts"],

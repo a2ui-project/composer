@@ -18,12 +18,9 @@ import {defineConfig} from 'vitest/config';
 import angular from '@analogjs/vite-plugin-angular';
 
 export default defineConfig({
-  plugins: [angular({jit: true, tsconfig: './tsconfig.spec.json'})],
+  plugins: [angular({jit: false, tsconfig: './tsconfig.spec.json'})],
   resolve: {
     dedupe: ['@angular/core', '@a2ui/angular', 'a2ui-bridge'],
-    alias: {
-      'a2ui-bridge': new URL('../bridge/src/preview-bridge.ts', import.meta.url).pathname,
-    },
   },
   test: {
     environment: 'jsdom',

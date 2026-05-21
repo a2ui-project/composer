@@ -17,7 +17,9 @@
 import {bootstrapApplication} from '@angular/platform-browser';
 import {provideZonelessChangeDetection} from '@angular/core';
 import {AppComponent} from './app/app.component';
+import {provideA2uiSandbox} from 'a2ui-bridge/angular';
+import {BasicCatalog} from '@a2ui/angular/v0_9';
 
 bootstrapApplication(AppComponent, {
-  providers: [provideZonelessChangeDetection()],
-}).catch(err => console.error(err));
+  providers: [provideZonelessChangeDetection(), provideA2uiSandbox([BasicCatalog])],
+}).catch(err => console.error('A2UI Sandbox Bootstrap Failed:', err));

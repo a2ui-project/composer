@@ -15,7 +15,6 @@
 node_modules
 **/dist/
 **/build/
-**/e2e/
 .git
 .venv
 *.min.js

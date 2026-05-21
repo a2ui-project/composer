@@ -131,9 +131,6 @@ export class PreviewBridge {
    */
   private overlayElement: HTMLDivElement | null = null;
 
-  /** The scheduled macro-task timer identifier deferred for DOM readiness handshake. */
-  private handshakeTimeoutId?: ReturnType<typeof setTimeout>;
-
   /** The scheduled macro-task timer identifier deferred for layout payload processing. */
   private renderTimeoutId?: ReturnType<typeof setTimeout>;
 
@@ -146,7 +143,6 @@ export class PreviewBridge {
    */
   constructor() {
     this.initMessageListener();
-    this.initLifecycleHandshake();
   }
 
   /**
@@ -179,6 +175,13 @@ export class PreviewBridge {
       activeSurfaceIds,
     };
 
+    // Dispatches the dynamic startup handshake message to the host Shell context
+    // ONLY after this modular framework application has completed its asynchronous
+    // bootstrapping and attached its active renderer. This guarantees that the
+    // parent receives the ready signal when the sandbox is truly capable of mounting
+    // surfaces, structurally eliminating the inter-frame timing race conditions.
+    this.sendMessage({type: PreviewBridgeMessageType.RENDERER_READY});
+
     const attachConnection = {
       unsubscribe: () => {
         if (this.activeRenderer?.processor === processor) {
@@ -202,11 +205,6 @@ export class PreviewBridge {
   destroy(): void {
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
-      window.removeEventListener('DOMContentLoaded', this.domContentLoadedListener);
-    }
-    if (this.handshakeTimeoutId !== undefined) {
-      clearTimeout(this.handshakeTimeoutId);
-      this.handshakeTimeoutId = undefined;
     }
     if (this.renderTimeoutId !== undefined) {
       clearTimeout(this.renderTimeoutId);
@@ -323,8 +321,14 @@ export class PreviewBridge {
    * then defers the rendering actual layout command payload to a clean event cycle task.
    */
   private dispatchRenderA2ui(payload: unknown): void {
+    // If a dynamic layout setup message is received before the framework application has
+    // bootstrapped and attached its renderer, we print a warning and ignore the payload.
+    // This should not ever happen since the host Shell is strictly designed never to dispatch
+    // RENDER_A2UI messages until after RENDERER_READY is sent (which we do from attachRenderer().
     if (!this.activeRenderer) {
-      console.warn('PreviewBridge: Received RENDER_A2UI but no active renderer is attached.');
+      console.warn(
+        'PreviewBridge: Received RENDER_A2UI but no active renderer is attached. Ignoring payload.',
+      );
       return;
     }
 
@@ -427,14 +431,6 @@ export class PreviewBridge {
   }
 
   /**
-   * Event listener callback executed when the DOM content is fully loaded.
-   * Dispatches the initial handshake notification message (`RENDERER_READY`) to the parent host frame.
-   */
-  private readonly domContentLoadedListener = () => {
-    this.sendMessage({type: PreviewBridgeMessageType.RENDERER_READY});
-  };
-
-  /**
    * Encapsulates the multi-level reactive subscription pipeline between surface lifecycle
    * events and data model mutations, automatically formatting and transmitting synchronization
    * payloads (`DATA_MODEL_CHANGE`) back to the parent Composer window.
@@ -451,7 +447,7 @@ export class PreviewBridge {
       (surface: SurfaceInstance) => {
         if (!surface || typeof surface !== 'object' || !surface.id || !surface.dataModel) return;
 
-        // Risk 2 Guard: Prevent linear growth and duplicate observers for the same surface ID
+        // Prevent duplicate observers and memory leaks when the same surface ID is re-registered
         const existing = subscriptions.get(surface.id);
         if (existing) {
           existing.unsubscribe();
@@ -486,7 +482,6 @@ export class PreviewBridge {
         }
         subscriptions.forEach(sub => sub.unsubscribe());
         subscriptions.clear();
-        // Remove itself from Set upon unsubscription
         this.activeConnections.delete(connection);
       },
     };
@@ -579,21 +574,6 @@ export class PreviewBridge {
           this.overlayElement.parentNode.removeChild(this.overlayElement);
         }
         this.overlayElement = null;
-      }
-    }
-  }
-
-  /**
-   * Initiates the synchronization handshake with the host application.
-   * Checks if the document is already parsed and interactive to immediately schedule
-   * the ready notification, or attaches a listener to the DOMContentLoaded event otherwise.
-   */
-  private initLifecycleHandshake(): void {
-    if (typeof document !== 'undefined') {
-      if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        this.handshakeTimeoutId = setTimeout(this.domContentLoadedListener, 0);
-      } else {
-        window.addEventListener('DOMContentLoaded', this.domContentLoadedListener);
       }
     }
   }
