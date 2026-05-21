@@ -20,6 +20,22 @@ import {JsonPipe} from '@angular/common';
 import {HostCommunicationService} from '../../shell/host-communication.service';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
+/** Exposes the unminified dynamic details mapping of cross-frame custom events */
+interface RawActionDetails {
+  name?: string;
+  surfaceId?: string;
+  sourceComponentId?: string;
+  sourceComponent?: string;
+  context?: Record<string, unknown> | null;
+  contextParameters?: Record<string, unknown> | null;
+  timestamp?: number;
+}
+
+/** Represents raw event envelopes carrying action payloads sent to the backend */
+interface RawServerPayload {
+  action?: string | RawActionDetails;
+}
+
 /**
  * A structured telemetry record representing a custom event or interaction
  * event captured within the isolated renderer.
@@ -29,7 +45,7 @@ export interface MappedEventLogItem {
   action: string;
   surface: string;
   component: string;
-  context: any;
+  context: Record<string, unknown> | null;
 }
 
 @Component({
@@ -53,7 +69,7 @@ export class EventsComponent {
     effect(() => {
       const envelope = this.hostComm.messageStream();
       if (envelope?.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
-        const payload = envelope.payload as any;
+        const payload = envelope.payload as RawServerPayload;
         if (payload && payload.action) {
           let action = payload.action;
           if (typeof action === 'string') {

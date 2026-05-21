@@ -33,6 +33,14 @@ export interface MappedErrorLogItem {
   stack?: string;
 }
 
+/** Internal interface mapping raw cross-frame telemetry message data. */
+interface RawTelemetryPayload {
+  message?: string;
+  stack?: string;
+  level?: 'error' | 'warn' | 'info' | 'debug' | 'log';
+  validationErrors?: unknown[] | Record<string, unknown> | string | boolean;
+}
+
 @Component({
   selector: 'a2ui-composer-errors',
   standalone: true,
@@ -56,7 +64,7 @@ export class ErrorsComponent {
       const envelope = this.hostComm.messageStream();
       if (!envelope) return;
 
-      const payload = envelope.payload as any;
+      const payload = envelope.payload as RawTelemetryPayload;
       if (!payload) return;
 
       if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {

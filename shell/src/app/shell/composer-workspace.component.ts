@@ -35,6 +35,12 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
 const EVENTS_TAB_INDEX = 1;
 const ERRORS_TAB_INDEX = 2;
 
+/** Internal interface mapping raw cross-frame workspace telemetry payloads */
+interface WorkspaceMessagePayload {
+  action?: unknown;
+  validationErrors?: unknown[] | Record<string, unknown> | string | boolean;
+}
+
 @Component({
   selector: 'a2ui-composer-workspace',
   standalone: true,
@@ -80,7 +86,7 @@ export class ComposerWorkspaceComponent implements OnInit {
       const envelope = this.hostComm.messageStream();
       if (!envelope) return;
 
-      const payload = envelope.payload as any;
+      const payload = envelope.payload as WorkspaceMessagePayload;
 
       untracked(() => {
         const activeTab = this.selectedTabIndex();
