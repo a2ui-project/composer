@@ -8683,9 +8683,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lit-basic-catalog@workspace:lit-basic-catalog":
+"lit-basic-catalog@workspace:samples/lit-basic-catalog":
   version: 0.0.0-use.local
-  resolution: "lit-basic-catalog@workspace:lit-basic-catalog"
+  resolution: "lit-basic-catalog@workspace:samples/lit-basic-catalog"
   dependencies:
     "@a2ui/lit": "npm:0.10.0"
     "@a2ui/web_core": "npm:0.9.2"
@@ -9331,9 +9331,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ng-basic-catalog@workspace:ng-basic-catalog":
+"ng-basic-catalog@workspace:samples/ng-basic-catalog":
   version: 0.0.0-use.local
-  resolution: "ng-basic-catalog@workspace:ng-basic-catalog"
+  resolution: "ng-basic-catalog@workspace:samples/ng-basic-catalog"
   dependencies:
     "@a2ui/angular": "npm:0.9.1"
     "@a2ui/markdown-it": "npm:^0.0.4"

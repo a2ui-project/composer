@@ -3,8 +3,8 @@
   "private": true,
   "workspaces": [
     "shell",
-    "ng-basic-catalog",
-    "lit-basic-catalog",
+    "samples/ng-basic-catalog",
+    "samples/lit-basic-catalog",
     "bridge"
   ],
   "scripts": {
