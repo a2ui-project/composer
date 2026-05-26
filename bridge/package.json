@@ -31,6 +31,7 @@
     "@angular/core": "21.2.12",
     "@types/react": "19.0.8",
     "@types/react-dom": "19.0.3",
+    "@vitest/coverage-v8": "4.1.7",
     "esbuild": "0.28.0",
     "jsdom": "29.1.1",
     "lit": "3.3.1",

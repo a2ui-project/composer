@@ -15,7 +15,7 @@
     "tsc": "yarn --cwd shell tsc --noEmit && yarn --cwd bridge tsc --project tsconfig.bridge.json --noEmit"
   },
   "resolutions": {
-    "@a2ui/web_core": "0.9.2"
+    "@a2ui/web_core": "0.10.0"
   },
   "packageManager": "yarn@4.5.0"
 }
