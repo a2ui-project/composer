@@ -262,6 +262,112 @@ describe('PreviewBridge Core API Runtime', () => {
     );
   });
 
+  it('serves registered catalog from configuration setup in-memory, bypassing fetch', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    window.fetch = vi.fn();
+
+    const mockCatalog = {items: ['InMemoryComponent']};
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      catalog: mockCatalog,
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(window.fetch).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: {catalog: mockCatalog},
+      },
+      '*',
+    );
+  });
+
+  it('strictly halts and transmits A2UI_CATALOG error envelope if in-memory catalog processing throws', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    window.fetch = vi.fn();
+
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      catalog: '{ invalid json ',
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(window.fetch).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: {
+          catalog: {},
+          error: {message: expect.any(String)},
+        },
+      },
+      '*',
+    );
+  });
+
+  it('falls back to standard HTTP network fetch if catalog is undefined in configuration', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const mockCatalog = {items: ['HTTPComponent']};
+    window.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify(mockCatalog),
+    });
+
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      catalog: undefined,
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(window.fetch).toHaveBeenCalledWith('/catalog');
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: {catalog: mockCatalog},
+      },
+      '*',
+    );
+  });
+
   it('ignores sendMessage when window.parent is null or equal to window in non-test env', () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';

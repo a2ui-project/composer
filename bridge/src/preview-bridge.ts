@@ -584,6 +584,33 @@ export class PreviewBridge {
    * JSON payload or error status back to the host container.
    */
   private async handleGetCatalog(): Promise<void> {
+    const inMemoryCatalog = this.activeRenderer?.config?.catalog;
+    if (inMemoryCatalog !== undefined) {
+      try {
+        let catalog = inMemoryCatalog;
+        if (typeof catalog === 'string') {
+          const safetyPrefix = ")]}'\n";
+          const jsonText = catalog.startsWith(safetyPrefix)
+            ? catalog.substring(safetyPrefix.length)
+            : catalog;
+          catalog = JSON.parse(jsonText);
+        }
+        this.sendMessage({
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: {catalog},
+        });
+        return;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('PreviewBridge: Error processing/parsing in-memory catalog:', error);
+        this.sendMessage({
+          type: PreviewBridgeMessageType.A2UI_CATALOG,
+          payload: {catalog: {}, error: {message: errorMessage}},
+        });
+        return;
+      }
+    }
+
     if (typeof window === 'undefined' || !window.fetch) return;
     try {
       let res = await window.fetch('/catalog');
