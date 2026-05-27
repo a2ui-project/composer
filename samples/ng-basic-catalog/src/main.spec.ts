@@ -22,7 +22,12 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {A2uiRendererService, A2UI_RENDERER_CONFIG, BasicCatalog} from '@a2ui/angular/v0_9';
 import {a2uiBridge} from 'a2ui-bridge';
 import {A2uiClientAction} from '@a2ui/web_core/v0_9';
-import {provideZonelessChangeDetection, Injector} from '@angular/core';
+import {
+  provideZonelessChangeDetection,
+  Injector,
+  createEnvironmentInjector,
+  EnvironmentInjector,
+} from '@angular/core';
 
 // Mocks core bridge singleton variables for clean telemetry spy verification
 vi.mock('a2ui-bridge', () => ({
@@ -50,7 +55,7 @@ describe('A2uiSandbox', () => {
       imports: [AppComponent],
       providers: [
         provideZonelessChangeDetection(),
-        provideA2uiSandbox([BasicCatalog]), // Injects dynamically linked dynamic manager
+        provideA2uiSandbox([BasicCatalog], {catalogJson: {items: ['Grid']}}), // Injects dynamically linked dynamic manager
       ],
     }).compileComponents();
 
@@ -77,6 +82,7 @@ describe('A2uiSandbox', () => {
         surfaceGroup: expect.any(Object),
         onSurfaceReady: expect.any(Function),
         onSurfaceCleared: expect.any(Function),
+        catalog: {items: ['Grid']},
       }),
     );
   });
@@ -126,13 +132,15 @@ describe('A2uiSandbox', () => {
   });
 
   it('provides and registers correct DI providers list', () => {
-    const injector = Injector.create({
-      providers: [provideA2uiSandbox([BasicCatalog])],
-    });
+    const parentInjector = TestBed.inject(EnvironmentInjector);
+    const environmentInjector = createEnvironmentInjector(
+      [provideA2uiSandbox([BasicCatalog], {catalogJson: {items: ['Grid']}})],
+      parentInjector,
+    );
 
-    expect(injector.get(A2uiRendererService)).toBeDefined();
-    expect(injector.get(A2uiSandboxConnection)).toBeDefined();
-    expect(injector.get(BasicCatalog)).toBeDefined();
-    expect(injector.get(A2UI_RENDERER_CONFIG)).toBeDefined();
+    expect(environmentInjector.get(A2uiRendererService)).toBeDefined();
+    expect(environmentInjector.get(A2uiSandboxConnection)).toBeDefined();
+    expect(environmentInjector.get(BasicCatalog)).toBeDefined();
+    expect(environmentInjector.get(A2UI_RENDERER_CONFIG)).toBeDefined();
   });
 });

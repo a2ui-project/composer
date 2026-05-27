@@ -14,13 +14,30 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, OnDestroy, Type, Provider} from '@angular/core';
+import {
+  Injectable,
+  inject,
+  signal,
+  OnDestroy,
+  Type,
+  Provider,
+  EnvironmentProviders,
+  makeEnvironmentProviders,
+} from '@angular/core';
 import {
   A2uiRendererService,
   A2UI_RENDERER_CONFIG,
   provideMarkdownRenderer,
 } from '@a2ui/angular/v0_9';
+import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {a2uiBridge, RendererProcessor, SurfaceStateSubscription} from '../preview-bridge.js';
+
+export interface AngularSandboxOptions {
+  /** Optional custom markdown rendering delegate callback hook */
+  markdownRendererFn?: (markdown: string) => Promise<string>;
+  /** Optional preloaded catalog JSON data, provided directly in memory. */
+  catalogJson?: unknown;
+}
 
 /**
  * Orchestrates mapping surface mount/unmount lifecycles, connection handshakes,
@@ -48,7 +65,7 @@ export class A2uiSandboxConnection implements OnDestroy {
    * Subscribes to the global preview bridge singleton, mapping dynamic renderer callbacks
    * (onSurfaceReady and onSurfaceCleared) directly to local reactive state signals.
    */
-  constructor() {
+  constructor(catalogJson?: unknown) {
     this.rendererConnection = a2uiBridge.attachRenderer(
       this.rendererService as unknown as RendererProcessor,
       {
@@ -59,6 +76,7 @@ export class A2uiSandboxConnection implements OnDestroy {
         onSurfaceCleared: () => {
           this.surfaceId.set('');
         },
+        catalog: catalogJson,
       },
     );
   }
@@ -83,21 +101,21 @@ export class A2uiSandboxConnection implements OnDestroy {
  * rendering service, and the sandbox connection state to keep catalog bootstrap clean and modular.
  *
  * @param catalogsClasses The array of catalog component provider classes (e.g. BasicCatalog) to register and manage.
- * @param markdownRendererFn Optional. A custom async rendering function mapping catalog Markdown formatting.
- * @returns A fully configured array of Angular Dependency Injection providers ready for bootstrapApplication.
+ * @param options Optional configuration adapter block holding local catalogJson and markdownRendererFn hook delegates.
+ * @returns Angular EnvironmentProviders ready for modern standalone bootstrapping application scopes.
  */
 export function provideA2uiSandbox(
-  catalogsClasses: Type<unknown>[],
-  markdownRendererFn?: (markdown: string) => Promise<string>,
-): Provider[] {
-  return [
+  catalogsClasses: Array<Type<Catalog<ComponentApi>>>,
+  options?: AngularSandboxOptions,
+): EnvironmentProviders {
+  const providers: Provider[] = [
     A2uiRendererService,
     {
       provide: A2uiSandboxConnection,
-      useFactory: () => new A2uiSandboxConnection(),
+      useFactory: () => new A2uiSandboxConnection(options?.catalogJson),
     },
     ...catalogsClasses,
-    provideMarkdownRenderer(markdownRendererFn),
+    provideMarkdownRenderer(options?.markdownRendererFn),
     {
       provide: A2UI_RENDERER_CONFIG,
       useFactory: () => {
@@ -111,4 +129,5 @@ export function provideA2uiSandbox(
       },
     },
   ];
+  return makeEnvironmentProviders(providers);
 }
