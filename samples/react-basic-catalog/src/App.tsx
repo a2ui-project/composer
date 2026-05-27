@@ -17,10 +17,8 @@
 import {useA2uiSandbox} from 'a2ui-bridge/react';
 import {A2uiSurface, basicCatalog} from '@a2ui/react/v0_9';
 
-const SANDBOX_CATALOGS = [basicCatalog];
-
 export function App() {
-  const {surface} = useA2uiSandbox(SANDBOX_CATALOGS);
+  const {surface} = useA2uiSandbox([basicCatalog]);
 
   return (
     <main className="sandbox-shell">

@@ -23,16 +23,23 @@ export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   surface: SurfaceModel<C> | undefined;
 }
 
+export interface ReactSandboxOptions {
+  /** Optional preloaded catalog JSON data, provided directly in memory. */
+  catalogJson?: unknown;
+}
+
 /**
  * A dynamic React hook that orchestrates the inter-frame PreviewBridge connection.
  * Automatically registers state observers, binds catalog processors, maps surface lifecycle
  * events reactively, and dispatches dynamic unmount cleanups during hook unmount to prevent memory leaks.
  *
  * @param catalogs The array of component catalogs matching A2UI specifications.
- * @returns A reactive state object containing the active surface drawing model and loading state flag.
+ * @param options Optional configuration payloads.
+ * @returns A reactive state object containing the active surface drawing model.
  */
 export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
   catalogs: Catalog<C>[],
+  options?: ReactSandboxOptions,
 ): UseA2uiSandboxResult<C> {
   const [surface, setSurface] = useState<SurfaceModel<C> | undefined>(undefined);
 
@@ -45,6 +52,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     // Connects the renderer stack and establishes inter-frame callbacks
     const connection = a2uiBridge.attachRenderer(processor, {
       surfaceGroup: processor.model,
+      catalog: options?.catalogJson,
       onSurfaceReady: surfaceId => {
         setSurface(processor.model.getSurface(surfaceId));
       },

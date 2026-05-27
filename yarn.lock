@@ -10532,6 +10532,7 @@ __metadata:
     "@vitejs/plugin-react": "npm:4.3.4"
     a2ui-bridge: "npm:0.1.0"
     jsdom: "npm:29.1.1"
+    prettier: "npm:3.8.3"
     react: "npm:19.0.0"
     react-dom: "npm:19.0.0"
     typescript: "npm:6.0.3"

@@ -19,6 +19,9 @@ import {act} from 'react';
 import {createRoot, Root} from 'react-dom/client';
 import {App} from './App';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {useA2uiSandbox} from 'a2ui-bridge/react';
+import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
+import {basicCatalog} from '@a2ui/react/v0_9';
 
 describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
   let container: HTMLDivElement | null = null;
@@ -213,6 +216,115 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
             name: 'PROXIED_CLICK',
             sourceComponentId: 'root',
           }),
+        }),
+      }),
+      '*',
+    );
+  });
+
+  it('resolves catalog network-dependently over HTTP fetch when catalogJson is not preloaded', async () => {
+    const postSpy = vi.spyOn(window.parent, 'postMessage');
+    const mockCatalogPayload = {
+      components: {
+        'test-component': {type: 'Button'},
+      },
+    };
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve(")]}'\n" + JSON.stringify(mockCatalogPayload)),
+      } as Response),
+    );
+
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    // Simulate GET_CATALOG request payload
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.GET_CATALOG,
+          },
+        }),
+      );
+    });
+
+    // Wait for the async handleGetCatalog to settle
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    // Verify fetch was triggered on standard path '/catalog'
+    expect(fetchSpy).toHaveBeenCalledWith('/catalog');
+
+    // Verify bridge posted back A2UI_CATALOG with resolved payload
+    expect(postSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: expect.objectContaining({
+          catalog: mockCatalogPayload,
+        }),
+      }),
+      '*',
+    );
+  });
+
+  it('bypasses network fetch and immediately returns preloaded in-memory catalogJson option when provided', async () => {
+    const postSpy = vi.spyOn(window.parent, 'postMessage');
+    const fetchSpy = vi.spyOn(window, 'fetch');
+    const mockPreloadedCatalog = {
+      components: {
+        'preloaded-comp': {type: 'Text'},
+      },
+    };
+
+    // Helper app testing target preloaded hook parameters
+    function InMemoryPreloadedApp() {
+      const {surface} = useA2uiSandbox([basicCatalog as unknown as Catalog<ComponentApi>], {
+        catalogJson: mockPreloadedCatalog,
+      });
+      return <main className="sandbox-shell">{surface ? 'Ready' : 'Waiting...'}</main>;
+    }
+
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<InMemoryPreloadedApp />);
+      }
+    });
+
+    // Simulate GET_CATALOG request payload
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.GET_CATALOG,
+          },
+        }),
+      );
+    });
+
+    // Wait for the async handleGetCatalog to settle
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    // Verify fetch was NOT called
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // Verify bridge posted back A2UI_CATALOG with our preloaded in-memory catalog
+    expect(postSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: expect.objectContaining({
+          catalog: mockPreloadedCatalog,
         }),
       }),
       '*',
