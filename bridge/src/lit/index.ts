@@ -20,9 +20,18 @@ import {MessageProcessor, Catalog, ComponentApi, SurfaceModel} from '@a2ui/web_c
 import {a2uiBridge, SurfaceStateSubscription} from '../preview-bridge.js';
 
 // Expose on the module scope for pristine, absolute compiler typings resolutions:
+export interface LitSandboxOptions {
+  /** The custom tag name of the custom HTML elements shell (Default: 'app-root') */
+  elementTagName?: string;
+  /** Optional preloaded catalog JSON data, provided directly in memory. */
+  catalogJson?: unknown;
+}
+
 export class A2uiSandboxRoot extends LitElement {
   /** The static catalog list shared by all sandbox element instances */
   static catalogs: Catalog<ComponentApi>[] = [];
+  /** Optional preloaded catalog JSON data shared statically */
+  static catalogJson?: unknown = undefined;
 
   // Core dynamic processing engine mapping actions outbox proxies
   private processor = new MessageProcessor(A2uiSandboxRoot.catalogs, action => {
@@ -39,6 +48,7 @@ export class A2uiSandboxRoot extends LitElement {
     this.rendererConnection?.unsubscribe();
     this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
       surfaceGroup: this.processor.model,
+      catalog: A2uiSandboxRoot.catalogJson,
       onSurfaceReady: surfaceId => {
         this.surface = this.processor.model.getSurface(surfaceId);
         this.requestUpdate();
@@ -70,12 +80,24 @@ export class A2uiSandboxRoot extends LitElement {
   }
 }
 
+/**
+ * Dynamic entry point that bootstraps the Lit Component Rendering Sandbox.
+ * Registers element mappings inside browser-level CustomElement registries, binds
+ * configuration schemas, and injects optional preloaded static catalog payloads.
+ *
+ * @param catalogs The array of component catalogs defining local layouts.
+ * @param options Optional configuration options block holding the HTML tag name and preloaded catalog JSON data.
+ * @returns The A2uiSandboxRoot custom element constructor value ready for nominal references.
+ */
 export function bootstrapLitSandbox<T extends ComponentApi>(
   catalogs: Catalog<T>[],
-  elementTagName = 'app-root',
+  options?: LitSandboxOptions,
 ): typeof A2uiSandboxRoot {
+  const elementTagName = options?.elementTagName || 'app-root';
+
   // Sets dynamic, catalog-specific shared variables with standard safe base casting
   A2uiSandboxRoot.catalogs = catalogs as Catalog<ComponentApi>[];
+  A2uiSandboxRoot.catalogJson = options?.catalogJson;
 
   if (!customElements.get(elementTagName)) {
     customElements.define(elementTagName, A2uiSandboxRoot);
