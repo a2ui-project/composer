@@ -22,6 +22,7 @@
     "@angular/material": "21.2.10",
     "@angular/platform-browser": "21.2.12",
     "@angular/router": "21.2.12",
+    "@google/genai": "0.2.0",
     "a2ui-bridge": "0.1.0",
     "dompurify": "3.4.3",
     "rxjs": "7.8.2",

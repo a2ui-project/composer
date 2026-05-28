@@ -20,10 +20,13 @@ import {SettingsComponent} from './settings.component';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolutionService} from '../shell/startup-resolution.service';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {HostCommunicationService} from '../shell/host-communication.service';
+import {HostCommunicationService, MessageEnvelope} from '../shell/host-communication.service';
 import {CatalogManagementService} from '../storage/catalog-management.service';
-import {signal, WritableSignal} from '@angular/core';
+import {Catalog} from '../storage/catalog-storage.model';
+import {signal, WritableSignal, Signal, computed} from '@angular/core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {AppConfigProvider, AuthType} from './app-config-provider';
+import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
 
 describe('SettingsComponent', () => {
   let mockStartupResolutionService: {
@@ -31,11 +34,24 @@ describe('SettingsComponent', () => {
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
     isContextLocked: ReturnType<typeof vi.fn>;
   };
-  let mockLatestEnvelope: WritableSignal<any>;
+  let mockLatestEnvelope: WritableSignal<MessageEnvelope | null>;
   let mockIsHandshakeInProgress: WritableSignal<boolean>;
   let mockActiveCatalogTitle: WritableSignal<string>;
-  let mockActiveCatalog: WritableSignal<any>;
+  let mockActiveCatalog: WritableSignal<Catalog | null>;
   let mockCatalogError: WritableSignal<string | null>;
+
+  let mockAuthOverride: WritableSignal<AuthType>;
+  let mockRendererUrl: WritableSignal<string>;
+  let mockGeminiApiKey: WritableSignal<string>;
+  let mockConfigProvider: {
+    authType: Signal<AuthType>;
+    rendererUrl: Signal<string>;
+    geminiApiKey: Signal<string>;
+    setRendererUrl: ReturnType<typeof vi.fn>;
+    setGeminiApiKey: ReturnType<typeof vi.fn>;
+    setForcedAuthMode: ReturnType<typeof vi.fn>;
+    flushConfig: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     localStorage.clear();
@@ -45,11 +61,45 @@ describe('SettingsComponent', () => {
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       isContextLocked: vi.fn().mockReturnValue(false),
     };
-    mockLatestEnvelope = signal<any>(null);
+    mockLatestEnvelope = signal<MessageEnvelope | null>(null);
     mockIsHandshakeInProgress = signal<boolean>(false);
     mockActiveCatalogTitle = signal<string>('');
-    mockActiveCatalog = signal<any>(null);
+    mockActiveCatalog = signal<Catalog | null>(null);
     mockCatalogError = signal<string | null>(null);
+
+    mockAuthOverride = signal<AuthType>(AuthType.DEFAULT);
+    mockRendererUrl = signal<string>('http://resolved-url.com');
+    mockGeminiApiKey = signal<string>('');
+
+    const mockAuthType = computed(() => {
+      const override = mockAuthOverride();
+      if (override !== AuthType.DEFAULT) {
+        return override;
+      }
+      return mockStartupResolutionService.isThirdPartyEnvironment()
+        ? AuthType.THREE_PARTY
+        : AuthType.ONE_PARTY;
+    });
+
+    mockConfigProvider = {
+      authType: mockAuthType,
+      rendererUrl: mockRendererUrl.asReadonly(),
+      geminiApiKey: mockGeminiApiKey.asReadonly(),
+      setRendererUrl: vi.fn().mockImplementation((url: string) => {
+        mockRendererUrl.set(url);
+      }),
+      setGeminiApiKey: vi.fn().mockImplementation((key: string) => {
+        mockGeminiApiKey.set(key);
+      }),
+      setForcedAuthMode: vi.fn().mockImplementation((mode: AuthType) => {
+        mockAuthOverride.set(mode);
+      }),
+      flushConfig: vi.fn().mockImplementation(() => {
+        mockAuthOverride.set(AuthType.DEFAULT);
+        mockGeminiApiKey.set('');
+        mockRendererUrl.set(mockStartupResolutionService.getResolvedRendererUrl() || '');
+      }),
+    };
   });
 
   afterEach(() => {
@@ -63,6 +113,7 @@ describe('SettingsComponent', () => {
       providers: [
         provideNoopAnimations(),
         {provide: StartupResolutionService, useValue: mockStartupResolutionService},
+        {provide: AppConfigProvider, useValue: mockConfigProvider},
         {
           provide: HostCommunicationService,
           useValue: {latestEnvelope: mockLatestEnvelope},
@@ -92,13 +143,14 @@ describe('SettingsComponent', () => {
     expect(component.isThirdParty()).toBe(false);
     expect(component.settingsForm.controls.rendererUrl.value).toBe('http://resolved-url.com');
 
-    const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
-    vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+    const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
     component.settingsForm.patchValue({rendererUrl: 'http://new-url.com'});
     component.saveSettings();
 
-    expect(removeItemSpy).toHaveBeenCalledWith('a2ui_composer_api_key');
+    expect(mockConfigProvider.flushConfig).toHaveBeenCalled();
+    expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://new-url.com');
+    expect(reloadSpy).toHaveBeenCalled();
   });
 
   it('enforces apiKey requirement in 3P mode and rejects empty whitespace keys', async () => {
@@ -120,7 +172,6 @@ describe('SettingsComponent', () => {
     mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(true);
     const {component} = await setupComponent();
 
-    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
     const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
     component.settingsForm.patchValue({
@@ -131,8 +182,8 @@ describe('SettingsComponent', () => {
 
     component.saveSettings();
 
-    expect(setItemSpy).toHaveBeenCalledWith('a2ui_composer_renderer_url', 'http://new-url.com');
-    expect(setItemSpy).toHaveBeenCalledWith('a2ui_composer_api_key', 'AIzaSyTestKey');
+    expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://new-url.com');
+    expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('AIzaSyTestKey');
     expect(reloadSpy).toHaveBeenCalled();
   });
 
@@ -174,6 +225,7 @@ describe('SettingsComponent', () => {
     mockLatestEnvelope.set({
       type: PreviewBridgeMessageType.RENDERER_READY,
       origin: 'http://localhost',
+      timestamp: 0,
     });
     fixture.detectChanges();
     expect(statusCard.textContent).toContain('Bridge: Connected');
@@ -264,6 +316,11 @@ describe('SettingsComponent', () => {
         providers: [
           provideNoopAnimations(),
           StartupResolutionService,
+          LocalStorageAppConfigProvider,
+          {
+            provide: AppConfigProvider,
+            useExisting: LocalStorageAppConfigProvider,
+          },
           {
             provide: HostCommunicationService,
             useValue: {latestEnvelope: mockLatestEnvelope},
@@ -293,10 +350,8 @@ describe('SettingsComponent', () => {
     }
   });
 
-  it('toggling forceThirdPartyAuth updates localStorage with a2ui_composer_force_3p and reloads the window', async () => {
+  it('updates dynamic forced auth overrides and reloads window when toggling forceThirdPartyAuth', async () => {
     const {fixture, component} = await setupComponent();
-    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
-    const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
     const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
     expect(component.forceThirdPartyAuth()).toBe(false);
@@ -305,14 +360,14 @@ describe('SettingsComponent', () => {
     fixture.detectChanges();
 
     expect(component.forceThirdPartyAuth()).toBe(true);
-    expect(setItemSpy).toHaveBeenCalledWith('a2ui_composer_force_3p', 'true');
+    expect(mockConfigProvider.setForcedAuthMode).toHaveBeenCalledWith(AuthType.THREE_PARTY);
     expect(reloadSpy).toHaveBeenCalled();
 
     component.toggleForceThirdPartyAuth();
     fixture.detectChanges();
 
     expect(component.forceThirdPartyAuth()).toBe(false);
-    expect(removeItemSpy).toHaveBeenCalledWith('a2ui_composer_force_3p');
+    expect(mockConfigProvider.setForcedAuthMode).toHaveBeenLastCalledWith(AuthType.ONE_PARTY);
     expect(reloadSpy).toHaveBeenCalledTimes(2);
   });
 

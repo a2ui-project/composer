@@ -27,6 +27,7 @@ import {StartupResolutionService} from '../shell/startup-resolution.service';
 import {DOCUMENT} from '@angular/common';
 import {HostCommunicationService} from '../shell/host-communication.service';
 import {CatalogManagementService} from '../storage/catalog-management.service';
+import {AppConfigProvider, AuthType} from './app-config-provider';
 
 @Component({
   selector: 'a2ui-composer-settings',
@@ -54,6 +55,7 @@ export class SettingsComponent implements OnInit {
   private readonly document = inject(DOCUMENT);
   private readonly hostCommunicationService = inject(HostCommunicationService);
   private readonly catalogManagementService = inject(CatalogManagementService);
+  private readonly configProvider = inject(AppConfigProvider);
 
   public readonly isLocked: WritableSignal<boolean> = signal(false);
   public readonly isThirdParty: WritableSignal<boolean> = signal(false);
@@ -86,13 +88,10 @@ export class SettingsComponent implements OnInit {
     const is3P = this.startupResolutionService.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
 
-    this.forceThirdPartyAuth.set(this.getStorageItem('a2ui_composer_force_3p') === 'true');
+    this.forceThirdPartyAuth.set(this.configProvider.authType() === AuthType.THREE_PARTY);
 
-    const initialUrl =
-      this.startupResolutionService.getResolvedRendererUrl() ||
-      this.getStorageItem('a2ui_composer_renderer_url') ||
-      '';
-    const initialApiKey = this.getStorageItem('a2ui_composer_api_key') || '';
+    const initialUrl = this.configProvider.rendererUrl();
+    const initialApiKey = this.configProvider.geminiApiKey();
 
     this.settingsForm.patchValue({
       rendererUrl: initialUrl,
@@ -118,14 +117,16 @@ export class SettingsComponent implements OnInit {
 
     const values = this.settingsForm.getRawValue();
 
-    if (!this.isLocked()) {
-      this.setStorageItem('a2ui_composer_renderer_url', values.rendererUrl.trim());
-    }
-
     if (this.isThirdParty()) {
-      this.setStorageItem('a2ui_composer_api_key', values.apiKey.trim());
+      if (!this.isLocked()) {
+        this.configProvider.setRendererUrl(values.rendererUrl.trim());
+      }
+      this.configProvider.setGeminiApiKey(values.apiKey.trim());
     } else {
-      this.removeStorageItem('a2ui_composer_api_key');
+      this.configProvider.setGeminiApiKey('');
+      if (!this.isLocked()) {
+        this.configProvider.setRendererUrl(values.rendererUrl.trim());
+      }
     }
 
     this.reloadWindow();
@@ -143,25 +144,7 @@ export class SettingsComponent implements OnInit {
     }
     const newState = !this.forceThirdPartyAuth();
     this.forceThirdPartyAuth.set(newState);
-    if (newState) {
-      this.setStorageItem('a2ui_composer_force_3p', 'true');
-      this.removeStorageItem('a2ui_composer_force_1p');
-    } else {
-      this.removeStorageItem('a2ui_composer_force_3p');
-      this.setStorageItem('a2ui_composer_force_1p', 'true');
-    }
+    this.configProvider.setForcedAuthMode(newState ? AuthType.THREE_PARTY : AuthType.ONE_PARTY);
     this.reloadWindow();
-  }
-
-  private getStorageItem(key: string): string | null {
-    return localStorage.getItem(key);
-  }
-
-  private setStorageItem(key: string, value: string): void {
-    localStorage.setItem(key, value);
-  }
-
-  private removeStorageItem(key: string): void {
-    localStorage.removeItem(key);
   }
 }

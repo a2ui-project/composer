@@ -23,6 +23,62 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {HostCommunicationService} from './host-communication.service';
 import {StartupResolutionService} from './startup-resolution.service';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {ChatService} from '../chat/chat-service/chat.service';
+import {LlmClient, LlmMessage} from '../chat/llm-client/llm-client';
+import {StateSyncService} from '../chat/state-sync.service';
+import {ChatStateService} from '../chat/chat-state.service';
+import {PipelineStatus} from '../chat/pipeline-status/pipeline-status';
+import {AppConfigProvider, EnvMode, AuthType} from '../settings/app-config-provider';
+import {signal} from '@angular/core';
+
+class MockChatStateService {
+  public readonly chatHistory = signal<LlmMessage[]>([]);
+  public readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  public readonly isProgrammaticStreamActive = signal(false);
+
+  public setPipelineStatus(status: PipelineStatus): void {
+    this.pipelineStatus.set(status);
+  }
+
+  public setProgrammaticStreamActive(active: boolean): void {
+    this.isProgrammaticStreamActive.set(active);
+  }
+
+  public setChatHistory(history: LlmMessage[]): void {
+    this.chatHistory.set(history);
+  }
+
+  public updateChatHistory(updater: (h: LlmMessage[]) => LlmMessage[]): void {
+    this.chatHistory.update(updater);
+  }
+}
+
+class MockChatService {
+  public readonly systemPrompt = signal('Initial system prompt block');
+  public readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  public readonly isProgrammaticStreamActive = signal(false);
+}
+
+class MockStateSyncService {
+  public readonly activeDraftSignal = signal('{}');
+  public readonly activeDraft = this.activeDraftSignal.asReadonly();
+  public updateDraft = vi.fn((val: string) => {
+    this.activeDraftSignal.set(val);
+  });
+  public hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
+}
+
+class MockAppConfigProvider {
+  public readonly envMode = signal(EnvMode.STANDALONE);
+  public readonly authType = signal(AuthType.ONE_PARTY);
+  public readonly rendererUrl = signal('http://localhost:4200/renderer');
+  public readonly geminiApiKey = signal('');
+}
+
+class MockLlmClient {
+  public chat = vi.fn();
+  public chatStream = vi.fn();
+}
 
 describe('ComposerWorkspaceComponent Dashboard', () => {
   let fixture: ComponentFixture<ComposerWorkspaceComponent>;
@@ -31,7 +87,14 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ComposerWorkspaceComponent],
-      providers: [provideNoopAnimations()],
+      providers: [
+        provideNoopAnimations(),
+        {provide: ChatStateService, useClass: MockChatStateService},
+        {provide: ChatService, useClass: MockChatService},
+        {provide: StateSyncService, useClass: MockStateSyncService},
+        {provide: AppConfigProvider, useClass: MockAppConfigProvider},
+        {provide: LlmClient, useClass: MockLlmClient},
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ComposerWorkspaceComponent);
@@ -59,27 +122,29 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     expect(textContent).toContain('Mock Rules');
   });
 
-  it('toggles collapse signal and updates the .debug-section.collapsed layout class', () => {
-    const component = fixture.componentInstance;
-    const debugSection = fixture.nativeElement.querySelector('.debug-section');
+  it(
+    'toggles collapse signal and updates the .debug-section.collapsed ' + 'layout class',
+    async () => {
+      const component = fixture.componentInstance;
 
-    expect(component.isDebugCollapsed()).toBe(false);
-    expect(debugSection.classList.contains('collapsed')).toBe(false);
+      expect(component.isDebugCollapsed()).toBe(false);
+      expect(await harness.isDebugSectionCollapsed()).toBe(false);
 
-    // Call toggleDebugCollapse()
-    component.toggleDebugCollapse();
-    fixture.detectChanges();
+      // Call toggleDebugCollapse()
+      component.toggleDebugCollapse();
+      fixture.detectChanges();
 
-    expect(component.isDebugCollapsed()).toBe(true);
-    expect(debugSection.classList.contains('collapsed')).toBe(true);
+      expect(component.isDebugCollapsed()).toBe(true);
+      expect(await harness.isDebugSectionCollapsed()).toBe(true);
 
-    // Toggle back
-    component.toggleDebugCollapse();
-    fixture.detectChanges();
+      // Toggle back
+      component.toggleDebugCollapse();
+      fixture.detectChanges();
 
-    expect(component.isDebugCollapsed()).toBe(false);
-    expect(debugSection.classList.contains('collapsed')).toBe(false);
-  });
+      expect(component.isDebugCollapsed()).toBe(false);
+      expect(await harness.isDebugSectionCollapsed()).toBe(false);
+    },
+  );
 
   it('delegates clearLogs to all queried child components when clearAllLogs is called', () => {
     const component = fixture.componentInstance;
@@ -243,16 +308,23 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     });
   });
 
-  it('collapses the debug panel automatically on mount when isExtensionMode is true', () => {
-    const resolutionService = TestBed.inject(StartupResolutionService);
-    vi.spyOn(resolutionService, 'isExtensionMode').mockReturnValue(true);
+  it(
+    'collapses the debug panel automatically on mount when isExtensionMode ' + 'is true',
+    async () => {
+      const resolutionService = TestBed.inject(StartupResolutionService);
+      vi.spyOn(resolutionService, 'isExtensionMode').mockReturnValue(true);
 
-    // Recreate fixture to trigger ngOnInit with mock return value
-    const newFixture = TestBed.createComponent(ComposerWorkspaceComponent);
-    newFixture.detectChanges();
+      // Recreate fixture to trigger ngOnInit with mock return value
+      const newFixture = TestBed.createComponent(ComposerWorkspaceComponent);
+      newFixture.detectChanges();
 
-    expect(newFixture.componentInstance.isDebugCollapsed()).toBe(true);
-    const debugSection = newFixture.nativeElement.querySelector('.debug-section');
-    expect(debugSection.classList.contains('collapsed')).toBe(true);
-  });
+      const newHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        newFixture,
+        ComposerWorkspaceHarness,
+      );
+
+      expect(newFixture.componentInstance.isDebugCollapsed()).toBe(true);
+      expect(await newHarness.isDebugSectionCollapsed()).toBe(true);
+    },
+  );
 });

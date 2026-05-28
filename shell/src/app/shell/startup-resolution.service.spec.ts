@@ -15,9 +15,10 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {Router} from '@angular/router';
 import {StartupResolutionService} from './startup-resolution.service';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {LocalStorageService} from '../settings/local-storage.service';
+import {LocalStorageKey} from '../settings/local-storage-keys';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
 describe('StartupResolutionService Task 2.6', () => {
   let service: StartupResolutionService;
@@ -25,19 +26,27 @@ describe('StartupResolutionService Task 2.6', () => {
   beforeEach(() => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [{provide: Router, useValue: {navigate: vi.fn()}}],
+      providers: [StartupResolutionService, LocalStorageService],
     });
     service = TestBed.inject(StartupResolutionService);
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
   });
 
   it('creates the startup resolution service', () => {
     expect(service).toBeTruthy();
   });
 
-  it('fetches static config and enforces lock when overrides are prohibited', async () => {
+  it('fetches static config and locks when overrides are prohibited', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
-      json: async () => ({defaultRendererUrl: 'http://enterprise:3000', allowOverrides: false}),
+      json: async () => ({
+        defaultRendererUrl: 'http://enterprise:3000',
+        allowOverrides: false,
+      }),
     } as Response);
 
     const logSpy = vi.spyOn(console, 'log');
@@ -50,10 +59,13 @@ describe('StartupResolutionService Task 2.6', () => {
     );
   });
 
-  it('evaluates query parameters prior to local storage when overrides are allowed', async () => {
+  it('evaluates query params prior to storage when overrides exist', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
-      json: async () => ({defaultRendererUrl: 'http://base:3000', allowOverrides: true}),
+      json: async () => ({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+      }),
     } as Response);
 
     vi.spyOn(service, 'getWindowSearch').mockReturnValue('?renderer=http://query:3000');
@@ -62,23 +74,26 @@ describe('StartupResolutionService Task 2.6', () => {
     expect(url).toBe('http://query:3000/');
   });
 
-  it('falls back to checking storage when config fetch fails or times out', async () => {
+  it('falls back to storage when config fetch fails or times out', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Timeout'));
     const warnSpy = vi.spyOn(console, 'warn');
 
-    await service.resolveStartupConfiguration();
+    localStorage.setItem(LocalStorageKey.RENDERER_URL, 'http://fallback-storage:3000');
+
+    const url = await service.resolveStartupConfiguration();
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Watchdog timeout or failure fetching config.json'),
     );
+    expect(url).toBe('http://fallback-storage:3000');
   });
 
-  it('identifies 3P environment based on hostname or local override flag', () => {
-    const setItemSpy = vi.spyOn(Storage.prototype, 'getItem');
+  it('identifies 3P environment based on hostname or local overrides', () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
     const hostnameSpy = vi.spyOn(service, 'getWindowHostname');
 
     // Test 1P hostname
     hostnameSpy.mockReturnValue('subdomain.google.com');
-    setItemSpy.mockReturnValue(null);
+    getItemSpy.mockReturnValue(null);
     expect(service.isThirdPartyEnvironment()).toBe(false);
 
     // Test apex 1P hostname
@@ -90,14 +105,17 @@ describe('StartupResolutionService Task 2.6', () => {
     expect(service.isThirdPartyEnvironment()).toBe(true);
 
     // Test forced 3P flag
-    setItemSpy.mockImplementation(key => (key === 'a2ui_composer_force_3p' ? 'true' : null));
+    getItemSpy.mockImplementation(key => (key === LocalStorageKey.FORCE_3P ? 'true' : null));
     expect(service.isThirdPartyEnvironment()).toBe(true);
   });
 
   it('evaluates environment validity correctly via isEnvironmentValid', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
-      json: async () => ({defaultRendererUrl: 'http://base:3000', allowOverrides: true}),
+      json: async () => ({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+      }),
     } as Response);
 
     vi.spyOn(service, 'getWindowHostname').mockReturnValue('localhost');
@@ -105,7 +123,7 @@ describe('StartupResolutionService Task 2.6', () => {
 
     // Scenario 1: URL resolved, but 3P missing API key -> invalid
     getItemSpy.mockImplementation(key => {
-      if (key === 'a2ui_composer_api_key') return null;
+      if (key === LocalStorageKey.GEMINI_API_KEY) return null;
       return null;
     });
     await service.resolveStartupConfiguration();
@@ -113,7 +131,7 @@ describe('StartupResolutionService Task 2.6', () => {
 
     // Scenario 2: URL resolved, and 3P has API key -> valid
     getItemSpy.mockImplementation(key => {
-      if (key === 'a2ui_composer_api_key') return 'AIzaSyValidKey';
+      if (key === LocalStorageKey.GEMINI_API_KEY) return 'AIzaSyValidKey';
       return null;
     });
     expect(service.isEnvironmentValid()).toBe(true);

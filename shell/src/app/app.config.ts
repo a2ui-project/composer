@@ -23,6 +23,10 @@ import {
 import {provideRouter} from '@angular/router';
 import {routes} from './app.routes';
 import {StartupResolutionService} from './shell/startup-resolution.service';
+import {AppConfigProvider} from './settings/app-config-provider';
+import {LocalStorageAppConfigProvider} from './settings/local-storage-config.provider';
+import {LlmClient} from './chat/llm-client/llm-client';
+import {Standalone3pLlmClient} from './chat/llm-client/standalone-3p-llm-client';
 
 /**
  * Application-wide Angular configuration defining core providers,
@@ -36,5 +40,13 @@ export const appConfig: ApplicationConfig = {
       const startupResolutionService = inject(StartupResolutionService);
       return startupResolutionService.resolveStartupConfiguration();
     }),
+    {
+      provide: AppConfigProvider,
+      useExisting: LocalStorageAppConfigProvider,
+    },
+    {
+      provide: LlmClient,
+      useExisting: Standalone3pLlmClient,
+    },
   ],
 };

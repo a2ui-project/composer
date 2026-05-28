@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import {Injectable, Injector, inject, signal} from '@angular/core';
-import {Router} from '@angular/router';
+import {Injectable, inject, signal} from '@angular/core';
 import {QueryParser} from './query-parser';
+import {LocalStorageKey} from '../settings/local-storage-keys';
+import {LocalStorageService} from '../settings/local-storage.service';
 
 /**
  * Represents the resolved runtime configuration for the application,
@@ -35,9 +36,9 @@ export interface AppConfig {
  * parameters, validating environments, and initializing core state.
  */
 export class StartupResolutionService {
-  private _resolvedUrl = signal<string | null>(null);
-  private _isLockedContext = signal(false);
-  private injector = inject(Injector);
+  private readonly _resolvedUrl = signal<string | null>(null);
+  private readonly _isLockedContext = signal(false);
+  private readonly localStorageService = inject(LocalStorageService);
 
   public readonly resolvedUrl = this._resolvedUrl.asReadonly();
   public readonly isLockedContext = this._isLockedContext.asReadonly();
@@ -54,7 +55,7 @@ export class StartupResolutionService {
       }
     } catch (err) {
       console.warn(
-        'Watchdog timeout or failure fetching config.json. Allowing overrides fallbacks.',
+        'Watchdog timeout or failure fetching config.json. ' + 'Allowing overrides fallbacks.',
       );
     } finally {
       clearTimeout(timeoutId);
@@ -63,7 +64,9 @@ export class StartupResolutionService {
     if (staticConfig) {
       this._resolvedUrl.set(staticConfig.defaultRendererUrl);
       if (!staticConfig.allowOverrides) {
-        console.log('Static configuration loaded with allowOverrides: false. Locking context.');
+        console.log(
+          'Static configuration loaded with allowOverrides: false. ' + 'Locking context.',
+        );
         this._isLockedContext.set(true);
 
         this.evaluateEnvironmentPurge();
@@ -80,7 +83,7 @@ export class StartupResolutionService {
       }
     }
 
-    const localPrefs = this.getStorageItem('a2ui_composer_renderer_url');
+    const localPrefs = this.localStorageService.getItem(LocalStorageKey.RENDERER_URL);
     if (localPrefs && !this._isLockedContext()) {
       this._resolvedUrl.set(localPrefs);
     }
@@ -99,13 +102,13 @@ export class StartupResolutionService {
   }
 
   public isThirdPartyEnvironment(): boolean {
-    const force1P = this.getStorageItem('a2ui_composer_force_1p') === 'true';
+    const force1P = this.localStorageService.getItem(LocalStorageKey.FORCE_1P) === 'true';
     if (force1P) {
       return false;
     }
 
     const hostname = this.getWindowHostname();
-    const force3P = this.getStorageItem('a2ui_composer_force_3p') === 'true';
+    const force3P = this.localStorageService.getItem(LocalStorageKey.FORCE_3P) === 'true';
     if (force3P) {
       return true;
     }
@@ -122,7 +125,7 @@ export class StartupResolutionService {
   public isEnvironmentValid(): boolean {
     const resolvedUrl = this.getResolvedRendererUrl();
     const is3P = this.isThirdPartyEnvironment();
-    const hasApiKey = !!this.getStorageItem('a2ui_composer_api_key');
+    const hasApiKey = !!this.localStorageService.getItem(LocalStorageKey.GEMINI_API_KEY);
 
     return !!resolvedUrl && (!is3P || hasApiKey);
   }
@@ -130,8 +133,9 @@ export class StartupResolutionService {
   public isExtensionMode(): boolean {
     const urlParams = new URLSearchParams(this.getWindowSearch());
     const urlExtension = urlParams.get('extension') === 'true';
-    const storageExtension = this.getStorageItem('a2ui_composer_extension_mode') === 'true';
-    return urlExtension || storageExtension;
+    const hasExtensionStorage =
+      this.localStorageService.getItem(LocalStorageKey.EXTENSION_MODE) === 'true';
+    return urlExtension || hasExtensionStorage;
   }
 
   public getWindowSearch(): string {
@@ -144,15 +148,7 @@ export class StartupResolutionService {
 
   private evaluateEnvironmentPurge(): void {
     if (!this.isThirdPartyEnvironment()) {
-      this.removeStorageItem('a2ui_composer_api_key');
+      this.localStorageService.removeItem(LocalStorageKey.GEMINI_API_KEY);
     }
-  }
-
-  private getStorageItem(key: string): string | null {
-    return localStorage.getItem(key);
-  }
-
-  private removeStorageItem(key: string): void {
-    localStorage.removeItem(key);
   }
 }
