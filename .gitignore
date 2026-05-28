@@ -194,3 +194,7 @@ Thumbs.db
 ### Playwright
 playwright-report
 test-results
+
+### We're strictly TypeScript
+*.js
+*.map
