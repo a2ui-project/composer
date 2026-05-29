@@ -55,6 +55,9 @@ export class A2uiSandboxConnection implements OnDestroy {
   /** Resolves the central rendering service provider from the injector context. */
   private rendererService = inject(A2uiRendererService);
 
+  /** Optional injected dynamic renderer configuration options block. */
+  private rendererConfig = inject(A2UI_RENDERER_CONFIG);
+
   /** The dynamic teardown handle for the active framework renderer connection subscription. */
   private rendererConnection: SurfaceStateSubscription | null = null;
 
@@ -77,6 +80,7 @@ export class A2uiSandboxConnection implements OnDestroy {
           this.surfaceId.set('');
         },
         catalog: catalogJson,
+        catalogs: this.rendererConfig.catalogs,
       },
     );
   }

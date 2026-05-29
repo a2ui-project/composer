@@ -1,4 +1,5 @@
 /**
+ * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +18,10 @@
 import {ComponentHarness} from '@angular/cdk/testing';
 import {MatInputHarness} from '@angular/material/input/testing';
 
+/**
+ * Harness for interacting with the raw-frame preview editor.
+ * Exposes methods to view and modify layout drafts in a code view.
+ */
 export class RawFrameHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-raw-frame';
 
@@ -40,5 +45,11 @@ export class RawFrameHarness extends ComponentHarness {
   async hasInvalidJsonBadge(): Promise<boolean> {
     const badge = await this.locatorForOptional('.invalid-json-badge')();
     return badge !== null;
+  }
+
+  async isReadOnly(): Promise<boolean> {
+    const input = await this.getInputHarness();
+    const host = await input.host();
+    return !!(await host.getProperty<boolean>('readOnly'));
   }
 }

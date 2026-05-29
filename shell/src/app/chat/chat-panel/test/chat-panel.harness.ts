@@ -1,4 +1,5 @@
 /**
+ * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +16,141 @@
  */
 
 import {ComponentHarness} from '@angular/cdk/testing';
+import {MatInputHarness} from '@angular/material/input/testing';
+import {MatButtonHarness} from '@angular/material/button/testing';
 
+/**
+ * Harness for interacting with the chat drawer drawer view.
+ * Exposes visual locator assertions and text modifier actions.
+ */
 export class ChatPanelHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-chat-panel';
+
+  protected getPromptInput = this.locatorForOptional(MatInputHarness);
+  protected getSubmitButton = this.locatorForOptional(
+    MatButtonHarness.with({selector: '.submit-button'}),
+  );
+
+  async getBubblesText(): Promise<string[]> {
+    const bubbles = await this.locatorForAll('.bubble-body')();
+    return Promise.all(bubbles.map(b => b.text()));
+  }
+
+  async getBubbleHeaders(): Promise<string[]> {
+    const headers = await this.locatorForAll('.bubble-author-name')();
+    return Promise.all(headers.map(h => h.text()));
+  }
+
+  async getBubbleTypes(): Promise<string[]> {
+    const bubbles = await this.locatorForAll('.chat-bubble-container')();
+    return Promise.all(
+      bubbles.map(async b => {
+        if (await b.hasClass('bubble-user')) {
+          if (await b.hasClass('bubble-layout')) {
+            return 'layout-snapshot';
+          }
+          return 'human-text';
+        }
+        if (await b.hasClass('bubble-model')) {
+          return 'model-response';
+        }
+        if (await b.hasClass('bubble-error')) {
+          return 'diagnostic-error';
+        }
+        return 'unknown';
+      }),
+    );
+  }
+
+  async getPromptText(): Promise<string> {
+    const input = await this.getPromptInput();
+    if (!input) return '';
+    return input.getValue();
+  }
+
+  async setPromptText(text: string): Promise<void> {
+    const input = await this.getPromptInput();
+    if (!input) throw new Error('Prompt input field not found.');
+    await input.setValue(text);
+  }
+
+  async clickSubmit(): Promise<void> {
+    const btn = await this.getSubmitButton();
+    if (!btn) throw new Error('Submit button not found.');
+    await btn.click();
+  }
+
+  async isSubmitDisabled(): Promise<boolean> {
+    const btn = await this.getSubmitButton();
+    if (!btn) return true;
+    return btn.isDisabled();
+  }
+
+  async isPromptDisabled(): Promise<boolean> {
+    const input = await this.getPromptInput();
+    if (!input) return true;
+    return input.isDisabled();
+  }
+
+  async hasLoadingOverlay(): Promise<boolean> {
+    const overlay = await this.locatorForOptional('.pipeline-overlay')();
+    return overlay !== null;
+  }
+
+  async getLoadingOverlayText(): Promise<string | null> {
+    const textNode = await this.locatorForOptional('.status-badge-text')();
+    if (!textNode) return null;
+    return textNode.text();
+  }
+
+  /**
+   * Simulates keydowns natively on the prompt input element.
+   *
+   * @param key The keyboard key identifier to press.
+   * @param modifiers Key modifier flags like shift.
+   */
+  async pressKeyOnPrompt(key: string, modifiers?: {shiftKey?: boolean}): Promise<void> {
+    const input = await this.getPromptInput();
+    if (!input) throw new Error('Prompt input field not found.');
+    const host = await input.host();
+    await host.dispatchEvent('keydown', {
+      key,
+      shiftKey: !!modifiers?.shiftKey,
+    });
+  }
+
+  /**
+   * Clicks and dismisses the loading pipeline overlay manually.
+   */
+  async dismissLoadingOverlay(): Promise<void> {
+    const overlay = await this.locatorForOptional('.pipeline-overlay')();
+    if (!overlay) throw new Error('Pipeline overlay not found.');
+    await overlay.click();
+  }
+
+  /**
+   * Checks if the welcome empty state state card notice is shown.
+   */
+  async hasWelcomeNotice(): Promise<boolean> {
+    const notice = await this.locatorForOptional('.empty-state-notice')();
+    return notice !== null;
+  }
+
+  /**
+   * Retrieves the empty state state card welcome notice text content.
+   */
+  async getWelcomeNoticeText(): Promise<string | null> {
+    const notice = await this.locatorForOptional('.empty-state-notice')();
+    if (!notice) return null;
+    return notice.text();
+  }
+  async clickSystemInstructionsLink(): Promise<void> {
+    const link = await this.locatorFor('.system-instructions-link')();
+    await link.click();
+  }
+
+  async hasSystemInstructionsLink(): Promise<boolean> {
+    const link = await this.locatorForOptional('.system-instructions-link')();
+    return link !== null;
+  }
 }

@@ -1,4 +1,5 @@
 /**
+ * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +25,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {DOCUMENT} from '@angular/common';
 import {IndexedDbStorageService} from '../storage/indexed-db-storage.service';
 import {CatalogManagementService} from '../storage/catalog-management.service';
+import {AppConfigProvider} from '../settings/app-config-provider';
 import {signal, WritableSignal} from '@angular/core';
 
 describe('ComposerShellComponent Layout', () => {
@@ -34,6 +36,10 @@ describe('ComposerShellComponent Layout', () => {
     activeCatalogTitle: WritableSignal<string>;
     activeCatalogDescription: WritableSignal<string>;
   };
+  let configProviderMock: {
+    themePreference: WritableSignal<'light' | 'dark'>;
+    setThemePreference: any;
+  };
 
   beforeEach(async () => {
     storageServiceMock = {
@@ -43,6 +49,13 @@ describe('ComposerShellComponent Layout', () => {
     catalogManagementServiceMock = {
       activeCatalogTitle: signal(''),
       activeCatalogDescription: signal(''),
+    };
+
+    configProviderMock = {
+      themePreference: signal('light'),
+      setThemePreference: vi.fn((theme: 'light' | 'dark') => {
+        configProviderMock.themePreference.set(theme);
+      }),
     };
 
     await TestBed.configureTestingModule({
@@ -57,6 +70,10 @@ describe('ComposerShellComponent Layout', () => {
         {
           provide: CatalogManagementService,
           useValue: catalogManagementServiceMock,
+        },
+        {
+          provide: AppConfigProvider,
+          useValue: configProviderMock,
         },
       ],
     }).compileComponents();
@@ -75,11 +92,14 @@ describe('ComposerShellComponent Layout', () => {
     expect(harness).toBeTruthy();
   });
 
-  it('displays the static header title A2UI Composer via test harness inspection', async () => {
-    expect(await harness.getHeaderTitleText()).toContain('A2UI Composer');
-  });
+  it(
+    'displays the static header title A2UI Composer via test ' + 'harness inspection',
+    async () => {
+      expect(await harness.getHeaderTitleText()).toContain('A2UI Composer');
+    },
+  );
 
-  it('dynamically updates the header title when activeCatalogTitle mutates', async () => {
+  it('dynamically updates the header title when ' + 'activeCatalogTitle mutates', async () => {
     catalogManagementServiceMock.activeCatalogTitle.set('Test Catalog');
     fixture.detectChanges();
     expect(await harness.getHeaderTitleText()).toBe('A2UI Composer - Test Catalog');
@@ -91,26 +111,56 @@ describe('ComposerShellComponent Layout', () => {
     expect(await harness.getHeaderTooltipText()).toBe('Sample description');
   });
 
-  it('flushes session cache upon clicking New Session reset button via test harness interaction', async () => {
-    const consoleSpy = vi.spyOn(console, 'log');
-    await harness.clickResetButton();
-    expect(consoleSpy).toHaveBeenCalledWith('Session state cleared.');
-  });
+  it(
+    'flushes session cache upon clicking New Session reset button ' +
+      'via test harness interaction',
+    async () => {
+      const consoleSpy = vi.spyOn(console, 'log');
+      await harness.clickResetButton();
+      expect(consoleSpy).toHaveBeenCalledWith('Session state cleared.');
+    },
+  );
 
-  it('toggles the dark theme SCSS class on the document body upon clicking the theme toggle button via test harness interaction', async () => {
+  it(
+    'toggles the dark theme SCSS class on the document body upon ' +
+      'clicking the theme toggle button via test harness interaction',
+    async () => {
+      const injectedDocument = TestBed.inject(DOCUMENT);
+      expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
+      await harness.clickThemeToggleButton();
+      expect(injectedDocument.body.classList.contains('dark-theme')).toBe(true);
+      await harness.clickThemeToggleButton();
+      expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
+    },
+  );
+
+  it(
+    'toggles the left sidebar opened and closed states upon clicking ' +
+      'the hamburger button via test harness interaction',
+    async () => {
+      expect(await harness.isSidenavOpened()).toBe(true);
+      await harness.clickHamburgerButton();
+      expect(await harness.isSidenavOpened()).toBe(false);
+      await harness.clickHamburgerButton();
+      expect(await harness.isSidenavOpened()).toBe(true);
+    },
+  );
+
+  it('reads the persisted theme preference from storage on initialization', async () => {
+    configProviderMock.themePreference.set('dark');
+    const newFixture = TestBed.createComponent(ComposerShellComponent);
+    newFixture.detectChanges();
+
     const injectedDocument = TestBed.inject(DOCUMENT);
-    expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
-    await harness.clickThemeToggleButton();
     expect(injectedDocument.body.classList.contains('dark-theme')).toBe(true);
-    await harness.clickThemeToggleButton();
-    expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
   });
 
-  it('toggles the left sidebar opened and closed states upon clicking the hamburger button via test harness interaction', async () => {
-    expect(await harness.isSidenavOpened()).toBe(true);
-    await harness.clickHamburgerButton();
-    expect(await harness.isSidenavOpened()).toBe(false);
-    await harness.clickHamburgerButton();
-    expect(await harness.isSidenavOpened()).toBe(true);
+  it('persists theme preference to storage upon toggling theme', async () => {
+    expect(configProviderMock.setThemePreference).not.toHaveBeenCalled();
+    await harness.clickThemeToggleButton();
+    expect(configProviderMock.setThemePreference).toHaveBeenCalledWith('dark');
+
+    await harness.clickThemeToggleButton();
+    expect(configProviderMock.setThemePreference).toHaveBeenCalledWith('light');
   });
 });

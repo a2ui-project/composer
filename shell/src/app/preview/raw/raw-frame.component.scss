@@ -29,6 +29,16 @@
   box-sizing: border-box;
   transition: all 0.3s ease;
 
+  &.is-locked {
+    opacity: 0.55;
+    pointer-events: none;
+    cursor: not-allowed;
+
+    textarea {
+      cursor: not-allowed;
+    }
+  }
+
   .invalid-json-badge {
     color: #f44336;
     font-weight: bold;

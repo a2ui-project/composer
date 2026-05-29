@@ -1,4 +1,5 @@
 /**
+ * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,63 +15,612 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, computed, signal, WritableSignal} from '@angular/core';
+import {Injectable, inject, computed, effect, untracked} from '@angular/core';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
-import {ChatMessage} from '../llm-client/llm-client';
+import {LlmMessage, LlmClient, MessageRole} from '../llm-client/llm-client';
+import {PipelineStatus} from '../pipeline-status/pipeline-status';
+import {AppConfigProvider} from '../../settings/app-config-provider';
+import {StateSyncService} from '../state-sync/state-sync.service';
+import {ChatStateService} from '../chat-state/chat-state.service';
+import {CrossFrameValidator} from '../../shell/cross-frame-validator';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 @Injectable({
   providedIn: 'root',
 })
 /**
- * Dynamic chat panel coordinator managing system prompt generation using dynamic component configurations.
+ * Dynamic chat panel coordinator managing system prompt generation using
+ * dynamic component configurations. Manages LLM completions transport
+ * streams, self-healing parsers, schemas typo corrections, and gateway
+ * error fallbacks.
  */
 export class ChatService {
   private readonly catalogManagement = inject(CatalogManagementService);
+  private readonly configProvider = inject(AppConfigProvider);
+  private readonly stateSyncService = inject(StateSyncService);
+  private readonly chatStateService = inject(ChatStateService);
+  private readonly llmClient = inject(LlmClient);
+
+  /** Reactively mapped rendering pipeline execution milestones. */
+  public readonly pipelineStatus = this.chatStateService.pipelineStatus;
 
   /**
-   * Backing dynamic, reactive Signal array storing conversational turn history records.
+   * Public programmatic lock signal protecting against typing deadlocks
+   * during streams.
    */
-  public readonly chatHistorySignal: WritableSignal<ChatMessage[]> = signal<ChatMessage[]>([]);
+  public readonly isProgrammaticStreamActive = this.chatStateService.isProgrammaticStreamActive;
+
+  private lastSeenRendererUrl = '';
+  private isFirstUrlEffectRun = true;
+
+  constructor() {
+    // Effect monitoring dynamic host preview configurations mapping cache
+    // resets
+    effect(() => {
+      const url = this.configProvider.rendererUrl();
+      untracked(() => {
+        if (this.isFirstUrlEffectRun) {
+          this.isFirstUrlEffectRun = false;
+          this.lastSeenRendererUrl = url;
+          return;
+        }
+        if (this.lastSeenRendererUrl !== url) {
+          queueMicrotask(() => this.wipeEnvironmentCache());
+        }
+        this.lastSeenRendererUrl = url;
+      });
+    });
+  }
 
   /**
-   * A dynamic, reactive, computed signal property constructing system prompt blocks
-   * from registered custom components metadata schemas.
+   * Resets turns logs history, overlays milestones, and locks indicators.
    */
-  public readonly systemPromptSignal = computed<string>(() => {
-    const catalog = this.catalogManagement.activeCatalogSignal();
+  public wipeEnvironmentCache(): void {
+    this.chatStateService.setChatHistory([]);
+    this.chatStateService.setPipelineStatus(PipelineStatus.IDLE);
+    this.chatStateService.setProgrammaticStreamActive(false);
+    this.stateSyncService.flushDraft();
+  }
+
+  /**
+   * Constructs System instructions prepended message logs context.
+   */
+  public getFullMessageContext(): LlmMessage[] {
+    return [
+      {
+        role: MessageRole.SYSTEM,
+        content: this.systemPrompt(),
+      },
+      ...this.chatStateService.chatHistory().filter(m => m.role !== MessageRole.ERROR),
+    ];
+  }
+
+  /**
+   * Dispatches a fresh text instruction, triggers GenAI completions
+   * in-stream, buffers packets, runs auto-repair healing and schema
+   * validation blocks.
+   */
+  public async submitPrompt(prompt: string): Promise<void> {
+    const trimmed = prompt.trim();
+    if (!trimmed) return;
+
+    // Lock UI controls and transition state indicators to receiving stream
+    this.chatStateService.setProgrammaticStreamActive(true);
+    this.chatStateService.setPipelineStatus(PipelineStatus.RECEIVING_STREAM);
+
+    // Append user prompt text turn to chat history
+    this.chatStateService.updateChatHistory(h => [
+      ...h,
+      {
+        role: MessageRole.USER,
+        content: trimmed,
+      },
+    ]);
+
+    // Construct system-prepended context matching conversational bounds
+    const fullContext = this.getFullMessageContext();
+
+    // Push initial model turn placeholder with loading pulse indicator to history
+    this.chatStateService.updateChatHistory(h => [
+      ...h,
+      {
+        role: MessageRole.MODEL,
+        content: ' ●●●',
+      },
+    ]);
+
+    try {
+      // Trigger streaming GenAI completions call using client facade
+      const responseStream = await this.llmClient.chatStream(fullContext);
+
+      // Loop asynchronously over incoming stream packets to compile text
+      let accumulatedRawText = '';
+      for await (const packet of responseStream.contentStream) {
+        accumulatedRawText += packet;
+
+        // Update history bubble in real-time with trailing pulse indicator
+        this.chatStateService.updateChatHistory(history => {
+          const updated = [...history];
+          const lastIdx = updated.length - 1;
+          if (updated[lastIdx]?.role === MessageRole.MODEL) {
+            updated[lastIdx] = {
+              role: MessageRole.MODEL,
+              content: accumulatedRawText + ' ●●●',
+            };
+          }
+          return updated;
+        });
+      }
+
+      // Stream exhausted, resolve final complete text and remove visual loading indicator
+      const finalRawText = await responseStream.complete;
+      this.chatStateService.updateChatHistory(history => {
+        const updated = [...history];
+        const lastIdx = updated.length - 1;
+        if (updated[lastIdx]?.role === MessageRole.MODEL) {
+          updated[lastIdx] = {
+            role: MessageRole.MODEL,
+            content: finalRawText,
+          };
+        }
+        return updated;
+      });
+
+      this.chatStateService.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
+      await this.processRawLlmPayload(finalRawText);
+    } catch (err: unknown) {
+      this.handleConnectivityError(err, trimmed);
+    }
+  }
+
+  /**
+   * Post-processes, extracts, syntax heals, and validates raw JSON lines.
+   */
+  private async processRawLlmPayload(rawText: string): Promise<void> {
+    // Stage 1: Parse and Syntax Healing
+    let parsedBlocks: unknown[] = [];
+    try {
+      parsedBlocks = this.parseAndHealJsonLines(rawText);
+    } catch (err: unknown) {
+      this.chatStateService.setPipelineStatus(PipelineStatus.FAILED);
+      this.chatStateService.setProgrammaticStreamActive(false);
+      throw err;
+    }
+
+    // Stage 2: Schema Validation
+    this.chatStateService.setPipelineStatus(PipelineStatus.VALIDATING);
+    try {
+      // Verify basic schema envelopes using pre-existing CrossFrameValidator
+      const mockEnvMsg = {
+        type: PreviewBridgeMessageType.RENDER_A2UI,
+        payload: parsedBlocks,
+      };
+
+      // Temporary override console.error to capture validation failures
+      const originalConsoleError = console.error;
+      const validationErrors: string[] = [];
+      console.error = (...args: unknown[]) => {
+        validationErrors.push(
+          args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '),
+        );
+      };
+
+      let isValidEnvelope = false;
+      try {
+        isValidEnvelope = CrossFrameValidator.validateOutgoingMessage(mockEnvMsg);
+      } finally {
+        console.error = originalConsoleError;
+      }
+
+      if (!isValidEnvelope) {
+        throw new Error(
+          `Outgoing message envelope validation failed:\n${validationErrors.join('\n')}`,
+        );
+      }
+
+      // Catalog Component Schema Check & Name Typos Healing
+      this.runCatalogComponentSchemaCheck(parsedBlocks);
+
+      // Stage 3: Ready & Commit Layout Wipes
+      this.chatStateService.setPipelineStatus(PipelineStatus.READY);
+
+      // Turn list of updates back into raw JSON lines text to write to
+      // editor draft
+      const finalLayoutText = parsedBlocks.map(b => JSON.stringify(b)).join('\n') + '\n';
+
+      // Commit layout synchronously to editor viewport before releasing
+      // lockout
+      this.stateSyncService.commitLayoutFromLlm(finalLayoutText);
+
+      // Release panel textareas lockout synchronously to avoid race
+      // condition escapes
+      this.chatStateService.setProgrammaticStreamActive(false);
+    } catch (err: unknown) {
+      this.chatStateService.setPipelineStatus(PipelineStatus.FAILED);
+      this.chatStateService.setProgrammaticStreamActive(false);
+      throw err;
+    }
+  }
+
+  /**
+   * Robust parser extracting JSON objects from blocks, performing syntax
+   * repairs.
+   */
+  private parseAndHealJsonLines(text: string): unknown[] {
+    let content = text.trim();
+
+    // Markdown Extraction: If output has markdown wrappers, extract content
+    const mdJsonRegex = /```json\s*([\s\S]*?)\s*```/;
+    const match = content.match(mdJsonRegex);
+    if (match && match[1]) {
+      this.chatStateService.setPipelineStatus(PipelineStatus.HEALING);
+      content = match[1].trim();
+    }
+
+    const lines = content
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+    const parsedBlocks: unknown[] = [];
+
+    for (const line of lines) {
+      // Skip markdown code tags if they leaked, or general prompt filler
+      // text lines
+      if (line.startsWith('```') || (!line.startsWith('{') && !line.startsWith('['))) {
+        continue;
+      }
+
+      try {
+        parsedBlocks.push(JSON.parse(line));
+      } catch (err) {
+        // Syntax Healing Loop
+        this.chatStateService.setPipelineStatus(PipelineStatus.HEALING);
+        const healedObj = this.attemptSyntaxHealing(line);
+        if (healedObj !== null) {
+          parsedBlocks.push(healedObj);
+        } else {
+          // If it looks like A2UI JSON but couldn't be repaired, throw
+          // validation error
+          if (line.includes('"version"') || line.includes('"createSurface"')) {
+            throw new Error(`Syntax recovery failed for corrupted JSON Line:\n"${line}"`);
+          }
+        }
+      }
+    }
+
+    if (parsedBlocks.length === 0) {
+      throw new Error('No valid A2UI JSON layout command block could be parsed or recovered.');
+    }
+
+    return parsedBlocks;
+  }
+
+  /**
+   * Attempts structural structural syntax patching on broken JSON strings.
+   */
+  private attemptSyntaxHealing(line: string): unknown | null {
+    let patched = line.trim();
+
+    // Repair 1: Strip trailing commas inside properties arrays
+    patched = patched.replace(/,\s*([\]}])/g, '$1');
+
+    // Repair 2: Auto-close braces
+    try {
+      return JSON.parse(patched);
+    } catch (e) {
+      // Loop to try appending up to 5 missing closing curly braces
+      for (let i = 1; i <= 5; i++) {
+        try {
+          return JSON.parse(patched + '}'.repeat(i));
+        } catch (_) {}
+      }
+
+      // Loop to try appending matching square brackets then curly braces
+      for (let i = 1; i <= 3; i++) {
+        for (let j = 1; j <= 3; j++) {
+          try {
+            return JSON.parse(patched + ']'.repeat(i) + '}'.repeat(j));
+          } catch (_) {}
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Validates parsed components against custom catalog schemas, healing name
+   * typos, mapping legacy names, and recursively stripping out custom mock
+   * rules configurations.
+   */
+  private runCatalogComponentSchemaCheck(parsedBlocks: unknown[]): void {
+    const catalog = this.catalogManagement.activeCatalog();
+    const componentHealMap: Record<string, string> = {};
+
+    if (catalog && catalog.components) {
+      for (const key of Object.keys(catalog.components)) {
+        const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, '');
+        componentHealMap[normalizedKey] = key;
+      }
+    }
+
+    const SYNONYM_MAP: Record<string, string> = {
+      textbox: 'textfield',
+      textinput: 'textfield',
+      rowlayout: 'row',
+      columnlayout: 'column',
+      choice: 'choicepicker',
+      datepicker: 'datetimeinput',
+      datetimepicker: 'datetimeinput',
+    };
+
+    for (const block of parsedBlocks) {
+      const bObj = block as Record<string, unknown>;
+      const updateComponents = bObj['updateComponents'] as Record<string, unknown>;
+      if (
+        !updateComponents ||
+        typeof updateComponents !== 'object' ||
+        !Array.isArray(updateComponents['components'])
+      ) {
+        continue;
+      }
+
+      const cleanedComponents: unknown[] = [];
+      for (const comp of updateComponents['components']) {
+        if (!comp || typeof comp !== 'object' || Array.isArray(comp)) {
+          cleanedComponents.push(comp);
+          continue;
+        }
+
+        const compObj = comp as Record<string, unknown>;
+        let compType = compObj['component'] as string;
+
+        // legacy property "name" fallback: heal to "component" key mapping
+        if (compObj['name'] && !compObj['component']) {
+          this.chatStateService.setPipelineStatus(PipelineStatus.HEALING);
+          compType = compObj['name'] as string;
+          compObj['component'] = compType;
+          delete compObj['name'];
+        }
+
+        if (typeof compType !== 'string') {
+          throw new Error('Component declaration is missing component type name string.');
+        }
+
+        let targetType = compType;
+
+        // Schema validation (only if catalog is actively loaded with components)
+        if (catalog && catalog.components) {
+          if (!catalog.components[compType]) {
+            // Unrecognized component type - check case-insensitive lookup!
+            const normalized = compType.toLowerCase().replace(/[^a-z]/g, '');
+            let healedType = componentHealMap[normalized];
+
+            // If not found directly, check synonym translation dictionary
+            if (!healedType) {
+              const synonymTarget = SYNONYM_MAP[normalized];
+              if (synonymTarget) {
+                healedType = componentHealMap[synonymTarget];
+              }
+            }
+
+            if (healedType && catalog.components[healedType]) {
+              this.chatStateService.setPipelineStatus(PipelineStatus.HEALING);
+              targetType = healedType;
+            } else {
+              // Fuzzy search matches (Worker 1 addition)
+              const fuzzyMatch = normalized
+                ? Object.keys(catalog.components).find(
+                    key =>
+                      key.toLowerCase().includes(normalized) ||
+                      normalized.includes(key.toLowerCase()),
+                  )
+                : undefined;
+
+              if (fuzzyMatch) {
+                this.chatStateService.setPipelineStatus(PipelineStatus.HEALING);
+                targetType = fuzzyMatch;
+              } else {
+                throw new Error(
+                  `Validation failure: Component type "${compType}" is ` +
+                    'not registered in the active custom catalog.',
+                );
+              }
+            }
+          }
+        }
+
+        // Recursively strip out dynamic mock setups configuration fields
+        const cleanedComp = this.sanitizeComponentObject(compObj);
+        // Restore corrected element name
+        cleanedComp['component'] = targetType;
+        cleanedComponents.push(cleanedComp);
+      }
+
+      // Commit sanitized array back in-place
+      updateComponents['components'] = cleanedComponents;
+    }
+  }
+
+  /**
+   * Recursively sanitizes component declarations maps.
+   * Strips out dynamic rules configs matching /rules/ or prefix /^mock/i.
+   */
+  private sanitizeComponentObject(obj: Record<string, unknown>): Record<string, unknown> {
+    const cleaned: Record<string, unknown> = {};
+
+    for (const [key, val] of Object.entries(obj)) {
+      if (key === 'rules' || /^mock/i.test(key)) {
+        continue;
+      }
+
+      if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+        cleaned[key] = this.sanitizeComponentObject(val as Record<string, unknown>);
+      } else if (Array.isArray(val)) {
+        cleaned[key] = val.map(item => {
+          if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
+            return this.sanitizeComponentObject(item as Record<string, unknown>);
+          }
+          return item;
+        });
+      } else {
+        cleaned[key] = val;
+      }
+    }
+
+    return cleaned;
+  }
+
+  /**
+   * Connectivity Exception Handling: bubbles diagnostics stack details.
+   * Instantly dismisses overlays locks on network, proxy, or auth failures
+   * to restore workspace editing controls immediately.
+   */
+  private handleConnectivityError(err: unknown, originalPrompt?: string): void {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+
+    // Intercept timeouts, proxy locks, or public API fetch failures
+    const isConnectivity =
+      errorMsg.includes('Failed to fetch') ||
+      errorMsg.includes('fetch') ||
+      errorMsg.includes('Timeout') ||
+      errorMsg.includes('timeout') ||
+      errorMsg.includes('504') ||
+      errorMsg.includes('Proxy') ||
+      errorMsg.includes('proxy') ||
+      errorMsg.includes('NetworkError') ||
+      errorMsg.includes('TypeError') ||
+      errorMsg.includes('connection') ||
+      errorMsg.includes('Connection') ||
+      errorMsg.includes('401') ||
+      errorMsg.includes('403') ||
+      errorMsg.includes('credential') ||
+      errorMsg.includes('quota') ||
+      errorMsg.includes('blocked') ||
+      errorMsg.includes('503') ||
+      errorMsg.includes('UNAVAILABLE');
+
+    if (isConnectivity) {
+      // Instantly dismiss loading overlay locks
+      this.chatStateService.setPipelineStatus(PipelineStatus.IDLE);
+    } else {
+      this.chatStateService.setPipelineStatus(PipelineStatus.FAILED);
+    }
+    this.chatStateService.setProgrammaticStreamActive(false);
+
+    let errorDetails = '';
+    if (err instanceof Error) {
+      errorDetails = `Exception: ${err.message}\nStack: ${err.stack || 'None'}`;
+    } else {
+      errorDetails = `Unknown Exception: ${JSON.stringify(err)}`;
+    }
+
+    const isValidationError =
+      errorMsg.includes('validation') ||
+      errorMsg.includes('Syntax recovery') ||
+      errorMsg.includes('Validation failure');
+
+    let bubbleText = isValidationError
+      ? '⚠️ Validation Failure. The generated layout contains invalid components or structure.'
+      : '⚠️ Connectivity Failure. Remote gateway communication drop.';
+    let isRetryable = !!originalPrompt;
+
+    // Check specifically for 503 UNAVAILABLE high demand
+    const is503 =
+      errorMsg.includes('503') ||
+      errorMsg.includes('UNAVAILABLE') ||
+      errorMsg.includes('high demand') ||
+      errorMsg.includes('experiencing high demand');
+
+    if (is503) {
+      bubbleText =
+        '⚠️ This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.';
+      isRetryable = true;
+    } else if (errorMsg.includes('Timeout') || errorMsg.includes('504')) {
+      bubbleText =
+        '⚠️ REST Gateway Timeout. Remote generation service ' +
+        'did not respond.\nDetails: ' +
+        errorMsg;
+    } else if (
+      errorMsg.includes('Auth') ||
+      errorMsg.includes('401') ||
+      errorMsg.includes('403') ||
+      errorMsg.includes('credential')
+    ) {
+      bubbleText =
+        '⚠️ Authentication Refused. Please verify your 3P API ' +
+        'credentials in Settings.\nDetails: ' +
+        errorMsg;
+    } else if (
+      errorMsg.includes('quota') ||
+      errorMsg.includes('blocked') ||
+      errorMsg.includes('429')
+    ) {
+      bubbleText =
+        '⚠️ GenAI Service Blocked. Resource quota depleted or ' +
+        'content safety limits triggered.\nDetails: ' +
+        errorMsg;
+    }
+
+    // Guides the developer directly on the error turn bubble content
+    let diagnosticText = bubbleText;
+    if (!is503) {
+      const errorHeader = isValidationError
+        ? '[A2UI Schema Validation or Parsing Exception]'
+        : '[REST Gateway Timeout or Connectivity Exception]';
+      const tipText = isValidationError
+        ? 'Tip: Try rephrasing your prompt to guide the model to generate valid components.'
+        : 'Tip: Please check your network proxy configurations or supply your third-party Gemini developer token key on the settings page to restore connections.';
+
+      diagnosticText +=
+        '\n\n' +
+        errorHeader +
+        '\n' +
+        '-------------------------------------------------\n' +
+        'Failed to compile generative turn. Diagnostic stack details:\n\n' +
+        errorDetails +
+        '\n\n' +
+        tipText;
+    }
+
+    // Overwrite trailing blank MODEL placeholder bubble in-place to
+    // avoid empty bubble drift
+    this.chatStateService.updateChatHistory(history => {
+      const updated = [...history];
+      const lastIdx = updated.length - 1;
+      const errorBubble: LlmMessage = {
+        role: MessageRole.ERROR,
+        content: diagnosticText,
+        ...(isRetryable ? {isRetryable: true, originalPrompt} : {}),
+      };
+      if (lastIdx >= 0 && updated[lastIdx].role === MessageRole.MODEL) {
+        updated[lastIdx] = errorBubble;
+        return updated;
+      }
+      updated.push(errorBubble);
+      return updated;
+    });
+  }
+
+  /**
+   * A dynamic, reactive, computed signal property constructing conformed JSON
+   * catalog schema specifications system instructions.
+   */
+  public readonly systemPrompt = computed<string>(() => {
+    const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) {
       return (
-        'SYSTEM INSTRUCTION SET\n' +
-        '----------------------\n' +
-        'You are an AI assistant designed to help model mock screens inside A2UI Composer shell.\n' +
-        'Status: [Awaiting renderer dynamic handshake settlement...]'
+        'You are an AI assistant designed to help model mock screens ' +
+        'inside A2UI Composer shell.\n' +
+        'Status: Awaiting renderer dynamic handshake settlement...'
       );
     }
 
-    const title = catalog.title || 'Dynamic Catalog';
-    const desc = catalog.description || 'Custom application elements layout catalog.';
-    let prompt =
-      'SYSTEM INSTRUCTION SET\n' +
-      '----------------------\n' +
-      `Catalog Metadata:\n` +
-      `- Identifier: ${catalog.catalogId || 'Unknown ID'}\n` +
-      `- Name: ${title}\n` +
-      `- Description: ${desc}\n\n` +
-      `You are an AI assistant authorized to author and return declarative UI component layout blocks in JSON arrays conforming natively to the following active custom schema specifications:\n\n`;
-
-    const components = catalog.components;
-    if (components && Object.keys(components).length > 0) {
-      for (const [name, schema] of Object.entries(components)) {
-        prompt += `### Component ID: "${name}"\n`;
-        prompt += `JSON Schema Definition:\n`;
-        prompt += `\`\`\`json\n`;
-        prompt += `${JSON.stringify(schema, null, 2)}\n`;
-        prompt += `\`\`\`\n\n`;
-      }
-    } else {
-      prompt += `[Notice: The active catalog is empty and declares no custom dynamic widgets schemas.]\n`;
-    }
-
-    return prompt.trim();
+    return (
+      `You are an AI assistant designed to author declarative UI ` +
+      `components conformed strictly to the dynamic catalog schema ` +
+      `specifications defined here:\n\n` +
+      `${JSON.stringify(catalog, null, 2)}`
+    );
   });
 }

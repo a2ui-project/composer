@@ -14,17 +14,109 @@
  limitations under the License.
 -->
 
-<div class="chat-panel-container">
-  <div class="panel-title-bar">
-    <span class="panel-title-text">Gemini System Prompt Block</span>
+<div class="preview-frame-container">
+  <!-- Loading/progress overlays status graphics panel -->
+  @if (pipelineStatus() !== 'idle' && pipelineStatus() !== 'ready') {
+    <div class="pipeline-overlay" [class]="pipelineStatus()" (click)="dismissOverlay()">
+      @if (pipelineStatus() === 'failed') {
+        <mat-icon class="status-icon error-icon">error</mat-icon>
+      } @else {
+        <mat-spinner [diameter]="40"></mat-spinner>
+      }
+      <div class="status-badge-text">{{ pipelineStatusText() }}</div>
+    </div>
+  }
+
+  <div class="frame-header">
+    <span class="panel-title-text">Gemini Assistant</span>
   </div>
-  <div class="system-prompt-body">
-    <p class="section-hint-text">
-      The dynamic schema components catalog registered reactively maps and constructs standard
-      System Prompts inside the workspace context:
-    </p>
-    <div class="prompt-box">
-      <pre class="prompt-text">{{ systemPrompt() }}</pre>
+
+  <div class="frame-body chat-history-log">
+    @if (visibleChatHistory().length === 0) {
+      <div class="empty-state-notice">
+        <span class="empty-state-icon">💬</span>
+        <p class="empty-state-text">
+          Ask Gemini to shape your layout interfaces or generate dynamic mock configurations
+          schemas. Let's get started!
+        </p>
+      </div>
+    } @else {
+      @for (turn of visibleChatHistory(); track $index) {
+        <div class="chat-bubble-container" [class]="getBubbleClass(turn)">
+          <div class="bubble-header-bar">
+            @if (turn.role === 'user') {
+              <span class="bubble-author-name">{{
+                turn.isSnapshot ? 'Canvas Revision Snapshot' : 'You'
+              }}</span>
+            } @else if (turn.role === 'model') {
+              <span class="bubble-author-name">Gemini AI</span>
+            } @else if (turn.role === 'error') {
+              <span class="bubble-author-name error-label">Gateway Exception Diagnostic</span>
+            }
+          </div>
+
+          <div class="bubble-body">
+            @if (turn.isSnapshot) {
+              <!-- Collapsible Snapshot Badge details block -->
+              <details class="layout-snapshot-details">
+                <summary class="layout-snapshot-summary">
+                  <div class="layout-snapshot-badge">
+                    <mat-icon class="badge-icon">image</mat-icon>
+                    <span class="badge-label">A2UI Visual Layout Dispatch Snapshot</span>
+                    <span class="badge-count">({{ turn.componentCount }} Components)</span>
+                  </div>
+                </summary>
+                <pre class="layout-json-code"><code>{{ turn.content }}</code></pre>
+              </details>
+            } @else {
+              <p class="bubble-text-content">{{ turn.content }}</p>
+              @if (turn.isRetryable) {
+                <div class="retry-action-container">
+                  <button
+                    mat-stroked-button
+                    color="primary"
+                    class="retry-button"
+                    [disabled]="isLocked()"
+                    (click)="retryPrompt(turn.originalPrompt || '')"
+                  >
+                    <mat-icon>refresh</mat-icon>
+                    Retry Request
+                  </button>
+                </div>
+              }
+            }
+          </div>
+        </div>
+      }
+    }
+  </div>
+
+  <!-- Footer Prompts textareas and lockout submits controls block -->
+  <div class="chat-controllers-panel">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-form-field">
+      <textarea
+        matInput
+        [ngModel]="userPrompt()"
+        (ngModelChange)="userPrompt.set($event)"
+        [disabled]="isLocked()"
+        (keydown)="onKeyDown($event)"
+        placeholder="Type instruction to shape your screen (e.g. 'Add a checkbox column')..."
+        rows="2"
+      ></textarea>
+    </mat-form-field>
+    <div class="submit-action-bar">
+      <button mat-button class="system-instructions-link" (click)="showSystemInstructions()">
+        Show system instructions
+      </button>
+      <button
+        mat-raised-button
+        color="primary"
+        class="submit-button"
+        [disabled]="isLocked() || !isHandshakeComplete() || !userPrompt().trim()"
+        (click)="submitPrompt()"
+      >
+        Send
+      </button>
     </div>
   </div>
 </div>

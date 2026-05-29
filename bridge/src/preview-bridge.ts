@@ -595,6 +595,9 @@ export class PreviewBridge {
             : catalog;
           catalog = JSON.parse(jsonText);
         }
+
+        this.alignRegisteredCatalogId(catalog);
+
         this.sendMessage({
           type: PreviewBridgeMessageType.A2UI_CATALOG,
           payload: catalog,
@@ -639,6 +642,9 @@ export class PreviewBridge {
         ? rawText.substring(safetyPrefix.length)
         : rawText;
       const catalog = JSON.parse(jsonText);
+
+      this.alignRegisteredCatalogId(catalog);
+
       this.sendMessage({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: catalog,
@@ -649,6 +655,30 @@ export class PreviewBridge {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: {error: {message: errorMessage}},
       });
+    }
+  }
+
+  /**
+   * Overwrites the ID of registered catalog classes dynamically with the catalogId
+   * value returned by the custom catalog.
+   */
+  private alignRegisteredCatalogId(catalog: unknown): void {
+    if (!catalog || typeof catalog !== 'object') return;
+    const catalogObj = catalog as {catalogId?: string};
+    const catalogId = catalogObj.catalogId;
+    if (!catalogId) return;
+
+    const registeredCatalogs = this.activeRenderer?.config?.catalogs;
+    if (Array.isArray(registeredCatalogs) && registeredCatalogs.length > 0) {
+      for (const regCatalog of registeredCatalogs) {
+        if (regCatalog && typeof regCatalog === 'object') {
+          const regCatalogObj = regCatalog as {id: string};
+          console.log(
+            `PreviewBridge: Dynamically aligning registered catalog ID from "${regCatalogObj.id}" to "${catalogId}"`,
+          );
+          regCatalogObj.id = catalogId;
+        }
+      }
     }
   }
 }

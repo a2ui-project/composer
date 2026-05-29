@@ -44,8 +44,12 @@
 
 .left-panel {
   flex: 0 0 300px;
+  width: 300px;
+  max-width: 300px;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .right-panel {

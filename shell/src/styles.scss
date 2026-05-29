@@ -232,3 +232,19 @@ body {
   color: var(--mat-sys-on-background);
   font-family: Roboto, 'Helvetica Neue', sans-serif;
 }
+
+/* High-specificity global overrides resolving slide toggle label checks collisions */
+body .mat-mdc-slide-toggle .mdc-form-field,
+body .mat-mdc-slide-toggle .mat-internal-form-field {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 16px !important; /* Clean spacer gap between switch and text label */
+}
+
+body .mat-mdc-slide-toggle label,
+body .mat-mdc-slide-toggle .mdc-label {
+  padding-left: 16px !important; /* Safe spacing cushion blocking handle overlaps */
+  white-space: normal !important; /* Forces clean wrapping on narrow viewports */
+  line-height: 1.4 !important;
+  color: var(--mat-sys-on-surface) !important;
+}

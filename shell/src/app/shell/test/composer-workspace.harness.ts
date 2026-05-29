@@ -1,4 +1,5 @@
 /**
+ * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +21,10 @@ import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.h
 import {RawFrameHarness} from '../../preview/raw/test/raw-frame.harness';
 import {DataModelHarness} from '../../debug/data-model/test/data-model.harness';
 
+/**
+ * Harness for interacting with the central workspace dashboard component.
+ * Exposes methods to locate and interact with the child panel harnesses.
+ */
 export class ComposerWorkspaceHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-workspace';
 
@@ -37,5 +42,13 @@ export class ComposerWorkspaceHarness extends ComponentHarness {
 
   async getDataModelHarness(): Promise<DataModelHarness> {
     return this.locatorFor(DataModelHarness)();
+  }
+
+  /**
+   * Asserts whether the drawer dashboard debug panels section is collapsed.
+   */
+  async isDebugSectionCollapsed(): Promise<boolean> {
+    const section = await this.locatorFor('.debug-section')();
+    return section.hasClass('collapsed');
   }
 }

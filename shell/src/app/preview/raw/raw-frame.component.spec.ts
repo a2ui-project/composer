@@ -25,6 +25,11 @@ import {signal, WritableSignal} from '@angular/core';
 import {HostCommunicationService} from '../../shell/host-communication.service';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
 import {StateSyncService} from '../../chat/state-sync/state-sync.service';
+import {ChatStateService} from '../../chat/chat-state/chat-state.service';
+
+class MockChatStateService {
+  public readonly isProgrammaticStreamActive = signal<boolean>(false);
+}
 
 class MockStateSyncService {
   public readonly activeDraftSignal = signal(
@@ -39,10 +44,11 @@ class MockStateSyncService {
   public hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
 }
 
-describe('RawFrameComponent', () => {
+describe('RawFrameComponent JSON Source Editor View', () => {
   let sendRenderA2UIMock: ReturnType<typeof vi.fn>;
   let mockActiveCatalog: WritableSignal<any>;
   let stateSyncMock: MockStateSyncService;
+  let chatStateMock: MockChatStateService;
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
@@ -69,10 +75,12 @@ describe('RawFrameComponent', () => {
           },
         },
         {provide: StateSyncService, useClass: MockStateSyncService},
+        {provide: ChatStateService, useClass: MockChatStateService},
       ],
     }).compileComponents();
 
     stateSyncMock = TestBed.inject(StateSyncService) as unknown as MockStateSyncService;
+    chatStateMock = TestBed.inject(ChatStateService) as unknown as MockChatStateService;
 
     const fixture = TestBed.createComponent(RawFrameComponent);
     fixture.detectChanges();
@@ -253,5 +261,20 @@ describe('RawFrameComponent', () => {
     await fixture.whenStable();
 
     expect(stateSyncMock.updateDraft).toHaveBeenCalledWith('{"version": "v0.9"}');
+  });
+
+  it('locks textarea inputs forcefully during active streams lockouts periods', async () => {
+    const {fixture, harness} = await setup(false);
+    expect(await harness.isReadOnly()).toBe(false);
+
+    // Lock active stream
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    fixture.detectChanges();
+    expect(await harness.isReadOnly()).toBe(true);
+
+    // Release active stream lock
+    chatStateMock.isProgrammaticStreamActive.set(false);
+    fixture.detectChanges();
+    expect(await harness.isReadOnly()).toBe(false);
   });
 });

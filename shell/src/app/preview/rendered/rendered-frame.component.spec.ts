@@ -21,14 +21,20 @@ import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {StartupResolutionService} from '../../shell/startup-resolution.service';
 import {HostCommunicationService} from '../../shell/host-communication.service';
+import {ChatStateService} from '../../chat/chat-state/chat-state.service';
 import {signal, WritableSignal} from '@angular/core';
 
-describe('RenderedFrameComponent', () => {
+class MockChatStateService {
+  public readonly isProgrammaticStreamActive = signal<boolean>(false);
+}
+
+describe('RenderedFrameComponent Live Preview Viewport', () => {
   let fixture: ComponentFixture<RenderedFrameComponent>;
   let harness: RenderedFrameHarness;
   let startupResolutionServiceMock: Partial<StartupResolutionService>;
   let hostCommunicationServiceMock: Partial<HostCommunicationService>;
   let resolvedUrlSignal: WritableSignal<string | null>;
+  let chatStateMock: MockChatStateService;
 
   beforeEach(async () => {
     resolvedUrlSignal = signal('http://localhost:3000/renderer');
@@ -51,9 +57,14 @@ describe('RenderedFrameComponent', () => {
           provide: HostCommunicationService,
           useValue: hostCommunicationServiceMock,
         },
+        {
+          provide: ChatStateService,
+          useClass: MockChatStateService,
+        },
       ],
     }).compileComponents();
 
+    chatStateMock = TestBed.inject(ChatStateService) as unknown as MockChatStateService;
     fixture = TestBed.createComponent(RenderedFrameComponent);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RenderedFrameHarness);
@@ -97,5 +108,19 @@ describe('RenderedFrameComponent', () => {
     expect(await relativeHarness.getIframeSrc()).toBe(
       'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000',
     );
+  });
+
+  it('visually locks manual preview visual click dispatches during active model stream turns', async () => {
+    expect(await harness.isLocked()).toBe(false);
+
+    // Lock active stream
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    fixture.detectChanges();
+    expect(await harness.isLocked()).toBe(true);
+
+    // Release lock
+    chatStateMock.isProgrammaticStreamActive.set(false);
+    fixture.detectChanges();
+    expect(await harness.isLocked()).toBe(false);
   });
 });

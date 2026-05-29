@@ -1,4 +1,5 @@
 /**
+ * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +15,7 @@
  * limitations under the License.
  */
 
-import {Component, Inject, inject, signal} from '@angular/core';
+import {Component, Inject, inject, computed, effect} from '@angular/core';
 import {MatToolbarModule} from '@angular/material/toolbar';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatButtonModule} from '@angular/material/button';
@@ -25,6 +26,7 @@ import {DOCUMENT} from '@angular/common';
 import {IndexedDbStorageService} from '../storage/indexed-db-storage.service';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {CatalogManagementService} from '../storage/catalog-management.service';
+import {AppConfigProvider} from '../settings/app-config-provider';
 
 @Component({
   selector: 'a2ui-composer-shell',
@@ -48,30 +50,34 @@ import {CatalogManagementService} from '../storage/catalog-management.service';
  * and hosts the active workspace routing outlet.
  */
 export class ComposerShellComponent {
-  isDarkTheme = signal(false);
+  isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
   private readonly catalogManagementService = inject(CatalogManagementService);
   private readonly storageService = inject(IndexedDbStorageService);
+  private readonly configProvider = inject(AppConfigProvider);
 
   activeCatalogTitle = this.catalogManagementService.activeCatalogTitle;
   activeCatalogDescription = this.catalogManagementService.activeCatalogDescription;
 
-  constructor(@Inject(DOCUMENT) private document: Document) {}
+  constructor(@Inject(DOCUMENT) private document: Document) {
+    effect(() => {
+      if (this.isDarkTheme()) {
+        this.document.body.classList.add('dark-theme');
+      } else {
+        this.document.body.classList.remove('dark-theme');
+      }
+    });
+  }
 
   /**
    * Switches between light and dark visual design system palettes.
    */
   toggleTheme(): void {
-    this.isDarkTheme.set(!this.isDarkTheme());
-    if (this.isDarkTheme()) {
-      this.document.body.classList.add('dark-theme');
-    } else {
-      this.document.body.classList.remove('dark-theme');
-    }
+    this.configProvider.setThemePreference(this.isDarkTheme() ? 'light' : 'dark');
   }
 
   /**
-   * Flushes all local state caches (IndexedDB, localStorage) and reloads the page
-   * to simulate a fresh hardware handshake connection.
+   * Flushes all local state caches (IndexedDB, localStorage) and reloads
+   * the page to simulate a fresh hardware handshake connection.
    */
   async resetSession(): Promise<void> {
     await this.storageService.flushAllRecords();

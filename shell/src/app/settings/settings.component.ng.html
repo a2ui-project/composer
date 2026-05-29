@@ -61,6 +61,7 @@
               <button
                 mat-icon-button
                 matSuffix
+                class="api-key-toggle-btn"
                 type="button"
                 (click)="hideApiKey.set(!hideApiKey())"
                 [attr.aria-label]="hideApiKey() ? 'Show API key' : 'Hide API key'"
@@ -93,7 +94,6 @@
               [checked]="forceThirdPartyAuth()"
               [disabled]="isLocked()"
               (change)="toggleForceThirdPartyAuth()"
-              color="primary"
             >
               Force External Third-Party Authentication Mode
             </mat-slide-toggle>

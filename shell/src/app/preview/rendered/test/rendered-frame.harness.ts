@@ -31,4 +31,9 @@ export class RenderedFrameHarness extends ComponentHarness {
     if (!iframe) return null;
     return iframe.getAttribute('src');
   }
+
+  async isLocked(): Promise<boolean> {
+    const container = await this.locatorFor('.rendered-frame-container')();
+    return await container.hasClass('is-locked');
+  }
 }

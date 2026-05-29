@@ -46,6 +46,12 @@ export interface LlmMessage {
    * segment turn.
    */
   readonly content: string;
+
+  /** Indicates whether a failed gateway transaction is retryable. */
+  readonly isRetryable?: boolean;
+
+  /** Holds the original prompt text payload to re-dispatch upon retry. */
+  readonly originalPrompt?: string;
 }
 
 /**

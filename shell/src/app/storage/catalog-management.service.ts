@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, DestroyRef, WritableSignal} from '@angular/core';
+import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {HostCommunicationService, MessageEnvelope} from '../shell/host-communication.service';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {Catalog} from './catalog-storage.model';
@@ -38,32 +38,74 @@ export class CatalogManagementService {
   private readonly startupResolutionService = inject(StartupResolutionService);
 
   private readonly _isHandshakeInProgress = signal<boolean>(false);
+  /**
+   * Conceptual state indicator tracking whether the remote visualization
+   * bridge is actively negotiating and establishing its catalog metadata
+   * synchronizations. Resolves to true when catalog discovery handshakes
+   * are currently in progress.
+   */
   public readonly isHandshakeInProgress = this._isHandshakeInProgress.asReadonly();
 
   private readonly _watchdogFired = signal<boolean>(false);
+  /**
+   * Conceptual status marking whether the catalog discovery handshake
+   * timed out. Resolves to true if the handshaking sequence exceeded
+   * baseline limits without receiving active confirmation.
+   */
   public readonly watchdogFired = this._watchdogFired.asReadonly();
 
   private readonly _catalogError = signal<string | null>(null);
+  /**
+   * Conceptual state containing the latest diagnostic issue or syntax failure
+   * encountered while resolving catalog representations. Resolves to the
+   * textual description of the failure, or null if context is fully healthy.
+   */
   public readonly catalogError = this._catalogError.asReadonly();
 
   private readonly _lastCatalogString = signal<string>('');
+  /**
+   * Conceptual representation of the raw structured catalog source content
+   * successfully received under active synchronization.
+   */
   public readonly lastCatalogString = this._lastCatalogString.asReadonly();
 
   private readonly _lastChecksumHash = signal<string>('');
+  /**
+   * Conceptual secure verification fingerprint matching the last successfully
+   * integrated catalog structure. Utilized to ensure structural consistency
+   * and tracking remote delta changes.
+   */
   public readonly lastChecksumHash = this._lastChecksumHash.asReadonly();
 
   private readonly _activeCatalog = signal<Catalog | null>(null);
+  /**
+   * Conceptual structured schema of the actively loaded preview catalog.
+   * Resolves to the active parsed model representation containing valid
+   * schemas, components, and configurations, or null if no catalog is
+   * established.
+   */
   public readonly activeCatalog = this._activeCatalog.asReadonly();
 
-  public readonly activeCatalogSignal: WritableSignal<Catalog | null> = signal(null);
-
   private readonly _catalogHashDelta = signal<boolean>(false);
+  /**
+   * Conceptual delta status indicating whether the incoming catalog's
+   * structure differs from the previously registered local copy.
+   * Resolves to true if the fresh payload has a different fingerprint.
+   */
   public readonly catalogHashDelta = this._catalogHashDelta.asReadonly();
 
   private readonly _activeCatalogTitle = signal<string>('');
+  /**
+   * Conceptual descriptive name resolved for the actively established catalog
+   * model.
+   */
   public readonly activeCatalogTitle = this._activeCatalogTitle.asReadonly();
 
   private readonly _activeCatalogDescription = signal<string>('');
+  /**
+   * Conceptual narrative description details clarifying the purpose, bounds,
+   * and scope of the actively established catalog model.
+   */
   public readonly activeCatalogDescription = this._activeCatalogDescription.asReadonly();
 
   private watchdogTimerId: ReturnType<typeof setTimeout> | null = null;
@@ -91,7 +133,9 @@ export class CatalogManagementService {
             this._isHandshakeInProgress.set(true);
             this._watchdogFired.set(false);
             this._catalogError.set(null);
-            this.hostCommunicationService.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+            this.hostCommunicationService.sendMessage({
+              type: PreviewBridgeMessageType.GET_CATALOG,
+            });
 
             this.watchdogTimerId = setTimeout(() => {
               if (this.watchdogTimerId === null) {
@@ -123,9 +167,10 @@ export class CatalogManagementService {
               return of(null);
             }
 
-            const payload = rawPayload as {error?: {message?: string}} & Catalog;
+            const payload = rawPayload as {
+              error?: {message?: string};
+            } & Catalog;
 
-            // Handle bridge errors returned in handshake payload
             if (payload.error) {
               const errorMsg =
                 payload.error.message ||
@@ -186,7 +231,6 @@ export class CatalogManagementService {
                   }
 
                   this._activeCatalog.set(catalogObj);
-                  this.activeCatalogSignal.set(catalogObj);
                   this._activeCatalogTitle.set(catalogObj.title || '');
                   this._activeCatalogDescription.set(catalogObj.description || '');
 

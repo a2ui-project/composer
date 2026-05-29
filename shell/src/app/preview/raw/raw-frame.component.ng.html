@@ -3,7 +3,7 @@
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+ you may obtain a copy of the License at
 
      http://www.apache.org/licenses/LICENSE-2.0
 
@@ -13,7 +13,11 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-<div class="raw-frame-container" [class.is-collapsed]="isExtensionMode()">
+<div
+  class="raw-frame-container"
+  [class.is-collapsed]="isExtensionMode()"
+  [class.is-locked]="isLocked()"
+>
   @if (isJsonInvalid()) {
     <div class="invalid-json-badge">⚠️ Invalid JSON syntax detected.</div>
   }
@@ -22,6 +26,7 @@
       matInput
       [ngModel]="layoutJson()"
       (ngModelChange)="onLayoutChange($event)"
+      [readOnly]="isLocked()"
       placeholder="Enter raw JSON here..."
     ></textarea>
   </mat-form-field>

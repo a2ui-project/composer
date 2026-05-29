@@ -33,8 +33,7 @@ import {IS_EXTENSION_MODE} from '../../shell/environment-tokens';
 import {HostCommunicationService} from '../../shell/host-communication.service';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
 import {StateSyncService} from '../../chat/state-sync/state-sync.service';
-
-// Removed local CAR_BOOKING constant to delegate layout draft buffering directly to StateSyncService.
+import {ChatStateService} from '../../chat/chat-state/chat-state.service';
 
 @Component({
   selector: 'a2ui-composer-raw-frame',
@@ -55,8 +54,12 @@ export class RawFrameComponent {
   private readonly hostCommunicationService = inject(HostCommunicationService);
   private readonly catalogManagementService = inject(CatalogManagementService);
   private readonly stateSyncService = inject(StateSyncService);
+  private readonly chatStateService = inject(ChatStateService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly layoutInput$ = new Subject<string>();
+
+  /** Public lock indicator preventing typing deadlocks during generative LLM stream turns. */
+  protected readonly isLocked = this.chatStateService.isProgrammaticStreamActive;
 
   constructor() {
     // Initialize backing editor layout state Signal dynamically from the volatile session cache
@@ -74,6 +77,31 @@ export class RawFrameComponent {
           // Ignore initial parse errors
         }
       }
+    });
+
+    // Sync back changes in StateSyncService activeDraft to editor layoutJson (e.g. from LLM stream completed updates)
+    effect(() => {
+      const activeDraftVal = this.stateSyncService.activeDraft();
+      untracked(() => {
+        if (this.layoutJson() !== activeDraftVal) {
+          queueMicrotask(() => {
+            this.layoutJson.set(activeDraftVal);
+
+            // Run live render updating matching activeDraft commits
+            try {
+              const payload = this.parseLayoutString(activeDraftVal);
+              if (payload !== null) {
+                this.isJsonInvalid.set(false);
+                this.hostCommunicationService.sendRenderA2UI(payload);
+              } else {
+                this.isJsonInvalid.set(true);
+              }
+            } catch (err) {
+              this.isJsonInvalid.set(true);
+            }
+          });
+        }
+      });
     });
 
     this.layoutInput$

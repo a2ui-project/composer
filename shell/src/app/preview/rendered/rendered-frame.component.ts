@@ -18,6 +18,7 @@ import {Component, inject, viewChild, ElementRef, effect, computed} from '@angul
 import {DomSanitizer, SafeResourceUrl} from '@angular/platform-browser';
 import {StartupResolutionService} from '../../shell/startup-resolution.service';
 import {HostCommunicationService} from '../../shell/host-communication.service';
+import {ChatStateService} from '../../chat/chat-state/chat-state.service';
 
 @Component({
   selector: 'a2ui-composer-rendered-frame',
@@ -34,10 +35,14 @@ export class RenderedFrameComponent {
   private sanitizer = inject(DomSanitizer);
   private startupResolutionService = inject(StartupResolutionService);
   private hostCommunicationService = inject(HostCommunicationService);
+  private chatStateService = inject(ChatStateService);
 
-  public iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('previewIframe');
+  /** Programmatic streams active locking Signal, mapping visual lock bounds. */
+  protected readonly isLocked = this.chatStateService.isProgrammaticStreamActive;
 
-  public safeRendererUrl = computed(() => {
+  protected iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('previewIframe');
+
+  protected safeRendererUrl = computed(() => {
     const currentUrl = this.startupResolutionService.resolvedUrl();
     if (!currentUrl) return null;
 
