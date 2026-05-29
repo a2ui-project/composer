@@ -198,3 +198,7 @@ test-results
 ### We're strictly TypeScript
 *.js
 *.map
+
+### Dynamic AI Agent Logs & Workspace Notes
+.agents/
+shell/_worker_notes/
