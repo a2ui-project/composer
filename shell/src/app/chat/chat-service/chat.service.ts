@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, computed} from '@angular/core';
-import {CatalogManagementService} from '../storage/catalog-management.service';
+import {Injectable, inject, computed, signal, WritableSignal} from '@angular/core';
+import {CatalogManagementService} from '../../storage/catalog-management.service';
+import {ChatMessage} from '../llm-client/llm-client';
 
 @Injectable({
   providedIn: 'root',
@@ -25,6 +26,11 @@ import {CatalogManagementService} from '../storage/catalog-management.service';
  */
 export class ChatService {
   private readonly catalogManagement = inject(CatalogManagementService);
+
+  /**
+   * Backing dynamic, reactive Signal array storing conversational turn history records.
+   */
+  public readonly chatHistorySignal: WritableSignal<ChatMessage[]> = signal<ChatMessage[]>([]);
 
   /**
    * A dynamic, reactive, computed signal property constructing system prompt blocks

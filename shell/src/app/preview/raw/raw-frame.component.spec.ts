@@ -24,10 +24,25 @@ import {IS_EXTENSION_MODE} from '../../shell/environment-tokens';
 import {signal, WritableSignal} from '@angular/core';
 import {HostCommunicationService} from '../../shell/host-communication.service';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
+import {StateSyncService} from '../../chat/state-sync/state-sync.service';
+
+class MockStateSyncService {
+  public readonly activeDraftSignal = signal(
+    '{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json", "sendDataModel": true}}\n' +
+      '{"version": "v0.9", "updateComponents": {"surfaceId": "sample-surface", "components": [{"id": "root", "component": "Column", "children": ["title", "location_input", "pickup_input", "dropoff_input", "book_button"], "justify": "start", "align": "stretch"}, {"id": "title", "component": "Text", "text": "Book a Car", "variant": "h1"}, {"id": "location_input", "component": "TextField", "label": "Pick-up Location", "value": {"path": "/booking/location"}, "variant": "shortText"}, {"id": "pickup_input", "component": "DateTimeInput", "label": "Pick-up Date", "value": {"path": "/booking/pickupDate"}, "enableDate": true, "enableTime": false}, {"id": "dropoff_input", "component": "DateTimeInput", "label": "Drop-off Date", "value": {"path": "/booking/dropoffDate"}, "enableDate": true, "enableTime": false}, {"id": "book_button", "component": "Button", "child": "book_button_text", "variant": "primary", "action": {"event": {"name": "searchCars", "context": {"location": {"path": "/booking/location"}, "pickupDate": {"path": "/booking/pickupDate"}, "dropoffDate": {"path": "/booking/dropoffDate"}}}}}, {"id": "book_button_text", "component": "Text", "text": "Search Cars", "variant": "body"}]}}\n' +
+      '{"version": "v0.9", "updateDataModel": {"surfaceId": "sample-surface", "path": "/booking", "value": {"location": "", "pickupDate": "", "dropoffDate": ""}}}',
+  );
+  public readonly activeDraft = this.activeDraftSignal.asReadonly();
+  public updateDraft = vi.fn((val: string) => {
+    this.activeDraftSignal.set(val);
+  });
+  public hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
+}
 
 describe('RawFrameComponent', () => {
   let sendRenderA2UIMock: ReturnType<typeof vi.fn>;
   let mockActiveCatalog: WritableSignal<any>;
+  let stateSyncMock: MockStateSyncService;
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
@@ -53,8 +68,11 @@ describe('RawFrameComponent', () => {
             activeCatalog: mockActiveCatalog,
           },
         },
+        {provide: StateSyncService, useClass: MockStateSyncService},
       ],
     }).compileComponents();
+
+    stateSyncMock = TestBed.inject(StateSyncService) as unknown as MockStateSyncService;
 
     const fixture = TestBed.createComponent(RawFrameComponent);
     fixture.detectChanges();
@@ -226,5 +244,14 @@ describe('RawFrameComponent', () => {
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledWith([]);
+  });
+
+  it('propagates manual edits back to the state synchronization service to trigger history syncs', async () => {
+    const {fixture, harness} = await setup(false);
+    await harness.setJsonText('{"version": "v0.9"}');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(stateSyncMock.updateDraft).toHaveBeenCalledWith('{"version": "v0.9"}');
   });
 });

@@ -32,12 +32,9 @@ import {debounceTime, filter, map} from 'rxjs/operators';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens';
 import {HostCommunicationService} from '../../shell/host-communication.service';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
+import {StateSyncService} from '../../chat/state-sync/state-sync.service';
 
-const CAR_BOOKING = `
-{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json", "sendDataModel": true}}
-{"version": "v0.9", "updateComponents": {"surfaceId": "sample-surface", "components": [{"id": "root", "component": "Column", "children": ["title", "location_input", "pickup_input", "dropoff_input", "book_button"], "justify": "start", "align": "stretch"}, {"id": "title", "component": "Text", "text": "Book a Car", "variant": "h1"}, {"id": "location_input", "component": "TextField", "label": "Pick-up Location", "value": {"path": "/booking/location"}, "variant": "shortText"}, {"id": "pickup_input", "component": "DateTimeInput", "label": "Pick-up Date", "value": {"path": "/booking/pickupDate"}, "enableDate": true, "enableTime": false}, {"id": "dropoff_input", "component": "DateTimeInput", "label": "Drop-off Date", "value": {"path": "/booking/dropoffDate"}, "enableDate": true, "enableTime": false}, {"id": "book_button", "component": "Button", "child": "book_button_text", "variant": "primary", "action": {"event": {"name": "searchCars", "context": {"location": {"path": "/booking/location"}, "pickupDate": {"path": "/booking/pickupDate"}, "dropoffDate": {"path": "/booking/dropoffDate"}}}}}, {"id": "book_button_text", "component": "Text", "text": "Search Cars", "variant": "body"}]}}
-{"version": "v0.9", "updateDataModel": {"surfaceId": "sample-surface", "path": "/booking", "value": {"location": "", "pickupDate": "", "dropoffDate": ""}}}
-`;
+// Removed local CAR_BOOKING constant to delegate layout draft buffering directly to StateSyncService.
 
 @Component({
   selector: 'a2ui-composer-raw-frame',
@@ -51,16 +48,19 @@ const CAR_BOOKING = `
  * and displaying real-time parsing error indicators.
  */
 export class RawFrameComponent {
-  public readonly isExtensionMode = inject(IS_EXTENSION_MODE);
-  public readonly layoutJson: WritableSignal<string> = signal(CAR_BOOKING);
-  public readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
+  protected readonly isExtensionMode = inject(IS_EXTENSION_MODE);
+  protected readonly layoutJson: WritableSignal<string>;
+  protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
 
   private readonly hostCommunicationService = inject(HostCommunicationService);
   private readonly catalogManagementService = inject(CatalogManagementService);
+  private readonly stateSyncService = inject(StateSyncService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly layoutInput$ = new Subject<string>();
 
   constructor() {
+    // Initialize backing editor layout state Signal dynamically from the volatile session cache
+    this.layoutJson = signal(this.stateSyncService.hydrateActiveDraft());
     effect(() => {
       const catalog = this.catalogManagementService.activeCatalog();
       if (catalog) {
@@ -101,9 +101,10 @@ export class RawFrameComponent {
       });
   }
 
-  public onLayoutChange(value: string): void {
+  protected onLayoutChange(value: string): void {
     this.layoutJson.set(value);
     this.layoutInput$.next(value);
+    this.stateSyncService.updateDraft(value);
   }
 
   /**
