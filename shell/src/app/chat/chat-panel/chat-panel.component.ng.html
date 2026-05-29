@@ -14,4 +14,17 @@
  limitations under the License.
 -->
 
-<div class="chat-panel-placeholder">Chat Panel Placeholder</div>
+<div class="chat-panel-container">
+  <div class="panel-title-bar">
+    <span class="panel-title-text">Gemini System Prompt Block</span>
+  </div>
+  <div class="system-prompt-body">
+    <p class="section-hint-text">
+      The dynamic schema components catalog registered reactively maps and constructs standard
+      System Prompts inside the workspace context:
+    </p>
+    <div class="prompt-box">
+      <pre class="prompt-text">{{ systemPrompt() }}</pre>
+    </div>
+  </div>
+</div>

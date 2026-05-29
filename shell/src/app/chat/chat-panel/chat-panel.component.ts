@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Component} from '@angular/core';
+import {Component, inject} from '@angular/core';
+import {ChatService} from '../chat-service/chat.service';
 
 @Component({
   selector: 'a2ui-composer-chat-panel',
@@ -25,6 +26,14 @@ import {Component} from '@angular/core';
 })
 /**
  * Displays the interactive chat panel within the Composer shell,
- * facilitating communication or simulating user input events.
+ * visualizing the reactively constructed AI system prompt blocks.
  */
-export class ChatPanelComponent {}
+export class ChatPanelComponent {
+  private readonly chatService = inject(ChatService);
+
+  /**
+   * The reactively computed dynamic system prompt instructions block
+   * reflecting Custom Component registrations.
+   */
+  protected readonly systemPrompt = this.chatService.systemPromptSignal;
+}

@@ -19,14 +19,24 @@ import {ChatPanelComponent} from './chat-panel.component';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ChatPanelHarness} from './test/chat-panel.harness';
 import {describe, it, expect, beforeEach} from 'vitest';
+import {ChatService} from '../chat-service/chat.service';
+import {signal, WritableSignal} from '@angular/core';
 
-describe('ChatPanelComponent Placeholder', () => {
+describe('ChatPanelComponent Gemini System Prompt View Integration', () => {
   let fixture: ComponentFixture<ChatPanelComponent>;
   let harness: ChatPanelHarness;
+  let chatServiceMock: {
+    systemPromptSignal: WritableSignal<string>;
+  };
 
   beforeEach(async () => {
+    chatServiceMock = {
+      systemPromptSignal: signal('Initial system prompt instructions block'),
+    };
+
     await TestBed.configureTestingModule({
       imports: [ChatPanelComponent],
+      providers: [{provide: ChatService, useValue: chatServiceMock}],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ChatPanelComponent);
@@ -36,5 +46,17 @@ describe('ChatPanelComponent Placeholder', () => {
 
   it('creates the chat panel placeholder component via test harness', async () => {
     expect(harness).toBeTruthy();
+  });
+
+  it('binds the dynamic system prompt signal state reactively to the HTML viewport template', async () => {
+    const preNode = fixture.nativeElement.querySelector('.prompt-text') as HTMLPreElement;
+    expect(preNode).not.toBeNull();
+    expect(preNode.textContent).toBe('Initial system prompt instructions block');
+
+    // Mutate the mock service prompt signal value
+    chatServiceMock.systemPromptSignal.set('Dynamic modified gemini layout prompt blocks');
+    fixture.detectChanges();
+
+    expect(preNode.textContent).toBe('Dynamic modified gemini layout prompt blocks');
   });
 });
