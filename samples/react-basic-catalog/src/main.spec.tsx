@@ -267,9 +267,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     expect(postSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: expect.objectContaining({
-          catalog: mockCatalogPayload,
-        }),
+        payload: expect.objectContaining(mockCatalogPayload),
       }),
       '*',
     );
@@ -323,9 +321,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     expect(postSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: expect.objectContaining({
-          catalog: mockPreloadedCatalog,
-        }),
+        payload: expect.objectContaining(mockPreloadedCatalog),
       }),
       '*',
     );

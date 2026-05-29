@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, DestroyRef} from '@angular/core';
+import {Injectable, inject, signal, DestroyRef, WritableSignal} from '@angular/core';
 import {HostCommunicationService, MessageEnvelope} from '../shell/host-communication.service';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {Catalog} from './catalog-storage.model';
@@ -54,6 +54,8 @@ export class CatalogManagementService {
 
   private readonly _activeCatalog = signal<Catalog | null>(null);
   public readonly activeCatalog = this._activeCatalog.asReadonly();
+
+  public readonly activeCatalogSignal: WritableSignal<Catalog | null> = signal(null);
 
   private readonly _catalogHashDelta = signal<boolean>(false);
   public readonly catalogHashDelta = this._catalogHashDelta.asReadonly();
@@ -112,11 +114,24 @@ export class CatalogManagementService {
             }
             this._watchdogFired.set(false);
 
-            const payload = envelope.payload;
-            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            const rawPayload = envelope.payload;
+            if (!rawPayload || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
               const errorMsg = 'Invalid or malformed A2UI_CATALOG payload received.';
               this._catalogError.set(errorMsg);
-              console.error(errorMsg, payload);
+              console.error(errorMsg, rawPayload);
+              this._isHandshakeInProgress.set(false);
+              return of(null);
+            }
+
+            const payload = rawPayload as {error?: {message?: string}} & Catalog;
+
+            // Handle bridge errors returned in handshake payload
+            if (payload.error) {
+              const errorMsg =
+                payload.error.message ||
+                'Unknown error occurred in preview bridge during handshake.';
+              this._catalogError.set(errorMsg);
+              console.error('Handshake failed with bridge error:', errorMsg);
               this._isHandshakeInProgress.set(false);
               return of(null);
             }
@@ -171,6 +186,7 @@ export class CatalogManagementService {
                   }
 
                   this._activeCatalog.set(catalogObj);
+                  this.activeCatalogSignal.set(catalogObj);
                   this._activeCatalogTitle.set(catalogObj.title || '');
                   this._activeCatalogDescription.set(catalogObj.description || '');
 
@@ -178,7 +194,7 @@ export class CatalogManagementService {
                   this._isHandshakeInProgress.set(false);
                   return null;
                 })
-                .catch(err => {
+                .catch((err: unknown) => {
                   const errorMsg = 'Failed to compute catalog hash or access storage.';
                   this._catalogError.set(errorMsg);
                   console.error(errorMsg, err);

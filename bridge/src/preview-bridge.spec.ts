@@ -193,7 +193,7 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: {catalog: mockCatalog},
+        payload: mockCatalog,
       },
       '*',
     );
@@ -228,7 +228,7 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: {catalog: mockCatalog},
+        payload: mockCatalog,
       },
       '*',
     );
@@ -254,7 +254,6 @@ describe('PreviewBridge Core API Runtime', () => {
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: {
-          catalog: {},
           error: {message: 'Catalog fetch failed with status: 500'},
         },
       },
@@ -289,7 +288,7 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: {catalog: mockCatalog},
+        payload: mockCatalog,
       },
       '*',
     );
@@ -324,7 +323,6 @@ describe('PreviewBridge Core API Runtime', () => {
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: {
-          catalog: {},
           error: {message: expect.any(String)},
         },
       },
@@ -362,7 +360,7 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: {catalog: mockCatalog},
+        payload: mockCatalog,
       },
       '*',
     );
@@ -789,13 +787,10 @@ describe('PreviewBridge Core API Runtime', () => {
       };
       const processSpy = vi.fn();
 
-      const conn = bridge.attachRenderer(
-        {processMessages: processSpy},
-        {
-          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
-          onSurfaceReady: vi.fn(),
-        },
-      );
+      const conn = bridge.attachRenderer({processMessages: processSpy}, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+      } as unknown as RendererConfig);
 
       window.dispatchEvent(
         new MessageEvent('message', {
@@ -1178,7 +1173,6 @@ describe('PreviewBridge Core API Runtime', () => {
         {
           type: PreviewBridgeMessageType.A2UI_CATALOG,
           payload: {
-            catalog: {},
             error: {
               message:
                 'Catalog fetch returned HTML and fallback to /catalog.json failed with status: 404',
@@ -1266,7 +1260,7 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(spy).toHaveBeenCalledWith(
         {
           type: PreviewBridgeMessageType.A2UI_CATALOG,
-          payload: {catalog: mockCatalog},
+          payload: mockCatalog,
         },
         '*',
       );
@@ -1293,7 +1287,6 @@ describe('PreviewBridge Core API Runtime', () => {
         {
           type: PreviewBridgeMessageType.A2UI_CATALOG,
           payload: {
-            catalog: {},
             error: {message: 'Network target unreachable (generic)'},
           },
         },

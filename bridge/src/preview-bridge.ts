@@ -468,7 +468,7 @@ export class PreviewBridge {
           if (modelSub) {
             subscriptions.set(surface.id, modelSub);
           }
-        } catch (err) {
+        } catch (err: unknown) {
           console.error(`Error subscribing to data model for surface ${surface.id}:`, err);
         }
       },
@@ -597,7 +597,7 @@ export class PreviewBridge {
         }
         this.sendMessage({
           type: PreviewBridgeMessageType.A2UI_CATALOG,
-          payload: {catalog},
+          payload: catalog,
         });
         return;
       } catch (error: unknown) {
@@ -605,7 +605,7 @@ export class PreviewBridge {
         console.error('PreviewBridge: Error processing/parsing in-memory catalog:', error);
         this.sendMessage({
           type: PreviewBridgeMessageType.A2UI_CATALOG,
-          payload: {catalog: {}, error: {message: errorMessage}},
+          payload: {error: {message: errorMessage}},
         });
         return;
       }
@@ -641,13 +641,13 @@ export class PreviewBridge {
       const catalog = JSON.parse(jsonText);
       this.sendMessage({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: {catalog},
+        payload: catalog,
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.sendMessage({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: {catalog: {}, error: {message: errorMessage}},
+        payload: {error: {message: errorMessage}},
       });
     }
   }

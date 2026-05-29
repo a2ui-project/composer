@@ -30,7 +30,7 @@ export interface CachedCatalogRecord {
  * registered within a catalog.
  */
 export interface CatalogComponentSchema {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**

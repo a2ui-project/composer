@@ -22,6 +22,7 @@ import {StartupResolutionService} from '../shell/startup-resolution.service';
 import {signal, WritableSignal} from '@angular/core';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {Catalog} from './catalog-storage.model';
 
 describe('CatalogManagementService', () => {
   let service: CatalogManagementService;
@@ -83,6 +84,7 @@ describe('CatalogManagementService', () => {
     expect(service.isHandshakeInProgress()).toBe(false);
     expect(service.catalogError()).toBeNull();
     expect(service.activeCatalog()).toBeNull();
+    expect(service.activeCatalogSignal()).toBeNull();
     expect(service.catalogHashDelta()).toBe(false);
     expect(service.activeCatalogTitle()).toBe('');
     expect(service.activeCatalogDescription()).toBe('');
@@ -152,6 +154,8 @@ describe('CatalogManagementService', () => {
 
     expect(service.isHandshakeInProgress()).toBe(false);
     expect(service.catalogError()).toBeNull();
+    expect(service.activeCatalog()).toEqual({});
+    expect(service.activeCatalogSignal()).toEqual({});
   });
 
   it('resets handshake lock and logs error on 5-second watchdog timeout if A2UI_CATALOG is not received', () => {
@@ -225,11 +229,42 @@ describe('CatalogManagementService', () => {
     );
   });
 
+  it('handles flat catalog error payloads returned by the preview bridge, updating catalogError signal', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    hostCommunicationServiceMock.messageStream.set({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: 3001,
+    });
+    TestBed.tick();
+
+    expect(service.isHandshakeInProgress()).toBe(true);
+
+    // Simulate bridge sending a flat error payload
+    hostCommunicationServiceMock.messageStream.set({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      origin: 'http://localhost',
+      payload: {
+        error: {message: 'Bridge in-memory catalog processing crash'},
+      },
+      timestamp: 3002,
+    });
+    TestBed.tick();
+
+    expect(service.catalogError()).toBe('Bridge in-memory catalog processing crash');
+    expect(service.isHandshakeInProgress()).toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it('sanitizes malicious HTML tags in title and description and computes deterministic SHA-256 hash', async () => {
     const payload = {
       title: 'Catalog Title <script>alert(1)</script>',
       description: 'Catalog Description <img src=x onerror=alert(1)>',
-      components: [{id: 'button', name: 'Button'}],
+      components: {
+        button: {name: 'Button'},
+      },
     };
 
     hostCommunicationServiceMock.messageStream.set({
@@ -251,13 +286,18 @@ describe('CatalogManagementService', () => {
     expect(service.lastCatalogString()).toContain('Catalog Description ');
     expect(service.lastCatalogString()).not.toContain('onerror');
 
+    expect(service.activeCatalogTitle()).toBe('Catalog Title ');
+    expect(service.activeCatalogDescription()).toBe('Catalog Description <img src="x">');
+
     const expectedHash = service.lastChecksumHash();
     expect(expectedHash).toBeTruthy();
     expect(expectedHash.length).toBe(64);
 
     // Verify deterministic hashing for identical catalog structures
     const payloadIdentical = {
-      components: [{id: 'button', name: 'Button'}],
+      components: {
+        button: {name: 'Button'},
+      },
       title: 'Catalog Title <script>alert(1)</script>',
       description: 'Catalog Description <img src=x onerror=alert(1)>',
     };
@@ -285,7 +325,7 @@ describe('CatalogManagementService', () => {
     const payload = {
       title: 'New Catalog',
       description: 'New Description',
-      components: [],
+      components: {},
     };
 
     hostCommunicationServiceMock.messageStream.set({
@@ -314,6 +354,7 @@ describe('CatalogManagementService', () => {
     });
 
     expect(service.activeCatalog()).toEqual(payload);
+    expect(service.activeCatalogSignal()).toEqual(payload);
     expect(service.activeCatalogTitle()).toBe('New Catalog');
     expect(service.activeCatalogDescription()).toBe('New Description');
   });
@@ -329,7 +370,7 @@ describe('CatalogManagementService', () => {
     const payload = {
       title: 'Updated Catalog',
       description: 'Updated Description',
-      components: [],
+      components: {},
     };
 
     hostCommunicationServiceMock.messageStream.set({
@@ -358,6 +399,7 @@ describe('CatalogManagementService', () => {
     });
 
     expect(service.activeCatalog()).toEqual(payload);
+    expect(service.activeCatalogSignal()).toEqual(payload);
     expect(service.activeCatalogTitle()).toBe('Updated Catalog');
     expect(service.activeCatalogDescription()).toBe('Updated Description');
   });
@@ -366,7 +408,7 @@ describe('CatalogManagementService', () => {
     const payload = {
       title: 'Matching Catalog',
       description: 'Matching Description',
-      components: [],
+      components: {},
     };
 
     hostCommunicationServiceMock.messageStream.set({
@@ -517,6 +559,7 @@ describe('CatalogManagementService', () => {
     expect(indexedDbStorageServiceMock.saveCatalogRecord).not.toHaveBeenCalled();
 
     expect(service.activeCatalog()).toEqual(payload);
+    expect(service.activeCatalogSignal()).toEqual(payload);
     expect(service.activeCatalogTitle()).toBe('Null URL Catalog');
     expect(service.catalogError()).toBeNull();
     expect(service.isHandshakeInProgress()).toBe(false);
