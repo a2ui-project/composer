@@ -616,11 +616,109 @@ export class ChatService {
       );
     }
 
-    return (
-      `You are an AI assistant designed to author declarative UI ` +
-      `components conformed strictly to the dynamic catalog schema ` +
-      `specifications defined here:\n\n` +
-      `${JSON.stringify(catalog, null, 2)}`
-    );
+    return this.generateSystemPrompt(JSON.stringify(catalog, null, 2));
   });
+
+  private generateSystemPrompt(catalog: string): string {
+    return `
+  # A2UI Generation Expert
+
+  ## Role
+  You are an A2UI expert. Your job is to translate the user's request into valid
+  A2UI messages.
+
+  # Overview
+  You MUST ensure all payloads strictly adhere to the **JSON Lines (JSONL)**
+  format. Each JSON object MUST be flattened to a single line without unescaped
+  newline characters.
+
+  The generated A2UI MUST conform to this A2UI JSON:
+  \`\`\`json
+  ${catalog}.
+  \`\`\`
+
+  ## Protocol
+  When building the \`createSurface\` message, you MUST set the \`catalogId\` to
+  reference the appropriate catalog schema URL.
+
+  You MUST follow the strict message sequence (\`createSurface\` ->
+  \`updateComponents\` -> \`updateDataModel\`) and use JSON Pointers for data
+  binding.
+
+  ## Validation
+
+  A complete A2UI payload consists of one or more message objects sent as
+  continuous JSON objects (or JSON Lines). Every message object MUST include a
+  top-level \`"version": "v0.9"\` field.
+
+  The four primary messages you must use to manage a UI surface are:
+
+  1.  **\`createSurface\`**: Sent **FIRST** to signal the client to create a new
+      surface. It defines the \`catalogId\` and optional \`theme\` parameters.
+  2.  **\`updateComponents\`**: Used to define or update the UI component tree. You
+      must provide a flat list of components. One component MUST have an \`id\` of
+      \`"root"\`.
+  3.  **\`updateDataModel\`**: Used to define or update data values that the
+      components bind to.
+  4.  **\`deleteSurface\`**: Signals the client to destroy the surface.
+
+  ## Lifecycle and Ordering
+
+  Typical sequence: \`createSurface\` -> \`updateComponents\` -> \`updateDataModel\` (or
+  combined/interleaved after creation).
+
+  ## Examples
+
+    * **Simple Example**: A basic column with text:
+      \`\`\`jsonl
+      {"version": "v0.9", "createSurface": {"surfaceId": "main", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
+      {"version": "v0.9", "updateComponents": {"surfaceId": "main", "components": [{"id": "root", "component": "MaterialColumn", "children": ["header", "content"]}, {"id": "header", "component": "MaterialText", "text": "Welcome"}, {"id": "content", "component": "MaterialText", "text": {"path": "/message"}}]}}
+      {"version": "v0.9", "updateDataModel": {"surfaceId": "main", "path": "/message", "value": "Hello, world!"}}
+      \`\`\`
+
+    * **Complex Form Example**: A vacation booking form demonstrating advanced
+      Material form controls (\`MaterialDatepicker\`, \`MaterialSelect\`,
+      \`MaterialSlideToggle\`) and buttons using the modernized Material catalog:
+      \`\`\`jsonl
+      {"version": "v0.9", "createSurface": {"surfaceId": "vacation_booking", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
+      {"version": "v0.9", "updateComponents": {"surfaceId": "vacation_booking", "components": [{"id": "root", "component": "MaterialColumn", "children": ["title", "destination_input", "checkin_datepicker", "checkout_datepicker", "room_type_select", "passenger_select", "flexible_dates_toggle", "search_button"]}, {"id": "title", "component": "MaterialText", "text": {"path": "/title_label"}, "usageHint": "h1"}, {"id": "destination_input", "component": "MaterialInput", "label": {"path": "/destination_label"}, "value": {"path": "/destination_value"}}, {"id": "checkin_datepicker", "component": "MaterialDatepicker", "label": {"path": "/checkin_label"}, "value": {"path": "/checkin_value"}}, {"id": "checkout_datepicker", "component": "MaterialDatepicker", "label": {"path": "/checkout_label"}, "value": {"path": "/checkout_value"}}, {"id": "room_type_select", "component": "MaterialSelect", "label": {"path": "/room_type_label"}, "value": {"path": "/room_type_value"}, "options": [{"label": "Standard Room", "value": "standard"}, {"label": "Deluxe Suite", "value": "deluxe"}]}, {"id": "passenger_select", "component": "MaterialSelect", "label": {"path": "/passenger_label"}, "value": {"path": "/passenger_value"}, "options": [{"label": "1 Passenger", "value": "1"}, {"label": "2 Passengers", "value": "2"}, {"label": "3+ Passengers", "value": "3"}]}, {"id": "flexible_dates_toggle", "component": "MaterialSlideToggle", "label": {"path": "/flexible_dates_label"}, "checked": {"path": "/flexible_dates_checked"}, "color": "primary"}, {"id": "search_button", "component": "MaterialButton", "label": {"path": "/search_label"}, "action": {"event": {"name": "searchVacation"}}}]}}
+      {"version": "v0.9", "updateDataModel": {"surfaceId": "vacation_booking", "value": {"title_label": "Book Your Dream Vacation", "destination_label": "Destination", "destination_value": "Hawaii", "checkin_label": "Check-in Date", "checkin_value": "2026-07-01", "checkout_label": "Check-out Date", "checkout_value": "2026-07-14", "room_type_label": "Room Type", "room_type_value": "standard", "passenger_label": "Passengers", "passenger_value": "2", "flexible_dates_label": "Flexible Dates (+/- 3 days)", "flexible_dates_checked": true, "search_label": "Search Flights & Hotels"}}}
+      \`\`\`
+
+    * **Dynamic List Example**: An example using templates to render a list of
+      items.
+      \`\`\`jsonl
+      {"version": "v0.9", "createSurface": {"surfaceId": "dynamic_list_demo", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
+      {"version": "v0.9", "updateComponents": {"surfaceId": "dynamic_list_demo", "components": [{"id": "root", "component": "MaterialColumn", "children": ["title", "list_container"]}, {"id": "title", "component": "MaterialText", "text": "Dynamic List Demo"}, {"id": "list_container", "component": "MaterialColumn", "children": {"componentId": "item_template", "path": "/items"}}, {"id": "item_template", "component": "MaterialText", "text": {"path": "text"}}]}}
+      {"version": "v0.9", "updateDataModel": {"surfaceId": "dynamic_list_demo", "value": {"items": [{"text": "Item One"}, {"text": "Item Two"}]}}}
+      \`\`\`
+
+  ## Data Binding
+  Every component property value MUST come from the data model (with minor
+  exceptions for static primitives).
+
+  When referencing data in the data model, you MUST use valid JSON Pointer syntax
+  starting with \`/\`.
+
+  ## Actions and Context
+
+  When defining actions (e.g., on buttons), the \`context\` payload is a standard
+  JSON object, rather than an array of key-value pairs.
+
+  Example action definition:
+
+  \`\`\`jsonl
+  "action": {
+    "event": {
+      "name": "selectItem",
+      "context": {
+        "itemId": "12345",
+        "itemName": {"path": "/selected/name"}
+      }
+    }
+  }
+  \`\`\`
+
+  `;
+  }
 }
