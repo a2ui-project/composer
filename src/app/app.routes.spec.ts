@@ -21,6 +21,7 @@ import {describe, it, expect, beforeEach} from 'vitest';
 
 describe('App Routes', () => {
   beforeEach(() => {
+    TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [provideRouter(routes)],
     });
@@ -40,5 +41,13 @@ describe('App Routes', () => {
     const childRoute = parentRoute?.children?.find(r => r.path === 'gallery');
     expect(childRoute).toBeTruthy();
     expect(childRoute?.title).toBe('A2UI Components Gallery');
+  });
+
+  it('defines routing pathway for the settings configuration view', () => {
+    const parentRoute = routes.find(r => r.path === '');
+    expect(parentRoute).toBeTruthy();
+    const childRoute = parentRoute?.children?.find(r => r.path === 'settings');
+    expect(childRoute).toBeTruthy();
+    expect(childRoute?.title).toBe('A2UI Composer Settings');
   });
 });

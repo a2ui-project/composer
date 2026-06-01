@@ -29,7 +29,7 @@ export default defineConfig({
     [
       'html',
       {
-        open: process.env['CI'] ? 'never' : 'always',
+        open: process.env['CI'] || process.env['E2E_HEADLESS'] ? 'never' : 'always',
         outputFolder: './e2e/playwright-report',
       },
     ],

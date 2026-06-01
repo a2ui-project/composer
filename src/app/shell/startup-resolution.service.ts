@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {Injectable, Injector, inject} from '@angular/core';
+import {Router} from '@angular/router';
 import {QueryParser} from './query-parser';
 
 /**
@@ -36,8 +37,9 @@ export interface AppConfig {
 export class StartupResolutionService {
   private resolvedUrl: string | null = null;
   private isLockedContext = false;
+  private injector = inject(Injector);
 
-  async resolveStartupConfiguration(): Promise<string | null> {
+  public async resolveStartupConfiguration(): Promise<string | null> {
     let staticConfig: AppConfig | null = null;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -61,31 +63,87 @@ export class StartupResolutionService {
         console.log('Static configuration loaded with allowOverrides: false. Locking context.');
         this.isLockedContext = true;
 
+        this.evaluateEnvironmentPurge();
         return this.resolvedUrl;
       }
     }
 
     if (!this.isLockedContext) {
-      const queryCandidate = QueryParser.parseRendererUrl(globalThis.location?.search || '');
+      const queryCandidate = QueryParser.parseRendererUrl(this.getWindowSearch());
       if (queryCandidate) {
         this.resolvedUrl = queryCandidate;
+        this.evaluateEnvironmentPurge();
         return this.resolvedUrl;
       }
     }
 
-    const localPrefs = localStorage.getItem('a2ui_composer_renderer_url');
+    const localPrefs = this.getStorageItem('a2ui_composer_renderer_url');
     if (localPrefs && !this.isLockedContext) {
       this.resolvedUrl = localPrefs;
+    }
+
+    this.evaluateEnvironmentPurge();
+
+    if (!this.resolvedUrl) {
+      if (globalThis.location?.pathname !== '/settings') {
+        this.injector.get(Router).navigate(['/settings']);
+      }
     }
 
     return this.resolvedUrl;
   }
 
-  getResolvedRendererUrl(): string | null {
+  public getResolvedRendererUrl(): string | null {
     return this.resolvedUrl;
   }
 
-  isContextLocked(): boolean {
+  public isContextLocked(): boolean {
     return this.isLockedContext;
+  }
+
+  public isThirdPartyEnvironment(): boolean {
+    const hostname = this.getWindowHostname();
+    const force3P = this.getStorageItem('a2ui_composer_force_3p') === 'true';
+    if (force3P) {
+      return true;
+    }
+
+    const is1P =
+      hostname === 'google.com' ||
+      hostname.endsWith('.google.com') ||
+      hostname === 'googleplex.com' ||
+      hostname.endsWith('.googleplex.com');
+
+    return !is1P;
+  }
+
+  public isEnvironmentValid(): boolean {
+    const resolvedUrl = this.getResolvedRendererUrl();
+    const is3P = this.isThirdPartyEnvironment();
+    const hasApiKey = !!this.getStorageItem('a2ui_composer_api_key');
+
+    return !!resolvedUrl && (!is3P || hasApiKey);
+  }
+
+  public getWindowSearch(): string {
+    return globalThis.location?.search || '';
+  }
+
+  public getWindowHostname(): string {
+    return globalThis.location?.hostname || '';
+  }
+
+  private evaluateEnvironmentPurge(): void {
+    if (!this.isThirdPartyEnvironment()) {
+      this.removeStorageItem('a2ui_composer_api_key');
+    }
+  }
+
+  private getStorageItem(key: string): string | null {
+    return localStorage.getItem(key);
+  }
+
+  private removeStorageItem(key: string): void {
+    localStorage.removeItem(key);
   }
 }
