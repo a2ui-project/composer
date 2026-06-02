@@ -16,13 +16,18 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {signal, WritableSignal, inject} from '@angular/core';
+import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ChatService} from './chat.service';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
 import {Catalog} from '../../storage/catalog-storage.model';
-import {ChatStateService} from '../chat-state/chat-state.service';
-import {AppConfigProvider, EnvMode, AuthType} from '../../settings/app-config-provider';
+import {ChatStateService, LlmLogEntry} from '../chat-state/chat-state.service';
+import {
+  AppConfigProvider,
+  EnvMode,
+  AuthType,
+  ThemePreference,
+} from '../../settings/app-config-provider';
 import {StateSyncService} from '../state-sync/state-sync.service';
 import {LlmClient, LlmMessage, LlmStreamResponse, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
@@ -36,6 +41,7 @@ class MockAppConfigProvider {
   public readonly geminiApiKey = signal<string>('sample-api-key');
   public readonly envMode = signal(EnvMode.STANDALONE);
   public readonly authType = signal(AuthType.THREE_PARTY);
+  public readonly themePreference = signal<ThemePreference>('light');
   public setRendererUrl = vi.fn((url: string) => {
     this.rendererUrl.set(url);
   });
@@ -43,6 +49,9 @@ class MockAppConfigProvider {
     this.geminiApiKey.set(key);
   });
   public setForcedAuthMode = vi.fn();
+  public setThemePreference = vi.fn((theme: ThemePreference) => {
+    this.themePreference.set(theme);
+  });
   public flushConfig = vi.fn();
 }
 
@@ -50,6 +59,8 @@ class MockChatStateService {
   public readonly chatHistory = signal<LlmMessage[]>([]);
   public readonly pipelineStatus = signal<PipelineStatus>(PipelineStatus.IDLE);
   public readonly isProgrammaticStreamActive = signal<boolean>(false);
+  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  public readonly llmHistory = signal<LlmLogEntry[]>([]);
 
   public setChatHistory(history: LlmMessage[]) {
     this.chatHistory.set(history);
@@ -62,6 +73,15 @@ class MockChatStateService {
   }
   public setProgrammaticStreamActive(active: boolean) {
     this.isProgrammaticStreamActive.set(active);
+  }
+  public addRawLlmLog(type: 'request' | 'response', payload: unknown): void {
+    const entry: LlmLogEntry = {type, timestamp: Date.now(), payload};
+    this.latestLlmLog.set(entry);
+    this.llmHistory.update(history => [...history, entry].slice(-50));
+  }
+  public clearRawLlmHistory(): void {
+    this.latestLlmLog.set(null);
+    this.llmHistory.set([]);
   }
 }
 
@@ -139,7 +159,7 @@ describe('ChatService Pipeline & State Integration', () => {
     llmClientMock = TestBed.inject(LlmClient) as unknown as MockLlmClient;
 
     // Eagerly execute initial constructor tracking effects skips
-    TestBed.flushEffects();
+    TestBed.tick();
   });
 
   /* Pre-existing baseline specs mapped to dynamic settings mocks */
@@ -201,7 +221,6 @@ describe('ChatService Pipeline & State Integration', () => {
     expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
     expect(service.isProgrammaticStreamActive()).toBe(false);
 
-    // Act
     const promptPromise = service.submitPrompt('Create checkout form');
 
     // Instantly enters receiving stream state and locks panels
@@ -237,7 +256,6 @@ describe('ChatService Pipeline & State Integration', () => {
     );
   });
 
-  /* Self-Repair Auto-Healing assertions */
   it('extracts layouts markdown and heals unmatched curly braces', async () => {
     // Return a corrupted Markdown wrap payload
     const corruptedRawOutput =
@@ -276,7 +294,6 @@ describe('ChatService Pipeline & State Integration', () => {
       },
     });
 
-    // Act
     await service.submitPrompt('Create broken screen');
 
     // Assert that the commited layout is fully healed and sanitized:
@@ -331,7 +348,6 @@ describe('ChatService Pipeline & State Integration', () => {
       },
     });
 
-    // Act
     await service.submitPrompt('Legacy widget prompt');
 
     // Verify committed element has mapped corrected component field
@@ -387,7 +403,6 @@ describe('ChatService Pipeline & State Integration', () => {
       },
     });
 
-    // Act
     await service.submitPrompt('Typos prompt');
 
     // Verify committed output elements have been mapped correct elements!
@@ -401,7 +416,6 @@ describe('ChatService Pipeline & State Integration', () => {
     expect(components[3].component).toBe('Button'); // fuzzy match success!
   });
 
-  /* Connection gateway timeout diagnostics bubbling assertions */
   it('bubbles connectivity and gateway timeout exceptions to error log', async () => {
     const networkError = new Error('HTTP 504: Gateway Timeout connecting to Vertex AI Endpoint.');
     llmClientMock.chatStream = vi.fn(async () => {
@@ -426,7 +440,6 @@ describe('ChatService Pipeline & State Integration', () => {
     expect(history[1].content).toContain('HTTP 504: Gateway Timeout');
   });
 
-  /* Cross-Environment Cache Auto-Reset assertions */
   it('monitors rendererUrl mutations triggering flushing resets', async () => {
     // Setup initial state: history has data, status is ready, locks active
     chatStateMock.chatHistory.set([{role: MessageRole.USER, content: 'Some logs'}]);
@@ -444,7 +457,7 @@ describe('ChatService Pipeline & State Integration', () => {
     configProviderMock.rendererUrl.set('http://localhost:9999/preview-env-fresh');
 
     // Trigger Angular effects change detections
-    TestBed.flushEffects();
+    TestBed.tick();
 
     // Wait for the scheduled microtask to execute
     await new Promise(resolve => queueMicrotask(resolve));
@@ -454,5 +467,81 @@ describe('ChatService Pipeline & State Integration', () => {
     expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
     expect(service.isProgrammaticStreamActive()).toBe(false);
     expect(stateSyncMock.flushDraft).toHaveBeenCalledTimes(1);
+  });
+
+  describe('sanitizeComponentObject', () => {
+    it('strips out top-level rules and mock prefix properties', () => {
+      const input = {
+        component: 'MaterialText',
+        rules: {someRule: true},
+        mockField: 'mock value',
+        otherProp: 'retained',
+      };
+      const result = service.TEST_ONLY.sanitizeComponentObject(input);
+      expect(result).toEqual({
+        component: 'MaterialText',
+        otherProp: 'retained',
+      });
+    });
+
+    it('handles deeply nested properties correctly', () => {
+      const input = {
+        component: 'MaterialColumn',
+        nested: {
+          rules: {nestedRule: true},
+          mockNested: 'nested value',
+          safeNested: {
+            value: 'keep',
+          },
+        },
+      };
+      const result = service.TEST_ONLY.sanitizeComponentObject(input);
+      expect(result).toEqual({
+        component: 'MaterialColumn',
+        nested: {
+          safeNested: {
+            value: 'keep',
+          },
+        },
+      });
+    });
+
+    it('safely cleans elements inside arrays recursively', () => {
+      const input = {
+        component: 'MaterialRow',
+        children: [
+          {component: 'MaterialText', rules: {x: 1}, text: 'A'},
+          {component: 'MaterialButton', mockProp: 10, label: 'B'},
+          'plain string',
+          null,
+        ],
+      };
+      const result = service.TEST_ONLY.sanitizeComponentObject(input);
+      expect(result).toEqual({
+        component: 'MaterialRow',
+        children: [
+          {component: 'MaterialText', text: 'A'},
+          {component: 'MaterialButton', label: 'B'},
+          'plain string',
+          null,
+        ],
+      });
+    });
+
+    it('prevents crash and returns safe values for null, undefined, or empty inputs', () => {
+      const input = {
+        component: 'MaterialCard',
+        nullProp: null,
+        undefinedProp: undefined,
+        emptyObj: {},
+      };
+      const result = service.TEST_ONLY.sanitizeComponentObject(input);
+      expect(result).toEqual({
+        component: 'MaterialCard',
+        nullProp: null,
+        undefinedProp: undefined,
+        emptyObj: {},
+      });
+    });
   });
 });
