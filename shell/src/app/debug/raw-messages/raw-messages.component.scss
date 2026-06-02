@@ -49,6 +49,7 @@
 }
 
 .message-envelope {
+  flex-shrink: 0;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 4px;
   background-color: var(--mat-sys-surface-container);
@@ -90,6 +91,8 @@
 }
 
 mat-expansion-panel.llm-log-panel {
+  flex-shrink: 0;
+  min-width: 0;
   box-shadow: none !important;
   background-color: var(--mat-sys-surface-container-low) !important;
   transition: background-color 0.2s ease;
@@ -102,7 +105,7 @@ mat-expansion-panel.llm-log-panel {
   ::ng-deep {
     mat-expansion-panel-header {
       height: 28px !important;
-      padding: 0 8px;
+      padding: 0 8px !important;
     }
 
     mat-panel-title {
@@ -139,6 +142,12 @@ mat-expansion-panel.llm-log-panel {
       align-items: center;
       justify-content: flex-end;
     }
+
+    .mat-expansion-panel-body {
+      padding: 6px 8px !important;
+      background-color: var(--mat-sys-surface-container-lowest) !important;
+      min-width: 0;
+    }
   }
 
   pre {
@@ -147,11 +156,9 @@ mat-expansion-panel.llm-log-panel {
     font-size: 11px;
     overflow-x: auto;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+    box-sizing: border-box;
     color: var(--mat-sys-on-surface);
-  }
-
-  ::ng-deep .mat-expansion-panel-body {
-    padding: 6px 8px;
-    background-color: var(--mat-sys-surface-container-lowest);
   }
 }
