@@ -239,56 +239,6 @@
   }
 }
 
-/* New Collapsible layout snapshot pre-blocks styles */
-.layout-snapshot-details {
-  width: 100%;
-
-  .layout-snapshot-summary {
-    cursor: pointer;
-    outline: none;
-    user-select: none;
-    list-style: none; /* removes standard details arrow */
-    &::-webkit-details-marker {
-      display: none;
-    }
-  }
-}
-
-.layout-snapshot-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--mat-sys-on-surface-variant);
-
-  .badge-icon {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-  }
-
-  .badge-count {
-    color: var(--mat-sys-primary);
-    font-weight: 600;
-  }
-}
-
-.layout-json-code {
-  margin: 8px 0 0 0;
-  font-family: 'Roboto Mono', Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  max-height: 160px;
-  overflow-y: auto;
-  background-color: var(--mat-sys-surface-container-lowest);
-  color: var(--mat-sys-on-surface-variant);
-  padding: 10px;
-  border-radius: 6px;
-  border: 1px solid var(--mat-sys-outline-variant);
-}
-
 /* Transient streaming packet chunk indicator pulses styling */
 .streaming-pulse-indicator {
   display: inline-block;
@@ -509,5 +459,23 @@
     font-size: 16px !important;
     width: 16px !important;
     height: 16px !important;
+  }
+}
+
+.layout-snapshot-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface-variant);
+
+  .badge-label {
+    font-weight: 500;
+  }
+
+  .badge-count {
+    opacity: 0.7;
+    font-size: 12px;
   }
 }

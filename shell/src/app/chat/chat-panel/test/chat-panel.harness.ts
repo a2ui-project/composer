@@ -20,7 +20,7 @@ import {MatInputHarness} from '@angular/material/input/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
 
 /**
- * Harness for interacting with the chat drawer drawer view.
+ * Harness for interacting with the chat drawer view.
  * Exposes visual locator assertions and text modifier actions.
  */
 export class ChatPanelHarness extends ComponentHarness {
@@ -129,7 +129,7 @@ export class ChatPanelHarness extends ComponentHarness {
   }
 
   /**
-   * Checks if the welcome empty state state card notice is shown.
+   * Checks if the welcome empty state card notice is shown.
    */
   async hasWelcomeNotice(): Promise<boolean> {
     const notice = await this.locatorForOptional('.empty-state-notice')();
@@ -137,7 +137,7 @@ export class ChatPanelHarness extends ComponentHarness {
   }
 
   /**
-   * Retrieves the empty state state card welcome notice text content.
+   * Retrieves the empty state card welcome notice text content.
    */
   async getWelcomeNoticeText(): Promise<string | null> {
     const notice = await this.locatorForOptional('.empty-state-notice')();
@@ -152,5 +152,18 @@ export class ChatPanelHarness extends ComponentHarness {
   async hasSystemInstructionsLink(): Promise<boolean> {
     const link = await this.locatorForOptional('.system-instructions-link')();
     return link !== null;
+  }
+
+  async getRetryButtonsCount(): Promise<number> {
+    const buttons = await this.locatorForAll('.retry-button')();
+    return buttons.length;
+  }
+
+  async clickRetryButtonAt(index: number): Promise<void> {
+    const buttons = await this.locatorForAll('.retry-button')();
+    if (index < 0 || index >= buttons.length) {
+      throw new Error(`Index ${index} out of bounds for retry buttons!`);
+    }
+    await buttons[index].click();
   }
 }

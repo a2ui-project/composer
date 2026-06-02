@@ -191,23 +191,25 @@ export class CatalogManagementService {
 
             const catalogString = stringify(catalogObj);
 
+            let hashHexPromise: Promise<string>;
             if (!globalThis.crypto?.subtle) {
-              const errorMsg = 'Failed to compute catalog hash or access storage.';
-              this._catalogError.set(errorMsg);
-              console.error(
-                errorMsg,
-                new TypeError("Cannot read properties of undefined (reading 'digest')"),
+              console.warn(
+                'Web Crypto is not available in this insecure context. Falling back to synchronous checksum hash.',
               );
-              this._isHandshakeInProgress.set(false);
-              return of(null);
+              const hashHex = simpleHash(catalogString);
+              hashHexPromise = Promise.resolve(hashHex);
+            } else {
+              hashHexPromise = crypto.subtle
+                .digest('SHA-256', new TextEncoder().encode(catalogString))
+                .then(hashBuffer => {
+                  const hashArray = Array.from(new Uint8Array(hashBuffer));
+                  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                });
             }
 
             return from(
-              crypto.subtle
-                .digest('SHA-256', new TextEncoder().encode(catalogString))
-                .then(async hashBuffer => {
-                  const hashArray = Array.from(new Uint8Array(hashBuffer));
-                  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+              hashHexPromise
+                .then(async hashHex => {
                   this._lastCatalogString.set(catalogString);
                   this._lastChecksumHash.set(hashHex);
 
@@ -253,4 +255,13 @@ export class CatalogManagementService {
       )
       .subscribe();
   }
+}
+
+function simpleHash(str: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }

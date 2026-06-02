@@ -16,7 +16,9 @@
 
 <div class="preview-frame-container">
   <!-- Loading/progress overlays status graphics panel -->
-  @if (pipelineStatus() !== 'idle' && pipelineStatus() !== 'ready') {
+  @if (
+    pipelineStatus() !== 'idle' && pipelineStatus() !== 'ready' && pipelineStatus() !== 'failed'
+  ) {
     <div class="pipeline-overlay" [class]="pipelineStatus()" (click)="dismissOverlay()">
       @if (pipelineStatus() === 'failed') {
         <mat-icon class="status-icon error-icon">error</mat-icon>
@@ -57,17 +59,7 @@
 
           <div class="bubble-body">
             @if (turn.isSnapshot) {
-              <!-- Collapsible Snapshot Badge details block -->
-              <details class="layout-snapshot-details">
-                <summary class="layout-snapshot-summary">
-                  <div class="layout-snapshot-badge">
-                    <mat-icon class="badge-icon">image</mat-icon>
-                    <span class="badge-label">A2UI Visual Layout Dispatch Snapshot</span>
-                    <span class="badge-count">({{ turn.componentCount }} Components)</span>
-                  </div>
-                </summary>
-                <pre class="layout-json-code"><code>{{ turn.content }}</code></pre>
-              </details>
+              <p class="bubble-text-content">A2UI JSON: {{ turn.componentCount }} components</p>
             } @else {
               <p class="bubble-text-content">{{ turn.content }}</p>
               @if (turn.isRetryable) {

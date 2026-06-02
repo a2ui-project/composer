@@ -21,6 +21,7 @@ import {
   inject,
 } from '@angular/core';
 import {provideRouter} from '@angular/router';
+import {provideAnimations} from '@angular/platform-browser/animations';
 import {routes} from './app.routes';
 import {StartupResolutionService} from './shell/startup-resolution.service';
 import {AppConfigProvider} from './settings/app-config-provider';
@@ -36,6 +37,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideZonelessChangeDetection(),
     provideRouter(routes),
+    provideAnimations(),
     provideAppInitializer(() => {
       const startupResolutionService = inject(StartupResolutionService);
       return startupResolutionService.resolveStartupConfiguration();
