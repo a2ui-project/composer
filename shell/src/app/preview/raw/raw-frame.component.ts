@@ -51,6 +51,11 @@ export class RawFrameComponent {
   protected readonly layoutJson: WritableSignal<string>;
   protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
 
+  public readonly TEST_ONLY = {
+    layoutJson: () => this.layoutJson,
+    isJsonInvalid: () => this.isJsonInvalid,
+  };
+
   private readonly hostCommunicationService = inject(HostCommunicationService);
   private readonly catalogManagementService = inject(CatalogManagementService);
   private readonly stateSyncService = inject(StateSyncService);

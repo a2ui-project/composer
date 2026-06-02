@@ -15,13 +15,13 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {signal, WritableSignal} from '@angular/core';
+import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {LlmClient, LlmMessage, LlmStreamResponse} from './llm-client';
+import {LlmClient, LlmMessage} from './llm-client';
 import {Standalone3pLlmClient} from './standalone-3p-llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider';
 import {MessageRole} from './llm-client';
-import {EnvMode, AuthType} from '../../settings/app-config-provider';
+import {EnvMode, AuthType, ThemePreference} from '../../settings/app-config-provider';
 import {appConfig} from '../../app.config';
 
 // TS Types matching official GenAI SDK (ensures zero 'any' type escapes)
@@ -92,10 +92,14 @@ class MockAppConfigProvider extends AppConfigProvider {
   override readonly authType = signal<AuthType>(AuthType.THREE_PARTY);
   override readonly rendererUrl = signal<string>('http://mock-renderer.com');
   override readonly geminiApiKey = signal<string>('mock-key-123');
+  override readonly themePreference = signal<ThemePreference>('light');
 
   override setRendererUrl(url: string): void {}
   override setGeminiApiKey(key: string): void {}
   override setForcedAuthMode(mode: AuthType): void {}
+  override setThemePreference(theme: ThemePreference): void {
+    this.themePreference.set(theme);
+  }
   override flushConfig(): void {}
 }
 

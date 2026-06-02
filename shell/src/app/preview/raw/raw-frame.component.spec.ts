@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ComponentFixture, TestBed} from '@angular/core/testing';
+import {TestBed} from '@angular/core/testing';
 import {RawFrameComponent} from './raw-frame.component';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
@@ -24,11 +24,23 @@ import {IS_EXTENSION_MODE} from '../../shell/environment-tokens';
 import {signal, WritableSignal} from '@angular/core';
 import {HostCommunicationService} from '../../shell/host-communication.service';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
+import {Catalog} from '../../storage/catalog-storage.model';
 import {StateSyncService} from '../../chat/state-sync/state-sync.service';
-import {ChatStateService} from '../../chat/chat-state/chat-state.service';
+import {ChatStateService, LlmLogEntry} from '../../chat/chat-state/chat-state.service';
 
 class MockChatStateService {
   public readonly isProgrammaticStreamActive = signal<boolean>(false);
+  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  public readonly llmHistory = signal<LlmLogEntry[]>([]);
+  public addRawLlmLog(type: 'request' | 'response', payload: unknown): void {
+    const entry = {type, timestamp: Date.now(), payload};
+    this.latestLlmLog.set(entry);
+    this.llmHistory.update(h => [...h, entry].slice(-50));
+  }
+  public clearRawLlmHistory(): void {
+    this.latestLlmLog.set(null);
+    this.llmHistory.set([]);
+  }
 }
 
 class MockStateSyncService {
@@ -46,13 +58,13 @@ class MockStateSyncService {
 
 describe('RawFrameComponent JSON Source Editor View', () => {
   let sendRenderA2UIMock: ReturnType<typeof vi.fn>;
-  let mockActiveCatalog: WritableSignal<any>;
+  let mockActiveCatalog: WritableSignal<Catalog | null>;
   let stateSyncMock: MockStateSyncService;
   let chatStateMock: MockChatStateService;
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
-    mockActiveCatalog = signal({title: 'Sample Catalog'});
+    mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
   });
 
   afterEach(() => {
@@ -109,7 +121,7 @@ describe('RawFrameComponent JSON Source Editor View', () => {
     await harness.setJsonText('{"updated": true}');
     fixture.detectChanges();
     await fixture.whenStable();
-    expect(fixture.componentInstance.layoutJson()).toBe('{"updated": true}');
+    expect(fixture.componentInstance.TEST_ONLY.layoutJson()()).toBe('{"updated": true}');
   });
 
   it('calls sendRenderA2UI immediately during component setup with the parsed CAR_BOOKING payload', async () => {
@@ -214,7 +226,7 @@ describe('RawFrameComponent JSON Source Editor View', () => {
     expect(sendRenderA2UIMock).toHaveBeenLastCalledWith([
       {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
     ]);
-    expect(fixture.componentInstance.isJsonInvalid()).toBe(false);
+    expect(fixture.componentInstance.TEST_ONLY.isJsonInvalid()()).toBe(false);
     expect(await harness.hasInvalidJsonBadge()).toBe(false);
   });
 
@@ -228,7 +240,7 @@ describe('RawFrameComponent JSON Source Editor View', () => {
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
-    expect(fixture.componentInstance.isJsonInvalid()).toBe(true);
+    expect(fixture.componentInstance.TEST_ONLY.isJsonInvalid()()).toBe(true);
     expect(await harness.hasInvalidJsonBadge()).toBe(true);
   });
 
@@ -247,7 +259,7 @@ describe('RawFrameComponent JSON Source Editor View', () => {
     const {fixture, component} = await setup(false);
     expect(sendRenderA2UIMock).not.toHaveBeenCalled();
 
-    component.layoutJson.set('   ');
+    component.TEST_ONLY.layoutJson().set('   ');
     mockActiveCatalog.set({title: 'Sample Catalog'});
     fixture.detectChanges();
 

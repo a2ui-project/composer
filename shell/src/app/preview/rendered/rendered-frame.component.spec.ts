@@ -21,11 +21,22 @@ import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {StartupResolutionService} from '../../shell/startup-resolution.service';
 import {HostCommunicationService} from '../../shell/host-communication.service';
-import {ChatStateService} from '../../chat/chat-state/chat-state.service';
+import {ChatStateService, LlmLogEntry} from '../../chat/chat-state/chat-state.service';
 import {signal, WritableSignal} from '@angular/core';
 
 class MockChatStateService {
   public readonly isProgrammaticStreamActive = signal<boolean>(false);
+  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  public readonly llmHistory = signal<LlmLogEntry[]>([]);
+  public addRawLlmLog(type: 'request' | 'response', payload: unknown): void {
+    const entry = {type, timestamp: Date.now(), payload};
+    this.latestLlmLog.set(entry);
+    this.llmHistory.update(h => [...h, entry].slice(-50));
+  }
+  public clearRawLlmHistory(): void {
+    this.latestLlmLog.set(null);
+    this.llmHistory.set([]);
+  }
 }
 
 describe('RenderedFrameComponent Live Preview Viewport', () => {
