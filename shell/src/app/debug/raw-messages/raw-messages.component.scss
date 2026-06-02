@@ -33,10 +33,14 @@
   width: 100%;
   overflow-y: auto;
   box-sizing: border-box;
-  padding: 8px;
+  padding: 0 8px 8px 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+
+  & > :first-child {
+    margin-top: 8px;
+  }
 }
 
 .raw-messages-placeholder {
@@ -101,11 +105,29 @@ mat-expansion-panel.llm-log-panel {
   }
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 4px;
+  overflow: visible !important;
 
   ::ng-deep {
+    .mat-expansion-panel-content-wrapper {
+      overflow: hidden;
+      border-bottom-left-radius: inherit;
+      border-bottom-right-radius: inherit;
+    }
+
     mat-expansion-panel-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
       height: 28px !important;
       padding: 0 8px !important;
+      background-color: inherit;
+      border-top-left-radius: inherit;
+      border-top-right-radius: inherit;
+
+      &.mat-expanded {
+        border-bottom: 1px solid var(--mat-sys-outline-variant);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
     }
 
     mat-panel-title {
