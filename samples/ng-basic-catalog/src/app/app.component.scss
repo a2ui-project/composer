@@ -14,17 +14,4 @@
  * limitations under the License.
  */
 
-import {Component, Inject} from '@angular/core';
-import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
-import {MatButtonModule} from '@angular/material/button';
-
-@Component({
-  selector: 'a2ui-system-instructions-dialog',
-  standalone: true,
-  imports: [MatDialogModule, MatButtonModule],
-  templateUrl: './system-instructions-dialog.component.ng.html',
-  styleUrl: './system-instructions-dialog.component.scss',
-})
-export class SystemInstructionsDialogComponent {
-  constructor(@Inject(MAT_DIALOG_DATA) protected readonly data: string) {}
-}
+/* Empty styles for app component */

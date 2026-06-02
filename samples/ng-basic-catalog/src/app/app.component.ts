@@ -25,17 +25,8 @@ import {A2uiSandboxConnection} from 'a2ui-bridge/angular';
   selector: 'app-root',
   standalone: true,
   imports: [SurfaceComponent],
-  template: `
-    <main class="sandbox-shell">
-      @if (sandbox.surfaceId()) {
-        <a2ui-v09-surface [surfaceId]="sandbox.surfaceId()"></a2ui-v09-surface>
-      } @else {
-        <p style="padding: 24px; color: #666; font-family: sans-serif; text-align: center;">
-          A2UI Angular Sandbox active. Waiting for RENDER_A2UI payloads...
-        </p>
-      }
-    </main>
-  `,
+  templateUrl: './app.component.ng.html',
+  styleUrl: './app.component.scss',
 })
 export class AppComponent {
   /**

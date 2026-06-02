@@ -14,17 +14,27 @@
  * limitations under the License.
  */
 
-import {Component, Inject} from '@angular/core';
-import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
-import {MatButtonModule} from '@angular/material/button';
-
-@Component({
-  selector: 'a2ui-system-instructions-dialog',
-  standalone: true,
-  imports: [MatDialogModule, MatButtonModule],
-  templateUrl: './system-instructions-dialog.component.ng.html',
-  styleUrl: './system-instructions-dialog.component.scss',
-})
-export class SystemInstructionsDialogComponent {
-  constructor(@Inject(MAT_DIALOG_DATA) protected readonly data: string) {}
+mat-dialog-content {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+.dialog-content-scrollable {
+  margin: 0 16px;
+  max-height: 400px;
+  overflow-y: auto;
+  background-color: var(--mat-sys-surface-container-high);
+  padding: 16px;
+  border-radius: 4px;
+}
+.dialog-content-scrollable:focus {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: -2px;
+}
+.instructions-text {
+  margin: 0;
+  font-family: 'Roboto Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--mat-sys-on-surface);
 }
