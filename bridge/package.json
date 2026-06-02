@@ -39,7 +39,7 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "typescript": "6.0.3",
-    "vitest": "4.1.5"
+    "vitest": "4.1.7"
   },
   "peerDependencies": {
     "@angular/core": "21.2.12",
