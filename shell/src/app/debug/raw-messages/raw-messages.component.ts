@@ -18,19 +18,31 @@ import {
   Component,
   inject,
   signal,
-  effect,
   viewChild,
   afterRenderEffect,
   ElementRef,
+  OnDestroy,
+  effect,
 } from '@angular/core';
+import {MatExpansionModule} from '@angular/material/expansion';
 import {JsonPipe} from '@angular/common';
 import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication.service';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {ChatStateService} from '../../chat/chat-state/chat-state.service';
+import {formatTimestamp} from '../../utils/date.utils';
+
+export interface RawLogEntry {
+  readonly type: string;
+  readonly payload: unknown;
+  readonly timestamp: number;
+  readonly timestampStr: string;
+  readonly origin?: string;
+}
 
 @Component({
   selector: 'a2ui-composer-raw-messages',
   standalone: true,
-  imports: [JsonPipe],
+  imports: [MatExpansionModule, JsonPipe],
   templateUrl: './raw-messages.component.ng.html',
   styleUrl: './raw-messages.component.scss',
 })
@@ -38,23 +50,73 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
  * A debug drawer component presenting a scrolling diagnostic view
  * of raw postMessage traffic across the iframe boundary.
  */
-export class RawMessagesComponent {
+export class RawMessagesComponent implements OnDestroy {
   private readonly hostComm = inject(HostCommunicationService);
+  private readonly chatState = inject(ChatStateService);
 
-  public readonly messageHistory = signal<{envelope: MessageEnvelope; timestampStr: string}[]>([]);
-  public readonly logContainer = viewChild<ElementRef<HTMLDivElement>>('logContainer');
+  protected readonly messageHistory = signal<RawLogEntry[]>([]);
+
+  private readonly logContainer = viewChild<ElementRef<HTMLDivElement>>('logContainer');
+
+  public readonly TEST_ONLY = {
+    logContainer: () => this.logContainer(),
+  };
+
+  private readonly postMessageListener = (envelope: MessageEnvelope) => {
+    if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+      return;
+    }
+    this.addLogEntry({
+      type: envelope.type,
+      payload: envelope.payload,
+      timestamp: envelope.timestamp,
+      timestampStr: formatTimestamp(envelope.timestamp),
+      origin: envelope.origin,
+    });
+  };
 
   constructor() {
+    const historyBuffer = this.hostComm.getHistoryBuffer();
+    const initialHosts: RawLogEntry[] = historyBuffer
+      .filter(env => env.type !== PreviewBridgeMessageType.CONSOLE_LOG)
+      .map(env => ({
+        type: env.type,
+        payload: env.payload,
+        timestamp: env.timestamp,
+        timestampStr: formatTimestamp(env.timestamp),
+        origin: env.origin,
+      }));
+
+    const initialLlms: RawLogEntry[] = this.chatState.llmHistory().map(log => ({
+      type: log.type,
+      payload: log.payload,
+      timestamp: log.timestamp,
+      timestampStr: formatTimestamp(log.timestamp),
+    }));
+
+    const merged = [...initialHosts, ...initialLlms];
+    const deduped: RawLogEntry[] = [];
+    const seen = new Set<string>();
+    for (const entry of merged) {
+      const key = `${entry.type}-${entry.timestamp}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(entry);
+      }
+    }
+    deduped.sort((a, b) => b.timestamp - a.timestamp);
+    this.messageHistory.set(deduped.slice(0, 100));
+
+    this.hostComm.addListener(this.postMessageListener);
+
     effect(() => {
-      const envelope = this.hostComm.messageStream();
-      if (envelope && envelope.type !== PreviewBridgeMessageType.CONSOLE_LOG) {
-        const timestampStr = this.formatTimestamp(envelope.timestamp);
-        this.messageHistory.update(history => {
-          const newHistory = [{envelope, timestampStr}, ...history];
-          if (newHistory.length > 100) {
-            newHistory.pop();
-          }
-          return newHistory;
+      const log = this.chatState.latestLlmLog();
+      if (log) {
+        this.addLogEntry({
+          type: log.type,
+          payload: log.payload,
+          timestamp: log.timestamp,
+          timestampStr: formatTimestamp(log.timestamp),
         });
       }
     });
@@ -72,14 +134,29 @@ export class RawMessagesComponent {
 
   public clearLogs(): void {
     this.messageHistory.set([]);
+    this.chatState.clearRawLlmHistory();
+    this.hostComm.clearHistoryBuffer();
   }
 
-  private formatTimestamp(epoch: number): string {
-    const date = new Date(epoch);
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    const ms = String(date.getMilliseconds()).padStart(3, '0');
-    return `${hours}:${minutes}:${seconds}.${ms}`;
+  ngOnDestroy(): void {
+    this.hostComm.removeListener(this.postMessageListener);
+  }
+
+  protected isCollapsible(item: RawLogEntry): boolean {
+    return (
+      item.type !== PreviewBridgeMessageType.RENDERER_READY &&
+      item.type !== PreviewBridgeMessageType.FORCE_UNBLOCK &&
+      item.type !== PreviewBridgeMessageType.SET_BLOCKING_STATE
+    );
+  }
+
+  private addLogEntry(entry: RawLogEntry): void {
+    this.messageHistory.update(history => {
+      if (history.some(h => h.timestamp === entry.timestamp && h.type === entry.type)) {
+        return history;
+      }
+      const newHistory = [entry, ...history];
+      return newHistory.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100);
+    });
   }
 }

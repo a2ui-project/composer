@@ -277,6 +277,36 @@ describe('HostCommunicationService', () => {
     expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
   });
 
+  it('excludes CONSOLE_LOG messages from the messageHistoryBuffer while keeping other control messages', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    // Send a non-console control message
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+      }),
+    );
+
+    // Send a console log message
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.CONSOLE_LOG,
+          payload: {level: 'log', message: 'info log'},
+        },
+      }),
+    );
+
+    const history = service.getHistoryBuffer();
+    expect(history.length).toBe(1);
+    expect(history[0].type).toBe(PreviewBridgeMessageType.RENDERER_READY);
+  });
+
   it('cleans up global window event listeners and properties upon destruction', () => {
     const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
 
