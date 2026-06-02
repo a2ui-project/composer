@@ -20,14 +20,13 @@ import {AppComponent} from './app/app.component';
 import {A2uiSandboxConnection, provideA2uiSandbox} from 'a2ui-bridge/angular';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {A2uiRendererService, A2UI_RENDERER_CONFIG, BasicCatalog} from '@a2ui/angular/v0_9';
-import {a2uiBridge} from 'a2ui-bridge';
 import {A2uiClientAction} from '@a2ui/web_core/v0_9';
 import {
   provideZonelessChangeDetection,
-  Injector,
   createEnvironmentInjector,
   EnvironmentInjector,
 } from '@angular/core';
+import {a2uiBridge} from 'a2ui-bridge';
 
 // Mocks core bridge singleton variables for clean telemetry spy verification
 vi.mock('a2ui-bridge', () => ({
@@ -82,7 +81,7 @@ describe('A2uiSandbox', () => {
         surfaceGroup: expect.any(Object),
         onSurfaceReady: expect.any(Function),
         onSurfaceCleared: expect.any(Function),
-        catalog: {items: ['Grid']},
+        catalogJson: {items: ['Grid']},
       }),
     );
   });

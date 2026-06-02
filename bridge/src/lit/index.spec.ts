@@ -15,16 +15,16 @@
  */
 
 // @vitest-environment jsdom
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, afterEach, vi} from 'vitest';
 import {bootstrapLitSandbox, A2uiSandboxRoot} from './index';
 import {a2uiBridge} from '../preview-bridge';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 
 describe('Lit Framework Adapter Spec', () => {
-  const dummyCatalog: Catalog<ComponentApi> = {
+  const dummyCatalog = {
     id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-    components: {},
-  };
+    components: new Map<string, ComponentApi>(),
+  } as unknown as Catalog<ComponentApi>;
 
   afterEach(() => {
     // Clear global state to not pollute other tests
@@ -55,7 +55,32 @@ describe('Lit Framework Adapter Spec', () => {
 
     expect(attachSpy).toHaveBeenCalled();
     const configPassed = attachSpy.mock.calls[0][1];
-    expect(configPassed.catalog).toBe(preload);
+    expect(configPassed.catalogJson).toBe(preload);
+
+    element.remove();
+  });
+
+  it('aligns elements in the static catalogs array with the resolved catalogId when onCatalogResolved is triggered', () => {
+    const myCatalog = {
+      id: 'https://default-catalog-id.json',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
+    bootstrapLitSandbox([myCatalog], {elementTagName: 'lit-test-element'});
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    const element = new A2uiSandboxRoot();
+    document.body.appendChild(element);
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.calls[0][1];
+    expect(configPassed.onCatalogResolved).toBeDefined();
+
+    // Trigger the callback
+    configPassed.onCatalogResolved!('urn:a2ui:catalog:resolved_dynamic_id');
+
+    expect(myCatalog.id).toBe('urn:a2ui:catalog:resolved_dynamic_id');
+    expect(A2uiSandboxRoot.catalogs[0].id).toBe('urn:a2ui:catalog:resolved_dynamic_id');
 
     element.remove();
   });

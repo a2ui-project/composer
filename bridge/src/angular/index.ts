@@ -69,20 +69,30 @@ export class A2uiSandboxConnection implements OnDestroy {
    * (onSurfaceReady and onSurfaceCleared) directly to local reactive state signals.
    */
   constructor(catalogJson?: unknown) {
-    this.rendererConnection = a2uiBridge.attachRenderer(
-      this.rendererService as unknown as RendererProcessor,
-      {
-        surfaceGroup: this.rendererService.surfaceGroup,
-        onSurfaceReady: surfaceId => {
-          this.surfaceId.set(surfaceId);
-        },
-        onSurfaceCleared: () => {
-          this.surfaceId.set('');
-        },
-        catalog: catalogJson,
-        catalogs: this.rendererConfig.catalogs,
+    const processor: RendererProcessor = {
+      processMessages: payload =>
+        (this.rendererService as unknown as RendererProcessor).processMessages(payload),
+    };
+    this.rendererConnection = a2uiBridge.attachRenderer(processor, {
+      surfaceGroup: this.rendererService.surfaceGroup,
+      onCatalogResolved: catalogId => {
+        const catalogs = this.rendererConfig.catalogs;
+        if (catalogs) {
+          for (const catalog of catalogs) {
+            if (catalog) {
+              (catalog as {id: string}).id = catalogId;
+            }
+          }
+        }
       },
-    );
+      onSurfaceReady: surfaceId => {
+        this.surfaceId.set(surfaceId);
+      },
+      onSurfaceCleared: () => {
+        this.surfaceId.set('');
+      },
+      catalogJson: catalogJson,
+    });
   }
 
   /**

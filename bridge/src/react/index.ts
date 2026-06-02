@@ -52,7 +52,14 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     // Connects the renderer stack and establishes inter-frame callbacks
     const connection = a2uiBridge.attachRenderer(processor, {
       surfaceGroup: processor.model,
-      catalog: options?.catalogJson,
+      catalogJson: options?.catalogJson,
+      onCatalogResolved: catalogId => {
+        for (const catalog of catalogs) {
+          if (catalog) {
+            (catalog as {id: string}).id = catalogId;
+          }
+        }
+      },
       onSurfaceReady: surfaceId => {
         setSurface(processor.model.getSurface(surfaceId));
       },
