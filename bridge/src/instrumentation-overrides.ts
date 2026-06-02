@@ -126,6 +126,7 @@ export function setupInstrumentationOverrides(): void {
         isSerializing = true;
         const message = args
           .map(arg => {
+            if (arg === undefined) return 'undefined';
             if (arg instanceof Error) return arg.message;
             if (typeof arg === 'string') return arg;
             const cloned = deepCloneSafe(arg);
