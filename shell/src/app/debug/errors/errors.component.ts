@@ -20,6 +20,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {HostCommunicationService} from '../../shell/host-communication.service';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {formatTimestamp} from '../../utils/date.utils';
 
 /**
  * A structured telemetry record capturing uncaught exceptions and
@@ -55,9 +56,9 @@ interface RawTelemetryPayload {
 export class ErrorsComponent {
   private readonly hostComm = inject(HostCommunicationService);
 
-  public readonly errorsLog = signal<MappedErrorLogItem[]>([]);
-  public readonly columnsToDisplay = ['time', 'level', 'source', 'message'];
-  public readonly expandedRows = signal<Set<MappedErrorLogItem>>(new Set());
+  protected readonly errorsLog = signal<MappedErrorLogItem[]>([]);
+  protected readonly columnsToDisplay = ['time', 'level', 'source', 'message'];
+  protected readonly expandedRows = signal<Set<MappedErrorLogItem>>(new Set());
 
   constructor() {
     effect(() => {
@@ -74,7 +75,7 @@ export class ErrorsComponent {
         const source = isException ? 'exception' : 'console';
         const level = isException ? 'error' : payload.level || 'log';
         const mapped: MappedErrorLogItem = {
-          time: this.formatTimestamp(envelope.timestamp),
+          time: formatTimestamp(envelope.timestamp),
           source,
           level,
           message: msg,
@@ -113,7 +114,7 @@ export class ErrorsComponent {
           }
 
           const mapped: MappedErrorLogItem = {
-            time: this.formatTimestamp(envelope.timestamp),
+            time: formatTimestamp(envelope.timestamp),
             source: 'validation',
             level: 'error',
             message,
@@ -133,7 +134,7 @@ export class ErrorsComponent {
     });
   }
 
-  public toggleRow(element: MappedErrorLogItem): void {
+  protected toggleRow(element: MappedErrorLogItem): void {
     this.expandedRows.update(set => {
       const newSet = new Set(set);
       if (newSet.has(element)) {
@@ -145,21 +146,12 @@ export class ErrorsComponent {
     });
   }
 
-  public isRowExpanded(element: MappedErrorLogItem): boolean {
+  protected isRowExpanded(element: MappedErrorLogItem): boolean {
     return this.expandedRows().has(element);
   }
 
   public clearLogs(): void {
     this.errorsLog.set([]);
     this.expandedRows.set(new Set());
-  }
-
-  private formatTimestamp(epoch: number): string {
-    const date = new Date(epoch);
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    const ms = String(date.getMilliseconds()).padStart(3, '0');
-    return `${hours}:${minutes}:${seconds}.${ms}`;
   }
 }
