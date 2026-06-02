@@ -12,7 +12,8 @@
     "test": "yarn workspaces foreach -A run test",
     "build": "yarn workspaces foreach -A run build",
     "prettier": "yarn workspaces foreach -A run prettier",
-    "tsc": "yarn --cwd shell tsc --noEmit && yarn --cwd bridge tsc --project tsconfig.bridge.json --noEmit"
+    "tsc": "yarn --cwd shell tsc --noEmit && yarn --cwd bridge tsc --project tsconfig.bridge.json --noEmit",
+    "clean": "yarn workspaces foreach -A run clean"
   },
   "resolutions": {
     "@a2ui/web_core": "0.10.0",

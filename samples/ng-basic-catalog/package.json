@@ -6,7 +6,8 @@
     "start": "ng serve --port 3456",
     "build": "ng build",
     "test": "vitest run",
-    "prettier": "prettier --write . | grep -v '(unchanged)'"
+    "prettier": "prettier --write . | grep -v '(unchanged)'",
+    "clean": "rm -rf dist .angular node_modules/.vite"
   },
   "dependencies": {
     "@a2ui/angular": "0.9.1",

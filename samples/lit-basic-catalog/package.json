@@ -9,7 +9,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "prettier": "prettier --write . | grep -v '(unchanged)'"
+    "prettier": "prettier --write . | grep -v '(unchanged)'",
+    "clean": "rm -rf dist node_modules/.vite"
   },
   "dependencies": {
     "@a2ui/lit": "0.10.0",

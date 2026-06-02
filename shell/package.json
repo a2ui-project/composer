@@ -10,7 +10,7 @@
     "e2e": "playwright test",
     "e2e-headless": "E2E_HEADLESS=true playwright test",
     "prettier": "prettier --write . | grep -v '(unchanged)'",
-    "clean": "rm -rf dist; rm -rf .angular"
+    "clean": "rm -rf dist .angular node_modules/.vite"
   },
   "dependencies": {
     "@angular/animations": "21.2.12",
