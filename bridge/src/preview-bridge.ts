@@ -217,7 +217,8 @@ export class PreviewBridge {
     this.activeRenderer = null;
 
     // Clean up active connections
-    for (const connection of this.activeConnections) {
+    const connections = Array.from(this.activeConnections);
+    for (const connection of connections) {
       connection.unsubscribe();
     }
     this.activeConnections.clear();
