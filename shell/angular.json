@@ -39,8 +39,17 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "buildTarget": "a2ui-composer:build"
-          }
+            "buildTarget": "a2ui-composer:build:development"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "a2ui-composer:build:production"
+            },
+            "development": {
+              "buildTarget": "a2ui-composer:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
         }
       }
     }
