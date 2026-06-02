@@ -6,7 +6,8 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "sourceMap": true
+    "sourceMap": true,
+    "noEmit": true
   },
   "include": ["src/**/*.ts"]
 }
