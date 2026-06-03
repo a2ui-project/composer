@@ -626,7 +626,6 @@ export class PreviewBridge {
           catalog = JSON.parse(jsonText);
         }
 
-        this.alignRegisteredCatalogId(catalog);
         const catalogId = (catalog as {catalogId?: string})?.catalogId;
         if (catalogId) {
           this.notifyCatalogResolved(catalogId);
@@ -697,25 +696,6 @@ export class PreviewBridge {
   /**
    * Safely triggers the onCatalogResolved callback if registered in the active renderer config.
    */
-  private alignRegisteredCatalogId(catalog: unknown): void {
-    if (!catalog || typeof catalog !== 'object') return;
-    const catalogObj = catalog as {catalogId?: string};
-    const catalogId = catalogObj.catalogId;
-    if (!catalogId) return;
-
-    const registeredCatalogs = this.activeRenderer?.config?.catalogs;
-    if (Array.isArray(registeredCatalogs) && registeredCatalogs.length > 0) {
-      for (const regCatalog of registeredCatalogs) {
-        if (regCatalog && typeof regCatalog === 'object') {
-          const regCatalogObj = regCatalog as {id: string};
-          console.log(
-            `PreviewBridge: Dynamically aligning registered catalog ID from "${regCatalogObj.id}" to "${catalogId}"`,
-          );
-          regCatalogObj.id = catalogId;
-        }
-      }
-    }
-  }
 
   private notifyCatalogResolved(catalogId: string): void {
     if (this.activeRenderer?.config.onCatalogResolved) {
