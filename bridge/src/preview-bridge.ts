@@ -152,6 +152,10 @@ export class PreviewBridge {
    * @returns A subscription handle to detach the renderer and clean up surface connections.
    */
   attachRenderer(processor: RendererProcessor, config: RendererConfig): SurfaceStateSubscription {
+    if (!config) {
+      console.error('PreviewBridge: config parameter is required in RendererConfig.');
+      return {unsubscribe: () => {}};
+    }
     if (!config.surfaceGroup) {
       console.error('PreviewBridge: surfaceGroup parameter is required in RendererConfig.');
       return {unsubscribe: () => {}};
@@ -441,6 +445,10 @@ export class PreviewBridge {
    */
   private connectSurfaceGroup(surfaceGroup: SurfaceGroupLike): {unsubscribe(): void} {
     const subscriptions = new Map<string, {unsubscribe(): void}>();
+
+    if (!surfaceGroup || !surfaceGroup.onSurfaceCreated) {
+      return {unsubscribe: () => {}};
+    }
 
     const groupSubscription = surfaceGroup.onSurfaceCreated.subscribe(
       (surface: SurfaceInstance) => {

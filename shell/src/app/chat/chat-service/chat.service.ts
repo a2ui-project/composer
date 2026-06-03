@@ -355,6 +355,9 @@ export class ChatService {
     };
 
     for (const block of parsedBlocks) {
+      if (!block || typeof block !== 'object') {
+        continue;
+      }
       const bObj = block as Record<string, unknown>;
       const updateComponents = bObj['updateComponents'] as Record<string, unknown>;
       if (

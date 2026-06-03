@@ -179,7 +179,10 @@ export class StateSyncService {
     for (const line of lines) {
       try {
         const parsed = JSON.parse(line);
-        const sanitized = this.sanitizeBlock(parsed);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          continue;
+        }
+        const sanitized = this.sanitizeBlock(parsed as Record<string, unknown>);
         if (sanitized) {
           sanitizedLines.push(JSON.stringify(sanitized));
         }

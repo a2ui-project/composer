@@ -173,7 +173,7 @@ describe('ChatService Pipeline & State Integration', () => {
     catalogManagementMock.activeCatalog.set(customCatalog);
     const prompt = service.systemPrompt();
 
-    expect(prompt).toContain('You are an AI assistant designed to author');
+    expect(prompt).toContain('A2UI Generation Expert');
     expect(prompt).toContain('test-catalog-123');
     expect(prompt).toContain('"Mock Catalog Custom"');
     expect(prompt).toContain('"Provides mock interface components."');
