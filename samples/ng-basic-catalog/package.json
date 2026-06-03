@@ -6,7 +6,7 @@
     "start": "ng serve --port 3456",
     "build": "ng build",
     "test": "vitest run",
-    "prettier": "prettier --write . | grep -v '(unchanged)'",
+    "prettier": "prettier --ignore-path ../../.prettierignore --write . | grep -v '(unchanged)'",
     "clean": "rm -rf dist .angular node_modules/.vite"
   },
   "dependencies": {

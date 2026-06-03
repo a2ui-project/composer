@@ -9,7 +9,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "NODE_ENV=test vitest run",
-    "prettier": "prettier --write . | grep -v '(unchanged)'",
+    "prettier": "prettier --ignore-path ../../.prettierignore --write . | grep -v '(unchanged)'",
     "clean": "rm -rf dist node_modules/.vite"
   },
   "dependencies": {
