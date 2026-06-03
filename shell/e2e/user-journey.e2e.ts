@@ -31,7 +31,7 @@ test.beforeEach(async ({page}) => {
   await page.goto('/');
 });
 
-test.describe('Phase 5 Comprehensive User Journey', () => {
+test.describe('E2E Workspace User Journey', () => {
   test('verifies full workflow across settings connection status, forced 3P mode toggle, and raw editor invalid JSON gate', async ({
     page,
   }) => {
@@ -70,7 +70,7 @@ test.describe('Phase 5 Comprehensive User Journey', () => {
 
     await expect(page.getByText('Gemini API Provisioning')).not.toBeVisible();
 
-    // 6. Switch back to Workspace (we are on workspace already, but click the link as requested)
+    // 6. Switch back to Workspace
     await page.getByRole('link', {name: 'Composer Workspace'}).click();
 
     // 7. Enter malformed JSON in Raw Editor textarea

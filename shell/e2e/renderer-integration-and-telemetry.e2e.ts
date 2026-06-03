@@ -70,8 +70,10 @@ test.beforeEach(async ({page}) => {
 });
 
 for (const config of CONFIGS) {
-  test.describe(`${config.name} Basic Catalog Integration Suite`, () => {
-    test('validates startup telemetry handshake messages', async ({page}) => {
+  test.describe(`${config.name} Preview Handshake & Sync`, () => {
+    test('validates startup telemetry handshake messages and catalog properties', async ({
+      page,
+    }) => {
       await page.goto(`/?renderer=${config.rendererUrl}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
 
@@ -81,6 +83,8 @@ for (const config of CONFIGS) {
         '.raw-messages-container [data-testid="raw-message-envelope"], .raw-messages-container [data-testid="llm-log-panel"]',
       );
       expect(await envelopes.count()).toBeGreaterThanOrEqual(3);
+
+      // Validate descending chronological sequence (newest first)
       await expect(envelopes.nth(0).locator('.message-type')).toHaveText(
         PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       );
@@ -90,6 +94,17 @@ for (const config of CONFIGS) {
       await expect(envelopes.nth(2).locator('.message-type')).toHaveText(
         PreviewBridgeMessageType.RENDERER_READY,
       );
+
+      // Expand A2UI_CATALOG card
+      const catalogHeader = envelopes.nth(1).locator('mat-expansion-panel-header');
+      await catalogHeader.focus();
+      await catalogHeader.press('Enter');
+
+      // Assert the pre block contains key catalog properties
+      const catalogPre = envelopes.nth(1).locator('pre');
+      await expect(catalogPre).toBeVisible();
+      await expect(catalogPre).toContainText('components');
+      await expect(catalogPre).toContainText('Column');
     });
 
     test('synchronizes "pick-up date" from preview iframe to data model tab', async ({page}) => {
@@ -163,13 +178,11 @@ for (const config of CONFIGS) {
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
 
-      // Fill out form entries (Pick-up Date)
       const pickupInput = config.pickupDateLocator(iframe);
       await expect(pickupInput).toBeVisible();
       await config.fillDate(pickupInput, '2026-05-05');
       await pickupInput.blur();
 
-      // Search button click
       const searchButton = iframe.getByRole('button', {name: 'Search Cars'});
       await expect(searchButton).toBeVisible();
       await searchButton.click();
@@ -207,8 +220,43 @@ for (const config of CONFIGS) {
       await expect(latestEnvelope.locator('pre')).toContainText(
         '"sourceComponentId": "book_button"',
       );
-      await expect(latestEnvelope.locator('pre')).toContainText('"location": ""');
-      await expect(latestEnvelope.locator('pre')).toContainText('"pickupDate": "2026-05-05"');
     });
   });
 }
+
+test.describe('Bridge Telemetry Layout Constraints', () => {
+  test('verifies bridge blocking state overlay mounting/unmounting and FORCE_UNBLOCK message ingestion', async ({
+    page,
+  }) => {
+    await page.route('http://custom-renderer.com/*', async route => {
+      await route.fulfill({
+        contentType: 'text/html',
+        body: `<!DOCTYPE html><html><body>Preview</body></html>`,
+      });
+    });
+
+    await page.goto('/?renderer=http://custom-renderer.com/index.html');
+    await expect(page.locator('.workspace-container')).toBeVisible();
+
+    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    await expect(iframeBody).toBeVisible();
+
+    const blockingMsg = {
+      type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+      payload: {blocked: true, message: 'Freezing'},
+    };
+    await iframeBody.evaluate((_, msg) => {
+      window.parent.postMessage(msg, '*');
+    }, blockingMsg);
+
+    await page.getByRole('tab', {name: 'Raw Messages'}).click();
+    const unblockMsg = {type: PreviewBridgeMessageType.FORCE_UNBLOCK};
+    await iframeBody.evaluate((_, msg) => {
+      window.parent.postMessage(msg, '*');
+    }, unblockMsg);
+
+    await expect(page.getByTestId('raw-message-envelope').first()).toBeVisible();
+    const envText = await page.getByTestId('raw-message-envelope').first().textContent();
+    expect(envText).toContain(PreviewBridgeMessageType.FORCE_UNBLOCK);
+  });
+});

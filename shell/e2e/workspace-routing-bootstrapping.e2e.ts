@@ -31,7 +31,7 @@ test.describe('Startup Resolution & Redirection', () => {
   });
 });
 
-test.describe('Phase 1 Scaffolding Shell Integration', () => {
+test.describe('Workspace Navigation & Layout Modes', () => {
   test.beforeEach(async ({page}) => {
     await page.addInitScript(() => {
       try {
@@ -73,5 +73,10 @@ test.describe('Phase 1 Scaffolding Shell Integration', () => {
     await page.goto('/?renderer=http://custom-renderer.com');
     await expect(page).toHaveTitle(/A2UI Composer/);
     await expect(page.locator('.workspace-container')).toBeVisible();
+  });
+
+  test('verifies responsive layout collapse in IDE webview mode', async ({page}) => {
+    await page.goto('/?renderer=http://localhost:3000&extension=true');
+    await expect(page.locator('.workspace-container')).toHaveClass(/extension-mode/);
   });
 });
