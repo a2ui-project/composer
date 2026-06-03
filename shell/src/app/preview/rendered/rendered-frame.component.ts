@@ -63,9 +63,8 @@ export class RenderedFrameComponent {
 
       return this.sanitizer.bypassSecurityTrustResourceUrl(url.toString());
     } catch (e) {
-      // Fallback if currentUrl is not a valid absolute or relative URL (e.g., malformed strings),
-      // bypassing safety checks to render what we can.
-      return this.sanitizer.bypassSecurityTrustResourceUrl(currentUrl);
+      console.error('Failed to parse renderer URL:', e);
+      return null;
     }
   });
 
