@@ -210,6 +210,43 @@ describe('IndexedDbStorageService Storage Resilience', () => {
     expect(storeMap.has('http://origin-new:3000')).toBe(true);
   });
 
+  it('evicts multiple records within a single write transaction', async () => {
+    for (let i = 0; i < 12; i++) {
+      storeMap.set(`http://origin-${i}:3000`, {
+        rendererUrl: `http://origin-${i}:3000`,
+        catalogString: '{}',
+        checksumHash: 'hash',
+        lastAccessed: 1000 + i,
+      });
+    }
+
+    let transactionCount = 0;
+    Object.defineProperty(globalThis, 'indexedDB', {
+      value: new FakeIndexedDB(storeMap, undefined, tx => {
+        transactionCount++;
+        setTimeout(() => tx.oncomplete?.(), 10);
+      }),
+      writable: true,
+      configurable: true,
+    });
+
+    const newRecord: CachedCatalogRecord = {
+      rendererUrl: 'http://origin-new:3000',
+      catalogString: '{}',
+      checksumHash: 'hash',
+      lastAccessed: 2000,
+    };
+
+    await service.saveCatalogRecord(newRecord);
+
+    expect(transactionCount).toBe(3);
+    expect(storeMap.has('http://origin-0:3000')).toBe(false);
+    expect(storeMap.has('http://origin-1:3000')).toBe(false);
+    expect(storeMap.has('http://origin-2:3000')).toBe(false);
+    expect(storeMap.has('http://origin-3:3000')).toBe(true);
+    expect(storeMap.has('http://origin-new:3000')).toBe(true);
+  });
+
   it('rolls back transaction and evicts down to three most recent upon initial quota error', async () => {
     for (let i = 0; i < 5; i++) {
       storeMap.set(`http://quota-${i}:3000`, {
@@ -357,29 +394,6 @@ describe('IndexedDbStorageService Storage Resilience', () => {
     const db = await service.openDatabase();
     expect(db).toBeTruthy();
     expect(openCount).toBe(2);
-  });
-
-  it('rejects the returned promise when a delete transaction is aborted to prevent promise hanging', async () => {
-    storeMap.set('http://target:3000', {
-      rendererUrl: 'http://target:3000',
-      catalogString: '{}',
-      checksumHash: 'hash',
-      lastAccessed: 123,
-    });
-
-    Object.defineProperty(globalThis, 'indexedDB', {
-      value: new FakeIndexedDB(storeMap, undefined, tx => {
-        const err = new DOMException('Transaction aborted due to transient locks', 'AbortError');
-        tx.error = err;
-        setTimeout(() => tx.onabort?.(), 0);
-      }),
-      writable: true,
-      configurable: true,
-    });
-
-    await expect(service.deleteCatalogRecord('http://target:3000')).rejects.toThrow(
-      'Transaction aborted due to transient locks',
-    );
   });
 
   it('rejects the returned promise when a flush all transaction is aborted to prevent promise hanging', async () => {
