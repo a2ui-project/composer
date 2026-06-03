@@ -26,7 +26,7 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ChatService} from '../chat/chat-service/chat.service';
 import {LlmClient, LlmMessage} from '../chat/llm-client/llm-client';
 import {StateSyncService} from '../chat/state-sync/state-sync.service';
-import {ChatStateService, LlmLogEntry} from '../chat/chat-state/chat-state.service';
+import {ChatStateService, LlmLogEntry, LlmLogType} from '../chat/chat-state/chat-state.service';
 import {PipelineStatus} from '../chat/pipeline-status/pipeline-status';
 import {
   AppConfigProvider,
@@ -59,7 +59,7 @@ class MockChatStateService {
     this.chatHistory.update(updater);
   }
 
-  public addRawLlmLog(type: 'request' | 'response', payload: unknown): void {
+  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
     const entry = {type, timestamp: Date.now(), payload};
     this.latestLlmLog.set(entry);
     this.llmHistory.update(h => [...h, entry].slice(-50));

@@ -21,7 +21,7 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ChatPanelHarness} from './test/chat-panel.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ChatService} from '../chat-service/chat.service';
-import {ChatStateService, LlmLogEntry} from '../chat-state/chat-state.service';
+import {ChatStateService, LlmLogEntry, LlmLogType} from '../chat-state/chat-state.service';
 import {signal, inject} from '@angular/core';
 import {LlmMessage} from '../llm-client/llm-client';
 import {MessageRole} from '../llm-client/llm-client';
@@ -54,7 +54,7 @@ class MockChatStateService {
     this.chatHistory.update(updater);
   }
 
-  public addRawLlmLog(type: 'request' | 'response', payload: unknown): void {
+  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
     const entry: LlmLogEntry = {type, timestamp: Date.now(), payload};
     this.latestLlmLog.set(entry);
     this.llmHistory.update(h => [...h, entry].slice(-50));

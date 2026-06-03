@@ -21,7 +21,7 @@ import {LlmMessage, LlmClient, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {AppConfigProvider} from '../../settings/app-config-provider';
 import {StateSyncService} from '../state-sync/state-sync.service';
-import {ChatStateService} from '../chat-state/chat-state.service';
+import {ChatStateService, LlmLogType} from '../chat-state/chat-state.service';
 import {CrossFrameValidator} from '../../shell/cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
@@ -122,7 +122,7 @@ export class ChatService {
     const fullContext = this.getFullMessageContext();
 
     // Log the raw LLM request telemetry
-    this.chatStateService.addRawLlmLog('request', fullContext);
+    this.chatStateService.addRawLlmLog(LlmLogType.REQUEST, fullContext);
 
     // Push initial model turn placeholder with loading pulse indicator to history
     this.chatStateService.updateChatHistory(h => [
@@ -160,7 +160,7 @@ export class ChatService {
       const finalRawText = await responseStream.complete;
 
       // Log the raw LLM response telemetry
-      this.chatStateService.addRawLlmLog('response', finalRawText);
+      this.chatStateService.addRawLlmLog(LlmLogType.RESPONSE, finalRawText);
       this.chatStateService.updateChatHistory(history => {
         const updated = [...history];
         const lastIdx = updated.length - 1;

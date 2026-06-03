@@ -18,8 +18,15 @@ import {Injectable, signal} from '@angular/core';
 import {LlmMessage} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 
+/** Indicate if the log is for a request or a response. */
+export enum LlmLogType {
+  REQUEST = 'LLM_REQUEST',
+  RESPONSE = 'LLM_RESPONSE',
+}
+
+/** Capture data about an LLM request or response. */
 export interface LlmLogEntry {
-  readonly type: 'request' | 'response';
+  readonly type: LlmLogType;
   readonly timestamp: number;
   readonly payload: unknown;
 }
@@ -118,7 +125,7 @@ export class ChatStateService {
     this._isProgrammaticStreamActive.set(active);
   }
 
-  addRawLlmLog(type: 'request' | 'response', payload: unknown): void {
+  addRawLlmLog(type: LlmLogType, payload: unknown): void {
     const entry: LlmLogEntry = {
       type,
       timestamp: Date.now(),

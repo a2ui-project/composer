@@ -21,7 +21,7 @@ import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ChatService} from './chat.service';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
 import {Catalog} from '../../storage/catalog-storage.model';
-import {ChatStateService, LlmLogEntry} from '../chat-state/chat-state.service';
+import {ChatStateService, LlmLogEntry, LlmLogType} from '../chat-state/chat-state.service';
 import {
   AppConfigProvider,
   EnvMode,
@@ -74,7 +74,7 @@ class MockChatStateService {
   public setProgrammaticStreamActive(active: boolean) {
     this.isProgrammaticStreamActive.set(active);
   }
-  public addRawLlmLog(type: 'request' | 'response', payload: unknown): void {
+  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
     const entry: LlmLogEntry = {type, timestamp: Date.now(), payload};
     this.latestLlmLog.set(entry);
     this.llmHistory.update(history => [...history, entry].slice(-50));

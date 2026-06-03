@@ -17,7 +17,7 @@
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {StateSyncService} from './state-sync.service';
-import {ChatStateService, LlmLogEntry} from '../chat-state/chat-state.service';
+import {ChatStateService, LlmLogEntry, LlmLogType} from '../chat-state/chat-state.service';
 import {LlmMessage} from '../llm-client/llm-client';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
@@ -39,7 +39,7 @@ class MockChatStateService {
   private _llmHistory: LlmLogEntry[] = [];
   public readonly latestLlmLog = vi.fn(() => this._latestLlmLog);
   public readonly llmHistory = vi.fn(() => this._llmHistory);
-  public addRawLlmLog = vi.fn((type: 'request' | 'response', payload: unknown) => {
+  public addRawLlmLog = vi.fn((type: LlmLogType, payload: unknown) => {
     const entry = {type, timestamp: Date.now(), payload};
     this._latestLlmLog = entry;
     this._llmHistory.push(entry);

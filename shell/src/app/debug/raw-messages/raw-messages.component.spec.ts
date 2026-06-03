@@ -21,7 +21,7 @@ import {RawMessagesHarness} from './test/raw-messages.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication.service';
 import {signal, WritableSignal} from '@angular/core';
-import {ChatStateService, LlmLogEntry} from '../../chat/chat-state/chat-state.service';
+import {ChatStateService, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state.service';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
@@ -188,7 +188,7 @@ describe('RawMessagesComponent', () => {
       timestamp: Date.now(),
     });
     latestLlmLogSignal.set({
-      type: 'request',
+      type: LlmLogType.REQUEST,
       payload: {},
       timestamp: Date.now(),
     });
@@ -239,12 +239,12 @@ describe('RawMessagesComponent', () => {
     ];
     const pastLlmLogs: LlmLogEntry[] = [
       {
-        type: 'request',
+        type: LlmLogType.REQUEST,
         payload: {prompt: 'first prompt'},
         timestamp: 2000,
       },
       {
-        type: 'response',
+        type: LlmLogType.RESPONSE,
         payload: {response: 'second response'},
         timestamp: 4000,
       },
@@ -264,9 +264,9 @@ describe('RawMessagesComponent', () => {
 
     expect(await newHarness.getLoggedMessagesCount()).toBe(4);
     // Expect descending order (newest first: timestamp 4000, 3000, 2000, 1000)
-    expect(await newHarness.getMessageTextAt(0)).toContain('response');
+    expect(await newHarness.getMessageTextAt(0)).toContain('LLM_RESPONSE');
     expect(await newHarness.getMessageTextAt(1)).toContain('POST_MSG_3');
-    expect(await newHarness.getMessageTextAt(2)).toContain('request');
+    expect(await newHarness.getMessageTextAt(2)).toContain('LLM_REQUEST');
     expect(await newHarness.getMessageTextAt(3)).toContain('POST_MSG_1');
   });
 
@@ -308,7 +308,7 @@ describe('RawMessagesComponent', () => {
       timestamp: 3000,
     });
     latestLlmLogSignal.set({
-      type: 'request',
+      type: LlmLogType.REQUEST,
       payload: {},
       timestamp: 4000,
     });
@@ -318,7 +318,7 @@ describe('RawMessagesComponent', () => {
 
     // Index 0 is request (collapsible/expansion panel)
     expect(await harness.isMessageCollapsibleAt(0)).toBe(true);
-    expect(await harness.getMessageTextAt(0)).toContain('request');
+    expect(await harness.getMessageTextAt(0)).toContain(LlmLogType.REQUEST);
 
     // Index 1 is DATA_MODEL_CHANGE (collapsible/expansion panel)
     expect(await harness.isMessageCollapsibleAt(1)).toBe(true);

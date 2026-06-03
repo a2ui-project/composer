@@ -26,13 +26,13 @@ import {HostCommunicationService} from '../../shell/host-communication.service';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
 import {Catalog} from '../../storage/catalog-storage.model';
 import {StateSyncService} from '../../chat/state-sync/state-sync.service';
-import {ChatStateService, LlmLogEntry} from '../../chat/chat-state/chat-state.service';
+import {ChatStateService, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state.service';
 
 class MockChatStateService {
   public readonly isProgrammaticStreamActive = signal<boolean>(false);
   public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
   public readonly llmHistory = signal<LlmLogEntry[]>([]);
-  public addRawLlmLog(type: 'request' | 'response', payload: unknown): void {
+  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
     const entry = {type, timestamp: Date.now(), payload};
     this.latestLlmLog.set(entry);
     this.llmHistory.update(h => [...h, entry].slice(-50));
