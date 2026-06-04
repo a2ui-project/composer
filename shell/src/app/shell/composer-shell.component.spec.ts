@@ -27,11 +27,14 @@ import {IndexedDbStorageService} from '../storage/indexed-db-storage.service';
 import {CatalogManagementService} from '../storage/catalog-management.service';
 import {AppConfigProvider} from '../settings/app-config-provider';
 import {signal, WritableSignal} from '@angular/core';
+import {LocalStorageService} from '../settings/local-storage.service';
+import {LocalStorageKey} from '../settings/local-storage-keys';
 
 describe('ComposerShellComponent Layout', () => {
   let fixture: ComponentFixture<ComposerShellComponent>;
   let harness: ComposerShellHarness;
   let storageServiceMock: Partial<IndexedDbStorageService>;
+  let localStorageServiceMock: Partial<LocalStorageService>;
   let catalogManagementServiceMock: {
     activeCatalogTitle: WritableSignal<string>;
     activeCatalogDescription: WritableSignal<string>;
@@ -44,6 +47,10 @@ describe('ComposerShellComponent Layout', () => {
   beforeEach(async () => {
     storageServiceMock = {
       flushAllRecords: vi.fn().mockResolvedValue(undefined),
+    };
+
+    localStorageServiceMock = {
+      removeItem: vi.fn(),
     };
 
     catalogManagementServiceMock = {
@@ -66,6 +73,10 @@ describe('ComposerShellComponent Layout', () => {
         {
           provide: IndexedDbStorageService,
           useValue: storageServiceMock,
+        },
+        {
+          provide: LocalStorageService,
+          useValue: localStorageServiceMock,
         },
         {
           provide: CatalogManagementService,
@@ -117,6 +128,11 @@ describe('ComposerShellComponent Layout', () => {
     async () => {
       const consoleSpy = vi.spyOn(console, 'log');
       await harness.clickResetButton();
+      expect(storageServiceMock.flushAllRecords).toHaveBeenCalled();
+      expect(localStorageServiceMock.removeItem).toHaveBeenCalledWith(
+        LocalStorageKey.SESSION_STATE,
+      );
+      expect(localStorageServiceMock.removeItem).toHaveBeenCalledWith(LocalStorageKey.EDITOR_CACHE);
       expect(consoleSpy).toHaveBeenCalledWith('Session state cleared.');
     },
   );
