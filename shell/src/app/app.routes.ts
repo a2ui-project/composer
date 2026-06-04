@@ -24,25 +24,24 @@ import {startupGuard} from './shell/startup-guard';
 export const routes: Routes = [
   {
     path: '',
-    loadComponent: () =>
-      import('./shell/composer-shell.component').then(m => m.ComposerShellComponent),
+    loadComponent: () => import('./shell/composer-shell').then(m => m.ComposerShellComponent),
     children: [
       {
         path: '',
         loadComponent: () =>
-          import('./shell/composer-workspace.component').then(m => m.ComposerWorkspaceComponent),
+          import('./shell/composer-workspace').then(m => m.ComposerWorkspaceComponent),
         title: 'A2UI Composer Workspace',
         canActivate: [startupGuard],
       },
       {
         path: 'gallery',
-        loadComponent: () => import('./gallery/gallery.component').then(m => m.GalleryComponent),
+        loadComponent: () => import('./gallery/gallery').then(m => m.GalleryComponent),
         title: 'A2UI Components Gallery',
         canActivate: [startupGuard],
       },
       {
         path: 'settings',
-        loadComponent: () => import('./settings/settings.component').then(m => m.SettingsComponent),
+        loadComponent: () => import('./settings/settings').then(m => m.SettingsComponent),
         title: 'A2UI Composer Settings',
       },
       {

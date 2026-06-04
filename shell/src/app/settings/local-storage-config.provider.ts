@@ -16,10 +16,10 @@
  */
 
 import {Injectable, Signal, computed, inject, signal} from '@angular/core';
-import {StartupResolutionService} from '../shell/startup-resolution.service';
+import {StartupResolutionService} from '../shell/startup-resolution';
 import {AppConfigProvider, AuthType, EnvMode, ThemePreference} from './app-config-provider';
 import {LocalStorageKey} from './local-storage-keys';
-import {LocalStorageService} from './local-storage.service';
+import {LocalStorageService} from './local-storage-interactions';
 
 /**
  * Concrete implementation of the AppConfigProvider that integrates with
