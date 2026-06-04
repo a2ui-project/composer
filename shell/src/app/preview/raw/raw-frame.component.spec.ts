@@ -244,6 +244,20 @@ describe('RawFrameComponent JSON Source Editor View', () => {
     expect(await harness.hasInvalidJsonBadge()).toBe(true);
   });
 
+  it('sets isJsonInvalid to true, suppresses sendRenderA2UI, and displays the invalid JSON badge when a malformed JSON array is typed', async () => {
+    const {fixture, harness} = await setup(false);
+    vi.useFakeTimers();
+    await harness.setJsonText('[{"version": "v0.9"}');
+    fixture.detectChanges();
+
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+
+    expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.TEST_ONLY.isJsonInvalid()()).toBe(true);
+    expect(await harness.hasInvalidJsonBadge()).toBe(true);
+  });
+
   it('dispatches initial layout dynamically when activeCatalog transitions from null to a valid catalog', async () => {
     mockActiveCatalog = signal(null);
     const {fixture} = await setup(false);

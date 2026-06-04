@@ -34,6 +34,7 @@ import {HostCommunicationService} from '../../shell/host-communication.service';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
 import {StateSyncService} from '../../chat/state-sync/state-sync.service';
 import {ChatStateService} from '../../chat/chat-state/chat-state.service';
+import {tryParseJsonArray} from '../../utils/json.utils';
 
 @Component({
   selector: 'a2ui-composer-raw-frame',
@@ -161,7 +162,11 @@ export class RawFrameComponent {
     }
     // Format 1: Standard JSON Array format
     if (trimmed.startsWith('[')) {
-      return JSON.parse(trimmed);
+      const parsed = tryParseJsonArray(trimmed);
+      if (parsed === null) {
+        throw new SyntaxError('Invalid JSON Array');
+      }
+      return parsed;
     }
     // Format 2: JSON Lines (JSONL) format. Parse each line independently.
     const lines = trimmed
