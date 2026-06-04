@@ -42,8 +42,15 @@ function deepCloneSafe(obj: unknown, ancestors: Set<unknown> = new Set<unknown>(
   if (obj === undefined) return 'undefined';
   if (obj instanceof Date) return obj.toISOString();
   if (obj instanceof RegExp) return obj.toString();
-  if (obj instanceof Map) return Array.from(obj.entries());
-  if (obj instanceof Set) return Array.from(obj.values());
+  if (obj instanceof Map) {
+    return Array.from(obj.entries()).map(([k, v]) => [
+      deepCloneSafe(k, ancestors),
+      deepCloneSafe(v, ancestors),
+    ]);
+  }
+  if (obj instanceof Set) {
+    return Array.from(obj.values()).map(v => deepCloneSafe(v, ancestors));
+  }
   if (typeof obj === 'function') return '[Function Callback]';
   if (typeof obj === 'symbol') return obj.toString();
   if (typeof obj === 'bigint') return `${obj.toString()}n`;

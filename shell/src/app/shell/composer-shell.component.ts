@@ -81,9 +81,13 @@ export class ComposerShellComponent {
    */
   async resetSession(): Promise<void> {
     await this.storageService.flushAllRecords();
-    localStorage.removeItem('a2ui_composer_session_state');
-    localStorage.removeItem('a2ui_composer_editor_cache');
-    sessionStorage.clear();
+    try {
+      localStorage.removeItem('a2ui_composer_session_state');
+      localStorage.removeItem('a2ui_composer_editor_cache');
+      sessionStorage.clear();
+    } catch (e) {
+      console.warn('Failed to clear session cache safely:', e);
+    }
     if (this.document.defaultView) {
       this.document.defaultView.location.reload();
     }

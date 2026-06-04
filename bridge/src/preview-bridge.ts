@@ -219,7 +219,11 @@ export class PreviewBridge {
     // Clean up active connections
     const connections = Array.from(this.activeConnections);
     for (const connection of connections) {
-      connection.unsubscribe();
+      try {
+        connection.unsubscribe();
+      } catch (err) {
+        console.error('PreviewBridge: Error during connection unsubscribe:', err);
+      }
     }
     this.activeConnections.clear();
   }
