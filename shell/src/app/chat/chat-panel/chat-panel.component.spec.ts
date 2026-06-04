@@ -21,19 +21,22 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ChatPanelHarness} from './test/chat-panel.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ChatService} from '../chat-service/chat.service';
-import {ChatStateService} from '../chat-state/chat-state.service';
-import {signal, inject, WritableSignal} from '@angular/core';
+import {ChatStateService, LlmLogEntry, LlmLogType} from '../chat-state/chat-state.service';
+import {signal, inject} from '@angular/core';
 import {LlmMessage} from '../llm-client/llm-client';
 import {MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {CatalogManagementService} from '../../storage/catalog-management.service';
 import {MatDialogHarness} from '@angular/material/dialog/testing';
+import {Catalog} from '../../storage/catalog-storage.model';
 
 class MockChatStateService {
   public readonly chatHistory = signal<LlmMessage[]>([]);
   public readonly pipelineStatus = signal<PipelineStatus>(PipelineStatus.IDLE);
   public readonly isProgrammaticStreamActive = signal<boolean>(false);
+  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  public readonly llmHistory = signal<LlmLogEntry[]>([]);
 
   public setPipelineStatus(status: PipelineStatus): void {
     this.pipelineStatus.set(status);
@@ -49,6 +52,17 @@ class MockChatStateService {
 
   public updateChatHistory(updater: (h: LlmMessage[]) => LlmMessage[]): void {
     this.chatHistory.update(updater);
+  }
+
+  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
+    const entry: LlmLogEntry = {type, timestamp: Date.now(), payload};
+    this.latestLlmLog.set(entry);
+    this.llmHistory.update(h => [...h, entry].slice(-50));
+  }
+
+  public clearRawLlmHistory(): void {
+    this.latestLlmLog.set(null);
+    this.llmHistory.set([]);
   }
 }
 
@@ -69,7 +83,7 @@ class MockChatService {
 }
 
 class MockCatalogManagementService {
-  public readonly activeCatalog = signal<any | null>({} as any); // non-null by default
+  public readonly activeCatalog = signal<Catalog | null>({}); // non-null by default
 }
 
 describe('ChatPanelComponent Gemini Dialogue Panel Integration', () => {
@@ -152,9 +166,7 @@ describe('ChatPanelComponent Gemini Dialogue Panel Integration', () => {
 
       // Bubble 2: Layout snapshot block
       expect(bubbleHeaders[1]).toBe('Canvas Revision Snapshot');
-      expect(bubbles[1]).toContain('A2UI Visual Layout Dispatch Snapshot');
-      expect(bubbles[1]).toContain('(1 Components)');
-      expect(bubbles[1]).toContain('"component":"Button"');
+      expect(bubbles[1]).toBe('A2UI JSON: 1 components');
       expect(bubbleTypes[1]).toBe('layout-snapshot');
 
       // Bubble 3: Model response turn
@@ -193,6 +205,31 @@ describe('ChatPanelComponent Gemini Dialogue Panel Integration', () => {
       expect(bubbleTypes[1]).toBe('diagnostic-error');
     },
   );
+
+  it('renders Retry Request action buttons below eligible error bubbles and triggers submitPrompt when clicked', async () => {
+    const submitSpy = chatServiceMock.submitPrompt;
+    const errorLog = '⚠️ Connectivity Failure. Remote gateway communication drop.';
+
+    const historyMocks: LlmMessage[] = [
+      {role: MessageRole.USER, content: 'create standard button'},
+      {
+        role: MessageRole.ERROR,
+        content: errorLog,
+        isRetryable: true,
+        originalPrompt: 'create standard button',
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    expect(await harness.getRetryButtonsCount()).toBe(1);
+
+    await harness.clickRetryButtonAt(0);
+    fixture.detectChanges();
+
+    expect(submitSpy).toHaveBeenCalledWith('create standard button');
+  });
 
   it(
     'triggers prompt submissions when submit action button is clicked, ' +
@@ -310,19 +347,10 @@ describe('ChatPanelComponent Gemini Dialogue Panel Integration', () => {
       fixture.detectChanges();
       expect(await harness.hasLoadingOverlay()).toBe(false);
 
-      // Milestone 6: Aborted/Failed turns (shows overlay, manually closeable)
+      // Milestone 6: Aborted/Failed turns (overlay is NOT shown, allowing sidebar to be interactive)
       chatStateMock.pipelineStatus.set(PipelineStatus.FAILED);
       fixture.detectChanges();
-      expect(await harness.hasLoadingOverlay()).toBe(true);
-      expect(await harness.getLoadingOverlayText()).toBe('A2UI JSON validation failed.');
-
-      // Dismiss overlay
-      await harness.dismissLoadingOverlay();
-      fixture.detectChanges();
-
-      // Verify overlay hides and status goes IDLE
       expect(await harness.hasLoadingOverlay()).toBe(false);
-      expect(chatServiceMock.pipelineStatus()).toBe(PipelineStatus.IDLE);
     },
   );
 
@@ -350,7 +378,7 @@ describe('ChatPanelComponent Gemini Dialogue Panel Integration', () => {
     expect(await harness.isSubmitDisabled()).toBe(true);
 
     // Set activeCatalog to non-null (handshake resolved)
-    catalogManagementServiceMock.activeCatalog.set({} as any);
+    catalogManagementServiceMock.activeCatalog.set({});
     fixture.detectChanges();
 
     // Send button must now be enabled

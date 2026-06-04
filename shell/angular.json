@@ -2,6 +2,9 @@
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
   "newProjectRoot": "projects",
+  "cli": {
+    "packageManager": "yarn"
+  },
   "projects": {
     "a2ui-composer": {
       "projectType": "application",
@@ -21,13 +24,32 @@
             "assets": ["src/favicon.ico", "src/assets", "src/config.json"],
             "styles": ["@angular/material/prebuilt-themes/indigo-pink.css", "src/styles.scss"],
             "scripts": []
+          },
+          "configurations": {
+            "production": {
+              "optimization": true,
+              "sourceMap": false
+            },
+            "development": {
+              "optimization": false,
+              "sourceMap": true
+            }
           }
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "buildTarget": "a2ui-composer:build"
-          }
+            "buildTarget": "a2ui-composer:build:development"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "a2ui-composer:build:production"
+            },
+            "development": {
+              "buildTarget": "a2ui-composer:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
         }
       }
     }

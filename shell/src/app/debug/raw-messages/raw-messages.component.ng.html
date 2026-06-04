@@ -13,19 +13,38 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-<div #logContainer class="raw-messages-container">
-  @if (messageHistory().length > 0) {
-    @for (item of messageHistory(); track item.envelope.timestamp) {
-      <div data-testid="raw-message-envelope" class="message-envelope">
-        <div class="envelope-header">
-          <span class="timestamp">{{ item.timestampStr }}</span>
-          <span class="message-type">{{ item.envelope.type }}</span>
-          <span class="origin">{{ item.envelope.origin }}</span>
-        </div>
-        <pre>{{ item.envelope.payload | json }}</pre>
-      </div>
+<div class="raw-messages-wrapper">
+  <div #logContainer class="raw-messages-container">
+    @if (messageHistory().length > 0) {
+      @for (item of messageHistory(); track item.type + '-' + item.timestamp) {
+        @if (isCollapsible(item)) {
+          <mat-expansion-panel data-testid="llm-log-panel" class="llm-log-panel" [expanded]="false">
+            <mat-expansion-panel-header>
+              <mat-panel-title>
+                <span class="timestamp">{{ item.timestampStr }}</span>
+                <span class="message-type">{{ item.type }}</span>
+                @if (item.origin) {
+                  <span class="origin">{{ item.origin }}</span>
+                }
+              </mat-panel-title>
+            </mat-expansion-panel-header>
+            <pre>{{ item.payload | json }}</pre>
+          </mat-expansion-panel>
+        } @else {
+          <div data-testid="raw-message-envelope" class="message-envelope">
+            <div class="envelope-header">
+              <span class="timestamp">{{ item.timestampStr }}</span>
+              <span class="message-type">{{ item.type }}</span>
+              <span class="origin">{{ item.origin }}</span>
+            </div>
+            @if (item.payload) {
+              <pre>{{ item.payload | json }}</pre>
+            }
+          </div>
+        }
+      }
+    } @else {
+      <div class="raw-messages-placeholder">No messages captured yet</div>
     }
-  } @else {
-    <div class="raw-messages-placeholder">No messages captured yet</div>
-  }
+  </div>
 </div>

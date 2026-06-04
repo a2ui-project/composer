@@ -32,6 +32,8 @@ export enum LocalStorageKey {
   EXTENSION_MODE = 'a2ui_composer_extension_mode',
   /** Key for retrieving the active workspace prompt in-progress draft content. */
   ACTIVE_DRAFT = 'a2ui_composer_active_draft',
+  SESSION_STATE = 'a2ui_composer_session_state',
+  EDITOR_CACHE = 'a2ui_composer_editor_cache',
   /** Key for persisting the user's theme selection (light vs dark). */
   THEME_PREFERENCE = 'a2ui_composer_theme_preference',
 }

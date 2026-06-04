@@ -15,9 +15,21 @@
  */
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {PreviewBridge, a2uiBridge, SurfaceGroupLike, SurfaceInstance} from './preview-bridge';
+import {
+  PreviewBridge,
+  a2uiBridge,
+  SurfaceGroupLike,
+  SurfaceInstance,
+  RendererConfig,
+} from './preview-bridge';
 import {PreviewBridgeMessageType} from './bridge-message';
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
+
+declare var process: {
+  env: {
+    NODE_ENV: string;
+  };
+};
 
 describe('PreviewBridge Core API Runtime', () => {
   let bridge: PreviewBridge;
@@ -41,6 +53,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it('routes SET_BLOCKING_STATE events correctly and handles overlays', () => {
@@ -189,7 +202,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    expect(window.fetch).toHaveBeenCalledWith('/catalog');
+    expect(window.fetch).toHaveBeenCalledWith('/catalog', expect.any(Object));
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -223,8 +236,8 @@ describe('PreviewBridge Core API Runtime', () => {
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog');
-    expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json');
+    expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json', expect.any(Object));
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -272,7 +285,7 @@ describe('PreviewBridge Core API Runtime', () => {
     bridge.attachRenderer(processor, {
       surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
       onSurfaceReady: vi.fn(),
-      catalog: mockCatalog,
+      catalogJson: mockCatalog,
     });
 
     window.dispatchEvent(
@@ -294,6 +307,65 @@ describe('PreviewBridge Core API Runtime', () => {
     );
   });
 
+  it('triggers onCatalogResolved callback when createSurface command contains catalogId', async () => {
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+    const onCatalogResolved = vi.fn();
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      onCatalogResolved,
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload: [
+            {
+              version: 'v0.9',
+              createSurface: {
+                surfaceId: 'surface-123',
+                catalogId: 'urn:a2ui:catalog:surface_dynamic_id',
+              },
+            },
+          ],
+        },
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(onCatalogResolved).toHaveBeenCalledWith('urn:a2ui:catalog:surface_dynamic_id');
+  });
+
+  it('triggers onCatalogResolved callback when GET_CATALOG resolves the catalogId', async () => {
+    const mockCatalog = {catalogId: 'urn:a2ui:catalog:get_catalog_id', items: ['MyComponent']};
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+    const onCatalogResolved = vi.fn();
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      catalogJson: mockCatalog,
+      onCatalogResolved,
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(onCatalogResolved).toHaveBeenCalledWith('urn:a2ui:catalog:get_catalog_id');
+  });
+
   it('strictly halts and transmits A2UI_CATALOG error envelope if in-memory catalog processing throws', async () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -305,7 +377,7 @@ describe('PreviewBridge Core API Runtime', () => {
     bridge.attachRenderer(processor, {
       surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
       onSurfaceReady: vi.fn(),
-      catalog: '{ invalid json ',
+      catalogJson: '{ invalid json ',
     });
 
     window.dispatchEvent(
@@ -344,7 +416,7 @@ describe('PreviewBridge Core API Runtime', () => {
     bridge.attachRenderer(processor, {
       surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
       onSurfaceReady: vi.fn(),
-      catalog: undefined,
+      catalogJson: undefined,
     });
 
     window.dispatchEvent(
@@ -356,7 +428,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    expect(window.fetch).toHaveBeenCalledWith('/catalog');
+    expect(window.fetch).toHaveBeenCalledWith('/catalog', expect.any(Object));
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -364,6 +436,136 @@ describe('PreviewBridge Core API Runtime', () => {
       },
       '*',
     );
+  });
+
+  it('falls back to /catalog.json if /catalog returns HTML with case-insensitive uppercase tags', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const mockCatalog = {items: ['CaseInsensitiveComponent']};
+
+    window.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => '<!DOCTYPE HTML><html>SPA Fallback</html>',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify(mockCatalog),
+      });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json', expect.any(Object));
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: mockCatalog,
+      },
+      '*',
+    );
+  });
+
+  it('serves registered legacy catalog from configuration setup in-memory, bypassing fetch', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    window.fetch = vi.fn();
+
+    const mockCatalog = {items: ['LegacyComponent']};
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      catalog: mockCatalog,
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(window.fetch).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: mockCatalog,
+      },
+      '*',
+    );
+  });
+
+  it('intercepts fetch abort error cleanly and posts standard catalog error envelope', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    window.fetch = vi
+      .fn()
+      .mockRejectedValue(new DOMException('The user aborted a request.', 'AbortError'));
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: {
+          error: {message: expect.stringContaining('The user aborted a request.')},
+        },
+      },
+      '*',
+    );
+  });
+
+  it('aborts fetch signal and handles timeout cleanly after 3000ms using fake timers', async () => {
+    vi.useFakeTimers();
+    const spy = vi.spyOn(window.parent, 'postMessage');
+
+    let abortSignal: AbortSignal | undefined;
+    window.fetch = vi.fn().mockImplementation((url, options) => {
+      abortSignal = options?.signal;
+      return new Promise(() => {}); // Never resolves
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
+      }),
+    );
+
+    // Let event microtasks run to trigger handleGetCatalog
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(window.fetch).toHaveBeenCalled();
+    expect(abortSignal).toBeDefined();
+    expect(abortSignal?.aborted).toBe(false);
+
+    // Advance by 2999ms (just before 3 seconds)
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(abortSignal?.aborted).toBe(false);
+
+    // Advance past the 3000ms timeout
+    await vi.advanceTimersByTimeAsync(1);
+    expect(abortSignal?.aborted).toBe(true);
+
+    // Clean up fake timers
+    vi.useRealTimers();
   });
 
   it('ignores sendMessage when window.parent is null or equal to window in non-test env', () => {
@@ -650,7 +852,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       vi.runAllTimers();
 
-      // The deferred render payload MUST NOT be processed since the timeout was cleanly cancelled!
+      // The deferred render payload MUST NOT be processed since the timeout was cleanly canceled!
       expect(processSpy).toHaveBeenCalledTimes(1); // Only the initial deleteSurface reset
       vi.useRealTimers();
     });
@@ -1167,8 +1369,8 @@ describe('PreviewBridge Core API Runtime', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog');
-      expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json');
+      expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog', expect.any(Object));
+      expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json', expect.any(Object));
       expect(spy).toHaveBeenCalledWith(
         {
           type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -1256,7 +1458,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      expect(window.fetch).toHaveBeenCalledWith('/catalog');
+      expect(window.fetch).toHaveBeenCalledWith('/catalog', expect.any(Object));
       expect(spy).toHaveBeenCalledWith(
         {
           type: PreviewBridgeMessageType.A2UI_CATALOG,

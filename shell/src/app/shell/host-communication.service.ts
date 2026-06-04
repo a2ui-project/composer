@@ -55,6 +55,44 @@ export class HostCommunicationService implements OnDestroy {
   private readonly messageStreamSignal = signal<MessageEnvelope | null>(null);
   public readonly messageStream = this.messageStreamSignal.asReadonly();
 
+  private readonly listeners = new Set<(envelope: MessageEnvelope) => void>();
+  private readonly messageHistoryBuffer: MessageEnvelope[] = [];
+  private latestCatalogEnvelope: MessageEnvelope | null = null;
+
+  public addListener(listener: (envelope: MessageEnvelope) => void): void {
+    this.listeners.add(listener);
+  }
+
+  public removeListener(listener: (envelope: MessageEnvelope) => void): void {
+    this.listeners.delete(listener);
+  }
+
+  public getHistoryBuffer(): MessageEnvelope[] {
+    return [...this.messageHistoryBuffer];
+  }
+
+  public getLatestCatalog(): MessageEnvelope | null {
+    return this.latestCatalogEnvelope;
+  }
+
+  public clearHistoryBuffer(): void {
+    this.messageHistoryBuffer.length = 0;
+    this.latestCatalogEnvelope = null;
+  }
+
+  /**
+   * Triggers a message stream envelope update. Primarily exposed for testing specifications
+   * to safely simulate incoming guest frame postMessages without unsafe casting bypasses.
+   */
+  private triggerMessageStreamForTesting(envelope: MessageEnvelope): void {
+    this.messageStreamSignal.set(envelope);
+  }
+
+  public readonly TEST_ONLY = {
+    triggerMessageStreamForTesting: (envelope: MessageEnvelope) =>
+      this.triggerMessageStreamForTesting(envelope),
+  };
+
   private readonly messageListener = (event: MessageEvent) => {
     const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
     if (!activeWindow || event.source !== activeWindow) {
@@ -84,8 +122,24 @@ export class HostCommunicationService implements OnDestroy {
         origin: event.origin,
         timestamp: Date.now(),
       };
+      if (type === PreviewBridgeMessageType.A2UI_CATALOG) {
+        this.latestCatalogEnvelope = envelope;
+      }
+      if (type !== PreviewBridgeMessageType.CONSOLE_LOG) {
+        this.messageHistoryBuffer.push(envelope);
+        if (this.messageHistoryBuffer.length > 100) {
+          this.messageHistoryBuffer.shift();
+        }
+      }
       this.latestEnvelopeSignal.set(envelope);
       this.messageStreamSignal.set(envelope);
+      this.listeners.forEach(l => {
+        try {
+          l(envelope);
+        } catch (err) {
+          console.error('Error in HostCommunicationService listener:', err);
+        }
+      });
     }
   };
 

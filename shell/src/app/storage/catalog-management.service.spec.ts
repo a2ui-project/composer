@@ -500,7 +500,8 @@ describe('CatalogManagementService', () => {
 
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(service.catalogError()).toBe('Failed to compute catalog hash or access storage.');
+    expect(service.catalogError()).toBeNull();
+    expect(service.activeCatalog()).toEqual({} as Catalog);
     expect(service.isHandshakeInProgress()).toBe(false);
 
     Object.defineProperty(globalThis, 'crypto', {

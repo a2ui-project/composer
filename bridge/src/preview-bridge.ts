@@ -217,8 +217,13 @@ export class PreviewBridge {
     this.activeRenderer = null;
 
     // Clean up active connections
-    for (const connection of this.activeConnections) {
-      connection.unsubscribe();
+    const connections = Array.from(this.activeConnections);
+    for (const connection of connections) {
+      try {
+        connection.unsubscribe();
+      } catch (err) {
+        console.error('PreviewBridge: Error during connection unsubscribe:', err);
+      }
     }
     this.activeConnections.clear();
   }
@@ -327,7 +332,7 @@ export class PreviewBridge {
     // If a dynamic layout setup message is received before the framework application has
     // bootstrapped and attached its renderer, we print a warning and ignore the payload.
     // This should not ever happen since the host Shell is strictly designed never to dispatch
-    // RENDER_A2UI messages until after RENDERER_READY is sent (which we do from attachRenderer().
+    // RENDER_A2UI messages until after RENDERER_READY is sent (which we do from attachRenderer()).
     if (!this.activeRenderer) {
       console.warn(
         'PreviewBridge: Received RENDER_A2UI but no active renderer is attached. Ignoring payload.',
@@ -383,9 +388,13 @@ export class PreviewBridge {
     if (Array.isArray(payload)) {
       const createSurfaceCommand = payload.find(
         (item: unknown) => item && typeof item === 'object' && 'createSurface' in item,
-      ) as {createSurface?: {surfaceId?: string}} | undefined;
+      ) as {createSurface?: {surfaceId?: string; catalogId?: string}} | undefined;
 
       if (createSurfaceCommand && createSurfaceCommand.createSurface) {
+        const catalogId = createSurfaceCommand.createSurface.catalogId;
+        if (catalogId) {
+          this.notifyCatalogResolved(catalogId);
+        }
         const surfaceId = createSurfaceCommand.createSurface.surfaceId;
         if (surfaceId) {
           // Track the surface BEFORE processing. If a subsequent command in
@@ -591,8 +600,25 @@ export class PreviewBridge {
    * router redirects, strips JSON vulnerability safety prefixes, and transmits the resulting
    * JSON payload or error status back to the host container.
    */
+  private async fetchWithTimeout(url: string, timeoutMs = 3000): Promise<Response> {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await window.fetch(url, {signal: controller.signal});
+    } finally {
+      clearTimeout(id);
+    }
+  }
+
+  /**
+   * Handles static requests to retrieve catalog configuration definitions.
+   * Attempts to fetch from the catalog endpoint, implements fallback mechanisms to handle SPA
+   * router redirects, strips JSON vulnerability safety prefixes, and transmits the resulting
+   * JSON payload or error status back to the host container.
+   */
   private async handleGetCatalog(): Promise<void> {
-    const inMemoryCatalog = this.activeRenderer?.config?.catalog;
+    const config = this.activeRenderer?.config;
+    const inMemoryCatalog = config?.catalogJson ?? config?.catalog;
     if (inMemoryCatalog !== undefined) {
       try {
         let catalog = inMemoryCatalog;
@@ -604,7 +630,10 @@ export class PreviewBridge {
           catalog = JSON.parse(jsonText);
         }
 
-        this.alignRegisteredCatalogId(catalog);
+        const catalogId = (catalog as {catalogId?: string})?.catalogId;
+        if (catalogId) {
+          this.notifyCatalogResolved(catalogId);
+        }
 
         this.sendMessage({
           type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -624,18 +653,17 @@ export class PreviewBridge {
 
     if (typeof window === 'undefined' || !window.fetch) return;
     try {
-      let res = await window.fetch('/catalog');
+      let res = await this.fetchWithTimeout('/catalog');
       if (!res.ok) {
         throw new Error(`Catalog fetch failed with status: ${res.status}`);
       }
       let rawText = await res.text();
 
       // Detect if the server fell back to serving HTML (SPA fallback)
-      const isHtml =
-        rawText.trim().startsWith('<!doctype html') ||
-        rawText.trim().toLowerCase().startsWith('<html');
+      const trimmedLower = rawText.trim().toLowerCase();
+      const isHtml = trimmedLower.startsWith('<!doctype html') || trimmedLower.startsWith('<html');
       if (isHtml) {
-        const fallbackRes = await window.fetch('/catalog.json');
+        const fallbackRes = await this.fetchWithTimeout('/catalog.json');
         if (!fallbackRes.ok) {
           throw new Error(
             `Catalog fetch returned HTML and fallback to /catalog.json failed with status: ${fallbackRes.status}`,
@@ -651,7 +679,10 @@ export class PreviewBridge {
         : rawText;
       const catalog = JSON.parse(jsonText);
 
-      this.alignRegisteredCatalogId(catalog);
+      const catalogId = (catalog as {catalogId?: string})?.catalogId;
+      if (catalogId) {
+        this.notifyCatalogResolved(catalogId);
+      }
 
       this.sendMessage({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -667,25 +698,15 @@ export class PreviewBridge {
   }
 
   /**
-   * Overwrites the ID of registered catalog classes dynamically with the catalogId
-   * value returned by the custom catalog.
+   * Safely triggers the onCatalogResolved callback if registered in the active renderer config.
    */
-  private alignRegisteredCatalogId(catalog: unknown): void {
-    if (!catalog || typeof catalog !== 'object') return;
-    const catalogObj = catalog as {catalogId?: string};
-    const catalogId = catalogObj.catalogId;
-    if (!catalogId) return;
 
-    const registeredCatalogs = this.activeRenderer?.config?.catalogs;
-    if (Array.isArray(registeredCatalogs) && registeredCatalogs.length > 0) {
-      for (const regCatalog of registeredCatalogs) {
-        if (regCatalog && typeof regCatalog === 'object') {
-          const regCatalogObj = regCatalog as {id: string};
-          console.log(
-            `PreviewBridge: Dynamically aligning registered catalog ID from "${regCatalogObj.id}" to "${catalogId}"`,
-          );
-          regCatalogObj.id = catalogId;
-        }
+  private notifyCatalogResolved(catalogId: string): void {
+    if (this.activeRenderer?.config.onCatalogResolved) {
+      try {
+        this.activeRenderer.config.onCatalogResolved(catalogId);
+      } catch (error: unknown) {
+        console.error('PreviewBridge: Error inside onCatalogResolved callback:', error);
       }
     }
   }

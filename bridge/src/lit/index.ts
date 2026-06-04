@@ -39,7 +39,7 @@ export class A2uiSandboxRoot extends LitElement {
   });
 
   @state()
-  private surface?: SurfaceModel<ComponentApi>;
+  private surface?: SurfaceModel;
 
   private rendererConnection: SurfaceStateSubscription | null = null;
 
@@ -48,7 +48,14 @@ export class A2uiSandboxRoot extends LitElement {
     this.rendererConnection?.unsubscribe();
     this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
       surfaceGroup: this.processor.model,
-      catalog: A2uiSandboxRoot.catalogJson,
+      catalogJson: A2uiSandboxRoot.catalogJson,
+      onCatalogResolved: catalogId => {
+        for (const catalog of A2uiSandboxRoot.catalogs) {
+          if (catalog) {
+            (catalog as {id: string}).id = catalogId;
+          }
+        }
+      },
       onSurfaceReady: surfaceId => {
         this.surface = this.processor.model.getSurface(surfaceId);
         this.requestUpdate();

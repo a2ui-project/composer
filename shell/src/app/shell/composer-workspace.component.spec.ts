@@ -26,15 +26,22 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ChatService} from '../chat/chat-service/chat.service';
 import {LlmClient, LlmMessage} from '../chat/llm-client/llm-client';
 import {StateSyncService} from '../chat/state-sync/state-sync.service';
-import {ChatStateService} from '../chat/chat-state/chat-state.service';
+import {ChatStateService, LlmLogEntry, LlmLogType} from '../chat/chat-state/chat-state.service';
 import {PipelineStatus} from '../chat/pipeline-status/pipeline-status';
-import {AppConfigProvider, EnvMode, AuthType} from '../settings/app-config-provider';
+import {
+  AppConfigProvider,
+  EnvMode,
+  AuthType,
+  ThemePreference,
+} from '../settings/app-config-provider';
 import {signal} from '@angular/core';
 
 class MockChatStateService {
   public readonly chatHistory = signal<LlmMessage[]>([]);
   public readonly pipelineStatus = signal(PipelineStatus.IDLE);
   public readonly isProgrammaticStreamActive = signal(false);
+  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  public readonly llmHistory = signal<LlmLogEntry[]>([]);
 
   public setPipelineStatus(status: PipelineStatus): void {
     this.pipelineStatus.set(status);
@@ -50,6 +57,17 @@ class MockChatStateService {
 
   public updateChatHistory(updater: (h: LlmMessage[]) => LlmMessage[]): void {
     this.chatHistory.update(updater);
+  }
+
+  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
+    const entry = {type, timestamp: Date.now(), payload};
+    this.latestLlmLog.set(entry);
+    this.llmHistory.update(h => [...h, entry].slice(-50));
+  }
+
+  public clearRawLlmHistory(): void {
+    this.latestLlmLog.set(null);
+    this.llmHistory.set([]);
   }
 }
 
@@ -73,6 +91,10 @@ class MockAppConfigProvider {
   public readonly authType = signal(AuthType.ONE_PARTY);
   public readonly rendererUrl = signal('http://localhost:4200/renderer');
   public readonly geminiApiKey = signal('');
+  public readonly themePreference = signal<ThemePreference>('light');
+  public setThemePreference = vi.fn((theme: ThemePreference) => {
+    this.themePreference.set(theme);
+  });
 }
 
 class MockLlmClient {
@@ -174,7 +196,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     it('increments Events unread count when a SEND_TO_SERVER message arrives and Events tab is inactive', () => {
       expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
 
-      (hostComm as any).messageStreamSignal.set({
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
         type: PreviewBridgeMessageType.SEND_TO_SERVER,
         payload: {action: {name: 'click-button'}},
         origin: 'http://localhost',
@@ -188,7 +210,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     it('does not increment Events unread count when a SEND_TO_SERVER message arrives without an action payload', () => {
       expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
 
-      (hostComm as any).messageStreamSignal.set({
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
         type: PreviewBridgeMessageType.SEND_TO_SERVER,
         payload: {name: 'click-button'}, // Missing action!
         origin: 'http://localhost',
@@ -205,7 +227,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
 
       expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
 
-      (hostComm as any).messageStreamSignal.set({
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
         type: PreviewBridgeMessageType.SEND_TO_SERVER,
         payload: {action: {name: 'click-button'}},
         origin: 'http://localhost',
@@ -219,7 +241,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     it('increments Errors unread count when a CONSOLE_LOG error arrives and Errors tab is inactive', () => {
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
 
-      (hostComm as any).messageStreamSignal.set({
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
         type: PreviewBridgeMessageType.CONSOLE_LOG,
         payload: {level: 'error', message: 'Failed to load'},
         origin: 'http://localhost',
@@ -233,7 +255,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     it('increments Errors unread count when a DATA_MODEL_CHANGE validation error arrives and Errors tab is inactive', () => {
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
 
-      (hostComm as any).messageStreamSignal.set({
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
         type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
         payload: {validationErrors: ['Invalid type']},
         origin: 'http://localhost',
@@ -247,7 +269,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     it('does not increment Errors unread count when a DATA_MODEL_CHANGE arrives with empty validationErrors', () => {
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
 
-      (hostComm as any).messageStreamSignal.set({
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
         type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
         payload: {validationErrors: []}, // Empty errors!
         origin: 'http://localhost',
@@ -264,7 +286,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
 
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
 
-      (hostComm as any).messageStreamSignal.set({
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
         type: PreviewBridgeMessageType.CONSOLE_LOG,
         payload: {level: 'error', message: 'Failed to load'},
         origin: 'http://localhost',
@@ -276,7 +298,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     });
 
     it('resets Events unread count to 0 when switching to Events tab', () => {
-      (hostComm as any).messageStreamSignal.set({
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
         type: PreviewBridgeMessageType.SEND_TO_SERVER,
         payload: {action: {name: 'click-button'}},
         origin: 'http://localhost',
@@ -292,7 +314,7 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
     });
 
     it('resets Errors unread count to 0 when switching to Errors tab', () => {
-      (hostComm as any).messageStreamSignal.set({
+      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
         type: PreviewBridgeMessageType.CONSOLE_LOG,
         payload: {level: 'error', message: 'Failed'},
         origin: 'http://localhost',

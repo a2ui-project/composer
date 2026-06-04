@@ -18,6 +18,19 @@ import {Injectable, signal} from '@angular/core';
 import {LlmMessage} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 
+/** Indicate if the log is for a request or a response. */
+export enum LlmLogType {
+  REQUEST = 'LLM_REQUEST',
+  RESPONSE = 'LLM_RESPONSE',
+}
+
+/** Capture data about an LLM request or response. */
+export interface LlmLogEntry {
+  readonly type: LlmLogType;
+  readonly timestamp: number;
+  readonly payload: unknown;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -46,6 +59,13 @@ export class ChatStateService {
    */
   private readonly _isProgrammaticStreamActive = signal<boolean>(false);
 
+  private readonly _latestLlmLog = signal<LlmLogEntry | null>(null);
+
+  /**
+   * Backing signal storing the historical LLM transaction telemetry logs.
+   */
+  private readonly _llmHistory = signal<LlmLogEntry[]>([]);
+
   /**
    * Public readonly signal exposing conversational history segments securely.
    */
@@ -60,6 +80,13 @@ export class ChatStateService {
    * Public readonly signal exposing stream locks state reactively.
    */
   public readonly isProgrammaticStreamActive = this._isProgrammaticStreamActive.asReadonly();
+
+  public readonly latestLlmLog = this._latestLlmLog.asReadonly();
+
+  /**
+   * Public readonly signal exposing the historical LLM telemetry logs list reactively.
+   */
+  public readonly llmHistory = this._llmHistory.asReadonly();
 
   /**
    * Overwrites the complete active conversational history array safely.
@@ -96,5 +123,23 @@ export class ChatStateService {
    */
   setProgrammaticStreamActive(active: boolean): void {
     this._isProgrammaticStreamActive.set(active);
+  }
+
+  addRawLlmLog(type: LlmLogType, payload: unknown): void {
+    const entry: LlmLogEntry = {
+      type,
+      timestamp: Date.now(),
+      payload,
+    };
+    this._latestLlmLog.set(entry);
+    this._llmHistory.update(history => [...history, entry].slice(-50));
+  }
+
+  /**
+   * Wipes any cached LLM telemetry history, resetting the latest log signal to null.
+   */
+  clearRawLlmHistory(): void {
+    this._latestLlmLog.set(null);
+    this._llmHistory.set([]);
   }
 }

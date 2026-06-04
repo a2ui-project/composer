@@ -39,6 +39,18 @@ function deepCloneSafe(obj: unknown, ancestors: Set<unknown> = new Set<unknown>(
   if (obj instanceof Error) {
     return {message: obj.message, stack: obj.stack};
   }
+  if (obj === undefined) return 'undefined';
+  if (obj instanceof Date) return obj.toISOString();
+  if (obj instanceof RegExp) return obj.toString();
+  if (obj instanceof Map) {
+    return Array.from(obj.entries()).map(([k, v]) => [
+      deepCloneSafe(k, ancestors),
+      deepCloneSafe(v, ancestors),
+    ]);
+  }
+  if (obj instanceof Set) {
+    return Array.from(obj.values()).map(v => deepCloneSafe(v, ancestors));
+  }
   if (typeof obj === 'function') return '[Function Callback]';
   if (typeof obj === 'symbol') return obj.toString();
   if (typeof obj === 'bigint') return `${obj.toString()}n`;
@@ -126,6 +138,7 @@ export function setupInstrumentationOverrides(): void {
         isSerializing = true;
         const message = args
           .map(arg => {
+            if (arg === undefined) return 'undefined';
             if (arg instanceof Error) return arg.message;
             if (typeof arg === 'string') return arg;
             const cloned = deepCloneSafe(arg);

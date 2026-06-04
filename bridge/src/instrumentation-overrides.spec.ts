@@ -218,6 +218,29 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
     );
   });
 
+  it('recursively clones Map and Set instances, resolving complex nested items and circular references', () => {
+    const complexObj: Record<string, unknown> = {data: 'nested'};
+    complexObj['self'] = complexObj;
+
+    const testMap = new Map<unknown, unknown>();
+    testMap.set('circularKey', complexObj);
+    testMap.set(complexObj, 'circularVal');
+
+    const testSet = new Set<unknown>();
+    testSet.add(complexObj);
+
+    console.log(testMap, testSet);
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          message:
+            '[["circularKey",{"data":"nested","self":"[Circular Reference]"}],[{"data":"nested","self":"[Circular Reference]"},"circularVal"]] [{"data":"nested","self":"[Circular Reference]"}]',
+        }),
+      }),
+    );
+  });
+
   it('catches and reports telemetry errors on original console in case of bridge message failures', () => {
     spy.mockImplementationOnce(() => {
       throw new Error('Bridge transport crashed');

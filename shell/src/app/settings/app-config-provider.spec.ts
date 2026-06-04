@@ -17,7 +17,7 @@
 import {signal, Signal, WritableSignal} from '@angular/core';
 import {describe, it, expect} from 'vitest';
 import {LocalStorageKey} from './local-storage-keys';
-import {AppConfigProvider, EnvMode, AuthType} from './app-config-provider';
+import {AppConfigProvider, EnvMode, AuthType, ThemePreference} from './app-config-provider';
 
 /**
  * Concrete implementation of AppConfigProvider used solely for testing type bounds.
@@ -29,11 +29,14 @@ class TestConfigProvider extends AppConfigProvider {
     'https://test-renderer.com',
   );
   private readonly internalGeminiApiKey: WritableSignal<string> = signal('test-api-key');
+  private readonly internalThemePreference: WritableSignal<ThemePreference> = signal('light');
 
   override readonly envMode: Signal<EnvMode> = this.internalEnvMode.asReadonly();
   override readonly authType: Signal<AuthType> = this.internalAuthType.asReadonly();
   override readonly rendererUrl: Signal<string> = this.internalRendererUrl.asReadonly();
   override readonly geminiApiKey: Signal<string> = this.internalGeminiApiKey.asReadonly();
+  override readonly themePreference: Signal<ThemePreference> =
+    this.internalThemePreference.asReadonly();
 
   override setRendererUrl(url: string): void {
     this.internalRendererUrl.set(url);
@@ -47,11 +50,16 @@ class TestConfigProvider extends AppConfigProvider {
     this.internalAuthType.set(mode);
   }
 
+  override setThemePreference(theme: ThemePreference): void {
+    this.internalThemePreference.set(theme);
+  }
+
   override flushConfig(): void {
     this.internalEnvMode.set(EnvMode.STANDALONE);
     this.internalAuthType.set(AuthType.THREE_PARTY);
     this.internalRendererUrl.set('https://test-renderer.com');
     this.internalGeminiApiKey.set('test-api-key');
+    this.internalThemePreference.set('light');
   }
 }
 

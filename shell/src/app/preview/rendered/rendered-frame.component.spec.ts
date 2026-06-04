@@ -21,11 +21,22 @@ import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {StartupResolutionService} from '../../shell/startup-resolution.service';
 import {HostCommunicationService} from '../../shell/host-communication.service';
-import {ChatStateService} from '../../chat/chat-state/chat-state.service';
+import {ChatStateService, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state.service';
 import {signal, WritableSignal} from '@angular/core';
 
 class MockChatStateService {
   public readonly isProgrammaticStreamActive = signal<boolean>(false);
+  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  public readonly llmHistory = signal<LlmLogEntry[]>([]);
+  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
+    const entry = {type, timestamp: Date.now(), payload};
+    this.latestLlmLog.set(entry);
+    this.llmHistory.update(h => [...h, entry].slice(-50));
+  }
+  public clearRawLlmHistory(): void {
+    this.latestLlmLog.set(null);
+    this.llmHistory.set([]);
+  }
 }
 
 describe('RenderedFrameComponent Live Preview Viewport', () => {
@@ -92,6 +103,19 @@ describe('RenderedFrameComponent Live Preview Viewport', () => {
     );
 
     expect(await nullHarness.hasIframe()).toBe(false);
+  });
+
+  it('renders a placeholder when the renderer URL is malformed and fails parsing', async () => {
+    fixture.destroy();
+    resolvedUrlSignal.set('http://[invalid]');
+    const malformedFixture = TestBed.createComponent(RenderedFrameComponent);
+    malformedFixture.detectChanges();
+    const malformedHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      malformedFixture,
+      RenderedFrameHarness,
+    );
+
+    expect(await malformedHarness.hasIframe()).toBe(false);
   });
 
   it('correctly handles relative renderer URLs and appends the origin', async () => {

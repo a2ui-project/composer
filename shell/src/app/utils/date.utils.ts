@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import {Component, Inject} from '@angular/core';
-import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
-import {MatButtonModule} from '@angular/material/button';
-
-@Component({
-  selector: 'a2ui-system-instructions-dialog',
-  standalone: true,
-  imports: [MatDialogModule, MatButtonModule],
-  templateUrl: './system-instructions-dialog.component.ng.html',
-  styleUrl: './system-instructions-dialog.component.scss',
-})
-export class SystemInstructionsDialogComponent {
-  constructor(@Inject(MAT_DIALOG_DATA) protected readonly data: string) {}
+/**
+ * Formats an epoch timestamp (in milliseconds) into localized "HH:mm:ss.SSS" format.
+ *
+ * @param epoch The timestamp in milliseconds.
+ * @returns Formatted localized timezone-safe time string.
+ */
+export function formatTimestamp(epoch: number): string {
+  const date = new Date(epoch);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const ms = String(date.getMilliseconds()).padStart(3, '0');
+  return `${hours}:${minutes}:${seconds}.${ms}`;
 }

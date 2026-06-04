@@ -9,7 +9,7 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "e2e-headless": "E2E_HEADLESS=true playwright test",
-    "prettier": "prettier --write . | grep -v '(unchanged)'",
+    "prettier": "prettier --ignore-path ../.prettierignore --write . | grep -v '(unchanged)'",
     "clean": "rm -rf dist .angular node_modules/.vite"
   },
   "dependencies": {
@@ -42,6 +42,6 @@
     "jsdom": "29.1.1",
     "prettier": "3.8.3",
     "typescript": "6.0.3",
-    "vitest": "4.1.5"
+    "vitest": "4.1.7"
   }
 }

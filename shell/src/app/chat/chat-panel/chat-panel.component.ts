@@ -128,8 +128,7 @@ export class ChatPanelComponent {
   });
 
   /**
-   * Delegates plain instructions text queries to GenAI completed completes
-   * pipeline.
+   * Delegates plain instructions text queries to GenAI pipeline.
    */
   protected async submitPrompt(): Promise<void> {
     const textVal = this.userPrompt().trim();

@@ -21,7 +21,7 @@ import {LlmMessage, LlmClient, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {AppConfigProvider} from '../../settings/app-config-provider';
 import {StateSyncService} from '../state-sync/state-sync.service';
-import {ChatStateService} from '../chat-state/chat-state.service';
+import {ChatStateService, LlmLogType} from '../chat-state/chat-state.service';
 import {CrossFrameValidator} from '../../shell/cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
@@ -79,6 +79,7 @@ export class ChatService {
     this.chatStateService.setChatHistory([]);
     this.chatStateService.setPipelineStatus(PipelineStatus.IDLE);
     this.chatStateService.setProgrammaticStreamActive(false);
+    this.chatStateService.clearRawLlmHistory();
     this.stateSyncService.flushDraft();
   }
 
@@ -120,6 +121,9 @@ export class ChatService {
     // Construct system-prepended context matching conversational bounds
     const fullContext = this.getFullMessageContext();
 
+    // Log the raw LLM request telemetry
+    this.chatStateService.addRawLlmLog(LlmLogType.REQUEST, fullContext);
+
     // Push initial model turn placeholder with loading pulse indicator to history
     this.chatStateService.updateChatHistory(h => [
       ...h,
@@ -154,6 +158,9 @@ export class ChatService {
 
       // Stream exhausted, resolve final complete text and remove visual loading indicator
       const finalRawText = await responseStream.complete;
+
+      // Log the raw LLM response telemetry
+      this.chatStateService.addRawLlmLog(LlmLogType.RESPONSE, finalRawText);
       this.chatStateService.updateChatHistory(history => {
         const updated = [...history];
         const lastIdx = updated.length - 1;
@@ -249,7 +256,7 @@ export class ChatService {
   private parseAndHealJsonLines(text: string): unknown[] {
     let content = text.trim();
 
-    // Markdown Extraction: If output has markdown wrappers, extract content
+    // Markdown Extraction: If output has Markdown wrappers, extract content
     const mdJsonRegex = /```json\s*([\s\S]*?)\s*```/;
     const match = content.match(mdJsonRegex);
     if (match && match[1]) {
@@ -264,7 +271,7 @@ export class ChatService {
     const parsedBlocks: unknown[] = [];
 
     for (const line of lines) {
-      // Skip markdown code tags if they leaked, or general prompt filler
+      // Skip Markdown code tags if they leaked, or general prompt filler
       // text lines
       if (line.startsWith('```') || (!line.startsWith('{') && !line.startsWith('['))) {
         continue;
@@ -296,7 +303,7 @@ export class ChatService {
   }
 
   /**
-   * Attempts structural structural syntax patching on broken JSON strings.
+   * Attempts structural syntax patching on broken JSON strings.
    */
   private attemptSyntaxHealing(line: string): unknown | null {
     let patched = line.trim();
@@ -446,33 +453,42 @@ export class ChatService {
   }
 
   /**
-   * Recursively sanitizes component declarations maps.
-   * Strips out dynamic rules configs matching /rules/ or prefix /^mock/i.
+   * Unifies recursive sanitization traversal and strips out dynamic mock setups
+   * configurations recursively.
    */
-  private sanitizeComponentObject(obj: Record<string, unknown>): Record<string, unknown> {
+  private sanitizeValue(val: unknown): unknown {
+    if (val === null || typeof val !== 'object') {
+      return val;
+    }
+
+    if (Array.isArray(val)) {
+      return val.map(item => this.sanitizeValue(item));
+    }
+
+    const obj = val as Record<string, unknown>;
     const cleaned: Record<string, unknown> = {};
 
-    for (const [key, val] of Object.entries(obj)) {
+    for (const [key, propVal] of Object.entries(obj)) {
       if (key === 'rules' || /^mock/i.test(key)) {
         continue;
       }
-
-      if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
-        cleaned[key] = this.sanitizeComponentObject(val as Record<string, unknown>);
-      } else if (Array.isArray(val)) {
-        cleaned[key] = val.map(item => {
-          if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
-            return this.sanitizeComponentObject(item as Record<string, unknown>);
-          }
-          return item;
-        });
-      } else {
-        cleaned[key] = val;
-      }
+      cleaned[key] = this.sanitizeValue(propVal);
     }
 
     return cleaned;
   }
+
+  /**
+   * Recursively sanitizes component declarations maps.
+   * Strips out dynamic rules configs matching /rules/ or prefix /^mock/i.
+   */
+  private sanitizeComponentObject(obj: Record<string, unknown>): Record<string, unknown> {
+    return this.sanitizeValue(obj) as Record<string, unknown>;
+  }
+
+  public readonly TEST_ONLY = {
+    sanitizeComponentObject: (obj: Record<string, unknown>) => this.sanitizeComponentObject(obj),
+  };
 
   /**
    * Connectivity Exception Handling: bubbles diagnostics stack details.
@@ -511,7 +527,7 @@ export class ChatService {
     }
     this.chatStateService.setProgrammaticStreamActive(false);
 
-    let errorDetails = '';
+    let errorDetails: string;
     if (err instanceof Error) {
       errorDetails = `Exception: ${err.message}\nStack: ${err.stack || 'None'}`;
     } else {

@@ -19,6 +19,7 @@ import {MatTableModule} from '@angular/material/table';
 import {JsonPipe} from '@angular/common';
 import {HostCommunicationService} from '../../shell/host-communication.service';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {formatTimestamp} from '../../utils/date.utils';
 
 /** Exposes the unminified dynamic details mapping of cross-frame custom events */
 interface RawActionDetails {
@@ -62,8 +63,8 @@ export interface MappedEventLogItem {
 export class EventsComponent {
   private readonly hostComm = inject(HostCommunicationService);
 
-  public readonly eventsLog = signal<MappedEventLogItem[]>([]);
-  public readonly displayedColumns = ['time', 'action', 'surface', 'component', 'context'];
+  protected readonly eventsLog = signal<MappedEventLogItem[]>([]);
+  protected readonly displayedColumns = ['time', 'action', 'surface', 'component', 'context'];
 
   constructor() {
     effect(() => {
@@ -82,7 +83,7 @@ export class EventsComponent {
           if (action && typeof action === 'object') {
             const timestamp = action.timestamp || envelope.timestamp;
             const mappedItem = {
-              time: this.formatTimestamp(timestamp),
+              time: formatTimestamp(timestamp),
               action: action.name || '',
               surface: action.surfaceId || '',
               component: action.sourceComponentId || action.sourceComponent || '',
@@ -105,14 +106,5 @@ export class EventsComponent {
 
   public clearLogs(): void {
     this.eventsLog.set([]);
-  }
-
-  private formatTimestamp(epoch: number): string {
-    const date = new Date(epoch);
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    const ms = String(date.getMilliseconds()).padStart(3, '0');
-    return `${hours}:${minutes}:${seconds}.${ms}`;
   }
 }

@@ -27,6 +27,8 @@ import {IndexedDbStorageService} from '../storage/indexed-db-storage.service';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {CatalogManagementService} from '../storage/catalog-management.service';
 import {AppConfigProvider} from '../settings/app-config-provider';
+import {LocalStorageKey} from '../settings/local-storage-keys';
+import {LocalStorageService} from '../settings/local-storage.service';
 
 @Component({
   selector: 'a2ui-composer-shell',
@@ -52,7 +54,8 @@ import {AppConfigProvider} from '../settings/app-config-provider';
 export class ComposerShellComponent {
   isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
   private readonly catalogManagementService = inject(CatalogManagementService);
-  private readonly storageService = inject(IndexedDbStorageService);
+  private readonly indexedDbStorageService = inject(IndexedDbStorageService);
+  private readonly storageService = inject(LocalStorageService);
   private readonly configProvider = inject(AppConfigProvider);
 
   activeCatalogTitle = this.catalogManagementService.activeCatalogTitle;
@@ -80,10 +83,16 @@ export class ComposerShellComponent {
    * the page to simulate a fresh hardware handshake connection.
    */
   async resetSession(): Promise<void> {
-    await this.storageService.flushAllRecords();
-    localStorage.removeItem('a2ui_composer_session_state');
-    localStorage.removeItem('a2ui_composer_editor_cache');
-    sessionStorage.clear();
+    await this.indexedDbStorageService.flushAllRecords();
+    this.storageService.removeItem(LocalStorageKey.SESSION_STATE);
+    this.storageService.removeItem(LocalStorageKey.EDITOR_CACHE);
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        sessionStorage.clear();
+      }
+    } catch (e) {
+      console.warn('Failed to clear session cache safely:', e);
+    }
     if (this.document.defaultView) {
       this.document.defaultView.location.reload();
     }
