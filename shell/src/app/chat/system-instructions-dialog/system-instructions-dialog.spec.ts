@@ -16,13 +16,13 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {MAT_DIALOG_DATA, MatDialogModule, MatDialogRef} from '@angular/material/dialog';
-import {SystemInstructionsDialogComponent} from './system-instructions-dialog';
+import {SystemInstructionsDialog} from './system-instructions-dialog';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {By} from '@angular/platform-browser';
 
-describe('SystemInstructionsDialogComponent', () => {
-  let fixture: ComponentFixture<SystemInstructionsDialogComponent>;
-  let component: SystemInstructionsDialogComponent;
+describe('SystemInstructionsDialog', () => {
+  let fixture: ComponentFixture<SystemInstructionsDialog>;
+  let component: SystemInstructionsDialog;
   const mockDialogData = 'Test system instructions content text.';
   const mockDialogRef = {
     close: vi.fn(),
@@ -30,14 +30,14 @@ describe('SystemInstructionsDialogComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [SystemInstructionsDialogComponent, MatDialogModule],
+      imports: [SystemInstructionsDialog, MatDialogModule],
       providers: [
         {provide: MAT_DIALOG_DATA, useValue: mockDialogData},
         {provide: MatDialogRef, useValue: mockDialogRef},
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(SystemInstructionsDialogComponent);
+    fixture = TestBed.createComponent(SystemInstructionsDialog);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

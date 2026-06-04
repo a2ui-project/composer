@@ -16,32 +16,32 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {ComposerShellComponent} from './composer-shell';
+import {ComposerShell} from './composer-shell';
 import {provideRouter} from '@angular/router';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerShellHarness} from './test/composer-shell.harness';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {DOCUMENT} from '@angular/common';
-import {IndexedDbStorageService} from '../storage/indexed-db-storage';
-import {CatalogManagementService} from '../storage/catalog-management';
+import {IndexedDbStorage} from '../storage/indexed-db-storage';
+import {CatalogManagement} from '../storage/catalog-management';
 import {AppConfigProvider} from '../settings/app-config-provider';
 import {signal, WritableSignal} from '@angular/core';
-import {LocalStorageService} from '../settings/local-storage-interactions';
+import {LocalStorageInteractions} from '../settings/local-storage-interactions';
 import {LocalStorageKey} from '../settings/local-storage-keys';
 
-describe('ComposerShellComponent Layout', () => {
-  let fixture: ComponentFixture<ComposerShellComponent>;
+describe('ComposerShell Layout', () => {
+  let fixture: ComponentFixture<ComposerShell>;
   let harness: ComposerShellHarness;
-  let storageServiceMock: Partial<IndexedDbStorageService>;
-  let localStorageServiceMock: Partial<LocalStorageService>;
+  let storageServiceMock: Partial<IndexedDbStorage>;
+  let localStorageServiceMock: Partial<LocalStorageInteractions>;
   let catalogManagementServiceMock: {
     activeCatalogTitle: WritableSignal<string>;
     activeCatalogDescription: WritableSignal<string>;
   };
   let configProviderMock: {
     themePreference: WritableSignal<'light' | 'dark'>;
-    setThemePreference: any;
+    setThemePreference: (theme: 'light' | 'dark') => void;
   };
 
   beforeEach(async () => {
@@ -66,20 +66,20 @@ describe('ComposerShellComponent Layout', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [ComposerShellComponent],
+      imports: [ComposerShell],
       providers: [
         provideRouter([]),
         provideNoopAnimations(),
         {
-          provide: IndexedDbStorageService,
+          provide: IndexedDbStorage,
           useValue: storageServiceMock,
         },
         {
-          provide: LocalStorageService,
+          provide: LocalStorageInteractions,
           useValue: localStorageServiceMock,
         },
         {
-          provide: CatalogManagementService,
+          provide: CatalogManagement,
           useValue: catalogManagementServiceMock,
         },
         {
@@ -89,7 +89,7 @@ describe('ComposerShellComponent Layout', () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(ComposerShellComponent);
+    fixture = TestBed.createComponent(ComposerShell);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ComposerShellHarness);
   });
@@ -164,7 +164,7 @@ describe('ComposerShellComponent Layout', () => {
 
   it('reads the persisted theme preference from storage on initialization', async () => {
     configProviderMock.themePreference.set('dark');
-    const newFixture = TestBed.createComponent(ComposerShellComponent);
+    const newFixture = TestBed.createComponent(ComposerShell);
     newFixture.detectChanges();
 
     const injectedDocument = TestBed.inject(DOCUMENT);

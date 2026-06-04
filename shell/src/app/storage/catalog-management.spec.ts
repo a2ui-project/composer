@@ -15,27 +15,27 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {CatalogManagementService} from './catalog-management';
-import {HostCommunicationService, MessageEnvelope} from '../shell/host-communication';
-import {IndexedDbStorageService} from './indexed-db-storage';
-import {StartupResolutionService} from '../shell/startup-resolution';
+import {CatalogManagement} from './catalog-management';
+import {HostCommunication, MessageEnvelope} from '../shell/host-communication';
+import {IndexedDbStorage} from './indexed-db-storage';
+import {StartupResolution} from '../shell/startup-resolution';
 import {signal, WritableSignal} from '@angular/core';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {Catalog} from './catalog-storage.model';
 
-describe('CatalogManagementService', () => {
-  let service: CatalogManagementService;
-  let hostCommunicationServiceMock: {
+describe('CatalogManagement', () => {
+  let service: CatalogManagement;
+  let hostCommunicationMock: {
     latestEnvelope: WritableSignal<MessageEnvelope | null>;
     messageStream: WritableSignal<MessageEnvelope | null>;
     sendMessage: ReturnType<typeof vi.fn>;
   };
-  let indexedDbStorageServiceMock: {
+  let indexedDbStorageMock: {
     getCatalogRecord: ReturnType<typeof vi.fn>;
     saveCatalogRecord: ReturnType<typeof vi.fn>;
   };
-  let startupResolutionServiceMock: {
+  let startupResolutionMock: {
     getResolvedRendererUrl: ReturnType<typeof vi.fn>;
   };
 
@@ -44,44 +44,44 @@ describe('CatalogManagementService', () => {
     vi.useFakeTimers();
     vi.spyOn(crypto.subtle, 'digest').mockResolvedValue(new Uint8Array(32).buffer);
 
-    hostCommunicationServiceMock = {
+    hostCommunicationMock = {
       latestEnvelope: signal<MessageEnvelope | null>(null),
       messageStream: signal<MessageEnvelope | null>(null),
       sendMessage: vi.fn(),
     };
 
-    indexedDbStorageServiceMock = {
+    indexedDbStorageMock = {
       getCatalogRecord: vi.fn().mockResolvedValue(null),
       saveCatalogRecord: vi.fn().mockResolvedValue(undefined),
     };
 
-    startupResolutionServiceMock = {
+    startupResolutionMock = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://localhost/renderer'),
     };
 
     TestBed.configureTestingModule({
       providers: [
-        CatalogManagementService,
+        CatalogManagement,
         {
-          provide: HostCommunicationService,
-          useValue: hostCommunicationServiceMock,
+          provide: HostCommunication,
+          useValue: hostCommunicationMock,
         },
         {
-          provide: IndexedDbStorageService,
-          useValue: indexedDbStorageServiceMock,
+          provide: IndexedDbStorage,
+          useValue: indexedDbStorageMock,
         },
         {
-          provide: StartupResolutionService,
-          useValue: startupResolutionServiceMock,
+          provide: StartupResolution,
+          useValue: startupResolutionMock,
         },
       ],
     });
 
-    service = TestBed.inject(CatalogManagementService);
+    service = TestBed.inject(CatalogManagement);
   });
 
   afterEach(() => {
-    hostCommunicationServiceMock.latestEnvelope.set(null);
+    hostCommunicationMock.latestEnvelope.set(null);
     TestBed.tick();
     vi.clearAllTimers();
     vi.useRealTimers();
@@ -102,7 +102,7 @@ describe('CatalogManagementService', () => {
   it(
     'sets handshake lock to true and sends GET_CATALOG when RENDERER_READY ' + 'is received',
     () => {
-      hostCommunicationServiceMock.messageStream.set({
+      hostCommunicationMock.messageStream.set({
         type: PreviewBridgeMessageType.RENDERER_READY,
         origin: 'http://localhost',
         timestamp: 1001,
@@ -110,7 +110,7 @@ describe('CatalogManagementService', () => {
       TestBed.tick();
 
       expect(service.isHandshakeInProgress()).toBe(true);
-      expect(hostCommunicationServiceMock.sendMessage).toHaveBeenCalledWith({
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith({
         type: PreviewBridgeMessageType.GET_CATALOG,
       });
     },
@@ -121,7 +121,7 @@ describe('CatalogManagementService', () => {
     () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      hostCommunicationServiceMock.messageStream.set({
+      hostCommunicationMock.messageStream.set({
         type: PreviewBridgeMessageType.RENDERER_READY,
         origin: 'http://localhost',
         timestamp: 1002,
@@ -129,9 +129,9 @@ describe('CatalogManagementService', () => {
       TestBed.tick();
 
       expect(service.isHandshakeInProgress()).toBe(true);
-      expect(hostCommunicationServiceMock.sendMessage).toHaveBeenCalledTimes(1);
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
 
-      hostCommunicationServiceMock.messageStream.set({
+      hostCommunicationMock.messageStream.set({
         type: PreviewBridgeMessageType.RENDERER_READY,
         origin: 'http://localhost',
         payload: 'retry',
@@ -142,12 +142,12 @@ describe('CatalogManagementService', () => {
       expect(warnSpy).toHaveBeenCalledWith(
         'Handshake already in progress. Ignoring RENDERER_READY.',
       );
-      expect(hostCommunicationServiceMock.sendMessage).toHaveBeenCalledTimes(1);
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
     },
   );
 
   it('clears handshake lock when A2UI_CATALOG arrives and hashing completes', async () => {
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.RENDERER_READY,
       origin: 'http://localhost',
       timestamp: 1004,
@@ -155,7 +155,7 @@ describe('CatalogManagementService', () => {
     TestBed.tick();
     expect(service.isHandshakeInProgress()).toBe(true);
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: {},
@@ -179,7 +179,7 @@ describe('CatalogManagementService', () => {
     () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      hostCommunicationServiceMock.messageStream.set({
+      hostCommunicationMock.messageStream.set({
         type: PreviewBridgeMessageType.RENDERER_READY,
         origin: 'http://localhost',
         timestamp: 1006,
@@ -200,7 +200,7 @@ describe('CatalogManagementService', () => {
   );
 
   it('clears watchdog timer when A2UI_CATALOG arrives before timeout', async () => {
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.RENDERER_READY,
       origin: 'http://localhost',
       timestamp: 1007,
@@ -211,7 +211,7 @@ describe('CatalogManagementService', () => {
     vi.advanceTimersByTime(3000);
     expect(service.isHandshakeInProgress()).toBe(true);
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: {},
@@ -233,7 +233,7 @@ describe('CatalogManagementService', () => {
   it('rejects malformed A2UI_CATALOG payload and sets catalogError signal', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: null,
@@ -254,7 +254,7 @@ describe('CatalogManagementService', () => {
     async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      hostCommunicationServiceMock.messageStream.set({
+      hostCommunicationMock.messageStream.set({
         type: PreviewBridgeMessageType.RENDERER_READY,
         origin: 'http://localhost',
         timestamp: 3001,
@@ -264,7 +264,7 @@ describe('CatalogManagementService', () => {
       expect(service.isHandshakeInProgress()).toBe(true);
 
       // Simulate bridge sending a flat error payload
-      hostCommunicationServiceMock.messageStream.set({
+      hostCommunicationMock.messageStream.set({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         origin: 'http://localhost',
         payload: {
@@ -290,7 +290,7 @@ describe('CatalogManagementService', () => {
       },
     };
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -325,7 +325,7 @@ describe('CatalogManagementService', () => {
       description: 'Catalog Description <img src=x onerror=alert(1)>',
     };
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: payloadIdentical,
@@ -343,7 +343,7 @@ describe('CatalogManagementService', () => {
   });
 
   it('executes IndexedDB write transaction on delta when no cached record exists', async () => {
-    indexedDbStorageServiceMock.getCatalogRecord.mockResolvedValue(null);
+    indexedDbStorageMock.getCatalogRecord.mockResolvedValue(null);
 
     const payload = {
       title: 'New Catalog',
@@ -351,7 +351,7 @@ describe('CatalogManagementService', () => {
       components: {},
     };
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -365,11 +365,9 @@ describe('CatalogManagementService', () => {
     vi.useFakeTimers();
     vi.spyOn(crypto.subtle, 'digest').mockResolvedValue(new Uint8Array(32).buffer);
 
-    expect(indexedDbStorageServiceMock.getCatalogRecord).toHaveBeenCalledWith(
-      'http://localhost/renderer',
-    );
+    expect(indexedDbStorageMock.getCatalogRecord).toHaveBeenCalledWith('http://localhost/renderer');
     expect(service.catalogHashDelta()).toBe(true);
-    expect(indexedDbStorageServiceMock.saveCatalogRecord).toHaveBeenCalledWith({
+    expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith({
       rendererUrl: 'http://localhost/renderer',
       catalogString: service.lastCatalogString(),
       checksumHash: service.lastChecksumHash(),
@@ -382,7 +380,7 @@ describe('CatalogManagementService', () => {
   });
 
   it('executes IndexedDB write transaction on delta when cached hash differs', async () => {
-    indexedDbStorageServiceMock.getCatalogRecord.mockResolvedValue({
+    indexedDbStorageMock.getCatalogRecord.mockResolvedValue({
       rendererUrl: 'http://localhost/renderer',
       catalogString: '{}',
       checksumHash: 'oldhash',
@@ -395,7 +393,7 @@ describe('CatalogManagementService', () => {
       components: {},
     };
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -409,11 +407,9 @@ describe('CatalogManagementService', () => {
     vi.useFakeTimers();
     vi.spyOn(crypto.subtle, 'digest').mockResolvedValue(new Uint8Array(32).buffer);
 
-    expect(indexedDbStorageServiceMock.getCatalogRecord).toHaveBeenCalledWith(
-      'http://localhost/renderer',
-    );
+    expect(indexedDbStorageMock.getCatalogRecord).toHaveBeenCalledWith('http://localhost/renderer');
     expect(service.catalogHashDelta()).toBe(true);
-    expect(indexedDbStorageServiceMock.saveCatalogRecord).toHaveBeenCalledWith({
+    expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith({
       rendererUrl: 'http://localhost/renderer',
       catalogString: service.lastCatalogString(),
       checksumHash: service.lastChecksumHash(),
@@ -432,7 +428,7 @@ describe('CatalogManagementService', () => {
       components: {},
     };
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -448,16 +444,16 @@ describe('CatalogManagementService', () => {
 
     const computedHash = service.lastChecksumHash();
     const computedCatalogString = service.lastCatalogString();
-    indexedDbStorageServiceMock.saveCatalogRecord.mockClear();
+    indexedDbStorageMock.saveCatalogRecord.mockClear();
 
-    indexedDbStorageServiceMock.getCatalogRecord.mockResolvedValue({
+    indexedDbStorageMock.getCatalogRecord.mockResolvedValue({
       rendererUrl: 'http://localhost/renderer',
       catalogString: computedCatalogString,
       checksumHash: computedHash,
       lastAccessed: 1000,
     });
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -472,7 +468,7 @@ describe('CatalogManagementService', () => {
     vi.spyOn(crypto.subtle, 'digest').mockResolvedValue(new Uint8Array(32).buffer);
 
     expect(service.catalogHashDelta()).toBe(false);
-    expect(indexedDbStorageServiceMock.saveCatalogRecord).toHaveBeenCalledWith({
+    expect(indexedDbStorageMock.saveCatalogRecord).toHaveBeenCalledWith({
       rendererUrl: 'http://localhost/renderer',
       catalogString: computedCatalogString,
       checksumHash: computedHash,
@@ -490,7 +486,7 @@ describe('CatalogManagementService', () => {
 
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: {},
@@ -518,7 +514,7 @@ describe('CatalogManagementService', () => {
       .spyOn(crypto.subtle, 'digest')
       .mockRejectedValue(new Error('Digest failed'));
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: {},
@@ -535,13 +531,11 @@ describe('CatalogManagementService', () => {
     errorSpy.mockRestore();
   });
 
-  it('handles IndexedDbStorageService failures gracefully', async () => {
+  it('handles IndexedDbStorage failures gracefully', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    indexedDbStorageServiceMock.getCatalogRecord.mockRejectedValue(
-      new Error('Database read failure'),
-    );
+    indexedDbStorageMock.getCatalogRecord.mockRejectedValue(new Error('Database read failure'));
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: {},
@@ -557,9 +551,9 @@ describe('CatalogManagementService', () => {
   });
 
   it('handshakes without IndexedDB if renderer URL is null', async () => {
-    startupResolutionServiceMock.getResolvedRendererUrl.mockReturnValue(null);
-    indexedDbStorageServiceMock.getCatalogRecord.mockClear();
-    indexedDbStorageServiceMock.saveCatalogRecord.mockClear();
+    startupResolutionMock.getResolvedRendererUrl.mockReturnValue(null);
+    indexedDbStorageMock.getCatalogRecord.mockClear();
+    indexedDbStorageMock.saveCatalogRecord.mockClear();
 
     const payload = {
       title: 'Null URL Catalog',
@@ -567,7 +561,7 @@ describe('CatalogManagementService', () => {
       components: {},
     };
 
-    hostCommunicationServiceMock.messageStream.set({
+    hostCommunicationMock.messageStream.set({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -577,8 +571,8 @@ describe('CatalogManagementService', () => {
 
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(indexedDbStorageServiceMock.getCatalogRecord).not.toHaveBeenCalled();
-    expect(indexedDbStorageServiceMock.saveCatalogRecord).not.toHaveBeenCalled();
+    expect(indexedDbStorageMock.getCatalogRecord).not.toHaveBeenCalled();
+    expect(indexedDbStorageMock.saveCatalogRecord).not.toHaveBeenCalled();
 
     expect(service.activeCatalog()).toEqual(payload);
     expect(service.activeCatalogTitle()).toBe('Null URL Catalog');

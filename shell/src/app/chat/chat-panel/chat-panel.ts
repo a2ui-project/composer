@@ -16,8 +16,8 @@
  */
 
 import {Component, inject, signal, computed} from '@angular/core';
-import {ChatService} from '../chat-service/chat-coordinator';
-import {ChatStateService} from '../chat-state/chat-state';
+import {ChatCoordinator} from '../chat-service/chat-coordinator';
+import {ChatState} from '../chat-state/chat-state';
 import {LlmMessage} from '../llm-client/llm-client';
 import {MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
@@ -28,8 +28,8 @@ import {FormsModule} from '@angular/forms';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatIconModule} from '@angular/material/icon';
 import {MatDialogModule, MatDialog} from '@angular/material/dialog';
-import {CatalogManagementService} from '../../storage/catalog-management';
-import {SystemInstructionsDialogComponent} from '../system-instructions-dialog/system-instructions-dialog';
+import {CatalogManagement} from '../../storage/catalog-management';
+import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 import {tryParseJsonArray} from '../../utils/json';
 
 @Component({
@@ -53,32 +53,32 @@ import {tryParseJsonArray} from '../../utils/json';
  * milestone Spinners, and handles prompt dispatches with lockout editing
  * controls.
  */
-export class ChatPanelComponent {
-  private readonly chatService = inject(ChatService);
-  private readonly chatStateService = inject(ChatStateService);
+export class ChatPanel {
+  private readonly chatCoordinator = inject(ChatCoordinator);
+  private readonly chatState = inject(ChatState);
   private readonly dialog = inject(MatDialog);
-  private readonly catalogManagementService = inject(CatalogManagementService);
+  private readonly catalogManagement = inject(CatalogManagement);
 
   /**
    * Reactively computed dynamic system prompt instructions spec viewport
    * text.
    */
-  protected readonly systemPrompt = this.chatService.systemPrompt;
+  protected readonly systemPrompt = this.chatCoordinator.systemPrompt;
   protected readonly isHandshakeComplete = computed(
-    () => this.catalogManagementService.activeCatalog() !== null,
+    () => this.catalogManagement.activeCatalog() !== null,
   );
 
   /**
    * Exposes the active streaming pipeline execution status point
    * reactively.
    */
-  protected readonly pipelineStatus = this.chatStateService.pipelineStatus;
+  protected readonly pipelineStatus = this.chatState.pipelineStatus;
 
   /**
    * Dynamic panel lockout indicators, preventing deadlocks during stream
    * completions.
    */
-  protected readonly isLocked = this.chatStateService.isProgrammaticStreamActive;
+  protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
   /** Backing mutable signal capturing prompts typed by researcher. */
   protected readonly userPrompt = signal<string>('');
@@ -90,7 +90,7 @@ export class ChatPanelComponent {
   protected readonly visibleChatHistory = computed<
     Array<LlmMessage & {isSnapshot: boolean; componentCount?: number}>
   >(() => {
-    return this.chatStateService
+    return this.chatState
       .chatHistory()
       .filter(m => m.role !== MessageRole.SYSTEM)
       .map(m => {
@@ -140,7 +140,7 @@ export class ChatPanelComponent {
     this.userPrompt.set('');
 
     // Trigger vertex async pipeline stream completions
-    await this.chatService.submitPrompt(textVal);
+    await this.chatCoordinator.submitPrompt(textVal);
   }
 
   /**
@@ -236,8 +236,8 @@ export class ChatPanelComponent {
    * Opens the system instructions modal dialog.
    */
   protected showSystemInstructions(): void {
-    this.dialog.open(SystemInstructionsDialogComponent, {
-      data: this.chatService.systemPrompt(),
+    this.dialog.open(SystemInstructionsDialog, {
+      data: this.chatCoordinator.systemPrompt(),
       width: '600px',
     });
   }
@@ -246,7 +246,7 @@ export class ChatPanelComponent {
    * Resets status back to IDLE, dismissing active milestone overlays.
    */
   protected dismissOverlay(): void {
-    this.chatStateService.setPipelineStatus(PipelineStatus.IDLE);
+    this.chatState.setPipelineStatus(PipelineStatus.IDLE);
   }
 
   /**

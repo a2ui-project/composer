@@ -16,11 +16,11 @@
 
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {LocalStorageService} from './local-storage-interactions';
+import {LocalStorageInteractions} from './local-storage-interactions';
 import {LocalStorageKey} from './local-storage-keys';
 
-describe('LocalStorageService Safety Boundaries', () => {
-  let service: LocalStorageService;
+describe('LocalStorageInteractions Safety Boundaries', () => {
+  let service: LocalStorageInteractions;
 
   beforeEach(() => {
     localStorage.clear();
@@ -37,9 +37,9 @@ describe('LocalStorageService Safety Boundaries', () => {
   describe('Standard Browser Environment (Storage Available)', () => {
     beforeEach(() => {
       TestBed.configureTestingModule({
-        providers: [LocalStorageService],
+        providers: [LocalStorageInteractions],
       });
-      service = TestBed.inject(LocalStorageService);
+      service = TestBed.inject(LocalStorageInteractions);
     });
 
     it('creates the service successfully and maps availability as true', () => {
@@ -81,9 +81,9 @@ describe('LocalStorageService Safety Boundaries', () => {
 
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
-        providers: [LocalStorageService],
+        providers: [LocalStorageInteractions],
       });
-      service = TestBed.inject(LocalStorageService);
+      service = TestBed.inject(LocalStorageInteractions);
     });
 
     it('creates successfully without throwing and maps availability as false', () => {

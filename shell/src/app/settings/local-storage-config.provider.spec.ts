@@ -20,8 +20,8 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {LocalStorageKey} from './local-storage-keys';
 import {EnvMode, AuthType, ThemePreference} from './app-config-provider';
 import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
-import {StartupResolutionService} from '../shell/startup-resolution';
-import {LocalStorageService} from './local-storage-interactions';
+import {StartupResolution} from '../shell/startup-resolution';
+import {LocalStorageInteractions} from './local-storage-interactions';
 
 describe('LocalStorageAppConfigProvider', () => {
   let mockStartupService: {
@@ -51,8 +51,8 @@ describe('LocalStorageAppConfigProvider', () => {
     TestBed.configureTestingModule({
       providers: [
         LocalStorageAppConfigProvider,
-        LocalStorageService,
-        {provide: StartupResolutionService, useValue: mockStartupService},
+        LocalStorageInteractions,
+        {provide: StartupResolution, useValue: mockStartupService},
       ],
     });
     return TestBed.inject(LocalStorageAppConfigProvider);

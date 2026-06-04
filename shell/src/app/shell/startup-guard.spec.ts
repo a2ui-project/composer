@@ -16,26 +16,26 @@
 
 import {TestBed} from '@angular/core/testing';
 import {Router, ActivatedRouteSnapshot, RouterStateSnapshot} from '@angular/router';
-import {StartupResolutionService} from './startup-resolution';
+import {StartupResolution} from './startup-resolution';
 import {startupGuard} from './startup-guard';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 
 describe('Startup Guard Task 2.6', () => {
-  let mockStartupResolutionService: {
+  let mockStartupResolution: {
     isEnvironmentValid: ReturnType<typeof vi.fn>;
   };
   let mockRouter: {createUrlTree: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     TestBed.resetTestingModule();
-    mockStartupResolutionService = {
+    mockStartupResolution = {
       isEnvironmentValid: vi.fn().mockReturnValue(true),
     };
     mockRouter = {createUrlTree: vi.fn().mockReturnValue('UrlTree')};
 
     TestBed.configureTestingModule({
       providers: [
-        {provide: StartupResolutionService, useValue: mockStartupResolutionService},
+        {provide: StartupResolution, useValue: mockStartupResolution},
         {provide: Router, useValue: mockRouter},
       ],
     });
@@ -52,7 +52,7 @@ describe('Startup Guard Task 2.6', () => {
   });
 
   it('redirects to settings view when the environment evaluates as invalid', () => {
-    mockStartupResolutionService.isEnvironmentValid.mockReturnValue(false);
+    mockStartupResolution.isEnvironmentValid.mockReturnValue(false);
     expect(runGuard()).toBe('UrlTree');
     expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/settings']);
   });

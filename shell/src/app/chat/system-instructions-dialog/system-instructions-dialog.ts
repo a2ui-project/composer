@@ -25,6 +25,6 @@ import {MatButtonModule} from '@angular/material/button';
   templateUrl: './system-instructions-dialog.ng.html',
   styleUrl: './system-instructions-dialog.scss',
 })
-export class SystemInstructionsDialogComponent {
+export class SystemInstructionsDialog {
   constructor(@Inject(MAT_DIALOG_DATA) protected readonly data: string) {}
 }

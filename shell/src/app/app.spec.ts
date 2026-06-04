@@ -15,23 +15,23 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {AppComponent} from './app';
+import {App} from './app';
 import {provideRouter} from '@angular/router';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {AppHarness} from './test/app.harness';
 import {describe, it, expect, beforeEach} from 'vitest';
 
-describe('AppComponent', () => {
-  let fixture: ComponentFixture<AppComponent>;
+describe('App', () => {
+  let fixture: ComponentFixture<App>;
   let harness: AppHarness;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [AppComponent],
+      imports: [App],
       providers: [provideRouter([])],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(AppComponent);
+    fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, AppHarness);
   });

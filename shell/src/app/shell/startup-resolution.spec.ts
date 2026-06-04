@@ -15,20 +15,20 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {StartupResolutionService} from './startup-resolution';
-import {LocalStorageService} from '../settings/local-storage-interactions';
+import {StartupResolution} from './startup-resolution';
+import {LocalStorageInteractions} from '../settings/local-storage-interactions';
 import {LocalStorageKey} from '../settings/local-storage-keys';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
-describe('StartupResolutionService Task 2.6', () => {
-  let service: StartupResolutionService;
+describe('StartupResolution Task 2.6', () => {
+  let service: StartupResolution;
 
   beforeEach(() => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [StartupResolutionService, LocalStorageService],
+      providers: [StartupResolution, LocalStorageInteractions],
     });
-    service = TestBed.inject(StartupResolutionService);
+    service = TestBed.inject(StartupResolution);
   });
 
   afterEach(() => {

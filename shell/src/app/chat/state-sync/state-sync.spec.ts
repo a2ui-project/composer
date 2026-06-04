@@ -16,13 +16,13 @@
 
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {StateSyncService} from './state-sync';
-import {ChatStateService, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
+import {StateSync} from './state-sync';
+import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {LlmMessage} from '../llm-client/llm-client';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
 
-class MockChatStateService {
+class MockChatState {
   private readonly _chatHistory: LlmMessage[] = [];
   public readonly chatHistory = vi.fn(() => this._chatHistory);
   public setChatHistory = vi.fn((history: LlmMessage[]) => {
@@ -53,20 +53,20 @@ class MockChatStateService {
   });
 }
 
-describe('StateSyncService Autosave Draft Integrations', () => {
-  let service: StateSyncService;
-  let chatStateMock: MockChatStateService;
+describe('StateSync Autosave Draft Integrations', () => {
+  let service: StateSync;
+  let chatStateMock: MockChatState;
 
   beforeEach(() => {
     TestBed.resetTestingModule();
     vi.useFakeTimers();
 
     TestBed.configureTestingModule({
-      providers: [StateSyncService, {provide: ChatStateService, useClass: MockChatStateService}],
+      providers: [StateSync, {provide: ChatState, useClass: MockChatState}],
     });
 
-    service = TestBed.inject(StateSyncService);
-    chatStateMock = TestBed.inject(ChatStateService) as unknown as MockChatStateService;
+    service = TestBed.inject(StateSync);
+    chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
 
     // Eagerly flush Angular change detection effect bindings instantly upon
     // setup to prevent microtask leaks

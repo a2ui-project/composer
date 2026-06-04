@@ -23,10 +23,10 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
-import {StartupResolutionService} from '../shell/startup-resolution';
+import {StartupResolution} from '../shell/startup-resolution';
 import {DOCUMENT} from '@angular/common';
-import {HostCommunicationService} from '../shell/host-communication';
-import {CatalogManagementService} from '../storage/catalog-management';
+import {HostCommunication} from '../shell/host-communication';
+import {CatalogManagement} from '../storage/catalog-management';
 import {AppConfigProvider, AuthType} from './app-config-provider';
 
 @Component({
@@ -49,12 +49,12 @@ import {AppConfigProvider, AuthType} from './app-config-provider';
  * Renders the user settings view, allowing configuration of target URL endpoints,
  * connection handshakes, and developer toggle overrides.
  */
-export class SettingsComponent implements OnInit {
+export class Settings implements OnInit {
   private readonly fb = inject(NonNullableFormBuilder);
-  private readonly startupResolutionService = inject(StartupResolutionService);
+  private readonly startupResolution = inject(StartupResolution);
   private readonly document = inject(DOCUMENT);
-  private readonly hostCommunicationService = inject(HostCommunicationService);
-  private readonly catalogManagementService = inject(CatalogManagementService);
+  private readonly hostCommunication = inject(HostCommunication);
+  private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
 
   public readonly isLocked: WritableSignal<boolean> = signal(false);
@@ -63,17 +63,17 @@ export class SettingsComponent implements OnInit {
   public readonly forceThirdPartyAuth: WritableSignal<boolean> = signal(false);
 
   public readonly bridgeConnected: Signal<boolean> = computed(
-    () => this.hostCommunicationService.latestEnvelope() !== null,
+    () => this.hostCommunication.latestEnvelope() !== null,
   );
   public readonly catalogStatus: Signal<string> = computed(() => {
-    if (this.catalogManagementService.catalogError()) return 'Error';
-    if (this.catalogManagementService.isHandshakeInProgress()) return 'Indexing';
-    if (this.catalogManagementService.activeCatalog()) return 'Connected';
+    if (this.catalogManagement.catalogError()) return 'Error';
+    if (this.catalogManagement.isHandshakeInProgress()) return 'Indexing';
+    if (this.catalogManagement.activeCatalog()) return 'Connected';
     return 'Disconnected';
   });
 
   public readonly catalogErrorMessage: Signal<string | null> = computed(() =>
-    this.catalogManagementService.catalogError(),
+    this.catalogManagement.catalogError(),
   );
 
   public readonly settingsForm = this.fb.group({
@@ -82,10 +82,10 @@ export class SettingsComponent implements OnInit {
   });
 
   public ngOnInit(): void {
-    const locked = this.startupResolutionService.isContextLocked();
+    const locked = this.startupResolution.isContextLocked();
     this.isLocked.set(locked);
 
-    const is3P = this.startupResolutionService.isThirdPartyEnvironment();
+    const is3P = this.startupResolution.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
 
     this.forceThirdPartyAuth.set(this.configProvider.authType() === AuthType.THREE_PARTY);

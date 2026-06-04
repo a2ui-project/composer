@@ -15,37 +15,34 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {ErrorsComponent} from './errors';
+import {Errors} from './errors';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ErrorsHarness} from './test/errors.harness';
 import {describe, it, expect, beforeEach} from 'vitest';
-import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication';
+import {HostCommunication, MessageEnvelope} from '../../shell/host-communication';
 import {signal} from '@angular/core';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatTableModule} from '@angular/material/table';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
-describe('ErrorsComponent', () => {
-  let fixture: ComponentFixture<ErrorsComponent>;
+describe('Errors', () => {
+  let fixture: ComponentFixture<Errors>;
   let harness: ErrorsHarness;
   let mockMessageStream: ReturnType<typeof signal<MessageEnvelope | null>>;
-  let mockHostCommService: any;
+  let mockHostComm: Partial<HostCommunication>;
 
   beforeEach(async () => {
     mockMessageStream = signal<MessageEnvelope | null>(null);
-    mockHostCommService = {
-      messageStream: mockMessageStream,
+    mockHostComm = {
+      messageStream: mockMessageStream.asReadonly(),
     };
 
     await TestBed.configureTestingModule({
-      imports: [ErrorsComponent, MatTableModule],
-      providers: [
-        provideNoopAnimations(),
-        {provide: HostCommunicationService, useValue: mockHostCommService},
-      ],
+      imports: [Errors, MatTableModule],
+      providers: [provideNoopAnimations(), {provide: HostCommunication, useValue: mockHostComm}],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(ErrorsComponent);
+    fixture = TestBed.createComponent(Errors);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ErrorsHarness);
   });

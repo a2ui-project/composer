@@ -18,21 +18,21 @@
 import {TestBed} from '@angular/core/testing';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {ChatService} from './chat-coordinator';
-import {CatalogManagementService} from '../../storage/catalog-management';
+import {ChatCoordinator} from './chat-coordinator';
+import {CatalogManagement} from '../../storage/catalog-management';
 import {Catalog} from '../../storage/catalog-storage.model';
-import {ChatStateService, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
+import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {
   AppConfigProvider,
   EnvMode,
   AuthType,
   ThemePreference,
 } from '../../settings/app-config-provider';
-import {StateSyncService} from '../state-sync/state-sync';
+import {StateSync} from '../state-sync/state-sync';
 import {LlmClient, LlmMessage, LlmStreamResponse, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 
-class MockCatalogManagementService {
+class MockCatalogManagement {
   public readonly activeCatalog = signal<Catalog | null>(null);
 }
 
@@ -55,7 +55,7 @@ class MockAppConfigProvider {
   public flushConfig = vi.fn();
 }
 
-class MockChatStateService {
+class MockChatState {
   public readonly chatHistory = signal<LlmMessage[]>([]);
   public readonly pipelineStatus = signal<PipelineStatus>(PipelineStatus.IDLE);
   public readonly isProgrammaticStreamActive = signal<boolean>(false);
@@ -85,7 +85,7 @@ class MockChatStateService {
   }
 }
 
-class MockStateSyncService {
+class MockStateSync {
   public readonly activeDraftSignal = signal<string>('Initial draft text');
   public readonly activeDraft = this.activeDraftSignal.asReadonly();
   public commitLayoutFromLlm = vi.fn((val: string) => {
@@ -125,37 +125,35 @@ class MockLlmClient {
   });
 }
 
-describe('ChatService Pipeline & State Integration', () => {
-  let service: ChatService;
-  let chatStateMock: MockChatStateService;
-  let catalogManagementMock: MockCatalogManagementService;
+describe('ChatCoordinator Pipeline & State Integration', () => {
+  let service: ChatCoordinator;
+  let chatStateMock: MockChatState;
+  let catalogManagementMock: MockCatalogManagement;
   let configProviderMock: MockAppConfigProvider;
-  let stateSyncMock: MockStateSyncService;
+  let stateSyncMock: MockStateSync;
   let llmClientMock: MockLlmClient;
 
   beforeEach(() => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
-        ChatService,
-        {provide: ChatStateService, useClass: MockChatStateService},
+        ChatCoordinator,
+        {provide: ChatState, useClass: MockChatState},
         {
-          provide: CatalogManagementService,
-          useClass: MockCatalogManagementService,
+          provide: CatalogManagement,
+          useClass: MockCatalogManagement,
         },
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
-        {provide: StateSyncService, useClass: MockStateSyncService},
+        {provide: StateSync, useClass: MockStateSync},
         {provide: LlmClient, useClass: MockLlmClient},
       ],
     });
 
-    service = TestBed.inject(ChatService);
-    chatStateMock = TestBed.inject(ChatStateService) as unknown as MockChatStateService;
-    catalogManagementMock = TestBed.inject(
-      CatalogManagementService,
-    ) as unknown as MockCatalogManagementService;
+    service = TestBed.inject(ChatCoordinator);
+    chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
+    catalogManagementMock = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
     configProviderMock = TestBed.inject(AppConfigProvider) as unknown as MockAppConfigProvider;
-    stateSyncMock = TestBed.inject(StateSyncService) as unknown as MockStateSyncService;
+    stateSyncMock = TestBed.inject(StateSync) as unknown as MockStateSync;
     llmClientMock = TestBed.inject(LlmClient) as unknown as MockLlmClient;
 
     // Eagerly execute initial constructor tracking effects skips
@@ -458,6 +456,7 @@ describe('ChatService Pipeline & State Integration', () => {
 
     // Trigger Angular effects change detections
     TestBed.tick();
+    await Promise.resolve();
 
     // Wait for the scheduled microtask to execute
     await new Promise(resolve => queueMicrotask(resolve));

@@ -15,28 +15,28 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {RawMessagesComponent} from './raw-messages';
+import {RawMessages} from './raw-messages';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawMessagesHarness} from './test/raw-messages.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication';
+import {HostCommunication, MessageEnvelope} from '../../shell/host-communication';
 import {signal, WritableSignal} from '@angular/core';
-import {ChatStateService, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
+import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
-describe('RawMessagesComponent', () => {
-  let fixture: ComponentFixture<RawMessagesComponent>;
-  let component: RawMessagesComponent;
+describe('RawMessages', () => {
+  let fixture: ComponentFixture<RawMessages>;
+  let component: RawMessages;
   let harness: RawMessagesHarness;
   let messageStreamSignal: WritableSignal<MessageEnvelope | null>;
-  let hostCommMock: Partial<HostCommunicationService>;
+  let hostCommMock: Partial<HostCommunication>;
   let listeners: Set<(env: MessageEnvelope) => void>;
   let emitMessage: (env: MessageEnvelope) => void;
 
   let latestLlmLogSignal: WritableSignal<LlmLogEntry | null>;
   let llmHistorySignal: WritableSignal<LlmLogEntry[]>;
-  let chatStateMock: Partial<ChatStateService>;
+  let chatStateMock: Partial<ChatState>;
 
   beforeEach(async () => {
     messageStreamSignal = signal<MessageEnvelope | null>(null);
@@ -81,21 +81,21 @@ describe('RawMessagesComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [RawMessagesComponent],
+      imports: [RawMessages],
       providers: [
         provideNoopAnimations(),
         {
-          provide: HostCommunicationService,
+          provide: HostCommunication,
           useValue: hostCommMock,
         },
         {
-          provide: ChatStateService,
+          provide: ChatState,
           useValue: chatStateMock,
         },
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(RawMessagesComponent);
+    fixture = TestBed.createComponent(RawMessages);
     component = fixture.componentInstance;
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RawMessagesHarness);
@@ -255,7 +255,7 @@ describe('RawMessagesComponent', () => {
 
     // Recreate fixture to load constructor with both history collections
     fixture.destroy();
-    const newFixture = TestBed.createComponent(RawMessagesComponent);
+    const newFixture = TestBed.createComponent(RawMessages);
     newFixture.detectChanges();
     const newHarness = await TestbedHarnessEnvironment.harnessForFixture(
       newFixture,

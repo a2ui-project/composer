@@ -40,7 +40,7 @@ export interface LlmLogEntry {
  * locking indicators. Eliminates circular dependencies between domain
  * coordinators and layout synchronizers.
  */
-export class ChatStateService {
+export class ChatState {
   /**
    * Backing dynamic, reactive Signal array storing conversational turn history
    * records. Encapsulated as private to enforce transactional integrity.

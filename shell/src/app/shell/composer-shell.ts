@@ -23,12 +23,12 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatListModule} from '@angular/material/list';
 import {RouterOutlet, RouterLink} from '@angular/router';
 import {DOCUMENT} from '@angular/common';
-import {IndexedDbStorageService} from '../storage/indexed-db-storage';
+import {IndexedDbStorage} from '../storage/indexed-db-storage';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {CatalogManagementService} from '../storage/catalog-management';
+import {CatalogManagement} from '../storage/catalog-management';
 import {AppConfigProvider} from '../settings/app-config-provider';
 import {LocalStorageKey} from '../settings/local-storage-keys';
-import {LocalStorageService} from '../settings/local-storage-interactions';
+import {LocalStorageInteractions} from '../settings/local-storage-interactions';
 
 @Component({
   selector: 'a2ui-composer-shell',
@@ -51,15 +51,15 @@ import {LocalStorageService} from '../settings/local-storage-interactions';
  * Renders the permanent header bar, persistent navigation sidebar,
  * and hosts the active workspace routing outlet.
  */
-export class ComposerShellComponent {
+export class ComposerShell {
   isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
-  private readonly catalogManagementService = inject(CatalogManagementService);
-  private readonly indexedDbStorageService = inject(IndexedDbStorageService);
-  private readonly storageService = inject(LocalStorageService);
+  private readonly catalogManagement = inject(CatalogManagement);
+  private readonly indexedDbStorage = inject(IndexedDbStorage);
+  private readonly storage = inject(LocalStorageInteractions);
   private readonly configProvider = inject(AppConfigProvider);
 
-  activeCatalogTitle = this.catalogManagementService.activeCatalogTitle;
-  activeCatalogDescription = this.catalogManagementService.activeCatalogDescription;
+  activeCatalogTitle = this.catalogManagement.activeCatalogTitle;
+  activeCatalogDescription = this.catalogManagement.activeCatalogDescription;
 
   constructor(@Inject(DOCUMENT) private document: Document) {
     effect(() => {
@@ -83,9 +83,9 @@ export class ComposerShellComponent {
    * the page to simulate a fresh hardware handshake connection.
    */
   async resetSession(): Promise<void> {
-    await this.indexedDbStorageService.flushAllRecords();
-    this.storageService.removeItem(LocalStorageKey.SESSION_STATE);
-    this.storageService.removeItem(LocalStorageKey.EDITOR_CACHE);
+    await this.indexedDbStorage.flushAllRecords();
+    this.storage.removeItem(LocalStorageKey.SESSION_STATE);
+    this.storage.removeItem(LocalStorageKey.EDITOR_CACHE);
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
         sessionStorage.clear();

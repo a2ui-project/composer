@@ -17,7 +17,7 @@
 import {Component, inject, signal, effect, untracked} from '@angular/core';
 import {MatTableModule} from '@angular/material/table';
 import {JsonPipe} from '@angular/common';
-import {HostCommunicationService} from '../../shell/host-communication';
+import {HostCommunication} from '../../shell/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {formatTimestamp} from '../../utils/date.utils';
 
@@ -60,8 +60,8 @@ export interface MappedEventLogItem {
  * A debug drawer component displaying interactive event hooks and custom
  * event transmissions triggered by layout elements.
  */
-export class EventsComponent {
-  private readonly hostComm = inject(HostCommunicationService);
+export class Events {
+  private readonly hostComm = inject(HostCommunication);
 
   protected readonly eventsLog = signal<MappedEventLogItem[]>([]);
   protected readonly displayedColumns = ['time', 'action', 'surface', 'component', 'context'];

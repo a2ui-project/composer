@@ -15,7 +15,7 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {IndexedDbStorageService} from './indexed-db-storage';
+import {IndexedDbStorage} from './indexed-db-storage';
 import {CachedCatalogRecord} from './catalog-storage.model';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 
@@ -167,8 +167,8 @@ class FakeIndexedDB {
   }
 }
 
-describe('IndexedDbStorageService Storage Resilience', () => {
-  let service: IndexedDbStorageService;
+describe('IndexedDbStorage Storage Resilience', () => {
+  let service: IndexedDbStorage;
   let storeMap: Map<string, CachedCatalogRecord>;
 
   beforeEach(() => {
@@ -180,7 +180,7 @@ describe('IndexedDbStorageService Storage Resilience', () => {
     });
 
     TestBed.configureTestingModule({});
-    service = TestBed.inject(IndexedDbStorageService);
+    service = TestBed.inject(IndexedDbStorage);
   });
 
   it('creates the resilient storage service', () => {

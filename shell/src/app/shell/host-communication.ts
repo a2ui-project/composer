@@ -15,7 +15,7 @@
  */
 
 import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
-import {StartupResolutionService} from './startup-resolution';
+import {StartupResolution} from './startup-resolution';
 import {CrossFrameValidator} from './cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
@@ -32,7 +32,7 @@ export interface MessageEnvelope {
 
 declare global {
   interface Window {
-    a2uiHostCommunicationService?: HostCommunicationService;
+    a2uiHostCommunication?: HostCommunication;
   }
 }
 
@@ -43,8 +43,8 @@ declare global {
  * Core service managing cross-frame message passing and event dispatching
  * between the primary workspace shell and rendering client frames.
  */
-export class HostCommunicationService implements OnDestroy {
-  private readonly startupResolutionService = inject(StartupResolutionService);
+export class HostCommunication implements OnDestroy {
+  private readonly startupResolution = inject(StartupResolution);
   private iframeWindow: Window | null = null;
   private iframeElement: HTMLIFrameElement | null = null;
   private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
@@ -99,7 +99,7 @@ export class HostCommunicationService implements OnDestroy {
       return;
     }
 
-    const expectedUrl = this.startupResolutionService.getResolvedRendererUrl();
+    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
     if (!expectedUrl) {
       return;
     }
@@ -137,7 +137,7 @@ export class HostCommunicationService implements OnDestroy {
         try {
           l(envelope);
         } catch (err) {
-          console.error('Error in HostCommunicationService listener:', err);
+          console.error('Error in HostCommunication listener:', err);
         }
       });
     }
@@ -146,7 +146,7 @@ export class HostCommunicationService implements OnDestroy {
   constructor() {
     if (typeof window !== 'undefined') {
       window.addEventListener('message', this.messageListener);
-      window.a2uiHostCommunicationService = this;
+      window.a2uiHostCommunication = this;
     }
   }
 
@@ -167,7 +167,7 @@ export class HostCommunicationService implements OnDestroy {
     const targetWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
     if (!targetWindow) return;
 
-    const expectedUrl = this.startupResolutionService.getResolvedRendererUrl();
+    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
     if (!expectedUrl) return;
 
     try {
@@ -185,7 +185,7 @@ export class HostCommunicationService implements OnDestroy {
   ngOnDestroy(): void {
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
-      delete window.a2uiHostCommunicationService;
+      delete window.a2uiHostCommunication;
     }
   }
 }

@@ -16,17 +16,17 @@
 
 import {inject} from '@angular/core';
 import {CanActivateFn, Router} from '@angular/router';
-import {StartupResolutionService} from './startup-resolution';
+import {StartupResolution} from './startup-resolution';
 
 /**
- * Routing guard ensuring that the StartupResolutionService has completed
+ * Routing guard ensuring that the StartupResolution has completed
  * resolving configuration schemas prior to rendering target routes.
  */
 export const startupGuard: CanActivateFn = () => {
-  const startupResolutionService = inject(StartupResolutionService);
+  const startupResolution = inject(StartupResolution);
   const router = inject(Router);
 
-  if (!startupResolutionService.isEnvironmentValid()) {
+  if (!startupResolution.isEnvironmentValid()) {
     return router.createUrlTree(['/settings']);
   }
 

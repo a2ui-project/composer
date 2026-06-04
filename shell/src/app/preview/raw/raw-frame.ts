@@ -30,10 +30,10 @@ import {FormsModule} from '@angular/forms';
 import {Subject} from 'rxjs';
 import {debounceTime, filter, map} from 'rxjs/operators';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens';
-import {HostCommunicationService} from '../../shell/host-communication';
-import {CatalogManagementService} from '../../storage/catalog-management';
-import {StateSyncService} from '../../chat/state-sync/state-sync';
-import {ChatStateService} from '../../chat/chat-state/chat-state';
+import {HostCommunication} from '../../shell/host-communication';
+import {CatalogManagement} from '../../storage/catalog-management';
+import {StateSync} from '../../chat/state-sync/state-sync';
+import {ChatState} from '../../chat/chat-state/chat-state';
 import {tryParseJsonArray} from '../../utils/json';
 
 @Component({
@@ -47,7 +47,7 @@ import {tryParseJsonArray} from '../../utils/json';
  * Hosts the raw JSON view of active surface models, allowing direct source editing
  * and displaying real-time parsing error indicators.
  */
-export class RawFrameComponent {
+export class RawFrame {
   protected readonly isExtensionMode = inject(IS_EXTENSION_MODE);
   protected readonly layoutJson: WritableSignal<string>;
   protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
@@ -57,27 +57,27 @@ export class RawFrameComponent {
     isJsonInvalid: () => this.isJsonInvalid,
   };
 
-  private readonly hostCommunicationService = inject(HostCommunicationService);
-  private readonly catalogManagementService = inject(CatalogManagementService);
-  private readonly stateSyncService = inject(StateSyncService);
-  private readonly chatStateService = inject(ChatStateService);
+  private readonly hostCommunication = inject(HostCommunication);
+  private readonly catalogManagement = inject(CatalogManagement);
+  private readonly stateSync = inject(StateSync);
+  private readonly chatState = inject(ChatState);
   private readonly destroyRef = inject(DestroyRef);
   private readonly layoutInput$ = new Subject<string>();
 
   /** Public lock indicator preventing typing deadlocks during generative LLM stream turns. */
-  protected readonly isLocked = this.chatStateService.isProgrammaticStreamActive;
+  protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
   constructor() {
     // Initialize backing editor layout state Signal dynamically from the volatile session cache
-    this.layoutJson = signal(this.stateSyncService.hydrateActiveDraft());
+    this.layoutJson = signal(this.stateSync.hydrateActiveDraft());
     effect(() => {
-      const catalog = this.catalogManagementService.activeCatalog();
+      const catalog = this.catalogManagement.activeCatalog();
       if (catalog) {
         const currentLayout = untracked(() => this.layoutJson());
         try {
           const payload = this.parseLayoutString(currentLayout);
           if (payload !== null) {
-            this.hostCommunicationService.sendRenderA2UI(payload);
+            this.hostCommunication.sendRenderA2UI(payload);
           }
         } catch (err) {
           // Ignore initial parse errors
@@ -85,9 +85,9 @@ export class RawFrameComponent {
       }
     });
 
-    // Sync back changes in StateSyncService activeDraft to editor layoutJson (e.g. from LLM stream completed updates)
+    // Sync back changes in StateSync activeDraft to editor layoutJson (e.g. from LLM stream completed updates)
     effect(() => {
-      const activeDraftVal = this.stateSyncService.activeDraft();
+      const activeDraftVal = this.stateSync.activeDraft();
       untracked(() => {
         if (this.layoutJson() !== activeDraftVal) {
           queueMicrotask(() => {
@@ -98,7 +98,7 @@ export class RawFrameComponent {
               const payload = this.parseLayoutString(activeDraftVal);
               if (payload !== null) {
                 this.isJsonInvalid.set(false);
-                this.hostCommunicationService.sendRenderA2UI(payload);
+                this.hostCommunication.sendRenderA2UI(payload);
               } else {
                 this.isJsonInvalid.set(true);
               }
@@ -131,14 +131,14 @@ export class RawFrameComponent {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((payload: unknown[]) => {
-        this.hostCommunicationService.sendRenderA2UI(payload);
+        this.hostCommunication.sendRenderA2UI(payload);
       });
   }
 
   protected onLayoutChange(value: string): void {
     this.layoutJson.set(value);
     this.layoutInput$.next(value);
-    this.stateSyncService.updateDraft(value);
+    this.stateSync.updateDraft(value);
   }
 
   /**

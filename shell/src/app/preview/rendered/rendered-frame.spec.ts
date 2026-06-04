@@ -15,16 +15,16 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {RenderedFrameComponent} from './rendered-frame';
+import {RenderedFrame} from './rendered-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {StartupResolutionService} from '../../shell/startup-resolution';
-import {HostCommunicationService} from '../../shell/host-communication';
-import {ChatStateService, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
+import {StartupResolution} from '../../shell/startup-resolution';
+import {HostCommunication} from '../../shell/host-communication';
+import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {signal, WritableSignal} from '@angular/core';
 
-class MockChatStateService {
+class MockChatState {
   public readonly isProgrammaticStreamActive = signal<boolean>(false);
   public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
   public readonly llmHistory = signal<LlmLogEntry[]>([]);
@@ -39,13 +39,13 @@ class MockChatStateService {
   }
 }
 
-describe('RenderedFrameComponent Live Preview Viewport', () => {
-  let fixture: ComponentFixture<RenderedFrameComponent>;
+describe('RenderedFrame Live Preview Viewport', () => {
+  let fixture: ComponentFixture<RenderedFrame>;
   let harness: RenderedFrameHarness;
-  let startupResolutionServiceMock: Partial<StartupResolutionService>;
-  let hostCommunicationServiceMock: Partial<HostCommunicationService>;
+  let startupResolutionServiceMock: Partial<StartupResolution>;
+  let hostCommunicationServiceMock: Partial<HostCommunication>;
   let resolvedUrlSignal: WritableSignal<string | null>;
-  let chatStateMock: MockChatStateService;
+  let chatStateMock: MockChatState;
 
   beforeEach(async () => {
     resolvedUrlSignal = signal('http://localhost:3000/renderer');
@@ -58,25 +58,25 @@ describe('RenderedFrameComponent Live Preview Viewport', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [RenderedFrameComponent],
+      imports: [RenderedFrame],
       providers: [
         {
-          provide: StartupResolutionService,
+          provide: StartupResolution,
           useValue: startupResolutionServiceMock,
         },
         {
-          provide: HostCommunicationService,
+          provide: HostCommunication,
           useValue: hostCommunicationServiceMock,
         },
         {
-          provide: ChatStateService,
-          useClass: MockChatStateService,
+          provide: ChatState,
+          useClass: MockChatState,
         },
       ],
     }).compileComponents();
 
-    chatStateMock = TestBed.inject(ChatStateService) as unknown as MockChatStateService;
-    fixture = TestBed.createComponent(RenderedFrameComponent);
+    chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
+    fixture = TestBed.createComponent(RenderedFrame);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RenderedFrameHarness);
   });
@@ -88,14 +88,14 @@ describe('RenderedFrameComponent Live Preview Viewport', () => {
     );
   });
 
-  it('registers the iframe contentWindow with HostCommunicationService upon view initialization', () => {
+  it('registers the iframe contentWindow with HostCommunication upon view initialization', () => {
     expect(hostCommunicationServiceMock.registerIframe).toHaveBeenCalled();
   });
 
   it('renders a placeholder when no renderer URL is resolved', async () => {
     fixture.destroy();
     resolvedUrlSignal.set(null);
-    const nullFixture = TestBed.createComponent(RenderedFrameComponent);
+    const nullFixture = TestBed.createComponent(RenderedFrame);
     nullFixture.detectChanges();
     const nullHarness = await TestbedHarnessEnvironment.harnessForFixture(
       nullFixture,
@@ -108,7 +108,7 @@ describe('RenderedFrameComponent Live Preview Viewport', () => {
   it('renders a placeholder when the renderer URL is malformed and fails parsing', async () => {
     fixture.destroy();
     resolvedUrlSignal.set('http://[invalid]');
-    const malformedFixture = TestBed.createComponent(RenderedFrameComponent);
+    const malformedFixture = TestBed.createComponent(RenderedFrame);
     malformedFixture.detectChanges();
     const malformedHarness = await TestbedHarnessEnvironment.harnessForFixture(
       malformedFixture,
@@ -121,7 +121,7 @@ describe('RenderedFrameComponent Live Preview Viewport', () => {
   it('correctly handles relative renderer URLs and appends the origin', async () => {
     fixture.destroy();
     resolvedUrlSignal.set('/renderer');
-    const relativeFixture = TestBed.createComponent(RenderedFrameComponent);
+    const relativeFixture = TestBed.createComponent(RenderedFrame);
     relativeFixture.detectChanges();
     const relativeHarness = await TestbedHarnessEnvironment.harnessForFixture(
       relativeFixture,

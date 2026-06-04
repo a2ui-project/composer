@@ -17,7 +17,7 @@
 import {Injectable, inject, signal} from '@angular/core';
 import {QueryParser} from './query-parser';
 import {LocalStorageKey} from '../settings/local-storage-keys';
-import {LocalStorageService} from '../settings/local-storage-interactions';
+import {LocalStorageInteractions} from '../settings/local-storage-interactions';
 
 /**
  * Represents the resolved runtime configuration for the application,
@@ -35,10 +35,10 @@ export interface AppConfig {
  * Orchestrates the initial application startup pipeline, resolving query
  * parameters, validating environments, and initializing core state.
  */
-export class StartupResolutionService {
+export class StartupResolution {
   private readonly _resolvedUrl = signal<string | null>(null);
   private readonly _isLockedContext = signal(false);
-  private readonly localStorageService = inject(LocalStorageService);
+  private readonly localStorageInteractions = inject(LocalStorageInteractions);
 
   public readonly resolvedUrl = this._resolvedUrl.asReadonly();
   public readonly isLockedContext = this._isLockedContext.asReadonly();
@@ -83,7 +83,7 @@ export class StartupResolutionService {
       }
     }
 
-    const localPrefs = this.localStorageService.getItem(LocalStorageKey.RENDERER_URL);
+    const localPrefs = this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL);
     if (localPrefs && !this._isLockedContext()) {
       this._resolvedUrl.set(localPrefs);
     }
@@ -102,13 +102,13 @@ export class StartupResolutionService {
   }
 
   public isThirdPartyEnvironment(): boolean {
-    const force1P = this.localStorageService.getItem(LocalStorageKey.FORCE_1P) === 'true';
+    const force1P = this.localStorageInteractions.getItem(LocalStorageKey.FORCE_1P) === 'true';
     if (force1P) {
       return false;
     }
 
     const hostname = this.getWindowHostname();
-    const force3P = this.localStorageService.getItem(LocalStorageKey.FORCE_3P) === 'true';
+    const force3P = this.localStorageInteractions.getItem(LocalStorageKey.FORCE_3P) === 'true';
     if (force3P) {
       return true;
     }
@@ -125,7 +125,7 @@ export class StartupResolutionService {
   public isEnvironmentValid(): boolean {
     const resolvedUrl = this.getResolvedRendererUrl();
     const is3P = this.isThirdPartyEnvironment();
-    const hasApiKey = !!this.localStorageService.getItem(LocalStorageKey.GEMINI_API_KEY);
+    const hasApiKey = !!this.localStorageInteractions.getItem(LocalStorageKey.GEMINI_API_KEY);
 
     return !!resolvedUrl && (!is3P || hasApiKey);
   }
@@ -134,7 +134,7 @@ export class StartupResolutionService {
     const urlParams = new URLSearchParams(this.getWindowSearch());
     const urlExtension = urlParams.get('extension') === 'true';
     const hasExtensionStorage =
-      this.localStorageService.getItem(LocalStorageKey.EXTENSION_MODE) === 'true';
+      this.localStorageInteractions.getItem(LocalStorageKey.EXTENSION_MODE) === 'true';
     return urlExtension || hasExtensionStorage;
   }
 
@@ -148,7 +148,7 @@ export class StartupResolutionService {
 
   private evaluateEnvironmentPurge(): void {
     if (!this.isThirdPartyEnvironment()) {
-      this.localStorageService.removeItem(LocalStorageKey.GEMINI_API_KEY);
+      this.localStorageInteractions.removeItem(LocalStorageKey.GEMINI_API_KEY);
     }
   }
 }

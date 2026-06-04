@@ -28,4 +28,4 @@ import {RouterOutlet} from '@angular/router';
  * The root application component for the A2UI Composer shell.
  * Serves as the main entry point rendering the router outlet.
  */
-export class AppComponent {}
+export class App {}

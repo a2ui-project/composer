@@ -18,7 +18,7 @@ import {Component, inject, signal, effect, untracked} from '@angular/core';
 import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
-import {HostCommunicationService} from '../../shell/host-communication';
+import {HostCommunication} from '../../shell/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {formatTimestamp} from '../../utils/date.utils';
 
@@ -53,8 +53,8 @@ interface RawTelemetryPayload {
  * A debug drawer component presenting captured error stacks, warnings,
  * and connection failures piped from the renderer application.
  */
-export class ErrorsComponent {
-  private readonly hostComm = inject(HostCommunicationService);
+export class Errors {
+  private readonly hostComm = inject(HostCommunication);
 
   protected readonly errorsLog = signal<MappedErrorLogItem[]>([]);
   protected readonly columnsToDisplay = ['time', 'level', 'source', 'message'];

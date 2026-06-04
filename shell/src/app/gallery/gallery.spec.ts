@@ -15,21 +15,21 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {GalleryComponent} from './gallery';
+import {Gallery} from './gallery';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {GalleryHarness} from './test/gallery.harness';
 import {describe, it, expect, beforeEach} from 'vitest';
 
-describe('GalleryComponent Placeholder', () => {
-  let fixture: ComponentFixture<GalleryComponent>;
+describe('Gallery Placeholder', () => {
+  let fixture: ComponentFixture<Gallery>;
   let harness: GalleryHarness;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [GalleryComponent],
+      imports: [Gallery],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(GalleryComponent);
+    fixture = TestBed.createComponent(Gallery);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, GalleryHarness);
   });

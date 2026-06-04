@@ -26,9 +26,9 @@ import {
 } from '@angular/core';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {JsonPipe} from '@angular/common';
-import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication';
+import {HostCommunication, MessageEnvelope} from '../../shell/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {ChatStateService} from '../../chat/chat-state/chat-state';
+import {ChatState} from '../../chat/chat-state/chat-state';
 import {formatTimestamp} from '../../utils/date.utils';
 
 export interface RawLogEntry {
@@ -50,9 +50,9 @@ export interface RawLogEntry {
  * A debug drawer component presenting a scrolling diagnostic view
  * of raw postMessage traffic across the iframe boundary.
  */
-export class RawMessagesComponent implements OnDestroy {
-  private readonly hostComm = inject(HostCommunicationService);
-  private readonly chatState = inject(ChatStateService);
+export class RawMessages implements OnDestroy {
+  private readonly hostComm = inject(HostCommunication);
+  private readonly chatState = inject(ChatState);
 
   protected readonly messageHistory = signal<RawLogEntry[]>([]);
 

@@ -16,12 +16,12 @@
  */
 
 import {Injectable, inject, computed, effect, untracked} from '@angular/core';
-import {CatalogManagementService} from '../../storage/catalog-management';
+import {CatalogManagement} from '../../storage/catalog-management';
 import {LlmMessage, LlmClient, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {AppConfigProvider} from '../../settings/app-config-provider';
-import {StateSyncService} from '../state-sync/state-sync';
-import {ChatStateService, LlmLogType} from '../chat-state/chat-state';
+import {StateSync} from '../state-sync/state-sync';
+import {ChatState, LlmLogType} from '../chat-state/chat-state';
 import {CrossFrameValidator} from '../../shell/cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
@@ -34,21 +34,21 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
  * streams, self-healing parsers, schemas typo corrections, and gateway
  * error fallbacks.
  */
-export class ChatService {
-  private readonly catalogManagement = inject(CatalogManagementService);
+export class ChatCoordinator {
+  private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
-  private readonly stateSyncService = inject(StateSyncService);
-  private readonly chatStateService = inject(ChatStateService);
+  private readonly stateSync = inject(StateSync);
+  private readonly chatState = inject(ChatState);
   private readonly llmClient = inject(LlmClient);
 
   /** Reactively mapped rendering pipeline execution milestones. */
-  public readonly pipelineStatus = this.chatStateService.pipelineStatus;
+  public readonly pipelineStatus = this.chatState.pipelineStatus;
 
   /**
    * Public programmatic lock signal protecting against typing deadlocks
    * during streams.
    */
-  public readonly isProgrammaticStreamActive = this.chatStateService.isProgrammaticStreamActive;
+  public readonly isProgrammaticStreamActive = this.chatState.isProgrammaticStreamActive;
 
   private lastSeenRendererUrl = '';
   private isFirstUrlEffectRun = true;
@@ -76,11 +76,11 @@ export class ChatService {
    * Resets turns logs history, overlays milestones, and locks indicators.
    */
   public wipeEnvironmentCache(): void {
-    this.chatStateService.setChatHistory([]);
-    this.chatStateService.setPipelineStatus(PipelineStatus.IDLE);
-    this.chatStateService.setProgrammaticStreamActive(false);
-    this.chatStateService.clearRawLlmHistory();
-    this.stateSyncService.flushDraft();
+    this.chatState.setChatHistory([]);
+    this.chatState.setPipelineStatus(PipelineStatus.IDLE);
+    this.chatState.setProgrammaticStreamActive(false);
+    this.chatState.clearRawLlmHistory();
+    this.stateSync.flushDraft();
   }
 
   /**
@@ -92,7 +92,7 @@ export class ChatService {
         role: MessageRole.SYSTEM,
         content: this.systemPrompt(),
       },
-      ...this.chatStateService.chatHistory().filter(m => m.role !== MessageRole.ERROR),
+      ...this.chatState.chatHistory().filter(m => m.role !== MessageRole.ERROR),
     ];
   }
 
@@ -106,11 +106,11 @@ export class ChatService {
     if (!trimmed) return;
 
     // Lock UI controls and transition state indicators to receiving stream
-    this.chatStateService.setProgrammaticStreamActive(true);
-    this.chatStateService.setPipelineStatus(PipelineStatus.RECEIVING_STREAM);
+    this.chatState.setProgrammaticStreamActive(true);
+    this.chatState.setPipelineStatus(PipelineStatus.RECEIVING_STREAM);
 
     // Append user prompt text turn to chat history
-    this.chatStateService.updateChatHistory(h => [
+    this.chatState.updateChatHistory(h => [
       ...h,
       {
         role: MessageRole.USER,
@@ -122,10 +122,10 @@ export class ChatService {
     const fullContext = this.getFullMessageContext();
 
     // Log the raw LLM request telemetry
-    this.chatStateService.addRawLlmLog(LlmLogType.REQUEST, fullContext);
+    this.chatState.addRawLlmLog(LlmLogType.REQUEST, fullContext);
 
     // Push initial model turn placeholder with loading pulse indicator to history
-    this.chatStateService.updateChatHistory(h => [
+    this.chatState.updateChatHistory(h => [
       ...h,
       {
         role: MessageRole.MODEL,
@@ -143,7 +143,7 @@ export class ChatService {
         accumulatedRawText += packet;
 
         // Update history bubble in real-time with trailing pulse indicator
-        this.chatStateService.updateChatHistory(history => {
+        this.chatState.updateChatHistory(history => {
           const updated = [...history];
           const lastIdx = updated.length - 1;
           if (updated[lastIdx]?.role === MessageRole.MODEL) {
@@ -160,8 +160,8 @@ export class ChatService {
       const finalRawText = await responseStream.complete;
 
       // Log the raw LLM response telemetry
-      this.chatStateService.addRawLlmLog(LlmLogType.RESPONSE, finalRawText);
-      this.chatStateService.updateChatHistory(history => {
+      this.chatState.addRawLlmLog(LlmLogType.RESPONSE, finalRawText);
+      this.chatState.updateChatHistory(history => {
         const updated = [...history];
         const lastIdx = updated.length - 1;
         if (updated[lastIdx]?.role === MessageRole.MODEL) {
@@ -173,7 +173,7 @@ export class ChatService {
         return updated;
       });
 
-      this.chatStateService.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
+      this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
       await this.processRawLlmPayload(finalRawText);
     } catch (err: unknown) {
       this.handleConnectivityError(err, trimmed);
@@ -189,13 +189,13 @@ export class ChatService {
     try {
       parsedBlocks = this.parseAndHealJsonLines(rawText);
     } catch (err: unknown) {
-      this.chatStateService.setPipelineStatus(PipelineStatus.FAILED);
-      this.chatStateService.setProgrammaticStreamActive(false);
+      this.chatState.setPipelineStatus(PipelineStatus.FAILED);
+      this.chatState.setProgrammaticStreamActive(false);
       throw err;
     }
 
     // Stage 2: Schema Validation
-    this.chatStateService.setPipelineStatus(PipelineStatus.VALIDATING);
+    this.chatState.setPipelineStatus(PipelineStatus.VALIDATING);
     try {
       // Verify basic schema envelopes using pre-existing CrossFrameValidator
       const mockEnvMsg = {
@@ -229,7 +229,7 @@ export class ChatService {
       this.runCatalogComponentSchemaCheck(parsedBlocks);
 
       // Stage 3: Ready & Commit Layout Wipes
-      this.chatStateService.setPipelineStatus(PipelineStatus.READY);
+      this.chatState.setPipelineStatus(PipelineStatus.READY);
 
       // Turn list of updates back into raw JSON lines text to write to
       // editor draft
@@ -237,14 +237,14 @@ export class ChatService {
 
       // Commit layout synchronously to editor viewport before releasing
       // lockout
-      this.stateSyncService.commitLayoutFromLlm(finalLayoutText);
+      this.stateSync.commitLayoutFromLlm(finalLayoutText);
 
       // Release panel textareas lockout synchronously to avoid race
       // condition escapes
-      this.chatStateService.setProgrammaticStreamActive(false);
+      this.chatState.setProgrammaticStreamActive(false);
     } catch (err: unknown) {
-      this.chatStateService.setPipelineStatus(PipelineStatus.FAILED);
-      this.chatStateService.setProgrammaticStreamActive(false);
+      this.chatState.setPipelineStatus(PipelineStatus.FAILED);
+      this.chatState.setProgrammaticStreamActive(false);
       throw err;
     }
   }
@@ -260,7 +260,7 @@ export class ChatService {
     const mdJsonRegex = /```json\s*([\s\S]*?)\s*```/;
     const match = content.match(mdJsonRegex);
     if (match && match[1]) {
-      this.chatStateService.setPipelineStatus(PipelineStatus.HEALING);
+      this.chatState.setPipelineStatus(PipelineStatus.HEALING);
       content = match[1].trim();
     }
 
@@ -281,7 +281,7 @@ export class ChatService {
         parsedBlocks.push(JSON.parse(line));
       } catch (err) {
         // Syntax Healing Loop
-        this.chatStateService.setPipelineStatus(PipelineStatus.HEALING);
+        this.chatState.setPipelineStatus(PipelineStatus.HEALING);
         const healedObj = this.attemptSyntaxHealing(line);
         if (healedObj !== null) {
           parsedBlocks.push(healedObj);
@@ -387,7 +387,7 @@ export class ChatService {
 
         // legacy property "name" fallback: heal to "component" key mapping
         if (compObj['name'] && !compObj['component']) {
-          this.chatStateService.setPipelineStatus(PipelineStatus.HEALING);
+          this.chatState.setPipelineStatus(PipelineStatus.HEALING);
           compType = compObj['name'] as string;
           compObj['component'] = compType;
           delete compObj['name'];
@@ -415,7 +415,7 @@ export class ChatService {
             }
 
             if (healedType && catalog.components[healedType]) {
-              this.chatStateService.setPipelineStatus(PipelineStatus.HEALING);
+              this.chatState.setPipelineStatus(PipelineStatus.HEALING);
               targetType = healedType;
             } else {
               // Fuzzy search matches (Worker 1 addition)
@@ -428,7 +428,7 @@ export class ChatService {
                 : undefined;
 
               if (fuzzyMatch) {
-                this.chatStateService.setPipelineStatus(PipelineStatus.HEALING);
+                this.chatState.setPipelineStatus(PipelineStatus.HEALING);
                 targetType = fuzzyMatch;
               } else {
                 throw new Error(
@@ -521,11 +521,11 @@ export class ChatService {
 
     if (isConnectivity) {
       // Instantly dismiss loading overlay locks
-      this.chatStateService.setPipelineStatus(PipelineStatus.IDLE);
+      this.chatState.setPipelineStatus(PipelineStatus.IDLE);
     } else {
-      this.chatStateService.setPipelineStatus(PipelineStatus.FAILED);
+      this.chatState.setPipelineStatus(PipelineStatus.FAILED);
     }
-    this.chatStateService.setProgrammaticStreamActive(false);
+    this.chatState.setProgrammaticStreamActive(false);
 
     let errorDetails: string;
     if (err instanceof Error) {
@@ -604,7 +604,7 @@ export class ChatService {
 
     // Overwrite trailing blank MODEL placeholder bubble in-place to
     // avoid empty bubble drift
-    this.chatStateService.updateChatHistory(history => {
+    this.chatState.updateChatHistory(history => {
       const updated = [...history];
       const lastIdx = updated.length - 1;
       const errorBubble: LlmMessage = {

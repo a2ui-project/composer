@@ -15,21 +15,21 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {MockRulesComponent} from './mock-rules';
+import {MockRules} from './mock-rules';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {MockRulesHarness} from './test/mock-rules.harness';
 import {describe, it, expect, beforeEach} from 'vitest';
 
-describe('MockRulesComponent Placeholder', () => {
-  let fixture: ComponentFixture<MockRulesComponent>;
+describe('MockRules Placeholder', () => {
+  let fixture: ComponentFixture<MockRules>;
   let harness: MockRulesHarness;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [MockRulesComponent],
+      imports: [MockRules],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(MockRulesComponent);
+    fixture = TestBed.createComponent(MockRules);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, MockRulesHarness);
   });

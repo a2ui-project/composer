@@ -15,18 +15,18 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {ComposerWorkspaceComponent} from './composer-workspace';
+import {ComposerWorkspace} from './composer-workspace';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {HostCommunicationService} from './host-communication';
-import {StartupResolutionService} from './startup-resolution';
+import {HostCommunication} from './host-communication';
+import {StartupResolution} from './startup-resolution';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {ChatService} from '../chat/chat-service/chat-coordinator';
+import {ChatCoordinator} from '../chat/chat-service/chat-coordinator';
 import {LlmClient, LlmMessage} from '../chat/llm-client/llm-client';
-import {StateSyncService} from '../chat/state-sync/state-sync';
-import {ChatStateService, LlmLogEntry, LlmLogType} from '../chat/chat-state/chat-state';
+import {StateSync} from '../chat/state-sync/state-sync';
+import {ChatState, LlmLogEntry, LlmLogType} from '../chat/chat-state/chat-state';
 import {PipelineStatus} from '../chat/pipeline-status/pipeline-status';
 import {
   AppConfigProvider,
@@ -36,7 +36,7 @@ import {
 } from '../settings/app-config-provider';
 import {signal} from '@angular/core';
 
-class MockChatStateService {
+class MockChatState {
   public readonly chatHistory = signal<LlmMessage[]>([]);
   public readonly pipelineStatus = signal(PipelineStatus.IDLE);
   public readonly isProgrammaticStreamActive = signal(false);
@@ -71,13 +71,13 @@ class MockChatStateService {
   }
 }
 
-class MockChatService {
+class MockChatCoordinator {
   public readonly systemPrompt = signal('Initial system prompt block');
   public readonly pipelineStatus = signal(PipelineStatus.IDLE);
   public readonly isProgrammaticStreamActive = signal(false);
 }
 
-class MockStateSyncService {
+class MockStateSync {
   public readonly activeDraftSignal = signal('{}');
   public readonly activeDraft = this.activeDraftSignal.asReadonly();
   public updateDraft = vi.fn((val: string) => {
@@ -102,24 +102,24 @@ class MockLlmClient {
   public chatStream = vi.fn();
 }
 
-describe('ComposerWorkspaceComponent Dashboard', () => {
-  let fixture: ComponentFixture<ComposerWorkspaceComponent>;
+describe('ComposerWorkspace Dashboard', () => {
+  let fixture: ComponentFixture<ComposerWorkspace>;
   let harness: ComposerWorkspaceHarness;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ComposerWorkspaceComponent],
+      imports: [ComposerWorkspace],
       providers: [
         provideNoopAnimations(),
-        {provide: ChatStateService, useClass: MockChatStateService},
-        {provide: ChatService, useClass: MockChatService},
-        {provide: StateSyncService, useClass: MockStateSyncService},
+        {provide: ChatState, useClass: MockChatState},
+        {provide: ChatCoordinator, useClass: MockChatCoordinator},
+        {provide: StateSync, useClass: MockStateSync},
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
         {provide: LlmClient, useClass: MockLlmClient},
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(ComposerWorkspaceComponent);
+    fixture = TestBed.createComponent(ComposerWorkspace);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ComposerWorkspaceHarness);
   });
@@ -171,9 +171,9 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
   it('delegates clearLogs to all queried child components when clearAllLogs is called', () => {
     const component = fixture.componentInstance;
 
-    const rawMsgSpy = vi.spyOn(component.rawMessagesComponent()!, 'clearLogs');
-    const eventsSpy = vi.spyOn(component.eventsComponent()!, 'clearLogs');
-    const errorsSpy = vi.spyOn(component.errorsComponent()!, 'clearLogs');
+    const rawMsgSpy = vi.spyOn(component.rawMessages()!, 'clearLogs');
+    const eventsSpy = vi.spyOn(component.events()!, 'clearLogs');
+    const errorsSpy = vi.spyOn(component.errors()!, 'clearLogs');
 
     component.clearAllLogs();
 
@@ -183,10 +183,10 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
   });
 
   describe('Unread Tab Badges', () => {
-    let hostComm: HostCommunicationService;
+    let hostComm: HostCommunication;
 
     beforeEach(() => {
-      hostComm = TestBed.inject(HostCommunicationService);
+      hostComm = TestBed.inject(HostCommunication);
       fixture.componentInstance.selectedTabIndex.set(0);
       fixture.componentInstance.unreadEventsCount.set(0);
       fixture.componentInstance.unreadErrorsCount.set(0);
@@ -333,11 +333,11 @@ describe('ComposerWorkspaceComponent Dashboard', () => {
   it(
     'collapses the debug panel automatically on mount when isExtensionMode ' + 'is true',
     async () => {
-      const resolutionService = TestBed.inject(StartupResolutionService);
+      const resolutionService = TestBed.inject(StartupResolution);
       vi.spyOn(resolutionService, 'isExtensionMode').mockReturnValue(true);
 
       // Recreate fixture to trigger ngOnInit with mock return value
-      const newFixture = TestBed.createComponent(ComposerWorkspaceComponent);
+      const newFixture = TestBed.createComponent(ComposerWorkspace);
       newFixture.detectChanges();
 
       const newHarness = await TestbedHarnessEnvironment.harnessForFixture(

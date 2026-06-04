@@ -20,7 +20,7 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {FormsModule} from '@angular/forms';
 import {debounceTime, distinctUntilChanged, filter} from 'rxjs';
-import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication';
+import {HostCommunication} from '../../shell/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 @Component({
@@ -34,8 +34,8 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
  * A debug drawer component presenting a reactive, nested JSON tree explorer
  * of the active surface's underlying state data model.
  */
-export class DataModelComponent {
-  private readonly hostComm = inject(HostCommunicationService);
+export class DataModel {
+  private readonly hostComm = inject(HostCommunication);
 
   private lastSurfaceId = 'sample-surface';
   private lastPath: string | undefined = undefined;

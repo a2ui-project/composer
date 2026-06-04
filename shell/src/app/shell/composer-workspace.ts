@@ -15,21 +15,21 @@
  */
 
 import {Component, inject, signal, viewChild, OnInit, effect, untracked} from '@angular/core';
-import {ChatPanelComponent} from '../chat/chat-panel/chat-panel';
-import {RawFrameComponent} from '../preview/raw/raw-frame';
-import {RenderedFrameComponent} from '../preview/rendered/rendered-frame';
-import {DataModelComponent} from '../debug/data-model/data-model';
-import {EventsComponent} from '../debug/events/events';
-import {ErrorsComponent} from '../debug/errors/errors';
-import {RawMessagesComponent} from '../debug/raw-messages/raw-messages';
-import {MockRulesComponent} from '../debug/mock-rules/mock-rules';
+import {ChatPanel} from '../chat/chat-panel/chat-panel';
+import {RawFrame} from '../preview/raw/raw-frame';
+import {RenderedFrame} from '../preview/rendered/rendered-frame';
+import {DataModel} from '../debug/data-model/data-model';
+import {Events} from '../debug/events/events';
+import {Errors} from '../debug/errors/errors';
+import {RawMessages} from '../debug/raw-messages/raw-messages';
+import {MockRules} from '../debug/mock-rules/mock-rules';
 import {MatTabsModule} from '@angular/material/tabs';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatBadgeModule} from '@angular/material/badge';
-import {StartupResolutionService} from './startup-resolution';
-import {HostCommunicationService} from './host-communication';
+import {StartupResolution} from './startup-resolution';
+import {HostCommunication} from './host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 const EVENTS_TAB_INDEX = 1;
@@ -45,14 +45,14 @@ interface WorkspaceMessagePayload {
   selector: 'a2ui-composer-workspace',
   standalone: true,
   imports: [
-    ChatPanelComponent,
-    RawFrameComponent,
-    RenderedFrameComponent,
-    DataModelComponent,
-    EventsComponent,
-    ErrorsComponent,
-    RawMessagesComponent,
-    MockRulesComponent,
+    ChatPanel,
+    RawFrame,
+    RenderedFrame,
+    DataModel,
+    Events,
+    Errors,
+    RawMessages,
+    MockRules,
     MatTabsModule,
     MatIconModule,
     MatButtonModule,
@@ -66,9 +66,9 @@ interface WorkspaceMessagePayload {
  * The central workspace hub coordinating split-pane views between
  * the layout editors, active preview frame, and debug consoles.
  */
-export class ComposerWorkspaceComponent implements OnInit {
-  private startupResolutionService = inject(StartupResolutionService);
-  private hostComm = inject(HostCommunicationService);
+export class ComposerWorkspace implements OnInit {
+  private startupResolution = inject(StartupResolution);
+  private hostComm = inject(HostCommunication);
 
   public isExtension = signal(false);
   public isDebugCollapsed = signal(false);
@@ -77,9 +77,9 @@ export class ComposerWorkspaceComponent implements OnInit {
   public unreadEventsCount = signal(0);
   public unreadErrorsCount = signal(0);
 
-  public readonly rawMessagesComponent = viewChild(RawMessagesComponent);
-  public readonly eventsComponent = viewChild(EventsComponent);
-  public readonly errorsComponent = viewChild(ErrorsComponent);
+  public readonly rawMessages = viewChild(RawMessages);
+  public readonly events = viewChild(Events);
+  public readonly errors = viewChild(Errors);
 
   constructor() {
     effect(() => {
@@ -131,7 +131,7 @@ export class ComposerWorkspaceComponent implements OnInit {
   }
 
   public ngOnInit(): void {
-    const isExt = this.startupResolutionService.isExtensionMode();
+    const isExt = this.startupResolution.isExtensionMode();
     this.isExtension.set(isExt);
     if (isExt) {
       this.isDebugCollapsed.set(true);
@@ -143,8 +143,8 @@ export class ComposerWorkspaceComponent implements OnInit {
   }
 
   public clearAllLogs(): void {
-    this.rawMessagesComponent()?.clearLogs();
-    this.eventsComponent()?.clearLogs();
-    this.errorsComponent()?.clearLogs();
+    this.rawMessages()?.clearLogs();
+    this.events()?.clearLogs();
+    this.errors()?.clearLogs();
   }
 }

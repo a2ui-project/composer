@@ -19,14 +19,14 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal, WritableSignal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi, afterEach} from 'vitest';
-import {DataModelComponent} from './data-model';
+import {DataModel} from './data-model';
 import {DataModelHarness} from './test/data-model.harness';
-import {HostCommunicationService, MessageEnvelope} from '../../shell/host-communication';
+import {HostCommunication, MessageEnvelope} from '../../shell/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
-describe('DataModelComponent', () => {
-  let fixture: ComponentFixture<DataModelComponent>;
-  let component: DataModelComponent;
+describe('DataModel', () => {
+  let fixture: ComponentFixture<DataModel>;
+  let component: DataModel;
   let harness: DataModelHarness;
   let mockHostComm: {
     messageStream: WritableSignal<MessageEnvelope | null>;
@@ -42,14 +42,11 @@ describe('DataModelComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [DataModelComponent],
-      providers: [
-        provideNoopAnimations(),
-        {provide: HostCommunicationService, useValue: mockHostComm},
-      ],
+      imports: [DataModel],
+      providers: [provideNoopAnimations(), {provide: HostCommunication, useValue: mockHostComm}],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(DataModelComponent);
+    fixture = TestBed.createComponent(DataModel);
     component = fixture.componentInstance;
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, DataModelHarness);

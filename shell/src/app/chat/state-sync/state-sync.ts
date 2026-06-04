@@ -17,8 +17,7 @@
 import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {debounceTime, distinctUntilChanged, skip} from 'rxjs/operators';
-import {ChatStateService} from '../chat-state/chat-state';
-import {LlmMessage} from '../llm-client/llm-client';
+import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
 import {tryParseJsonArray} from '../../utils/json';
@@ -43,9 +42,9 @@ const MOCK_RULES_CONTAINER = 'mock_rules_container';
 @Injectable({
   providedIn: 'root',
 })
-export class StateSyncService {
+export class StateSync {
   private readonly destroyRef = inject(DestroyRef);
-  private readonly chatStateService = inject(ChatStateService);
+  private readonly chatState = inject(ChatState);
 
   private readonly _activeDraft = signal<string>(CAR_BOOKING);
   /**
@@ -103,11 +102,11 @@ export class StateSyncService {
    */
   private syncLayoutToHistory(layout: string): void {
     const sanitizedLayoutString = this.sanitizeLayout(layout);
-    const history = this.chatStateService.chatHistory();
+    const history = this.chatState.chatHistory();
 
     if (history.length === 0) {
       // Initialize logs context if empty
-      this.chatStateService.setChatHistory([
+      this.chatState.setChatHistory([
         {
           role: MessageRole.USER,
           content: sanitizedLayoutString,
@@ -132,11 +131,11 @@ export class StateSyncService {
         role: MessageRole.USER,
         content: sanitizedLayoutString,
       };
-      this.chatStateService.setChatHistory(updatedHistory);
+      this.chatState.setChatHistory(updatedHistory);
     } else {
       // Append a new USER message node representing visual snapshot if last
       // belongs to MODEL or represents human textual instructions
-      this.chatStateService.updateChatHistory(h => [
+      this.chatState.updateChatHistory(h => [
         ...h,
         {
           role: MessageRole.USER,
@@ -189,7 +188,7 @@ export class StateSyncService {
       } catch (err) {
         // Discard conversational wrappers or malformed syntax blocks
         console.warn(
-          '[StateSyncService] Discarding malformed layout JSON Line ' + 'during sanitization:',
+          '[StateSync] Discarding malformed layout JSON Line ' + 'during sanitization:',
           line,
           err,
         );

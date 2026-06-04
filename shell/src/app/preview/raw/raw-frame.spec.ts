@@ -15,20 +15,20 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {RawFrameComponent} from './raw-frame';
+import {RawFrame} from './raw-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens';
 import {signal, WritableSignal} from '@angular/core';
-import {HostCommunicationService} from '../../shell/host-communication';
-import {CatalogManagementService} from '../../storage/catalog-management';
+import {HostCommunication} from '../../shell/host-communication';
+import {CatalogManagement} from '../../storage/catalog-management';
 import {Catalog} from '../../storage/catalog-storage.model';
-import {StateSyncService} from '../../chat/state-sync/state-sync';
-import {ChatStateService, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
+import {StateSync} from '../../chat/state-sync/state-sync';
+import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 
-class MockChatStateService {
+class MockChatState {
   public readonly isProgrammaticStreamActive = signal<boolean>(false);
   public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
   public readonly llmHistory = signal<LlmLogEntry[]>([]);
@@ -43,7 +43,7 @@ class MockChatStateService {
   }
 }
 
-class MockStateSyncService {
+class MockStateSync {
   public readonly activeDraftSignal = signal(
     '{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json", "sendDataModel": true}}\n' +
       '{"version": "v0.9", "updateComponents": {"surfaceId": "sample-surface", "components": [{"id": "root", "component": "Column", "children": ["title", "location_input", "pickup_input", "dropoff_input", "book_button"], "justify": "start", "align": "stretch"}, {"id": "title", "component": "Text", "text": "Book a Car", "variant": "h1"}, {"id": "location_input", "component": "TextField", "label": "Pick-up Location", "value": {"path": "/booking/location"}, "variant": "shortText"}, {"id": "pickup_input", "component": "DateTimeInput", "label": "Pick-up Date", "value": {"path": "/booking/pickupDate"}, "enableDate": true, "enableTime": false}, {"id": "dropoff_input", "component": "DateTimeInput", "label": "Drop-off Date", "value": {"path": "/booking/dropoffDate"}, "enableDate": true, "enableTime": false}, {"id": "book_button", "component": "Button", "child": "book_button_text", "variant": "primary", "action": {"event": {"name": "searchCars", "context": {"location": {"path": "/booking/location"}, "pickupDate": {"path": "/booking/pickupDate"}, "dropoffDate": {"path": "/booking/dropoffDate"}}}}}, {"id": "book_button_text", "component": "Text", "text": "Search Cars", "variant": "body"}]}}\n' +
@@ -56,11 +56,11 @@ class MockStateSyncService {
   public hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
 }
 
-describe('RawFrameComponent JSON Source Editor View', () => {
+describe('RawFrame JSON Source Editor View', () => {
   let sendRenderA2UIMock: ReturnType<typeof vi.fn>;
   let mockActiveCatalog: WritableSignal<Catalog | null>;
-  let stateSyncMock: MockStateSyncService;
-  let chatStateMock: MockChatStateService;
+  let stateSyncMock: MockStateSync;
+  let chatStateMock: MockChatState;
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
@@ -75,26 +75,26 @@ describe('RawFrameComponent JSON Source Editor View', () => {
   async function setup(isExtension: boolean) {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
-      imports: [RawFrameComponent],
+      imports: [RawFrame],
       providers: [
         provideNoopAnimations(),
         {provide: IS_EXTENSION_MODE, useValue: signal(isExtension)},
-        {provide: HostCommunicationService, useValue: {sendRenderA2UI: sendRenderA2UIMock}},
+        {provide: HostCommunication, useValue: {sendRenderA2UI: sendRenderA2UIMock}},
         {
-          provide: CatalogManagementService,
+          provide: CatalogManagement,
           useValue: {
             activeCatalog: mockActiveCatalog,
           },
         },
-        {provide: StateSyncService, useClass: MockStateSyncService},
-        {provide: ChatStateService, useClass: MockChatStateService},
+        {provide: StateSync, useClass: MockStateSync},
+        {provide: ChatState, useClass: MockChatState},
       ],
     }).compileComponents();
 
-    stateSyncMock = TestBed.inject(StateSyncService) as unknown as MockStateSyncService;
-    chatStateMock = TestBed.inject(ChatStateService) as unknown as MockChatStateService;
+    stateSyncMock = TestBed.inject(StateSync) as unknown as MockStateSync;
+    chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
 
-    const fixture = TestBed.createComponent(RawFrameComponent);
+    const fixture = TestBed.createComponent(RawFrame);
     fixture.detectChanges();
     const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RawFrameHarness);
     const component = fixture.componentInstance;

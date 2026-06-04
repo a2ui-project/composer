@@ -24,7 +24,7 @@ import {LocalStorageKey} from './local-storage-keys';
 @Injectable({
   providedIn: 'root',
 })
-export class LocalStorageService {
+export class LocalStorageInteractions {
   private readonly _isStorageAvailable: boolean;
 
   constructor() {

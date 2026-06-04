@@ -15,10 +15,10 @@
  */
 
 import {Component, inject, viewChild, ElementRef, effect, computed} from '@angular/core';
-import {DomSanitizer, SafeResourceUrl} from '@angular/platform-browser';
-import {StartupResolutionService} from '../../shell/startup-resolution';
-import {HostCommunicationService} from '../../shell/host-communication';
-import {ChatStateService} from '../../chat/chat-state/chat-state';
+import {DomSanitizer} from '@angular/platform-browser';
+import {StartupResolution} from '../../shell/startup-resolution';
+import {HostCommunication} from '../../shell/host-communication';
+import {ChatState} from '../../chat/chat-state/chat-state';
 
 @Component({
   selector: 'a2ui-composer-rendered-frame',
@@ -31,19 +31,19 @@ import {ChatStateService} from '../../chat/chat-state/chat-state';
  * Orchestrates the secure, sandboxed iframe rendering the active preview target,
  * synchronizing layouts, data models, and diagnostic telemetry.
  */
-export class RenderedFrameComponent {
+export class RenderedFrame {
   private sanitizer = inject(DomSanitizer);
-  private startupResolutionService = inject(StartupResolutionService);
-  private hostCommunicationService = inject(HostCommunicationService);
-  private chatStateService = inject(ChatStateService);
+  private startupResolution = inject(StartupResolution);
+  private hostCommunication = inject(HostCommunication);
+  private chatState = inject(ChatState);
 
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
-  protected readonly isLocked = this.chatStateService.isProgrammaticStreamActive;
+  protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
   protected iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('previewIframe');
 
   protected safeRendererUrl = computed(() => {
-    const currentUrl = this.startupResolutionService.resolvedUrl();
+    const currentUrl = this.startupResolution.resolvedUrl();
     if (!currentUrl) return null;
 
     try {
@@ -71,11 +71,11 @@ export class RenderedFrameComponent {
   constructor() {
     effect(() => {
       const ref = this.iframeRef();
-      if (typeof this.hostCommunicationService.registerIframeElement === 'function') {
-        this.hostCommunicationService.registerIframeElement(ref?.nativeElement || null);
+      if (typeof this.hostCommunication.registerIframeElement === 'function') {
+        this.hostCommunication.registerIframeElement(ref?.nativeElement || null);
       }
-      if (typeof this.hostCommunicationService.registerIframe === 'function') {
-        this.hostCommunicationService.registerIframe(ref?.nativeElement?.contentWindow || null);
+      if (typeof this.hostCommunication.registerIframe === 'function') {
+        this.hostCommunication.registerIframe(ref?.nativeElement?.contentWindow || null);
       }
     });
   }

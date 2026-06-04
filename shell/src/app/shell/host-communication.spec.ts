@@ -15,30 +15,30 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {HostCommunicationService} from './host-communication';
-import {StartupResolutionService} from './startup-resolution';
+import {HostCommunication} from './host-communication';
+import {StartupResolution} from './startup-resolution';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
-describe('HostCommunicationService', () => {
-  let service: HostCommunicationService;
-  let startupResolutionServiceMock: Partial<StartupResolutionService>;
+describe('HostCommunication', () => {
+  let service: HostCommunication;
+  let startupResolutionMock: Partial<StartupResolution>;
 
   beforeEach(() => {
-    startupResolutionServiceMock = {
+    startupResolutionMock = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://localhost:3000/renderer'),
     };
 
     TestBed.configureTestingModule({
       providers: [
         {
-          provide: StartupResolutionService,
-          useValue: startupResolutionServiceMock,
+          provide: StartupResolution,
+          useValue: startupResolutionMock,
         },
       ],
     });
 
-    service = TestBed.inject(HostCommunicationService);
+    service = TestBed.inject(HostCommunication);
   });
 
   afterEach(() => {
@@ -242,7 +242,7 @@ describe('HostCommunicationService', () => {
   });
 
   it('ignores incoming messages and blocks sendMessage when resolved renderer URL is null', () => {
-    startupResolutionServiceMock.getResolvedRendererUrl = vi.fn().mockReturnValue(null);
+    startupResolutionMock.getResolvedRendererUrl = vi.fn().mockReturnValue(null);
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
 
@@ -260,7 +260,7 @@ describe('HostCommunicationService', () => {
   });
 
   it('handles malformed resolved renderer URL gracefully in messageListener and sendMessage', () => {
-    startupResolutionServiceMock.getResolvedRendererUrl = vi.fn().mockReturnValue('http://[');
+    startupResolutionMock.getResolvedRendererUrl = vi.fn().mockReturnValue('http://[');
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
 
@@ -313,7 +313,7 @@ describe('HostCommunicationService', () => {
     service.ngOnDestroy();
 
     expect(removeEventListenerSpy).toHaveBeenCalledWith('message', expect.any(Function));
-    expect(window.a2uiHostCommunicationService).toBeUndefined();
+    expect(window.a2uiHostCommunication).toBeUndefined();
 
     removeEventListenerSpy.mockRestore();
   });

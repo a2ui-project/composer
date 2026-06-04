@@ -24,7 +24,7 @@ import {CachedCatalogRecord} from './catalog-storage.model';
  * Core database service providing low-level asynchronous storage access
  * to local IndexedDB instances for schema and catalog caching.
  */
-export class IndexedDbStorageService {
+export class IndexedDbStorage {
   private dbName = 'a2ui_composer_db';
   private dbVersion = 1;
   private storeName = 'catalogs';

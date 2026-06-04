@@ -16,22 +16,22 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {ChatPanelComponent} from './chat-panel';
+import {ChatPanel} from './chat-panel';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ChatPanelHarness} from './test/chat-panel.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {ChatService} from '../chat-service/chat-coordinator';
-import {ChatStateService, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
+import {ChatCoordinator} from '../chat-service/chat-coordinator';
+import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {signal, inject} from '@angular/core';
 import {LlmMessage} from '../llm-client/llm-client';
 import {MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {CatalogManagementService} from '../../storage/catalog-management';
+import {CatalogManagement} from '../../storage/catalog-management';
 import {MatDialogHarness} from '@angular/material/dialog/testing';
 import {Catalog} from '../../storage/catalog-storage.model';
 
-class MockChatStateService {
+class MockChatState {
   public readonly chatHistory = signal<LlmMessage[]>([]);
   public readonly pipelineStatus = signal<PipelineStatus>(PipelineStatus.IDLE);
   public readonly isProgrammaticStreamActive = signal<boolean>(false);
@@ -66,8 +66,8 @@ class MockChatStateService {
   }
 }
 
-class MockChatService {
-  private readonly chatState = inject(ChatStateService) as unknown as MockChatStateService;
+class MockChatCoordinator {
+  private readonly chatState = inject(ChatState) as unknown as MockChatState;
 
   public readonly systemPrompt = signal<string>('Initial system prompt instructions block');
 
@@ -82,34 +82,34 @@ class MockChatService {
   public submitPrompt = vi.fn(async (prompt: string): Promise<void> => {});
 }
 
-class MockCatalogManagementService {
+class MockCatalogManagement {
   public readonly activeCatalog = signal<Catalog | null>({}); // non-null by default
 }
 
-describe('ChatPanelComponent Gemini Dialogue Panel Integration', () => {
-  let fixture: ComponentFixture<ChatPanelComponent>;
+describe('ChatPanel Gemini Dialogue Panel Integration', () => {
+  let fixture: ComponentFixture<ChatPanel>;
   let harness: ChatPanelHarness;
-  let chatServiceMock: MockChatService;
-  let chatStateMock: MockChatStateService;
-  let catalogManagementServiceMock: MockCatalogManagementService;
+  let chatServiceMock: MockChatCoordinator;
+  let chatStateMock: MockChatState;
+  let catalogManagementServiceMock: MockCatalogManagement;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ChatPanelComponent],
+      imports: [ChatPanel],
       providers: [
         provideNoopAnimations(),
-        {provide: ChatService, useClass: MockChatService},
-        {provide: ChatStateService, useClass: MockChatStateService},
-        {provide: CatalogManagementService, useClass: MockCatalogManagementService},
+        {provide: ChatCoordinator, useClass: MockChatCoordinator},
+        {provide: ChatState, useClass: MockChatState},
+        {provide: CatalogManagement, useClass: MockCatalogManagement},
       ],
     }).compileComponents();
 
-    chatServiceMock = TestBed.inject(ChatService) as unknown as MockChatService;
-    chatStateMock = TestBed.inject(ChatStateService) as unknown as MockChatStateService;
+    chatServiceMock = TestBed.inject(ChatCoordinator) as unknown as MockChatCoordinator;
+    chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
     catalogManagementServiceMock = TestBed.inject(
-      CatalogManagementService,
-    ) as unknown as MockCatalogManagementService;
-    fixture = TestBed.createComponent(ChatPanelComponent);
+      CatalogManagement,
+    ) as unknown as MockCatalogManagement;
+    fixture = TestBed.createComponent(ChatPanel);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ChatPanelHarness);
   });

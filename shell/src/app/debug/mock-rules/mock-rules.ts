@@ -27,4 +27,4 @@ import {Component} from '@angular/core';
  * A debug drawer component allowing developers to view, inspect,
  * and configure mock business logic rules for the active catalog.
  */
-export class MockRulesComponent {}
+export class MockRules {}

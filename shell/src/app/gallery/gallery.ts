@@ -27,4 +27,4 @@ import {Component} from '@angular/core';
  * Displays a visual catalog gallery of pre-configured A2UI components
  * and layouts for rapid prototyping and reference.
  */
-export class GalleryComponent {}
+export class Gallery {}

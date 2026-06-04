@@ -15,14 +15,14 @@
  */
 
 import {Injectable, inject, signal, DestroyRef} from '@angular/core';
-import {HostCommunicationService, MessageEnvelope} from '../shell/host-communication';
+import {HostCommunication, MessageEnvelope} from '../shell/host-communication';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {Catalog} from './catalog-storage.model';
 import {concatMap, filter, from, of} from 'rxjs';
 import DOMPurify from 'dompurify';
 import stringify from 'safe-stable-stringify';
-import {IndexedDbStorageService} from './indexed-db-storage';
-import {StartupResolutionService} from '../shell/startup-resolution';
+import {IndexedDbStorage} from './indexed-db-storage';
+import {StartupResolution} from '../shell/startup-resolution';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 @Injectable({
@@ -32,10 +32,10 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
  * Coordinates client sidepanel integration, managing live visual schemas,
  * remote catalog assets, and establishing active rendering contexts.
  */
-export class CatalogManagementService {
-  private readonly hostCommunicationService = inject(HostCommunicationService);
-  private readonly indexedDbStorageService = inject(IndexedDbStorageService);
-  private readonly startupResolutionService = inject(StartupResolutionService);
+export class CatalogManagement {
+  private readonly hostCommunication = inject(HostCommunication);
+  private readonly indexedDbStorage = inject(IndexedDbStorage);
+  private readonly startupResolution = inject(StartupResolution);
 
   private readonly _isHandshakeInProgress = signal<boolean>(false);
   /**
@@ -119,7 +119,7 @@ export class CatalogManagementService {
       }
     });
 
-    toObservable(this.hostCommunicationService.messageStream)
+    toObservable(this.hostCommunication.messageStream)
       .pipe(
         filter((envelope): envelope is MessageEnvelope => envelope !== null),
         takeUntilDestroyed(),
@@ -133,7 +133,7 @@ export class CatalogManagementService {
             this._isHandshakeInProgress.set(true);
             this._watchdogFired.set(false);
             this._catalogError.set(null);
-            this.hostCommunicationService.sendMessage({
+            this.hostCommunication.sendMessage({
               type: PreviewBridgeMessageType.GET_CATALOG,
             });
 
@@ -213,13 +213,13 @@ export class CatalogManagementService {
                   this._lastCatalogString.set(catalogString);
                   this._lastChecksumHash.set(hashHex);
 
-                  const rendererUrl = this.startupResolutionService.getResolvedRendererUrl();
+                  const rendererUrl = this.startupResolution.getResolvedRendererUrl();
                   if (rendererUrl) {
                     const existingRecord =
-                      await this.indexedDbStorageService.getCatalogRecord(rendererUrl);
+                      await this.indexedDbStorage.getCatalogRecord(rendererUrl);
                     if (!existingRecord || existingRecord.checksumHash !== hashHex) {
                       this._catalogHashDelta.set(true);
-                      await this.indexedDbStorageService.saveCatalogRecord({
+                      await this.indexedDbStorage.saveCatalogRecord({
                         rendererUrl,
                         catalogString,
                         checksumHash: hashHex,
@@ -228,7 +228,7 @@ export class CatalogManagementService {
                     } else {
                       this._catalogHashDelta.set(false);
                       existingRecord.lastAccessed = Date.now();
-                      await this.indexedDbStorageService.saveCatalogRecord(existingRecord);
+                      await this.indexedDbStorage.saveCatalogRecord(existingRecord);
                     }
                   }
 

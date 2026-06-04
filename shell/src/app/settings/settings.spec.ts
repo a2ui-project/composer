@@ -17,12 +17,12 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {Validators} from '@angular/forms';
-import {SettingsComponent} from './settings';
+import {Settings} from './settings';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {StartupResolutionService} from '../shell/startup-resolution';
+import {StartupResolution} from '../shell/startup-resolution';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {HostCommunicationService, MessageEnvelope} from '../shell/host-communication';
-import {CatalogManagementService} from '../storage/catalog-management';
+import {HostCommunication, MessageEnvelope} from '../shell/host-communication';
+import {CatalogManagement} from '../storage/catalog-management';
 import {Catalog} from '../storage/catalog-storage.model';
 import {signal, WritableSignal, Signal, computed} from '@angular/core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
@@ -31,8 +31,8 @@ import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SettingsHarness} from './test/settings.harness';
 
-describe('SettingsComponent', () => {
-  let mockStartupResolutionService: {
+describe('Settings', () => {
+  let mockStartupResolution: {
     getResolvedRendererUrl: ReturnType<typeof vi.fn>;
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
     isContextLocked: ReturnType<typeof vi.fn>;
@@ -59,7 +59,7 @@ describe('SettingsComponent', () => {
   beforeEach(() => {
     localStorage.clear();
     TestBed.resetTestingModule();
-    mockStartupResolutionService = {
+    mockStartupResolution = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       isContextLocked: vi.fn().mockReturnValue(false),
@@ -79,7 +79,7 @@ describe('SettingsComponent', () => {
       if (override !== AuthType.DEFAULT) {
         return override;
       }
-      return mockStartupResolutionService.isThirdPartyEnvironment()
+      return mockStartupResolution.isThirdPartyEnvironment()
         ? AuthType.THREE_PARTY
         : AuthType.ONE_PARTY;
     });
@@ -100,7 +100,7 @@ describe('SettingsComponent', () => {
       flushConfig: vi.fn().mockImplementation(() => {
         mockAuthOverride.set(AuthType.DEFAULT);
         mockGeminiApiKey.set('');
-        mockRendererUrl.set(mockStartupResolutionService.getResolvedRendererUrl() || '');
+        mockRendererUrl.set(mockStartupResolution.getResolvedRendererUrl() || '');
       }),
     };
   });
@@ -112,20 +112,20 @@ describe('SettingsComponent', () => {
 
   async function setupComponent() {
     await TestBed.configureTestingModule({
-      imports: [SettingsComponent],
+      imports: [Settings],
       providers: [
         provideNoopAnimations(),
         {
-          provide: StartupResolutionService,
-          useValue: mockStartupResolutionService,
+          provide: StartupResolution,
+          useValue: mockStartupResolution,
         },
         {provide: AppConfigProvider, useValue: mockConfigProvider},
         {
-          provide: HostCommunicationService,
+          provide: HostCommunication,
           useValue: {latestEnvelope: mockLatestEnvelope},
         },
         {
-          provide: CatalogManagementService,
+          provide: CatalogManagement,
           useValue: {
             isHandshakeInProgress: mockIsHandshakeInProgress,
             activeCatalogTitle: mockActiveCatalogTitle,
@@ -136,7 +136,7 @@ describe('SettingsComponent', () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(SettingsComponent);
+    const fixture = TestBed.createComponent(Settings);
     const component = fixture.componentInstance;
     fixture.detectChanges();
     const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
@@ -144,7 +144,7 @@ describe('SettingsComponent', () => {
   }
 
   it('initializes form controls cleanly in 1P mode without ' + 'requiring apiKey', async () => {
-    mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(false);
+    mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
     const {component, harness} = await setupComponent();
 
     expect(component.isThirdParty()).toBe(false);
@@ -161,7 +161,7 @@ describe('SettingsComponent', () => {
   });
 
   it('enforces apiKey requirement in 3P mode and rejects ' + 'empty whitespace keys', async () => {
-    mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(true);
+    mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
     const {component, harness} = await setupComponent();
 
     expect(component.isThirdParty()).toBe(true);
@@ -175,7 +175,7 @@ describe('SettingsComponent', () => {
   });
 
   it('persists valid configurations securely in 3P environments', async () => {
-    mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(true);
+    mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
     const {component, harness} = await setupComponent();
 
     const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
@@ -195,7 +195,7 @@ describe('SettingsComponent', () => {
   it(
     'disables rendererUrl form control and displays lock warning when ' + 'context is locked',
     async () => {
-      mockStartupResolutionService.isContextLocked.mockReturnValue(true);
+      mockStartupResolution.isContextLocked.mockReturnValue(true);
       const {component, harness} = await setupComponent();
 
       expect(component.isLocked()).toBe(true);
@@ -218,7 +218,7 @@ describe('SettingsComponent', () => {
 
   it(
     'dynamically updates connection status badges and logs console when ' +
-      'HostCommunicationService and CatalogManagementService signals mutate',
+      'HostCommunication and CatalogManagement signals mutate',
     async () => {
       const {fixture, harness} = await setupComponent();
 
@@ -271,7 +271,7 @@ describe('SettingsComponent', () => {
   it(
     'toggles API key input visibility between password and text via ' + 'button clicks',
     async () => {
-      mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(true);
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
       const {fixture, harness} = await setupComponent();
 
       expect(await harness.getApiKeyInputType()).toBe('password');
@@ -290,7 +290,7 @@ describe('SettingsComponent', () => {
     'renders client-side format validation errors for missing required ' +
       'fields and malformed URL strings upon form submission',
     async () => {
-      mockStartupResolutionService.isThirdPartyEnvironment.mockReturnValue(true);
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
       const {fixture, component, harness} = await setupComponent();
 
       await harness.setRendererUrlValue('');
@@ -317,27 +317,27 @@ describe('SettingsComponent', () => {
   it(
     'renders third-party context layout when a2ui_composer_force_3p ' +
       'storage override key is present using a real ' +
-      'StartupResolutionService',
+      'StartupResolution',
     async () => {
       localStorage.setItem('a2ui_composer_force_3p', 'true');
       try {
         await TestBed.resetTestingModule();
         await TestBed.configureTestingModule({
-          imports: [SettingsComponent],
+          imports: [Settings],
           providers: [
             provideNoopAnimations(),
-            StartupResolutionService,
+            StartupResolution,
             LocalStorageAppConfigProvider,
             {
               provide: AppConfigProvider,
               useExisting: LocalStorageAppConfigProvider,
             },
             {
-              provide: HostCommunicationService,
+              provide: HostCommunication,
               useValue: {latestEnvelope: mockLatestEnvelope},
             },
             {
-              provide: CatalogManagementService,
+              provide: CatalogManagement,
               useValue: {
                 isHandshakeInProgress: mockIsHandshakeInProgress,
                 activeCatalogTitle: mockActiveCatalogTitle,
@@ -348,7 +348,7 @@ describe('SettingsComponent', () => {
           ],
         }).compileComponents();
 
-        const fixture = TestBed.createComponent(SettingsComponent);
+        const fixture = TestBed.createComponent(Settings);
         const component = fixture.componentInstance;
         fixture.detectChanges();
         const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
@@ -393,7 +393,7 @@ describe('SettingsComponent', () => {
     'disables the slide toggle and displays the auth-locked-notice ' +
       'warning badge when isContextLocked returns true',
     async () => {
-      mockStartupResolutionService.isContextLocked.mockReturnValue(true);
+      mockStartupResolution.isContextLocked.mockReturnValue(true);
       const {fixture, component, harness} = await setupComponent();
 
       expect(component.isLocked()).toBe(true);
