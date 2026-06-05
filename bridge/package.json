@@ -9,20 +9,20 @@
       "default": "./dist/preview-bridge.js"
     },
     "./lit": {
-      "types": "./dist/lit/lit-bridge.d.ts",
-      "default": "./dist/lit/lit-bridge.js"
+      "types": "./dist/lit/index.d.ts",
+      "default": "./dist/lit/index.js"
     },
     "./angular": {
-      "types": "./dist/angular/angular-bridge.d.ts",
-      "default": "./dist/angular/angular-bridge.js"
+      "types": "./dist/angular/index.d.ts",
+      "default": "./dist/angular/index.js"
     },
     "./react": {
-      "types": "./dist/react/react-bridge.d.ts",
-      "default": "./dist/react/react-bridge.js"
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
     }
   },
   "scripts": {
-    "build": "esbuild src/preview-bridge.ts src/lit/lit-bridge.ts src/angular/angular-bridge.ts src/react/react-bridge.ts --bundle --format=esm --target=es2022 --outdir=dist --tsconfig=tsconfig.bridge.json --external:lit '--external:@angular/*' '--external:@a2ui/*' '--external:react' '--external:react-dom' --external:../preview-bridge.js && tsc --project tsconfig.bridge.json --emitDeclarationOnly",
+    "build": "esbuild src/preview-bridge.ts src/lit/lit-bridge.ts src/angular/angular-bridge.ts src/react/react-bridge.ts src/lit/index.ts src/angular/index.ts src/react/index.ts --bundle --format=esm --target=es2022 --outdir=dist --tsconfig=tsconfig.bridge.json --external:lit '--external:@angular/*' '--external:@a2ui/*' '--external:react' '--external:react-dom' --external:../preview-bridge.js && tsc --project tsconfig.bridge.json --emitDeclarationOnly",
     "clean": "rm -rf dist",
     "test": "NODE_ENV=test vitest run",
     "prettier": "prettier --ignore-path ../.prettierignore --write . | grep -v '(unchanged)'"
