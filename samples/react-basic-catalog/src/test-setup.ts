@@ -14,29 +14,10 @@
  * limitations under the License.
  */
 
-import {defineConfig} from 'vitest/config';
-import angular from '@analogjs/vite-plugin-angular';
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
 
-export default defineConfig({
-  esbuild: false,
-  plugins: [angular({jit: false, tsconfig: './tsconfig.spec.json', oxc: false})],
-  resolve: {
-    dedupe: ['@angular/core', '@a2ui/angular', 'a2ui-bridge'],
-  },
-  test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/test-setup.ts'],
-    deps: {
-      optimizer: {
-        web: {
-          include: ['@a2ui/angular'],
-        },
-      },
-    },
-    server: {
-      deps: {
-        inline: true,
-      },
-    },
-  },
-});
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+export {};

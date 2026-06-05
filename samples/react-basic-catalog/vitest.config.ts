@@ -32,6 +32,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    setupFiles: ['./src/test-setup.ts'],
     server: {
       deps: {
         inline: ['@a2ui/react', '@a2ui/web_core'],

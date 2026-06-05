@@ -15,39 +15,133 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {provideRouter} from '@angular/router';
+import {provideRouter, Router} from '@angular/router';
+import {RouterTestingHarness} from '@angular/router/testing';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
+import {signal} from '@angular/core';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {routes} from './app.routes';
-import {describe, it, expect, beforeEach} from 'vitest';
+import {StartupResolution} from './shell/startup-resolution';
+import {ChatState} from './chat/chat-state/chat-state';
+import {ChatCoordinator} from './chat/chat-service/chat-coordinator';
+import {StateSync} from './chat/state-sync/state-sync';
+import {AppConfigProvider, EnvMode, AuthType} from './settings/app-config-provider';
+import {LlmClient} from './chat/llm-client/llm-client';
+import {CatalogManagement} from './storage/catalog-management';
+import {IndexedDbStorage} from './storage/indexed-db-storage';
+import {LocalStorageInteractions} from './settings/local-storage-interactions';
+import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
 
-describe('App Routes', () => {
-  beforeEach(() => {
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [provideRouter(routes)],
-    });
+class MockStartupResolution {
+  public readonly resolvedUrl = signal('http://localhost:4200');
+  public readonly isLockedContext = signal(false);
+  public isEnvironmentValid = vi.fn().mockReturnValue(true);
+  public isExtensionMode = vi.fn().mockReturnValue(false);
+  public isContextLocked = vi.fn().mockReturnValue(false);
+  public getResolvedRendererUrl = vi.fn().mockReturnValue('http://localhost:4200');
+  public isThirdPartyEnvironment = vi.fn().mockReturnValue(false);
+}
+
+class MockChatState {
+  public readonly chatHistory = signal([]);
+  public readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  public readonly isProgrammaticStreamActive = signal(false);
+  public readonly latestLlmLog = signal(null);
+  public readonly llmHistory = signal([]);
+}
+
+class MockChatCoordinator {
+  public readonly systemPrompt = signal('');
+  public readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  public readonly isProgrammaticStreamActive = signal(false);
+}
+
+class MockStateSync {
+  public readonly activeDraft = signal('{}');
+  public updateDraft = vi.fn();
+  public hydrateActiveDraft = vi.fn(() => '{}');
+}
+
+class MockAppConfigProvider {
+  public readonly envMode = signal(EnvMode.STANDALONE);
+  public readonly authType = signal(AuthType.ONE_PARTY);
+  public readonly rendererUrl = signal('http://localhost:4200/renderer');
+  public readonly geminiApiKey = signal('');
+  public readonly themePreference = signal('light');
+  public setThemePreference = vi.fn();
+  public setGeminiApiKey = vi.fn();
+  public setRendererUrl = vi.fn();
+}
+
+describe('App Routes Active Verification', () => {
+  let harness: RouterTestingHarness;
+  let router: Router;
+  let mockStartupResolution: MockStartupResolution;
+
+  beforeEach(async () => {
+    mockStartupResolution = new MockStartupResolution();
+
+    await TestBed.configureTestingModule({
+      providers: [
+        provideRouter(routes),
+        provideNoopAnimations(),
+        {provide: StartupResolution, useValue: mockStartupResolution},
+        {provide: ChatState, useClass: MockChatState},
+        {provide: ChatCoordinator, useClass: MockChatCoordinator},
+        {provide: StateSync, useClass: MockStateSync},
+        {provide: AppConfigProvider, useClass: MockAppConfigProvider},
+        {provide: LlmClient, useValue: {chat: vi.fn(), chatStream: vi.fn()}},
+        {
+          provide: CatalogManagement,
+          useValue: {
+            activeCatalogTitle: signal(''),
+            activeCatalogDescription: signal(''),
+            activeCatalog: signal(null),
+            catalogError: signal(null),
+            isHandshakeInProgress: signal(false),
+            watchdogFired: signal(false),
+            lastCatalogString: signal(''),
+            lastChecksumHash: signal(''),
+            catalogHashDelta: signal(false),
+          },
+        },
+        {
+          provide: IndexedDbStorage,
+          useValue: {flushAllRecords: vi.fn().mockResolvedValue(undefined)},
+        },
+        {
+          provide: LocalStorageInteractions,
+          useValue: {removeItem: vi.fn(), getItem: vi.fn().mockReturnValue(null)},
+        },
+      ],
+    }).compileComponents();
+
+    harness = await RouterTestingHarness.create();
+    router = TestBed.inject(Router);
   });
 
-  it('defines routing pathway for the central workspace dashboard', () => {
-    const parentRoute = routes.find(r => r.path === '');
-    expect(parentRoute).toBeTruthy();
-    const childRoute = parentRoute?.children?.find(r => r.path === '');
-    expect(childRoute).toBeTruthy();
-    expect(childRoute?.title).toBe('A2UI Composer Workspace');
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('defines routing pathway for the components gallery placeholder', () => {
-    const parentRoute = routes.find(r => r.path === '');
-    expect(parentRoute).toBeTruthy();
-    const childRoute = parentRoute?.children?.find(r => r.path === 'gallery');
-    expect(childRoute).toBeTruthy();
-    expect(childRoute?.title).toBe('A2UI Components Gallery');
+  it('activates root workspace dashboard pathway on valid environment', async () => {
+    await harness.navigateByUrl('/');
+    expect(router.url).toBe('/');
   });
 
-  it('defines routing pathway for the settings configuration view', () => {
-    const parentRoute = routes.find(r => r.path === '');
-    expect(parentRoute).toBeTruthy();
-    const childRoute = parentRoute?.children?.find(r => r.path === 'settings');
-    expect(childRoute).toBeTruthy();
-    expect(childRoute?.title).toBe('A2UI Composer Settings');
+  it('activates gallery pathway on gallery route navigation', async () => {
+    await harness.navigateByUrl('/gallery');
+    expect(router.url).toBe('/gallery');
+  });
+
+  it('redirects to settings view when environment evaluates as invalid', async () => {
+    mockStartupResolution.isEnvironmentValid.mockReturnValue(false);
+    await harness.navigateByUrl('/');
+    expect(router.url).toBe('/settings');
+  });
+
+  it('redirects unknown wildcard pathways to root route', async () => {
+    await harness.navigateByUrl('/unknown-wildcard-route');
+    expect(router.url).toBe('/');
   });
 });

@@ -9814,6 +9814,7 @@ __metadata:
     "@angular/platform-browser": "npm:21.2.12"
     "@angular/platform-browser-dynamic": "npm:21.2.12"
     "@angular/router": "npm:21.2.12"
+    "@types/jsdom": "npm:21.1.7"
     a2ui-bridge: "npm:0.1.0"
     jsdom: "npm:29.1.1"
     prettier: "npm:3.8.3"
