@@ -16,7 +16,7 @@
 
 // @vitest-environment jsdom
 import {describe, it, expect, afterEach, vi} from 'vitest';
-import {useA2uiSandbox} from './index';
+import {useA2uiSandbox} from './react-bridge';
 import {a2uiBridge} from '../preview-bridge';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import React from 'react';

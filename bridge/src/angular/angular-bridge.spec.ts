@@ -18,7 +18,7 @@ import '@angular/compiler';
 
 // @vitest-environment jsdom
 import {describe, it, expect, afterEach, beforeEach, vi, Mock} from 'vitest';
-import {A2uiSandboxConnection} from './index';
+import {A2uiSandboxConnection} from './angular-bridge';
 import {a2uiBridge} from '../preview-bridge';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 
