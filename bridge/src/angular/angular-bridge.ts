@@ -53,10 +53,10 @@ export class A2uiSandboxConnection implements OnDestroy {
   readonly surfaceId = signal('');
 
   /** Resolves the central rendering service provider from the injector context. */
-  private rendererService = inject(A2uiRendererService);
+  private readonly rendererService = inject(A2uiRendererService);
 
   /** Optional injected dynamic renderer configuration options block. */
-  private rendererConfig = inject(A2UI_RENDERER_CONFIG);
+  private readonly rendererConfig = inject(A2UI_RENDERER_CONFIG);
 
   /** The dynamic teardown handle for the active framework renderer connection subscription. */
   private rendererConnection: SurfaceStateSubscription | null = null;
@@ -75,8 +75,8 @@ export class A2uiSandboxConnection implements OnDestroy {
     };
     this.rendererConnection = a2uiBridge.attachRenderer(processor, {
       surfaceGroup: this.rendererService.surfaceGroup,
-      onCatalogResolved: catalogId => {
-        const catalogs = this.rendererConfig.catalogs;
+      onCatalogResolved: (catalogId: string) => {
+        const catalogs = this.rendererConfig?.catalogs;
         if (catalogs) {
           for (const catalog of catalogs) {
             if (catalog) {
@@ -85,7 +85,7 @@ export class A2uiSandboxConnection implements OnDestroy {
           }
         }
       },
-      onSurfaceReady: surfaceId => {
+      onSurfaceReady: (surfaceId: string) => {
         this.surfaceId.set(surfaceId);
       },
       onSurfaceCleared: () => {
@@ -101,10 +101,8 @@ export class A2uiSandboxConnection implements OnDestroy {
    * to prevent memory leaks and observer bloat in high-frequency test runs.
    */
   ngOnDestroy() {
-    if (this.rendererConnection) {
-      this.rendererConnection.unsubscribe();
-      this.rendererConnection = null;
-    }
+    this.rendererConnection?.unsubscribe();
+    this.rendererConnection = null;
   }
 }
 

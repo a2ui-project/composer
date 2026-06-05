@@ -14,8 +14,25 @@
  * limitations under the License.
  */
 
-import {a2uiBridge} from './preview-bridge';
-import {PreviewBridgeMessageType} from './bridge-message';
+import {PreviewBridgeMessageType, BridgeMessage} from './bridge-message';
+
+export interface TelemetrySender {
+  sendMessage(msg: BridgeMessage): void;
+}
+
+let isInstrumented: boolean;
+const methods: Array<'log' | 'warn' | 'error' | 'info' | 'debug'> = [
+  'log',
+  'warn',
+  'error',
+  'info',
+  'debug',
+];
+let originalConsoleMethods: Partial<
+  Record<'log' | 'warn' | 'error' | 'info' | 'debug', (...args: unknown[]) => void>
+>;
+let originalOnError: OnErrorEventHandler;
+let rejectionHandler: ((event: PromiseRejectionEvent) => void) | null;
 
 /**
  * Safely and deeply clones a value or object, resolving potential serialization
@@ -103,24 +120,26 @@ function deepCloneSafe(obj: unknown, ancestors: Set<unknown> = new Set<unknown>(
  * during serialization failures or when logging from within the interceptor itself).
  * If run outside a browser context (e.g. Server-Side Rendering), the function immediately returns.
  */
-export function setupInstrumentationOverrides(): void {
-  if (typeof window === 'undefined') return;
+interface InstrumentedConsoleMethod {
+  (...args: unknown[]): void;
+  __a2uiOriginal?: (...args: unknown[]) => void;
+}
 
-  const originalConsoleError = console.error;
-  let isSerializing = false;
+/**
+ * Safely invokes the pristine `console.error` (if preserved) or native `console.error`
+ * to report telemetry execution failures without causing recursive loops.
+ */
+function logTelemetryError(label: string, err: unknown): void {
+  const originalError = (originalConsoleMethods && originalConsoleMethods.error) || console.error;
+  originalError.call(console, label, err);
+}
 
-  const methods: Array<'log' | 'warn' | 'error' | 'info' | 'debug'> = [
-    'log',
-    'warn',
-    'error',
-    'info',
-    'debug',
-  ];
-
-  interface InstrumentedConsoleMethod {
-    (...args: unknown[]): void;
-    __a2uiOriginal?: (...args: unknown[]) => void;
+function overrideConsoleMethods(sender: TelemetrySender): void {
+  if (!originalConsoleMethods) {
+    originalConsoleMethods = {};
   }
+
+  let isSerializing = false;
 
   methods.forEach(method => {
     const current = console[method] as InstrumentedConsoleMethod;
@@ -129,6 +148,7 @@ export function setupInstrumentationOverrides(): void {
       return;
     }
     const original = current;
+    originalConsoleMethods[method] = original;
     const wrapper = (...args: unknown[]) => {
       original.apply(console, args);
 
@@ -149,7 +169,7 @@ export function setupInstrumentationOverrides(): void {
         const errorArg = args.find(arg => arg instanceof Error);
         const stack = errorArg ? (errorArg as Error).stack : undefined;
 
-        a2uiBridge.sendMessage({
+        sender.sendMessage({
           type: PreviewBridgeMessageType.CONSOLE_LOG,
           payload: {
             level: method,
@@ -158,7 +178,7 @@ export function setupInstrumentationOverrides(): void {
           },
         });
       } catch (err) {
-        originalConsoleError.call(console, 'A2UI Bridge Telemetry Error (Console):', err);
+        logTelemetryError('A2UI Bridge Telemetry Error (Console):', err);
       } finally {
         isSerializing = false;
       }
@@ -166,8 +186,10 @@ export function setupInstrumentationOverrides(): void {
     (wrapper as InstrumentedConsoleMethod).__a2uiOriginal = original;
     console[method] = wrapper;
   });
+}
 
-  const originalOnError = window.onerror;
+function overrideWindowError(sender: TelemetrySender): void {
+  originalOnError = window.onerror;
 
   window.onerror = (
     message: string | Event,
@@ -177,7 +199,7 @@ export function setupInstrumentationOverrides(): void {
     error: Error | undefined,
   ): boolean => {
     try {
-      a2uiBridge.sendMessage({
+      sender.sendMessage({
         type: PreviewBridgeMessageType.CONSOLE_LOG,
         payload: {
           level: 'error',
@@ -186,7 +208,7 @@ export function setupInstrumentationOverrides(): void {
         },
       });
     } catch (err) {
-      originalConsoleError.call(console, 'A2UI Bridge Telemetry Error (Window Error):', err);
+      logTelemetryError('A2UI Bridge Telemetry Error (Window Error):', err);
     }
 
     if (originalOnError) {
@@ -196,8 +218,10 @@ export function setupInstrumentationOverrides(): void {
     }
     return false;
   };
+}
 
-  window.addEventListener('unhandledrejection', event => {
+function overrideUnhandledRejection(sender: TelemetrySender): void {
+  rejectionHandler = event => {
     try {
       // Extracts the rejection reason from the event, determining whether it
       // is a standard `Error` object (retaining its message and stack trace)
@@ -207,7 +231,7 @@ export function setupInstrumentationOverrides(): void {
       const message = event.reason instanceof Error ? event.reason.message : String(event.reason);
       const stack = event.reason instanceof Error ? event.reason.stack : undefined;
 
-      a2uiBridge.sendMessage({
+      sender.sendMessage({
         type: PreviewBridgeMessageType.CONSOLE_LOG,
         payload: {
           level: 'error',
@@ -216,8 +240,43 @@ export function setupInstrumentationOverrides(): void {
         },
       });
     } catch (err) {
-      originalConsoleError.call(console, 'A2UI Bridge Telemetry Error (Unhandled Rejection):', err);
+      logTelemetryError('A2UI Bridge Telemetry Error (Unhandled Rejection):', err);
+    }
+  };
+
+  window.addEventListener('unhandledrejection', rejectionHandler);
+}
+
+export function setupInstrumentationOverrides(sender: TelemetrySender): void {
+  if (isInstrumented || typeof window === 'undefined') return;
+  isInstrumented = true;
+
+  overrideConsoleMethods(sender);
+  overrideWindowError(sender);
+  overrideUnhandledRejection(sender);
+}
+
+/**
+ * Unrolls console overrides, restores window.onerror, and removes event listeners
+ * to cleanly teardown telemetry instrumentation.
+ */
+export function teardownInstrumentationOverrides(): void {
+  if (!isInstrumented || typeof window === 'undefined') return;
+
+  methods.forEach(method => {
+    if (originalConsoleMethods[method]) {
+      console[method] = originalConsoleMethods[method]!;
     }
   });
+  originalConsoleMethods = {};
+
+  window.onerror = originalOnError;
+  originalOnError = null;
+
+  if (rejectionHandler) {
+    window.removeEventListener('unhandledrejection', rejectionHandler);
+    rejectionHandler = null;
+  }
+
+  isInstrumented = false;
 }
-setupInstrumentationOverrides();

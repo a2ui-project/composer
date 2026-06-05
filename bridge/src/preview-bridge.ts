@@ -13,7 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import './instrumentation-overrides';
+import {
+  setupInstrumentationOverrides,
+  teardownInstrumentationOverrides,
+} from './instrumentation-overrides';
 
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
@@ -141,6 +144,7 @@ export class PreviewBridge {
    */
   constructor() {
     this.initMessageListener();
+    setupInstrumentationOverrides(this);
   }
 
   /**
@@ -205,6 +209,7 @@ export class PreviewBridge {
    * Highly critical to invoke in hot-reloads or test tear-downs to avoid memory leaks and test pollution.
    */
   destroy(): void {
+    teardownInstrumentationOverrides();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
     }
@@ -611,73 +616,69 @@ export class PreviewBridge {
   }
 
   /**
+   * Coordinates in-memory retrieval (`catalogJson`) vs. HTTP network fetching
+   * (including SPA HTML fallback to `/catalog.json`).
+   */
+  private async resolveCatalog(): Promise<{
+    rawData: unknown;
+    isInMemory: boolean;
+  } | null> {
+    const config = this.activeRenderer?.config;
+    const inMemoryCatalog = config?.catalogJson ?? config?.catalog;
+    if (inMemoryCatalog !== undefined) {
+      return {rawData: inMemoryCatalog, isInMemory: true};
+    }
+
+    if (typeof window === 'undefined' || !window.fetch) return null;
+
+    let res = await this.fetchWithTimeout('/catalog');
+    if (!res.ok) {
+      throw new Error(`Catalog fetch failed with status: ${res.status}`);
+    }
+    let rawText = await res.text();
+
+    // Detect if the server fell back to serving HTML (SPA fallback)
+    const trimmedLower = rawText.trim().toLowerCase();
+    const isHtml = trimmedLower.startsWith('<!doctype html') || trimmedLower.startsWith('<html');
+    if (isHtml) {
+      const fallbackRes = await this.fetchWithTimeout('/catalog.json');
+      if (!fallbackRes.ok) {
+        throw new Error(
+          `Catalog fetch returned HTML and fallback to /catalog.json failed with status: ${fallbackRes.status}`,
+        );
+      }
+      res = fallbackRes;
+      rawText = await res.text();
+    }
+
+    return {rawData: rawText, isInMemory: false};
+  }
+
+  /**
+   * Strips potential XSSI vulnerability prefixes (`)]}'\n`) and executes `JSON.parse()`.
+   */
+  private parseCatalogData(data: unknown): unknown {
+    if (typeof data === 'string') {
+      const safetyPrefix = ")]}'\n";
+      const jsonText = data.startsWith(safetyPrefix) ? data.substring(safetyPrefix.length) : data;
+      return JSON.parse(jsonText);
+    }
+    return data;
+  }
+
+  /**
    * Handles static requests to retrieve catalog configuration definitions.
    * Attempts to fetch from the catalog endpoint, implements fallback mechanisms to handle SPA
    * router redirects, strips JSON vulnerability safety prefixes, and transmits the resulting
    * JSON payload or error status back to the host container.
    */
   private async handleGetCatalog(): Promise<void> {
-    const config = this.activeRenderer?.config;
-    const inMemoryCatalog = config?.catalogJson ?? config?.catalog;
-    if (inMemoryCatalog !== undefined) {
-      try {
-        let catalog = inMemoryCatalog;
-        if (typeof catalog === 'string') {
-          const safetyPrefix = ")]}'\n";
-          const jsonText = catalog.startsWith(safetyPrefix)
-            ? catalog.substring(safetyPrefix.length)
-            : catalog;
-          catalog = JSON.parse(jsonText);
-        }
-
-        const catalogId = (catalog as {catalogId?: string})?.catalogId;
-        if (catalogId) {
-          this.notifyCatalogResolved(catalogId);
-        }
-
-        this.sendMessage({
-          type: PreviewBridgeMessageType.A2UI_CATALOG,
-          payload: catalog,
-        });
-        return;
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error('PreviewBridge: Error processing/parsing in-memory catalog:', error);
-        this.sendMessage({
-          type: PreviewBridgeMessageType.A2UI_CATALOG,
-          payload: {error: {message: errorMessage}},
-        });
-        return;
-      }
-    }
-
-    if (typeof window === 'undefined' || !window.fetch) return;
+    let resolved: {rawData: unknown; isInMemory: boolean} | null = null;
     try {
-      let res = await this.fetchWithTimeout('/catalog');
-      if (!res.ok) {
-        throw new Error(`Catalog fetch failed with status: ${res.status}`);
-      }
-      let rawText = await res.text();
+      resolved = await this.resolveCatalog();
+      if (!resolved) return;
 
-      // Detect if the server fell back to serving HTML (SPA fallback)
-      const trimmedLower = rawText.trim().toLowerCase();
-      const isHtml = trimmedLower.startsWith('<!doctype html') || trimmedLower.startsWith('<html');
-      if (isHtml) {
-        const fallbackRes = await this.fetchWithTimeout('/catalog.json');
-        if (!fallbackRes.ok) {
-          throw new Error(
-            `Catalog fetch returned HTML and fallback to /catalog.json failed with status: ${fallbackRes.status}`,
-          );
-        }
-        res = fallbackRes;
-        rawText = await res.text();
-      }
-
-      const safetyPrefix = ")]}'\n";
-      const jsonText = rawText.startsWith(safetyPrefix)
-        ? rawText.substring(safetyPrefix.length)
-        : rawText;
-      const catalog = JSON.parse(jsonText);
+      const catalog = this.parseCatalogData(resolved.rawData);
 
       const catalogId = (catalog as {catalogId?: string})?.catalogId;
       if (catalogId) {
@@ -690,6 +691,9 @@ export class PreviewBridge {
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      if (resolved?.isInMemory) {
+        console.error('PreviewBridge: Error processing/parsing in-memory catalog:', error);
+      }
       this.sendMessage({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: {error: {message: errorMessage}},

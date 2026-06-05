@@ -14,36 +14,35 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, beforeEach, afterEach, beforeAll, vi, MockInstance} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi, MockInstance} from 'vitest';
 
 const consoleErrorSpy = vi.hoisted(() => {
   return vi.spyOn(console, 'error').mockImplementation(() => {});
 });
-import {setupInstrumentationOverrides} from './instrumentation-overrides';
-import {a2uiBridge} from './preview-bridge';
+import {
+  setupInstrumentationOverrides,
+  teardownInstrumentationOverrides,
+  TelemetrySender,
+} from './instrumentation-overrides';
 import {PreviewBridgeMessageType} from './bridge-message';
 
 describe('InstrumentationOverrides Diagnostics Telemetry', () => {
   let spy: MockInstance;
-  let originalLog: (...data: unknown[]) => void;
-  let originalOnError: OnErrorEventHandler;
-
-  beforeAll(() => {
-    setupInstrumentationOverrides();
-  });
+  let mockSender: TelemetrySender;
 
   beforeEach(() => {
-    spy = vi.spyOn(a2uiBridge, 'sendMessage').mockImplementation(() => {});
-    originalLog = console.log;
-    originalOnError = window.onerror;
+    teardownInstrumentationOverrides();
+    mockSender = {
+      sendMessage: () => {},
+    };
+    spy = vi.spyOn(mockSender, 'sendMessage').mockImplementation(() => {});
+    setupInstrumentationOverrides(mockSender);
   });
 
   afterEach(() => {
-    console.log = originalLog;
-    window.onerror = originalOnError;
+    teardownInstrumentationOverrides();
     consoleErrorSpy.mockClear();
     spy.mockClear();
-    vi.restoreAllMocks();
   });
 
   it('captures native console.log calls routing telemetry directly to the bridge interface', () => {
@@ -287,10 +286,12 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
   });
 
   it('delegates to the original window.onerror handler after capturing error telemetry', () => {
+    teardownInstrumentationOverrides();
+
     const originalOnErrorMock = vi.fn();
     window.onerror = originalOnErrorMock;
 
-    setupInstrumentationOverrides();
+    setupInstrumentationOverrides(mockSender);
 
     if (window.onerror) {
       window.onerror('Script failed', 'app.js', 20, 10);
@@ -337,5 +338,12 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
         }),
       }),
     );
+  });
+
+  it('restores original console methods and error handlers upon teardown', () => {
+    const wrappedLog = console.log;
+    teardownInstrumentationOverrides();
+
+    expect(console.log).not.toBe(wrappedLog);
   });
 });
