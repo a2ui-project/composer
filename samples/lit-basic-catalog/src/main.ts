@@ -17,10 +17,12 @@
 import {bootstrapLitSandbox} from 'a2ui-bridge/lit';
 import {basicCatalog} from '@a2ui/lit/v0_9';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
+import {renderMarkdown} from '@a2ui/markdown-it';
 
 // Export AppRoot class constructor value with a safe double cast to bypass duplicate-dependency nominal mismatches:
 export const AppRoot = bootstrapLitSandbox([basicCatalog as unknown as Catalog<ComponentApi>], {
   elementTagName: 'app-root',
+  markdownRenderer: renderMarkdown,
 });
 
 // Export AppRoot instance type under same name (type/value namespace merging)

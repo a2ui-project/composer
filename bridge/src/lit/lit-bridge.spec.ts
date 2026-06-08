@@ -30,6 +30,7 @@ describe('Lit Framework Adapter Spec', () => {
     // Clear global state to not pollute other tests
     A2uiSandboxRoot.catalogs = [];
     A2uiSandboxRoot.catalogJson = undefined;
+    A2uiSandboxRoot.markdownRenderer = undefined;
     a2uiBridge.destroy();
   });
 
@@ -83,5 +84,43 @@ describe('Lit Framework Adapter Spec', () => {
     expect(A2uiSandboxRoot.catalogs[0].id).toBe('urn:a2ui:catalog:resolved_dynamic_id');
 
     element.remove();
+  });
+
+  it('handles context-request events for A2UIMarkdown and cleanly removes the listener on disconnect', () => {
+    bootstrapLitSandbox([dummyCatalog], {
+      elementTagName: 'lit-test-element',
+      markdownRenderer: (text: string) => `<h1>${text}</h1>` as any,
+    });
+
+    const element = new A2uiSandboxRoot();
+    document.body.appendChild(element);
+
+    let resolvedRenderer: any = null;
+    const contextEvent = new CustomEvent('context-request', {
+      bubbles: true,
+      composed: true,
+    }) as any;
+    contextEvent.context = 'A2UIMarkdown';
+    contextEvent.callback = (renderer: any) => {
+      resolvedRenderer = renderer;
+    };
+
+    element.dispatchEvent(contextEvent);
+    expect(resolvedRenderer).toBeDefined();
+
+    // Verify cleanup on disconnect
+    element.remove();
+    let afterRemoveRenderer: any = null;
+    const postRemoveEvent = new CustomEvent('context-request', {
+      bubbles: true,
+      composed: true,
+    }) as any;
+    postRemoveEvent.context = 'A2UIMarkdown';
+    postRemoveEvent.callback = (renderer: any) => {
+      afterRemoveRenderer = renderer;
+    };
+
+    element.dispatchEvent(postRemoveEvent);
+    expect(afterRemoveRenderer).toBeNull();
   });
 });

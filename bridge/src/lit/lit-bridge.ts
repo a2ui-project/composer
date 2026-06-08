@@ -16,13 +16,18 @@
 
 import {LitElement, html, TemplateResult} from 'lit';
 import {state} from 'lit/decorators.js';
+import {ContextProvider} from '@lit/context';
+import {Context} from '@a2ui/lit/v0_9';
 import {MessageProcessor, Catalog, ComponentApi, SurfaceModel} from '@a2ui/web_core/v0_9';
+import type {MarkdownRenderer} from '@a2ui/web_core/types/types';
 import {a2uiBridge, SurfaceStateSubscription} from '../preview-bridge.js';
 
 // Expose on the module scope for pristine, absolute compiler typings resolutions:
 export interface LitSandboxOptions {
   /** The custom tag name of the custom HTML elements shell (Default: 'app-root') */
   elementTagName?: string;
+  /** Optional custom markdown rendering delegate callback hook */
+  markdownRenderer?: MarkdownRenderer;
   /** Optional preloaded catalog JSON data, provided directly in memory. */
   catalogJson?: unknown;
 }
@@ -32,19 +37,45 @@ export class A2uiSandboxRoot extends LitElement {
   static catalogs: Catalog<ComponentApi>[] = [];
   /** Optional preloaded catalog JSON data shared statically */
   static catalogJson?: unknown = undefined;
+  /** Optional custom markdown renderer callback shared statically */
+  static markdownRenderer?: MarkdownRenderer = undefined;
 
   // Core dynamic processing engine mapping actions outbox proxies
   private processor = new MessageProcessor(A2uiSandboxRoot.catalogs, action => {
     a2uiBridge.sendAction(action);
   });
 
+  private markdownProvider = new ContextProvider(this, {
+    context: Context.markdown,
+    initialValue: A2uiSandboxRoot.markdownRenderer,
+  });
+
+  get markdownRenderer(): MarkdownRenderer | undefined {
+    return this.markdownProvider.value;
+  }
+  set markdownRenderer(value: MarkdownRenderer | undefined) {
+    this.markdownProvider.setValue(value);
+  }
+
   @state()
   private surface?: SurfaceModel;
 
   private rendererConnection: SurfaceStateSubscription | null = null;
 
+  private contextRequestListener = (ev: any) => {
+    const contextStr = String(ev.context?.id || ev.context?.__context__ || ev.context || '');
+    if (this.markdownRenderer && contextStr.includes('A2UIMarkdown')) {
+      ev.stopPropagation();
+      ev.callback?.(this.markdownRenderer);
+    }
+  };
+
   connectedCallback() {
     super.connectedCallback();
+    this.markdownRenderer =
+      (this.constructor as typeof A2uiSandboxRoot).markdownRenderer ||
+      A2uiSandboxRoot.markdownRenderer;
+    this.addEventListener('context-request', this.contextRequestListener);
     this.rendererConnection?.unsubscribe();
     this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
       surfaceGroup: this.processor.model,
@@ -69,6 +100,7 @@ export class A2uiSandboxRoot extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this.removeEventListener('context-request', this.contextRequestListener);
     if (this.rendererConnection) {
       this.rendererConnection.unsubscribe();
       this.rendererConnection = null;
@@ -105,6 +137,7 @@ export function bootstrapLitSandbox<T extends ComponentApi>(
   // Sets dynamic, catalog-specific shared variables with standard safe base casting
   A2uiSandboxRoot.catalogs = catalogs as Catalog<ComponentApi>[];
   A2uiSandboxRoot.catalogJson = options?.catalogJson;
+  A2uiSandboxRoot.markdownRenderer = options?.markdownRenderer;
 
   if (!customElements.get(elementTagName)) {
     customElements.define(elementTagName, A2uiSandboxRoot);

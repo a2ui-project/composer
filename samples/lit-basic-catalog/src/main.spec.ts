@@ -23,6 +23,7 @@ describe('AppRoot Lit Element', () => {
   let element: AppRoot;
 
   beforeEach(async () => {
+    document.adoptedStyleSheets = document.adoptedStyleSheets || [];
     element = new AppRoot();
     document.body.appendChild(element);
     await element.updateComplete;
@@ -95,5 +96,52 @@ describe('AppRoot Lit Element', () => {
     const attachSpy = vi.spyOn(element['rendererConnection']!, 'unsubscribe');
     element.disconnectedCallback();
     expect(attachSpy).toHaveBeenCalled();
+  });
+
+  it('renders Markdown text without logging missing renderer warning', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const mockPayload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'markdown-surface-123',
+          catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'markdown-surface-123',
+          components: [
+            {
+              component: 'Text',
+              id: 'root',
+              text: '**bold text**',
+            },
+          ],
+        },
+      },
+    ];
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        origin: window.location.origin,
+        data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload: mockPayload},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await element.updateComplete;
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('[MarkdownDirective]'),
+      expect.any(String),
+      expect.any(String),
+    );
+    const surfaceEl = element.shadowRoot?.querySelector('a2ui-surface');
+    await (surfaceEl as unknown as {updateComplete: Promise<void>})?.updateComplete;
+    const textEl = surfaceEl?.shadowRoot?.querySelector('a2ui-basic-text');
+    await (textEl as unknown as {updateComplete: Promise<void>})?.updateComplete;
+    expect(textEl?.shadowRoot?.innerHTML).toContain('<strong>bold text</strong>');
   });
 });
