@@ -307,6 +307,94 @@ describe('HostCommunication', () => {
     expect(history[0].type).toBe(PreviewBridgeMessageType.RENDERER_READY);
   });
 
+  it('buffers early messages when no iframe is registered and replays them upon registration', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+
+    const event = new MessageEvent('message', {
+      source: mockIframeWindow,
+      origin: 'http://localhost:3000',
+      data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {status: 'early'}},
+    });
+
+    window.dispatchEvent(event);
+
+    expect(service.latestEnvelope()).toBeNull();
+
+    service.registerIframe(mockIframeWindow);
+
+    expect(service.latestEnvelope()).toEqual({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      payload: {status: 'early'},
+      origin: 'http://localhost:3000',
+      timestamp: expect.any(Number),
+    });
+  });
+
+  it('buffers early messages when no iframe is registered and replays them upon element registration', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    const mockIFrameElement = {contentWindow: mockIframeWindow} as unknown as HTMLIFrameElement;
+
+    const event = new MessageEvent('message', {
+      source: mockIframeWindow,
+      origin: 'http://localhost:3000',
+      data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {status: 'early-element'}},
+    });
+
+    window.dispatchEvent(event);
+
+    expect(service.latestEnvelope()).toBeNull();
+
+    service.registerIframeElement(mockIFrameElement);
+
+    expect(service.latestEnvelope()).toEqual({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      payload: {status: 'early-element'},
+      origin: 'http://localhost:3000',
+      timestamp: expect.any(Number),
+    });
+  });
+
+  it('caps early message buffering strictly at 20 messages', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+
+    for (let i = 0; i < 25; i++) {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {index: i}},
+        }),
+      );
+    }
+
+    expect(service.latestEnvelope()).toBeNull();
+
+    service.registerIframe(mockIframeWindow);
+
+    const history = service.getHistoryBuffer();
+    expect(history.length).toBe(20);
+    expect(history[0].payload).toEqual({index: 0});
+    expect(history[19].payload).toEqual({index: 19});
+  });
+
+  it('purges early message buffer when iframe is unregistered or service is destroyed', () => {
+    const mockGuest = {} as Window;
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockGuest,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+      }),
+    );
+
+    service.registerIframe(null);
+
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    expect(service.latestEnvelope()).toBeNull();
+  });
+
   it('cleans up global window event listeners and properties upon destruction', () => {
     const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
 

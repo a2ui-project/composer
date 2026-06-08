@@ -57,6 +57,7 @@ export class HostCommunication implements OnDestroy {
 
   private readonly listeners = new Set<(envelope: MessageEnvelope) => void>();
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
+  private readonly earlyMessageBuffer: MessageEvent[] = [];
   private latestCatalogEnvelope: MessageEnvelope | null = null;
 
   public addListener(listener: (envelope: MessageEnvelope) => void): void {
@@ -95,7 +96,21 @@ export class HostCommunication implements OnDestroy {
 
   private readonly messageListener = (event: MessageEvent) => {
     const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
-    if (!activeWindow || event.source !== activeWindow) {
+    if (!activeWindow) {
+      const isBridgeMessage =
+        event.data &&
+        typeof event.data === 'object' &&
+        Object.values(PreviewBridgeMessageType).includes(event.data.type);
+      if (!isBridgeMessage || event.data.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+        return;
+      }
+      this.earlyMessageBuffer.push(event);
+      if (this.earlyMessageBuffer.length > 20) {
+        this.earlyMessageBuffer.shift();
+      }
+      return;
+    }
+    if (event.source !== activeWindow) {
       return;
     }
 
@@ -150,12 +165,33 @@ export class HostCommunication implements OnDestroy {
     }
   }
 
+  private flushEarlyMessages(): void {
+    const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
+    if (activeWindow && this.earlyMessageBuffer.length > 0) {
+      const messages = [...this.earlyMessageBuffer];
+      this.earlyMessageBuffer.length = 0;
+      for (const msg of messages) {
+        this.messageListener(msg);
+      }
+    }
+  }
+
   public registerIframe(contentWindow: Window | null): void {
     this.iframeWindow = contentWindow;
+    if (contentWindow === null) {
+      this.earlyMessageBuffer.length = 0;
+    } else {
+      this.flushEarlyMessages();
+    }
   }
 
   public registerIframeElement(element: HTMLIFrameElement | null): void {
     this.iframeElement = element;
+    if (element === null) {
+      this.earlyMessageBuffer.length = 0;
+    } else {
+      this.flushEarlyMessages();
+    }
   }
 
   public sendMessage(message: {type: PreviewBridgeMessageType; payload?: unknown}): void {
@@ -183,6 +219,7 @@ export class HostCommunication implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.earlyMessageBuffer.length = 0;
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
       delete window.a2uiHostCommunication;

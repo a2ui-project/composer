@@ -53,6 +53,7 @@ describe('Lit Framework Adapter Spec', () => {
 
     const element = new A2uiSandboxRoot();
     document.body.appendChild(element);
+    await new Promise(r => setTimeout(r, 0));
 
     expect(attachSpy).toHaveBeenCalled();
     const configPassed = attachSpy.mock.calls[0][1];
@@ -61,7 +62,7 @@ describe('Lit Framework Adapter Spec', () => {
     element.remove();
   });
 
-  it('aligns elements in the static catalogs array with the resolved catalogId when onCatalogResolved is triggered', () => {
+  it('aligns elements in the static catalogs array with the resolved catalogId when onCatalogResolved is triggered', async () => {
     const myCatalog = {
       id: 'https://default-catalog-id.json',
       components: new Map<string, ComponentApi>(),
@@ -72,6 +73,7 @@ describe('Lit Framework Adapter Spec', () => {
 
     const element = new A2uiSandboxRoot();
     document.body.appendChild(element);
+    await new Promise(r => setTimeout(r, 0));
 
     expect(attachSpy).toHaveBeenCalled();
     const configPassed = attachSpy.mock.calls[0][1];

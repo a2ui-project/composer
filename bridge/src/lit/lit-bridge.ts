@@ -61,6 +61,7 @@ export class A2uiSandboxRoot extends LitElement {
   private surface?: SurfaceModel;
 
   private rendererConnection: SurfaceStateSubscription | null = null;
+  private attachTimeoutId?: ReturnType<typeof setTimeout>;
 
   private contextRequestListener = (ev: any) => {
     const contextStr = String(ev.context?.id || ev.context?.__context__ || ev.context || '');
@@ -76,31 +77,43 @@ export class A2uiSandboxRoot extends LitElement {
       (this.constructor as typeof A2uiSandboxRoot).markdownRenderer ||
       A2uiSandboxRoot.markdownRenderer;
     this.addEventListener('context-request', this.contextRequestListener);
+    if (this.attachTimeoutId) {
+      clearTimeout(this.attachTimeoutId);
+      this.attachTimeoutId = undefined;
+    }
     this.rendererConnection?.unsubscribe();
-    this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
-      surfaceGroup: this.processor.model,
-      catalogJson: A2uiSandboxRoot.catalogJson,
-      onCatalogResolved: catalogId => {
-        for (const catalog of A2uiSandboxRoot.catalogs) {
-          if (catalog) {
-            (catalog as {id: string}).id = catalogId;
+    this.rendererConnection = null;
+    this.attachTimeoutId = setTimeout(() => {
+      this.attachTimeoutId = undefined;
+      this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
+        surfaceGroup: this.processor.model,
+        catalogJson: A2uiSandboxRoot.catalogJson,
+        onCatalogResolved: catalogId => {
+          for (const catalog of A2uiSandboxRoot.catalogs) {
+            if (catalog) {
+              (catalog as {id: string}).id = catalogId;
+            }
           }
-        }
-      },
-      onSurfaceReady: surfaceId => {
-        this.surface = this.processor.model.getSurface(surfaceId);
-        this.requestUpdate();
-      },
-      onSurfaceCleared: () => {
-        this.surface = undefined;
-        this.requestUpdate();
-      },
-    });
+        },
+        onSurfaceReady: surfaceId => {
+          this.surface = this.processor.model.getSurface(surfaceId);
+          this.requestUpdate();
+        },
+        onSurfaceCleared: () => {
+          this.surface = undefined;
+          this.requestUpdate();
+        },
+      });
+    }, 0);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this.removeEventListener('context-request', this.contextRequestListener);
+    if (this.attachTimeoutId) {
+      clearTimeout(this.attachTimeoutId);
+      this.attachTimeoutId = undefined;
+    }
     if (this.rendererConnection) {
       this.rendererConnection.unsubscribe();
       this.rendererConnection = null;
