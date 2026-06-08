@@ -5083,15 +5083,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/dompurify@npm:3.2.0":
-  version: 3.2.0
-  resolution: "@types/dompurify@npm:3.2.0"
-  dependencies:
-    dompurify: "npm:*"
-  checksum: 10c0/e83fec586ffbb1b43f7c8479f2a99c223814d240db912d53fb126aaeea52a4091deceeb75632b5d76004d88ef0fbf444984887b121dece6fa69f4172ed4b2b07
-  languageName: node
-  linkType: hard
-
 "@types/eslint-scope@npm:^3.7.7":
   version: 3.7.7
   resolution: "@types/eslint-scope@npm:3.7.7"
@@ -5698,15 +5689,14 @@ __metadata:
     "@angular/router": "npm:21.2.12"
     "@google/genai": "npm:0.2.0"
     "@playwright/test": "npm:1.59.1"
-    "@types/dompurify": "npm:3.2.0"
     "@types/jsdom": "npm:21.1.7"
     "@vitest/coverage-v8": "npm:4.1.7"
     a2ui-bridge: "npm:0.1.0"
-    dompurify: "npm:3.4.3"
     jsdom: "npm:29.1.1"
     prettier: "npm:3.8.3"
     rxjs: "npm:7.8.2"
     safe-stable-stringify: "npm:2.4.3"
+    safevalues: "npm:1.2.0"
     tslib: "npm:2.6.2"
     typescript: "npm:6.0.3"
     vitest: "npm:4.1.7"
@@ -6912,7 +6902,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"dompurify@npm:*, dompurify@npm:^3.3.1":
+"dompurify@npm:^3.3.1":
   version: 3.4.8
   resolution: "dompurify@npm:3.4.8"
   dependencies:
@@ -6921,18 +6911,6 @@ __metadata:
     "@types/trusted-types":
       optional: true
   checksum: 10c0/8f56a53d0ac80c76068772c9b72721f31fad68cac64a528e2420699ce2bd26b3516e29a5a7bd2205c2732d7114b9859998bf922d20cdb9361c4a05dab8352570
-  languageName: node
-  linkType: hard
-
-"dompurify@npm:3.4.3":
-  version: 3.4.3
-  resolution: "dompurify@npm:3.4.3"
-  dependencies:
-    "@types/trusted-types": "npm:^2.0.7"
-  dependenciesMeta:
-    "@types/trusted-types":
-      optional: true
-  checksum: 10c0/88b9e1a6d0a990e15fab46f4eb96163ef79f20634705b21c82651ffce1ccc5236e4007397d920234afab86123d49be863f2367bd6aacdf28a401aef4d177e0f9
   languageName: node
   linkType: hard
 
@@ -11257,6 +11235,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"safevalues@npm:1.2.0":
+  version: 1.2.0
+  resolution: "safevalues@npm:1.2.0"
+  checksum: 10c0/81effe58d45d240a9ddedb4a851d983ea40ef8a084664ffc2fbfe7929c1be64cf55f2f24618980d22cfbe7b47864c24c8e22b8b6d969e04639192d7a813a52a6
+  languageName: node
+  linkType: hard
+
 "sass-loader@npm:16.0.7":
   version: 16.0.7
   resolution: "sass-loader@npm:16.0.7"
@@ -11380,11 +11365,11 @@ __metadata:
   linkType: hard
 
 "semver@npm:^7.0.0, semver@npm:^7.1.1, semver@npm:^7.3.5, semver@npm:^7.5.3, semver@npm:^7.5.4, semver@npm:^7.6.2, semver@npm:^7.6.3":
-  version: 7.8.2
-  resolution: "semver@npm:7.8.2"
+  version: 7.8.3
+  resolution: "semver@npm:7.8.3"
   bin:
     semver: bin/semver.js
-  checksum: 10c0/8e8c193fa75b938e5b3ccf6707c6447e4b34f73e493e72b03f3185393489f45e049144052f624217c346d6c6e0a301dda8eeab2f14413e337218ecb1cbd2de16
+  checksum: 10c0/06d96d5b5c03acd8b0dceeae458e5d4b4ea2b6c16a2b0dfa88a0f19b91d19be1a4a192c7abfa825218c4c36c087d831b928c27d5b79a622e370bd12e95578a99
   languageName: node
   linkType: hard
 

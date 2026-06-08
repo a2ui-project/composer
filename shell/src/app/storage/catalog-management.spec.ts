@@ -310,7 +310,7 @@ describe('CatalogManagement', () => {
     expect(service.lastCatalogString()).not.toContain('onerror');
 
     expect(service.activeCatalogTitle()).toBe('Catalog Title ');
-    expect(service.activeCatalogDescription()).toBe('Catalog Description <img src="x">');
+    expect(service.activeCatalogDescription()).toBe('Catalog Description <img src="x" />');
 
     const expectedHash = service.lastChecksumHash();
     expect(expectedHash).toBeTruthy();

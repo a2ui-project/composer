@@ -19,7 +19,7 @@ import {HostCommunication, MessageEnvelope} from '../shell/host-communication';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {Catalog} from './catalog-storage.model';
 import {concatMap, filter, from, of} from 'rxjs';
-import DOMPurify from 'dompurify';
+import {sanitizeHtml} from 'safevalues';
 import stringify from 'safe-stable-stringify';
 import {IndexedDbStorage} from './indexed-db-storage';
 import {StartupResolution} from '../shell/startup-resolution';
@@ -183,10 +183,10 @@ export class CatalogManagement {
 
             const catalogObj = structuredClone(payload as Catalog);
             if (typeof catalogObj.title === 'string') {
-              catalogObj.title = DOMPurify.sanitize(catalogObj.title);
+              catalogObj.title = sanitizeHtml(catalogObj.title).toString();
             }
             if (typeof catalogObj.description === 'string') {
-              catalogObj.description = DOMPurify.sanitize(catalogObj.description);
+              catalogObj.description = sanitizeHtml(catalogObj.description).toString();
             }
 
             const catalogString = stringify(catalogObj);
