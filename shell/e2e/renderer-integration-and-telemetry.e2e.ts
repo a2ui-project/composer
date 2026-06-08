@@ -54,6 +54,17 @@ const CONFIGS: IntegrationConfig[] = [
       }, value);
     },
   },
+  {
+    name: 'Lit',
+    rendererUrl: 'http://localhost:3457',
+    pickupDateLocator: iframe =>
+      iframe.locator('a2ui-datetimeinput:has-text("Pick-up Date") input'),
+    pickupLocationLocator: iframe =>
+      iframe.locator('a2ui-basic-textfield:has-text("Pick-up Location") input'),
+    fillDate: async (locator, value) => {
+      await locator.fill(value);
+    },
+  },
 ];
 
 test.beforeEach(async ({page}) => {
