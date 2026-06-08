@@ -22,7 +22,10 @@ import {MessageProcessor, Catalog, ComponentApi, SurfaceModel} from '@a2ui/web_c
 import type {MarkdownRenderer} from '@a2ui/web_core/types/types';
 import {a2uiBridge, SurfaceStateSubscription} from '../preview-bridge.js';
 
-// Expose on the module scope for pristine, absolute compiler typings resolutions:
+/**
+ * Options block configuring custom element generation and static payload injection
+ * for the Lit component rendering sandbox.
+ */
 export interface LitSandboxOptions {
   /** The custom tag name of the custom HTML elements shell (Default: 'app-root') */
   elementTagName?: string;
@@ -32,6 +35,22 @@ export interface LitSandboxOptions {
   catalogJson?: unknown;
 }
 
+/**
+ * Event payload interface representing an incoming context-request event
+ * used to intercept and resolve dynamic provider contexts.
+ */
+export interface ContextRequestEventPayload extends Event {
+  /** Target context identifier or metadata structure */
+  context?: {id?: string; __context__?: string} | string;
+  /** Resolution callback function invoked with the satisfied provider value */
+  callback?: (renderer: unknown) => void;
+}
+
+/**
+ * Root rendering sandbox container element hosting A2UI dynamic surface layouts.
+ * Integrates contextual providers, manages active surface subscriptions, and
+ * delegates remote message processing.
+ */
 export class A2uiSandboxRoot extends LitElement {
   /** The static catalog list shared by all sandbox element instances */
   static catalogs: Catalog<ComponentApi>[] = [];
@@ -61,59 +80,51 @@ export class A2uiSandboxRoot extends LitElement {
   private surface?: SurfaceModel;
 
   private rendererConnection: SurfaceStateSubscription | null = null;
-  private attachTimeoutId?: ReturnType<typeof setTimeout>;
 
-  private contextRequestListener = (ev: any) => {
-    const contextStr = String(ev.context?.id || ev.context?.__context__ || ev.context || '');
+  private contextRequestListener = (ev: Event) => {
+    const requestEv = ev as ContextRequestEventPayload;
+    const ctx = requestEv.context;
+    const contextStr = String(
+      (typeof ctx === 'object' && ctx !== null ? ctx.id || ctx.__context__ : ctx) || '',
+    );
     if (this.markdownRenderer && contextStr.includes('A2UIMarkdown')) {
-      ev.stopPropagation();
-      ev.callback?.(this.markdownRenderer);
+      requestEv.stopPropagation();
+      requestEv.callback?.(this.markdownRenderer);
     }
   };
 
-  connectedCallback() {
+  connectedCallback(): void {
     super.connectedCallback();
     this.markdownRenderer =
       (this.constructor as typeof A2uiSandboxRoot).markdownRenderer ||
       A2uiSandboxRoot.markdownRenderer;
     this.addEventListener('context-request', this.contextRequestListener);
-    if (this.attachTimeoutId) {
-      clearTimeout(this.attachTimeoutId);
-      this.attachTimeoutId = undefined;
-    }
+
     this.rendererConnection?.unsubscribe();
-    this.rendererConnection = null;
-    this.attachTimeoutId = setTimeout(() => {
-      this.attachTimeoutId = undefined;
-      this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
-        surfaceGroup: this.processor.model,
-        catalogJson: A2uiSandboxRoot.catalogJson,
-        onCatalogResolved: catalogId => {
-          for (const catalog of A2uiSandboxRoot.catalogs) {
-            if (catalog) {
-              (catalog as {id: string}).id = catalogId;
-            }
+    this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
+      surfaceGroup: this.processor.model,
+      catalogJson: A2uiSandboxRoot.catalogJson,
+      onCatalogResolved: catalogId => {
+        for (const catalog of A2uiSandboxRoot.catalogs) {
+          if (catalog) {
+            (catalog as {id: string}).id = catalogId;
           }
-        },
-        onSurfaceReady: surfaceId => {
-          this.surface = this.processor.model.getSurface(surfaceId);
-          this.requestUpdate();
-        },
-        onSurfaceCleared: () => {
-          this.surface = undefined;
-          this.requestUpdate();
-        },
-      });
-    }, 0);
+        }
+      },
+      onSurfaceReady: surfaceId => {
+        this.surface = this.processor.model.getSurface(surfaceId);
+        this.requestUpdate();
+      },
+      onSurfaceCleared: () => {
+        this.surface = undefined;
+        this.requestUpdate();
+      },
+    });
   }
 
-  disconnectedCallback() {
+  disconnectedCallback(): void {
     super.disconnectedCallback();
     this.removeEventListener('context-request', this.contextRequestListener);
-    if (this.attachTimeoutId) {
-      clearTimeout(this.attachTimeoutId);
-      this.attachTimeoutId = undefined;
-    }
     if (this.rendererConnection) {
       this.rendererConnection.unsubscribe();
       this.rendererConnection = null;
@@ -153,7 +164,11 @@ export function bootstrapLitSandbox<T extends ComponentApi>(
   A2uiSandboxRoot.markdownRenderer = options?.markdownRenderer;
 
   if (!customElements.get(elementTagName)) {
-    customElements.define(elementTagName, A2uiSandboxRoot);
+    try {
+      customElements.define(elementTagName, A2uiSandboxRoot);
+    } catch (err) {
+      customElements.define(elementTagName, class extends A2uiSandboxRoot {});
+    }
   }
 
   return A2uiSandboxRoot;

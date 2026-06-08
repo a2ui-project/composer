@@ -15,7 +15,7 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {HostCommunication} from './host-communication';
+import {HostCommunication, MessageEnvelope} from './host-communication';
 import {StartupResolution} from './startup-resolution';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
@@ -354,7 +354,7 @@ describe('HostCommunication', () => {
     });
   });
 
-  it('caps early message buffering strictly at 20 messages', () => {
+  it('caps early message buffering strictly at 20 messages via sliding ring eviction', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
 
     for (let i = 0; i < 25; i++) {
@@ -373,8 +373,35 @@ describe('HostCommunication', () => {
 
     const history = service.getHistoryBuffer();
     expect(history.length).toBe(20);
-    expect(history[0].payload).toEqual({index: 0});
-    expect(history[19].payload).toEqual({index: 19});
+    expect(history[0].payload).toEqual({index: 5});
+    expect(history[19].payload).toEqual({index: 24});
+  });
+
+  it('broadcasts uncoalesced multi-message stream replay via messageStream$', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    const emitted: MessageEnvelope[] = [];
+    const sub = service.messageStream$.subscribe(envelope => {
+      emitted.push(envelope);
+    });
+
+    for (let i = 0; i < 3; i++) {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {batchId: i}},
+        }),
+      );
+    }
+
+    expect(emitted.length).toBe(3);
+    expect(emitted[0].payload).toEqual({batchId: 0});
+    expect(emitted[1].payload).toEqual({batchId: 1});
+    expect(emitted[2].payload).toEqual({batchId: 2});
+
+    sub.unsubscribe();
   });
 
   it('purges early message buffer when iframe is unregistered or service is destroyed', () => {
@@ -393,6 +420,29 @@ describe('HostCommunication', () => {
     service.registerIframe(mockIframeWindow);
 
     expect(service.latestEnvelope()).toBeNull();
+  });
+
+  it('instantly relays the most recent envelope to late subscribers via messageStream$', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {index: 100}},
+      }),
+    );
+
+    let lateEnvelope: MessageEnvelope | null = null;
+    const sub = service.messageStream$.subscribe(envelope => {
+      lateEnvelope = envelope;
+    });
+
+    expect(lateEnvelope).toBeDefined();
+    expect(lateEnvelope!.payload).toEqual({index: 100});
+
+    sub.unsubscribe();
   });
 
   it('cleans up global window event listeners and properties upon destruction', () => {

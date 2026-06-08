@@ -16,7 +16,7 @@
 
 // @vitest-environment jsdom
 import {describe, it, expect, afterEach, vi} from 'vitest';
-import {bootstrapLitSandbox, A2uiSandboxRoot} from './lit-bridge';
+import {bootstrapLitSandbox, A2uiSandboxRoot, ContextRequestEventPayload} from './lit-bridge';
 import {a2uiBridge} from '../preview-bridge';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 
@@ -35,17 +35,16 @@ describe('Lit Framework Adapter Spec', () => {
   });
 
   it('defines custom element using customTagName from options block', () => {
-    const tagName = 'lit-test-element';
+    const tagName = 'app-root';
     bootstrapLitSandbox([dummyCatalog], {elementTagName: tagName});
 
     expect(customElements.get(tagName)).toBe(A2uiSandboxRoot);
   });
 
-  it('passes through preloaded catalogJson down to active renderer connection', async () => {
+  it('passes through preloaded catalogJson down to active renderer connection synchronously', () => {
     const preload = {catalogId: 'preload-id', version: 'v0.9', components: {}};
-    // Reuse the same tag name 'lit-test-element' to prevent registration constructor clash in JSDOM:
     bootstrapLitSandbox([dummyCatalog], {
-      elementTagName: 'lit-test-element',
+      elementTagName: 'app-root',
       catalogJson: preload,
     });
 
@@ -53,7 +52,6 @@ describe('Lit Framework Adapter Spec', () => {
 
     const element = new A2uiSandboxRoot();
     document.body.appendChild(element);
-    await new Promise(r => setTimeout(r, 0));
 
     expect(attachSpy).toHaveBeenCalled();
     const configPassed = attachSpy.mock.calls[0][1];
@@ -62,18 +60,17 @@ describe('Lit Framework Adapter Spec', () => {
     element.remove();
   });
 
-  it('aligns elements in the static catalogs array with the resolved catalogId when onCatalogResolved is triggered', async () => {
+  it('aligns elements in the static catalogs array with the resolved catalogId when onCatalogResolved is triggered', () => {
     const myCatalog = {
       id: 'https://default-catalog-id.json',
       components: new Map<string, ComponentApi>(),
     } as unknown as Catalog<ComponentApi>;
-    bootstrapLitSandbox([myCatalog], {elementTagName: 'lit-test-element'});
+    bootstrapLitSandbox([myCatalog], {elementTagName: 'app-root'});
 
     const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
 
     const element = new A2uiSandboxRoot();
     document.body.appendChild(element);
-    await new Promise(r => setTimeout(r, 0));
 
     expect(attachSpy).toHaveBeenCalled();
     const configPassed = attachSpy.mock.calls[0][1];
@@ -90,20 +87,22 @@ describe('Lit Framework Adapter Spec', () => {
 
   it('handles context-request events for A2UIMarkdown and cleanly removes the listener on disconnect', () => {
     bootstrapLitSandbox([dummyCatalog], {
-      elementTagName: 'lit-test-element',
-      markdownRenderer: (text: string) => `<h1>${text}</h1>` as any,
+      elementTagName: 'app-root',
+      markdownRenderer: ((text: string) => `<h1>${text}</h1>`) as unknown as (
+        text: string,
+      ) => unknown,
     });
 
     const element = new A2uiSandboxRoot();
     document.body.appendChild(element);
 
-    let resolvedRenderer: any = null;
+    let resolvedRenderer: unknown = null;
     const contextEvent = new CustomEvent('context-request', {
       bubbles: true,
       composed: true,
-    }) as any;
+    }) as unknown as ContextRequestEventPayload;
     contextEvent.context = 'A2UIMarkdown';
-    contextEvent.callback = (renderer: any) => {
+    contextEvent.callback = renderer => {
       resolvedRenderer = renderer;
     };
 
@@ -112,13 +111,13 @@ describe('Lit Framework Adapter Spec', () => {
 
     // Verify cleanup on disconnect
     element.remove();
-    let afterRemoveRenderer: any = null;
+    let afterRemoveRenderer: unknown = null;
     const postRemoveEvent = new CustomEvent('context-request', {
       bubbles: true,
       composed: true,
-    }) as any;
+    }) as unknown as ContextRequestEventPayload;
     postRemoveEvent.context = 'A2UIMarkdown';
-    postRemoveEvent.callback = (renderer: any) => {
+    postRemoveEvent.callback = renderer => {
       afterRemoveRenderer = renderer;
     };
 

@@ -20,6 +20,7 @@ import {HostCommunication, MessageEnvelope} from '../shell/host-communication';
 import {IndexedDbStorage} from './indexed-db-storage';
 import {StartupResolution} from '../shell/startup-resolution';
 import {signal, WritableSignal} from '@angular/core';
+import {Subject} from 'rxjs';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {Catalog} from './catalog-storage.model';
@@ -28,7 +29,7 @@ describe('CatalogManagement', () => {
   let service: CatalogManagement;
   let hostCommunicationMock: {
     latestEnvelope: WritableSignal<MessageEnvelope | null>;
-    messageStream: WritableSignal<MessageEnvelope | null>;
+    messageStream$: Subject<MessageEnvelope>;
     sendMessage: ReturnType<typeof vi.fn>;
   };
   let indexedDbStorageMock: {
@@ -46,7 +47,7 @@ describe('CatalogManagement', () => {
 
     hostCommunicationMock = {
       latestEnvelope: signal<MessageEnvelope | null>(null),
-      messageStream: signal<MessageEnvelope | null>(null),
+      messageStream$: new Subject<MessageEnvelope>(),
       sendMessage: vi.fn(),
     };
 
@@ -102,7 +103,7 @@ describe('CatalogManagement', () => {
   it(
     'sets handshake lock to true and sends GET_CATALOG when RENDERER_READY ' + 'is received',
     () => {
-      hostCommunicationMock.messageStream.set({
+      hostCommunicationMock.messageStream$.next({
         type: PreviewBridgeMessageType.RENDERER_READY,
         origin: 'http://localhost',
         timestamp: 1001,
@@ -121,7 +122,7 @@ describe('CatalogManagement', () => {
     () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      hostCommunicationMock.messageStream.set({
+      hostCommunicationMock.messageStream$.next({
         type: PreviewBridgeMessageType.RENDERER_READY,
         origin: 'http://localhost',
         timestamp: 1002,
@@ -131,7 +132,7 @@ describe('CatalogManagement', () => {
       expect(service.isHandshakeInProgress()).toBe(true);
       expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
 
-      hostCommunicationMock.messageStream.set({
+      hostCommunicationMock.messageStream$.next({
         type: PreviewBridgeMessageType.RENDERER_READY,
         origin: 'http://localhost',
         payload: 'retry',
@@ -147,7 +148,7 @@ describe('CatalogManagement', () => {
   );
 
   it('clears handshake lock when A2UI_CATALOG arrives and hashing completes', async () => {
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.RENDERER_READY,
       origin: 'http://localhost',
       timestamp: 1004,
@@ -155,7 +156,7 @@ describe('CatalogManagement', () => {
     TestBed.tick();
     expect(service.isHandshakeInProgress()).toBe(true);
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: {},
@@ -179,7 +180,7 @@ describe('CatalogManagement', () => {
     () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      hostCommunicationMock.messageStream.set({
+      hostCommunicationMock.messageStream$.next({
         type: PreviewBridgeMessageType.RENDERER_READY,
         origin: 'http://localhost',
         timestamp: 1006,
@@ -200,7 +201,7 @@ describe('CatalogManagement', () => {
   );
 
   it('clears watchdog timer when A2UI_CATALOG arrives before timeout', async () => {
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.RENDERER_READY,
       origin: 'http://localhost',
       timestamp: 1007,
@@ -211,7 +212,7 @@ describe('CatalogManagement', () => {
     vi.advanceTimersByTime(3000);
     expect(service.isHandshakeInProgress()).toBe(true);
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: {},
@@ -233,7 +234,7 @@ describe('CatalogManagement', () => {
   it('rejects malformed A2UI_CATALOG payload and sets catalogError signal', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: null,
@@ -254,7 +255,7 @@ describe('CatalogManagement', () => {
     async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      hostCommunicationMock.messageStream.set({
+      hostCommunicationMock.messageStream$.next({
         type: PreviewBridgeMessageType.RENDERER_READY,
         origin: 'http://localhost',
         timestamp: 3001,
@@ -264,7 +265,7 @@ describe('CatalogManagement', () => {
       expect(service.isHandshakeInProgress()).toBe(true);
 
       // Simulate bridge sending a flat error payload
-      hostCommunicationMock.messageStream.set({
+      hostCommunicationMock.messageStream$.next({
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         origin: 'http://localhost',
         payload: {
@@ -290,7 +291,7 @@ describe('CatalogManagement', () => {
       },
     };
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -325,7 +326,7 @@ describe('CatalogManagement', () => {
       description: 'Catalog Description <img src=x onerror=alert(1)>',
     };
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: payloadIdentical,
@@ -351,7 +352,7 @@ describe('CatalogManagement', () => {
       components: {},
     };
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -393,7 +394,7 @@ describe('CatalogManagement', () => {
       components: {},
     };
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -428,7 +429,7 @@ describe('CatalogManagement', () => {
       components: {},
     };
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -453,7 +454,7 @@ describe('CatalogManagement', () => {
       lastAccessed: 1000,
     });
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
@@ -486,7 +487,7 @@ describe('CatalogManagement', () => {
 
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: {},
@@ -514,7 +515,7 @@ describe('CatalogManagement', () => {
       .spyOn(crypto.subtle, 'digest')
       .mockRejectedValue(new Error('Digest failed'));
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: {},
@@ -535,7 +536,7 @@ describe('CatalogManagement', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     indexedDbStorageMock.getCatalogRecord.mockRejectedValue(new Error('Database read failure'));
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload: {},
@@ -561,7 +562,7 @@ describe('CatalogManagement', () => {
       components: {},
     };
 
-    hostCommunicationMock.messageStream.set({
+    hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
       payload,
