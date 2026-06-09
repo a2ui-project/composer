@@ -31,6 +31,7 @@
     "@angular/cli": "21.2.10",
     "@angular/compiler-cli": "21.2.12",
     "@angular/platform-browser-dynamic": "21.2.12",
+    "@types/jsdom": "21.1.7",
     "jsdom": "29.1.1",
     "prettier": "3.8.3",
     "typescript": "6.0.3",
