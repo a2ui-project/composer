@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {Component, Inject, inject, computed, effect} from '@angular/core';
+import {Component, Inject, inject, computed, effect, signal} from '@angular/core';
 import {MatToolbarModule} from '@angular/material/toolbar';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatButtonModule} from '@angular/material/button';
@@ -70,6 +70,8 @@ export class ComposerShell {
       }
     });
   }
+
+  public showComponentsGallery = signal(false);
 
   /**
    * Switches between light and dark visual design system palettes.

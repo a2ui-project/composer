@@ -41,30 +41,28 @@ test.describe('Workspace Navigation & Layout Modes', () => {
     });
   });
 
-  test('navigates seamlessly between primary workspace and components gallery via sidebar routing links', async ({
+  test('verifies components gallery navigation link is conditionally hidden by default', async ({
     page,
-  }, testInfo) => {
+  }) => {
     await page.goto('/');
 
     const galleryLink = page.getByRole('link', {name: 'Components Gallery'});
-    await galleryLink.click();
-    await page.waitForURL('**/gallery');
+    await expect(galleryLink).toBeHidden();
+  });
+
+  test('loads components gallery view successfully via direct URL navigation', async ({
+    page,
+  }, testInfo) => {
+    await page.goto('/gallery');
 
     const galleryPlaceholder = page.locator('.gallery-placeholder');
     await expect(galleryPlaceholder).toBeVisible();
     await expect(galleryPlaceholder).toContainText('Components Gallery Placeholder');
     const screenshotBuffer = await page.screenshot();
-    await testInfo.attach('gallery-placeholder-navigation', {
+    await testInfo.attach('gallery-placeholder-direct', {
       body: screenshotBuffer,
       contentType: 'image/png',
     });
-
-    const workspaceLink = page.getByRole('link', {name: 'Composer Workspace'});
-    await workspaceLink.click();
-    await page.waitForURL('**/');
-
-    const workspaceContainer = page.locator('.workspace-container');
-    await expect(workspaceContainer).toBeVisible();
   });
 
   test('loads workspace successfully when valid custom renderer query parameter is provided', async ({

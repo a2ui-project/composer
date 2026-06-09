@@ -138,6 +138,8 @@ export class ComposerWorkspace implements OnInit {
     }
   }
 
+  public showMockRules = signal(false);
+
   public toggleDebugCollapse(): void {
     this.isDebugCollapsed.update(c => !c);
   }

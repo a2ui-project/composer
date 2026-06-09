@@ -135,13 +135,17 @@ describe('ComposerWorkspace Dashboard', () => {
     expect(await harness.getDataModelHarness()).toBeTruthy();
   });
 
-  it('renders debugging components inside a mat-tab-group with appropriate labels', () => {
+  it('renders debugging components inside a mat-tab-group with appropriate labels and conditionally hides Mock Rules', () => {
     const textContent = fixture.nativeElement.textContent;
     expect(textContent).toContain('Data Model');
     expect(textContent).toContain('Events');
     expect(textContent).toContain('Errors');
     expect(textContent).toContain('Raw Messages');
-    expect(textContent).toContain('Mock Rules');
+    expect(textContent).not.toContain('Mock Rules');
+
+    fixture.componentInstance.showMockRules.set(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Mock Rules');
   });
 
   it(
