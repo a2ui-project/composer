@@ -14,21 +14,18 @@
  * limitations under the License.
  */
 
-import {inject} from '@angular/core';
-import {CanActivateFn, Router} from '@angular/router';
-import {StartupResolution} from './startup-resolution';
+import {Component} from '@angular/core';
+import {RouterOutlet} from '@angular/router';
 
+@Component({
+  selector: 'a2ui-composer-root',
+  standalone: true,
+  imports: [RouterOutlet],
+  templateUrl: './app.ng.html',
+  styleUrl: './app.scss',
+})
 /**
- * Routing guard ensuring that the StartupResolution has completed
- * resolving configuration schemas prior to rendering target routes.
+ * The root application component for the A2UI Composer shell.
+ * Serves as the main entry point rendering the router outlet.
  */
-export const startupGuard: CanActivateFn = () => {
-  const startupResolution = inject(StartupResolution);
-  const router = inject(Router);
-
-  if (!startupResolution.isEnvironmentValid()) {
-    return router.createUrlTree(['/settings']);
-  }
-
-  return true;
-};
+export class App {}

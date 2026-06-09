@@ -14,21 +14,17 @@
  * limitations under the License.
  */
 
-import {inject} from '@angular/core';
-import {CanActivateFn, Router} from '@angular/router';
-import {StartupResolution} from './startup-resolution';
+import {Component} from '@angular/core';
 
+@Component({
+  selector: 'a2ui-composer-gallery',
+  standalone: true,
+  imports: [],
+  templateUrl: './gallery.ng.html',
+  styleUrl: './gallery.scss',
+})
 /**
- * Routing guard ensuring that the StartupResolution has completed
- * resolving configuration schemas prior to rendering target routes.
+ * Displays a visual catalog gallery of pre-configured A2UI components
+ * and layouts for rapid prototyping and reference.
  */
-export const startupGuard: CanActivateFn = () => {
-  const startupResolution = inject(StartupResolution);
-  const router = inject(Router);
-
-  if (!startupResolution.isEnvironmentValid()) {
-    return router.createUrlTree(['/settings']);
-  }
-
-  return true;
-};
+export class Gallery {}

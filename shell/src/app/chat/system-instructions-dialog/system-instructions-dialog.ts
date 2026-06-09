@@ -14,21 +14,17 @@
  * limitations under the License.
  */
 
-import {inject} from '@angular/core';
-import {CanActivateFn, Router} from '@angular/router';
-import {StartupResolution} from './startup-resolution';
+import {Component, Inject} from '@angular/core';
+import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
+import {MatButtonModule} from '@angular/material/button';
 
-/**
- * Routing guard ensuring that the StartupResolution has completed
- * resolving configuration schemas prior to rendering target routes.
- */
-export const startupGuard: CanActivateFn = () => {
-  const startupResolution = inject(StartupResolution);
-  const router = inject(Router);
-
-  if (!startupResolution.isEnvironmentValid()) {
-    return router.createUrlTree(['/settings']);
-  }
-
-  return true;
-};
+@Component({
+  selector: 'a2ui-system-instructions-dialog',
+  standalone: true,
+  imports: [MatDialogModule, MatButtonModule],
+  templateUrl: './system-instructions-dialog.ng.html',
+  styleUrl: './system-instructions-dialog.scss',
+})
+export class SystemInstructionsDialog {
+  constructor(@Inject(MAT_DIALOG_DATA) protected readonly data: string) {}
+}

@@ -16,45 +16,45 @@
  */
 
 import {Injectable, Signal, computed, inject, signal} from '@angular/core';
-import {StartupResolutionService} from '../shell/startup-resolution.service';
+import {StartupResolution} from '../shell/startup-resolution';
 import {AppConfigProvider, AuthType, EnvMode, ThemePreference} from './app-config-provider';
 import {LocalStorageKey} from './local-storage-keys';
-import {LocalStorageService} from './local-storage.service';
+import {LocalStorageInteractions} from './local-storage-interactions';
 
 /**
  * Concrete implementation of the AppConfigProvider that integrates with
  * browser local storage for persistence of dynamic user-specified parameters,
  * query overrides, and API credentials. Coordinates baseline host parameters
- * read from the central StartupResolutionService singleton.
+ * read from the central StartupResolution singleton.
  */
 @Injectable({
   providedIn: 'root',
 })
 export class LocalStorageAppConfigProvider extends AppConfigProvider {
   /** Core dynamic singleton startup state resolution bridge. */
-  private readonly startup = inject(StartupResolutionService);
+  private readonly startup = inject(StartupResolution);
 
   /** Central type-safe browser persistent storage service provider. */
-  private readonly localStorageService = inject(LocalStorageService);
+  private readonly localStorageInteractions = inject(LocalStorageInteractions);
 
   /** Tracks local overrides for authentication modes at runtime. */
   private readonly _forcedAuthOverride = signal<AuthType>(this.getInitialForcedAuth());
 
   /** Coordinates dynamic API key state tracking. */
   private readonly _geminiApiKey = signal<string>(
-    this.localStorageService.getItem(LocalStorageKey.GEMINI_API_KEY) || '',
+    this.localStorageInteractions.getItem(LocalStorageKey.GEMINI_API_KEY) || '',
   );
 
   /** Coordinates dynamic renderer preview frame URL endpoint. */
   private readonly _rendererUrl = signal<string>(
-    this.localStorageService.getItem(LocalStorageKey.RENDERER_URL) ||
+    this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL) ||
       this.startup.getResolvedRendererUrl() ||
       '',
   );
 
   /** Coordinates dynamic light/dark UI style theme preferences state. */
   private readonly _themePreference = signal<ThemePreference>(
-    (this.localStorageService.getItem(
+    (this.localStorageInteractions.getItem(
       LocalStorageKey.THEME_PREFERENCE,
     ) as ThemePreference | null) || 'light',
   );
@@ -73,10 +73,10 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     if (override !== AuthType.DEFAULT) {
       return override;
     }
-    if (this.localStorageService.getItem(LocalStorageKey.FORCE_1P) === 'true') {
+    if (this.localStorageInteractions.getItem(LocalStorageKey.FORCE_1P) === 'true') {
       return AuthType.ONE_PARTY;
     }
-    if (this.localStorageService.getItem(LocalStorageKey.FORCE_3P) === 'true') {
+    if (this.localStorageInteractions.getItem(LocalStorageKey.FORCE_3P) === 'true') {
       return AuthType.THREE_PARTY;
     }
     return this.startup.isThirdPartyEnvironment() ? AuthType.THREE_PARTY : AuthType.ONE_PARTY;
@@ -98,7 +98,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    */
   override setRendererUrl(url: string): void {
     this._rendererUrl.set(url);
-    this.localStorageService.setItem(LocalStorageKey.RENDERER_URL, url);
+    this.localStorageInteractions.setItem(LocalStorageKey.RENDERER_URL, url);
   }
 
   /**
@@ -108,7 +108,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    */
   override setGeminiApiKey(key: string): void {
     this._geminiApiKey.set(key);
-    this.localStorageService.setItem(LocalStorageKey.GEMINI_API_KEY, key);
+    this.localStorageInteractions.setItem(LocalStorageKey.GEMINI_API_KEY, key);
   }
 
   /**
@@ -118,7 +118,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    */
   override setThemePreference(theme: ThemePreference): void {
     this._themePreference.set(theme);
-    this.localStorageService.setItem(LocalStorageKey.THEME_PREFERENCE, theme);
+    this.localStorageInteractions.setItem(LocalStorageKey.THEME_PREFERENCE, theme);
   }
 
   /**
@@ -130,15 +130,15 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     this._forcedAuthOverride.set(mode);
 
     if (mode === AuthType.ONE_PARTY) {
-      this.localStorageService.setItem(LocalStorageKey.FORCE_1P, 'true');
-      this.localStorageService.removeItem(LocalStorageKey.FORCE_3P);
+      this.localStorageInteractions.setItem(LocalStorageKey.FORCE_1P, 'true');
+      this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_3P);
     } else if (mode === AuthType.THREE_PARTY) {
-      this.localStorageService.setItem(LocalStorageKey.FORCE_3P, 'true');
-      this.localStorageService.removeItem(LocalStorageKey.FORCE_1P);
+      this.localStorageInteractions.setItem(LocalStorageKey.FORCE_3P, 'true');
+      this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_1P);
     } else {
       // AuthType.DEFAULT -> Clear all override flags in browser storage
-      this.localStorageService.removeItem(LocalStorageKey.FORCE_1P);
-      this.localStorageService.removeItem(LocalStorageKey.FORCE_3P);
+      this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_1P);
+      this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_3P);
     }
   }
 
@@ -146,11 +146,11 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    * Purges runtime overrides and dynamic key markers from persistent layers.
    */
   override flushConfig(): void {
-    this.localStorageService.removeItem(LocalStorageKey.RENDERER_URL);
-    this.localStorageService.removeItem(LocalStorageKey.GEMINI_API_KEY);
-    this.localStorageService.removeItem(LocalStorageKey.FORCE_1P);
-    this.localStorageService.removeItem(LocalStorageKey.FORCE_3P);
-    this.localStorageService.removeItem(LocalStorageKey.THEME_PREFERENCE);
+    this.localStorageInteractions.removeItem(LocalStorageKey.RENDERER_URL);
+    this.localStorageInteractions.removeItem(LocalStorageKey.GEMINI_API_KEY);
+    this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_1P);
+    this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_3P);
+    this.localStorageInteractions.removeItem(LocalStorageKey.THEME_PREFERENCE);
 
     this._forcedAuthOverride.set(AuthType.DEFAULT);
     this._geminiApiKey.set('');
@@ -165,10 +165,10 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    * @returns Active AuthType mapping.
    */
   private getInitialForcedAuth(): AuthType {
-    if (this.localStorageService.getItem(LocalStorageKey.FORCE_1P) === 'true') {
+    if (this.localStorageInteractions.getItem(LocalStorageKey.FORCE_1P) === 'true') {
       return AuthType.ONE_PARTY;
     }
-    if (this.localStorageService.getItem(LocalStorageKey.FORCE_3P) === 'true') {
+    if (this.localStorageInteractions.getItem(LocalStorageKey.FORCE_3P) === 'true') {
       return AuthType.THREE_PARTY;
     }
     return AuthType.DEFAULT;

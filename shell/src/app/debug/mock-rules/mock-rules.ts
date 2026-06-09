@@ -14,21 +14,17 @@
  * limitations under the License.
  */
 
-import {inject} from '@angular/core';
-import {CanActivateFn, Router} from '@angular/router';
-import {StartupResolution} from './startup-resolution';
+import {Component} from '@angular/core';
 
+@Component({
+  selector: 'a2ui-composer-mock-rules',
+  standalone: true,
+  imports: [],
+  templateUrl: './mock-rules.ng.html',
+  styleUrl: './mock-rules.scss',
+})
 /**
- * Routing guard ensuring that the StartupResolution has completed
- * resolving configuration schemas prior to rendering target routes.
+ * A debug drawer component allowing developers to view, inspect,
+ * and configure mock business logic rules for the active catalog.
  */
-export const startupGuard: CanActivateFn = () => {
-  const startupResolution = inject(StartupResolution);
-  const router = inject(Router);
-
-  if (!startupResolution.isEnvironmentValid()) {
-    return router.createUrlTree(['/settings']);
-  }
-
-  return true;
-};
+export class MockRules {}
