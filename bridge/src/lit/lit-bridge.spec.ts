@@ -124,6 +124,60 @@ describe('Lit Framework Adapter Spec', () => {
     expect(afterRemoveRenderer).toBeNull();
   });
 
+  it('resolves context requests carrying an arbitrary object with a custom toString() method correctly', () => {
+    bootstrapLitSandbox([dummyCatalog], {
+      elementTagName: 'app-root-tostring',
+      markdownRenderer: async (text: string) => `<i>${text}</i>`,
+    });
+
+    const ctor = customElements.get('app-root-tostring');
+    const element = new ctor!();
+    document.body.appendChild(element);
+
+    let resolvedRenderer: unknown = null;
+    const contextEvent = new CustomEvent('context-request', {
+      bubbles: true,
+      composed: true,
+    }) as unknown as ContextRequestEventPayload;
+
+    contextEvent.context = {
+      toString: () => 'CustomA2UIMarkdownContext',
+    };
+    contextEvent.callback = renderer => {
+      resolvedRenderer = renderer;
+    };
+
+    element.dispatchEvent(contextEvent);
+    expect(resolvedRenderer).toBeDefined();
+
+    element.remove();
+  });
+
+  it('handles context requests carrying Object.create(null) defensively without throwing a TypeError', () => {
+    bootstrapLitSandbox([dummyCatalog], {
+      elementTagName: 'app-root-nullproto',
+      markdownRenderer: async (text: string) => `<i>${text}</i>`,
+    });
+
+    const ctor = customElements.get('app-root-nullproto');
+    const element = new ctor!();
+    document.body.appendChild(element);
+
+    const contextEvent = new CustomEvent('context-request', {
+      bubbles: true,
+      composed: true,
+    }) as unknown as ContextRequestEventPayload;
+
+    contextEvent.context = Object.create(null);
+    contextEvent.callback = () => {};
+
+    expect(() => {
+      element.dispatchEvent(contextEvent);
+    }).not.toThrow();
+
+    element.remove();
+  });
+
   it('dispatches outbound component actions to a2uiBridge.sendAction', async () => {
     const sendActionSpy = vi.spyOn(a2uiBridge, 'sendAction');
     bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root'});
@@ -206,5 +260,102 @@ describe('Lit Framework Adapter Spec', () => {
     expect(ctor).toBeDefined();
     expect(ctor).not.toBe(A2uiSandboxRoot);
     expect(new ctor!()).toBeInstanceOf(A2uiSandboxRoot);
+  });
+
+  it('resolves static subclass overrides (catalogs, catalogJson) properly upon initialization', () => {
+    const customCatalog = {
+      id: 'https://custom.json',
+      components: new Map(),
+    } as unknown as Catalog<ComponentApi>;
+    const customPreload = {custom: true};
+
+    class CustomSandboxRoot extends A2uiSandboxRoot {
+      static catalogs = [customCatalog];
+      static catalogJson = customPreload;
+    }
+
+    customElements.define('custom-sandbox-root', CustomSandboxRoot);
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    const element = new CustomSandboxRoot();
+    document.body.appendChild(element);
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.lastCall![1];
+
+    expect(configPassed.catalogJson).toBe(customPreload);
+
+    configPassed.onCatalogResolved!('urn:a2ui:catalog:subclass_id');
+    expect(customCatalog.id).toBe('urn:a2ui:catalog:subclass_id');
+
+    element.remove();
+  });
+
+  it('isolates assigned static properties (catalogs, catalogJson) per registered target class without cross-contamination', () => {
+    const cat1 = {id: 'cat-1'} as unknown as Catalog<ComponentApi>;
+    const cat2 = {id: 'cat-2'} as unknown as Catalog<ComponentApi>;
+
+    const ctor1 = bootstrapLitSandbox([cat1], {
+      elementTagName: 'box-one',
+      catalogJson: {box: 1},
+    });
+
+    const ctor2 = bootstrapLitSandbox([cat2], {
+      elementTagName: 'box-two',
+      catalogJson: {box: 2},
+    });
+
+    expect(ctor1).not.toBe(ctor2);
+    expect(ctor1.catalogs).toEqual([cat1]);
+    expect(ctor1.catalogJson).toEqual({box: 1});
+
+    expect(ctor2.catalogs).toEqual([cat2]);
+    expect(ctor2.catalogJson).toEqual({box: 2});
+  });
+
+  it('persists programmatic assignment of markdownRenderer across DOM disconnection and reconnection', () => {
+    bootstrapLitSandbox([dummyCatalog], {
+      elementTagName: 'app-root-persist',
+    });
+
+    const ctor = customElements.get('app-root-persist');
+    const element = new ctor!();
+    document.body.appendChild(element);
+
+    const customRenderer = async (text: string) => `<b>${text}</b>`;
+    element.markdownRenderer = customRenderer;
+
+    expect(element.markdownRenderer).toBe(customRenderer);
+
+    element.remove();
+    document.body.appendChild(element);
+
+    expect(element.markdownRenderer).toBe(customRenderer);
+
+    element.remove();
+  });
+
+  it('upgrades pre-rendered DOM element synchronously and successfully resolves static configuration properties', () => {
+    const preElement = document.createElement('app-root-sync');
+    document.body.appendChild(preElement);
+
+    const catSync = {id: 'cat-sync'} as unknown as Catalog<ComponentApi>;
+    bootstrapLitSandbox([catSync], {
+      elementTagName: 'app-root-sync',
+      catalogJson: {sync: true},
+    });
+
+    const upgraded = document.querySelector('app-root-sync') as A2uiSandboxRoot;
+    expect(upgraded).toBeInstanceOf(A2uiSandboxRoot);
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    upgraded.connectedCallback();
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.lastCall![1];
+    expect(configPassed.catalogJson).toEqual({sync: true});
+
+    preElement.remove();
   });
 });

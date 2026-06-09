@@ -60,13 +60,16 @@ export class A2uiSandboxRoot extends LitElement {
   static markdownRenderer?: MarkdownRenderer = undefined;
 
   // Core dynamic processing engine mapping actions outbox proxies
-  private processor = new MessageProcessor(A2uiSandboxRoot.catalogs, action => {
-    a2uiBridge.sendAction(action);
-  });
+  private processor = new MessageProcessor(
+    (this.constructor as typeof A2uiSandboxRoot).catalogs,
+    action => {
+      a2uiBridge.sendAction(action);
+    },
+  );
 
   private markdownProvider = new ContextProvider(this, {
     context: Context.markdown,
-    initialValue: A2uiSandboxRoot.markdownRenderer,
+    initialValue: (this.constructor as typeof A2uiSandboxRoot).markdownRenderer,
   });
 
   get markdownRenderer(): MarkdownRenderer | undefined {
@@ -84,9 +87,14 @@ export class A2uiSandboxRoot extends LitElement {
   private contextRequestListener = (ev: Event) => {
     const requestEv = ev as ContextRequestEventPayload;
     const ctx = requestEv.context;
-    const contextStr = String(
-      (typeof ctx === 'object' && ctx !== null ? ctx.id || ctx.__context__ : ctx) || '',
-    );
+    const resolved =
+      typeof ctx === 'object' && ctx !== null ? ctx.id || ctx.__context__ || ctx : ctx;
+    const contextStr =
+      resolved && typeof (resolved as any).toString === 'function'
+        ? String(resolved)
+        : typeof resolved === 'string'
+          ? resolved
+          : '';
     if (this.markdownRenderer && contextStr.includes('A2UIMarkdown')) {
       requestEv.stopPropagation();
       requestEv.callback?.(this.markdownRenderer);
@@ -95,17 +103,14 @@ export class A2uiSandboxRoot extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    this.markdownRenderer =
-      (this.constructor as typeof A2uiSandboxRoot).markdownRenderer ||
-      A2uiSandboxRoot.markdownRenderer;
     this.addEventListener('context-request', this.contextRequestListener);
 
     this.rendererConnection?.unsubscribe();
     this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
       surfaceGroup: this.processor.model,
-      catalogJson: A2uiSandboxRoot.catalogJson,
+      catalogJson: (this.constructor as typeof A2uiSandboxRoot).catalogJson,
       onCatalogResolved: catalogId => {
-        for (const catalog of A2uiSandboxRoot.catalogs) {
+        for (const catalog of (this.constructor as typeof A2uiSandboxRoot).catalogs) {
           if (catalog) {
             (catalog as {id: string}).id = catalogId;
           }
@@ -158,18 +163,27 @@ export function bootstrapLitSandbox<T extends ComponentApi>(
 ): typeof A2uiSandboxRoot {
   const elementTagName = options?.elementTagName || 'app-root';
 
-  // Sets dynamic, catalog-specific shared variables with standard safe base casting
-  A2uiSandboxRoot.catalogs = catalogs as Catalog<ComponentApi>[];
-  A2uiSandboxRoot.catalogJson = options?.catalogJson;
-  A2uiSandboxRoot.markdownRenderer = options?.markdownRenderer;
+  let targetClass =
+    (customElements.get(elementTagName) as typeof A2uiSandboxRoot) || A2uiSandboxRoot;
+
+  const populateProps = (clazz: typeof A2uiSandboxRoot) => {
+    clazz.catalogs = catalogs as Catalog<ComponentApi>[];
+    clazz.catalogJson = options?.catalogJson;
+    clazz.markdownRenderer = options?.markdownRenderer;
+  };
 
   if (!customElements.get(elementTagName)) {
+    populateProps(targetClass);
     try {
-      customElements.define(elementTagName, A2uiSandboxRoot);
+      customElements.define(elementTagName, targetClass);
     } catch (err) {
-      customElements.define(elementTagName, class extends A2uiSandboxRoot {});
+      targetClass = class extends A2uiSandboxRoot {};
+      populateProps(targetClass);
+      customElements.define(elementTagName, targetClass);
     }
+  } else {
+    populateProps(targetClass);
   }
 
-  return A2uiSandboxRoot;
+  return targetClass;
 }
