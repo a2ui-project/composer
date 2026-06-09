@@ -55,7 +55,7 @@ export class A2uiSandboxConnection implements OnDestroy {
   /** Resolves the central rendering service provider from the injector context. */
   private readonly rendererService = inject(A2uiRendererService);
 
-  /** Optional injected dynamic renderer configuration options block. */
+  /** Injected dynamic renderer configuration options block. */
   private readonly rendererConfig = inject(A2UI_RENDERER_CONFIG);
 
   /** The dynamic teardown handle for the active framework renderer connection subscription. */
@@ -76,7 +76,7 @@ export class A2uiSandboxConnection implements OnDestroy {
     this.rendererConnection = a2uiBridge.attachRenderer(processor, {
       surfaceGroup: this.rendererService.surfaceGroup,
       onCatalogResolved: (catalogId: string) => {
-        const catalogs = this.rendererConfig?.catalogs;
+        const catalogs = this.rendererConfig.catalogs;
         if (catalogs) {
           for (const catalog of catalogs) {
             if (catalog) {
