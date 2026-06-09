@@ -200,5 +200,4 @@ test-results
 *.map
 
 ### Dynamic AI Agent Logs & Workspace Notes
-.agents/
 shell/_worker_notes/
