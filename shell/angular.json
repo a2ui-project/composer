@@ -21,7 +21,7 @@
             "polyfills": [],
             "tsConfig": "tsconfig.json",
             "inlineStyleLanguage": "scss",
-            "assets": ["src/favicon.ico", "src/assets", "src/config.json"],
+            "assets": ["src/favicon.svg", "src/assets", "src/config.json"],
             "styles": ["@angular/material/prebuilt-themes/indigo-pink.css", "src/styles.scss"],
             "scripts": []
           },
