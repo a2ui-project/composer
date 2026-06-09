@@ -6,7 +6,7 @@
   "scripts": {
     "start": "ng serve",
     "build": "ng build",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "e2e": "playwright test",
     "e2e-headless": "E2E_HEADLESS=true playwright test",
     "prettier": "prettier --ignore-path ../.prettierignore --write . | grep -v '(unchanged)'",

@@ -17,38 +17,23 @@
 import '@angular/compiler';
 
 // @vitest-environment jsdom
-import {describe, it, expect, afterEach, beforeEach, vi, Mock} from 'vitest';
-import {A2uiSandboxConnection} from './angular-bridge';
+import {describe, it, expect, afterEach, vi} from 'vitest';
+import {getTestBed, TestBed} from '@angular/core/testing';
+import {BrowserTestingModule, platformBrowserTesting} from '@angular/platform-browser/testing';
+import {A2uiSandboxConnection, provideA2uiSandbox} from './angular-bridge';
+import {A2UI_RENDERER_CONFIG, A2uiRendererService} from '@a2ui/angular/v0_9';
 import {a2uiBridge} from '../preview-bridge';
-import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
+import {Catalog, ComponentApi, A2uiClientAction} from '@a2ui/web_core/v0_9';
 
-declare global {
-  var mockInject: Mock<(token: unknown) => unknown> | undefined;
+if (!getTestBed().platform) {
+  getTestBed().initTestEnvironment(BrowserTestingModule, platformBrowserTesting());
 }
 
-// Mock @angular/core inject dynamically using globalThis delegation
-vi.mock('@angular/core', async importOriginal => {
-  const original = await importOriginal<typeof import('@angular/core')>();
-  return {
-    ...original,
-    inject: <T>(token: Parameters<typeof original.inject>[0]): T => {
-      if (globalThis.mockInject) {
-        return globalThis.mockInject(token) as T;
-      }
-      return original.inject(token) as T;
-    },
-  };
-});
-
 describe('Angular Sandbox Connection Spec', () => {
-  beforeEach(() => {
-    globalThis.mockInject = vi.fn();
-  });
-
   afterEach(() => {
-    globalThis.mockInject = undefined;
     a2uiBridge.destroy();
     vi.restoreAllMocks();
+    TestBed.resetTestingModule();
   });
 
   it('aligns catalogs inside A2UI_RENDERER_CONFIG with the resolved catalogId when onCatalogResolved is triggered', () => {
@@ -70,23 +55,19 @@ describe('Angular Sandbox Connection Spec', () => {
       catalogs: [myCatalog],
     };
 
-    const mockInject = globalThis.mockInject;
-    if (!mockInject) {
-      throw new Error('mockInject is not defined');
-    }
-    mockInject.mockImplementation((token: unknown) => {
-      if (token && typeof token === 'function' && token.name === 'A2uiRendererService') {
-        return mockRendererService;
-      }
-      return mockRendererConfig;
+    TestBed.configureTestingModule({
+      providers: [
+        {provide: A2uiRendererService, useValue: mockRendererService},
+        {provide: A2UI_RENDERER_CONFIG, useValue: mockRendererConfig},
+      ],
     });
 
     const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
 
-    const connection = new A2uiSandboxConnection();
+    const connection = TestBed.runInInjectionContext(() => new A2uiSandboxConnection());
 
     expect(attachSpy).toHaveBeenCalled();
-    const configPassed = attachSpy.mock.calls[0][1];
+    const configPassed = attachSpy.mock.lastCall![1];
     expect(configPassed.onCatalogResolved).toBeDefined();
 
     // Trigger the callback
@@ -95,5 +76,108 @@ describe('Angular Sandbox Connection Spec', () => {
     expect(myCatalog.id).toBe('urn:a2ui:catalog:angular_resolved_id');
 
     connection.ngOnDestroy();
+  });
+
+  it('delegates processMessages payload to the underlying A2uiRendererService', () => {
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        {provide: A2uiRendererService, useValue: mockRendererService},
+        {provide: A2UI_RENDERER_CONFIG, useValue: {}},
+      ],
+    });
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const connection = TestBed.runInInjectionContext(() => new A2uiSandboxConnection());
+
+    const processor = attachSpy.mock.lastCall![0];
+    const payload = [{version: 'v0.9'}] as any;
+
+    processor.processMessages(payload);
+
+    expect(mockRendererService.processMessages).toHaveBeenCalledWith(payload);
+
+    connection.ngOnDestroy();
+  });
+
+  it('updates surfaceId reactive signal when onSurfaceReady and onSurfaceCleared are invoked', () => {
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        {provide: A2uiRendererService, useValue: mockRendererService},
+        {provide: A2UI_RENDERER_CONFIG, useValue: {}},
+      ],
+    });
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const connection = TestBed.runInInjectionContext(() => new A2uiSandboxConnection());
+
+    const config = attachSpy.mock.lastCall![1];
+
+    expect(connection.surfaceId()).toBe('');
+
+    config.onSurfaceReady('surf-123');
+    expect(connection.surfaceId()).toBe('surf-123');
+
+    if (config.onSurfaceCleared) {
+      config.onSurfaceCleared();
+    }
+    expect(connection.surfaceId()).toBe('');
+
+    connection.ngOnDestroy();
+  });
+
+  it('configures standalone DI providers via provideA2uiSandbox and routes actions to a2uiBridge.sendAction', () => {
+    class MockCatalog {}
+    const mockCatalogInstance = new MockCatalog();
+
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([MockCatalog as any], {catalogJson: {key: 'val'}}),
+        {provide: MockCatalog, useValue: mockCatalogInstance},
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    // 1. Verify A2uiSandboxConnection factory
+    const connInstance = TestBed.inject(A2uiSandboxConnection);
+    expect(connInstance).toBeInstanceOf(A2uiSandboxConnection);
+
+    // 2. Verify A2UI_RENDERER_CONFIG factory and actionHandler
+    const config = TestBed.inject(A2UI_RENDERER_CONFIG);
+
+    expect(config.catalogs).toEqual([mockCatalogInstance]);
+
+    const sendActionSpy = vi.spyOn(a2uiBridge, 'sendAction');
+    const dummyAction: A2uiClientAction = {
+      name: 'testAction',
+      surfaceId: 'surf-1',
+      sourceComponentId: 'comp-1',
+      timestamp: '2026-06-09T00:00:00Z',
+      context: {},
+    };
+    config.actionHandler!(dummyAction);
+    expect(sendActionSpy).toHaveBeenCalledWith(dummyAction);
+
+    connInstance.ngOnDestroy();
   });
 });

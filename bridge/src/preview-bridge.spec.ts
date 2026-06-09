@@ -1667,4 +1667,71 @@ describe('PreviewBridge Core API Runtime', () => {
 
     expect(bridge['overlayElement']).toBeNull();
   });
+
+  it('logs error and returns empty handle when attachRenderer is called with null config', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const processor = {processMessages: vi.fn()};
+
+    const handle = bridge.attachRenderer(processor, null as unknown as RendererConfig);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'PreviewBridge: config parameter is required in RendererConfig.',
+    );
+    expect(handle).toBeDefined();
+    expect(() => handle.unsubscribe()).not.toThrow();
+  });
+
+  it('logs error when connection.unsubscribe() throws during bridge.destroy()', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const processor = {processMessages: vi.fn()};
+
+    const throwingGroup = {
+      onSurfaceCreated: {
+        subscribe: () => ({
+          unsubscribe: () => {
+            throw new Error('Unsubscribe failed');
+          },
+        }),
+      },
+    };
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: throwingGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+    });
+
+    bridge.destroy();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'PreviewBridge: Error during connection unsubscribe:',
+      expect.any(Error),
+    );
+  });
+
+  it('returns empty subscription handle when connectSurfaceGroup is called on a group missing onSurfaceCreated', () => {
+    const handle = bridge['connectSurfaceGroup']({} as SurfaceGroupLike);
+    expect(handle).toBeDefined();
+    expect(() => handle.unsubscribe()).not.toThrow();
+  });
+
+  it('logs error when onCatalogResolved callback throws an unexpected exception', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      onCatalogResolved: () => {
+        throw new Error('Catalog callback crashed');
+      },
+    });
+
+    bridge['notifyCatalogResolved']('urn:a2ui:catalog:test');
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'PreviewBridge: Error inside onCatalogResolved callback:',
+      expect.any(Error),
+    );
+  });
 });

@@ -24,7 +24,7 @@
   "scripts": {
     "build": "esbuild src/preview-bridge.ts src/lit/lit-bridge.ts src/angular/angular-bridge.ts src/react/react-bridge.ts src/lit/index.ts src/angular/index.ts src/react/index.ts --bundle --format=esm --target=es2022 --outdir=dist --tsconfig=tsconfig.bridge.json --external:lit --external:@lit/context '--external:@angular/*' '--external:@a2ui/*' '--external:react' '--external:react-dom' --external:../preview-bridge.js && tsc --project tsconfig.bridge.json --emitDeclarationOnly",
     "clean": "rm -rf dist",
-    "test": "NODE_ENV=test vitest run",
+    "test": "NODE_ENV=test vitest run --coverage",
     "prettier": "prettier --ignore-path ../.prettierignore --write . | grep -v '(unchanged)'"
   },
   "devDependencies": {

@@ -25,11 +25,12 @@ import {act} from 'react';
 
 describe('React Hook Adapter Spec', () => {
   beforeEach(() => {
-    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
   afterEach(() => {
     a2uiBridge.destroy();
+    vi.restoreAllMocks();
   });
 
   it('aligns active catalogs array with the resolved catalogId when onCatalogResolved is triggered', async () => {
@@ -67,6 +68,113 @@ describe('React Hook Adapter Spec', () => {
     });
 
     expect(myCatalog.id).toBe('urn:a2ui:catalog:react_resolved_id');
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('updates hook state with active surface onSurfaceReady and resets onSurfaceCleared', async () => {
+    const dummyCatalog = {
+      id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    let renderedSurface: any = undefined;
+
+    function TestComponent() {
+      const {surface} = useA2uiSandbox([dummyCatalog]);
+      renderedSurface = surface;
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(React.createElement(TestComponent));
+    });
+
+    expect(attachSpy).toHaveBeenCalled();
+    const processor = attachSpy.mock.lastCall![0] as any;
+    const config = attachSpy.mock.lastCall![1];
+
+    expect(renderedSurface).toBeUndefined();
+
+    processor.processMessages([
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'surf-react',
+          catalogId: dummyCatalog.id,
+        },
+      },
+    ]);
+
+    await act(async () => {
+      config.onSurfaceReady('surf-react');
+    });
+
+    expect(renderedSurface).toBeDefined();
+    expect(renderedSurface.id).toBe('surf-react');
+
+    await act(async () => {
+      if (config.onSurfaceCleared) {
+        config.onSurfaceCleared();
+      }
+    });
+
+    expect(renderedSurface).toBeUndefined();
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('dispatches outbound actions triggered within MessageProcessor out to a2uiBridge.sendAction', async () => {
+    const dummyCatalog = {
+      id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
+
+    const sendActionSpy = vi.spyOn(a2uiBridge, 'sendAction');
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    function TestComponent() {
+      useA2uiSandbox([dummyCatalog]);
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(React.createElement(TestComponent));
+    });
+
+    expect(attachSpy).toHaveBeenCalled();
+    const processor = attachSpy.mock.lastCall![0] as any;
+
+    processor.processMessages([
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'surf-action',
+          catalogId: dummyCatalog.id,
+        },
+      },
+    ]);
+
+    const surface = processor.model.getSurface('surf-action');
+    surface['_onAction'].emit({action: {click: true}});
+
+    expect(sendActionSpy).toHaveBeenCalled();
 
     await act(async () => {
       root.unmount();

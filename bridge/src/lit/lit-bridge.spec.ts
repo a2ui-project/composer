@@ -32,6 +32,7 @@ describe('Lit Framework Adapter Spec', () => {
     A2uiSandboxRoot.catalogJson = undefined;
     A2uiSandboxRoot.markdownRenderer = undefined;
     a2uiBridge.destroy();
+    vi.restoreAllMocks();
   });
 
   it('defines custom element using customTagName from options block', () => {
@@ -88,9 +89,7 @@ describe('Lit Framework Adapter Spec', () => {
   it('handles context-request events for A2UIMarkdown and cleanly removes the listener on disconnect', () => {
     bootstrapLitSandbox([dummyCatalog], {
       elementTagName: 'app-root',
-      markdownRenderer: ((text: string) => `<h1>${text}</h1>`) as unknown as (
-        text: string,
-      ) => unknown,
+      markdownRenderer: async (text: string) => `<h1>${text}</h1>`,
     });
 
     const element = new A2uiSandboxRoot();
@@ -123,5 +122,89 @@ describe('Lit Framework Adapter Spec', () => {
 
     element.dispatchEvent(postRemoveEvent);
     expect(afterRemoveRenderer).toBeNull();
+  });
+
+  it('dispatches outbound component actions to a2uiBridge.sendAction', async () => {
+    const sendActionSpy = vi.spyOn(a2uiBridge, 'sendAction');
+    bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root'});
+
+    const element = new A2uiSandboxRoot();
+    document.body.appendChild(element);
+
+    const processor = element['processor'] as any;
+
+    processor.processMessages([
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'surf-action',
+          catalogId: dummyCatalog.id,
+        },
+      },
+    ]);
+
+    const surface = processor.model.getSurface('surf-action');
+    surface['_onAction'].emit({action: {click: true}});
+
+    expect(sendActionSpy).toHaveBeenCalled();
+
+    element.remove();
+  });
+
+  it('renders active a2ui-surface element onSurfaceReady and reverts to waiting banner onSurfaceCleared', () => {
+    bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root'});
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    const element = new A2uiSandboxRoot();
+    document.body.appendChild(element);
+
+    const config = attachSpy.mock.lastCall![1];
+
+    // Initial render is waiting banner
+    let rendered = element.render() as any;
+    expect(rendered.strings.join('')).toContain('A2UI Lit Sandbox active');
+
+    // Trigger onSurfaceReady via real message processing
+    const processor = element['processor'] as any;
+    processor.processMessages([
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'surf-lit',
+          catalogId: dummyCatalog.id,
+        },
+      },
+    ]);
+
+    const mockSurface = processor.model.getSurface('surf-lit');
+    config.onSurfaceReady('surf-lit');
+
+    expect(element['surface']).toBe(mockSurface);
+
+    rendered = element.render() as any;
+    expect(rendered.strings.join('')).toContain('a2ui-surface');
+
+    // Trigger onSurfaceCleared
+    if (config.onSurfaceCleared) {
+      config.onSurfaceCleared();
+    }
+    expect(element['surface']).toBeUndefined();
+
+    rendered = element.render() as any;
+    expect(rendered.strings.join('')).toContain('A2UI Lit Sandbox active');
+
+    element.remove();
+  });
+
+  it('defines an anonymous subclass if A2uiSandboxRoot constructor is already registered to another tag', () => {
+    bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root'});
+    const tag2 = 'app-root-second';
+
+    bootstrapLitSandbox([dummyCatalog], {elementTagName: tag2});
+
+    const ctor = customElements.get(tag2);
+    expect(ctor).toBeDefined();
+    expect(ctor).not.toBe(A2uiSandboxRoot);
+    expect(new ctor!()).toBeInstanceOf(A2uiSandboxRoot);
   });
 });
