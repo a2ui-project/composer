@@ -639,7 +639,7 @@ export class PreviewBridge {
 
     // Detect if the server fell back to serving HTML (SPA fallback)
     const trimmedLower = rawText.trim().toLowerCase();
-    const isHtml = trimmedLower.startsWith('<!doctype html') || trimmedLower.startsWith('<html');
+    const isHtml = trimmedLower.startsWith('<!doctype') || trimmedLower.startsWith('<html');
     if (isHtml) {
       const fallbackRes = await this.fetchWithTimeout('/catalog.json');
       if (!fallbackRes.ok) {
@@ -647,8 +647,18 @@ export class PreviewBridge {
           `Catalog fetch returned HTML and fallback to /catalog.json failed with status: ${fallbackRes.status}`,
         );
       }
+      const fallbackText = await fallbackRes.text();
+      const fallbackTrimmedLower = fallbackText.trim().toLowerCase();
+      if (
+        fallbackTrimmedLower.startsWith('<!doctype') ||
+        fallbackTrimmedLower.startsWith('<html')
+      ) {
+        throw new Error(
+          'Catalog fetch returned HTML (SPA fallback) for both /catalog and /catalog.json. Ensure the catalog JSON is correctly hosted and served.',
+        );
+      }
       res = fallbackRes;
-      rawText = await res.text();
+      rawText = fallbackText;
     }
 
     return {rawData: rawText, isInMemory: false};

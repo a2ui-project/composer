@@ -247,6 +247,80 @@ describe('PreviewBridge Core API Runtime', () => {
     );
   });
 
+  it('emits A2UI_CATALOG error when both /catalog and /catalog.json return HTML', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+
+    window.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => '<!doctype html><html>SPA Fallback 1</html>',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => '<!doctype html><html>SPA Fallback 2</html>',
+      });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json', expect.any(Object));
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: {
+          error: {
+            message:
+              'Catalog fetch returned HTML (SPA fallback) for both /catalog and /catalog.json. Ensure the catalog JSON is correctly hosted and served.',
+          },
+        },
+      },
+      '*',
+    );
+  });
+
+  it('falls back to /catalog.json if /catalog returns HTML with irregular doctype spacing', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const mockCatalog = {items: ['IrregularSpacing']};
+
+    window.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => '<!doctype   html><html>SPA Fallback</html>',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify(mockCatalog),
+      });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_CATALOG},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json', expect.any(Object));
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: mockCatalog,
+      },
+      '*',
+    );
+  });
+
   it('transmits A2UI_CATALOG error payload on failed GET_CATALOG fetch', async () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
     window.fetch = vi.fn().mockResolvedValue({
