@@ -29,6 +29,7 @@ import {CatalogManagement} from '../storage/catalog-management';
 import {AppConfigProvider} from '../settings/app-config-provider';
 import {LocalStorageKey} from '../settings/local-storage-keys';
 import {LocalStorageInteractions} from '../settings/local-storage-interactions';
+import {SessionStorageInteractions} from '../settings/session-storage-interactions';
 
 @Component({
   selector: 'a2ui-composer-shell',
@@ -56,6 +57,7 @@ export class ComposerShell {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly indexedDbStorage = inject(IndexedDbStorage);
   private readonly storage = inject(LocalStorageInteractions);
+  private readonly sessionStorage = inject(SessionStorageInteractions);
   private readonly configProvider = inject(AppConfigProvider);
 
   activeCatalogTitle = this.catalogManagement.activeCatalogTitle;
@@ -88,13 +90,7 @@ export class ComposerShell {
     await this.indexedDbStorage.flushAllRecords();
     this.storage.removeItem(LocalStorageKey.SESSION_STATE);
     this.storage.removeItem(LocalStorageKey.EDITOR_CACHE);
-    try {
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        window.sessionStorage.clear();
-      }
-    } catch (e) {
-      console.warn('Failed to clear session cache safely:', e);
-    }
+    this.sessionStorage.clear();
     if (this.document.defaultView) {
       this.document.defaultView.location.reload();
     }

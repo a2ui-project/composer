@@ -81,7 +81,7 @@ export class Events {
             }
           }
           if (action && typeof action === 'object') {
-            const timestamp = action.timestamp || envelope?.timestamp || Date.now();
+            const timestamp = action.timestamp || envelope.timestamp;
             const mappedItem = {
               time: formatTimestamp(timestamp),
               action: action.name || '',

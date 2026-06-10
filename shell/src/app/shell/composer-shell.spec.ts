@@ -29,12 +29,14 @@ import {AppConfigProvider} from '../settings/app-config-provider';
 import {signal, WritableSignal} from '@angular/core';
 import {LocalStorageInteractions} from '../settings/local-storage-interactions';
 import {LocalStorageKey} from '../settings/local-storage-keys';
+import {SessionStorageInteractions} from '../settings/session-storage-interactions';
 
 describe('ComposerShell Layout', () => {
   let fixture: ComponentFixture<ComposerShell>;
   let harness: ComposerShellHarness;
   let storageServiceMock: Partial<IndexedDbStorage>;
   let localStorageServiceMock: Partial<LocalStorageInteractions>;
+  let sessionStorageServiceMock: Partial<SessionStorageInteractions>;
   let catalogManagementServiceMock: {
     activeCatalogTitle: WritableSignal<string>;
     activeCatalogDescription: WritableSignal<string>;
@@ -51,6 +53,10 @@ describe('ComposerShell Layout', () => {
 
     localStorageServiceMock = {
       removeItem: vi.fn(),
+    };
+
+    sessionStorageServiceMock = {
+      clear: vi.fn(),
     };
 
     catalogManagementServiceMock = {
@@ -77,6 +83,10 @@ describe('ComposerShell Layout', () => {
         {
           provide: LocalStorageInteractions,
           useValue: localStorageServiceMock,
+        },
+        {
+          provide: SessionStorageInteractions,
+          useValue: sessionStorageServiceMock,
         },
         {
           provide: CatalogManagement,
@@ -133,6 +143,7 @@ describe('ComposerShell Layout', () => {
         LocalStorageKey.SESSION_STATE,
       );
       expect(localStorageServiceMock.removeItem).toHaveBeenCalledWith(LocalStorageKey.EDITOR_CACHE);
+      expect(sessionStorageServiceMock.clear).toHaveBeenCalled();
       expect(consoleSpy).toHaveBeenCalledWith('Session state cleared.');
     },
   );
