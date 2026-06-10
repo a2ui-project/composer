@@ -101,11 +101,13 @@
             <a2ui-composer-raw-messages></a2ui-composer-raw-messages>
           </div>
         </mat-tab>
-        <mat-tab label="Mock Rules">
-          <div class="tab-content-container">
-            <a2ui-composer-mock-rules></a2ui-composer-mock-rules>
-          </div>
-        </mat-tab>
+        @if (showMockRules()) {
+          <mat-tab label="Mock Rules">
+            <div class="tab-content-container">
+              <a2ui-composer-mock-rules></a2ui-composer-mock-rules>
+            </div>
+          </mat-tab>
+        }
       </mat-tab-group>
     </div>
   </div>
