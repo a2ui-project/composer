@@ -15,6 +15,8 @@
  */
 
 import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
+import {Subject, ReplaySubject} from 'rxjs';
 import {StartupResolution} from './startup-resolution';
 import {CrossFrameValidator} from './cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
@@ -24,9 +26,13 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
  * event data and lifecycle checks between the host and preview frame.
  */
 export interface MessageEnvelope {
+  /** Discriminator action type identifying the specific message intent */
   type: string;
+  /** Optional payload attached to the message transaction */
   payload?: unknown;
+  /** Fully resolved origin URI string of the dispatching sender */
   origin: string;
+  /** Epoch millisecond timestamp recording when the message was received */
   timestamp: number;
 }
 
@@ -36,45 +42,71 @@ declare global {
   }
 }
 
-@Injectable({
-  providedIn: 'root',
-})
 /**
  * Core service managing cross-frame message passing and event dispatching
  * between the primary workspace shell and rendering client frames.
  */
+@Injectable({
+  providedIn: 'root',
+})
 export class HostCommunication implements OnDestroy {
   private readonly startupResolution = inject(StartupResolution);
   private iframeWindow: Window | null = null;
   private iframeElement: HTMLIFrameElement | null = null;
   private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
 
+  /** Readonly signal tracking the most recent message envelope */
   public readonly latestEnvelope: Signal<MessageEnvelope | null> =
     this.latestEnvelopeSignal.asReadonly();
 
-  private readonly messageStreamSignal = signal<MessageEnvelope | null>(null);
-  public readonly messageStream = this.messageStreamSignal.asReadonly();
+  private readonly messageStreamSubject = new ReplaySubject<MessageEnvelope>(1);
+  /** Uncoalesced hot event stream broadcasting all incoming message envelopes */
+  public readonly messageStream$ = this.messageStreamSubject.asObservable();
+  /** Readonly signal holding the latest incoming stream message */
+  public readonly messageStream = toSignal(this.messageStream$, {
+    initialValue: null,
+  });
 
   private readonly listeners = new Set<(envelope: MessageEnvelope) => void>();
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
+  private readonly earlyMessageBuffer: MessageEvent[] = [];
   private latestCatalogEnvelope: MessageEnvelope | null = null;
 
+  /**
+   * Registers a callback listener to intercept incoming message envelopes.
+   * @param listener Callback function invoked upon envelope arrival
+   */
   public addListener(listener: (envelope: MessageEnvelope) => void): void {
     this.listeners.add(listener);
   }
 
+  /**
+   * Removes a previously registered callback listener.
+   * @param listener Callback function to remove
+   */
   public removeListener(listener: (envelope: MessageEnvelope) => void): void {
     this.listeners.delete(listener);
   }
 
+  /**
+   * Retrieves a snapshot copy of the recent message history buffer.
+   * @returns Array of stored message envelopes
+   */
   public getHistoryBuffer(): MessageEnvelope[] {
     return [...this.messageHistoryBuffer];
   }
 
+  /**
+   * Retrieves the most recent catalog message envelope received from the preview frame.
+   * @returns Latest catalog envelope or null if none received
+   */
   public getLatestCatalog(): MessageEnvelope | null {
     return this.latestCatalogEnvelope;
   }
 
+  /**
+   * Clears the historical message buffer and resets the tracked catalog state.
+   */
   public clearHistoryBuffer(): void {
     this.messageHistoryBuffer.length = 0;
     this.latestCatalogEnvelope = null;
@@ -85,9 +117,10 @@ export class HostCommunication implements OnDestroy {
    * to safely simulate incoming guest frame postMessages without unsafe casting bypasses.
    */
   private triggerMessageStreamForTesting(envelope: MessageEnvelope): void {
-    this.messageStreamSignal.set(envelope);
+    this.messageStreamSubject.next(envelope);
   }
 
+  /** Test-only hooks to simulate incoming stream messages */
   public readonly TEST_ONLY = {
     triggerMessageStreamForTesting: (envelope: MessageEnvelope) =>
       this.triggerMessageStreamForTesting(envelope),
@@ -95,7 +128,21 @@ export class HostCommunication implements OnDestroy {
 
   private readonly messageListener = (event: MessageEvent) => {
     const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
-    if (!activeWindow || event.source !== activeWindow) {
+    if (!activeWindow) {
+      const isBridgeMessage =
+        event.data &&
+        typeof event.data === 'object' &&
+        Object.values(PreviewBridgeMessageType).includes(event.data.type);
+      if (!isBridgeMessage || event.data.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+        return;
+      }
+      this.earlyMessageBuffer.push(event);
+      if (this.earlyMessageBuffer.length > 20) {
+        this.earlyMessageBuffer.shift();
+      }
+      return;
+    }
+    if (event.source !== activeWindow) {
       return;
     }
 
@@ -132,7 +179,7 @@ export class HostCommunication implements OnDestroy {
         }
       }
       this.latestEnvelopeSignal.set(envelope);
-      this.messageStreamSignal.set(envelope);
+      this.messageStreamSubject.next(envelope);
       this.listeners.forEach(l => {
         try {
           l(envelope);
@@ -150,14 +197,47 @@ export class HostCommunication implements OnDestroy {
     }
   }
 
+  private flushEarlyMessages(): void {
+    const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
+    if (activeWindow && this.earlyMessageBuffer.length > 0) {
+      const messages = [...this.earlyMessageBuffer];
+      this.earlyMessageBuffer.length = 0;
+      for (const msg of messages) {
+        this.messageListener(msg);
+      }
+    }
+  }
+
+  /**
+   * Registers an active content window directly and flushes any buffered early messages.
+   * @param contentWindow Target guest window reference
+   */
   public registerIframe(contentWindow: Window | null): void {
     this.iframeWindow = contentWindow;
+    if (contentWindow === null) {
+      this.earlyMessageBuffer.length = 0;
+    } else {
+      this.flushEarlyMessages();
+    }
   }
 
+  /**
+   * Registers an iframe DOM element and flushes any buffered early messages.
+   * @param element Target iframe DOM element reference
+   */
   public registerIframeElement(element: HTMLIFrameElement | null): void {
     this.iframeElement = element;
+    if (element === null) {
+      this.earlyMessageBuffer.length = 0;
+    } else {
+      this.flushEarlyMessages();
+    }
   }
 
+  /**
+   * Validates and dispatches a structured postMessage payload to the registered guest frame.
+   * @param message Structured message payload
+   */
   public sendMessage(message: {type: PreviewBridgeMessageType; payload?: unknown}): void {
     if (!CrossFrameValidator.validateOutgoingMessage(message)) {
       console.error('Blocked dispatch of malformed message type...', message);
@@ -178,11 +258,16 @@ export class HostCommunication implements OnDestroy {
     }
   }
 
+  /**
+   * Helper utility dispatching a RENDER_A2UI layout array to the preview renderer.
+   * @param payload Array of layout nodes or configuration objects
+   */
   public sendRenderA2UI(payload: unknown[]): void {
     this.sendMessage({type: PreviewBridgeMessageType.RENDER_A2UI, payload});
   }
 
   ngOnDestroy(): void {
+    this.earlyMessageBuffer.length = 0;
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
       delete window.a2uiHostCommunication;

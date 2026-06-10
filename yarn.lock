@@ -5326,6 +5326,7 @@ __metadata:
   resolution: "a2ui-bridge@workspace:bridge"
   dependencies:
     "@angular/core": "npm:22.0.0"
+    "@lit/context": "npm:1.1.6"
     "@types/react": "npm:19.2.17"
     "@types/react-dom": "npm:19.2.3"
     "@vitest/coverage-v8": "npm:4.1.8"
@@ -8482,6 +8483,7 @@ __metadata:
   resolution: "lit-basic-catalog@workspace:samples/lit-basic-catalog"
   dependencies:
     "@a2ui/lit": "npm:0.10.0"
+    "@a2ui/markdown-it": "npm:0.0.4"
     "@a2ui/web_core": "npm:0.10.0"
     "@lit-labs/signals": "npm:0.3.0"
     "@lit/context": "npm:1.1.6"

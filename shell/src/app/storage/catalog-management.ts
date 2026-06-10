@@ -16,22 +16,22 @@
 
 import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {HostCommunication, MessageEnvelope} from '../shell/host-communication';
-import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Catalog} from './catalog-storage.model';
-import {concatMap, filter, from, of} from 'rxjs';
+import {concatMap, from, of} from 'rxjs';
 import {sanitizeHtml} from 'safevalues';
 import stringify from 'safe-stable-stringify';
 import {IndexedDbStorage} from './indexed-db-storage';
 import {StartupResolution} from '../shell/startup-resolution';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
-@Injectable({
-  providedIn: 'root',
-})
 /**
  * Coordinates client sidepanel integration, managing live visual schemas,
  * remote catalog assets, and establishing active rendering contexts.
  */
+@Injectable({
+  providedIn: 'root',
+})
 export class CatalogManagement {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly indexedDbStorage = inject(IndexedDbStorage);
@@ -119,9 +119,8 @@ export class CatalogManagement {
       }
     });
 
-    toObservable(this.hostCommunication.messageStream)
+    this.hostCommunication.messageStream$
       .pipe(
-        filter((envelope): envelope is MessageEnvelope => envelope !== null),
         takeUntilDestroyed(),
         concatMap((envelope: MessageEnvelope) => {
           if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
