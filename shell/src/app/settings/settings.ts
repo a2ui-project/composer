@@ -28,6 +28,7 @@ import {DOCUMENT} from '@angular/common';
 import {HostCommunication} from '../shell/host-communication';
 import {CatalogManagement} from '../storage/catalog-management';
 import {AppConfigProvider, AuthType} from './app-config-provider';
+import {locationAssign} from 'safevalues/dom';
 
 @Component({
   selector: 'a2ui-composer-settings',
@@ -134,7 +135,7 @@ export class Settings implements OnInit {
 
   public reloadWindow(): void {
     if (this.document.defaultView?.location) {
-      this.document.defaultView.location.assign('/');
+      locationAssign(this.document.defaultView.location, '/');
     }
   }
 

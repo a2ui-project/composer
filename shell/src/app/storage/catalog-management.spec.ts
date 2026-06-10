@@ -117,35 +117,30 @@ describe('CatalogManagement', () => {
     },
   );
 
-  it(
-    'logs a warning and ignores subsequent RENDERER_READY if handshake ' + 'is already in progress',
-    () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('logs a warning and ignores subsequent RENDERER_READY', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      hostCommunicationMock.messageStream$.next({
-        type: PreviewBridgeMessageType.RENDERER_READY,
-        origin: 'http://localhost',
-        timestamp: 1002,
-      });
-      TestBed.tick();
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: 1002,
+    });
+    TestBed.tick();
 
-      expect(service.isHandshakeInProgress()).toBe(true);
-      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
+    expect(service.isHandshakeInProgress()).toBe(true);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
 
-      hostCommunicationMock.messageStream$.next({
-        type: PreviewBridgeMessageType.RENDERER_READY,
-        origin: 'http://localhost',
-        payload: 'retry',
-        timestamp: 1003,
-      });
-      TestBed.tick();
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      payload: 'retry',
+      timestamp: 1003,
+    });
+    TestBed.tick();
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Handshake already in progress. Ignoring RENDERER_READY.',
-      );
-      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
-    },
-  );
+    expect(warnSpy).toHaveBeenCalledWith('Handshake already in progress. Ignoring RENDERER_READY.');
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
+  });
 
   it('clears handshake lock when A2UI_CATALOG arrives and hashing completes', async () => {
     hostCommunicationMock.messageStream$.next({
@@ -281,6 +276,39 @@ describe('CatalogManagement', () => {
       errorSpy.mockRestore();
     },
   );
+
+  it('catches DataCloneError during catalog cloning and updates catalogError signal', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: 3003,
+    });
+    TestBed.tick();
+
+    expect(service.isHandshakeInProgress()).toBe(true);
+
+    const nonClonablePayload = {
+      title: 'Title',
+      description: 'Desc',
+      schemas: [],
+      badProp: function () {},
+    };
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      origin: 'http://localhost',
+      payload: nonClonablePayload,
+      timestamp: 3004,
+    });
+    TestBed.tick();
+
+    expect(service.catalogError()).toBe('Failed to clone or serialize catalog payload.');
+    expect(service.isHandshakeInProgress()).toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
 
   it('sanitizes HTML tags in title and description and computes SHA-256 hash', async () => {
     const payload = {

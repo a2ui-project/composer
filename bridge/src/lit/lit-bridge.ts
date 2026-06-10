@@ -18,7 +18,13 @@ import {LitElement, html, TemplateResult} from 'lit';
 import {state} from 'lit/decorators.js';
 import {ContextProvider} from '@lit/context';
 import {Context} from '@a2ui/lit/v0_9';
-import {MessageProcessor, Catalog, ComponentApi, SurfaceModel} from '@a2ui/web_core/v0_9';
+import {
+  MessageProcessor,
+  Catalog,
+  ComponentApi,
+  SurfaceModel,
+  A2uiClientAction,
+} from '@a2ui/web_core/v0_9';
 import type {MarkdownRenderer} from '@a2ui/web_core/types/types';
 import {a2uiBridge, SurfaceStateSubscription} from '../preview-bridge.js';
 
@@ -62,7 +68,7 @@ export class A2uiSandboxRoot extends LitElement {
   // Core dynamic processing engine mapping actions outbox proxies
   private processor = new MessageProcessor(
     (this.constructor as typeof A2uiSandboxRoot).catalogs,
-    action => {
+    (action: A2uiClientAction) => {
       a2uiBridge.sendAction(action);
     },
   );

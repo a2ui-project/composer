@@ -56,7 +56,7 @@ export class LocalStorageInteractions {
       return null;
     }
     try {
-      return localStorage.getItem(key);
+      return window.localStorage.getItem(key);
     } catch (e) {
       console.warn(`Failed to read key "${key}" from local storage safely:`, e);
       return null;
@@ -74,7 +74,7 @@ export class LocalStorageInteractions {
       return;
     }
     try {
-      localStorage.setItem(key, value);
+      window.localStorage.setItem(key, value);
     } catch (e) {
       console.warn(`Failed to write key "${key}" to local storage safely:`, e);
     }
@@ -90,7 +90,7 @@ export class LocalStorageInteractions {
       return;
     }
     try {
-      localStorage.removeItem(key);
+      window.localStorage.removeItem(key);
     } catch (e) {
       console.warn(`Failed to remove key "${key}" from local storage safely:`, e);
     }

@@ -90,7 +90,7 @@ export class ComposerShell {
     this.storage.removeItem(LocalStorageKey.EDITOR_CACHE);
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
-        sessionStorage.clear();
+        window.sessionStorage.clear();
       }
     } catch (e) {
       console.warn('Failed to clear session cache safely:', e);

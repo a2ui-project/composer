@@ -70,7 +70,7 @@ export class Events {
     effect(() => {
       const envelope = this.hostComm.messageStream();
       if (envelope?.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
-        const payload = envelope.payload as RawServerPayload;
+        const payload = envelope?.payload as RawServerPayload;
         if (payload && payload.action) {
           let action = payload.action;
           if (typeof action === 'string') {
@@ -81,7 +81,7 @@ export class Events {
             }
           }
           if (action && typeof action === 'object') {
-            const timestamp = action.timestamp || envelope.timestamp;
+            const timestamp = action.timestamp || envelope?.timestamp || Date.now();
             const mappedItem = {
               time: formatTimestamp(timestamp),
               action: action.name || '',

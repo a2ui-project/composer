@@ -1,0 +1,2 @@
+declare const catalogJson: any;
+export default catalogJson;

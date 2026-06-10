@@ -15,7 +15,13 @@
  */
 
 import {useState, useEffect} from 'react';
-import {MessageProcessor, Catalog, ComponentApi, SurfaceModel} from '@a2ui/web_core/v0_9';
+import {
+  MessageProcessor,
+  Catalog,
+  ComponentApi,
+  SurfaceModel,
+  A2uiClientAction,
+} from '@a2ui/web_core/v0_9';
 import {a2uiBridge} from '../preview-bridge.js';
 
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
@@ -45,7 +51,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
 
   useEffect(() => {
     // Instantiates a new dynamic MessageProcessor mapping outbound event actions
-    const processor = new MessageProcessor(catalogs, action => {
+    const processor = new MessageProcessor(catalogs, (action: A2uiClientAction) => {
       a2uiBridge.sendAction(action);
     });
 

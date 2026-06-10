@@ -19,7 +19,7 @@ import {toObservable} from '@angular/core/rxjs-interop';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {FormsModule} from '@angular/forms';
-import {debounceTime, distinctUntilChanged, filter} from 'rxjs';
+import {debounceTime, distinctUntilChanged, filter} from 'rxjs/operators';
 import {HostCommunication} from '../../shell/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
@@ -65,7 +65,7 @@ export class DataModel {
     effect(() => {
       const streamValue = this.hostComm.messageStream();
       if (streamValue?.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
-        const payload = streamValue.payload as Record<string, unknown>;
+        const payload = streamValue?.payload as Record<string, unknown>;
         const updateObj = payload?.['updateDataModel'] as Record<string, unknown>;
         if (updateObj) {
           if (typeof updateObj['surfaceId'] === 'string') {

@@ -18,12 +18,13 @@ import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {HostCommunication, MessageEnvelope} from '../shell/host-communication';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Catalog} from './catalog-storage.model';
-import {concatMap, from, of} from 'rxjs';
+import {from, of} from 'rxjs';
+import {concatMap} from 'rxjs/operators';
 import {sanitizeHtml} from 'safevalues';
-import stringify from 'safe-stable-stringify';
 import {IndexedDbStorage} from './indexed-db-storage';
 import {StartupResolution} from '../shell/startup-resolution';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {stableStringify} from './stable-stringify';
 
 /**
  * Coordinates client sidepanel integration, managing live visual schemas,
@@ -180,15 +181,24 @@ export class CatalogManagement {
               return of(null);
             }
 
-            const catalogObj = structuredClone(payload as Catalog);
-            if (typeof catalogObj.title === 'string') {
-              catalogObj.title = sanitizeHtml(catalogObj.title).toString();
+            let catalogObj: Catalog;
+            let catalogString: string;
+            try {
+              catalogObj = structuredClone(payload as Catalog);
+              if (typeof catalogObj.title === 'string') {
+                catalogObj.title = sanitizeHtml(catalogObj.title).toString();
+              }
+              if (typeof catalogObj.description === 'string') {
+                catalogObj.description = sanitizeHtml(catalogObj.description).toString();
+              }
+              catalogString = stableStringify(catalogObj);
+            } catch (err: unknown) {
+              const errorMsg = 'Failed to clone or serialize catalog payload.';
+              this._catalogError.set(errorMsg);
+              console.error(errorMsg, err);
+              this._isHandshakeInProgress.set(false);
+              return of(null);
             }
-            if (typeof catalogObj.description === 'string') {
-              catalogObj.description = sanitizeHtml(catalogObj.description).toString();
-            }
-
-            const catalogString = stringify(catalogObj);
 
             let hashHexPromise: Promise<string>;
             if (!globalThis.crypto?.subtle) {
