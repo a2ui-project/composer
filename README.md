@@ -7,6 +7,19 @@ _Real-Time Visual Authoring, Live-Preview & Debugging Workbench for A2UI._
 [![Yarn](https://img.shields.io/badge/Yarn-v4-blue.svg)](https://yarnpkg.com/)
 [![Angular](https://img.shields.io/badge/Angular-v21-dd0031.svg)](https://angular.dev/)
 
+_Screenshot:_
+
+![A2UI Composer](./docs/assets/A2UI%20Composer%20Demo.png)
+
+_Demo video:_
+
+<video width="640" height="360" controls>
+  <source src="./docs/assets/A2UI%20Composer%20Demo.mp4" type="video/mp4"/>
+  Your browser does not support the video tag.
+</video>
+
+_Note: Interactions with the LLM have been sped up in the video._
+
 ## Executive Summary & Value Proposition
 
 **A2UI Composer** is a purely client-side, serverless, framework-agnostic
