@@ -23,5 +23,17 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.spec.ts'],
+    coverage: {
+      enabled: true,
+      clean: true,
+      reportsDirectory: './coverage',
+      reporter: ['text', 'html'],
+      thresholds: {
+        lines: 90,
+        functions: 90,
+        branches: 75,
+        statements: 85,
+      },
+    },
   },
 });

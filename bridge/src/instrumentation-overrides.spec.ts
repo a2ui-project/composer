@@ -16,6 +16,9 @@
 
 import {describe, it, expect, beforeEach, afterEach, vi, MockInstance} from 'vitest';
 
+const consoleLogSpy = vi.hoisted(() => {
+  return vi.spyOn(console, 'log').mockImplementation(() => {});
+});
 const consoleErrorSpy = vi.hoisted(() => {
   return vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -41,6 +44,7 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
 
   afterEach(() => {
     teardownInstrumentationOverrides();
+    consoleLogSpy.mockClear();
     consoleErrorSpy.mockClear();
     spy.mockClear();
   });
@@ -345,5 +349,60 @@ describe('InstrumentationOverrides Diagnostics Telemetry', () => {
     teardownInstrumentationOverrides();
 
     expect(console.log).not.toBe(wrappedLog);
+  });
+
+  it('serializes Date, RegExp, and nested undefined values safely inside deepCloneSafe', () => {
+    const testDate = new Date('2026-06-09T12:00:00.000Z');
+    const testRegExp = /test-pattern/gi;
+    console.log({
+      date: testDate,
+      regexp: testRegExp,
+      empty: undefined,
+    });
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          message:
+            '{"date":"2026-06-09T12:00:00.000Z","regexp":"/test-pattern/gi","empty":"undefined"}',
+        }),
+      }),
+    );
+  });
+
+  it('returns early without double-wrapping when setupInstrumentationOverrides is called repeatedly', () => {
+    const currentLog = console.log;
+    setupInstrumentationOverrides(mockSender);
+    expect(console.log).toBe(currentLog);
+  });
+
+  it('captures direct top-level undefined arguments in console calls', () => {
+    console.log(undefined);
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: expect.objectContaining({
+          level: 'log',
+          message: 'undefined',
+        }),
+      }),
+    );
+  });
+
+  it('captures direct top-level Error instances and includes their stack trace', () => {
+    const topError = new Error('Direct fatal error');
+    console.log(topError);
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {
+          level: 'log',
+          message: 'Direct fatal error',
+          stack: topError.stack,
+        },
+      }),
+    );
   });
 });

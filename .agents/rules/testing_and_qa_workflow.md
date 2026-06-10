@@ -46,7 +46,7 @@ Before committing any change, you MUST execute the following pipeline.
 - After addressing all review findings, spawn a separate QA subagent (which
   MUST be a `Gemini Pro` model) to perform a comprehensive quality review,
   looking for:
-  - Sufficient testing of both happy and unhappy paths.
-  - Sufficient code coverage (as reported by `yarn test`).
+  - Tests exist to cover both happy and unhappy paths.
+  - Sufficient code coverage (as reported by `yarn test --coverage`).
 - If the QA agent flags anything, it MUST be addressed and then reviewed again
   by a separate review agent (repeating Step 1).

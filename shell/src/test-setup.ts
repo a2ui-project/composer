@@ -15,10 +15,7 @@
  */
 
 import {getTestBed} from '@angular/core/testing';
-import {
-  BrowserDynamicTestingModule,
-  platformBrowserDynamicTesting,
-} from '@angular/platform-browser-dynamic/testing';
+import {BrowserTestingModule, platformBrowserTesting} from '@angular/platform-browser/testing';
 import {webcrypto} from 'node:crypto';
 
 if (typeof window !== 'undefined' && (!window.crypto || !window.crypto.subtle)) {
@@ -29,7 +26,7 @@ if (typeof window !== 'undefined' && (!window.crypto || !window.crypto.subtle)) 
 }
 
 if (!getTestBed().platform) {
-  getTestBed().initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting());
+  getTestBed().initTestEnvironment(BrowserTestingModule, platformBrowserTesting());
 }
 
 import {beforeEach} from 'vitest';
