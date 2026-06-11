@@ -41,6 +41,10 @@ interface WorkspaceMessagePayload {
   validationErrors?: unknown[] | Record<string, unknown> | string | boolean;
 }
 
+/**
+ * The central workspace hub coordinating split-pane views between
+ * the layout editors, active preview frame, and debug consoles.
+ */
 @Component({
   selector: 'a2ui-composer-workspace',
   standalone: true,
@@ -62,17 +66,13 @@ interface WorkspaceMessagePayload {
   templateUrl: './composer-workspace.ng.html',
   styleUrl: './composer-workspace.scss',
 })
-/**
- * The central workspace hub coordinating split-pane views between
- * the layout editors, active preview frame, and debug consoles.
- */
 export class ComposerWorkspace implements OnInit {
   private startupResolution = inject(StartupResolution);
   private hostComm = inject(HostCommunication);
 
   public isExtension = signal(false);
   public isDebugCollapsed = signal(false);
-
+  public showMockRules = signal(false);
   public selectedTabIndex = signal(0);
   public unreadEventsCount = signal(0);
   public unreadErrorsCount = signal(0);
@@ -137,8 +137,6 @@ export class ComposerWorkspace implements OnInit {
       this.isDebugCollapsed.set(true);
     }
   }
-
-  public showMockRules = signal(false);
 
   public toggleDebugCollapse(): void {
     this.isDebugCollapsed.update(c => !c);

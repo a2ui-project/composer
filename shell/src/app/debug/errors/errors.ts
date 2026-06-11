@@ -42,6 +42,10 @@ interface RawTelemetryPayload {
   validationErrors?: unknown[] | Record<string, unknown> | string | boolean;
 }
 
+/**
+ * A debug drawer component presenting captured error stacks, warnings,
+ * and connection failures piped from the renderer application.
+ */
 @Component({
   selector: 'a2ui-composer-errors',
   standalone: true,
@@ -49,10 +53,6 @@ interface RawTelemetryPayload {
   templateUrl: './errors.ng.html',
   styleUrl: './errors.scss',
 })
-/**
- * A debug drawer component presenting captured error stacks, warnings,
- * and connection failures piped from the renderer application.
- */
 export class Errors {
   private readonly hostComm = inject(HostCommunication);
 

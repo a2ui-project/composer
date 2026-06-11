@@ -20,6 +20,10 @@ import {StartupResolution} from '../../shell/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication';
 import {ChatState} from '../../chat/chat-state/chat-state';
 
+/**
+ * Orchestrates the secure, sandboxed iframe rendering the active preview target,
+ * synchronizing layouts, data models, and diagnostic telemetry.
+ */
 @Component({
   selector: 'a2ui-composer-rendered-frame',
   standalone: true,
@@ -27,10 +31,6 @@ import {ChatState} from '../../chat/chat-state/chat-state';
   templateUrl: './rendered-frame.ng.html',
   styleUrl: './rendered-frame.scss',
 })
-/**
- * Orchestrates the secure, sandboxed iframe rendering the active preview target,
- * synchronizing layouts, data models, and diagnostic telemetry.
- */
 export class RenderedFrame {
   private sanitizer = inject(DomSanitizer);
   private startupResolution = inject(StartupResolution);

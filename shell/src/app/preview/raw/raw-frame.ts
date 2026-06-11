@@ -36,6 +36,10 @@ import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState} from '../../chat/chat-state/chat-state';
 import {tryParseJsonArray} from '../../utils/json';
 
+/**
+ * Hosts the raw JSON view of active surface models, allowing direct source editing
+ * and displaying real-time parsing error indicators.
+ */
 @Component({
   selector: 'a2ui-composer-raw-frame',
   standalone: true,
@@ -43,10 +47,6 @@ import {tryParseJsonArray} from '../../utils/json';
   templateUrl: './raw-frame.ng.html',
   styleUrl: './raw-frame.scss',
 })
-/**
- * Hosts the raw JSON view of active surface models, allowing direct source editing
- * and displaying real-time parsing error indicators.
- */
 export class RawFrame {
   protected readonly isExtensionMode = inject(IS_EXTENSION_MODE);
   protected readonly layoutJson: WritableSignal<string>;

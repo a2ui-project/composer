@@ -31,6 +31,11 @@ import {LocalStorageKey} from '../settings/local-storage-keys';
 import {LocalStorageInteractions} from '../settings/local-storage-interactions';
 import {SessionStorageInteractions} from '../settings/session-storage-interactions';
 
+/**
+ * The primary layout container for the A2UI Composer.
+ * Renders the permanent header bar, persistent navigation sidebar,
+ * and hosts the active workspace routing outlet.
+ */
 @Component({
   selector: 'a2ui-composer-shell',
   standalone: true,
@@ -47,11 +52,6 @@ import {SessionStorageInteractions} from '../settings/session-storage-interactio
   templateUrl: './composer-shell.ng.html',
   styleUrl: './composer-shell.scss',
 })
-/**
- * The primary layout container for the A2UI Composer.
- * Renders the permanent header bar, persistent navigation sidebar,
- * and hosts the active workspace routing outlet.
- */
 export class ComposerShell {
   isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
   private readonly catalogManagement = inject(CatalogManagement);
@@ -59,11 +59,12 @@ export class ComposerShell {
   private readonly storage = inject(LocalStorageInteractions);
   private readonly sessionStorage = inject(SessionStorageInteractions);
   private readonly configProvider = inject(AppConfigProvider);
+  private readonly document = inject(DOCUMENT);
 
   activeCatalogTitle = this.catalogManagement.activeCatalogTitle;
   activeCatalogDescription = this.catalogManagement.activeCatalogDescription;
 
-  constructor(@Inject(DOCUMENT) private document: Document) {
+  constructor() {
     effect(() => {
       if (this.isDarkTheme()) {
         this.document.body.classList.add('dark-theme');

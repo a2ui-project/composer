@@ -39,6 +39,10 @@ export interface RawLogEntry {
   readonly origin?: string;
 }
 
+/**
+ * A debug drawer component presenting a scrolling diagnostic view
+ * of raw postMessage traffic across the iframe boundary.
+ */
 @Component({
   selector: 'a2ui-composer-raw-messages',
   standalone: true,
@@ -46,10 +50,6 @@ export interface RawLogEntry {
   templateUrl: './raw-messages.ng.html',
   styleUrl: './raw-messages.scss',
 })
-/**
- * A debug drawer component presenting a scrolling diagnostic view
- * of raw postMessage traffic across the iframe boundary.
- */
 export class RawMessages implements OnDestroy {
   private readonly hostComm = inject(HostCommunication);
   private readonly chatState = inject(ChatState);

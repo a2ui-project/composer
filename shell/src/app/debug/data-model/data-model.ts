@@ -23,6 +23,10 @@ import {debounceTime, distinctUntilChanged, filter} from 'rxjs/operators';
 import {HostCommunication} from '../../shell/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
+/**
+ * A debug drawer component presenting a reactive, nested JSON tree explorer
+ * of the active surface's underlying state data model.
+ */
 @Component({
   selector: 'a2ui-composer-data-model',
   standalone: true,
@@ -30,10 +34,6 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
   templateUrl: './data-model.ng.html',
   styleUrl: './data-model.scss',
 })
-/**
- * A debug drawer component presenting a reactive, nested JSON tree explorer
- * of the active surface's underlying state data model.
- */
 export class DataModel {
   private readonly hostComm = inject(HostCommunication);
 

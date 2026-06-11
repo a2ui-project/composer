@@ -30,6 +30,10 @@ import {CatalogManagement} from '../storage/catalog-management';
 import {AppConfigProvider, AuthType} from './app-config-provider';
 import {locationAssign} from 'safevalues/dom';
 
+/**
+ * Renders the user settings view, allowing configuration of target URL endpoints,
+ * connection handshakes, and developer toggle overrides.
+ */
 @Component({
   selector: 'a2ui-composer-settings',
   standalone: true,
@@ -46,10 +50,6 @@ import {locationAssign} from 'safevalues/dom';
   templateUrl: './settings.ng.html',
   styleUrl: './settings.scss',
 })
-/**
- * Renders the user settings view, allowing configuration of target URL endpoints,
- * connection handshakes, and developer toggle overrides.
- */
 export class Settings implements OnInit {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly startupResolution = inject(StartupResolution);

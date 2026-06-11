@@ -17,6 +17,10 @@
 import {Component} from '@angular/core';
 import {RouterOutlet} from '@angular/router';
 
+/**
+ * The root application component for the A2UI Composer shell.
+ * Serves as the main entry point rendering the router outlet.
+ */
 @Component({
   selector: 'a2ui-composer-root',
   standalone: true,
@@ -24,8 +28,4 @@ import {RouterOutlet} from '@angular/router';
   templateUrl: './app.ng.html',
   styleUrl: './app.scss',
 })
-/**
- * The root application component for the A2UI Composer shell.
- * Serves as the main entry point rendering the router outlet.
- */
 export class App {}

@@ -49,6 +49,10 @@ export interface MappedEventLogItem {
   context: Record<string, unknown> | null;
 }
 
+/**
+ * A debug drawer component displaying interactive event hooks and custom
+ * event transmissions triggered by layout elements.
+ */
 @Component({
   selector: 'a2ui-composer-events',
   standalone: true,
@@ -56,10 +60,6 @@ export interface MappedEventLogItem {
   templateUrl: './events.ng.html',
   styleUrl: './events.scss',
 })
-/**
- * A debug drawer component displaying interactive event hooks and custom
- * event transmissions triggered by layout elements.
- */
 export class Events {
   private readonly hostComm = inject(HostCommunication);
 

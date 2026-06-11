@@ -32,6 +32,12 @@ import {CatalogManagement} from '../../storage/catalog-management';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 import {tryParseJsonArray} from '../../utils/json';
 
+/**
+ * Displays the interactive Gemini chat dialogue drawer within the Composer
+ * shell. Visualizes conversational bubble histories list, loading Overlay
+ * milestone Spinners, and handles prompt dispatches with lockout editing
+ * controls.
+ */
 @Component({
   selector: 'a2ui-composer-chat-panel',
   standalone: true,
@@ -47,12 +53,6 @@ import {tryParseJsonArray} from '../../utils/json';
   templateUrl: './chat-panel.ng.html',
   styleUrl: './chat-panel.scss',
 })
-/**
- * Displays the interactive Gemini chat dialogue drawer within the Composer
- * shell. Visualizes conversational bubble histories list, loading Overlay
- * milestone Spinners, and handles prompt dispatches with lockout editing
- * controls.
- */
 export class ChatPanel {
   private readonly chatCoordinator = inject(ChatCoordinator);
   private readonly chatState = inject(ChatState);

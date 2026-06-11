@@ -14,17 +14,5 @@
  * limitations under the License.
  */
 
-import {Component} from '@angular/core';
-
-/**
- * Displays a visual catalog gallery of pre-configured A2UI components
- * and layouts for rapid prototyping and reference.
- */
-@Component({
-  selector: 'a2ui-composer-gallery',
-  standalone: true,
-  imports: [],
-  templateUrl: './gallery.ng.html',
-  styleUrl: './gallery.scss',
-})
-export class Gallery {}
+declare const catalogJson: any;
+export default catalogJson;

@@ -16,6 +16,10 @@
 
 import {Component} from '@angular/core';
 
+/**
+ * A debug drawer component allowing developers to view, inspect,
+ * and configure mock business logic rules for the active catalog.
+ */
 @Component({
   selector: 'a2ui-composer-mock-rules',
   standalone: true,
@@ -23,8 +27,4 @@ import {Component} from '@angular/core';
   templateUrl: './mock-rules.ng.html',
   styleUrl: './mock-rules.scss',
 })
-/**
- * A debug drawer component allowing developers to view, inspect,
- * and configure mock business logic rules for the active catalog.
- */
 export class MockRules {}
