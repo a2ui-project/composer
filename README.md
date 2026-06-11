@@ -1,4 +1,4 @@
-e# A2UI Composer
+# A2UI Composer
 
 _Real-Time Visual Authoring, Live-Preview & Debugging Workbench for A2UI._
 
@@ -14,7 +14,6 @@ _Screenshot:_
 _Demo video:_
 
 https://github.com/user-attachments/assets/6ce76648-9dbd-4ada-ba2c-eea005f6f983
-
 
 _Note: Interactions with the LLM have been sped up in the video._
 
