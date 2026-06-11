@@ -1,4 +1,4 @@
-# A2UI Composer
+e# A2UI Composer
 
 _Real-Time Visual Authoring, Live-Preview & Debugging Workbench for A2UI._
 
@@ -13,10 +13,8 @@ _Screenshot:_
 
 _Demo video:_
 
-<video width="640" height="360" controls>
-  <source src="https://raw.githubusercontent.com/a2ui-project/composer/main/docs/assets/A2UI%20Composer%20Demo.mp4" type="video/mp4"/>
-  Your browser does not support the video tag.
-</video>
+https://github.com/user-attachments/assets/6ce76648-9dbd-4ada-ba2c-eea005f6f983
+
 
 _Note: Interactions with the LLM have been sped up in the video._
 
