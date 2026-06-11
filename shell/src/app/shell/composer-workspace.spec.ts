@@ -37,69 +37,69 @@ import {
 import {signal} from '@angular/core';
 
 class MockChatState {
-  public readonly chatHistory = signal<LlmMessage[]>([]);
-  public readonly pipelineStatus = signal(PipelineStatus.IDLE);
-  public readonly isProgrammaticStreamActive = signal(false);
-  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
-  public readonly llmHistory = signal<LlmLogEntry[]>([]);
+  readonly chatHistory = signal<LlmMessage[]>([]);
+  readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  readonly isProgrammaticStreamActive = signal(false);
+  readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  readonly llmHistory = signal<LlmLogEntry[]>([]);
 
-  public setPipelineStatus(status: PipelineStatus): void {
+  setPipelineStatus(status: PipelineStatus): void {
     this.pipelineStatus.set(status);
   }
 
-  public setProgrammaticStreamActive(active: boolean): void {
+  setProgrammaticStreamActive(active: boolean): void {
     this.isProgrammaticStreamActive.set(active);
   }
 
-  public setChatHistory(history: LlmMessage[]): void {
+  setChatHistory(history: LlmMessage[]): void {
     this.chatHistory.set(history);
   }
 
-  public updateChatHistory(updater: (h: LlmMessage[]) => LlmMessage[]): void {
+  updateChatHistory(updater: (h: LlmMessage[]) => LlmMessage[]): void {
     this.chatHistory.update(updater);
   }
 
-  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
+  addRawLlmLog(type: LlmLogType, payload: unknown): void {
     const entry = {type, timestamp: Date.now(), payload};
     this.latestLlmLog.set(entry);
     this.llmHistory.update(h => [...h, entry].slice(-50));
   }
 
-  public clearRawLlmHistory(): void {
+  clearRawLlmHistory(): void {
     this.latestLlmLog.set(null);
     this.llmHistory.set([]);
   }
 }
 
 class MockChatCoordinator {
-  public readonly systemPrompt = signal('Initial system prompt block');
-  public readonly pipelineStatus = signal(PipelineStatus.IDLE);
-  public readonly isProgrammaticStreamActive = signal(false);
+  readonly systemPrompt = signal('Initial system prompt block');
+  readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  readonly isProgrammaticStreamActive = signal(false);
 }
 
 class MockStateSync {
-  public readonly activeDraftSignal = signal('{}');
-  public readonly activeDraft = this.activeDraftSignal.asReadonly();
-  public updateDraft = vi.fn((val: string) => {
+  readonly activeDraftSignal = signal('{}');
+  readonly activeDraft = this.activeDraftSignal.asReadonly();
+  updateDraft = vi.fn((val: string) => {
     this.activeDraftSignal.set(val);
   });
-  public hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
+  hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
 }
 
 class MockAppConfigProvider {
-  public readonly envMode = signal(EnvMode.STANDALONE);
-  public readonly authType = signal(AuthType.ONE_PARTY);
-  public readonly rendererUrl = signal('http://localhost:4200/renderer');
-  public readonly geminiApiKey = signal('');
-  public readonly themePreference = signal<ThemePreference>('light');
-  public setThemePreference = vi.fn((theme: ThemePreference) => {
+  readonly envMode = signal(EnvMode.STANDALONE);
+  readonly authType = signal(AuthType.ONE_PARTY);
+  readonly rendererUrl = signal('http://localhost:4200/renderer');
+  readonly geminiApiKey = signal('');
+  readonly themePreference = signal<ThemePreference>('light');
+  setThemePreference = vi.fn((theme: ThemePreference) => {
     this.themePreference.set(theme);
   });
 }
 
 class MockLlmClient {
-  public chat = vi.fn();
-  public chatStream = vi.fn();
+  chat = vi.fn();
+  chatStream = vi.fn();
 }
 
 describe('ComposerWorkspace Dashboard', () => {

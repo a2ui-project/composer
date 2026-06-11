@@ -24,12 +24,12 @@ import {CAR_BOOKING} from '../chat-service/initial-draft';
 
 class MockChatState {
   private readonly _chatHistory: LlmMessage[] = [];
-  public readonly chatHistory = vi.fn(() => this._chatHistory);
-  public setChatHistory = vi.fn((history: LlmMessage[]) => {
+  readonly chatHistory = vi.fn(() => this._chatHistory);
+  setChatHistory = vi.fn((history: LlmMessage[]) => {
     this._chatHistory.length = 0;
     this._chatHistory.push(...history);
   });
-  public updateChatHistory = vi.fn((updater: (history: LlmMessage[]) => LlmMessage[]) => {
+  updateChatHistory = vi.fn((updater: (history: LlmMessage[]) => LlmMessage[]) => {
     const updated = updater([...this._chatHistory]);
     this._chatHistory.length = 0;
     this._chatHistory.push(...updated);
@@ -37,9 +37,9 @@ class MockChatState {
 
   private _latestLlmLog: LlmLogEntry | null = null;
   private _llmHistory: LlmLogEntry[] = [];
-  public readonly latestLlmLog = vi.fn(() => this._latestLlmLog);
-  public readonly llmHistory = vi.fn(() => this._llmHistory);
-  public addRawLlmLog = vi.fn((type: LlmLogType, payload: unknown) => {
+  readonly latestLlmLog = vi.fn(() => this._latestLlmLog);
+  readonly llmHistory = vi.fn(() => this._llmHistory);
+  addRawLlmLog = vi.fn((type: LlmLogType, payload: unknown) => {
     const entry = {type, timestamp: Date.now(), payload};
     this._latestLlmLog = entry;
     this._llmHistory.push(entry);
@@ -47,7 +47,7 @@ class MockChatState {
       this._llmHistory.shift();
     }
   });
-  public clearRawLlmHistory = vi.fn(() => {
+  clearRawLlmHistory = vi.fn(() => {
     this._latestLlmLog = null;
     this._llmHistory.length = 0;
   });

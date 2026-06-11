@@ -25,7 +25,7 @@ import {act} from 'react';
 
 describe('React Hook Adapter Spec', () => {
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT: boolean}).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
   afterEach(() => {
@@ -40,8 +40,6 @@ describe('React Hook Adapter Spec', () => {
     } as unknown as Catalog<ComponentApi>;
 
     const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
-
-    let onCatalogResolvedCb: ((catalogId: string) => void) | undefined;
 
     function TestComponent() {
       useA2uiSandbox([myCatalog]);
@@ -60,7 +58,7 @@ describe('React Hook Adapter Spec', () => {
     const configPassed = attachSpy.mock.calls[0][1];
     expect(configPassed.onCatalogResolved).toBeDefined();
 
-    onCatalogResolvedCb = configPassed.onCatalogResolved;
+    const onCatalogResolvedCb = configPassed.onCatalogResolved;
 
     // Trigger the callback
     await act(async () => {
@@ -83,7 +81,7 @@ describe('React Hook Adapter Spec', () => {
 
     const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
 
-    let renderedSurface: any = undefined;
+    let renderedSurface: {id?: string} | undefined = undefined;
 
     function TestComponent() {
       const {surface} = useA2uiSandbox([dummyCatalog]);
@@ -100,7 +98,10 @@ describe('React Hook Adapter Spec', () => {
     });
 
     expect(attachSpy).toHaveBeenCalled();
-    const processor = attachSpy.mock.lastCall![0] as any;
+    interface MockProcessor {
+      processMessages(messages: unknown[]): void;
+    }
+    const processor = attachSpy.mock.lastCall![0] as unknown as MockProcessor;
     const config = attachSpy.mock.lastCall![1];
 
     expect(renderedSurface).toBeUndefined();
@@ -120,7 +121,7 @@ describe('React Hook Adapter Spec', () => {
     });
 
     expect(renderedSurface).toBeDefined();
-    expect(renderedSurface.id).toBe('surf-react');
+    expect(renderedSurface!.id).toBe('surf-react');
 
     await act(async () => {
       if (config.onSurfaceCleared) {
@@ -159,7 +160,14 @@ describe('React Hook Adapter Spec', () => {
     });
 
     expect(attachSpy).toHaveBeenCalled();
-    const processor = attachSpy.mock.lastCall![0] as any;
+    interface MockSurface {
+      _onAction: {emit(val: unknown): void};
+    }
+    interface FullMockProcessor {
+      processMessages(messages: unknown[]): void;
+      model: {getSurface(id: string): MockSurface};
+    }
+    const processor = attachSpy.mock.lastCall![0] as unknown as FullMockProcessor;
 
     processor.processMessages([
       {

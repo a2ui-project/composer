@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "start": "ng serve --port 3456",
-    "build": "ng build",
+    "build": "yarn lint && ng build",
     "test": "vitest run",
     "prettier": "prettier --ignore-path ../../.prettierignore --write . | grep -v '(unchanged)'",
-    "clean": "rm -rf dist .angular node_modules/.vite"
+    "clean": "rm -rf dist .angular node_modules/.vite",
+    "lint": "npx eslint ."
   },
   "dependencies": {
     "@a2ui/angular": "0.10.0",

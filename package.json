@@ -13,11 +13,18 @@
     "build": "yarn workspaces foreach -A run build",
     "prettier": "yarn workspaces foreach -A run prettier",
     "tsc": "yarn --cwd shell tsc --noEmit && yarn --cwd bridge tsc --project tsconfig.bridge.json --noEmit",
-    "clean": "yarn workspaces foreach -A run clean"
+    "clean": "yarn workspaces foreach -A run clean",
+    "lint": "yarn workspaces foreach -A run lint"
   },
   "resolutions": {
     "@a2ui/web_core": "0.10.0",
     "@google/genai": "2.8.0"
   },
-  "packageManager": "yarn@4.5.0"
+  "packageManager": "yarn@4.5.0",
+  "devDependencies": {
+    "angular-eslint": "22.0.0",
+    "eslint": "10.4.1",
+    "typescript-eslint": "8.61.0"
+  },
+  "type": "module"
 }

@@ -33,44 +33,44 @@ import {LocalStorageInteractions} from './settings/local-storage-interactions';
 import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
 
 class MockStartupResolution {
-  public readonly resolvedUrl = signal('http://localhost:4200');
-  public readonly isLockedContext = signal(false);
-  public isEnvironmentValid = vi.fn().mockReturnValue(true);
-  public isExtensionMode = vi.fn().mockReturnValue(false);
-  public isContextLocked = vi.fn().mockReturnValue(false);
-  public getResolvedRendererUrl = vi.fn().mockReturnValue('http://localhost:4200');
-  public isThirdPartyEnvironment = vi.fn().mockReturnValue(false);
+  readonly resolvedUrl = signal('http://localhost:4200');
+  readonly isLockedContext = signal(false);
+  isEnvironmentValid = vi.fn().mockReturnValue(true);
+  isExtensionMode = vi.fn().mockReturnValue(false);
+  isContextLocked = vi.fn().mockReturnValue(false);
+  getResolvedRendererUrl = vi.fn().mockReturnValue('http://localhost:4200');
+  isThirdPartyEnvironment = vi.fn().mockReturnValue(false);
 }
 
 class MockChatState {
-  public readonly chatHistory = signal([]);
-  public readonly pipelineStatus = signal(PipelineStatus.IDLE);
-  public readonly isProgrammaticStreamActive = signal(false);
-  public readonly latestLlmLog = signal(null);
-  public readonly llmHistory = signal([]);
+  readonly chatHistory = signal([]);
+  readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  readonly isProgrammaticStreamActive = signal(false);
+  readonly latestLlmLog = signal(null);
+  readonly llmHistory = signal([]);
 }
 
 class MockChatCoordinator {
-  public readonly systemPrompt = signal('');
-  public readonly pipelineStatus = signal(PipelineStatus.IDLE);
-  public readonly isProgrammaticStreamActive = signal(false);
+  readonly systemPrompt = signal('');
+  readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  readonly isProgrammaticStreamActive = signal(false);
 }
 
 class MockStateSync {
-  public readonly activeDraft = signal('{}');
-  public updateDraft = vi.fn();
-  public hydrateActiveDraft = vi.fn(() => '{}');
+  readonly activeDraft = signal('{}');
+  updateDraft = vi.fn();
+  hydrateActiveDraft = vi.fn(() => '{}');
 }
 
 class MockAppConfigProvider {
-  public readonly envMode = signal(EnvMode.STANDALONE);
-  public readonly authType = signal(AuthType.ONE_PARTY);
-  public readonly rendererUrl = signal('http://localhost:4200/renderer');
-  public readonly geminiApiKey = signal('');
-  public readonly themePreference = signal('light');
-  public setThemePreference = vi.fn();
-  public setGeminiApiKey = vi.fn();
-  public setRendererUrl = vi.fn();
+  readonly envMode = signal(EnvMode.STANDALONE);
+  readonly authType = signal(AuthType.ONE_PARTY);
+  readonly rendererUrl = signal('http://localhost:4200/renderer');
+  readonly geminiApiKey = signal('');
+  readonly themePreference = signal('light');
+  setThemePreference = vi.fn();
+  setGeminiApiKey = vi.fn();
+  setRendererUrl = vi.fn();
 }
 
 describe('App Routes Active Verification', () => {

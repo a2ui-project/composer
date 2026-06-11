@@ -40,9 +40,9 @@ export class DataModel {
   private lastSurfaceId = 'sample-surface';
   private lastPath: string | undefined = undefined;
 
-  public readonly latestModelValue = signal<unknown>(null);
+  readonly latestModelValue = signal<unknown>(null);
 
-  public readonly dataModelJson = linkedSignal({
+  readonly dataModelJson = linkedSignal({
     source: this.latestModelValue,
     computation: (newModel: unknown): string => {
       if (newModel === null) return '';
@@ -50,7 +50,7 @@ export class DataModel {
     },
   });
 
-  public readonly isJsonInvalid = computed(() => {
+  readonly isJsonInvalid = computed(() => {
     const val = this.dataModelJson();
     if (!val) return false;
     try {

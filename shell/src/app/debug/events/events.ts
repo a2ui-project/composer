@@ -104,7 +104,7 @@ export class Events {
     });
   }
 
-  public clearLogs(): void {
+  clearLogs(): void {
     this.eventsLog.set([]);
   }
 }

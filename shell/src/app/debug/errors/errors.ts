@@ -150,7 +150,7 @@ export class Errors {
     return this.expandedRows().has(element);
   }
 
-  public clearLogs(): void {
+  clearLogs(): void {
     this.errorsLog.set([]);
     this.expandedRows.set(new Set());
   }

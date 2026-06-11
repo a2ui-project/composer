@@ -29,31 +29,31 @@ import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 
 class MockChatState {
-  public readonly isProgrammaticStreamActive = signal<boolean>(false);
-  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
-  public readonly llmHistory = signal<LlmLogEntry[]>([]);
-  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
+  readonly isProgrammaticStreamActive = signal<boolean>(false);
+  readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  readonly llmHistory = signal<LlmLogEntry[]>([]);
+  addRawLlmLog(type: LlmLogType, payload: unknown): void {
     const entry = {type, timestamp: Date.now(), payload};
     this.latestLlmLog.set(entry);
     this.llmHistory.update(h => [...h, entry].slice(-50));
   }
-  public clearRawLlmHistory(): void {
+  clearRawLlmHistory(): void {
     this.latestLlmLog.set(null);
     this.llmHistory.set([]);
   }
 }
 
 class MockStateSync {
-  public readonly activeDraftSignal = signal(
+  readonly activeDraftSignal = signal(
     '{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json", "sendDataModel": true}}\n' +
       '{"version": "v0.9", "updateComponents": {"surfaceId": "sample-surface", "components": [{"id": "root", "component": "Column", "children": ["title", "location_input", "pickup_input", "dropoff_input", "book_button"], "justify": "start", "align": "stretch"}, {"id": "title", "component": "Text", "text": "Book a Car", "variant": "h1"}, {"id": "location_input", "component": "TextField", "label": "Pick-up Location", "value": {"path": "/booking/location"}, "variant": "shortText"}, {"id": "pickup_input", "component": "DateTimeInput", "label": "Pick-up Date", "value": {"path": "/booking/pickupDate"}, "enableDate": true, "enableTime": false}, {"id": "dropoff_input", "component": "DateTimeInput", "label": "Drop-off Date", "value": {"path": "/booking/dropoffDate"}, "enableDate": true, "enableTime": false}, {"id": "book_button", "component": "Button", "child": "book_button_text", "variant": "primary", "action": {"event": {"name": "searchCars", "context": {"location": {"path": "/booking/location"}, "pickupDate": {"path": "/booking/pickupDate"}, "dropoffDate": {"path": "/booking/dropoffDate"}}}}}, {"id": "book_button_text", "component": "Text", "text": "Search Cars", "variant": "body"}]}}\n' +
       '{"version": "v0.9", "updateDataModel": {"surfaceId": "sample-surface", "path": "/booking", "value": {"location": "", "pickupDate": "", "dropoffDate": ""}}}',
   );
-  public readonly activeDraft = this.activeDraftSignal.asReadonly();
-  public updateDraft = vi.fn((val: string) => {
+  readonly activeDraft = this.activeDraftSignal.asReadonly();
+  updateDraft = vi.fn((val: string) => {
     this.activeDraftSignal.set(val);
   });
-  public hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
+  hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
 }
 
 describe('RawFrame JSON Source Editor View', () => {

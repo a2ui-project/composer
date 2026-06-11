@@ -6,11 +6,12 @@
   "scripts": {
     "start": "vite --port 3458",
     "dev": "vite --port 3458",
-    "build": "tsc && vite build",
+    "build": "yarn lint && tsc && vite build",
     "preview": "vite preview",
     "test": "NODE_ENV=test vitest run",
     "prettier": "prettier --ignore-path ../../.prettierignore --write . | grep -v '(unchanged)'",
-    "clean": "rm -rf dist node_modules/.vite"
+    "clean": "rm -rf dist node_modules/.vite",
+    "lint": "npx eslint ."
   },
   "dependencies": {
     "@a2ui/react": "0.10.0",

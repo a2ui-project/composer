@@ -33,73 +33,73 @@ import {LlmClient, LlmMessage, LlmStreamResponse, MessageRole} from '../llm-clie
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 
 class MockCatalogManagement {
-  public readonly activeCatalog = signal<Catalog | null>(null);
+  readonly activeCatalog = signal<Catalog | null>(null);
 }
 
 class MockAppConfigProvider {
-  public readonly rendererUrl = signal<string>('http://localhost:4200/preview');
-  public readonly geminiApiKey = signal<string>('sample-api-key');
-  public readonly envMode = signal(EnvMode.STANDALONE);
-  public readonly authType = signal(AuthType.THREE_PARTY);
-  public readonly themePreference = signal<ThemePreference>('light');
-  public setRendererUrl = vi.fn((url: string) => {
+  readonly rendererUrl = signal<string>('http://localhost:4200/preview');
+  readonly geminiApiKey = signal<string>('sample-api-key');
+  readonly envMode = signal(EnvMode.STANDALONE);
+  readonly authType = signal(AuthType.THREE_PARTY);
+  readonly themePreference = signal<ThemePreference>('light');
+  setRendererUrl = vi.fn((url: string) => {
     this.rendererUrl.set(url);
   });
-  public setGeminiApiKey = vi.fn((key: string) => {
+  setGeminiApiKey = vi.fn((key: string) => {
     this.geminiApiKey.set(key);
   });
-  public setForcedAuthMode = vi.fn();
-  public setThemePreference = vi.fn((theme: ThemePreference) => {
+  setForcedAuthMode = vi.fn();
+  setThemePreference = vi.fn((theme: ThemePreference) => {
     this.themePreference.set(theme);
   });
-  public flushConfig = vi.fn();
+  flushConfig = vi.fn();
 }
 
 class MockChatState {
-  public readonly chatHistory = signal<LlmMessage[]>([]);
-  public readonly pipelineStatus = signal<PipelineStatus>(PipelineStatus.IDLE);
-  public readonly isProgrammaticStreamActive = signal<boolean>(false);
-  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
-  public readonly llmHistory = signal<LlmLogEntry[]>([]);
+  readonly chatHistory = signal<LlmMessage[]>([]);
+  readonly pipelineStatus = signal<PipelineStatus>(PipelineStatus.IDLE);
+  readonly isProgrammaticStreamActive = signal<boolean>(false);
+  readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  readonly llmHistory = signal<LlmLogEntry[]>([]);
 
-  public setChatHistory(history: LlmMessage[]) {
+  setChatHistory(history: LlmMessage[]) {
     this.chatHistory.set(history);
   }
-  public updateChatHistory(updater: (history: LlmMessage[]) => LlmMessage[]) {
+  updateChatHistory(updater: (history: LlmMessage[]) => LlmMessage[]) {
     this.chatHistory.update(updater);
   }
-  public setPipelineStatus(status: PipelineStatus) {
+  setPipelineStatus(status: PipelineStatus) {
     this.pipelineStatus.set(status);
   }
-  public setProgrammaticStreamActive(active: boolean) {
+  setProgrammaticStreamActive(active: boolean) {
     this.isProgrammaticStreamActive.set(active);
   }
-  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
+  addRawLlmLog(type: LlmLogType, payload: unknown): void {
     const entry: LlmLogEntry = {type, timestamp: Date.now(), payload};
     this.latestLlmLog.set(entry);
     this.llmHistory.update(history => [...history, entry].slice(-50));
   }
-  public clearRawLlmHistory(): void {
+  clearRawLlmHistory(): void {
     this.latestLlmLog.set(null);
     this.llmHistory.set([]);
   }
 }
 
 class MockStateSync {
-  public readonly activeDraftSignal = signal<string>('Initial draft text');
-  public readonly activeDraft = this.activeDraftSignal.asReadonly();
-  public commitLayoutFromLlm = vi.fn((val: string) => {
+  readonly activeDraftSignal = signal<string>('Initial draft text');
+  readonly activeDraft = this.activeDraftSignal.asReadonly();
+  commitLayoutFromLlm = vi.fn((val: string) => {
     this.activeDraftSignal.set(val);
   });
-  public flushDraft = vi.fn(() => {
+  flushDraft = vi.fn(() => {
     this.activeDraftSignal.set('Initial draft text');
   });
-  public hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
+  hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
 }
 
 class MockLlmClient {
-  public chat = vi.fn();
-  public chatStream = vi.fn(async (messages: LlmMessage[]): Promise<LlmStreamResponse> => {
+  chat = vi.fn();
+  chatStream = vi.fn(async (messages: LlmMessage[]): Promise<LlmStreamResponse> => {
     const contentStream: AsyncIterable<string> = {
       [Symbol.asyncIterator]() {
         const chunks = [

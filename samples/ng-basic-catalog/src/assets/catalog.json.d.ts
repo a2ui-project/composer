@@ -14,5 +14,5 @@
  * limitations under the License.
  */
 
-declare const catalogJson: any;
+declare const catalogJson: unknown;
 export default catalogJson;

@@ -69,24 +69,24 @@ export class ChatState {
   /**
    * Public readonly signal exposing conversational history segments securely.
    */
-  public readonly chatHistory = this._chatHistory.asReadonly();
+  readonly chatHistory = this._chatHistory.asReadonly();
 
   /**
    * Public readonly signal exposing active rendering pipeline milestones.
    */
-  public readonly pipelineStatus = this._pipelineStatus.asReadonly();
+  readonly pipelineStatus = this._pipelineStatus.asReadonly();
 
   /**
    * Public readonly signal exposing stream locks state reactively.
    */
-  public readonly isProgrammaticStreamActive = this._isProgrammaticStreamActive.asReadonly();
+  readonly isProgrammaticStreamActive = this._isProgrammaticStreamActive.asReadonly();
 
-  public readonly latestLlmLog = this._latestLlmLog.asReadonly();
+  readonly latestLlmLog = this._latestLlmLog.asReadonly();
 
   /**
    * Public readonly signal exposing the historical LLM telemetry logs list reactively.
    */
-  public readonly llmHistory = this._llmHistory.asReadonly();
+  readonly llmHistory = this._llmHistory.asReadonly();
 
   /**
    * Overwrites the complete active conversational history array safely.

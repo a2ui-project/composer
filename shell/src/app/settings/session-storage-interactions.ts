@@ -41,7 +41,7 @@ export class SessionStorageInteractions {
    * @param key Stored item identifier
    * @returns Stored string value or null if non-existent or inaccessible
    */
-  public getItem(key: string): string | null {
+  getItem(key: string): string | null {
     if (!this.storage) return null;
     try {
       return this.storage.getItem(key);
@@ -56,7 +56,7 @@ export class SessionStorageInteractions {
    * @param key Storage key identifier
    * @param value Stored string payload
    */
-  public setItem(key: string, value: string): void {
+  setItem(key: string, value: string): void {
     if (!this.storage) return;
     try {
       this.storage.setItem(key, value);
@@ -69,7 +69,7 @@ export class SessionStorageInteractions {
    * Removes a specific item from the underlying sessionStorage.
    * @param key Storage key identifier to purge
    */
-  public removeItem(key: string): void {
+  removeItem(key: string): void {
     if (!this.storage) return;
     try {
       this.storage.removeItem(key);
@@ -81,7 +81,7 @@ export class SessionStorageInteractions {
   /**
    * Clears all stored key-value pairs from the underlying sessionStorage.
    */
-  public clear(): void {
+  clear(): void {
     if (!this.storage) return;
     try {
       this.storage.clear();

@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import {Component, Inject} from '@angular/core';
+import {Component, inject} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
 import {MatButtonModule} from '@angular/material/button';
 
 @Component({
-  selector: 'a2ui-system-instructions-dialog',
+  selector: 'a2ui-composer-system-instructions-dialog',
   standalone: true,
   imports: [MatDialogModule, MatButtonModule],
   templateUrl: './system-instructions-dialog.ng.html',
   styleUrl: './system-instructions-dialog.scss',
 })
 export class SystemInstructionsDialog {
-  constructor(@Inject(MAT_DIALOG_DATA) protected readonly data: string) {}
+  protected readonly data = inject<string>(MAT_DIALOG_DATA);
 }

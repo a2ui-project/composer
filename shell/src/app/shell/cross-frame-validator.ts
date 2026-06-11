@@ -21,7 +21,7 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
  * component hierarchies, and data binding payloads prior to transmission.
  */
 export class CrossFrameValidator {
-  public static validateOutgoingMessage(message: {type: string; payload?: unknown}): boolean {
+  static validateOutgoingMessage(message: {type: string; payload?: unknown}): boolean {
     if (!message || typeof message !== 'object' || Array.isArray(message)) {
       console.error('Malformed message: message must be an object.');
       return false;

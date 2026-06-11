@@ -25,15 +25,15 @@ import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-sta
 import {signal, WritableSignal} from '@angular/core';
 
 class MockChatState {
-  public readonly isProgrammaticStreamActive = signal<boolean>(false);
-  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
-  public readonly llmHistory = signal<LlmLogEntry[]>([]);
-  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
+  readonly isProgrammaticStreamActive = signal<boolean>(false);
+  readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  readonly llmHistory = signal<LlmLogEntry[]>([]);
+  addRawLlmLog(type: LlmLogType, payload: unknown): void {
     const entry = {type, timestamp: Date.now(), payload};
     this.latestLlmLog.set(entry);
     this.llmHistory.update(h => [...h, entry].slice(-50));
   }
-  public clearRawLlmHistory(): void {
+  clearRawLlmHistory(): void {
     this.latestLlmLog.set(null);
     this.llmHistory.set([]);
   }

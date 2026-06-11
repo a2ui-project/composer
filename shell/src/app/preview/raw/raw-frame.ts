@@ -52,7 +52,7 @@ export class RawFrame {
   protected readonly layoutJson: WritableSignal<string>;
   protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
 
-  public readonly TEST_ONLY = {
+  readonly TEST_ONLY = {
     layoutJson: () => this.layoutJson,
     isJsonInvalid: () => this.isJsonInvalid,
   };

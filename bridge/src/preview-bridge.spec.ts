@@ -25,7 +25,7 @@ import {
 import {PreviewBridgeMessageType} from './bridge-message';
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
-declare var process: {
+declare const process: {
   env: {
     NODE_ENV: string;
   };
@@ -608,7 +608,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
   it('aborts fetch signal and handles timeout cleanly after 3000ms using fake timers', async () => {
     vi.useFakeTimers();
-    const spy = vi.spyOn(window.parent, 'postMessage');
+    vi.spyOn(window.parent, 'postMessage');
 
     let abortSignal: AbortSignal | undefined;
     window.fetch = vi.fn().mockImplementation((url, options) => {

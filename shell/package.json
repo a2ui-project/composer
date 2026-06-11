@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "start": "ng serve",
-    "build": "ng build",
+    "build": "yarn lint && ng build",
     "test": "vitest run --coverage",
     "e2e": "playwright test",
     "e2e-headless": "E2E_HEADLESS=true playwright test",
     "prettier": "prettier --ignore-path ../.prettierignore --write . | grep -v '(unchanged)'",
-    "clean": "rm -rf dist .angular node_modules/.vite"
+    "clean": "rm -rf dist .angular node_modules/.vite",
+    "lint": "npx eslint ."
   },
   "dependencies": {
     "@angular/animations": "22.0.0",

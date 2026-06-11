@@ -58,31 +58,31 @@ export class Settings implements OnInit {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
 
-  public readonly isLocked: WritableSignal<boolean> = signal(false);
-  public readonly isThirdParty: WritableSignal<boolean> = signal(false);
-  public readonly hideApiKey: WritableSignal<boolean> = signal(true);
-  public readonly forceThirdPartyAuth: WritableSignal<boolean> = signal(false);
+  readonly isLocked: WritableSignal<boolean> = signal(false);
+  readonly isThirdParty: WritableSignal<boolean> = signal(false);
+  readonly hideApiKey: WritableSignal<boolean> = signal(true);
+  readonly forceThirdPartyAuth: WritableSignal<boolean> = signal(false);
 
-  public readonly bridgeConnected: Signal<boolean> = computed(
+  readonly bridgeConnected: Signal<boolean> = computed(
     () => this.hostCommunication.latestEnvelope() !== null,
   );
-  public readonly catalogStatus: Signal<string> = computed(() => {
+  readonly catalogStatus: Signal<string> = computed(() => {
     if (this.catalogManagement.catalogError()) return 'Error';
     if (this.catalogManagement.isHandshakeInProgress()) return 'Indexing';
     if (this.catalogManagement.activeCatalog()) return 'Connected';
     return 'Disconnected';
   });
 
-  public readonly catalogErrorMessage: Signal<string | null> = computed(() =>
+  readonly catalogErrorMessage: Signal<string | null> = computed(() =>
     this.catalogManagement.catalogError(),
   );
 
-  public readonly settingsForm = this.fb.group({
+  readonly settingsForm = this.fb.group({
     rendererUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/i)]],
     apiKey: [''],
   });
 
-  public ngOnInit(): void {
+  ngOnInit(): void {
     const locked = this.startupResolution.isContextLocked();
     this.isLocked.set(locked);
 
@@ -110,7 +110,7 @@ export class Settings implements OnInit {
     }
   }
 
-  public saveSettings(): void {
+  saveSettings(): void {
     if (this.settingsForm.invalid) {
       this.settingsForm.markAllAsTouched();
       return;
@@ -133,13 +133,13 @@ export class Settings implements OnInit {
     this.reloadWindow();
   }
 
-  public reloadWindow(): void {
+  reloadWindow(): void {
     if (this.document.defaultView?.location) {
       locationAssign(this.document.defaultView.location, '/');
     }
   }
 
-  public toggleForceThirdPartyAuth(): void {
+  toggleForceThirdPartyAuth(): void {
     if (this.isLocked()) {
       return;
     }

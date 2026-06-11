@@ -96,7 +96,7 @@ export class A2uiSandboxRoot extends LitElement {
     const resolved =
       typeof ctx === 'object' && ctx !== null ? ctx.id || ctx.__context__ || ctx : ctx;
     const contextStr =
-      resolved && typeof (resolved as any).toString === 'function'
+      resolved && typeof (resolved as {toString?: unknown}).toString === 'function'
         ? String(resolved)
         : typeof resolved === 'string'
           ? resolved

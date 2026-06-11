@@ -45,13 +45,15 @@ test.describe('Settings and Client Configuration', () => {
       await apiKeyInput.fill('test-api-key');
 
       await page.evaluate(() => {
-        (window as any).__BEFORE_RELOAD__ = true;
+        (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__ = true;
       });
 
       const saveBtn = page.getByRole('button', {name: 'Save Settings'});
       await Promise.all([page.waitForURL('**/settings'), saveBtn.click()]);
 
-      const sentinel = await page.evaluate(() => (window as any).__BEFORE_RELOAD__);
+      const sentinel = await page.evaluate(
+        () => (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__,
+      );
       expect(sentinel).toBeUndefined();
 
       await page.goto('/');

@@ -53,10 +53,10 @@ export class A2uiSandboxConnection implements OnDestroy {
   readonly surfaceId = signal('');
 
   /** Resolves the central rendering service provider from the injector context. */
-  private readonly rendererService = inject(A2uiRendererService);
+  private readonly rendererService: A2uiRendererService = inject(A2uiRendererService);
 
   /** Injected dynamic renderer configuration options block. */
-  private readonly rendererConfig = inject(A2UI_RENDERER_CONFIG);
+  private readonly rendererConfig: {catalogs: unknown[]} = inject(A2UI_RENDERER_CONFIG);
 
   /** The dynamic teardown handle for the active framework renderer connection subscription. */
   private rendererConnection: SurfaceStateSubscription | null = null;

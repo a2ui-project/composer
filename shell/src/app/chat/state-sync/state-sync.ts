@@ -51,7 +51,7 @@ export class StateSync {
    * Volatile, read-only reactive Signal exposing the currently buffered
    * in-memory canvas layout string.
    */
-  public readonly activeDraft = this._activeDraft.asReadonly();
+  readonly activeDraft = this._activeDraft.asReadonly();
 
   private readonly _draftInput = signal<string>('');
 
@@ -67,7 +67,7 @@ export class StateSync {
    * Caches a fresh raw layout text update inside volatile memory,
    * queueing synchronization.
    */
-  public updateDraft(value: string): void {
+  updateDraft(value: string): void {
     this._activeDraft.set(value);
     this._draftInput.set(value);
   }
@@ -76,7 +76,7 @@ export class StateSync {
    * Retrieves the current volatile in-memory draft configuration state
    * on panel re-hydration cycles.
    */
-  public hydrateActiveDraft(): string {
+  hydrateActiveDraft(): string {
     return this._activeDraft();
   }
 
@@ -84,7 +84,7 @@ export class StateSync {
    * Directly updates the editor layout draft from LLM pipeline,
    * bypassing standard debounces and context history synchronization.
    */
-  public commitLayoutFromLlm(value: string): void {
+  commitLayoutFromLlm(value: string): void {
     this._activeDraft.set(value);
   }
 
@@ -92,7 +92,7 @@ export class StateSync {
    * Wipes all dynamic draft context instantly, resetting layout
    * memory to default.
    */
-  public flushDraft(): void {
+  flushDraft(): void {
     this._activeDraft.set(CAR_BOOKING);
   }
 

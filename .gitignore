@@ -197,6 +197,7 @@ test-results
 
 ### We're strictly TypeScript
 *.js
+!*.config.js
 *.map
 
 ### Dynamic AI Agent Logs & Workspace Notes

@@ -210,13 +210,15 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     });
 
     await page.evaluate(() => {
-      (window as any).__BEFORE_RELOAD__ = true;
+      (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__ = true;
     });
 
     await page.getByRole('button', {name: 'New Session'}).click();
 
     // Wait for the page reload navigation to complete
-    await page.waitForFunction(() => (window as any).__BEFORE_RELOAD__ === undefined);
+    await page.waitForFunction(
+      () => (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__ === undefined,
+    );
 
     const testVal = await page.evaluate(() => {
       try {

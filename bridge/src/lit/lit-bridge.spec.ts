@@ -19,6 +19,7 @@ import {describe, it, expect, afterEach, vi} from 'vitest';
 import {bootstrapLitSandbox, A2uiSandboxRoot, ContextRequestEventPayload} from './lit-bridge';
 import {a2uiBridge} from '../preview-bridge';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
+import {TemplateResult} from 'lit';
 
 describe('Lit Framework Adapter Spec', () => {
   const dummyCatalog = {
@@ -142,7 +143,7 @@ describe('Lit Framework Adapter Spec', () => {
 
     contextEvent.context = {
       toString: () => 'CustomA2UIMarkdownContext',
-    };
+    } as unknown;
     contextEvent.callback = renderer => {
       resolvedRenderer = renderer;
     };
@@ -185,7 +186,14 @@ describe('Lit Framework Adapter Spec', () => {
     const element = new A2uiSandboxRoot();
     document.body.appendChild(element);
 
-    const processor = element['processor'] as any;
+    interface MockSurface {
+      _onAction: {emit(val: unknown): void};
+    }
+    interface MockProcessor {
+      processMessages(messages: unknown[]): void;
+      model: {getSurface(id: string): MockSurface};
+    }
+    const processor = element['processor'] as unknown as MockProcessor;
 
     processor.processMessages([
       {
@@ -215,11 +223,15 @@ describe('Lit Framework Adapter Spec', () => {
     const config = attachSpy.mock.lastCall![1];
 
     // Initial render is waiting banner
-    let rendered = element.render() as any;
+    let rendered = element.render() as unknown as TemplateResult;
     expect(rendered.strings.join('')).toContain('A2UI Lit Sandbox active');
 
     // Trigger onSurfaceReady via real message processing
-    const processor = element['processor'] as any;
+    interface SimProcessor {
+      processMessages(messages: unknown[]): void;
+      model: {getSurface(id: string): unknown};
+    }
+    const processor = element['processor'] as unknown as SimProcessor;
     processor.processMessages([
       {
         version: 'v0.9',
@@ -235,7 +247,7 @@ describe('Lit Framework Adapter Spec', () => {
 
     expect(element['surface']).toBe(mockSurface);
 
-    rendered = element.render() as any;
+    rendered = element.render() as unknown as TemplateResult;
     expect(rendered.strings.join('')).toContain('a2ui-surface');
 
     // Trigger onSurfaceCleared
@@ -244,7 +256,7 @@ describe('Lit Framework Adapter Spec', () => {
     }
     expect(element['surface']).toBeUndefined();
 
-    rendered = element.render() as any;
+    rendered = element.render() as unknown as TemplateResult;
     expect(rendered.strings.join('')).toContain('A2UI Lit Sandbox active');
 
     element.remove();
@@ -320,7 +332,7 @@ describe('Lit Framework Adapter Spec', () => {
     });
 
     const ctor = customElements.get('app-root-persist');
-    const element = new ctor!();
+    const element = new ctor!() as A2uiSandboxRoot;
     document.body.appendChild(element);
 
     const customRenderer = async (text: string) => `<b>${text}</b>`;

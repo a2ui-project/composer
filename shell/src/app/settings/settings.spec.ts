@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {Validators} from '@angular/forms';
+import {TestBed} from '@angular/core/testing';
 import {Settings} from './settings';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolution} from '../shell/startup-resolution';
@@ -394,7 +393,7 @@ describe('Settings', () => {
       'warning badge when isContextLocked returns true',
     async () => {
       mockStartupResolution.isContextLocked.mockReturnValue(true);
-      const {fixture, component, harness} = await setupComponent();
+      const {component, harness} = await setupComponent();
 
       expect(component.isLocked()).toBe(true);
       expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);

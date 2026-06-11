@@ -16,7 +16,7 @@
 
 import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
-import {Subject, ReplaySubject} from 'rxjs';
+import {ReplaySubject} from 'rxjs';
 import {StartupResolution} from './startup-resolution';
 import {CrossFrameValidator} from './cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
@@ -56,14 +56,13 @@ export class HostCommunication implements OnDestroy {
   private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
 
   /** Readonly signal tracking the most recent message envelope */
-  public readonly latestEnvelope: Signal<MessageEnvelope | null> =
-    this.latestEnvelopeSignal.asReadonly();
+  readonly latestEnvelope: Signal<MessageEnvelope | null> = this.latestEnvelopeSignal.asReadonly();
 
   private readonly messageStreamSubject = new ReplaySubject<MessageEnvelope>(1);
   /** Uncoalesced hot event stream broadcasting all incoming message envelopes */
-  public readonly messageStream$ = this.messageStreamSubject.asObservable();
+  readonly messageStream$ = this.messageStreamSubject.asObservable();
   /** Readonly signal holding the latest incoming stream message */
-  public readonly messageStream = toSignal(this.messageStream$, {
+  readonly messageStream = toSignal(this.messageStream$, {
     initialValue: null,
   });
 
@@ -76,7 +75,7 @@ export class HostCommunication implements OnDestroy {
    * Registers a callback listener to intercept incoming message envelopes.
    * @param listener Callback function invoked upon envelope arrival
    */
-  public addListener(listener: (envelope: MessageEnvelope) => void): void {
+  addListener(listener: (envelope: MessageEnvelope) => void): void {
     this.listeners.add(listener);
   }
 
@@ -84,7 +83,7 @@ export class HostCommunication implements OnDestroy {
    * Removes a previously registered callback listener.
    * @param listener Callback function to remove
    */
-  public removeListener(listener: (envelope: MessageEnvelope) => void): void {
+  removeListener(listener: (envelope: MessageEnvelope) => void): void {
     this.listeners.delete(listener);
   }
 
@@ -92,7 +91,7 @@ export class HostCommunication implements OnDestroy {
    * Retrieves a snapshot copy of the recent message history buffer.
    * @returns Array of stored message envelopes
    */
-  public getHistoryBuffer(): MessageEnvelope[] {
+  getHistoryBuffer(): MessageEnvelope[] {
     return [...this.messageHistoryBuffer];
   }
 
@@ -100,14 +99,14 @@ export class HostCommunication implements OnDestroy {
    * Retrieves the most recent catalog message envelope received from the preview frame.
    * @returns Latest catalog envelope or null if none received
    */
-  public getLatestCatalog(): MessageEnvelope | null {
+  getLatestCatalog(): MessageEnvelope | null {
     return this.latestCatalogEnvelope;
   }
 
   /**
    * Clears the historical message buffer and resets the tracked catalog state.
    */
-  public clearHistoryBuffer(): void {
+  clearHistoryBuffer(): void {
     this.messageHistoryBuffer.length = 0;
     this.latestCatalogEnvelope = null;
   }
@@ -121,7 +120,7 @@ export class HostCommunication implements OnDestroy {
   }
 
   /** Test-only hooks to simulate incoming stream messages */
-  public readonly TEST_ONLY = {
+  readonly TEST_ONLY = {
     triggerMessageStreamForTesting: (envelope: MessageEnvelope) =>
       this.triggerMessageStreamForTesting(envelope),
   };
@@ -212,7 +211,7 @@ export class HostCommunication implements OnDestroy {
    * Registers an active content window directly and flushes any buffered early messages.
    * @param contentWindow Target guest window reference
    */
-  public registerIframe(contentWindow: Window | null): void {
+  registerIframe(contentWindow: Window | null): void {
     this.iframeWindow = contentWindow;
     if (contentWindow === null) {
       this.earlyMessageBuffer.length = 0;
@@ -225,7 +224,7 @@ export class HostCommunication implements OnDestroy {
    * Registers an iframe DOM element and flushes any buffered early messages.
    * @param element Target iframe DOM element reference
    */
-  public registerIframeElement(element: HTMLIFrameElement | null): void {
+  registerIframeElement(element: HTMLIFrameElement | null): void {
     this.iframeElement = element;
     if (element === null) {
       this.earlyMessageBuffer.length = 0;
@@ -238,7 +237,7 @@ export class HostCommunication implements OnDestroy {
    * Validates and dispatches a structured postMessage payload to the registered guest frame.
    * @param message Structured message payload
    */
-  public sendMessage(message: {type: PreviewBridgeMessageType; payload?: unknown}): void {
+  sendMessage(message: {type: PreviewBridgeMessageType; payload?: unknown}): void {
     if (!CrossFrameValidator.validateOutgoingMessage(message)) {
       console.error('Blocked dispatch of malformed message type...', message);
       return;
@@ -262,7 +261,7 @@ export class HostCommunication implements OnDestroy {
    * Helper utility dispatching a RENDER_A2UI layout array to the preview renderer.
    * @param payload Array of layout nodes or configuration objects
    */
-  public sendRenderA2UI(payload: unknown[]): void {
+  sendRenderA2UI(payload: unknown[]): void {
     this.sendMessage({type: PreviewBridgeMessageType.RENDER_A2UI, payload});
   }
 

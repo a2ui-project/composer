@@ -33,32 +33,32 @@ describe('CrossFrameValidator', () => {
 
   describe('Envelope Validation', () => {
     it('rejects null message', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage(null as any)).toBe(false);
+      expect(CrossFrameValidator.validateOutgoingMessage(null as never)).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith('Malformed message: message must be an object.');
     });
 
     it('rejects non-object message', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage('message' as any)).toBe(false);
+      expect(CrossFrameValidator.validateOutgoingMessage('message' as never)).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith('Malformed message: message must be an object.');
     });
 
     it('rejects array message', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage([] as any)).toBe(false);
+      expect(CrossFrameValidator.validateOutgoingMessage([] as never)).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith('Malformed message: message must be an object.');
     });
 
     it('rejects missing type', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({payload: {}} as any)).toBe(false);
+      expect(CrossFrameValidator.validateOutgoingMessage({payload: {}} as never)).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith('Malformed message: type must be a non-empty string.');
     });
 
     it('rejects non-string type', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: 123} as any)).toBe(false);
+      expect(CrossFrameValidator.validateOutgoingMessage({type: 123} as never)).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith('Malformed message: type must be a non-empty string.');
     });
 
     it('rejects empty string type', () => {
-      expect(CrossFrameValidator.validateOutgoingMessage({type: '   '} as any)).toBe(false);
+      expect(CrossFrameValidator.validateOutgoingMessage({type: '   '} as never)).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith('Malformed message: type must be a non-empty string.');
     });
   });

@@ -42,13 +42,13 @@ export class ChatCoordinator {
   private readonly llmClient = inject(LlmClient);
 
   /** Reactively mapped rendering pipeline execution milestones. */
-  public readonly pipelineStatus = this.chatState.pipelineStatus;
+  readonly pipelineStatus = this.chatState.pipelineStatus;
 
   /**
    * Public programmatic lock signal protecting against typing deadlocks
    * during streams.
    */
-  public readonly isProgrammaticStreamActive = this.chatState.isProgrammaticStreamActive;
+  readonly isProgrammaticStreamActive = this.chatState.isProgrammaticStreamActive;
 
   private lastSeenRendererUrl = '';
   private isFirstUrlEffectRun = true;
@@ -75,7 +75,7 @@ export class ChatCoordinator {
   /**
    * Resets turns logs history, overlays milestones, and locks indicators.
    */
-  public wipeEnvironmentCache(): void {
+  wipeEnvironmentCache(): void {
     this.chatState.setChatHistory([]);
     this.chatState.setPipelineStatus(PipelineStatus.IDLE);
     this.chatState.setProgrammaticStreamActive(false);
@@ -86,7 +86,7 @@ export class ChatCoordinator {
   /**
    * Constructs System instructions prepended message logs context.
    */
-  public getFullMessageContext(): LlmMessage[] {
+  getFullMessageContext(): LlmMessage[] {
     return [
       {
         role: MessageRole.SYSTEM,
@@ -101,7 +101,7 @@ export class ChatCoordinator {
    * in-stream, buffers packets, runs auto-repair healing and schema
    * validation blocks.
    */
-  public async submitPrompt(prompt: string): Promise<void> {
+  async submitPrompt(prompt: string): Promise<void> {
     const trimmed = prompt.trim();
     if (!trimmed) return;
 
@@ -486,7 +486,7 @@ export class ChatCoordinator {
     return this.sanitizeValue(obj) as Record<string, unknown>;
   }
 
-  public readonly TEST_ONLY = {
+  readonly TEST_ONLY = {
     sanitizeComponentObject: (obj: Record<string, unknown>) => this.sanitizeComponentObject(obj),
   };
 
@@ -625,7 +625,7 @@ export class ChatCoordinator {
    * A dynamic, reactive, computed signal property constructing conformed JSON
    * catalog schema specifications system instructions.
    */
-  public readonly systemPrompt = computed<string>(() => {
+  readonly systemPrompt = computed<string>(() => {
     const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) {
       return (

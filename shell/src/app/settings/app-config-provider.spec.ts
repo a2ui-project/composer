@@ -16,7 +16,6 @@
 
 import {signal, Signal, WritableSignal} from '@angular/core';
 import {describe, it, expect} from 'vitest';
-import {LocalStorageKey} from './local-storage-keys';
 import {AppConfigProvider, EnvMode, AuthType, ThemePreference} from './app-config-provider';
 
 /**

@@ -19,11 +19,12 @@ import '@angular/compiler';
 // @vitest-environment jsdom
 import {describe, it, expect, afterEach, vi} from 'vitest';
 import {getTestBed, TestBed} from '@angular/core/testing';
+import {Type} from '@angular/core';
 import {BrowserTestingModule, platformBrowserTesting} from '@angular/platform-browser/testing';
 import {A2uiSandboxConnection, provideA2uiSandbox} from './angular-bridge';
 import {A2UI_RENDERER_CONFIG, A2uiRendererService} from '@a2ui/angular/v0_9';
 import {a2uiBridge} from '../preview-bridge';
-import {Catalog, ComponentApi, A2uiClientAction} from '@a2ui/web_core/v0_9';
+import {Catalog, ComponentApi, A2uiClientAction, A2uiMessage} from '@a2ui/web_core/v0_9';
 
 if (!getTestBed().platform) {
   getTestBed().initTestEnvironment(BrowserTestingModule, platformBrowserTesting());
@@ -97,7 +98,7 @@ describe('Angular Sandbox Connection Spec', () => {
     const connection = TestBed.runInInjectionContext(() => new A2uiSandboxConnection());
 
     const processor = attachSpy.mock.lastCall![0];
-    const payload = [{version: 'v0.9'}] as any;
+    const payload = [{version: 'v0.9'}] as unknown as A2uiMessage[];
 
     processor.processMessages(payload);
 
@@ -152,7 +153,9 @@ describe('Angular Sandbox Connection Spec', () => {
 
     TestBed.configureTestingModule({
       providers: [
-        provideA2uiSandbox([MockCatalog as any], {catalogJson: {key: 'val'}}),
+        provideA2uiSandbox([MockCatalog as unknown as Type<Catalog<ComponentApi>>], {
+          catalogJson: {key: 'val'},
+        }),
         {provide: MockCatalog, useValue: mockCatalogInstance},
         {provide: A2uiRendererService, useValue: mockRendererService},
       ],

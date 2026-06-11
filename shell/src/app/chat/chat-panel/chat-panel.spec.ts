@@ -32,35 +32,35 @@ import {MatDialogHarness} from '@angular/material/dialog/testing';
 import {Catalog} from '../../storage/catalog-storage.model';
 
 class MockChatState {
-  public readonly chatHistory = signal<LlmMessage[]>([]);
-  public readonly pipelineStatus = signal<PipelineStatus>(PipelineStatus.IDLE);
-  public readonly isProgrammaticStreamActive = signal<boolean>(false);
-  public readonly latestLlmLog = signal<LlmLogEntry | null>(null);
-  public readonly llmHistory = signal<LlmLogEntry[]>([]);
+  readonly chatHistory = signal<LlmMessage[]>([]);
+  readonly pipelineStatus = signal<PipelineStatus>(PipelineStatus.IDLE);
+  readonly isProgrammaticStreamActive = signal<boolean>(false);
+  readonly latestLlmLog = signal<LlmLogEntry | null>(null);
+  readonly llmHistory = signal<LlmLogEntry[]>([]);
 
-  public setPipelineStatus(status: PipelineStatus): void {
+  setPipelineStatus(status: PipelineStatus): void {
     this.pipelineStatus.set(status);
   }
 
-  public setProgrammaticStreamActive(active: boolean): void {
+  setProgrammaticStreamActive(active: boolean): void {
     this.isProgrammaticStreamActive.set(active);
   }
 
-  public setChatHistory(history: LlmMessage[]): void {
+  setChatHistory(history: LlmMessage[]): void {
     this.chatHistory.set(history);
   }
 
-  public updateChatHistory(updater: (h: LlmMessage[]) => LlmMessage[]): void {
+  updateChatHistory(updater: (h: LlmMessage[]) => LlmMessage[]): void {
     this.chatHistory.update(updater);
   }
 
-  public addRawLlmLog(type: LlmLogType, payload: unknown): void {
+  addRawLlmLog(type: LlmLogType, payload: unknown): void {
     const entry: LlmLogEntry = {type, timestamp: Date.now(), payload};
     this.latestLlmLog.set(entry);
     this.llmHistory.update(h => [...h, entry].slice(-50));
   }
 
-  public clearRawLlmHistory(): void {
+  clearRawLlmHistory(): void {
     this.latestLlmLog.set(null);
     this.llmHistory.set([]);
   }
@@ -69,21 +69,21 @@ class MockChatState {
 class MockChatCoordinator {
   private readonly chatState = inject(ChatState) as unknown as MockChatState;
 
-  public readonly systemPrompt = signal<string>('Initial system prompt instructions block');
+  readonly systemPrompt = signal<string>('Initial system prompt instructions block');
 
-  public get pipelineStatus() {
+  get pipelineStatus() {
     return this.chatState.pipelineStatus;
   }
 
-  public get isProgrammaticStreamActive() {
+  get isProgrammaticStreamActive() {
     return this.chatState.isProgrammaticStreamActive;
   }
 
-  public submitPrompt = vi.fn(async (prompt: string): Promise<void> => {});
+  submitPrompt = vi.fn(async (prompt: string): Promise<void> => {});
 }
 
 class MockCatalogManagement {
-  public readonly activeCatalog = signal<Catalog | null>({}); // non-null by default
+  readonly activeCatalog = signal<Catalog | null>({}); // non-null by default
 }
 
 describe('ChatPanel Gemini Dialogue Panel Integration', () => {

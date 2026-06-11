@@ -40,10 +40,10 @@ export class StartupResolution {
   private readonly _isLockedContext = signal(false);
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
 
-  public readonly resolvedUrl = this._resolvedUrl.asReadonly();
-  public readonly isLockedContext = this._isLockedContext.asReadonly();
+  readonly resolvedUrl = this._resolvedUrl.asReadonly();
+  readonly isLockedContext = this._isLockedContext.asReadonly();
 
-  public async resolveStartupConfiguration(): Promise<string | null> {
+  async resolveStartupConfiguration(): Promise<string | null> {
     let staticConfig: AppConfig | null = null;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -93,15 +93,15 @@ export class StartupResolution {
     return this._resolvedUrl();
   }
 
-  public getResolvedRendererUrl(): string | null {
+  getResolvedRendererUrl(): string | null {
     return this._resolvedUrl();
   }
 
-  public isContextLocked(): boolean {
+  isContextLocked(): boolean {
     return this._isLockedContext();
   }
 
-  public isThirdPartyEnvironment(): boolean {
+  isThirdPartyEnvironment(): boolean {
     const force1P = this.localStorageInteractions.getItem(LocalStorageKey.FORCE_1P) === 'true';
     if (force1P) {
       return false;
@@ -122,7 +122,7 @@ export class StartupResolution {
     return !is1P;
   }
 
-  public isEnvironmentValid(): boolean {
+  isEnvironmentValid(): boolean {
     const resolvedUrl = this.getResolvedRendererUrl();
     const is3P = this.isThirdPartyEnvironment();
     const hasApiKey = !!this.localStorageInteractions.getItem(LocalStorageKey.GEMINI_API_KEY);
@@ -130,7 +130,7 @@ export class StartupResolution {
     return !!resolvedUrl && (!is3P || hasApiKey);
   }
 
-  public isExtensionMode(): boolean {
+  isExtensionMode(): boolean {
     const urlParams = new URLSearchParams(this.getWindowSearch());
     const urlExtension = urlParams.get('extension') === 'true';
     const hasExtensionStorage =
@@ -138,11 +138,11 @@ export class StartupResolution {
     return urlExtension || hasExtensionStorage;
   }
 
-  public getWindowSearch(): string {
+  getWindowSearch(): string {
     return globalThis.location?.search || '';
   }
 
-  public getWindowHostname(): string {
+  getWindowHostname(): string {
     return globalThis.location?.hostname || '';
   }
 
