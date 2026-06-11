@@ -14,7 +14,7 @@ _Screenshot:_
 _Demo video:_
 
 <video width="640" height="360" controls>
-  <source src="./docs/assets/A2UI%20Composer%20Demo.mp4" type="video/mp4"/>
+  <source src="https://raw.githubusercontent.com/a2ui-project/composer/main/docs/assets/A2UI%20Composer%20Demo.mp4" type="video/mp4"/>
   Your browser does not support the video tag.
 </video>
 
