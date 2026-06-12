@@ -59,19 +59,19 @@ a message gateway (`a2ui-bridge`).
 ### System Architecture Diagram
 
 ```mermaid
-graph TD
-    subgraph Host["Host Layer (VS Code Extension vs Standalone Web)"]
+flowchart TD
+    subgraph Host ["Host Layer (VS Code Extension vs Standalone Web)"]
         Shell["Composer Shell Application"]
         Chat["Gemini LLM Chat & Stream Repair"]
         Workbench["Diagnostics & Mock Workbench"]
         Store[("IndexedDB LRU Quota Store")]
     end
 
-    subgraph BridgeLayer["Secure Cross-Frame Bridge"]
+    subgraph BridgeLayer ["Secure Cross-Frame Bridge"]
         Bridge["a2ui-bridge"]
     end
 
-    subgraph Renderers["Child Renderer Sandboxes (Iframes)"]
+    subgraph Renderers ["Child Renderer Sandboxes (Iframes)"]
         LitSandbox["Lit Renderer Sandbox"]
         AngSandbox["Angular Renderer Sandbox"]
         ReactSandbox["React Renderer Sandbox"]
