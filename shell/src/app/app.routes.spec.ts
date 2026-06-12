@@ -47,11 +47,11 @@ class MockStartupResolution {
 }
 
 class MockChatState {
-  readonly chatHistory = signal([]);
+  readonly chatHistory = signal<unknown[]>([]);
   readonly pipelineStatus = signal(PipelineStatus.IDLE);
   readonly isProgrammaticStreamActive = signal(false);
-  readonly latestLlmLog = signal(null);
-  readonly llmHistory = signal([]);
+  readonly latestLlmLog = signal<unknown>(null);
+  readonly llmHistory = signal<unknown[]>([]);
 }
 
 class MockChatCoordinator {

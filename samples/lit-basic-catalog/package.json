@@ -11,7 +11,7 @@
     "test": "vitest run",
     "prettier": "prettier --ignore-path ../../.prettierignore --write . | grep -v '(unchanged)'",
     "clean": "rm -rf dist node_modules/.vite",
-    "lint": "npx eslint ."
+    "lint": "eslint ."
   },
   "dependencies": {
     "@a2ui/lit": "0.10.0",
