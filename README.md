@@ -3,7 +3,7 @@
 _Real-Time Visual Authoring, Live-Preview & Debugging Workbench for A2UI._
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Node.js](https://img.shields.io/badge/Node.js-v20+-green.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-v24+-green.svg)](https://nodejs.org/)
 [![Yarn](https://img.shields.io/badge/Yarn-v4-blue.svg)](https://yarnpkg.com/)
 [![Angular](https://img.shields.io/badge/Angular-v21-dd0031.svg)](https://angular.dev/)
 
@@ -104,7 +104,7 @@ The ecosystem is architected as a modular, highly cohesive monorepo utilizing
 
 Ensure your local workspace is configured with the following dependencies:
 
-- **Node.js**: v20+
+- **Node.js**: v24+
 - **Package Manager**: Yarn v4 Corepack enabled (`corepack enable`)
 - **Code Formatter**: Prettier
 
