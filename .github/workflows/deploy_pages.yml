@@ -1,0 +1,98 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Deploy Production Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-main
+  # Disable cancel-in-progress so production deployments queue and complete reliably
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "yarn"
+          cache-dependency-path: "yarn.lock"
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install Dependencies
+        run: yarn install --immutable
+
+      # Only compile prerequisite bridge dependency in baseline step to eliminate redundant frontend builds
+      - name: Build Core Bridge Dependency
+        run: yarn workspace a2ui-bridge build
+
+      - name: Build Production Shell & Catalogs with Correct Base URLs
+        run: |
+          yarn workspace a2ui-composer-shell run build --base-href=/composer/
+          yarn workspace ng-basic-catalog run build --base-href=/composer/samples/ng-basic-catalog/
+          yarn workspace lit-basic-catalog run build --base=/composer/samples/lit-basic-catalog/
+          yarn workspace react-basic-catalog run build --base=/composer/samples/react-basic-catalog/
+
+      # Explicitly pre-create all destination directories and use cp -r SOURCE/. DEST/ to prevent nesting traps
+      - name: Assemble Staging Directory (deploy_dist)
+        run: |
+          mkdir -p deploy_dist/samples/ng-basic-catalog
+          mkdir -p deploy_dist/samples/lit-basic-catalog
+          mkdir -p deploy_dist/samples/react-basic-catalog
+
+          # Stage Shell
+          if [ -d "shell/dist/a2ui-composer/browser" ]; then
+            cp -r shell/dist/a2ui-composer/browser/. deploy_dist/
+          else
+            cp -r shell/dist/a2ui-composer/. deploy_dist/
+          fi
+
+          # Stage Angular Sample
+          if [ -d "samples/ng-basic-catalog/dist/ng-basic-catalog/browser" ]; then
+            cp -r samples/ng-basic-catalog/dist/ng-basic-catalog/browser/. deploy_dist/samples/ng-basic-catalog/
+          else
+            cp -r samples/ng-basic-catalog/dist/ng-basic-catalog/. deploy_dist/samples/ng-basic-catalog/
+          fi
+
+          # Stage Vite Samples
+          cp -r samples/lit-basic-catalog/dist/. deploy_dist/samples/lit-basic-catalog/
+          cp -r samples/react-basic-catalog/dist/. deploy_dist/samples/react-basic-catalog/
+
+          # Create Angular SPA fallback and bypass Jekyll
+          cp deploy_dist/index.html deploy_dist/404.html
+          touch deploy_dist/.nojekyll
+
+      - name: Publish to gh-pages Branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./deploy_dist
+          destination_dir: ./
+          keep_files: true
