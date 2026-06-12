@@ -16,7 +16,7 @@
 
 import {TestBed} from '@angular/core/testing';
 import {HostCommunication, MessageEnvelope} from './host-communication';
-import {StartupResolution} from './startup-resolution';
+import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 

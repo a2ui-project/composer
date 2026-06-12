@@ -18,7 +18,7 @@ import {Component, inject, signal, effect, untracked} from '@angular/core';
 import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
-import {HostCommunication} from '../../shell/host-communication';
+import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {formatTimestamp} from '../../utils/date.utils';
 

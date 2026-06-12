@@ -28,7 +28,7 @@ import {FormsModule} from '@angular/forms';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatIconModule} from '@angular/material/icon';
 import {MatDialogModule, MatDialog} from '@angular/material/dialog';
-import {CatalogManagement} from '../../storage/catalog-management';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 import {tryParseJsonArray} from '../../utils/json';
 

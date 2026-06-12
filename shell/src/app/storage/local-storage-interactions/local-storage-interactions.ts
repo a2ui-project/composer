@@ -15,7 +15,7 @@
  */
 
 import {Injectable} from '@angular/core';
-import {LocalStorageKey} from './local-storage-keys';
+import {LocalStorageKey} from '../models/local-storage-keys';
 
 /**
  * Governs browser local storage interactions.

@@ -21,15 +21,19 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {routes} from './app.routes';
-import {StartupResolution} from './shell/startup-resolution';
+import {StartupResolution} from './shell/startup-resolution/startup-resolution';
 import {ChatState} from './chat/chat-state/chat-state';
 import {ChatCoordinator} from './chat/chat-service/chat-coordinator';
 import {StateSync} from './chat/state-sync/state-sync';
-import {AppConfigProvider, EnvMode, AuthType} from './settings/app-config-provider';
+import {
+  AppConfigProvider,
+  EnvMode,
+  AuthType,
+} from './settings/app-config-provider/app-config-provider';
 import {LlmClient} from './chat/llm-client/llm-client';
-import {CatalogManagement} from './storage/catalog-management';
-import {IndexedDbStorage} from './storage/indexed-db-storage';
-import {LocalStorageInteractions} from './settings/local-storage-interactions';
+import {CatalogManagement} from './storage/catalog-management/catalog-management';
+import {IndexedDbStorage} from './storage/indexed-db-storage/indexed-db-storage';
+import {LocalStorageInteractions} from './storage/local-storage-interactions/local-storage-interactions';
 import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
 
 class MockStartupResolution {

@@ -17,7 +17,7 @@
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {LocalStorageInteractions} from './local-storage-interactions';
-import {LocalStorageKey} from './local-storage-keys';
+import {LocalStorageKey} from '../models/local-storage-keys';
 
 describe('LocalStorageInteractions Safety Boundaries', () => {
   let service: LocalStorageInteractions;

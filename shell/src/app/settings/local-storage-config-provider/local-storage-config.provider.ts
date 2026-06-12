@@ -16,10 +16,15 @@
  */
 
 import {Injectable, Signal, computed, inject, signal} from '@angular/core';
-import {StartupResolution} from '../shell/startup-resolution';
-import {AppConfigProvider, AuthType, EnvMode, ThemePreference} from './app-config-provider';
-import {LocalStorageKey} from './local-storage-keys';
-import {LocalStorageInteractions} from './local-storage-interactions';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {
+  AppConfigProvider,
+  AuthType,
+  EnvMode,
+  ThemePreference,
+} from '../app-config-provider/app-config-provider';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 
 /**
  * Concrete implementation of the AppConfigProvider that integrates with
@@ -72,12 +77,6 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     const override = this._forcedAuthOverride();
     if (override !== AuthType.DEFAULT) {
       return override;
-    }
-    if (this.localStorageInteractions.getItem(LocalStorageKey.FORCE_1P) === 'true') {
-      return AuthType.ONE_PARTY;
-    }
-    if (this.localStorageInteractions.getItem(LocalStorageKey.FORCE_3P) === 'true') {
-      return AuthType.THREE_PARTY;
     }
     return this.startup.isThirdPartyEnvironment() ? AuthType.THREE_PARTY : AuthType.ONE_PARTY;
   });

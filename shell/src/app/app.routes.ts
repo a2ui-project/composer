@@ -15,7 +15,7 @@
  */
 
 import {Routes} from '@angular/router';
-import {startupGuard} from './shell/startup-guard';
+import {startupGuard} from './shell/startup-guard/startup-guard';
 
 /**
  * Declarative routing table mapping URL paths to feature components
@@ -24,11 +24,12 @@ import {startupGuard} from './shell/startup-guard';
 export const routes: Routes = [
   {
     path: '',
-    loadComponent: () => import('./shell/composer-shell').then(m => m.ComposerShell),
+    loadComponent: () => import('./shell/composer-shell/composer-shell').then(m => m.ComposerShell),
     children: [
       {
         path: '',
-        loadComponent: () => import('./shell/composer-workspace').then(m => m.ComposerWorkspace),
+        loadComponent: () =>
+          import('./shell/composer-workspace/composer-workspace').then(m => m.ComposerWorkspace),
         title: 'A2UI Composer Workspace',
         canActivate: [startupGuard],
       },
@@ -40,7 +41,7 @@ export const routes: Routes = [
       },
       {
         path: 'settings',
-        loadComponent: () => import('./settings/settings').then(m => m.Settings),
+        loadComponent: () => import('./settings/settings-view/settings').then(m => m.Settings),
         title: 'A2UI Composer Settings',
       },
       {

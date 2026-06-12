@@ -15,7 +15,7 @@
  */
 
 import {Injectable} from '@angular/core';
-import {CachedCatalogRecord} from './catalog-storage.model';
+import {CachedCatalogRecord} from '../models/catalog-storage.model';
 
 @Injectable({
   providedIn: 'root',

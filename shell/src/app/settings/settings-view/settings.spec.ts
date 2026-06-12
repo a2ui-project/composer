@@ -18,15 +18,18 @@
 import {TestBed} from '@angular/core/testing';
 import {Settings} from './settings';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {StartupResolution} from '../shell/startup-resolution';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {HostCommunication, MessageEnvelope} from '../shell/host-communication';
-import {CatalogManagement} from '../storage/catalog-management';
-import {Catalog} from '../storage/catalog-storage.model';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 import {signal, WritableSignal, Signal, computed} from '@angular/core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {AppConfigProvider, AuthType} from './app-config-provider';
-import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
+import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
+import {LocalStorageAppConfigProvider} from '../local-storage-config-provider/local-storage-config.provider';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SettingsHarness} from './test/settings.harness';
 

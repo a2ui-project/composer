@@ -16,8 +16,8 @@
 
 import {Component, inject, viewChild, ElementRef, effect, computed} from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
-import {StartupResolution} from '../../shell/startup-resolution';
-import {HostCommunication} from '../../shell/host-communication';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {ChatState} from '../../chat/chat-state/chat-state';
 
 /**

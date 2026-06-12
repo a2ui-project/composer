@@ -19,7 +19,10 @@ import {Events} from './events';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {EventsHarness} from './test/events.harness';
 import {describe, it, expect, beforeEach} from 'vitest';
-import {HostCommunication, MessageEnvelope} from '../../shell/host-communication';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
 import {signal} from '@angular/core';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatTableModule} from '@angular/material/table';

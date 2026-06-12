@@ -19,7 +19,10 @@ import {RawMessages} from './raw-messages';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawMessagesHarness} from './test/raw-messages.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {HostCommunication, MessageEnvelope} from '../../shell/host-communication';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
 import {signal, WritableSignal} from '@angular/core';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';

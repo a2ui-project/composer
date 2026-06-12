@@ -19,8 +19,8 @@ import {RenderedFrame} from './rendered-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {StartupResolution} from '../../shell/startup-resolution';
-import {HostCommunication} from '../../shell/host-communication';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {signal, WritableSignal} from '@angular/core';
 

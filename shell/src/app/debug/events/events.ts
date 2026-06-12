@@ -17,7 +17,7 @@
 import {Component, inject, signal, effect, untracked} from '@angular/core';
 import {MatTableModule} from '@angular/material/table';
 import {JsonPipe} from '@angular/common';
-import {HostCommunication} from '../../shell/host-communication';
+import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {formatTimestamp} from '../../utils/date.utils';
 

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {Component, OnInit, inject, signal, computed, WritableSignal, Signal} from '@angular/core';
-import {ReactiveFormsModule, NonNullableFormBuilder, Validators} from '@angular/forms';
+import {Component, computed, inject, OnInit, signal, Signal, WritableSignal} from '@angular/core';
+import {NonNullableFormBuilder, ReactiveFormsModule, Validators} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatButtonModule} from '@angular/material/button';
@@ -23,11 +23,11 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
-import {StartupResolution} from '../shell/startup-resolution';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {DOCUMENT} from '@angular/common';
-import {HostCommunication} from '../shell/host-communication';
-import {CatalogManagement} from '../storage/catalog-management';
-import {AppConfigProvider, AuthType} from './app-config-provider';
+import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 import {locationAssign} from 'safevalues/dom';
 
 /**

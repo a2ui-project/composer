@@ -16,13 +16,13 @@
  */
 
 import {Injectable, inject, computed, effect, untracked} from '@angular/core';
-import {CatalogManagement} from '../../storage/catalog-management';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {LlmMessage, LlmClient, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
-import {AppConfigProvider} from '../../settings/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {StateSync} from '../state-sync/state-sync';
 import {ChatState, LlmLogType} from '../chat-state/chat-state';
-import {CrossFrameValidator} from '../../shell/cross-frame-validator';
+import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 @Injectable({

@@ -14,22 +14,23 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, viewChild, OnInit, effect, untracked} from '@angular/core';
-import {ChatPanel} from '../chat/chat-panel/chat-panel';
-import {RawFrame} from '../preview/raw/raw-frame';
-import {RenderedFrame} from '../preview/rendered/rendered-frame';
-import {DataModel} from '../debug/data-model/data-model';
-import {Events} from '../debug/events/events';
-import {Errors} from '../debug/errors/errors';
-import {RawMessages} from '../debug/raw-messages/raw-messages';
-import {MockRules} from '../debug/mock-rules/mock-rules';
+import {Component, effect, inject, OnInit, signal, untracked, viewChild} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
+import {ChatPanel} from '../../chat/chat-panel/chat-panel';
+import {RawFrame} from '../../preview/raw/raw-frame';
+import {RenderedFrame} from '../../preview/rendered/rendered-frame';
+import {DataModel} from '../../debug/data-model/data-model';
+import {Events} from '../../debug/events/events';
+import {Errors} from '../../debug/errors/errors';
+import {RawMessages} from '../../debug/raw-messages/raw-messages';
+import {MockRules} from '../../debug/mock-rules/mock-rules';
 import {MatTabsModule} from '@angular/material/tabs';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatBadgeModule} from '@angular/material/badge';
-import {StartupResolution} from './startup-resolution';
-import {HostCommunication} from './host-communication';
+import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {HostCommunication} from '../host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 const EVENTS_TAB_INDEX = 1;
@@ -82,38 +83,35 @@ export class ComposerWorkspace implements OnInit {
   readonly errors = viewChild(Errors);
 
   constructor() {
-    effect(() => {
-      const envelope = this.hostComm.messageStream();
+    this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
       if (!envelope) return;
 
       const payload = envelope.payload as WorkspaceMessagePayload;
+      const activeTab = this.selectedTabIndex();
 
-      untracked(() => {
-        const activeTab = this.selectedTabIndex();
-        if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.action) {
-          if (activeTab !== EVENTS_TAB_INDEX) {
-            this.unreadEventsCount.update(count => count + 1);
-          }
-        } else if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
-          if (activeTab !== ERRORS_TAB_INDEX) {
-            this.unreadErrorsCount.update(count => count + 1);
-          }
-        } else if (
-          envelope.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE &&
-          payload?.validationErrors
-        ) {
-          const validationErrors = payload.validationErrors;
-          const hasErrors = Array.isArray(validationErrors)
-            ? validationErrors.length > 0
-            : typeof validationErrors === 'object' && validationErrors !== null
-              ? Object.keys(validationErrors).length > 0
-              : !!validationErrors;
-
-          if (hasErrors && activeTab !== ERRORS_TAB_INDEX) {
-            this.unreadErrorsCount.update(count => count + 1);
-          }
+      if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.action) {
+        if (activeTab !== EVENTS_TAB_INDEX) {
+          this.unreadEventsCount.update(count => count + 1);
         }
-      });
+      } else if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+        if (activeTab !== ERRORS_TAB_INDEX) {
+          this.unreadErrorsCount.update(count => count + 1);
+        }
+      } else if (
+        envelope.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE &&
+        payload?.validationErrors
+      ) {
+        const validationErrors = payload.validationErrors;
+        const hasErrors = Array.isArray(validationErrors)
+          ? validationErrors.length > 0
+          : typeof validationErrors === 'object' && validationErrors !== null
+            ? Object.keys(validationErrors).length > 0
+            : !!validationErrors;
+
+        if (hasErrors && activeTab !== ERRORS_TAB_INDEX) {
+          this.unreadErrorsCount.update(count => count + 1);
+        }
+      }
     });
 
     effect(() => {

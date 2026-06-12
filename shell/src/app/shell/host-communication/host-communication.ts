@@ -17,8 +17,8 @@
 import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {ReplaySubject} from 'rxjs';
-import {StartupResolution} from './startup-resolution';
-import {CrossFrameValidator} from './cross-frame-validator';
+import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {CrossFrameValidator} from '../cross-frame-validator/cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 /**

@@ -19,15 +19,15 @@ import {TestBed} from '@angular/core/testing';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ChatCoordinator} from './chat-coordinator';
-import {CatalogManagement} from '../../storage/catalog-management';
-import {Catalog} from '../../storage/catalog-storage.model';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {
   AppConfigProvider,
   EnvMode,
   AuthType,
   ThemePreference,
-} from '../../settings/app-config-provider';
+} from '../../settings/app-config-provider/app-config-provider';
 import {StateSync} from '../state-sync/state-sync';
 import {LlmClient, LlmMessage, LlmStreamResponse, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';

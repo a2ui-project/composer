@@ -16,7 +16,7 @@
 
 import {TestBed} from '@angular/core/testing';
 import {IndexedDbStorage} from './indexed-db-storage';
-import {CachedCatalogRecord} from './catalog-storage.model';
+import {CachedCatalogRecord} from '../models/catalog-storage.model';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 
 class FakeIDBRequest {

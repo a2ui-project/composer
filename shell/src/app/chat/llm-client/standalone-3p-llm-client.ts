@@ -16,7 +16,7 @@
 
 import {Injectable, inject} from '@angular/core';
 import {LlmClient, LlmMessage, LlmResponse, LlmStreamResponse, MessageRole} from './llm-client';
-import {AppConfigProvider} from '../../settings/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {GoogleGenAI, Content, GenerateContentParameters} from '@google/genai';
 
 /**

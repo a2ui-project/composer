@@ -15,16 +15,19 @@
  */
 
 import {Injectable, inject, signal, DestroyRef} from '@angular/core';
-import {HostCommunication, MessageEnvelope} from '../shell/host-communication';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {Catalog} from './catalog-storage.model';
+import {Catalog} from '../models/catalog-storage.model';
 import {from, of} from 'rxjs';
 import {concatMap} from 'rxjs/operators';
 import {sanitizeHtml} from 'safevalues';
-import {IndexedDbStorage} from './indexed-db-storage';
-import {StartupResolution} from '../shell/startup-resolution';
+import {IndexedDbStorage} from '../indexed-db-storage/indexed-db-storage';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {stableStringify} from './stable-stringify';
+import {stableStringify} from '../stable-stringify/stable-stringify';
 
 /**
  * Coordinates client sidepanel integration, managing live visual schemas,

@@ -16,7 +16,7 @@
 
 import {inject} from '@angular/core';
 import {CanActivateFn, Router} from '@angular/router';
-import {StartupResolution} from './startup-resolution';
+import {StartupResolution} from '../startup-resolution/startup-resolution';
 
 /**
  * Routing guard ensuring that the StartupResolution has completed

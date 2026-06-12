@@ -17,11 +17,11 @@
 
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {LocalStorageKey} from './local-storage-keys';
-import {EnvMode, AuthType} from './app-config-provider';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {EnvMode, AuthType} from '../app-config-provider/app-config-provider';
 import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
-import {StartupResolution} from '../shell/startup-resolution';
-import {LocalStorageInteractions} from './local-storage-interactions';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 
 describe('LocalStorageAppConfigProvider', () => {
   let mockStartupService: {

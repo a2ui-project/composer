@@ -16,14 +16,17 @@
 
 import {TestBed} from '@angular/core/testing';
 import {CatalogManagement} from './catalog-management';
-import {HostCommunication, MessageEnvelope} from '../shell/host-communication';
-import {IndexedDbStorage} from './indexed-db-storage';
-import {StartupResolution} from '../shell/startup-resolution';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
+import {IndexedDbStorage} from '../indexed-db-storage/indexed-db-storage';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {signal, WritableSignal} from '@angular/core';
 import {Subject} from 'rxjs';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {Catalog} from './catalog-storage.model';
+import {Catalog} from '../models/catalog-storage.model';
 
 describe('CatalogManagement', () => {
   let service: CatalogManagement;

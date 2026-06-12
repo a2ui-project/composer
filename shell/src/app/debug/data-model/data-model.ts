@@ -20,7 +20,7 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {FormsModule} from '@angular/forms';
 import {debounceTime, distinctUntilChanged, filter} from 'rxjs/operators';
-import {HostCommunication} from '../../shell/host-communication';
+import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 /**

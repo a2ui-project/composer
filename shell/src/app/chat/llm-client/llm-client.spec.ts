@@ -19,9 +19,13 @@ import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {LlmClient, LlmMessage} from './llm-client';
 import {Standalone3pLlmClient} from './standalone-3p-llm-client';
-import {AppConfigProvider} from '../../settings/app-config-provider';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {MessageRole} from './llm-client';
-import {EnvMode, AuthType, ThemePreference} from '../../settings/app-config-provider';
+import {
+  EnvMode,
+  AuthType,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
 import {appConfig} from '../../app.config';
 
 // TS Types matching official GenAI SDK (ensures zero 'any' type escapes)

@@ -20,20 +20,20 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {HostCommunication} from './host-communication';
-import {StartupResolution} from './startup-resolution';
+import {HostCommunication} from '../host-communication/host-communication';
+import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {ChatCoordinator} from '../chat/chat-service/chat-coordinator';
-import {LlmClient, LlmMessage} from '../chat/llm-client/llm-client';
-import {StateSync} from '../chat/state-sync/state-sync';
-import {ChatState, LlmLogEntry, LlmLogType} from '../chat/chat-state/chat-state';
-import {PipelineStatus} from '../chat/pipeline-status/pipeline-status';
+import {ChatCoordinator} from '../../chat/chat-service/chat-coordinator';
+import {LlmClient, LlmMessage} from '../../chat/llm-client/llm-client';
+import {StateSync} from '../../chat/state-sync/state-sync';
+import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
+import {PipelineStatus} from '../../chat/pipeline-status/pipeline-status';
 import {
   AppConfigProvider,
   EnvMode,
   AuthType,
   ThemePreference,
-} from '../settings/app-config-provider';
+} from '../../settings/app-config-provider/app-config-provider';
 import {signal} from '@angular/core';
 
 class MockChatState {

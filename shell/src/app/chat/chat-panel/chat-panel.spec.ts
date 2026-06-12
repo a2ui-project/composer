@@ -27,9 +27,9 @@ import {LlmMessage} from '../llm-client/llm-client';
 import {MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {CatalogManagement} from '../../storage/catalog-management';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {MatDialogHarness} from '@angular/material/dialog/testing';
-import {Catalog} from '../../storage/catalog-storage.model';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);

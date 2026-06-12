@@ -26,7 +26,10 @@ import {
 } from '@angular/core';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {JsonPipe} from '@angular/common';
-import {HostCommunication, MessageEnvelope} from '../../shell/host-communication';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ChatState} from '../../chat/chat-state/chat-state';
 import {formatTimestamp} from '../../utils/date.utils';

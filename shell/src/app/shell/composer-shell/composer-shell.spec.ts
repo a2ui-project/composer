@@ -23,13 +23,13 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerShellHarness} from './test/composer-shell.harness';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {DOCUMENT} from '@angular/common';
-import {IndexedDbStorage} from '../storage/indexed-db-storage';
-import {CatalogManagement} from '../storage/catalog-management';
-import {AppConfigProvider} from '../settings/app-config-provider';
+import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {signal, WritableSignal} from '@angular/core';
-import {LocalStorageInteractions} from '../settings/local-storage-interactions';
-import {LocalStorageKey} from '../settings/local-storage-keys';
-import {SessionStorageInteractions} from '../settings/session-storage-interactions';
+import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
 
 describe('ComposerShell Layout', () => {
   let fixture: ComponentFixture<ComposerShell>;

@@ -15,9 +15,9 @@
  */
 
 import {Injectable, inject, signal} from '@angular/core';
-import {QueryParser} from './query-parser';
-import {LocalStorageKey} from '../settings/local-storage-keys';
-import {LocalStorageInteractions} from '../settings/local-storage-interactions';
+import {QueryParser} from '../query-parser/query-parser';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 
 /**
  * Represents the resolved runtime configuration for the application,

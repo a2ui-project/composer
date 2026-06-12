@@ -16,7 +16,7 @@
 
 import {TestBed} from '@angular/core/testing';
 import {Router, ActivatedRouteSnapshot, RouterStateSnapshot} from '@angular/router';
-import {StartupResolution} from './startup-resolution';
+import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {startupGuard} from './startup-guard';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 

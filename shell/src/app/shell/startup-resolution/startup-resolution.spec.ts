@@ -16,8 +16,8 @@
 
 import {TestBed} from '@angular/core/testing';
 import {StartupResolution} from './startup-resolution';
-import {LocalStorageInteractions} from '../settings/local-storage-interactions';
-import {LocalStorageKey} from '../settings/local-storage-keys';
+import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
 describe('StartupResolution Task 2.6', () => {

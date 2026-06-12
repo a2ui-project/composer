@@ -23,9 +23,9 @@ import {
 import {provideRouter} from '@angular/router';
 import {provideAnimations} from '@angular/platform-browser/animations';
 import {routes} from './app.routes';
-import {StartupResolution} from './shell/startup-resolution';
-import {AppConfigProvider} from './settings/app-config-provider';
-import {LocalStorageAppConfigProvider} from './settings/local-storage-config.provider';
+import {StartupResolution} from './shell/startup-resolution/startup-resolution';
+import {AppConfigProvider} from './settings/app-config-provider/app-config-provider';
+import {LocalStorageAppConfigProvider} from './settings/local-storage-config-provider/local-storage-config.provider';
 import {LlmClient} from './chat/llm-client/llm-client';
 import {Standalone3pLlmClient} from './chat/llm-client/standalone-3p-llm-client';
 

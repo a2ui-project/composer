@@ -21,7 +21,10 @@ import {signal, WritableSignal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi, afterEach} from 'vitest';
 import {DataModel} from './data-model';
 import {DataModelHarness} from './test/data-model.harness';
-import {HostCommunication, MessageEnvelope} from '../../shell/host-communication';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 describe('DataModel', () => {

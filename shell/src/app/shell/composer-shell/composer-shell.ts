@@ -15,21 +15,21 @@
  * limitations under the License.
  */
 
-import {Component, inject, computed, effect, signal} from '@angular/core';
+import {Component, computed, effect, inject, signal} from '@angular/core';
 import {MatToolbarModule} from '@angular/material/toolbar';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatListModule} from '@angular/material/list';
-import {RouterOutlet, RouterLink} from '@angular/router';
+import {RouterLink, RouterOutlet} from '@angular/router';
 import {DOCUMENT} from '@angular/common';
-import {IndexedDbStorage} from '../storage/indexed-db-storage';
+import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {CatalogManagement} from '../storage/catalog-management';
-import {AppConfigProvider} from '../settings/app-config-provider';
-import {LocalStorageKey} from '../settings/local-storage-keys';
-import {LocalStorageInteractions} from '../settings/local-storage-interactions';
-import {SessionStorageInteractions} from '../settings/session-storage-interactions';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
 
 /**
  * The primary layout container for the A2UI Composer.

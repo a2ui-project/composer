@@ -20,11 +20,11 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {IS_EXTENSION_MODE} from '../../shell/environment-tokens';
+import {IS_EXTENSION_MODE} from '../../shell/environment-tokens/environment-tokens';
 import {signal, WritableSignal} from '@angular/core';
-import {HostCommunication} from '../../shell/host-communication';
-import {CatalogManagement} from '../../storage/catalog-management';
-import {Catalog} from '../../storage/catalog-storage.model';
+import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 
