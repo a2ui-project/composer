@@ -48,12 +48,12 @@ describe('LocalStorageInteractions Safety Boundaries', () => {
     });
 
     it('safely performs setItem and calls underlying native API', () => {
-      service.setItem(LocalStorageKey.GEMINI_API_KEY, 'my-test-api-key');
+      service.setItem(LocalStorageKey.THEME_PREFERENCE, 'dark');
       expect(Storage.prototype.setItem).toHaveBeenCalledWith(
-        LocalStorageKey.GEMINI_API_KEY,
-        'my-test-api-key',
+        LocalStorageKey.THEME_PREFERENCE,
+        'dark',
       );
-      expect(localStorage.getItem(LocalStorageKey.GEMINI_API_KEY)).toBe('my-test-api-key');
+      expect(localStorage.getItem(LocalStorageKey.THEME_PREFERENCE)).toBe('dark');
     });
 
     it('safely performs getItem and retrieves content via native API', () => {
@@ -94,20 +94,20 @@ describe('LocalStorageInteractions Safety Boundaries', () => {
     it('returns null on getItem under storage unavailable contexts safely', () => {
       let value: string | null = 'not-null';
       expect(() => {
-        value = service.getItem(LocalStorageKey.GEMINI_API_KEY);
+        value = service.getItem(LocalStorageKey.THEME_PREFERENCE);
       }).not.toThrow();
       expect(value).toBeNull();
     });
 
     it('ignores setItem under storage unavailable contexts safely', () => {
       expect(() => {
-        service.setItem(LocalStorageKey.GEMINI_API_KEY, 'new-key-value');
+        service.setItem(LocalStorageKey.THEME_PREFERENCE, 'dark');
       }).not.toThrow();
     });
 
     it('ignores removeItem under storage unavailable contexts safely', () => {
       expect(() => {
-        service.removeItem(LocalStorageKey.GEMINI_API_KEY);
+        service.removeItem(LocalStorageKey.THEME_PREFERENCE);
       }).not.toThrow();
     });
   });

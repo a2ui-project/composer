@@ -25,6 +25,8 @@ import {
 } from '../app-config-provider/app-config-provider';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
+import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
 
 /**
  * Concrete implementation of the AppConfigProvider that integrates with
@@ -42,13 +44,14 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   /** Central type-safe browser persistent storage service provider. */
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
 
+  /** Highly secure credentials asynchronous storage engine. */
+  private readonly secureCredentialsStorage = inject(SecureCredentialsStorage);
+
   /** Tracks local overrides for authentication modes at runtime. */
   private readonly _forcedAuthOverride = signal<AuthType>(this.getInitialForcedAuth());
 
   /** Coordinates dynamic API key state tracking. */
-  private readonly _geminiApiKey = signal<string>(
-    this.localStorageInteractions.getItem(LocalStorageKey.GEMINI_API_KEY) || '',
-  );
+  private readonly _geminiApiKey = signal<string>('');
 
   /** Coordinates dynamic renderer preview frame URL endpoint. */
   private readonly _rendererUrl = signal<string>(
@@ -63,6 +66,42 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
       LocalStorageKey.THEME_PREFERENCE,
     ) as ThemePreference | null) || 'light',
   );
+
+  /**
+   * Orchestrates overall subsystem bootstrapping, sequentially resolving
+   * active renderer fallback URLs and secure cryptographic API credentials.
+   */
+  override async initialize(): Promise<void> {
+    this.initializeRendererUrl();
+    await this.initializeCredentials();
+  }
+
+  /** Asynchronously resolves the sensitive Gemini API key from SecureCredentialsStorage. */
+  private async initializeCredentials(): Promise<void> {
+    try {
+      const key = await this.secureCredentialsStorage.getCredential(
+        SecureCredentialsKey.GEMINI_API_KEY,
+      );
+      this._geminiApiKey.set(key || '');
+    } catch (err) {
+      console.warn(
+        'Failed to resolve credentials from SecureCredentialsStorage during bootstrap',
+        err,
+      );
+      this._geminiApiKey.set('');
+    }
+  }
+
+  /** Synchronizes the active renderer URL with the resolved StartupResolution fallback. */
+  private initializeRendererUrl(): void {
+    const localUrl = this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL);
+    if (!localUrl) {
+      const resolved = this.startup.getResolvedRendererUrl();
+      if (resolved) {
+        this._rendererUrl.set(resolved);
+      }
+    }
+  }
 
   /**
    * Exposes whether the host environment operates in standalone or integrated
@@ -105,9 +144,27 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    *
    * @param key The fresh Gemini developer API key credential.
    */
-  override setGeminiApiKey(key: string): void {
-    this._geminiApiKey.set(key);
-    this.localStorageInteractions.setItem(LocalStorageKey.GEMINI_API_KEY, key);
+  override async setGeminiApiKey(key: string): Promise<void> {
+    try {
+      await this.secureCredentialsStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, key);
+      this._geminiApiKey.set(key);
+    } catch (err) {
+      console.warn('Failed to persist Gemini API key to SecureCredentialsStorage', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Securely erases the Gemini developer API key token from SecureCredentialsStorage
+   * and resets our in-memory reactive Signal to an empty string.
+   */
+  override async purgeGeminiApiKey(): Promise<void> {
+    this._geminiApiKey.set('');
+    await this.secureCredentialsStorage
+      .removeCredential(SecureCredentialsKey.GEMINI_API_KEY)
+      .catch(err => {
+        console.warn('Failed to remove Gemini API key from SecureCredentialsStorage', err);
+      });
   }
 
   /**
@@ -144,9 +201,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   /**
    * Purges runtime overrides and dynamic key markers from persistent layers.
    */
-  override flushConfig(): void {
+  override async flushConfig(): Promise<void> {
     this.localStorageInteractions.removeItem(LocalStorageKey.RENDERER_URL);
-    this.localStorageInteractions.removeItem(LocalStorageKey.GEMINI_API_KEY);
+    await this.purgeGeminiApiKey();
     this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_1P);
     this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_3P);
     this.localStorageInteractions.removeItem(LocalStorageKey.THEME_PREFERENCE);

@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,10 +17,31 @@
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
+
 import {EnvMode, AuthType} from '../app-config-provider/app-config-provider';
 import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
+
+class MockSecureCredentialsStorage {
+  private storage = new Map<string, string>();
+
+  async getCredential(key: string): Promise<string | null> {
+    return Promise.resolve(this.storage.get(key) || null);
+  }
+
+  async setCredential(key: string, value: string): Promise<void> {
+    this.storage.set(key, value);
+    return Promise.resolve();
+  }
+
+  async removeCredential(key: string): Promise<void> {
+    this.storage.delete(key);
+    return Promise.resolve();
+  }
+}
 
 describe('LocalStorageAppConfigProvider', () => {
   let mockStartupService: {
@@ -30,9 +50,11 @@ describe('LocalStorageAppConfigProvider', () => {
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
     isExtensionMode: ReturnType<typeof vi.fn>;
   };
+  let mockSecureStorage: MockSecureCredentialsStorage;
 
   beforeEach(() => {
     localStorage.clear();
+    mockSecureStorage = new MockSecureCredentialsStorage();
     mockStartupService = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('https://default-renderer.com'),
       isContextLocked: vi.fn().mockReturnValue(false),
@@ -52,6 +74,7 @@ describe('LocalStorageAppConfigProvider', () => {
       providers: [
         LocalStorageAppConfigProvider,
         LocalStorageInteractions,
+        {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
         {provide: StartupResolution, useValue: mockStartupService},
       ],
     });
@@ -75,9 +98,10 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(provider.authType()).toBe(AuthType.ONE_PARTY); // Fallback is 1P
   });
 
-  it('initializes geminiApiKey with the stored API key', () => {
-    localStorage.setItem(LocalStorageKey.GEMINI_API_KEY, 'test-key-xyz');
+  it('initializes geminiApiKey with the stored API key from SecureCredentialsStorage', async () => {
+    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'test-key-xyz');
     const provider = setupProvider();
+    await provider.initialize();
     expect(provider.geminiApiKey()).toBe('test-key-xyz');
   });
 
@@ -91,6 +115,13 @@ describe('LocalStorageAppConfigProvider', () => {
     mockStartupService.getResolvedRendererUrl.mockReturnValue('https://resolved-fallback.com');
     const provider = setupProvider();
     expect(provider.rendererUrl()).toBe('https://resolved-fallback.com');
+  });
+
+  it('synchronizes rendererUrl with resolved fallback when initialize is invoked', async () => {
+    mockStartupService.getResolvedRendererUrl.mockReturnValue('https://fallback-init.com');
+    const provider = setupProvider();
+    await provider.initialize();
+    expect(provider.rendererUrl()).toBe('https://fallback-init.com');
   });
 
   it('initializes themePreference to light mode by default', () => {
@@ -154,11 +185,13 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(localStorage.getItem(LocalStorageKey.RENDERER_URL)).toBe('https://updated-renderer.com');
   });
 
-  it('persists updated API key to localStorage and updates signal', () => {
+  it('persists updated API key to SecureCredentialsStorage and updates signal', async () => {
     const provider = setupProvider();
-    provider.setGeminiApiKey('fresh-token');
+    await provider.setGeminiApiKey('fresh-token');
     expect(provider.geminiApiKey()).toBe('fresh-token');
-    expect(localStorage.getItem(LocalStorageKey.GEMINI_API_KEY)).toBe('fresh-token');
+    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBe(
+      'fresh-token',
+    );
   });
 
   it('persists updated theme selection to localStorage and updates signal', () => {
@@ -189,16 +222,17 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(localStorage.getItem(LocalStorageKey.FORCE_3P)).toBeNull();
   });
 
-  it('purges all storage keys and resets signals on flushConfig', () => {
+  it('purges all storage keys and resets signals on flushConfig', async () => {
     mockStartupService.getResolvedRendererUrl.mockReturnValue('https://base-url.com');
+    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'dirty-token');
     const provider = setupProvider();
 
     provider.setRendererUrl('https://dirty-renderer.com');
-    provider.setGeminiApiKey('dirty-token');
+    await provider.setGeminiApiKey('dirty-token');
     provider.setForcedAuthMode(AuthType.THREE_PARTY);
     provider.setThemePreference('dark');
 
-    provider.flushConfig();
+    await provider.flushConfig();
 
     expect(provider.rendererUrl()).toBe('https://base-url.com');
     expect(provider.geminiApiKey()).toBe('');
@@ -206,10 +240,88 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(provider.themePreference()).toBe('light');
 
     expect(localStorage.getItem(LocalStorageKey.RENDERER_URL)).toBeNull();
-    expect(localStorage.getItem(LocalStorageKey.GEMINI_API_KEY)).toBeNull();
+    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBeNull();
     expect(localStorage.getItem(LocalStorageKey.FORCE_1P)).toBeNull();
     expect(localStorage.getItem(LocalStorageKey.FORCE_3P)).toBeNull();
     expect(localStorage.getItem(LocalStorageKey.THEME_PREFERENCE)).toBeNull();
+  });
+
+  it('handles simulated storage rejections gracefully during initialize bootstrap', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    vi.spyOn(mockSecureStorage, 'getCredential').mockRejectedValue(
+      new Error('Simulated Read Failure'),
+    );
+
+    const provider = setupProvider();
+    await provider.initialize();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to resolve credentials from SecureCredentialsStorage during bootstrap',
+      expect.any(Error),
+    );
+    expect(provider.geminiApiKey()).toBe('');
+  });
+
+  it('attaches catch handler and logs warning when setGeminiApiKey write fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    vi.spyOn(mockSecureStorage, 'setCredential').mockRejectedValue(
+      new Error('Simulated Write Failure'),
+    );
+
+    const provider = setupProvider();
+    await expect(provider.setGeminiApiKey('failed-key')).rejects.toThrow('Simulated Write Failure');
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to persist Gemini API key to SecureCredentialsStorage',
+      expect.any(Error),
+    );
+  });
+
+  it('does not update geminiApiKey signal when setCredential persistence fails', async () => {
+    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'initial-key');
+    const provider = setupProvider();
+    await provider.initialize();
+    expect(provider.geminiApiKey()).toBe('initial-key');
+
+    vi.spyOn(mockSecureStorage, 'setCredential').mockRejectedValue(
+      new Error('Simulated Write Failure'),
+    );
+
+    await expect(provider.setGeminiApiKey('new-failed-key')).rejects.toThrow(
+      'Simulated Write Failure',
+    );
+
+    expect(provider.geminiApiKey()).toBe('initial-key');
+  });
+
+  it('attaches catch handler and logs warning when removeCredential delete fails during flushConfig', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    vi.spyOn(mockSecureStorage, 'removeCredential').mockRejectedValue(
+      new Error('Simulated Remove Failure'),
+    );
+
+    const provider = setupProvider();
+    await provider.flushConfig();
+
+    // Allow pending promise to reject
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to remove Gemini API key from SecureCredentialsStorage',
+      expect.any(Error),
+    );
+  });
+
+  it('securely removes API key from SecureCredentialsStorage and updates signal on purgeGeminiApiKey', async () => {
+    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'token-to-purge');
+    const provider = setupProvider();
+    await provider.initialize();
+    expect(provider.geminiApiKey()).toBe('token-to-purge');
+
+    await provider.purgeGeminiApiKey();
+
+    expect(provider.geminiApiKey()).toBe('');
+    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBeNull();
   });
 
   describe('under potential Server-Side Rendering (SSR) environments', () => {
@@ -230,6 +342,7 @@ describe('LocalStorageAppConfigProvider', () => {
       // Verify saving/mutations do not throw ReferenceError
       expect(() => provider.setRendererUrl('https://any-url.com')).not.toThrow();
       expect(() => provider.setGeminiApiKey('any-key')).not.toThrow();
+      expect(() => provider.purgeGeminiApiKey()).not.toThrow();
       expect(() => provider.setForcedAuthMode(AuthType.THREE_PARTY)).not.toThrow();
       expect(() => provider.setThemePreference('dark')).not.toThrow();
       expect(() => provider.flushConfig()).not.toThrow();

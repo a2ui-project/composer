@@ -15,18 +15,31 @@
  */
 
 import {TestBed} from '@angular/core/testing';
+import {signal} from '@angular/core';
 import {StartupResolution} from './startup-resolution';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+
+class MockAppConfigProvider {
+  geminiApiKey = signal<string>('');
+  purgeGeminiApiKey = vi.fn().mockResolvedValue(undefined);
+}
 
 describe('StartupResolution Task 2.6', () => {
   let service: StartupResolution;
+  let mockConfigProvider: MockAppConfigProvider;
 
   beforeEach(() => {
+    mockConfigProvider = new MockAppConfigProvider();
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [StartupResolution, LocalStorageInteractions],
+      providers: [
+        StartupResolution,
+        LocalStorageInteractions,
+        {provide: AppConfigProvider, useValue: mockConfigProvider},
+      ],
     });
     service = TestBed.inject(StartupResolution);
   });
@@ -119,21 +132,29 @@ describe('StartupResolution Task 2.6', () => {
     } as Response);
 
     vi.spyOn(service, 'getWindowHostname').mockReturnValue('localhost');
-    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
 
     // Scenario 1: URL resolved, but 3P missing API key -> invalid
-    getItemSpy.mockImplementation(key => {
-      if (key === LocalStorageKey.GEMINI_API_KEY) return null;
-      return null;
-    });
     await service.resolveStartupConfiguration();
-    expect(service.isEnvironmentValid()).toBe(false);
+    expect(await service.isEnvironmentValid()).toBe(false);
 
     // Scenario 2: URL resolved, and 3P has API key -> valid
-    getItemSpy.mockImplementation(key => {
-      if (key === LocalStorageKey.GEMINI_API_KEY) return 'AIzaSyValidKey';
-      return null;
-    });
-    expect(service.isEnvironmentValid()).toBe(true);
+    mockConfigProvider.geminiApiKey.set('AIzaSyValidKey');
+    expect(await service.isEnvironmentValid()).toBe(true);
+  });
+
+  it('purges Gemini API key via AppConfigProvider when operating in 1P environments', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+      }),
+    } as Response);
+
+    vi.spyOn(service, 'getWindowHostname').mockReturnValue('google.com');
+
+    await service.resolveStartupConfiguration();
+
+    expect(mockConfigProvider.purgeGeminiApiKey).toHaveBeenCalled();
   });
 });

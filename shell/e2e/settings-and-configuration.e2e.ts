@@ -49,7 +49,8 @@ test.describe('Settings and Client Configuration', () => {
       });
 
       const saveBtn = page.getByRole('button', {name: 'Save Settings'});
-      await Promise.all([page.waitForURL('**/settings'), saveBtn.click()]);
+      await Promise.all([page.waitForURL(url => url.pathname === '/'), saveBtn.click()]);
+      await page.waitForLoadState('load');
 
       const sentinel = await page.evaluate(
         () => (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__,
@@ -87,7 +88,6 @@ test.describe('Settings and Client Configuration', () => {
         try {
           localStorage.setItem('a2ui_composer_force_3p', 'true');
           localStorage.removeItem('a2ui_composer_force_1p');
-          localStorage.removeItem('a2ui_composer_api_key');
         } catch (e) {}
       });
       await page.reload();

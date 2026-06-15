@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,8 +29,7 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {signal, WritableSignal, Signal, computed} from '@angular/core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
-import {LocalStorageAppConfigProvider} from '../local-storage-config-provider/local-storage-config.provider';
+import {AppConfigProvider, AuthType, EnvMode} from '../app-config-provider/app-config-provider';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SettingsHarness} from './test/settings.harness';
 
@@ -60,6 +58,7 @@ describe('Settings', () => {
   let mockRendererUrl: WritableSignal<string>;
   let mockGeminiApiKey: WritableSignal<string>;
   let mockConfigProvider: {
+    initialize: Mock<() => Promise<void>>;
     authType: Signal<AuthType>;
     rendererUrl: Signal<string>;
     geminiApiKey: Signal<string>;
@@ -67,6 +66,7 @@ describe('Settings', () => {
     setGeminiApiKey: Mock<(key: string) => void>;
     setForcedAuthMode: Mock<(mode: AuthType) => void>;
     flushConfig: Mock<() => void>;
+    purgeGeminiApiKey: Mock<() => void>;
   };
 
   beforeEach(() => {
@@ -101,6 +101,7 @@ describe('Settings', () => {
     });
 
     mockConfigProvider = {
+      initialize: vi.fn().mockResolvedValue(undefined),
       authType: mockAuthType,
       rendererUrl: mockRendererUrl.asReadonly(),
       geminiApiKey: mockGeminiApiKey.asReadonly(),
@@ -117,6 +118,9 @@ describe('Settings', () => {
         mockAuthOverride.set(AuthType.DEFAULT);
         mockGeminiApiKey.set('');
         mockRendererUrl.set(mockStartupResolution.getResolvedRendererUrl() || '');
+      }),
+      purgeGeminiApiKey: vi.fn().mockImplementation(() => {
+        mockGeminiApiKey.set('');
       }),
     };
   });
@@ -163,7 +167,7 @@ describe('Settings', () => {
     return {fixture, component, harness};
   }
 
-  it('initializes form controls cleanly in 1P mode without ' + 'requiring apiKey', async () => {
+  it('initializes form controls cleanly in 1P mode without requiring apiKey', async () => {
     mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
     const {component, harness} = await setupComponent();
 
@@ -173,14 +177,14 @@ describe('Settings', () => {
     const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
     await harness.setRendererUrlValue('http://new-url.com');
-    component.saveSettings();
+    await component.saveSettings();
 
-    expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('');
+    expect(mockConfigProvider.purgeGeminiApiKey).toHaveBeenCalled();
     expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://new-url.com');
     expect(reloadSpy).toHaveBeenCalled();
   });
 
-  it('enforces apiKey requirement in 3P mode and rejects ' + 'empty whitespace keys', async () => {
+  it('enforces apiKey requirement in 3P mode and rejects empty whitespace keys', async () => {
     mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
     const {component, harness} = await setupComponent();
 
@@ -205,81 +209,69 @@ describe('Settings', () => {
 
     expect(component.settingsForm.valid).toBe(true);
 
-    component.saveSettings();
+    await component.saveSettings();
 
     expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://new-url.com');
     expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('AIzaSyTestKey');
     expect(reloadSpy).toHaveBeenCalled();
   });
 
-  it(
-    'disables rendererUrl form control and displays lock warning when ' + 'context is locked',
-    async () => {
-      mockStartupResolution.isContextLocked.mockReturnValue(true);
-      const {component, harness} = await setupComponent();
+  it('disables rendererUrl form control and displays lock warning when context is locked', async () => {
+    mockStartupResolution.isContextLocked.mockReturnValue(true);
+    const {component, harness} = await setupComponent();
 
-      expect(component.isLocked()).toBe(true);
-      expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
+    expect(component.isLocked()).toBe(true);
+    expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
 
-      expect(await harness.hasLockedNotice()).toBe(true);
-      expect(await harness.getLockedNoticeText()).toContain('locked by enterprise policy');
-    },
-  );
+    expect(await harness.hasLockedNotice()).toBe(true);
+    expect(await harness.getLockedNoticeText()).toContain('locked by enterprise policy');
+  });
 
-  it(
-    'displays default connection status badges and overlay logs console ' + 'when disconnected',
-    async () => {
-      const {harness} = await setupComponent();
-      expect(await harness.getBridgeBadgeText()).toContain('Bridge: Disconnected');
-      expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Disconnected');
-      expect(await harness.getLogsConsoleText()).toContain('Bridge disconnected');
-    },
-  );
+  it('displays default connection status badges and overlay logs console when disconnected', async () => {
+    const {harness} = await setupComponent();
+    expect(await harness.getBridgeBadgeText()).toContain('Bridge: Disconnected');
+    expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Disconnected');
+    expect(await harness.getLogsConsoleText()).toContain('Bridge disconnected');
+  });
 
-  it(
-    'dynamically updates connection status badges and logs console when ' +
-      'HostCommunication and CatalogManagement signals mutate',
-    async () => {
-      const {fixture, harness} = await setupComponent();
+  it('dynamically updates connection status badges and logs console when HostCommunication and CatalogManagement signals mutate', async () => {
+    const {fixture, harness} = await setupComponent();
 
-      // Initial state: bridge disconnected, catalog disconnected
-      expect(await harness.getBridgeBadgeText()).toContain('Bridge: Disconnected');
-      expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Disconnected');
+    // Initial state: bridge disconnected, catalog disconnected
+    expect(await harness.getBridgeBadgeText()).toContain('Bridge: Disconnected');
+    expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Disconnected');
 
-      // Mutate bridge to connected
-      mockLatestEnvelope.set({
-        type: PreviewBridgeMessageType.RENDERER_READY,
-        origin: 'http://localhost',
-        timestamp: 0,
-      });
-      fixture.detectChanges();
-      expect(await harness.getBridgeBadgeText()).toContain('Bridge: Connected');
+    // Mutate bridge to connected
+    mockLatestEnvelope.set({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: 0,
+    });
+    fixture.detectChanges();
+    expect(await harness.getBridgeBadgeText()).toContain('Bridge: Connected');
 
-      // Mutate catalog to indexing
-      mockIsHandshakeInProgress.set(true);
-      fixture.detectChanges();
-      expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Indexing');
-      expect(await harness.getLogsConsoleText()).toContain('Catalog handshake in progress');
+    // Mutate catalog to indexing
+    mockIsHandshakeInProgress.set(true);
+    fixture.detectChanges();
+    expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Indexing');
+    expect(await harness.getLogsConsoleText()).toContain('Catalog handshake in progress');
 
-      // Mutate catalog to connected
-      mockIsHandshakeInProgress.set(false);
-      mockActiveCatalogTitle.set('My Catalog');
-      mockActiveCatalog.set({title: 'My Catalog'});
-      fixture.detectChanges();
-      expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Connected');
-      expect(await harness.getLogsConsoleText()).toContain(
-        'Catalog handshake completed successfully',
-      );
+    // Mutate catalog to connected
+    mockIsHandshakeInProgress.set(false);
+    mockActiveCatalogTitle.set('My Catalog');
+    mockActiveCatalog.set({title: 'My Catalog'});
+    fixture.detectChanges();
+    expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Connected');
+    expect(await harness.getLogsConsoleText()).toContain(
+      'Catalog handshake completed successfully',
+    );
 
-      // Mutate catalog to error
-      mockCatalogError.set('Malformed catalog JSON');
-      fixture.detectChanges();
-      expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Error');
-      expect(await harness.getLogsConsoleText()).toContain(
-        '[Catalog Error] Malformed catalog JSON',
-      );
-    },
-  );
+    // Mutate catalog to error
+    mockCatalogError.set('Malformed catalog JSON');
+    fixture.detectChanges();
+    expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Error');
+    expect(await harness.getLogsConsoleText()).toContain('[Catalog Error] Malformed catalog JSON');
+  });
 
   it('verifies static placeholder text on the renderer URL input', async () => {
     const {harness} = await setupComponent();
@@ -288,156 +280,151 @@ describe('Settings', () => {
     expect(await harness.getRendererUrlPlaceholder()).toBe('http://localhost:3000');
   });
 
-  it(
-    'toggles API key input visibility between password and text via ' + 'button clicks',
-    async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      const {fixture, harness} = await setupComponent();
+  it('toggles API key input visibility between password and text via button clicks', async () => {
+    mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+    const {fixture, harness} = await setupComponent();
 
-      expect(await harness.getApiKeyInputType()).toBe('password');
+    expect(await harness.getApiKeyInputType()).toBe('password');
 
-      await harness.clickApiKeyToggleBtn();
-      fixture.detectChanges();
-      expect(await harness.getApiKeyInputType()).toBe('text');
+    await harness.clickApiKeyToggleBtn();
+    fixture.detectChanges();
+    expect(await harness.getApiKeyInputType()).toBe('text');
 
-      await harness.clickApiKeyToggleBtn();
-      fixture.detectChanges();
-      expect(await harness.getApiKeyInputType()).toBe('password');
-    },
-  );
+    await harness.clickApiKeyToggleBtn();
+    fixture.detectChanges();
+    expect(await harness.getApiKeyInputType()).toBe('password');
+  });
 
-  it(
-    'renders client-side format validation errors for missing required ' +
-      'fields and malformed URL strings upon form submission',
-    async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      const {fixture, component, harness} = await setupComponent();
+  it('renders client-side format validation errors for missing required fields and malformed URL strings upon form submission', async () => {
+    mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+    const {fixture, component, harness} = await setupComponent();
 
-      await harness.setRendererUrlValue('');
-      await harness.setGeminiApiKeyValue('');
-      component.saveSettings();
-      fixture.detectChanges();
+    await harness.setRendererUrlValue('');
+    await harness.setGeminiApiKeyValue('');
+    await component.saveSettings();
+    fixture.detectChanges();
 
-      const errors = await harness.getErrorsText();
-      expect(errors.length).toBe(2);
-      expect(errors[0]).toContain('Renderer URL is required');
-      expect(errors[1]).toContain('Gemini API key is required');
+    const errors = await harness.getErrorsText();
+    expect(errors.length).toBe(2);
+    expect(errors[0]).toContain('Renderer URL is required');
+    expect(errors[1]).toContain('Gemini API key is required');
 
-      await harness.setRendererUrlValue('invalid-url');
-      await harness.setGeminiApiKeyValue('valid-key');
-      component.saveSettings();
-      fixture.detectChanges();
+    await harness.setRendererUrlValue('invalid-url');
+    await harness.setGeminiApiKeyValue('valid-key');
+    await component.saveSettings();
+    fixture.detectChanges();
 
-      const patternErrors = await harness.getErrorsText();
-      expect(patternErrors.length).toBe(1);
-      expect(patternErrors[0]).toContain('Must be a valid HTTP or HTTPS URL');
-    },
-  );
+    const patternErrors = await harness.getErrorsText();
+    expect(patternErrors.length).toBe(1);
+    expect(patternErrors[0]).toContain('Must be a valid HTTP or HTTPS URL');
+  });
 
-  it(
-    'renders third-party context layout when a2ui_composer_force_3p ' +
-      'storage override key is present using a real ' +
-      'StartupResolution',
-    async () => {
-      localStorage.setItem('a2ui_composer_force_3p', 'true');
-      try {
-        await TestBed.resetTestingModule();
-        await TestBed.configureTestingModule({
-          imports: [Settings],
-          providers: [
-            provideNoopAnimations(),
-            StartupResolution,
-            LocalStorageAppConfigProvider,
-            {
-              provide: AppConfigProvider,
-              useExisting: LocalStorageAppConfigProvider,
+  class FakeAppConfigProvider extends AppConfigProvider {
+    initialize = vi.fn().mockResolvedValue(undefined);
+    envMode = signal(EnvMode.STANDALONE);
+    authType = computed(() => {
+      return localStorage.getItem('a2ui_composer_force_3p') === 'true'
+        ? AuthType.THREE_PARTY
+        : AuthType.ONE_PARTY;
+    });
+    rendererUrl = signal('');
+    geminiApiKey = signal('');
+    themePreference = signal<ThemePreference>('light');
+    setRendererUrl = vi.fn();
+    setGeminiApiKey = vi.fn();
+    setForcedAuthMode = vi.fn();
+    setThemePreference = vi.fn();
+    flushConfig = vi.fn();
+    purgeGeminiApiKey = vi.fn();
+  }
+
+  it('renders third-party context layout when a2ui_composer_force_3p storage override key is present using a real StartupResolution', async () => {
+    localStorage.setItem('a2ui_composer_force_3p', 'true');
+    try {
+      await TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [Settings],
+        providers: [
+          provideNoopAnimations(),
+          StartupResolution,
+          {
+            provide: AppConfigProvider,
+            useClass: FakeAppConfigProvider,
+          },
+          {
+            provide: HostCommunication,
+            useValue: {latestEnvelope: mockLatestEnvelope},
+          },
+          {
+            provide: CatalogManagement,
+            useValue: {
+              isHandshakeInProgress: mockIsHandshakeInProgress,
+              activeCatalogTitle: mockActiveCatalogTitle,
+              activeCatalog: mockActiveCatalog,
+              catalogError: mockCatalogError,
             },
-            {
-              provide: HostCommunication,
-              useValue: {latestEnvelope: mockLatestEnvelope},
-            },
-            {
-              provide: CatalogManagement,
-              useValue: {
-                isHandshakeInProgress: mockIsHandshakeInProgress,
-                activeCatalogTitle: mockActiveCatalogTitle,
-                activeCatalog: mockActiveCatalog,
-                catalogError: mockCatalogError,
-              },
-            },
-          ],
-        }).compileComponents();
+          },
+        ],
+      }).compileComponents();
 
-        const fixture = TestBed.createComponent(Settings);
-        const component = fixture.componentInstance;
-        fixture.detectChanges();
-        const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
-
-        expect(component.isThirdParty()).toBe(true);
-        expect(await harness.getFormSectionsCount()).toBe(3);
-
-        const sections = await harness.getFormSectionsCount();
-        expect(sections).toBe(3);
-      } finally {
-        localStorage.removeItem('a2ui_composer_force_3p');
-      }
-    },
-  );
-
-  it(
-    'updates dynamic forced auth overrides and reloads window when ' +
-      'toggling forceThirdPartyAuth',
-    async () => {
-      const {fixture, component, harness} = await setupComponent();
-      const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
-
-      expect(component.forceThirdPartyAuth()).toBe(false);
-
-      await harness.toggleForceThirdPartyAuth();
+      const fixture = TestBed.createComponent(Settings);
+      const component = fixture.componentInstance;
       fixture.detectChanges();
+      const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
 
-      expect(component.forceThirdPartyAuth()).toBe(true);
-      expect(mockConfigProvider.setForcedAuthMode).toHaveBeenCalledWith(AuthType.THREE_PARTY);
-      expect(reloadSpy).toHaveBeenCalled();
+      expect(component.isThirdParty()).toBe(true);
+      expect(await harness.getFormSectionsCount()).toBe(3);
 
-      await harness.toggleForceThirdPartyAuth();
-      fixture.detectChanges();
+      const sections = await harness.getFormSectionsCount();
+      expect(sections).toBe(3);
+    } finally {
+      localStorage.removeItem('a2ui_composer_force_3p');
+    }
+  });
 
-      expect(component.forceThirdPartyAuth()).toBe(false);
-      expect(mockConfigProvider.setForcedAuthMode).toHaveBeenLastCalledWith(AuthType.ONE_PARTY);
-      expect(reloadSpy).toHaveBeenCalledTimes(2);
-    },
-  );
+  it('updates dynamic forced auth overrides and reloads window when toggling forceThirdPartyAuth', async () => {
+    const {fixture, component, harness} = await setupComponent();
+    const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
-  it(
-    'disables the slide toggle and displays the auth-locked-notice ' +
-      'warning badge when isContextLocked returns true',
-    async () => {
-      mockStartupResolution.isContextLocked.mockReturnValue(true);
-      const {component, harness} = await setupComponent();
+    expect(component.forceThirdPartyAuth()).toBe(false);
 
-      expect(component.isLocked()).toBe(true);
-      expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
+    await harness.toggleForceThirdPartyAuth();
+    fixture.detectChanges();
 
-      expect(await harness.hasAuthLockedNotice()).toBe(true);
-      expect(await harness.getAuthLockedNoticeText()).toContain(
-        'Authentication mode overrides are locked by enterprise policy',
-      );
+    expect(component.forceThirdPartyAuth()).toBe(true);
+    expect(mockConfigProvider.setForcedAuthMode).toHaveBeenCalledWith(AuthType.THREE_PARTY);
+    expect(reloadSpy).toHaveBeenCalled();
 
-      expect(await harness.isSlideToggleDisabled()).toBe(true);
-    },
-  );
+    await harness.toggleForceThirdPartyAuth();
+    fixture.detectChanges();
 
-  it(
-    'reloads the application at the dynamic base path when ' + 'hosted under a dynamic base href',
-    async () => {
-      const {component} = await setupComponent();
+    expect(component.forceThirdPartyAuth()).toBe(false);
+    expect(mockConfigProvider.setForcedAuthMode).toHaveBeenLastCalledWith(AuthType.ONE_PARTY);
+    expect(reloadSpy).toHaveBeenCalledTimes(2);
+  });
 
-      component.reloadWindow();
+  it('disables the slide toggle and displays the auth-locked-notice warning badge when isContextLocked returns true', async () => {
+    mockStartupResolution.isContextLocked.mockReturnValue(true);
+    const {component, harness} = await setupComponent();
 
-      expect(locationAssign).toHaveBeenCalledWith(expect.anything(), '/composer/pr/44/');
-    },
-  );
+    expect(component.isLocked()).toBe(true);
+    expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
+
+    expect(await harness.hasAuthLockedNotice()).toBe(true);
+    expect(await harness.getAuthLockedNoticeText()).toContain(
+      'Authentication mode overrides are locked by enterprise policy',
+    );
+
+    expect(await harness.isSlideToggleDisabled()).toBe(true);
+  });
+
+  it('reloads the application at the dynamic base path when hosted under a dynamic base href', async () => {
+    const {component} = await setupComponent();
+
+    component.reloadWindow();
+
+    expect(locationAssign).toHaveBeenCalledWith(expect.anything(), '/composer/pr/44/');
+  });
 
   it('reloads the application at the root path "/" when base href is unavailable', async () => {
     mockPlatformLocation.getBaseHrefFromDOM.mockReturnValue(null);

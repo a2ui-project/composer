@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal} from '@angular/core';
+import {Injectable, Injector, inject, signal} from '@angular/core';
 import {QueryParser} from '../query-parser/query-parser';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 
 /**
  * Represents the resolved runtime configuration for the application,
@@ -39,6 +40,7 @@ export class StartupResolution {
   private readonly _resolvedUrl = signal<string | null>(null);
   private readonly _isLockedContext = signal(false);
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
+  private readonly injector = inject(Injector);
 
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
   readonly isLockedContext = this._isLockedContext.asReadonly();
@@ -64,12 +66,10 @@ export class StartupResolution {
     if (staticConfig) {
       this._resolvedUrl.set(staticConfig.defaultRendererUrl);
       if (!staticConfig.allowOverrides) {
-        console.log(
-          'Static configuration loaded with allowOverrides: false. ' + 'Locking context.',
-        );
+        console.log('Static configuration loaded with allowOverrides: false. Locking context.');
         this._isLockedContext.set(true);
 
-        this.evaluateEnvironmentPurge();
+        await this.evaluateEnvironmentPurge();
         return this._resolvedUrl();
       }
     }
@@ -78,7 +78,7 @@ export class StartupResolution {
       const queryCandidate = QueryParser.parseRendererUrl(this.getWindowSearch());
       if (queryCandidate) {
         this._resolvedUrl.set(queryCandidate);
-        this.evaluateEnvironmentPurge();
+        await this.evaluateEnvironmentPurge();
         return this._resolvedUrl();
       }
     }
@@ -88,7 +88,7 @@ export class StartupResolution {
       this._resolvedUrl.set(localPrefs);
     }
 
-    this.evaluateEnvironmentPurge();
+    await this.evaluateEnvironmentPurge();
 
     return this._resolvedUrl();
   }
@@ -122,10 +122,15 @@ export class StartupResolution {
     return !is1P;
   }
 
-  isEnvironmentValid(): boolean {
+  async isEnvironmentValid(): Promise<boolean> {
     const resolvedUrl = this.getResolvedRendererUrl();
     const is3P = this.isThirdPartyEnvironment();
-    const hasApiKey = !!this.localStorageInteractions.getItem(LocalStorageKey.GEMINI_API_KEY);
+    let hasApiKey = false;
+
+    try {
+      const configProvider = this.injector.get(AppConfigProvider);
+      hasApiKey = !!configProvider.geminiApiKey();
+    } catch (err) {}
 
     return !!resolvedUrl && (!is3P || hasApiKey);
   }
@@ -146,9 +151,12 @@ export class StartupResolution {
     return globalThis.location?.hostname || '';
   }
 
-  private evaluateEnvironmentPurge(): void {
+  private async evaluateEnvironmentPurge(): Promise<void> {
     if (!this.isThirdPartyEnvironment()) {
-      this.localStorageInteractions.removeItem(LocalStorageKey.GEMINI_API_KEY);
+      try {
+        const configProvider = this.injector.get(AppConfigProvider);
+        await configProvider.purgeGeminiApiKey();
+      } catch (e) {}
     }
   }
 }

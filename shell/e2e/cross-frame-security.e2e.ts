@@ -22,7 +22,6 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
     await page.addInitScript(() => {
       try {
         localStorage.setItem('a2ui_composer_force_1p', 'true');
-        localStorage.setItem('a2ui_composer_api_key', 'test-api-key');
       } catch (e) {}
     });
   });

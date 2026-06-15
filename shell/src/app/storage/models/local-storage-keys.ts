@@ -22,8 +22,6 @@
 export enum LocalStorageKey {
   /** Key for storing the active preview renderer URL target. */
   RENDERER_URL = 'a2ui_composer_renderer_url',
-  /** Key for storing the personal third-party Gemini developer API token. */
-  GEMINI_API_KEY = 'a2ui_composer_api_key',
   /** Key mapping forced 1P authentication override settings. */
   FORCE_1P = 'a2ui_composer_force_1p',
   /** Key mapping forced 3P authentication override settings. */

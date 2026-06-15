@@ -40,8 +40,8 @@ const CONFIGS: IntegrationConfig[] = [
   {
     name: 'React',
     rendererUrl: 'http://localhost:3458',
-    pickupDateLocator: iframe => iframe.getByLabel('Pick-up Date'),
-    pickupLocationLocator: iframe => iframe.getByLabel('Pick-up Location'),
+    pickupDateLocator: iframe => iframe.locator('div:has(> :text("Pick-up Date")) input'),
+    pickupLocationLocator: iframe => iframe.locator('div:has(> :text("Pick-up Location")) input'),
     fillDate: async (locator, value) => {
       await locator.evaluate((el: HTMLInputElement, val) => {
         const prototype = Object.getPrototypeOf(el);
@@ -75,7 +75,6 @@ test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     try {
       localStorage.setItem('a2ui_composer_force_1p', 'true');
-      localStorage.setItem('a2ui_composer_api_key', 'test-api-key');
     } catch (e) {}
   });
 });

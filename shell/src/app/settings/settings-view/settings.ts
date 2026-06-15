@@ -111,7 +111,7 @@ export class Settings implements OnInit {
     }
   }
 
-  saveSettings(): void {
+  async saveSettings(): Promise<void> {
     if (this.settingsForm.invalid) {
       this.settingsForm.markAllAsTouched();
       return;
@@ -123,9 +123,9 @@ export class Settings implements OnInit {
       if (!this.isLocked()) {
         this.configProvider.setRendererUrl(values.rendererUrl.trim());
       }
-      this.configProvider.setGeminiApiKey(values.apiKey.trim());
+      await this.configProvider.setGeminiApiKey(values.apiKey.trim());
     } else {
-      this.configProvider.setGeminiApiKey('');
+      await this.configProvider.purgeGeminiApiKey();
       if (!this.isLocked()) {
         this.configProvider.setRendererUrl(values.rendererUrl.trim());
       }

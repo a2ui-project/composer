@@ -52,6 +52,9 @@ export type ThemePreference = 'light' | 'dark';
  * and security tokens across decoupled visual blocks.
  */
 export abstract class AppConfigProvider {
+  /** Orchestrates overall domain configuration and credential bootstrapping. */
+  abstract initialize(): Promise<void> | void;
+
   /** The active workspace runtime mode, standalone vs extension. */
   abstract readonly envMode: Signal<EnvMode>;
 
@@ -82,7 +85,13 @@ export abstract class AppConfigProvider {
    *
    * @param key The fresh Gemini developer api key credential.
    */
-  abstract setGeminiApiKey(key: string): void;
+  abstract setGeminiApiKey(key: string): Promise<void> | void;
+
+  /**
+   * Erases the Gemini developer API key credential from secure persistence
+   * and resets our active reactive Signal to an empty string.
+   */
+  abstract purgeGeminiApiKey(): Promise<void> | void;
 
   /**
    * Overrides target authentication environments.
@@ -105,5 +114,5 @@ export abstract class AppConfigProvider {
    * Resets persistence layers and dynamic reactive channels to factory
    * base states.
    */
-  abstract flushConfig(): void;
+  abstract flushConfig(): Promise<void> | void;
 }

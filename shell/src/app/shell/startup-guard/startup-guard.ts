@@ -22,11 +22,12 @@ import {StartupResolution} from '../startup-resolution/startup-resolution';
  * Routing guard ensuring that the StartupResolution has completed
  * resolving configuration schemas prior to rendering target routes.
  */
-export const startupGuard: CanActivateFn = () => {
+export const startupGuard: CanActivateFn = async () => {
   const startupResolution = inject(StartupResolution);
   const router = inject(Router);
 
-  if (!startupResolution.isEnvironmentValid()) {
+  const isValid = await startupResolution.isEnvironmentValid();
+  if (!isValid) {
     return router.createUrlTree(['/settings']);
   }
 

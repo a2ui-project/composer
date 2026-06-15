@@ -47,13 +47,13 @@ describe('Startup Guard Task 2.6', () => {
     );
   }
 
-  it('allows activation when the environment evaluates as valid', () => {
-    expect(runGuard()).toBe(true);
+  it('allows activation when the environment evaluates as valid', async () => {
+    expect(await runGuard()).toBe(true);
   });
 
-  it('redirects to settings view when the environment evaluates as invalid', () => {
+  it('redirects to settings view when the environment evaluates as invalid', async () => {
     mockStartupResolution.isEnvironmentValid.mockReturnValue(false);
-    expect(runGuard()).toBe('UrlTree');
+    expect(await runGuard()).toBe('UrlTree');
     expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/settings']);
   });
 });

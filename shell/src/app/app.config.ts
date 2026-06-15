@@ -40,7 +40,10 @@ export const appConfig: ApplicationConfig = {
     provideAnimations(),
     provideAppInitializer(() => {
       const startupResolution = inject(StartupResolution);
-      return startupResolution.resolveStartupConfiguration();
+      const configProvider = inject(AppConfigProvider);
+      return startupResolution.resolveStartupConfiguration().then(() => {
+        return configProvider.initialize();
+      });
     }),
     {
       provide: AppConfigProvider,
