@@ -24,7 +24,7 @@ import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {DOCUMENT} from '@angular/common';
+import {DOCUMENT, PlatformLocation} from '@angular/common';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
@@ -54,6 +54,7 @@ export class Settings implements OnInit {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly startupResolution = inject(StartupResolution);
   private readonly document = inject(DOCUMENT);
+  private readonly platformLocation = inject(PlatformLocation);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
@@ -133,9 +134,14 @@ export class Settings implements OnInit {
     this.reloadWindow();
   }
 
+  /**
+   * Reloads the target application window context by navigating to the dynamic
+   * base href configured in the DOM, or falling back to the root path.
+   */
   reloadWindow(): void {
     if (this.document.defaultView?.location) {
-      locationAssign(this.document.defaultView.location, '/');
+      const basePath = this.platformLocation.getBaseHrefFromDOM() || '/';
+      locationAssign(this.document.defaultView.location, basePath);
     }
   }
 
