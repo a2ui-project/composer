@@ -21,6 +21,7 @@ import {signal, WritableSignal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi, afterEach} from 'vitest';
 import {DataModel} from './data-model';
 import {DataModelHarness} from './test/data-model.harness';
+import {MatInputHarness} from '@angular/material/input/testing';
 import {
   HostCommunication,
   MessageEnvelope,
@@ -172,5 +173,12 @@ describe('DataModel', () => {
     fixture.detectChanges();
 
     expect(await harness.getModelText()).toBe('');
+  });
+
+  it('applies the accessible name "Data model JSON" to the data model textarea', async () => {
+    const loader = TestbedHarnessEnvironment.loader(fixture);
+    const input = await loader.getHarness(MatInputHarness);
+    const host = await input.host();
+    expect(await host.getAttribute('aria-label')).toBe('Data model JSON');
   });
 });

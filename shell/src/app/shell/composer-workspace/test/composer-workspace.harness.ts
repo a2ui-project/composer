@@ -51,4 +51,9 @@ export class ComposerWorkspaceHarness extends ComponentHarness {
     const section = await this.locatorFor('.debug-section')();
     return section.hasClass('collapsed');
   }
+
+  async getIconsAriaHidden(): Promise<(string | null)[]> {
+    const icons = await this.locatorForAll('.debug-header-controls mat-icon')();
+    return Promise.all(icons.map(i => i.getAttribute('aria-hidden')));
+  }
 }

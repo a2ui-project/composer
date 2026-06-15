@@ -51,7 +51,7 @@
                 (click)="toggleRow(element); $event.stopPropagation()"
                 aria-label="Toggle Stack Trace"
               >
-                <mat-icon>{{
+                <mat-icon aria-hidden="true">{{
                   isRowExpanded(element) ? 'keyboard_arrow_up' : 'keyboard_arrow_down'
                 }}</mat-icon>
               </button>

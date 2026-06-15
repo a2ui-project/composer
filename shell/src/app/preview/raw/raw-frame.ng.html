@@ -24,6 +24,7 @@
   <mat-form-field appearance="outline" subscriptSizing="dynamic" class="raw-json-field">
     <textarea
       matInput
+      aria-label="Raw layout JSON"
       [ngModel]="layoutJson()"
       (ngModelChange)="onLayoutChange($event)"
       [readOnly]="isLocked()"

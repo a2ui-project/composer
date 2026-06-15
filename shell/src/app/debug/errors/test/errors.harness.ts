@@ -83,4 +83,9 @@ export class ErrorsHarness extends ComponentHarness {
     }
     return list[index].text();
   }
+
+  async getIconsAriaHidden(): Promise<(string | null)[]> {
+    const icons = await this.locatorForAll('mat-icon')();
+    return Promise.all(icons.map(i => i.getAttribute('aria-hidden')));
+  }
 }

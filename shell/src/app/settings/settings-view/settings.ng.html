@@ -25,7 +25,7 @@
           <h3>Renderer Application URL</h3>
           @if (isLocked()) {
             <div class="locked-notice">
-              <mat-icon color="warn">lock</mat-icon>
+              <mat-icon color="warn" aria-hidden="true">lock</mat-icon>
               <span
                 >Active URL configuration is locked by enterprise policy (allowOverrides:
                 false).</span
@@ -73,7 +73,9 @@
                 (click)="hideApiKey.set(!hideApiKey())"
                 [attr.aria-label]="hideApiKey() ? 'Show API key' : 'Hide API key'"
               >
-                <mat-icon>{{ hideApiKey() ? 'visibility' : 'visibility_off' }}</mat-icon>
+                <mat-icon aria-hidden="true">{{
+                  hideApiKey() ? 'visibility' : 'visibility_off'
+                }}</mat-icon>
               </button>
               @if (settingsForm.controls.apiKey.hasError('required')) {
                 <mat-error>Gemini API key is required in external environments.</mat-error>
@@ -92,7 +94,7 @@
           </p>
           @if (isLocked()) {
             <div class="locked-notice auth-locked-notice">
-              <mat-icon color="warn">lock</mat-icon>
+              <mat-icon color="warn" aria-hidden="true">lock</mat-icon>
               <span>Authentication mode overrides are locked by enterprise policy.</span>
             </div>
           }

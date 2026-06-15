@@ -277,4 +277,22 @@ describe('Errors', () => {
     expect(await harness.hasPlaceholder()).toBe(true);
     expect(fixture.componentInstance.expandedRows().size).toBe(0);
   });
+
+  it('applies aria-hidden attribute to the purely decorative MatIcon element inside stack toggle buttons', async () => {
+    mockMessageStream.set({
+      type: PreviewBridgeMessageType.CONSOLE_LOG,
+      payload: {
+        level: 'error',
+        message: 'Exception with stack',
+        stack: 'Stack trace details here\n  at file.ts:10',
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    const hiddenAttrs = await harness.getIconsAriaHidden();
+    expect(hiddenAttrs.length).toBe(1);
+    expect(hiddenAttrs[0]).toBe('true');
+  });
 });

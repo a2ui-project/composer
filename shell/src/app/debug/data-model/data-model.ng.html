@@ -21,6 +21,7 @@
   <mat-form-field appearance="outline" subscriptSizing="dynamic" class="data-model-field">
     <textarea
       matInput
+      aria-label="Data model JSON"
       [ngModel]="dataModelJson()"
       (ngModelChange)="dataModelJson.set($event)"
       placeholder="Enter data model JSON here..."

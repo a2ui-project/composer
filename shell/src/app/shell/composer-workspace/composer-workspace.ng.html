@@ -46,7 +46,7 @@
           matTooltip="Clear all log tabs"
           matTooltipPosition="left"
         >
-          <mat-icon>delete</mat-icon>
+          <mat-icon aria-hidden="true">delete</mat-icon>
         </button>
         <button
           mat-icon-button
@@ -55,7 +55,7 @@
           [matTooltip]="isDebugCollapsed() ? 'Expand Debug Panel' : 'Collapse Debug Panel'"
           matTooltipPosition="left"
         >
-          <mat-icon>{{
+          <mat-icon aria-hidden="true">{{
             isDebugCollapsed() ? 'keyboard_arrow_up' : 'keyboard_arrow_down'
           }}</mat-icon>
         </button>

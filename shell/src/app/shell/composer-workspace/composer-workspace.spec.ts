@@ -353,4 +353,12 @@ describe('ComposerWorkspace Dashboard', () => {
       expect(await newHarness.isDebugSectionCollapsed()).toBe(true);
     },
   );
+
+  it('applies aria-hidden attribute to purely decorative MatIcon elements across the workspace header controls', async () => {
+    const hiddenAttrs = await harness.getIconsAriaHidden();
+    expect(hiddenAttrs.length).toBe(2);
+    hiddenAttrs.forEach(attr => {
+      expect(attr).toBe('true');
+    });
+  });
 });

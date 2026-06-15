@@ -434,4 +434,17 @@ describe('Settings', () => {
 
     expect(locationAssign).toHaveBeenCalledWith(expect.anything(), '/');
   });
+
+  it('applies aria-hidden attribute to purely decorative MatIcon elements across settings', async () => {
+    mockStartupResolution.isContextLocked.mockReturnValue(true);
+    mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+    const {fixture, harness} = await setupComponent();
+    fixture.detectChanges();
+
+    const hiddenAttrs = await harness.getIconsAriaHidden();
+    expect(hiddenAttrs.length).toBe(3);
+    hiddenAttrs.forEach(attr => {
+      expect(attr).toBe('true');
+    });
+  });
 });

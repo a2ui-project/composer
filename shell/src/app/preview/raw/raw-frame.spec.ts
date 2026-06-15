@@ -18,6 +18,7 @@ import {TestBed} from '@angular/core/testing';
 import {RawFrame} from './raw-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
+import {MatInputHarness} from '@angular/material/input/testing';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens/environment-tokens';
@@ -302,5 +303,13 @@ describe('RawFrame JSON Source Editor View', () => {
     chatStateMock.isProgrammaticStreamActive.set(false);
     fixture.detectChanges();
     expect(await harness.isReadOnly()).toBe(false);
+  });
+
+  it('applies the accessible name "Raw layout JSON" to the raw layout textarea', async () => {
+    const {fixture} = await setup(false);
+    const loader = TestbedHarnessEnvironment.loader(fixture);
+    const input = await loader.getHarness(MatInputHarness);
+    const host = await input.host();
+    expect(await host.getAttribute('aria-label')).toBe('Raw layout JSON');
   });
 });

@@ -16,12 +16,19 @@
 
 <div class="preview-frame-container">
   <!-- Loading/progress overlays status graphics panel -->
-  @if (
-    pipelineStatus() !== 'idle' && pipelineStatus() !== 'ready' && pipelineStatus() !== 'failed'
-  ) {
-    <div class="pipeline-overlay" [class]="pipelineStatus()" (click)="dismissOverlay()">
+  @if (pipelineStatus() !== 'idle' && pipelineStatus() !== 'ready') {
+    <div
+      class="pipeline-overlay"
+      [class]="pipelineStatus()"
+      (click)="dismissOverlay()"
+      (keydown.enter)="dismissOverlay()"
+      (keydown.space)="$event.preventDefault(); dismissOverlay()"
+      role="button"
+      tabindex="0"
+      aria-label="Dismiss status overlay"
+    >
       @if (pipelineStatus() === 'failed') {
-        <mat-icon class="status-icon error-icon">error</mat-icon>
+        <mat-icon class="status-icon error-icon" aria-hidden="true">error</mat-icon>
       } @else {
         <mat-spinner [diameter]="40"></mat-spinner>
       }
@@ -71,7 +78,7 @@
                     [disabled]="isLocked()"
                     (click)="retryPrompt(turn.originalPrompt || '')"
                   >
-                    <mat-icon>refresh</mat-icon>
+                    <mat-icon aria-hidden="true">refresh</mat-icon>
                     Retry Request
                   </button>
                 </div>
@@ -88,6 +95,7 @@
     <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-form-field">
       <textarea
         matInput
+        aria-label="Chat prompt"
         [ngModel]="userPrompt()"
         (ngModelChange)="userPrompt.set($event)"
         [disabled]="isLocked()"

@@ -29,6 +29,7 @@ import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {MatDialogHarness} from '@angular/material/dialog/testing';
+import {MatInputHarness} from '@angular/material/input/testing';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 
 class MockChatState {
@@ -347,10 +348,10 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       fixture.detectChanges();
       expect(await harness.hasLoadingOverlay()).toBe(false);
 
-      // Milestone 6: Aborted/Failed turns (overlay is NOT shown, allowing sidebar to be interactive)
+      // Milestone 6: Aborted/Failed turns (overlay is shown with error status)
       chatStateMock.pipelineStatus.set(PipelineStatus.FAILED);
       fixture.detectChanges();
-      expect(await harness.hasLoadingOverlay()).toBe(false);
+      expect(await harness.hasLoadingOverlay()).toBe(true);
     },
   );
 
@@ -383,5 +384,41 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     // Send button must now be enabled
     expect(await harness.isSubmitDisabled()).toBe(false);
+  });
+
+  it('applies the accessible name "Chat prompt" to the prompt textarea', async () => {
+    const loader = TestbedHarnessEnvironment.loader(fixture);
+    const input = await loader.getHarness(MatInputHarness);
+    const host = await input.host();
+    expect(await host.getAttribute('aria-label')).toBe('Chat prompt');
+  });
+
+  it('attaches structural accessibility attributes (role, tabindex, aria-label) to the pipeline dismiss overlay', async () => {
+    chatStateMock.pipelineStatus.set(PipelineStatus.RECEIVING_STREAM);
+    fixture.detectChanges();
+
+    const attrs = await harness.getPipelineOverlayAttributes();
+    expect(attrs.role).toBe('button');
+    expect(attrs.tabindex).toBe('0');
+    expect(attrs.ariaLabel).toBe('Dismiss status overlay');
+  });
+
+  it('applies aria-hidden attribute to purely decorative MatIcon elements across the chat panel', async () => {
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.ERROR,
+        content: 'error',
+        isRetryable: true,
+        originalPrompt: 'prompt',
+      },
+    ];
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const hiddenAttrs = await harness.getIconsAriaHidden();
+    expect(hiddenAttrs.length).toBeGreaterThan(0);
+    hiddenAttrs.forEach(attr => {
+      expect(attr).toBe('true');
+    });
   });
 });

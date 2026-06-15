@@ -166,4 +166,23 @@ export class ChatPanelHarness extends ComponentHarness {
     }
     await buttons[index].click();
   }
+
+  async getPipelineOverlayAttributes(): Promise<{
+    role: string | null;
+    tabindex: string | null;
+    ariaLabel: string | null;
+  }> {
+    const overlay = await this.locatorForOptional('.pipeline-overlay')();
+    if (!overlay) return {role: null, tabindex: null, ariaLabel: null};
+    return {
+      role: await overlay.getAttribute('role'),
+      tabindex: await overlay.getAttribute('tabindex'),
+      ariaLabel: await overlay.getAttribute('aria-label'),
+    };
+  }
+
+  async getIconsAriaHidden(): Promise<(string | null)[]> {
+    const icons = await this.locatorForAll('mat-icon')();
+    return Promise.all(icons.map(i => i.getAttribute('aria-hidden')));
+  }
 }

@@ -21,7 +21,7 @@
     (click)="sidenav.toggle()"
     aria-label="Toggle sidenav"
   >
-    <mat-icon>menu</mat-icon>
+    <mat-icon aria-hidden="true">menu</mat-icon>
   </button>
   <span class="header-title" [matTooltip]="activeCatalogDescription() || ''"
     >A2UI Composer{{ activeCatalogTitle() ? ' - ' + activeCatalogTitle() : '' }}</span
@@ -37,7 +37,7 @@
     (click)="toggleTheme()"
     [attr.aria-label]="isDarkTheme() ? 'Switch to light theme' : 'Switch to dark theme'"
   >
-    <mat-icon>{{ isDarkTheme() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+    <mat-icon aria-hidden="true">{{ isDarkTheme() ? 'light_mode' : 'dark_mode' }}</mat-icon>
   </button>
 </mat-toolbar>
 

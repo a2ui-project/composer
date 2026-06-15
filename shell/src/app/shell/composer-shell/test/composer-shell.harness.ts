@@ -58,4 +58,9 @@ export class ComposerShellHarness extends ComponentHarness {
     const sidenav = await this.getSidenav();
     return sidenav.isOpen();
   }
+
+  async getIconsAriaHidden(): Promise<(string | null)[]> {
+    const icons = await this.locatorForAll('mat-icon')();
+    return Promise.all(icons.map(i => i.getAttribute('aria-hidden')));
+  }
 }
