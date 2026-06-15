@@ -16,10 +16,12 @@
  */
 
 import {TestBed} from '@angular/core/testing';
+import {PlatformLocation} from '@angular/common';
 import {Settings} from './settings';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
+import {locationAssign} from 'safevalues/dom';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi, Mock} from 'vitest';
 import {
   HostCommunication,
   MessageEnvelope,
@@ -33,11 +35,20 @@ import {LocalStorageAppConfigProvider} from '../local-storage-config-provider/lo
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SettingsHarness} from './test/settings.harness';
 
+vi.mock('safevalues/dom', () => {
+  return {
+    locationAssign: vi.fn(),
+  };
+});
+
 describe('Settings', () => {
+  let mockPlatformLocation: {
+    getBaseHrefFromDOM: Mock<() => string | null>;
+  };
   let mockStartupResolution: {
-    getResolvedRendererUrl: ReturnType<typeof vi.fn>;
-    isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
-    isContextLocked: ReturnType<typeof vi.fn>;
+    getResolvedRendererUrl: Mock<() => string | null>;
+    isThirdPartyEnvironment: Mock<() => boolean>;
+    isContextLocked: Mock<() => boolean>;
   };
   let mockLatestEnvelope: WritableSignal<MessageEnvelope | null>;
   let mockIsHandshakeInProgress: WritableSignal<boolean>;
@@ -52,15 +63,18 @@ describe('Settings', () => {
     authType: Signal<AuthType>;
     rendererUrl: Signal<string>;
     geminiApiKey: Signal<string>;
-    setRendererUrl: ReturnType<typeof vi.fn>;
-    setGeminiApiKey: ReturnType<typeof vi.fn>;
-    setForcedAuthMode: ReturnType<typeof vi.fn>;
-    flushConfig: ReturnType<typeof vi.fn>;
+    setRendererUrl: Mock<(url: string) => void>;
+    setGeminiApiKey: Mock<(key: string) => void>;
+    setForcedAuthMode: Mock<(mode: AuthType) => void>;
+    flushConfig: Mock<() => void>;
   };
 
   beforeEach(() => {
     localStorage.clear();
     TestBed.resetTestingModule();
+    mockPlatformLocation = {
+      getBaseHrefFromDOM: vi.fn().mockReturnValue('/composer/pr/44/'),
+    };
     mockStartupResolution = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
@@ -134,6 +148,10 @@ describe('Settings', () => {
             activeCatalog: mockActiveCatalog,
             catalogError: mockCatalogError,
           },
+        },
+        {
+          provide: PlatformLocation,
+          useValue: mockPlatformLocation,
         },
       ],
     }).compileComponents();
@@ -409,4 +427,24 @@ describe('Settings', () => {
       expect(await harness.isSlideToggleDisabled()).toBe(true);
     },
   );
+
+  it(
+    'reloads the application at the dynamic base path when ' + 'hosted under a dynamic base href',
+    async () => {
+      const {component} = await setupComponent();
+
+      component.reloadWindow();
+
+      expect(locationAssign).toHaveBeenCalledWith(expect.anything(), '/composer/pr/44/');
+    },
+  );
+
+  it('reloads the application at the root path "/" when base href is unavailable', async () => {
+    mockPlatformLocation.getBaseHrefFromDOM.mockReturnValue(null);
+    const {component} = await setupComponent();
+
+    component.reloadWindow();
+
+    expect(locationAssign).toHaveBeenCalledWith(expect.anything(), '/');
+  });
 });

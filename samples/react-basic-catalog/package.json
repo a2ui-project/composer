@@ -25,7 +25,6 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
-    "angular-eslint": "22.0.0",
     "eslint": "10.5.0",
     "jsdom": "29.1.1",
     "prettier": "3.8.3",
