@@ -40,13 +40,11 @@ test.describe('Workspace Navigation & Layout Modes', () => {
     });
   });
 
-  test('verifies components gallery navigation link is conditionally hidden by default', async ({
-    page,
-  }) => {
+  test('verifies components gallery navigation link is visible by default', async ({page}) => {
     await page.goto('/');
 
     const galleryLink = page.getByRole('link', {name: 'Components Gallery'});
-    await expect(galleryLink).toBeHidden();
+    await expect(galleryLink).toBeVisible();
   });
 
   test('loads components gallery view successfully via direct URL navigation', async ({

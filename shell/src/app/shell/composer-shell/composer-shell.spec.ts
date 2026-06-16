@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -189,6 +188,11 @@ describe('ComposerShell Layout', () => {
 
     await harness.clickThemeToggleButton();
     expect(configProviderMock.setThemePreference).toHaveBeenCalledWith('light');
+  });
+
+  it('renders the Components Gallery navigation link in the sidebar by default', async () => {
+    const links = await harness.getNavigationLinksText();
+    expect(links).toContain('Components Gallery');
   });
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {

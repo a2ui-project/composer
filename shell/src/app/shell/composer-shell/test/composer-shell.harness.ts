@@ -17,7 +17,11 @@
 import {ComponentHarness} from '@angular/cdk/testing';
 import {MatSidenavHarness} from '@angular/material/sidenav/testing';
 import {MatTooltipHarness} from '@angular/material/tooltip/testing';
+import {MatNavListHarness} from '@angular/material/list/testing';
 
+/**
+ * Test harness for testing the `ComposerShell` component.
+ */
 export class ComposerShellHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-shell';
 
@@ -27,6 +31,7 @@ export class ComposerShellHarness extends ComponentHarness {
   private getSidenav = this.locatorFor(MatSidenavHarness);
   private getResetButton = this.locatorFor('button.reset-session-button');
   private getHeaderTooltip = this.locatorFor(MatTooltipHarness);
+  private getNavList = this.locatorFor(MatNavListHarness);
 
   async getHeaderTitleText(): Promise<string> {
     const title = await this.getHeaderTitle();
@@ -57,6 +62,12 @@ export class ComposerShellHarness extends ComponentHarness {
   async isSidenavOpened(): Promise<boolean> {
     const sidenav = await this.getSidenav();
     return sidenav.isOpen();
+  }
+
+  async getNavigationLinksText(): Promise<string[]> {
+    const list = await this.getNavList();
+    const items = await list.getItems();
+    return Promise.all(items.map(item => item.getFullText()));
   }
 
   async getIconsAriaHidden(): Promise<(string | null)[]> {
