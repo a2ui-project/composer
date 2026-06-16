@@ -26,6 +26,8 @@ import {CatalogManagement} from '../storage/catalog-management/catalog-managemen
 import {ParsedProperty} from './schema/catalog-schema-resolver';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {HostCommunication} from '../shell/host-communication/host-communication';
+import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
+import {ChatState} from '../chat/chat-state/chat-state';
 
 interface TestFriendlyGallery {
   catalogId: () => string | null;
@@ -51,6 +53,17 @@ class MockCatalogManagement {
 
 class MockHostCommunication {
   sendRenderA2UI = vi.fn();
+  registerIframeElement = vi.fn();
+  registerIframe = vi.fn();
+}
+
+class MockStartupResolution {
+  readonly resolvedUrl = signal<string | null>('http://localhost/renderer');
+  getResolvedRendererUrl = vi.fn(() => 'http://localhost/renderer');
+}
+
+class MockChatState {
+  readonly isProgrammaticStreamActive = signal<boolean>(false);
 }
 
 describe('Gallery Component', () => {
@@ -70,6 +83,8 @@ describe('Gallery Component', () => {
         {provide: GalleryCatalog, useClass: MockGalleryCatalogService},
         {provide: CatalogManagement, useClass: MockCatalogManagement},
         {provide: HostCommunication, useClass: MockHostCommunication},
+        {provide: StartupResolution, useClass: MockStartupResolution},
+        {provide: ChatState, useClass: MockChatState},
       ],
     }).compileComponents();
 
@@ -583,5 +598,79 @@ describe('Gallery Component', () => {
     TestBed.flushEffects();
 
     expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
+  });
+
+  it('renders the a2ui-composer-rendered-frame element when a component is active', async () => {
+    catalogServiceMock.selectedComponentKey.set('Text');
+    fixture.detectChanges();
+
+    const hasFrame = await harness.hasRenderedFrame();
+    expect(hasFrame).toBe(true);
+  });
+
+  it('triggers another rendering update call when changing component selection', async () => {
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'https://a2ui.org/custom_catalog.json',
+      components: {
+        Text: {type: 'object'},
+        Button: {type: 'object'},
+        Column: {type: 'object'},
+      },
+    });
+
+    const usageText = [
+      {
+        id: 'target',
+        component: 'Text',
+        text: 'Headline Large (H1)',
+        variant: 'h1',
+      },
+    ];
+    const usageButton = [
+      {
+        id: 'target',
+        component: 'Button',
+        text: 'Click Me',
+      },
+    ];
+
+    catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentUsage.set(JSON.stringify(usageText));
+    fixture.detectChanges();
+
+    const expectedTextLine1 = {
+      version: 'v0.9',
+      createSurface: {
+        surfaceId: 'gallery-preview',
+        catalogId: 'https://a2ui.org/custom_catalog.json',
+      },
+    };
+    const expectedTextLine2 = {
+      version: 'v0.9',
+      updateComponents: {
+        surfaceId: 'gallery-preview',
+        components: [{id: 'root', component: 'Column', children: ['target']}, ...usageText],
+      },
+    };
+    const expectedTextPayload = [expectedTextLine1, expectedTextLine2];
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith(expectedTextPayload);
+
+    hostCommunicationMock.sendRenderA2UI.mockClear();
+
+    catalogServiceMock.selectedComponentKey.set('Button');
+    catalogServiceMock.selectedComponentUsage.set(JSON.stringify(usageButton));
+    fixture.detectChanges();
+
+    const expectedButtonLine2 = {
+      version: 'v0.9',
+      updateComponents: {
+        surfaceId: 'gallery-preview',
+        components: [{id: 'root', component: 'Column', children: ['target']}, ...usageButton],
+      },
+    };
+    const expectedButtonPayload = [expectedTextLine1, expectedButtonLine2];
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith(expectedButtonPayload);
   });
 });

@@ -455,4 +455,90 @@ describe('HostCommunication', () => {
 
     removeEventListenerSpy.mockRestore();
   });
+
+  it('caches the latest catalog envelope when receiving an A2UI_CATALOG message', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    const catalogPayload = {components: {}};
+    const event = new MessageEvent('message', {
+      source: mockIframeWindow,
+      origin: 'http://localhost:3000',
+      data: {
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: catalogPayload,
+      },
+    });
+
+    window.dispatchEvent(event);
+
+    const latestCatalog = service.getLatestCatalog();
+    expect(latestCatalog).toEqual({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      payload: catalogPayload,
+      origin: 'http://localhost:3000',
+      timestamp: expect.any(Number),
+    });
+
+    const history = service.getHistoryBuffer();
+    expect(history.length).toBe(1);
+    expect(history[0].type).toBe(PreviewBridgeMessageType.A2UI_CATALOG);
+  });
+
+  it('caps the message history buffer at 100 entries strictly using FIFO eviction', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    for (let i = 0; i < 105; i++) {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.RENDERER_READY,
+            payload: {index: i},
+          },
+        }),
+      );
+    }
+
+    const history = service.getHistoryBuffer();
+    expect(history.length).toBe(100);
+    expect(history[0].payload).toEqual({index: 5});
+    expect(history[99].payload).toEqual({index: 104});
+  });
+
+  it('catches and logs errors thrown by listeners without crashing the message dispatch loop', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const throwingListener = vi.fn().mockImplementation(() => {
+      throw new Error('Listener failed');
+    });
+    const safeListener = vi.fn();
+
+    service.addListener(throwingListener);
+    service.addListener(safeListener);
+
+    const event = new MessageEvent('message', {
+      source: mockIframeWindow,
+      origin: 'http://localhost:3000',
+      data: {type: PreviewBridgeMessageType.RENDERER_READY},
+    });
+
+    window.dispatchEvent(event);
+
+    expect(throwingListener).toHaveBeenCalledTimes(1);
+    expect(safeListener).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Error in HostCommunication listener:',
+      expect.any(Error),
+    );
+
+    consoleErrorSpy.mockRestore();
+    service.removeListener(throwingListener);
+    service.removeListener(safeListener);
+  });
 });

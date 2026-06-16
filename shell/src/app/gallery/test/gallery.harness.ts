@@ -18,6 +18,7 @@ import {ComponentHarness} from '@angular/cdk/testing';
 import {MatNavListHarness} from '@angular/material/list/testing';
 import {MatTableHarness} from '@angular/material/table/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
+import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
 
 /**
  * Harness for interacting with the Gallery component in unit tests.
@@ -37,6 +38,7 @@ export class GalleryHarness extends ComponentHarness {
   );
   private readonly getEmptySubtitle = this.locatorForOptional('.empty-subtitle');
   private readonly getCardTitles = this.locatorForAll('mat-card-title');
+  private readonly getRenderedFrame = this.locatorForOptional(RenderedFrameHarness);
 
   /**
    * Retrieves the text labels of all category subheaders.
@@ -118,6 +120,14 @@ export class GalleryHarness extends ComponentHarness {
   async getCardTitlesText(): Promise<string[]> {
     const titles = await this.getCardTitles();
     return Promise.all(titles.map(t => t.text()));
+  }
+
+  /**
+   * Checks if the sandboxed preview rendered frame is present.
+   */
+  async hasRenderedFrame(): Promise<boolean> {
+    const frame = await this.getRenderedFrame();
+    return !!frame;
   }
 
   /**
