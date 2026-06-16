@@ -52,11 +52,11 @@ test.describe('Workspace Navigation & Layout Modes', () => {
   }, testInfo) => {
     await page.goto('/gallery');
 
-    const galleryPlaceholder = page.locator('.gallery-placeholder');
-    await expect(galleryPlaceholder).toBeVisible();
-    await expect(galleryPlaceholder).toContainText('Components Gallery Placeholder');
+    const galleryContainer = page.locator('.gallery-container');
+    await expect(galleryContainer).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'No Component Selected'})).toBeVisible();
     const screenshotBuffer = await page.screenshot();
-    await testInfo.attach('gallery-placeholder-direct', {
+    await testInfo.attach('gallery-container-direct', {
       body: screenshotBuffer,
       contentType: 'image/png',
     });

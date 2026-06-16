@@ -207,6 +207,15 @@ export class CatalogManagement {
               return of(null);
             }
 
+            const catalogId = catalogObj['catalogId'] || catalogObj['$id'];
+            if (!catalogId) {
+              const errorMsg = 'Catalog is missing a valid identifier (catalogId or $id).';
+              this._catalogError.set(errorMsg);
+              console.error(errorMsg, catalogObj);
+              this._isHandshakeInProgress.set(false);
+              return of(null);
+            }
+
             let hashHexPromise: Promise<string>;
             if (!globalThis.crypto?.subtle) {
               console.warn(

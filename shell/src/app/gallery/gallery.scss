@@ -14,4 +14,222 @@
  * limitations under the License.
  */
 
-/* Gallery placeholder styles */
+.gallery-container {
+  height: 100%;
+  width: 100%;
+}
+
+.gallery-sidenav {
+  width: 240px;
+  border-right: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  background-color: var(--mat-sys-surface-container-low, #fcfcfc);
+}
+
+.catalog-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface, #1c1b1f);
+}
+
+.gallery-sidenav .catalog-list {
+  .category-header {
+    font: var(--mat-sys-typescale-label-medium);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .component-nav-item {
+    display: flex;
+    justify-content: flex-start;
+    text-align: left;
+    border: none;
+    background: transparent;
+    border-radius: 20px;
+    margin: 2px 12px;
+    padding-left: 12px;
+    width: calc(100% - 24px);
+    box-sizing: border-box;
+    --mdc-list-list-item-container-height: 36px;
+    cursor: pointer;
+
+    ::ng-deep .mdc-list-item__content {
+      text-align: left;
+    }
+
+    &:hover,
+    &:focus {
+      background-color: var(--mat-sys-surface-container-low, #f2f2f2);
+    }
+
+    &.mat-mdc-list-item-activated,
+    &[activated='true'] {
+      background-color: var(--mat-sys-surface-container-high, #e2e2e2);
+
+      span[matListItemTitle] {
+        font-weight: 500;
+      }
+    }
+
+    span[matListItemTitle] {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+    }
+  }
+}
+
+.gallery-content {
+  padding: 24px;
+  background-color: var(--mat-sys-background, #fafafa);
+  overflow-y: auto;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 80%;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+.empty-icon {
+  font-size: 48px;
+  height: 48px;
+  width: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-title {
+  margin: 0 0 8px 0;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.empty-subtitle {
+  margin: 0;
+  max-width: 400px;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.details-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.details-header {
+  border-bottom: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  padding-bottom: 16px;
+}
+
+.component-title {
+  margin: 0 0 8px 0;
+  font-size: 1.75rem;
+  font-weight: 400;
+}
+
+.component-description {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--mat-sys-on-surface-variant, #49454f);
+  line-height: 1.4;
+}
+
+.preview-card,
+.usage-card,
+.properties-card {
+  border-radius: 8px;
+  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  background-color: var(--mat-sys-surface, #ffffff);
+}
+
+.preview-placeholder {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--mat-sys-surface-container-highest, #f0f0f0);
+  border: 2px dashed var(--mat-sys-outline-variant, #e0e0e0);
+  border-radius: 4px;
+  font-style: italic;
+  color: var(--mat-sys-on-surface-variant, #777);
+}
+
+.usage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-right: 8px;
+}
+
+.copy-button {
+  color: var(--mat-sys-primary, #6750a4);
+}
+
+.usage-code-block {
+  margin: 0;
+  padding: 12px;
+  background-color: var(--mat-sys-surface-container-high, #f5f5f5);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.usage-code {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--mat-sys-on-surface, #333);
+}
+
+.properties-table {
+  width: 100%;
+  background: transparent;
+
+  th {
+    font-weight: 600;
+  }
+
+  .prop-name {
+    font-weight: 500;
+    color: var(--mat-sys-primary, #6750a4);
+  }
+
+  .prop-type code {
+    background-color: var(--mat-sys-surface-container-high, #f0f0f0);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+  }
+
+  .prop-required {
+    mat-icon {
+      font-size: 18px;
+      height: 18px;
+      width: 18px;
+    }
+  }
+
+  .optional-label {
+    font-size: 0.8rem;
+    font-style: italic;
+    opacity: 0.6;
+  }
+
+  .prop-default code {
+    background-color: var(--mat-sys-surface-container-high, #f0f0f0);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+  }
+}
+
+.hidden-frame {
+  display: none;
+}

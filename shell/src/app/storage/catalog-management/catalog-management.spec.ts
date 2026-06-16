@@ -157,7 +157,7 @@ describe('CatalogManagement', () => {
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
-      payload: {},
+      payload: {catalogId: 'test-catalog'},
       timestamp: 1005,
     });
     TestBed.tick();
@@ -169,7 +169,7 @@ describe('CatalogManagement', () => {
 
     expect(service.isHandshakeInProgress()).toBe(false);
     expect(service.catalogError()).toBeNull();
-    expect(service.activeCatalog()).toEqual({});
+    expect(service.activeCatalog()).toEqual({catalogId: 'test-catalog'});
   });
 
   it(
@@ -213,7 +213,7 @@ describe('CatalogManagement', () => {
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
-      payload: {},
+      payload: {catalogId: 'test-catalog'},
       timestamp: 1008,
     });
     TestBed.tick();
@@ -315,6 +315,7 @@ describe('CatalogManagement', () => {
 
   it('sanitizes HTML tags in title and description and computes SHA-256 hash', async () => {
     const payload = {
+      catalogId: 'test-catalog',
       title: 'Catalog Title <script>alert(1)</script>',
       description: 'Catalog Description <img src=x onerror=alert(1)>',
       components: {
@@ -350,6 +351,7 @@ describe('CatalogManagement', () => {
 
     // Verify deterministic hashing for identical catalog structures
     const payloadIdentical = {
+      catalogId: 'test-catalog',
       components: {
         button: {name: 'Button'},
       },
@@ -378,6 +380,7 @@ describe('CatalogManagement', () => {
     indexedDbStorageMock.getCatalogRecord.mockResolvedValue(null);
 
     const payload = {
+      catalogId: 'test-catalog',
       title: 'New Catalog',
       description: 'New Description',
       components: {},
@@ -420,6 +423,7 @@ describe('CatalogManagement', () => {
     });
 
     const payload = {
+      catalogId: 'test-catalog',
       title: 'Updated Catalog',
       description: 'Updated Description',
       components: {},
@@ -455,6 +459,7 @@ describe('CatalogManagement', () => {
 
   it('updates lastAccessed but delta is false when cached hash matches', async () => {
     const payload = {
+      catalogId: 'test-catalog',
       title: 'Matching Catalog',
       description: 'Matching Description',
       components: {},
@@ -521,7 +526,7 @@ describe('CatalogManagement', () => {
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
-      payload: {},
+      payload: {catalogId: 'test-catalog'},
       timestamp: 2001,
     });
     TestBed.tick();
@@ -529,7 +534,7 @@ describe('CatalogManagement', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(service.catalogError()).toBeNull();
-    expect(service.activeCatalog()).toEqual({} as Catalog);
+    expect(service.activeCatalog()).toEqual({catalogId: 'test-catalog'} as Catalog);
     expect(service.isHandshakeInProgress()).toBe(false);
 
     Object.defineProperty(globalThis, 'crypto', {
@@ -549,7 +554,7 @@ describe('CatalogManagement', () => {
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
-      payload: {},
+      payload: {catalogId: 'test-catalog'},
       timestamp: 2002,
     });
     TestBed.tick();
@@ -570,7 +575,7 @@ describe('CatalogManagement', () => {
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
       origin: 'http://localhost',
-      payload: {},
+      payload: {catalogId: 'test-catalog'},
       timestamp: 2003,
     });
     TestBed.tick();
@@ -588,6 +593,7 @@ describe('CatalogManagement', () => {
     indexedDbStorageMock.saveCatalogRecord.mockClear();
 
     const payload = {
+      catalogId: 'test-catalog',
       title: 'Null URL Catalog',
       description: 'Null URL Description',
       components: {},
@@ -634,5 +640,80 @@ describe('CatalogManagement', () => {
     expect(service.activeCatalogTitle()).toBe('Test Title <b>Bold</b>');
     expect(service.activeCatalogDescription()).toBe('Test Description <i>Italic</i>');
     expect(service.activeCatalog()?.['catalogId']).toBe('custom-catalog-id');
+  });
+
+  it('rejects A2UI_CATALOG payload if catalogId and $id are missing', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      origin: 'http://localhost',
+      payload: {
+        title: 'No ID Catalog',
+        components: {},
+      },
+      timestamp: 2006,
+    });
+    TestBed.tick();
+
+    expect(service.catalogError()).toBe(
+      'Catalog is missing a valid identifier (catalogId or $id).',
+    );
+    expect(service.isHandshakeInProgress()).toBe(false);
+    expect(service.activeCatalog()).toBeNull();
+    errorSpy.mockRestore();
+  });
+
+  it('ignores watchdog timeout execution if watchdogTimerId is manually cleared', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Trigger RENDERER_READY to start the watchdog timer
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: 3001,
+    });
+    TestBed.tick();
+
+    // Manually corrupt private watchdogTimerId state
+    (service as unknown as {watchdogTimerId: ReturnType<typeof setTimeout> | null})[
+      'watchdogTimerId'
+    ] = null;
+
+    // Fast forward past the 5 second timeout limit
+    vi.advanceTimersByTime(5000);
+
+    // Expect the timeout handler to have returned early without throwing or setting errors
+    expect(service.catalogError()).toBeNull();
+    expect(service.isHandshakeInProgress()).toBe(true);
+
+    errorSpy.mockRestore();
+  });
+
+  it('handles flat catalog error payloads without message, using default error message', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: 4001,
+    });
+    TestBed.tick();
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      origin: 'http://localhost',
+      payload: {
+        error: {}, // No message
+      },
+      timestamp: 4002,
+    });
+    TestBed.tick();
+
+    expect(service.catalogError()).toBe(
+      'Unknown error occurred in preview bridge during handshake.',
+    );
+    expect(service.isHandshakeInProgress()).toBe(false);
+    errorSpy.mockRestore();
   });
 });
