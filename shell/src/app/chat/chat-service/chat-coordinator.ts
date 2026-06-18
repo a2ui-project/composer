@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
 import {StateSync} from '../state-sync/state-sync';
 import {ChatState, LlmLogType} from '../chat-state/chat-state';
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, RenderA2uiItem, A2uiComponentInstance} from 'a2ui-bridge';
 
 @Injectable({
   providedIn: 'root',
@@ -365,8 +364,8 @@ export class ChatCoordinator {
       if (!block || typeof block !== 'object') {
         continue;
       }
-      const bObj = block as Record<string, unknown>;
-      const updateComponents = bObj['updateComponents'] as Record<string, unknown>;
+      const bObj = block as RenderA2uiItem;
+      const updateComponents = bObj['updateComponents'];
       if (
         !updateComponents ||
         typeof updateComponents !== 'object' ||
@@ -382,7 +381,7 @@ export class ChatCoordinator {
           continue;
         }
 
-        const compObj = comp as Record<string, unknown>;
+        const compObj = comp as A2uiComponentInstance;
         let compType = compObj['component'] as string;
 
         // legacy property "name" fallback: heal to "component" key mapping
@@ -482,12 +481,12 @@ export class ChatCoordinator {
    * Recursively sanitizes component declarations maps.
    * Strips out dynamic rules configs matching /rules/ or prefix /^mock/i.
    */
-  private sanitizeComponentObject(obj: Record<string, unknown>): Record<string, unknown> {
-    return this.sanitizeValue(obj) as Record<string, unknown>;
+  private sanitizeComponentObject(obj: A2uiComponentInstance): A2uiComponentInstance {
+    return this.sanitizeValue(obj) as A2uiComponentInstance;
   }
 
   readonly TEST_ONLY = {
-    sanitizeComponentObject: (obj: Record<string, unknown>) => this.sanitizeComponentObject(obj),
+    sanitizeComponentObject: (obj: A2uiComponentInstance) => this.sanitizeComponentObject(obj),
   };
 
   /**

@@ -325,5 +325,152 @@ describe('StateSync Autosave Draft Integrations', () => {
         expect(syncedContent).not.toContain('mock_rules_container');
       },
     );
+
+    it('handles non-object items in components list during sanitization', () => {
+      const dirtyLayout =
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
+        '{"id": "c-1", "component": "TextField", "label": "L1"},' +
+        '"invalid-string-element"' +
+        ']}}';
+
+      service.updateDraft(dirtyLayout);
+      TestBed.flushEffects();
+
+      vi.advanceTimersByTime(300);
+
+      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
+      const syncedContent = syncCall[0].content;
+
+      expect(syncedContent).toContain('"id":"c-1"');
+      expect(syncedContent).toContain('"invalid-string-element"');
+    });
+
+    it('handles component array properties containing primitive values during sanitization', () => {
+      const dirtyLayout =
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
+        '{"id": "c-1", "component": "ChoicePicker", "options": ["option-1", "option-2"]}' +
+        ']}}';
+
+      service.updateDraft(dirtyLayout);
+      TestBed.flushEffects();
+
+      vi.advanceTimersByTime(300);
+
+      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
+      const syncedContent = syncCall[0].content;
+
+      expect(syncedContent).toContain('"option-1"');
+      expect(syncedContent).toContain('"option-2"');
+    });
+
+    it('handles JSON array format during sanitization', () => {
+      const arrayLayout =
+        '[{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
+        '{"id": "c-1", "component": "TextField", "label": "L1"}' +
+        ']}}]';
+
+      service.updateDraft(arrayLayout);
+      TestBed.flushEffects();
+
+      vi.advanceTimersByTime(300);
+
+      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
+      const syncedContent = syncCall[0].content;
+
+      expect(syncedContent).toContain('"id":"c-1"');
+    });
+
+    it('handles non-object lines in JSON Lines format during sanitization', () => {
+      const dirtyLayout =
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": []}}\n' +
+        '"invalid-primitive-line"\n' +
+        '{"version": "v0.9", "updateDataModel": {"surfaceId": "s-1", "path": "/p", "value": ""}}';
+
+      service.updateDraft(dirtyLayout);
+      TestBed.flushEffects();
+
+      vi.advanceTimersByTime(300);
+
+      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
+      const syncedContent = syncCall[0].content;
+
+      expect(syncedContent).toContain('"updateComponents"');
+      expect(syncedContent).toContain('"updateDataModel"');
+      expect(syncedContent).not.toContain('invalid-primitive-line');
+    });
+
+    it('sanitizes objects inside component array properties', () => {
+      const dirtyLayout =
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
+        '{"id": "c-1", "component": "ChoicePicker", "options": [' +
+        '{"label": "L1", "value": "V1", "mockProp": "strip-me"}' +
+        ']}' +
+        ']}}';
+
+      service.updateDraft(dirtyLayout);
+      TestBed.flushEffects();
+
+      vi.advanceTimersByTime(300);
+
+      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
+      const syncedContent = syncCall[0].content;
+
+      expect(syncedContent).toContain('"label":"L1"');
+      expect(syncedContent).not.toContain('mockProp');
+    });
+
+    it('returns empty string when sanitizing empty or whitespace layout', () => {
+      service.updateDraft('   ');
+      TestBed.flushEffects();
+
+      vi.advanceTimersByTime(300);
+
+      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
+      const syncedContent = syncCall[0].content;
+
+      expect(syncedContent).toBe('');
+    });
+
+    it('handles JSON array containing non-object primitive elements during sanitization', () => {
+      const arrayWithPrimitive =
+        '[{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": []}}, "primitive-element"]';
+
+      service.updateDraft(arrayWithPrimitive);
+      TestBed.flushEffects();
+
+      vi.advanceTimersByTime(300);
+
+      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
+      const syncedContent = syncCall[0].content;
+
+      expect(syncedContent).toContain('"updateComponents"');
+      expect(syncedContent).toContain('"primitive-element"');
+    });
+    it('returns empty string when all layout lines are sanitized to null', () => {
+      service.updateDraft('{"registerMockRules": true}');
+      TestBed.flushEffects();
+
+      vi.advanceTimersByTime(300);
+
+      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
+      const syncedContent = syncCall[0].content;
+
+      expect(syncedContent).toBe('');
+    });
+
+    it('handles updateComponents without components array during sanitization', () => {
+      const invalidComponents =
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": "not-an-array"}}';
+
+      service.updateDraft(invalidComponents);
+      TestBed.flushEffects();
+
+      vi.advanceTimersByTime(300);
+
+      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
+      const syncedContent = syncCall[0].content;
+
+      expect(syncedContent).toContain('"components":"not-an-array"');
+    });
   });
 });

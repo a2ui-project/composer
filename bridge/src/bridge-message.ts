@@ -121,3 +121,17 @@ export interface RenderA2uiItem {
   deleteSurface?: DeleteSurfaceDetails;
   [key: string]: unknown;
 }
+
+/** Minimal catalog definition representation used by the Preview Bridge. */
+export interface CatalogDetails {
+  catalogId?: string;
+  $id?: string;
+  [key: string]: unknown;
+}
+
+/** Represents a component instance definition in the A2UI layout tree. */
+export interface A2uiComponentInstance {
+  component: string;
+  id?: string;
+  [key: string]: unknown;
+}

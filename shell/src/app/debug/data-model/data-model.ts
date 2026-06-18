@@ -21,7 +21,7 @@ import {MatInputModule} from '@angular/material/input';
 import {FormsModule} from '@angular/forms';
 import {debounceTime, distinctUntilChanged, filter} from 'rxjs/operators';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, DataModelChangePayload} from 'a2ui-bridge';
 
 /**
  * A debug drawer component presenting a reactive, nested JSON tree explorer
@@ -65,8 +65,8 @@ export class DataModel {
     effect(() => {
       const streamValue = this.hostComm.messageStream();
       if (streamValue?.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
-        const payload = streamValue?.payload as Record<string, unknown>;
-        const updateObj = payload?.['updateDataModel'] as Record<string, unknown>;
+        const payload = streamValue?.payload as DataModelChangePayload | undefined;
+        const updateObj = payload?.['updateDataModel'];
         if (updateObj) {
           if (typeof updateObj['surfaceId'] === 'string') {
             this.lastSurfaceId = updateObj['surfaceId'];

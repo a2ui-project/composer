@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +30,7 @@ import {MatDialogModule, MatDialog} from '@angular/material/dialog';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 import {tryParseJsonArray} from '../../utils/json';
+import {RenderA2uiItem} from 'a2ui-bridge';
 
 /**
  * Displays the interactive Gemini chat dialogue drawer within the Composer
@@ -220,9 +220,9 @@ export class ChatPanel {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return 0;
     }
-    const parsedObj = parsed as Record<string, unknown>;
+    const parsedObj = parsed as RenderA2uiItem;
     if (parsedObj['updateComponents'] && typeof parsedObj['updateComponents'] === 'object') {
-      const updateObj = parsedObj['updateComponents'] as Record<string, unknown>;
+      const updateObj = parsedObj['updateComponents'];
       if (Array.isArray(updateObj['components'])) {
         return updateObj['components'].length;
       }

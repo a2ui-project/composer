@@ -181,4 +181,63 @@ describe('DataModel', () => {
     const host = await input.host();
     expect(await host.getAttribute('aria-label')).toBe('Data model JSON');
   });
+
+  it('displays a plain string model value without stringifying it', async () => {
+    component.latestModelValue.set('plain-string-value');
+    TestBed.tick();
+    fixture.detectChanges();
+
+    const text = await harness.getModelText();
+    expect(text).toBe('plain-string-value');
+  });
+
+  it('retains last known surfaceId and clears path when updateDataModel message is missing them', async () => {
+    mockHostComm.messageStream.set({
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 'initial-surface-id',
+          path: '/initial/path',
+          value: {foo: 'bar'},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+    TestBed.tick();
+    fixture.detectChanges();
+
+    mockHostComm.messageStream.set({
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 12345,
+          path: null,
+          value: {hello: 'world'},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+    TestBed.tick();
+    fixture.detectChanges();
+
+    await harness.setModelText(JSON.stringify({hello: 'local-edit'}));
+    TestBed.tick();
+    fixture.detectChanges();
+
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+
+    expect(mockHostComm.sendMessage).toHaveBeenCalledWith({
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 'initial-surface-id',
+          path: undefined,
+          value: {hello: 'local-edit'},
+        },
+      },
+    });
+  });
 });

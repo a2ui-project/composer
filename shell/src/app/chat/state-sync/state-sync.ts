@@ -21,6 +21,7 @@ import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
 import {tryParseJsonArray} from '../../utils/json';
+import {RenderA2uiItem, A2uiComponentInstance, UpdateComponentsDetails} from 'a2ui-bridge';
 
 /**
  * Manages in-memory volatile autosave draft layouts and bidirectionally
@@ -160,7 +161,7 @@ export class StateSync {
       const sanitized = parsedArray
         .map(block => {
           if (block && typeof block === 'object' && !Array.isArray(block)) {
-            return this.sanitizeBlock(block as Record<string, unknown>);
+            return this.sanitizeBlock(block as RenderA2uiItem);
           }
           return block;
         })
@@ -181,7 +182,7 @@ export class StateSync {
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
           continue;
         }
-        const sanitized = this.sanitizeBlock(parsed as Record<string, unknown>);
+        const sanitized = this.sanitizeBlock(parsed as RenderA2uiItem);
         if (sanitized) {
           sanitizedLines.push(JSON.stringify(sanitized));
         }
@@ -198,24 +199,22 @@ export class StateSync {
     return sanitizedLines.length > 0 ? sanitizedLines.join('\n') + '\n' : '';
   }
 
-  private sanitizeBlock(parsed: Record<string, unknown>): Record<string, unknown> | null {
-    // Security checks: exclude dynamic mock server registration commands
+  private sanitizeBlock(parsed: RenderA2uiItem): RenderA2uiItem | null {
     if (parsed[REGISTER_MOCK_RULES] || parsed[MOCK_RULES_CONFIG]) {
       return null;
     }
 
-    // Deep recursive cleaning inside component schema definitions
     if (
       parsed[UPDATE_COMPONENTS] &&
       typeof parsed[UPDATE_COMPONENTS] === 'object' &&
       parsed[UPDATE_COMPONENTS] !== null
     ) {
-      const updateComponents = parsed[UPDATE_COMPONENTS] as Record<string, unknown>;
+      const updateComponents = parsed[UPDATE_COMPONENTS] as UpdateComponentsDetails;
       if (Array.isArray(updateComponents[COMPONENTS])) {
         // Actively filter out component with ID 'mock_rules_container'
         const filtered = updateComponents[COMPONENTS].filter(comp => {
           if (comp !== null && typeof comp === 'object' && !Array.isArray(comp)) {
-            const compObj = comp as Record<string, unknown>;
+            const compObj = comp as A2uiComponentInstance;
             return compObj[ID] !== MOCK_RULES_CONTAINER;
           }
           return true;
