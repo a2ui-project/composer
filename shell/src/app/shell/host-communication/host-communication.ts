@@ -128,11 +128,13 @@ export class HostCommunication implements OnDestroy {
   private readonly messageListener = (event: MessageEvent) => {
     const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
     if (!activeWindow) {
+      // NOTE: Bracket notation is used to access properties on the incoming postMessage event
+      // to prevent compilers from renaming these property accesses during minification.
       const isBridgeMessage =
         event.data &&
         typeof event.data === 'object' &&
-        Object.values(PreviewBridgeMessageType).includes(event.data.type);
-      if (!isBridgeMessage || event.data.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+        Object.values(PreviewBridgeMessageType).includes(event.data['type']);
+      if (!isBridgeMessage || event.data['type'] === PreviewBridgeMessageType.CONSOLE_LOG) {
         return;
       }
       this.earlyMessageBuffer.push(event);
@@ -160,11 +162,13 @@ export class HostCommunication implements OnDestroy {
     }
 
     const data = event.data;
-    if (data && typeof data === 'object' && data.type) {
-      const type = data.type;
+    // NOTE: Bracket notation is used to access properties on the incoming postMessage event
+    // to prevent compilers from renaming these property accesses during minification.
+    if (data && typeof data === 'object' && data['type']) {
+      const type = data['type'] as string;
       const envelope: MessageEnvelope = {
         type,
-        payload: data.payload,
+        payload: data['payload'],
         origin: event.origin,
         timestamp: Date.now(),
       };
@@ -262,7 +266,12 @@ export class HostCommunication implements OnDestroy {
    * @param payload Array of layout nodes or configuration objects
    */
   sendRenderA2UI(payload: unknown[]): void {
-    this.sendMessage({type: PreviewBridgeMessageType.RENDER_A2UI, payload});
+    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+    // prettier-ignore
+    this.sendMessage({
+      'type': PreviewBridgeMessageType.RENDER_A2UI,
+      'payload': payload,
+    });
   }
 
   ngOnDestroy(): void {

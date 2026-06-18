@@ -344,8 +344,8 @@ export class ChatCoordinator {
     const catalog = this.catalogManagement.activeCatalog();
     const componentHealMap: Record<string, string> = {};
 
-    if (catalog && catalog.components) {
-      for (const key of Object.keys(catalog.components)) {
+    if (catalog && catalog['components']) {
+      for (const key of Object.keys(catalog['components'])) {
         const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, '');
         componentHealMap[normalizedKey] = key;
       }

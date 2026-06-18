@@ -169,12 +169,14 @@ function overrideConsoleMethods(sender: TelemetrySender): void {
         const errorArg = args.find(arg => arg instanceof Error);
         const stack = errorArg ? (errorArg as Error).stack : undefined;
 
+        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+        // prettier-ignore
         sender.sendMessage({
-          type: PreviewBridgeMessageType.CONSOLE_LOG,
-          payload: {
-            level: method,
-            message,
-            stack,
+          'type': PreviewBridgeMessageType.CONSOLE_LOG,
+          'payload': {
+            'level': method,
+            'message': message,
+            'stack': stack,
           },
         });
       } catch (err) {
@@ -199,12 +201,14 @@ function overrideWindowError(sender: TelemetrySender): void {
     error: Error | undefined,
   ): boolean => {
     try {
+      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+      // prettier-ignore
       sender.sendMessage({
-        type: PreviewBridgeMessageType.CONSOLE_LOG,
-        payload: {
-          level: 'error',
-          message: String(message),
-          stack: error ? error.stack : `${source || ''}:${lineno || 0}:${colno || 0}`,
+        'type': PreviewBridgeMessageType.CONSOLE_LOG,
+        'payload': {
+          'level': 'error',
+          'message': String(message),
+          'stack': error ? error.stack : `${source || ''}:${lineno || 0}:${colno || 0}`,
         },
       });
     } catch (err) {
@@ -231,12 +235,14 @@ function overrideUnhandledRejection(sender: TelemetrySender): void {
       const message = event.reason instanceof Error ? event.reason.message : String(event.reason);
       const stack = event.reason instanceof Error ? event.reason.stack : undefined;
 
+      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+      // prettier-ignore
       sender.sendMessage({
-        type: PreviewBridgeMessageType.CONSOLE_LOG,
-        payload: {
-          level: 'error',
-          message: `Unhandled Rejection: ${message}`,
-          stack,
+        'type': PreviewBridgeMessageType.CONSOLE_LOG,
+        'payload': {
+          'level': 'error',
+          'message': `Unhandled Rejection: ${message}`,
+          'stack': stack,
         },
       });
     } catch (err) {

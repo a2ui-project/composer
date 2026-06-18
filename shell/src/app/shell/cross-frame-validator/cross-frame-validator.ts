@@ -14,7 +14,14 @@
  * limitations under the License.
  */
 
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {
+  PreviewBridgeMessageType,
+  RenderA2uiItem,
+  BaseSurfaceDetails,
+  CreateSurfaceDetails,
+  UpdateComponentsDetails,
+  UpdateDataModelDetails,
+} from 'a2ui-bridge';
 
 /**
  * Hardens postMessage channels by validating outgoing layout schemas,
@@ -27,15 +34,20 @@ export class CrossFrameValidator {
       return false;
     }
 
-    if (typeof message.type !== 'string' || !message.type.trim()) {
+    // NOTE: Bracket notation is used to access properties on the incoming message object
+    // to prevent compilers from renaming these property accesses during minification.
+    const msgType = message['type'];
+    const msgPayload = message['payload'];
+
+    if (typeof msgType !== 'string' || !msgType.trim()) {
       console.error('Malformed message: type must be a non-empty string.');
       return false;
     }
 
-    switch (message.type) {
+    switch (msgType) {
       case PreviewBridgeMessageType.GET_CATALOG: {
-        if (message.payload !== undefined && message.payload !== null) {
-          if (typeof message.payload !== 'object' || Array.isArray(message.payload)) {
+        if (msgPayload !== undefined && msgPayload !== null) {
+          if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
             console.error(
               'Malformed payload for GET_CATALOG: must be an object, null, or undefined.',
             );
@@ -46,18 +58,18 @@ export class CrossFrameValidator {
       }
 
       case PreviewBridgeMessageType.RENDER_A2UI: {
-        if (!message.payload || !Array.isArray(message.payload)) {
+        if (!msgPayload || !Array.isArray(msgPayload)) {
           console.error('Malformed payload for RENDER_A2UI: must be an Array.');
           return false;
         }
 
-        for (const item of message.payload) {
+        for (const item of msgPayload) {
           if (!item || typeof item !== 'object' || Array.isArray(item)) {
             console.error('Malformed payload for RENDER_A2UI: array items must be objects.');
             return false;
           }
 
-          const itemObj = item as Record<string, unknown>;
+          const itemObj = item as RenderA2uiItem;
           if (itemObj['version'] !== 'v0.9') {
             console.error(
               'Malformed payload for RENDER_A2UI: array items must specify version "v0.9".',
@@ -99,8 +111,8 @@ export class CrossFrameValidator {
             return false;
           }
 
-          const u = updateObj as Record<string, unknown>;
-          if (typeof u['surfaceId'] !== 'string') {
+          const updateData = updateObj as BaseSurfaceDetails;
+          if (typeof updateData['surfaceId'] !== 'string') {
             console.error(
               `Malformed payload for RENDER_A2UI: ${updateType} must contain a valid surfaceId string.`,
             );
@@ -108,26 +120,31 @@ export class CrossFrameValidator {
           }
 
           if (updateType === 'createSurface') {
-            if (typeof u['catalogId'] !== 'string') {
+            const createDetails = updateObj as CreateSurfaceDetails;
+            if (typeof createDetails['catalogId'] !== 'string') {
               console.error(
                 'Malformed payload for RENDER_A2UI: createSurface must contain a valid catalogId string.',
               );
               return false;
             }
-            if (u['sendDataModel'] !== undefined && typeof u['sendDataModel'] !== 'boolean') {
+            if (
+              createDetails['sendDataModel'] !== undefined &&
+              typeof createDetails['sendDataModel'] !== 'boolean'
+            ) {
               console.error(
                 'Malformed payload for RENDER_A2UI: createSurface sendDataModel must be a boolean if present.',
               );
               return false;
             }
           } else if (updateType === 'updateComponents') {
-            if (!Array.isArray(u['components'])) {
+            const updateCompDetails = updateObj as UpdateComponentsDetails;
+            if (!Array.isArray(updateCompDetails['components'])) {
               console.error(
                 'Malformed payload for RENDER_A2UI: updateComponents must contain a components Array.',
               );
               return false;
             }
-            for (const comp of u['components']) {
+            for (const comp of updateCompDetails['components']) {
               if (!comp || typeof comp !== 'object' || Array.isArray(comp)) {
                 console.error(
                   'Malformed payload for RENDER_A2UI: updateComponents components array items must be objects.',
@@ -136,7 +153,11 @@ export class CrossFrameValidator {
               }
             }
           } else if (updateType === 'updateDataModel') {
-            if (u['path'] !== undefined && typeof u['path'] !== 'string') {
+            const updateModelDetails = updateObj as UpdateDataModelDetails;
+            if (
+              updateModelDetails['path'] !== undefined &&
+              typeof updateModelDetails['path'] !== 'string'
+            ) {
               console.error(
                 'Malformed payload for RENDER_A2UI: updateDataModel path must be a string if present.',
               );
@@ -148,23 +169,22 @@ export class CrossFrameValidator {
       }
 
       case PreviewBridgeMessageType.SET_BLOCKING_STATE: {
-        if (
-          !message.payload ||
-          typeof message.payload !== 'object' ||
-          Array.isArray(message.payload)
-        ) {
+        if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
           console.error('Malformed payload for SET_BLOCKING_STATE: must be an object.');
           return false;
         }
 
-        const p = message.payload as Record<string, unknown>;
-        if (typeof p['blocked'] !== 'boolean') {
+        const blockingState = msgPayload as Record<string, unknown>;
+        if (typeof blockingState['blocked'] !== 'boolean') {
           console.error(
             'Malformed payload for SET_BLOCKING_STATE: must contain boolean property blocked.',
           );
           return false;
         }
-        if (p['message'] !== undefined && typeof p['message'] !== 'string') {
+        if (
+          blockingState['message'] !== undefined &&
+          typeof blockingState['message'] !== 'string'
+        ) {
           console.error(
             'Malformed payload for SET_BLOCKING_STATE: message property must be a string if present.',
           );
@@ -174,17 +194,13 @@ export class CrossFrameValidator {
       }
 
       case PreviewBridgeMessageType.DATA_MODEL_CHANGE: {
-        if (
-          !message.payload ||
-          typeof message.payload !== 'object' ||
-          Array.isArray(message.payload)
-        ) {
+        if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
           console.error('Malformed payload for DATA_MODEL_CHANGE: must be an object.');
           return false;
         }
 
-        const p = message.payload as Record<string, unknown>;
-        const updateObj = p['updateDataModel'];
+        const changePayload = msgPayload as Record<string, unknown>;
+        const updateObj = changePayload['updateDataModel'];
         if (!updateObj || typeof updateObj !== 'object' || Array.isArray(updateObj)) {
           console.error(
             'Malformed payload for DATA_MODEL_CHANGE: must contain an updateDataModel object.',
@@ -192,14 +208,14 @@ export class CrossFrameValidator {
           return false;
         }
 
-        const u = updateObj as Record<string, unknown>;
-        if (typeof u['surfaceId'] !== 'string') {
+        const updateData = updateObj as Record<string, unknown>;
+        if (typeof updateData['surfaceId'] !== 'string') {
           console.error(
             'Malformed payload for DATA_MODEL_CHANGE: updateDataModel must contain a valid surfaceId string.',
           );
           return false;
         }
-        if (u['path'] !== undefined && typeof u['path'] !== 'string') {
+        if (updateData['path'] !== undefined && typeof updateData['path'] !== 'string') {
           console.error(
             'Malformed payload for DATA_MODEL_CHANGE: updateDataModel path must be a string if present.',
           );
@@ -209,7 +225,7 @@ export class CrossFrameValidator {
       }
 
       default: {
-        console.warn(`Unrecognized message type: ${message.type}`);
+        console.warn(`Unrecognized message type: ${msgType}`);
         return true;
       }
     }

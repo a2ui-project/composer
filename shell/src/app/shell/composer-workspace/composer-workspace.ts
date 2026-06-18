@@ -86,10 +86,12 @@ export class ComposerWorkspace implements OnInit {
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
       if (!envelope) return;
 
-      const payload = envelope.payload as WorkspaceMessagePayload;
+      // NOTE: Bracket notation is used to access properties on cross-frame message payloads
+      // to prevent compilers from renaming these properties during production minification.
+      const payload = envelope.payload as WorkspaceMessagePayload | undefined;
       const activeTab = this.selectedTabIndex();
 
-      if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.action) {
+      if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.['action']) {
         if (activeTab !== EVENTS_TAB_INDEX) {
           this.unreadEventsCount.update(count => count + 1);
         }
@@ -99,9 +101,9 @@ export class ComposerWorkspace implements OnInit {
         }
       } else if (
         envelope.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE &&
-        payload?.validationErrors
+        payload?.['validationErrors']
       ) {
-        const validationErrors = payload.validationErrors;
+        const validationErrors = payload['validationErrors'];
         const hasErrors = Array.isArray(validationErrors)
           ? validationErrors.length > 0
           : typeof validationErrors === 'object' && validationErrors !== null

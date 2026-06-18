@@ -31,6 +31,11 @@ export enum PreviewBridgeMessageType {
 
 /**
  * Represents a message structure transmitted across the Preview Bridge iframe boundary.
+ *
+ * NOTE: To prevent compilers from renaming properties during minification in
+ * production builds, all properties of this message must be constructed using
+ * quoted keys (e.g. {'type': ...}) and accessed using bracket notation (e.g.
+ * message['type']) when communicating across compilation boundaries.
  */
 export interface BridgeMessage {
   /** The unique type identifier representing the event. */
@@ -38,5 +43,81 @@ export interface BridgeMessage {
   /** Optional payload data associated with the message event. */
   payload?: unknown;
   /** Extensible custom properties. */
+  [key: string]: unknown;
+}
+
+/** Payload for CONSOLE_LOG message type. */
+export interface ConsoleLogPayload {
+  level: string;
+  message: string;
+  stack?: string;
+}
+
+/** Base interface for all surface layout commands containing surfaceId. */
+export interface BaseSurfaceDetails {
+  surfaceId: string;
+}
+
+/** Inner details for DATA_MODEL_CHANGE payload. */
+export interface UpdateDataModelDetails extends BaseSurfaceDetails {
+  path?: string;
+  value: unknown;
+}
+
+/** Payload for DATA_MODEL_CHANGE message type. */
+export interface DataModelChangePayload {
+  updateDataModel: UpdateDataModelDetails;
+}
+
+/** Payload for SET_BLOCKING_STATE message type. */
+export interface SetBlockingStatePayload {
+  blocked: boolean;
+  message?: string;
+}
+
+/** Details for error in A2UI_CATALOG handshake. */
+export interface CatalogErrorDetails {
+  message: string;
+}
+
+/** Payload for A2UI_CATALOG message type. */
+export interface CatalogHandshakePayload {
+  error?: CatalogErrorDetails;
+  [key: string]: unknown;
+}
+
+/** Payload for SEND_TO_SERVER message type. */
+export interface SendToServerPayload {
+  version: string;
+  action: unknown;
+}
+
+/** Inner details for createSurface command in RENDER_A2UI payload. */
+export interface CreateSurfaceDetails extends BaseSurfaceDetails {
+  catalogId: string;
+  sendDataModel?: boolean;
+}
+
+/** Layout command structure containing createSurface in RENDER_A2UI payload. */
+export interface CreateSurfaceCommand {
+  createSurface?: CreateSurfaceDetails;
+  [key: string]: unknown;
+}
+
+/** Inner details for updateComponents command in RENDER_A2UI payload. */
+export interface UpdateComponentsDetails extends BaseSurfaceDetails {
+  components: unknown[];
+}
+
+/** Inner details for deleteSurface command in RENDER_A2UI payload. */
+export type DeleteSurfaceDetails = BaseSurfaceDetails;
+
+/** Represents a single layout command item inside the RENDER_A2UI array. */
+export interface RenderA2uiItem {
+  version: string;
+  createSurface?: CreateSurfaceDetails;
+  updateComponents?: UpdateComponentsDetails;
+  updateDataModel?: UpdateDataModelDetails;
+  deleteSurface?: DeleteSurfaceDetails;
   [key: string]: unknown;
 }

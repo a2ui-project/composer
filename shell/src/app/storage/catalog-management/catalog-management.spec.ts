@@ -611,4 +611,28 @@ describe('CatalogManagement', () => {
     expect(service.catalogError()).toBeNull();
     expect(service.isHandshakeInProgress()).toBe(false);
   });
+
+  it('correctly resolves and sanitizes title and description from raw postMessage catalog payload using bracket notation', async () => {
+    // prettier-ignore
+    const payload = {
+      'title': 'Test Title <b>Bold</b>',
+      'description': 'Test Description <i>Italic</i>',
+      'catalogId': 'custom-catalog-id',
+      'components': {},
+    };
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      origin: 'http://localhost',
+      payload,
+      timestamp: 2005,
+    });
+    TestBed.tick();
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(service.activeCatalogTitle()).toBe('Test Title <b>Bold</b>');
+    expect(service.activeCatalogDescription()).toBe('Test Description <i>Italic</i>');
+    expect(service.activeCatalog()?.['catalogId']).toBe('custom-catalog-id');
+  });
 });

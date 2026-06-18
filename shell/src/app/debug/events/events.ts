@@ -70,9 +70,11 @@ export class Events {
     effect(() => {
       const envelope = this.hostComm.messageStream();
       if (envelope?.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
-        const payload = envelope?.payload as RawServerPayload;
-        if (payload && payload.action) {
-          let action = payload.action;
+        // NOTE: Bracket notation is used to access properties on the parsed postMessage payload
+        // to prevent compiler minification renaming from breaking property reads.
+        const payload = envelope?.payload as RawServerPayload | undefined;
+        if (payload && payload['action']) {
+          let action = payload['action'];
           if (typeof action === 'string') {
             try {
               action = JSON.parse(action);
@@ -81,13 +83,16 @@ export class Events {
             }
           }
           if (action && typeof action === 'object') {
-            const timestamp = action.timestamp || envelope.timestamp;
+            // NOTE: Bracket notation prevents compiler minification renaming of keys that
+            // originate from external cross-frame events.
+            const actionObj = action as RawActionDetails;
+            const timestamp = actionObj['timestamp'] || envelope.timestamp;
             const mappedItem = {
               time: formatTimestamp(timestamp),
-              action: action.name || '',
-              surface: action.surfaceId || '',
-              component: action.sourceComponentId || action.sourceComponent || '',
-              context: action.context || action.contextParameters || null,
+              action: actionObj['name'] || '',
+              surface: actionObj['surfaceId'] || '',
+              component: actionObj['sourceComponentId'] || actionObj['sourceComponent'] || '',
+              context: actionObj['context'] || actionObj['contextParameters'] || null,
             };
             untracked(() => {
               this.eventsLog.update(logs => {

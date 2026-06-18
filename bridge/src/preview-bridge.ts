@@ -20,7 +20,13 @@ import {
 
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
-import {PreviewBridgeMessageType, BridgeMessage} from './bridge-message';
+import {
+  PreviewBridgeMessageType,
+  BridgeMessage,
+  SetBlockingStatePayload,
+  DataModelChangePayload,
+  CreateSurfaceCommand,
+} from './bridge-message';
 export * from './bridge-message';
 
 import type {
@@ -186,7 +192,11 @@ export class PreviewBridge {
     // bootstrapping and attached its active renderer. This guarantees that the
     // parent receives the ready signal when the sandbox is truly capable of mounting
     // surfaces, structurally eliminating the inter-frame timing race conditions.
-    this.sendMessage({type: PreviewBridgeMessageType.RENDERER_READY});
+    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+    // prettier-ignore
+    this.sendMessage({
+      'type': PreviewBridgeMessageType.RENDERER_READY,
+    });
 
     const attachConnection = {
       unsubscribe: () => {
@@ -260,9 +270,14 @@ export class PreviewBridge {
    * @param [version='v0.9'] The A2UI protocol specification version.
    */
   sendAction(action: unknown, version = 'v0.9'): void {
+    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+    // prettier-ignore
     this.sendMessage({
-      type: PreviewBridgeMessageType.SEND_TO_SERVER,
-      payload: {version, action},
+      'type': PreviewBridgeMessageType.SEND_TO_SERVER,
+      'payload': {
+        'version': version,
+        'action': action,
+      },
     });
   }
 
@@ -278,19 +293,21 @@ export class PreviewBridge {
     if (event.source !== window.parent && event.source !== window) return;
 
     const data = event.data as BridgeMessage;
-    if (!data || typeof data !== 'object' || !data.type) return;
+    // NOTE: Bracket notation is used to access properties on the parsed postMessage event
+    // to prevent compilers from renaming these property accesses during minification.
+    if (!data || typeof data !== 'object' || !data['type']) return;
 
-    switch (data.type) {
+    switch (data['type']) {
       case PreviewBridgeMessageType.SET_BLOCKING_STATE:
-        this.handleSetBlockingState(data.payload);
+        this.handleSetBlockingState(data['payload']);
         break;
 
       case PreviewBridgeMessageType.DATA_MODEL_CHANGE:
-        this.handleIncomingDataModelChange(data.payload);
+        this.handleIncomingDataModelChange(data['payload']);
         break;
 
       case PreviewBridgeMessageType.RENDER_A2UI:
-        this.dispatchRenderA2ui(data.payload !== undefined ? data.payload : data);
+        this.dispatchRenderA2ui(data['payload'] !== undefined ? data['payload'] : data);
         break;
 
       case PreviewBridgeMessageType.GET_CATALOG:
@@ -298,7 +315,7 @@ export class PreviewBridge {
         break;
 
       default:
-        console.warn(`PreviewBridge: Unrecognized incoming message type: ${data.type}`);
+        console.warn(`PreviewBridge: Unrecognized incoming message type: ${data['type']}`);
     }
   };
 
@@ -306,9 +323,11 @@ export class PreviewBridge {
    * Handles incoming blocking overlay requests.
    */
   private handleSetBlockingState(payload: unknown): void {
-    const payloadObj = payload as {blocked?: boolean; message?: string} | undefined;
-    const blocked = !!(payloadObj && payloadObj.blocked);
-    const messageStr = payloadObj && payloadObj.message;
+    // NOTE: Bracket notation is used to access properties on cross-frame message payloads
+    // to prevent compilers from renaming these properties during production minification.
+    const payloadObj = payload as SetBlockingStatePayload | undefined;
+    const blocked = !!(payloadObj && payloadObj['blocked']);
+    const messageStr = payloadObj && payloadObj['message'];
     this.handleBlockingOverlay(blocked, messageStr);
   }
 
@@ -316,12 +335,15 @@ export class PreviewBridge {
    * Dynamic interceptor mapping incoming state changes back into a standard render lifecycle payload.
    */
   private handleIncomingDataModelChange(payload: unknown): void {
-    const payloadObj = payload as {updateDataModel?: unknown} | undefined;
-    if (payloadObj && payloadObj.updateDataModel) {
+    // NOTE: Bracket notation is used to access properties on cross-frame message payloads
+    // to prevent compilers from renaming these properties during production minification.
+    const payloadObj = payload as DataModelChangePayload | undefined;
+    if (payloadObj && payloadObj['updateDataModel']) {
+      // prettier-ignore
       const renderPayload = [
         {
-          version: 'v0.9',
-          updateDataModel: payloadObj.updateDataModel,
+          'version': 'v0.9',
+          'updateDataModel': payloadObj['updateDataModel'],
         },
       ];
       this.dispatchRenderA2ui(renderPayload);
@@ -393,14 +415,18 @@ export class PreviewBridge {
     if (Array.isArray(payload)) {
       const createSurfaceCommand = payload.find(
         (item: unknown) => item && typeof item === 'object' && 'createSurface' in item,
-      ) as {createSurface?: {surfaceId?: string; catalogId?: string}} | undefined;
+      ) as CreateSurfaceCommand | undefined;
 
-      if (createSurfaceCommand && createSurfaceCommand.createSurface) {
-        const catalogId = createSurfaceCommand.createSurface.catalogId;
+      let hasCreateSurface = false;
+      let surfaceId: string | undefined;
+      const createSurface = createSurfaceCommand && createSurfaceCommand['createSurface'];
+      if (createSurface) {
+        hasCreateSurface = true;
+        const catalogId = createSurface['catalogId'];
         if (catalogId) {
           this.notifyCatalogResolved(catalogId);
         }
-        const surfaceId = createSurfaceCommand.createSurface.surfaceId;
+        surfaceId = createSurface['surfaceId'];
         if (surfaceId) {
           // Track the surface BEFORE processing. If a subsequent command in
           // the payload has a typo and throws an error, we still want to
@@ -413,8 +439,8 @@ export class PreviewBridge {
 
       this.activeRenderer.processor.processMessages(payload as A2uiMessage[]);
 
-      if (createSurfaceCommand && createSurfaceCommand.createSurface?.surfaceId) {
-        this.activeRenderer.config.onSurfaceReady(createSurfaceCommand.createSurface.surfaceId);
+      if (hasCreateSurface && surfaceId) {
+        this.activeRenderer.config.onSurfaceReady(surfaceId);
       }
     } else {
       console.warn('PreviewBridge: Unexpected non-array RENDER_A2UI payload received:', payload);
@@ -477,12 +503,14 @@ export class PreviewBridge {
 
         try {
           const modelSub = surface.dataModel.subscribe('', (newValue: unknown) => {
+            // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+            // prettier-ignore
             this.sendMessage({
-              type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-              payload: {
-                updateDataModel: {
-                  surfaceId: surface.id,
-                  value: newValue,
+              'type': PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+              'payload': {
+                'updateDataModel': {
+                  'surfaceId': surface.id,
+                  'value': newValue,
                 },
               },
             });
@@ -576,7 +604,12 @@ export class PreviewBridge {
         });
 
         button.addEventListener('click', () => {
-          this.sendMessage({type: PreviewBridgeMessageType.FORCE_UNBLOCK, payload: {}});
+          // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+          // prettier-ignore
+          this.sendMessage({
+            'type': PreviewBridgeMessageType.FORCE_UNBLOCK,
+            'payload': {},
+          });
           this.handleBlockingOverlay(false);
         });
 
@@ -690,23 +723,33 @@ export class PreviewBridge {
 
       const catalog = this.parseCatalogData(resolved.rawData);
 
-      const catalogId = (catalog as {catalogId?: string})?.catalogId;
+      const catalogId = (catalog as Record<string, unknown> | undefined)?.['catalogId'] as
+        | string
+        | undefined;
       if (catalogId) {
         this.notifyCatalogResolved(catalogId);
       }
 
+      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+      // prettier-ignore
       this.sendMessage({
-        type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: catalog,
+        'type': PreviewBridgeMessageType.A2UI_CATALOG,
+        'payload': catalog,
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (resolved?.isInMemory) {
         console.error('PreviewBridge: Error processing/parsing in-memory catalog:', error);
       }
+      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+      // prettier-ignore
       this.sendMessage({
-        type: PreviewBridgeMessageType.A2UI_CATALOG,
-        payload: {error: {message: errorMessage}},
+        'type': PreviewBridgeMessageType.A2UI_CATALOG,
+        'payload': {
+          'error': {
+            'message': errorMessage,
+          },
+        },
       });
     }
   }

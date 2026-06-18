@@ -103,13 +103,15 @@ export class DataModel {
         const localStr = JSON.stringify(parsed);
 
         if (incomingStr !== localStr) {
+          // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+          // prettier-ignore
           this.hostComm.sendMessage({
-            type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-            payload: {
-              updateDataModel: {
-                surfaceId: this.lastSurfaceId,
-                path: this.lastPath,
-                value: parsed,
+            'type': PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+            'payload': {
+              'updateDataModel': {
+                'surfaceId': this.lastSurfaceId,
+                'path': this.lastPath,
+                'value': parsed,
               },
             },
           });
