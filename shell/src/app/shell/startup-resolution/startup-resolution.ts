@@ -53,11 +53,14 @@ export class StartupResolution {
     try {
       const response = await fetch('config.json', {signal: controller.signal});
       if (response.ok) {
-        staticConfig = await response.json();
+        const text = await response.text();
+        const cleanText = text.replace(/^\)]}'\s*/, '');
+        staticConfig = JSON.parse(cleanText);
       }
     } catch (err) {
       console.warn(
-        'Watchdog timeout or failure fetching config.json. ' + 'Allowing overrides fallbacks.',
+        'Watchdog timeout or failure fetching config.json. Allowing overrides fallbacks.',
+        err,
       );
     } finally {
       clearTimeout(timeoutId);

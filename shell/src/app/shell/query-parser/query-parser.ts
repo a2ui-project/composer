@@ -29,7 +29,7 @@ export class QueryParser {
 
     // 1. Enforce root parameters check case-insensitively
     for (const key of params.keys()) {
-      if (this.isProhibitedKey(key)) {
+      if (QueryParser.isProhibitedKey(key)) {
         console.warn(
           'Security Violation: Prohibited credentials detected in root query string. Stripping parameters.',
         );
@@ -48,7 +48,7 @@ export class QueryParser {
         if (validUrl.protocol === 'http:' || validUrl.protocol === 'https:') {
           // 2. Prohibit keys embedded inside the inner renderer target string
           for (const innerKey of validUrl.searchParams.keys()) {
-            if (this.isProhibitedKey(innerKey)) {
+            if (QueryParser.isProhibitedKey(innerKey)) {
               console.warn(
                 'Security Violation: Prohibited credentials embedded inside renderer target URL. Stripping candidate.',
               );

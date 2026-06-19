@@ -31,6 +31,10 @@ describe('StartupResolution Task 2.6', () => {
   let service: StartupResolution;
   let mockConfigProvider: MockAppConfigProvider;
 
+  function mockFetchConfig(config: object) {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(config)));
+  }
+
   beforeEach(() => {
     mockConfigProvider = new MockAppConfigProvider();
     TestBed.resetTestingModule();
@@ -54,13 +58,10 @@ describe('StartupResolution Task 2.6', () => {
   });
 
   it('fetches static config and locks when overrides are prohibited', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        defaultRendererUrl: 'http://enterprise:3000',
-        allowOverrides: false,
-      }),
-    } as Response);
+    mockFetchConfig({
+      defaultRendererUrl: 'http://enterprise:3000',
+      allowOverrides: false,
+    });
 
     const logSpy = vi.spyOn(console, 'log');
     const url = await service.resolveStartupConfiguration();
@@ -72,14 +73,39 @@ describe('StartupResolution Task 2.6', () => {
     );
   });
 
+  it('strips JSON safety prefix with LF line endings', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        ")]}'\n" +
+          JSON.stringify({
+            defaultRendererUrl: 'http://lf:3000',
+            allowOverrides: true,
+          }),
+      ),
+    );
+    const url = await service.resolveStartupConfiguration();
+    expect(url).toBe('http://lf:3000');
+  });
+
+  it('strips JSON safety prefix with CRLF line endings', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        ")]}'\r\n" +
+          JSON.stringify({
+            defaultRendererUrl: 'http://crlf:3000',
+            allowOverrides: true,
+          }),
+      ),
+    );
+    const url = await service.resolveStartupConfiguration();
+    expect(url).toBe('http://crlf:3000');
+  });
+
   it('evaluates query params prior to storage when overrides exist', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        defaultRendererUrl: 'http://base:3000',
-        allowOverrides: true,
-      }),
-    } as Response);
+    mockFetchConfig({
+      defaultRendererUrl: 'http://base:3000',
+      allowOverrides: true,
+    });
 
     vi.spyOn(service, 'getWindowSearch').mockReturnValue('?renderer=http://query:3000');
 
@@ -96,6 +122,7 @@ describe('StartupResolution Task 2.6', () => {
     const url = await service.resolveStartupConfiguration();
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Watchdog timeout or failure fetching config.json'),
+      expect.any(Error),
     );
     expect(url).toBe('http://fallback-storage:3000');
   });
@@ -120,16 +147,17 @@ describe('StartupResolution Task 2.6', () => {
     // Test forced 3P flag
     getItemSpy.mockImplementation(key => (key === LocalStorageKey.FORCE_3P ? 'true' : null));
     expect(service.isThirdPartyEnvironment()).toBe(true);
+
+    // Test forced 1P flag
+    getItemSpy.mockImplementation(key => (key === LocalStorageKey.FORCE_1P ? 'true' : null));
+    expect(service.isThirdPartyEnvironment()).toBe(false);
   });
 
   it('evaluates environment validity correctly via isEnvironmentValid', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        defaultRendererUrl: 'http://base:3000',
-        allowOverrides: true,
-      }),
-    } as Response);
+    mockFetchConfig({
+      defaultRendererUrl: 'http://base:3000',
+      allowOverrides: true,
+    });
 
     vi.spyOn(service, 'getWindowHostname').mockReturnValue('localhost');
 
@@ -143,18 +171,64 @@ describe('StartupResolution Task 2.6', () => {
   });
 
   it('purges Gemini API key via AppConfigProvider when operating in 1P environments', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        defaultRendererUrl: 'http://base:3000',
-        allowOverrides: true,
-      }),
-    } as Response);
+    mockFetchConfig({
+      defaultRendererUrl: 'http://base:3000',
+      allowOverrides: true,
+    });
 
     vi.spyOn(service, 'getWindowHostname').mockReturnValue('google.com');
 
     await service.resolveStartupConfiguration();
 
     expect(mockConfigProvider.purgeGeminiApiKey).toHaveBeenCalled();
+  });
+
+  it('correctly evaluates isExtensionMode based on query param and storage', () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
+    const searchSpy = vi.spyOn(service, 'getWindowSearch');
+
+    // Both false
+    searchSpy.mockReturnValue('?extension=false');
+    getItemSpy.mockReturnValue(null);
+    expect(service.isExtensionMode()).toBe(false);
+
+    // Query param true
+    searchSpy.mockReturnValue('?extension=true');
+    getItemSpy.mockReturnValue(null);
+    expect(service.isExtensionMode()).toBe(true);
+
+    // Storage true
+    searchSpy.mockReturnValue('');
+    getItemSpy.mockImplementation(key => (key === LocalStorageKey.EXTENSION_MODE ? 'true' : null));
+    expect(service.isExtensionMode()).toBe(true);
+  });
+
+  it('falls back to overrides when config fetch returns non-ok response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', {status: 404}));
+    vi.spyOn(service, 'getWindowSearch').mockReturnValue('?renderer=http://query:3000');
+    const url = await service.resolveStartupConfiguration();
+    expect(url).toBe('http://query:3000/');
+  });
+
+  it('skips query and storage evaluations when context is already locked from prior run', async () => {
+    mockFetchConfig({
+      defaultRendererUrl: 'http://enterprise:3000',
+      allowOverrides: false,
+    });
+    await service.resolveStartupConfiguration(); // locks context
+
+    // Second run, config fetch fails, but context is locked
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'));
+    vi.spyOn(service, 'getWindowSearch').mockReturnValue('?renderer=http://query:3000');
+    localStorage.setItem(LocalStorageKey.RENDERER_URL, 'http://storage:3000');
+    const url = await service.resolveStartupConfiguration();
+
+    // Stays with enterprise URL
+    expect(url).toBe('http://enterprise:3000');
+  });
+
+  it('returns window search and hostname safely', () => {
+    expect(typeof service.getWindowSearch()).toBe('string');
+    expect(typeof service.getWindowHostname()).toBe('string');
   });
 });
