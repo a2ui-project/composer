@@ -185,4 +185,26 @@ export class ChatPanelHarness extends ComponentHarness {
     const icons = await this.locatorForAll('mat-icon')();
     return Promise.all(icons.map(i => i.getAttribute('aria-hidden')));
   }
+
+  async isDisabled(): Promise<boolean> {
+    const panel = await this.locatorForOptional('.disabled-chat-panel')();
+    return panel !== null;
+  }
+
+  async getDisabledNoticeText(): Promise<string | null> {
+    const textNode = await this.locatorForOptional('.disabled-notice-text')();
+    if (!textNode) return null;
+    return textNode.text();
+  }
+
+  async hasAddKeyButton(): Promise<boolean> {
+    const btn = await this.locatorForOptional('.add-key-button')();
+    return btn !== null;
+  }
+
+  async clickAddKeyButton(): Promise<void> {
+    const btn = await this.locatorForOptional('.add-key-button')();
+    if (!btn) throw new Error('Add API key button not found.');
+    await btn.click();
+  }
 }

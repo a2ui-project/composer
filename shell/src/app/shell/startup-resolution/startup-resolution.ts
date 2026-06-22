@@ -127,15 +127,7 @@ export class StartupResolution {
 
   async isEnvironmentValid(): Promise<boolean> {
     const resolvedUrl = this.getResolvedRendererUrl();
-    const is3P = this.isThirdPartyEnvironment();
-    let hasApiKey = false;
-
-    try {
-      const configProvider = this.injector.get(AppConfigProvider);
-      hasApiKey = !!configProvider.geminiApiKey();
-    } catch (err) {}
-
-    return !!resolvedUrl && (!is3P || hasApiKey);
+    return !!resolvedUrl;
   }
 
   isExtensionMode(): boolean {

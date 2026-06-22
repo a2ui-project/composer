@@ -80,7 +80,7 @@ test.describe('Settings and Client Configuration', () => {
       expect(rendererVal).toBe('http://locked-renderer.com');
     });
 
-    test('verifies 1P vs 3P environment detection and automatic redirection on missing API keys', async ({
+    test('verifies 1P vs 3P environment detection and disables chat panel on missing API keys', async ({
       page,
     }) => {
       await page.goto('/?renderer=http://localhost:3000');
@@ -91,8 +91,11 @@ test.describe('Settings and Client Configuration', () => {
         } catch (e) {}
       });
       await page.reload();
-      await page.waitForURL('**/settings');
-      await expect(page.getByLabel('Gemini API Key')).toBeVisible();
+      await page.waitForURL(url => url.pathname === '/');
+      await expect(page.locator('.disabled-chat-panel')).toBeVisible();
+      await expect(page.locator('.disabled-notice-text')).toContainText(
+        'This feature is only available with a valid Gemini API key.',
+      );
     });
 
     test('verifies forced 3P authentication mode toggle and API key provisioning panel visibility', async ({
@@ -115,7 +118,8 @@ test.describe('Settings and Client Configuration', () => {
         name: 'Force External Third-Party Authentication Mode',
       });
       await force3pSwitch.click();
-      await page.waitForURL('**/settings');
+      await page.waitForURL(url => url.pathname === '/');
+      await page.goto('/settings');
 
       const isForce3p = await page.evaluate(() => localStorage.getItem('a2ui_composer_force_3p'));
       expect(isForce3p).toBe('true');

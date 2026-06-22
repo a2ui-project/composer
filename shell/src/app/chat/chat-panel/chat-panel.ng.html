@@ -40,83 +40,95 @@
     <span class="panel-title-text">Gemini Assistant</span>
   </div>
 
-  <div class="frame-body chat-history-log">
-    @if (visibleChatHistory().length === 0) {
-      <div class="empty-state-notice">
-        <span class="empty-state-icon">💬</span>
-        <p class="empty-state-text">
-          Ask Gemini to shape your layout interfaces or generate dynamic mock configurations
-          schemas. Let's get started!
-        </p>
-      </div>
-    } @else {
-      @for (turn of visibleChatHistory(); track $index) {
-        <div class="chat-bubble-container" [class]="getBubbleClass(turn)">
-          <div class="bubble-header-bar">
-            @if (turn.role === 'user') {
-              <span class="bubble-author-name">{{
-                turn.isSnapshot ? 'Canvas Revision Snapshot' : 'You'
-              }}</span>
-            } @else if (turn.role === 'model') {
-              <span class="bubble-author-name">Gemini AI</span>
-            } @else if (turn.role === 'error') {
-              <span class="bubble-author-name error-label">Gateway Exception Diagnostic</span>
-            }
-          </div>
-
-          <div class="bubble-body">
-            @if (turn.isSnapshot) {
-              <p class="bubble-text-content">A2UI JSON: {{ turn.componentCount }} components</p>
-            } @else {
-              <p class="bubble-text-content">{{ turn.content }}</p>
-              @if (turn.isRetryable) {
-                <div class="retry-action-container">
-                  <button
-                    mat-stroked-button
-                    color="primary"
-                    class="retry-button"
-                    [disabled]="isLocked()"
-                    (click)="retryPrompt(turn.originalPrompt || '')"
-                  >
-                    <mat-icon aria-hidden="true">refresh</mat-icon>
-                    Retry Request
-                  </button>
-                </div>
-              }
-            }
-          </div>
-        </div>
-      }
-    }
-  </div>
-
-  <!-- Footer Prompts textareas and lockout submits controls block -->
-  <div class="chat-controllers-panel">
-    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-form-field">
-      <textarea
-        matInput
-        aria-label="Chat prompt"
-        [ngModel]="userPrompt()"
-        (ngModelChange)="userPrompt.set($event)"
-        [disabled]="isLocked()"
-        (keydown)="onKeyDown($event)"
-        placeholder="Type instruction to shape your screen (e.g. 'Add a checkbox column')..."
-        rows="2"
-      ></textarea>
-    </mat-form-field>
-    <div class="submit-action-bar">
-      <button mat-button class="system-instructions-link" (click)="showSystemInstructions()">
-        Show system instructions
-      </button>
-      <button
-        mat-raised-button
-        color="primary"
-        class="submit-button"
-        [disabled]="isLocked() || !isHandshakeComplete() || !userPrompt().trim()"
-        (click)="submitPrompt()"
-      >
-        Send
-      </button>
+  @if (isChatDisabled()) {
+    <div class="disabled-chat-panel">
+      <mat-icon class="disabled-key-icon" aria-hidden="true">vpn_key</mat-icon>
+      <p class="disabled-notice-text">
+        This feature is only available with a valid Gemini API key.
+      </p>
+      <a mat-flat-button color="primary" routerLink="/settings" class="add-key-button">
+        Add Gemini API key
+      </a>
     </div>
-  </div>
+  } @else {
+    <div class="frame-body chat-history-log">
+      @if (visibleChatHistory().length === 0) {
+        <div class="empty-state-notice">
+          <span class="empty-state-icon">💬</span>
+          <p class="empty-state-text">
+            Ask Gemini to shape your layout interfaces or generate dynamic mock configurations
+            schemas. Let's get started!
+          </p>
+        </div>
+      } @else {
+        @for (turn of visibleChatHistory(); track $index) {
+          <div class="chat-bubble-container" [class]="getBubbleClass(turn)">
+            <div class="bubble-header-bar">
+              @if (turn.role === 'user') {
+                <span class="bubble-author-name">{{
+                  turn.isSnapshot ? 'Canvas Revision Snapshot' : 'You'
+                }}</span>
+              } @else if (turn.role === 'model') {
+                <span class="bubble-author-name">Gemini AI</span>
+              } @else if (turn.role === 'error') {
+                <span class="bubble-author-name error-label">Gateway Exception Diagnostic</span>
+              }
+            </div>
+
+            <div class="bubble-body">
+              @if (turn.isSnapshot) {
+                <p class="bubble-text-content">A2UI JSON: {{ turn.componentCount }} components</p>
+              } @else {
+                <p class="bubble-text-content">{{ turn.content }}</p>
+                @if (turn.isRetryable) {
+                  <div class="retry-action-container">
+                    <button
+                      mat-stroked-button
+                      color="primary"
+                      class="retry-button"
+                      [disabled]="isLocked()"
+                      (click)="retryPrompt(turn.originalPrompt || '')"
+                    >
+                      <mat-icon aria-hidden="true">refresh</mat-icon>
+                      Retry Request
+                    </button>
+                  </div>
+                }
+              }
+            </div>
+          </div>
+        }
+      }
+    </div>
+
+    <!-- Footer Prompts textareas and lockout submits controls block -->
+    <div class="chat-controllers-panel">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-form-field">
+        <textarea
+          matInput
+          aria-label="Chat prompt"
+          [ngModel]="userPrompt()"
+          (ngModelChange)="userPrompt.set($event)"
+          [disabled]="isLocked()"
+          (keydown)="onKeyDown($event)"
+          placeholder="Type instruction to shape your screen (e.g. 'Add a checkbox column')..."
+          rows="2"
+        ></textarea>
+      </mat-form-field>
+      <div class="submit-action-bar">
+        <button mat-button class="system-instructions-link" (click)="showSystemInstructions()">
+          Show system instructions
+        </button>
+        <button
+          mat-raised-button
+          color="primary"
+          class="submit-button"
+          [disabled]="isLocked() || !isHandshakeComplete() || !userPrompt().trim()"
+          (click)="submitPrompt()"
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  }
 </div>

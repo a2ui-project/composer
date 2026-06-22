@@ -20,6 +20,7 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
+import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
@@ -111,6 +112,7 @@ describe('ComposerWorkspace Dashboard', () => {
       imports: [ComposerWorkspace],
       providers: [
         provideNoopAnimations(),
+        provideRouter([]),
         {provide: ChatState, useClass: MockChatState},
         {provide: ChatCoordinator, useClass: MockChatCoordinator},
         {provide: StateSync, useClass: MockStateSync},

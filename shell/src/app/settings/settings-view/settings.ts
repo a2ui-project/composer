@@ -106,7 +106,7 @@ export class Settings implements OnInit {
 
     if (is3P) {
       const apiKeyControl = this.settingsForm.controls.apiKey;
-      apiKeyControl.setValidators([Validators.required, Validators.pattern(/\S/)]);
+      apiKeyControl.setValidators([Validators.pattern(/\S/)]);
       apiKeyControl.updateValueAndValidity();
     }
   }

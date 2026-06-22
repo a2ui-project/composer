@@ -77,8 +77,10 @@
                   hideApiKey() ? 'visibility' : 'visibility_off'
                 }}</mat-icon>
               </button>
-              @if (settingsForm.controls.apiKey.hasError('required')) {
-                <mat-error>Gemini API key is required in external environments.</mat-error>
+              @if (!settingsForm.controls.apiKey.value) {
+                <mat-hint class="warning-hint"
+                  >Gemini Assistant feature will be disabled without a valid API key.</mat-hint
+                >
               }
               @if (settingsForm.controls.apiKey.hasError('pattern')) {
                 <mat-error>API key cannot be empty whitespace.</mat-error>

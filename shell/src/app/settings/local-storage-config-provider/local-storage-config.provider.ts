@@ -82,7 +82,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
       const key = await this.secureCredentialsStorage.getCredential(
         SecureCredentialsKey.GEMINI_API_KEY,
       );
-      this._geminiApiKey.set(key || '');
+      this._geminiApiKey.set((key || '').trim());
     } catch (err) {
       console.warn(
         'Failed to resolve credentials from SecureCredentialsStorage during bootstrap',
@@ -146,8 +146,12 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    */
   override async setGeminiApiKey(key: string): Promise<void> {
     try {
-      await this.secureCredentialsStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, key);
-      this._geminiApiKey.set(key);
+      const trimmedKey = key.trim();
+      await this.secureCredentialsStorage.setCredential(
+        SecureCredentialsKey.GEMINI_API_KEY,
+        trimmedKey,
+      );
+      this._geminiApiKey.set(trimmedKey);
     } catch (err) {
       console.warn('Failed to persist Gemini API key to SecureCredentialsStorage', err);
       throw err;

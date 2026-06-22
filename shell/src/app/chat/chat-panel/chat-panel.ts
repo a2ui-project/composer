@@ -30,6 +30,9 @@ import {MatDialogModule, MatDialog} from '@angular/material/dialog';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 import {tryParseJsonArray} from '../../utils/json';
+import {RouterLink} from '@angular/router';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {RenderA2uiItem} from 'a2ui-bridge';
 
 /**
@@ -49,6 +52,7 @@ import {RenderA2uiItem} from 'a2ui-bridge';
     MatProgressSpinnerModule,
     MatIconModule,
     MatDialogModule,
+    RouterLink,
   ],
   templateUrl: './chat-panel.ng.html',
   styleUrl: './chat-panel.scss',
@@ -58,6 +62,8 @@ export class ChatPanel {
   private readonly chatState = inject(ChatState);
   private readonly dialog = inject(MatDialog);
   private readonly catalogManagement = inject(CatalogManagement);
+  private readonly startupResolution = inject(StartupResolution);
+  private readonly configProvider = inject(AppConfigProvider);
 
   /**
    * Reactively computed dynamic system prompt instructions spec viewport
@@ -67,6 +73,11 @@ export class ChatPanel {
   protected readonly isHandshakeComplete = computed(
     () => this.catalogManagement.activeCatalog() !== null,
   );
+  protected readonly isChatDisabled = computed(() => {
+    const is3P = this.startupResolution.isThirdPartyEnvironment();
+    const hasNoKey = !this.configProvider.geminiApiKey();
+    return is3P && hasNoKey;
+  });
 
   /**
    * Exposes the active streaming pipeline execution status point

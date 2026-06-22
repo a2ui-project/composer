@@ -184,12 +184,13 @@ describe('Settings', () => {
     expect(reloadSpy).toHaveBeenCalled();
   });
 
-  it('enforces apiKey requirement in 3P mode and rejects empty whitespace keys', async () => {
+  it('rejects empty whitespace keys in 3P mode but permits missing keys', async () => {
     mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
     const {component, harness} = await setupComponent();
 
     expect(component.isThirdParty()).toBe(true);
-    expect(component.settingsForm.controls.apiKey.errors?.['required']).toBeTruthy();
+    expect(component.settingsForm.controls.apiKey.errors?.['required']).toBeFalsy();
+    expect(component.settingsForm.valid).toBe(true);
 
     await harness.setRendererUrlValue('http://new-url.com');
     await harness.setGeminiApiKeyValue('   ');
@@ -305,9 +306,8 @@ describe('Settings', () => {
     fixture.detectChanges();
 
     const errors = await harness.getErrorsText();
-    expect(errors.length).toBe(2);
+    expect(errors.length).toBe(1);
     expect(errors[0]).toContain('Renderer URL is required');
-    expect(errors[1]).toContain('Gemini API key is required');
 
     await harness.setRendererUrlValue('invalid-url');
     await harness.setGeminiApiKeyValue('valid-key');

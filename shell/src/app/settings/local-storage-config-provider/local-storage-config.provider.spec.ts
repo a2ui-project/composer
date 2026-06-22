@@ -29,7 +29,8 @@ class MockSecureCredentialsStorage {
   private storage = new Map<string, string>();
 
   async getCredential(key: string): Promise<string | null> {
-    return Promise.resolve(this.storage.get(key) || null);
+    const val = this.storage.get(key);
+    return Promise.resolve(val !== undefined ? val : null);
   }
 
   async setCredential(key: string, value: string): Promise<void> {
@@ -103,6 +104,26 @@ describe('LocalStorageAppConfigProvider', () => {
     const provider = setupProvider();
     await provider.initialize();
     expect(provider.geminiApiKey()).toBe('test-key-xyz');
+  });
+
+  it('initializes geminiApiKey with a trimmed stored API key', async () => {
+    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, '  test-key-xyz  ');
+    const provider = setupProvider();
+    await provider.initialize();
+    expect(provider.geminiApiKey()).toBe('test-key-xyz');
+  });
+
+  it('initializes geminiApiKey with an empty string when stored API key is not present', async () => {
+    const provider = setupProvider();
+    await provider.initialize();
+    expect(provider.geminiApiKey()).toBe('');
+  });
+
+  it('initializes geminiApiKey with an empty string when stored API key is empty or whitespace', async () => {
+    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, '   ');
+    const provider = setupProvider();
+    await provider.initialize();
+    expect(provider.geminiApiKey()).toBe('');
   });
 
   it('initializes rendererUrl with stored renderer URL if present', () => {
@@ -192,6 +213,29 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBe(
       'fresh-token',
     );
+  });
+
+  it('trims the API key before persisting and updating signal', async () => {
+    const provider = setupProvider();
+    await provider.setGeminiApiKey('  fresh-token  ');
+    expect(provider.geminiApiKey()).toBe('fresh-token');
+    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBe(
+      'fresh-token',
+    );
+  });
+
+  it('handles empty string in setGeminiApiKey', async () => {
+    const provider = setupProvider();
+    await provider.setGeminiApiKey('');
+    expect(provider.geminiApiKey()).toBe('');
+    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBe('');
+  });
+
+  it('handles whitespace-only string in setGeminiApiKey by trimming to empty string', async () => {
+    const provider = setupProvider();
+    await provider.setGeminiApiKey('   ');
+    expect(provider.geminiApiKey()).toBe('');
+    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBe('');
   });
 
   it('persists updated theme selection to localStorage and updates signal', () => {

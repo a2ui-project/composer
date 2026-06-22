@@ -161,9 +161,9 @@ describe('StartupResolution Task 2.6', () => {
 
     vi.spyOn(service, 'getWindowHostname').mockReturnValue('localhost');
 
-    // Scenario 1: URL resolved, but 3P missing API key -> invalid
+    // Scenario 1: URL resolved, and 3P missing API key -> valid
     await service.resolveStartupConfiguration();
-    expect(await service.isEnvironmentValid()).toBe(false);
+    expect(await service.isEnvironmentValid()).toBe(true);
 
     // Scenario 2: URL resolved, and 3P has API key -> valid
     mockConfigProvider.geminiApiKey.set('AIzaSyValidKey');

@@ -52,7 +52,8 @@ test.describe('E2E Workspace User Journey', () => {
       name: 'Force External Third-Party Authentication Mode',
     });
     await force3pSwitch.click();
-    await page.waitForURL('**/settings');
+    await page.waitForURL(url => url.pathname === '/');
+    await page.goto('/settings');
 
     const isForce3p = await page.evaluate(() => localStorage.getItem('a2ui_composer_force_3p'));
     expect(isForce3p).toBe('true');
@@ -68,6 +69,7 @@ test.describe('E2E Workspace User Journey', () => {
     );
     expect(isForce3pAfter).toBeNull();
 
+    await page.goto('/settings');
     await expect(page.getByText('Gemini API Provisioning')).not.toBeVisible();
 
     // 6. Switch back to Workspace

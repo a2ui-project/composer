@@ -19,7 +19,7 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ChatPanel} from './chat-panel';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ChatPanelHarness} from './test/chat-panel.harness';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {ChatCoordinator} from '../chat-service/chat-coordinator';
 import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {signal, inject} from '@angular/core';
@@ -27,8 +27,11 @@ import {LlmMessage} from '../llm-client/llm-client';
 import {MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
+import {provideRouter} from '@angular/router';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {MatDialogHarness} from '@angular/material/dialog/testing';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {MatInputHarness} from '@angular/material/input/testing';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 
@@ -87,21 +90,37 @@ class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>({}); // non-null by default
 }
 
+class MockStartupResolution {
+  is3PVal = false;
+  isThirdPartyEnvironment() {
+    return this.is3PVal;
+  }
+}
+
+class MockAppConfigProvider {
+  geminiApiKey = signal<string>('AIzaSyValidKey');
+}
+
 describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   let fixture: ComponentFixture<ChatPanel>;
   let harness: ChatPanelHarness;
   let chatServiceMock: MockChatCoordinator;
   let chatStateMock: MockChatState;
   let catalogManagementServiceMock: MockCatalogManagement;
+  let startupResolutionMock: MockStartupResolution;
+  let configProviderMock: MockAppConfigProvider;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ChatPanel],
       providers: [
         provideNoopAnimations(),
+        provideRouter([]),
         {provide: ChatCoordinator, useClass: MockChatCoordinator},
         {provide: ChatState, useClass: MockChatState},
         {provide: CatalogManagement, useClass: MockCatalogManagement},
+        {provide: StartupResolution, useClass: MockStartupResolution},
+        {provide: AppConfigProvider, useClass: MockAppConfigProvider},
       ],
     }).compileComponents();
 
@@ -110,9 +129,17 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     catalogManagementServiceMock = TestBed.inject(
       CatalogManagement,
     ) as unknown as MockCatalogManagement;
+    startupResolutionMock = TestBed.inject(StartupResolution) as unknown as MockStartupResolution;
+    configProviderMock = TestBed.inject(AppConfigProvider) as unknown as MockAppConfigProvider;
     fixture = TestBed.createComponent(ChatPanel);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ChatPanelHarness);
+  });
+
+  afterEach(() => {
+    if (fixture) {
+      fixture.destroy();
+    }
   });
 
   it(
@@ -420,5 +447,33 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
+  });
+
+  it('disables the chat panel when in a 3P environment and the API key is empty', async () => {
+    startupResolutionMock.is3PVal = true;
+    configProviderMock.geminiApiKey.set('');
+    fixture.detectChanges();
+
+    expect(await harness.isDisabled()).toBe(true);
+    expect(await harness.getDisabledNoticeText()).toContain(
+      'This feature is only available with a valid Gemini API key.',
+    );
+    expect(await harness.hasAddKeyButton()).toBe(true);
+  });
+
+  it('keeps the chat panel active in 1P environment even if API key is empty', async () => {
+    startupResolutionMock.is3PVal = false;
+    configProviderMock.geminiApiKey.set('');
+    fixture.detectChanges();
+
+    expect(await harness.isDisabled()).toBe(false);
+  });
+
+  it('keeps the chat panel active in 3P environment if API key is supplied', async () => {
+    startupResolutionMock.is3PVal = true;
+    configProviderMock.geminiApiKey.set('AIzaSyValidKey');
+    fixture.detectChanges();
+
+    expect(await harness.isDisabled()).toBe(false);
   });
 });
