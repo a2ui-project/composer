@@ -14,8 +14,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@a2ui/react": "0.10.0",
-    "@a2ui/web_core": "0.10.0",
+    "@a2ui/react": "0.10.1",
+    "@a2ui/web_core": "0.10.2",
     "a2ui-bridge": "0.1.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
@@ -27,9 +27,9 @@
     "@vitejs/plugin-react": "6.0.2",
     "eslint": "10.5.0",
     "jsdom": "29.1.1",
-    "prettier": "3.8.3",
+    "prettier": "3.8.4",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.61.0",
+    "typescript-eslint": "8.61.1",
     "vite": "8.0.16",
     "vitest": "4.1.8"
   }

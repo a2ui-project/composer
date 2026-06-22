@@ -17,7 +17,7 @@
     "lint": "yarn workspaces foreach -A run lint"
   },
   "resolutions": {
-    "@a2ui/web_core": "0.10.0",
+    "@a2ui/web_core": "0.10.2",
     "@google/genai": "2.8.0"
   },
   "packageManager": "yarn@4.5.0",
