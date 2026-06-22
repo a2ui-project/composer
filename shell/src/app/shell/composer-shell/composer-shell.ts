@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, computed, effect, inject, signal} from '@angular/core';
+import {Component, computed, effect, inject} from '@angular/core';
 import {MatToolbarModule} from '@angular/material/toolbar';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatButtonModule} from '@angular/material/button';
@@ -73,8 +72,6 @@ export class ComposerShell {
       }
     });
   }
-
-  showComponentsGallery = signal(false);
 
   /**
    * Switches between light and dark visual design system palettes.
