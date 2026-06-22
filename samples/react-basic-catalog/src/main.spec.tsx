@@ -260,8 +260,8 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
-    // Verify fetch was triggered on standard path '/catalog'
-    expect(fetchSpy).toHaveBeenCalledWith('/catalog', expect.any(Object));
+    // Verify fetch was triggered on standard path 'catalog'
+    expect(fetchSpy).toHaveBeenCalledWith('catalog', expect.any(Object));
 
     // Verify bridge posted back A2UI_CATALOG with resolved payload
     expect(postSpy).toHaveBeenCalledWith(

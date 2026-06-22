@@ -5876,6 +5876,7 @@ __metadata:
     angular-eslint: "npm:22.0.0"
     eslint: "npm:10.5.0"
     jsdom: "npm:29.1.1"
+    ng-basic-catalog: "npm:0.1.0"
     prettier: "npm:3.8.4"
     rxjs: "npm:7.8.2"
     safevalues: "npm:1.2.0"
@@ -9922,7 +9923,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ng-basic-catalog@workspace:samples/ng-basic-catalog":
+"ng-basic-catalog@npm:0.1.0, ng-basic-catalog@workspace:samples/ng-basic-catalog":
   version: 0.0.0-use.local
   resolution: "ng-basic-catalog@workspace:samples/ng-basic-catalog"
   dependencies:

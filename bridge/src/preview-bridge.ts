@@ -664,7 +664,7 @@ export class PreviewBridge {
 
     if (typeof window === 'undefined' || !window.fetch) return null;
 
-    let res = await this.fetchWithTimeout('/catalog');
+    let res = await this.fetchWithTimeout('catalog');
     if (!res.ok) {
       throw new Error(`Catalog fetch failed with status: ${res.status}`);
     }
@@ -674,10 +674,10 @@ export class PreviewBridge {
     const trimmedLower = rawText.trim().toLowerCase();
     const isHtml = trimmedLower.startsWith('<!doctype') || trimmedLower.startsWith('<html');
     if (isHtml) {
-      const fallbackRes = await this.fetchWithTimeout('/catalog.json');
+      const fallbackRes = await this.fetchWithTimeout('catalog.json');
       if (!fallbackRes.ok) {
         throw new Error(
-          `Catalog fetch returned HTML and fallback to /catalog.json failed with status: ${fallbackRes.status}`,
+          `Catalog fetch returned HTML and fallback to catalog.json failed with status: ${fallbackRes.status}`,
         );
       }
       const fallbackText = await fallbackRes.text();
@@ -687,7 +687,7 @@ export class PreviewBridge {
         fallbackTrimmedLower.startsWith('<html')
       ) {
         throw new Error(
-          'Catalog fetch returned HTML (SPA fallback) for both /catalog and /catalog.json. Ensure the catalog JSON is correctly hosted and served.',
+          'Catalog fetch returned HTML (SPA fallback) for both catalog and catalog.json. Ensure the catalog JSON is correctly hosted and served.',
         );
       }
       res = fallbackRes;

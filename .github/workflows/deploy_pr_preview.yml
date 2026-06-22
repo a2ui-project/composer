@@ -58,8 +58,8 @@ jobs:
         env:
           PR_NUM: ${{ github.event.pull_request.number }}
         run: |
-          yarn workspace a2ui-composer-shell run build --base-href=/composer/pr/${PR_NUM}/
           yarn workspace ng-basic-catalog run build --base-href=/composer/pr/${PR_NUM}/samples/ng-basic-catalog/
+          yarn workspace a2ui-composer-shell run build --base-href=/composer/pr/${PR_NUM}/
           yarn workspace lit-basic-catalog run build --base=/composer/pr/${PR_NUM}/samples/lit-basic-catalog/
           yarn workspace react-basic-catalog run build --base=/composer/pr/${PR_NUM}/samples/react-basic-catalog/
 

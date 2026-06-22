@@ -64,4 +64,20 @@ describe('QueryParser', () => {
       expect.stringContaining('Security Violation: Prohibited credentials'),
     );
   });
+
+  it('resolves relative renderer paths starting with "/" against window.location.origin', () => {
+    // Under Vitest/jsdom, location.origin defaults to http://localhost:3000 or similar.
+    const expectedPrefix = globalThis.location?.origin || 'http://localhost';
+    const url = QueryParser.parseRendererUrl('?renderer=/samples/ng-basic-catalog/index.html');
+    expect(url).toBe(`${expectedPrefix}/samples/ng-basic-catalog/index.html`);
+  });
+
+  it('rejects relative renderer paths that do not start with "/"', () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const url = QueryParser.parseRendererUrl('?renderer=samples/ng-basic-catalog/index.html');
+    expect(url).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Malformed renderer parameter string encountered'),
+    );
+  });
 });

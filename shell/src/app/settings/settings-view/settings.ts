@@ -78,8 +78,12 @@ export class Settings implements OnInit {
     this.catalogManagement.catalogError(),
   );
 
+  // Matches either absolute HTTP/HTTPS URLs (starting with http:// or https://)
+  // or relative paths starting with '/'.
+  // Note that the `\/(?!/)` means Match a forward slash (\/), but only if it is
+  // not immediately followed by another forward slash ((?!/))".
   readonly settingsForm = this.fb.group({
-    rendererUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/i)]],
+    rendererUrl: ['', [Validators.required, Validators.pattern(/^(https?:\/\/|\/(?!\/)).+/i)]],
     apiKey: [''],
   });
 

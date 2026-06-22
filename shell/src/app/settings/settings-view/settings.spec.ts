@@ -316,7 +316,9 @@ describe('Settings', () => {
 
     const patternErrors = await harness.getErrorsText();
     expect(patternErrors.length).toBe(1);
-    expect(patternErrors[0]).toContain('Must be a valid HTTP or HTTPS URL');
+    expect(patternErrors[0]).toContain(
+      'Must be a valid HTTP/HTTPS URL or relative path starting with "/"',
+    );
   });
 
   class FakeAppConfigProvider extends AppConfigProvider {
@@ -416,6 +418,11 @@ describe('Settings', () => {
     );
 
     expect(await harness.isSlideToggleDisabled()).toBe(true);
+
+    const initialForcedAuth = component.forceThirdPartyAuth();
+    component.toggleForceThirdPartyAuth();
+    expect(component.forceThirdPartyAuth()).toBe(initialForcedAuth);
+    expect(mockConfigProvider.setForcedAuthMode).not.toHaveBeenCalled();
   });
 
   it('reloads the application at the dynamic base path when hosted under a dynamic base href', async () => {
@@ -446,5 +453,42 @@ describe('Settings', () => {
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
+  });
+
+  it.for(['/samples/ng-basic-catalog/index.html', '/renderer'])(
+    'accepts relative paths starting with "/"',
+    async relativeUrl => {
+      const {fixture, component, harness} = await setupComponent();
+
+      await harness.setRendererUrlValue(relativeUrl);
+      fixture.detectChanges();
+      expect(component.settingsForm.controls.rendererUrl.valid).toBe(true);
+    },
+  );
+
+  it.for([
+    'samples/ng-basic-catalog/index.html',
+    'renderer',
+    '//renderer',
+    '//example.com/foo/bar',
+  ])('rejects other relative paths', async relativeUrl => {
+    const {fixture, component, harness} = await setupComponent();
+
+    await harness.setRendererUrlValue(relativeUrl);
+    fixture.detectChanges();
+    expect(component.settingsForm.controls.rendererUrl.valid).toBe(false);
+    expect(component.settingsForm.controls.rendererUrl.errors?.['pattern']).toBeTruthy();
+  });
+
+  it('saves settings with valid relative rendererUrl', async () => {
+    const {component, harness} = await setupComponent();
+
+    await harness.setRendererUrlValue('/samples/ng-basic-catalog/index.html');
+    await component.saveSettings();
+
+    expect(component.settingsForm.valid).toBe(true);
+    expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith(
+      '/samples/ng-basic-catalog/index.html',
+    );
   });
 });

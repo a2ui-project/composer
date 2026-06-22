@@ -42,9 +42,12 @@ export class QueryParser {
       return null;
     }
 
+    const baseOrigin = globalThis.location?.origin || '';
     for (const uriCandidate of renderers) {
       try {
-        const validUrl = new URL(uriCandidate);
+        const validUrl = uriCandidate.startsWith('/')
+          ? new URL(uriCandidate, baseOrigin)
+          : new URL(uriCandidate);
         if (validUrl.protocol === 'http:' || validUrl.protocol === 'https:') {
           // 2. Prohibit keys embedded inside the inner renderer target string
           for (const innerKey of validUrl.searchParams.keys()) {

@@ -39,7 +39,9 @@
               <mat-error>Renderer URL is required.</mat-error>
             }
             @if (settingsForm.controls.rendererUrl.hasError('pattern')) {
-              <mat-error>Must be a valid HTTP or HTTPS URL.</mat-error>
+              <mat-error>
+                Must be a valid HTTP/HTTPS URL or relative path starting with "/".
+              </mat-error>
             }
           </mat-form-field>
         </div>

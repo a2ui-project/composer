@@ -202,7 +202,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    expect(window.fetch).toHaveBeenCalledWith('/catalog', expect.any(Object));
+    expect(window.fetch).toHaveBeenCalledWith('catalog', expect.any(Object));
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -236,8 +236,8 @@ describe('PreviewBridge Core API Runtime', () => {
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog', expect.any(Object));
-    expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(1, 'catalog', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(2, 'catalog.json', expect.any(Object));
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -270,15 +270,15 @@ describe('PreviewBridge Core API Runtime', () => {
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog', expect.any(Object));
-    expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(1, 'catalog', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(2, 'catalog.json', expect.any(Object));
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: {
           error: {
             message:
-              'Catalog fetch returned HTML (SPA fallback) for both /catalog and /catalog.json. Ensure the catalog JSON is correctly hosted and served.',
+              'Catalog fetch returned HTML (SPA fallback) for both catalog and catalog.json. Ensure the catalog JSON is correctly hosted and served.',
           },
         },
       },
@@ -310,8 +310,8 @@ describe('PreviewBridge Core API Runtime', () => {
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog', expect.any(Object));
-    expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(1, 'catalog', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(2, 'catalog.json', expect.any(Object));
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -502,7 +502,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    expect(window.fetch).toHaveBeenCalledWith('/catalog', expect.any(Object));
+    expect(window.fetch).toHaveBeenCalledWith('catalog', expect.any(Object));
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -536,8 +536,8 @@ describe('PreviewBridge Core API Runtime', () => {
 
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog', expect.any(Object));
-    expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(1, 'catalog', expect.any(Object));
+    expect(window.fetch).toHaveBeenNthCalledWith(2, 'catalog.json', expect.any(Object));
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -1443,15 +1443,15 @@ describe('PreviewBridge Core API Runtime', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      expect(window.fetch).toHaveBeenNthCalledWith(1, '/catalog', expect.any(Object));
-      expect(window.fetch).toHaveBeenNthCalledWith(2, '/catalog.json', expect.any(Object));
+      expect(window.fetch).toHaveBeenNthCalledWith(1, 'catalog', expect.any(Object));
+      expect(window.fetch).toHaveBeenNthCalledWith(2, 'catalog.json', expect.any(Object));
       expect(spy).toHaveBeenCalledWith(
         {
           type: PreviewBridgeMessageType.A2UI_CATALOG,
           payload: {
             error: {
               message:
-                'Catalog fetch returned HTML and fallback to /catalog.json failed with status: 404',
+                'Catalog fetch returned HTML and fallback to catalog.json failed with status: 404',
             },
           },
         },
@@ -1532,7 +1532,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      expect(window.fetch).toHaveBeenCalledWith('/catalog', expect.any(Object));
+      expect(window.fetch).toHaveBeenCalledWith('catalog', expect.any(Object));
       expect(spy).toHaveBeenCalledWith(
         {
           type: PreviewBridgeMessageType.A2UI_CATALOG,

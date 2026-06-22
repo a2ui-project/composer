@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, DestroyRef} from '@angular/core';
+import {Injectable, inject, signal, DestroyRef, untracked, effect} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {debounceTime, distinctUntilChanged, skip} from 'rxjs/operators';
 import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {tryParseJsonArray} from '../../utils/json';
 import {RenderA2uiItem, A2uiComponentInstance, UpdateComponentsDetails} from 'a2ui-bridge';
 
@@ -46,8 +47,20 @@ const MOCK_RULES_CONTAINER = 'mock_rules_container';
 export class StateSync {
   private readonly destroyRef = inject(DestroyRef);
   private readonly chatState = inject(ChatState);
+  private readonly catalogManagement = inject(CatalogManagement);
 
-  private readonly _activeDraft = signal<string>(CAR_BOOKING);
+  // A "draft" represents the volatile, unsaved in-memory JSON Lines
+  // payload containing the active surface setup, component hierarchy,
+  // and data models currently rendered on the preview canvas.
+  //
+  // We maintain separate signals for `_activeDraft` and `_draftInput`
+  // to prevent feedback loops when syncing with LLM chat history:
+  // - `_activeDraft` is the source of truth for active editor/preview
+  //   UI bindings, updating instantly.
+  // - `_draftInput` is an event trigger used to debounce and sync
+  //   user edits back to the history. LLM-initiated edits update
+  //   `_activeDraft` directly, bypassing history sync.
+  private readonly _activeDraft = signal<string>('');
   /**
    * Volatile, read-only reactive Signal exposing the currently buffered
    * in-memory canvas layout string.
@@ -57,6 +70,20 @@ export class StateSync {
   private readonly _draftInput = signal<string>('');
 
   constructor() {
+    effect(() => {
+      const catalog = this.catalogManagement.activeCatalog();
+      if (catalog) {
+        const catalogId = catalog.catalogId || '';
+        untracked(() => {
+          const currentDraft = this._activeDraft();
+          const draftCatalogId = this.getCatalogIdFromDraft(currentDraft);
+          if (currentDraft === '' || draftCatalogId !== catalogId) {
+            this._activeDraft.set(this.getInitialDraft(catalogId));
+          }
+        });
+      }
+    });
+
     toObservable(this._draftInput)
       .pipe(skip(1), debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
       .subscribe((val: string) => {
@@ -94,7 +121,63 @@ export class StateSync {
    * memory to default.
    */
   flushDraft(): void {
-    this._activeDraft.set(CAR_BOOKING);
+    const catalog = this.catalogManagement.activeCatalog();
+    const catalogId = catalog?.catalogId || '';
+    this._activeDraft.set(this.getInitialDraft(catalogId));
+  }
+
+  private getInitialDraft(catalogId: string): string {
+    if (catalogId === 'https://a2ui.org/specification/v0_9/basic_catalog.json') {
+      return CAR_BOOKING;
+    }
+    if (!catalogId) {
+      return '';
+    }
+    const draftObj = {
+      version: 'v0.9',
+      createSurface: {
+        surfaceId: 'sample-surface',
+        catalogId,
+        sendDataModel: true,
+      },
+    };
+    return JSON.stringify(draftObj) + '\n';
+  }
+
+  private getCatalogIdFromDraft(draft: string): string | null {
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item?.createSurface?.catalogId) {
+            return item.createSurface.catalogId;
+          }
+        }
+      } else if (parsed?.createSurface?.catalogId) {
+        return parsed.createSurface.catalogId;
+      }
+    } catch (e) {
+      // Might be JSON Lines
+    }
+
+    const lines = trimmed.split('\n');
+    for (const line of lines) {
+      const lineTrimmed = line.trim();
+      if (!lineTrimmed) continue;
+      try {
+        const parsed = JSON.parse(lineTrimmed);
+        if (parsed?.createSurface?.catalogId) {
+          return parsed.createSurface.catalogId;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    return null;
   }
 
   /**

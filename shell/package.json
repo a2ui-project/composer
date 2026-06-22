@@ -2,9 +2,12 @@
   "name": "a2ui-composer-shell",
   "version": "0.1.0",
   "private": true,
+  "installConfig": {
+    "hoistingLimits": "workspaces"
+  },
   "type": "module",
   "scripts": {
-    "start": "ng serve",
+    "start": "yarn workspace ng-basic-catalog build && ng serve",
     "build": "yarn lint && ng build",
     "test": "vitest run --coverage",
     "e2e": "playwright test",
@@ -42,6 +45,7 @@
     "angular-eslint": "22.0.0",
     "eslint": "10.5.0",
     "jsdom": "29.1.1",
+    "ng-basic-catalog": "0.1.0",
     "prettier": "3.8.4",
     "typescript": "6.0.3",
     "typescript-eslint": "8.61.1",

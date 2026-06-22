@@ -21,6 +21,9 @@ import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {LlmMessage} from '../llm-client/llm-client';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {Catalog} from '../../storage/models/catalog-storage.model';
+import {signal} from '@angular/core';
 
 class MockChatState {
   private readonly _chatHistory: LlmMessage[] = [];
@@ -53,20 +56,35 @@ class MockChatState {
   });
 }
 
+class MockCatalogManagement {
+  readonly activeCatalog = signal<Catalog | null>(null);
+}
+
 describe('StateSync Autosave Draft Integrations', () => {
   let service: StateSync;
   let chatStateMock: MockChatState;
+  let catalogManagementMock: MockCatalogManagement;
 
   beforeEach(() => {
     TestBed.resetTestingModule();
     vi.useFakeTimers();
 
     TestBed.configureTestingModule({
-      providers: [StateSync, {provide: ChatState, useClass: MockChatState}],
+      providers: [
+        StateSync,
+        {provide: ChatState, useClass: MockChatState},
+        {provide: CatalogManagement, useClass: MockCatalogManagement},
+      ],
     });
 
     service = TestBed.inject(StateSync);
     chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
+    catalogManagementMock = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
+
+    // Initialize catalog mock with the basic catalog ID
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+    });
 
     // Eagerly flush Angular change detection effect bindings instantly upon
     // setup to prevent microtask leaks
@@ -446,6 +464,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(syncedContent).toContain('"updateComponents"');
       expect(syncedContent).toContain('"primitive-element"');
     });
+
     it('returns empty string when all layout lines are sanitized to null', () => {
       service.updateDraft('{"registerMockRules": true}');
       TestBed.flushEffects();
@@ -471,6 +490,183 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncedContent = syncCall[0].content;
 
       expect(syncedContent).toContain('"components":"not-an-array"');
+    });
+  });
+
+  describe('Dynamic Initial Draft Pre-population', () => {
+    it('pre-populates with generic draft instead of CAR_BOOKING if catalog does not support basic catalog', () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          StateSync,
+          {provide: ChatState, useClass: MockChatState},
+          {provide: CatalogManagement, useClass: MockCatalogManagement},
+        ],
+      });
+      const newCatalogMock = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
+      newCatalogMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      const newService = TestBed.inject(StateSync);
+      TestBed.flushEffects();
+
+      expect(newService.activeDraft()).toContain('material_catalog.json');
+      expect(newService.activeDraft()).not.toContain('Book a Car');
+    });
+
+    it('resets to appropriate dynamic initial draft on flushDraft', () => {
+      // Switch activeCatalog to material_catalog
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      TestBed.flushEffects();
+
+      service.updateDraft('{"version": "dirty"}');
+      expect(service.activeDraft()).toBe('{"version": "dirty"}');
+
+      service.flushDraft();
+      expect(service.activeDraft()).toContain('material_catalog.json');
+      expect(service.activeDraft()).not.toContain('Book a Car');
+    });
+
+    it('resets activeDraft dynamically when catalogId changes and draft is incompatible', () => {
+      // Start with basic catalog
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      });
+      TestBed.flushEffects();
+      expect(service.activeDraft()).toBe(CAR_BOOKING);
+
+      // User has typed some layout (dirty) matching basic catalog
+      service.updateDraft(
+        '{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json", "sendDataModel": true}}\n{"version": "v0.9", "updateComponents": {"components": []}}',
+      );
+      TestBed.flushEffects();
+
+      // Catalog changes to material
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      TestBed.flushEffects();
+
+      // Expect draft to be reset to material initial draft because the old draft was basic catalog
+      expect(service.activeDraft()).toContain('material_catalog.json');
+      expect(service.activeDraft()).not.toContain('basic_catalog.json');
+    });
+
+    it('does not reset activeDraft if catalogId changes but draft already matches it', () => {
+      // Start with material catalog
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      TestBed.flushEffects();
+      const materialInitialDraft = service.activeDraft();
+      expect(materialInitialDraft).toContain('material_catalog.json');
+
+      // User makes a change (dirty layout) but still on material catalog
+      const editedMaterialDraft =
+        materialInitialDraft +
+        '{"version": "v0.9", "updateComponents": {"components": [{"id": "foo"}]}}';
+      service.updateDraft(editedMaterialDraft);
+      TestBed.flushEffects();
+
+      // Trigger a catalog change with the same catalog ID (e.g. metadata refresh)
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+        title: 'New Title', // different title, same catalogId
+      });
+      TestBed.flushEffects();
+
+      // Expect draft NOT to be reset, preserving user changes
+      expect(service.activeDraft()).toBe(editedMaterialDraft);
+    });
+
+    it('does not reset activeDraft if catalogId changes and draft is a matching single JSON object', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      TestBed.flushEffects();
+
+      const singleObjectDraft =
+        '{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json", "sendDataModel": true}}';
+      service.updateDraft(singleObjectDraft);
+      TestBed.flushEffects();
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+        title: 'New Title',
+      });
+      TestBed.flushEffects();
+
+      expect(service.activeDraft()).toBe(singleObjectDraft);
+    });
+
+    it('does not reset activeDraft if catalogId changes and draft is a matching JSON array', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      TestBed.flushEffects();
+
+      const arrayDraft =
+        '[{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json", "sendDataModel": true}}]';
+      service.updateDraft(arrayDraft);
+      TestBed.flushEffects();
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+        title: 'New Title',
+      });
+      TestBed.flushEffects();
+
+      expect(service.activeDraft()).toBe(arrayDraft);
+    });
+
+    it('resets activeDraft if catalogId changes and draft has no catalogId', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      TestBed.flushEffects();
+
+      service.updateDraft('{"version": "v0.9", "updateComponents": {"components": []}}');
+      TestBed.flushEffects();
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+        title: 'New Title',
+      });
+      TestBed.flushEffects();
+
+      expect(service.activeDraft()).toContain('material_catalog.json');
+      expect(service.activeDraft()).not.toContain('updateComponents');
+    });
+
+    it('resets activeDraft if catalogId changes and draft is whitespace', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      TestBed.flushEffects();
+
+      service.updateDraft('   ');
+      TestBed.flushEffects();
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+        title: 'New Title',
+      });
+      TestBed.flushEffects();
+
+      expect(service.activeDraft()).toContain('material_catalog.json');
+    });
+
+    it('sets activeDraft to empty string on flushDraft if activeCatalog has no catalogId', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: '',
+      });
+      TestBed.flushEffects();
+      service.updateDraft('{"version": "dirty"}');
+
+      service.flushDraft();
+      expect(service.activeDraft()).toBe('');
     });
   });
 });

@@ -21,9 +21,19 @@
             "polyfills": [],
             "tsConfig": "tsconfig.json",
             "inlineStyleLanguage": "scss",
-            "assets": ["src/favicon.svg", "src/assets", "src/config.json"],
+            "assets": [
+              "src/favicon.svg",
+              "src/assets",
+              "src/config.json",
+              {
+                "glob": "**/*",
+                "input": "node_modules/ng-basic-catalog/dist/ng-basic-catalog/browser",
+                "output": "samples/ng-basic-catalog"
+              }
+            ],
             "styles": ["@angular/material/prebuilt-themes/indigo-pink.css", "src/styles.scss"],
-            "scripts": []
+            "scripts": [],
+            "preserveSymlinks": true
           },
           "configurations": {
             "production": {

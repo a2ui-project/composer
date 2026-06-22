@@ -9,12 +9,12 @@
     "bridge"
   ],
   "scripts": {
-    "test": "yarn workspaces foreach -A run test",
-    "build": "yarn workspaces foreach -A run build",
-    "prettier": "yarn workspaces foreach -A run prettier",
+    "test": "yarn workspaces foreach -A --exclude a2ui-composer-root run test",
+    "build": "yarn workspaces foreach -A --topological-dev --exclude a2ui-composer-root run build",
+    "prettier": "yarn workspaces foreach -A --exclude a2ui-composer-root run prettier",
     "tsc": "yarn --cwd shell tsc --noEmit && yarn --cwd bridge tsc --project tsconfig.bridge.json --noEmit",
-    "clean": "yarn workspaces foreach -A run clean",
-    "lint": "yarn workspaces foreach -A run lint"
+    "clean": "yarn workspaces foreach -A --exclude a2ui-composer-root run clean",
+    "lint": "yarn workspaces foreach -A --exclude a2ui-composer-root run lint"
   },
   "resolutions": {
     "@a2ui/web_core": "0.10.2",

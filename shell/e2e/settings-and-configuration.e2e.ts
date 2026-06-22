@@ -60,6 +60,22 @@ test.describe('Settings and Client Configuration', () => {
       await page.goto('/');
       await expect(page.locator('.workspace-container')).toBeVisible();
     });
+
+    test('persists configuration successfully with default relative renderer URL and loads workspace with pre-populated draft', async ({
+      page,
+    }) => {
+      const apiKeyInput = page.getByLabel('Gemini API Key');
+      await apiKeyInput.fill('test-api-key');
+
+      const saveBtn = page.getByRole('button', {name: 'Save Settings'});
+      await Promise.all([page.waitForURL(url => url.pathname === '/'), saveBtn.click()]);
+      await page.waitForLoadState('load');
+
+      await expect(page.locator('.workspace-container')).toBeVisible();
+
+      const iframe = page.frameLocator('iframe.preview-iframe');
+      await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+    });
   });
 
   test.describe('Enterprise & Environment Constraints', () => {
