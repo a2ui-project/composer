@@ -46,3 +46,6 @@ jobs:
 
       - name: Test
         run: yarn test
+
+      - name: e2e tests
+        run: yarn --cwd shell e2e-headless
