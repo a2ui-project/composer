@@ -1,0 +1,1 @@
+import {H as HI,ap as Sc,t as tD,aq as xc}from'./main.js';var r=class l{static \u0275fac=function(e){return new(e||l)};static \u0275cmp=HI({type:l,selectors:[["a2ui-composer-gallery"]],decls:2,vars:0,consts:[[1,"gallery-placeholder"]],template:function(e,i){e&1&&(Sc(0,"div",0),tD(1,"Components Gallery Placeholder"),xc());},encapsulation:2})};export{r as Gallery};
