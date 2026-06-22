@@ -20,6 +20,7 @@ import angular from '@analogjs/vite-plugin-angular';
 export default defineConfig({
   plugins: [angular({jit: true, tsconfig: './tsconfig.spec.json'})],
   test: {
+    pool: 'threads',
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.spec.ts'],
