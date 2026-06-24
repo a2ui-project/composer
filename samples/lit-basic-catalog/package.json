@@ -14,9 +14,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@a2ui/lit": "0.10.0",
+    "@a2ui/lit": "0.10.1",
     "@a2ui/markdown-it": "0.0.4",
-    "@a2ui/web_core": "0.10.0",
+    "@a2ui/web_core": "0.10.2",
     "@lit-labs/signals": "0.3.0",
     "@lit/context": "1.1.6",
     "a2ui-bridge": "0.1.0",
@@ -26,9 +26,9 @@
   "devDependencies": {
     "eslint": "10.5.0",
     "jsdom": "29.1.1",
-    "prettier": "3.8.3",
+    "prettier": "3.8.4",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.61.0",
+    "typescript-eslint": "8.61.1",
     "vite": "8.0.16",
     "vitest": "4.1.8"
   }
