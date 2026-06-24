@@ -1,4 +1,4 @@
 {
-  "defaultRendererUrl": "http://localhost:3000",
+  "defaultRendererUrl": "/samples/ng-basic-catalog/index.html",
   "allowOverrides": true
 }

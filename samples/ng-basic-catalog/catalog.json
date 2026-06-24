@@ -3,7 +3,7 @@
   "$id": "my_basic_catalog.json",
   "title": "my_basic_catalog A2UI Catalog",
   "description": "my_basic_catalog A2UI catalog, including catalog.",
-  "catalogId": "urn:a2ui:catalog:my_basic_catalog",
+  "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json",
   "components": {
     "Text": {
       "type": "object",
