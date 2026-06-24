@@ -53,6 +53,12 @@ export class StartupResolution {
     try {
       const response = await fetch('config.json', {signal: controller.signal});
       if (response.ok) {
+        // Although we *expect* JSON, it's possible that the response includes
+        // a JSON Vulnerability Protection prefixes (often referred to as an
+        // XSSI - Cross-Site Script Inclusion prefix).
+        // To prevent attacks, Google APIs and frameworks (like Angular) prefix
+        // JSON payloads with a non-executable, syntactically invalid JavaScript
+        // prefix—most commonly )]}' followed by a newline.
         const text = await response.text();
         const cleanText = text.replace(/^\)]}'\s*/, '');
         staticConfig = JSON.parse(cleanText);
