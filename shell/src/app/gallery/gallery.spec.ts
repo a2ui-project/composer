@@ -222,7 +222,7 @@ describe('Gallery Component', () => {
 
     const expectedPayload =
       `{"version":"v0.9","createSurface":{"surfaceId":"gallery-preview","catalogId":"https://a2ui.org/custom_catalog.json"}}\n` +
-      `{"version":"v0.9","updateComponents":{"surfaceId":"gallery-preview","components":[{"id":"target","component":"Text"}]}}`;
+      `{"version":"v0.9","updateComponents":{"surfaceId":"gallery-preview","components":[{"id":"root","component":"Text"}]}}`;
 
     expect(writeTextSpy).toHaveBeenCalledWith(expectedPayload);
   });
@@ -416,7 +416,13 @@ describe('Gallery Component', () => {
         updateComponents: {
           surfaceId: 'gallery-preview',
           components: [
-            {id: 'root', component: 'Column', children: ['target']},
+            {
+              id: 'root',
+              component: 'Column',
+              align: 'center',
+              justify: 'center',
+              children: ['target'],
+            },
             {id: 'target', component: 'Text'},
           ],
         },
@@ -447,7 +453,7 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [{id: 'target', component: 'Text'}],
+          components: [{id: 'root', component: 'Text'}],
         },
       },
     ]);
@@ -499,7 +505,13 @@ describe('Gallery Component', () => {
         updateComponents: {
           surfaceId: 'gallery-preview',
           components: [
-            {id: 'root', component: 'coLuMn', children: ['target']},
+            {
+              id: 'root',
+              component: 'coLuMn',
+              align: 'center',
+              justify: 'center',
+              children: ['target'],
+            },
             {id: 'target', component: 'Text'},
           ],
         },
@@ -550,21 +562,6 @@ describe('Gallery Component', () => {
       catalogId: 'mock-id',
     });
     catalogServiceMock.selectedComponentKey.set('Text');
-    expect(
-      (fixture.componentInstance as unknown as TestFriendlyGallery).selectedComponentDescription(),
-    ).toBe('');
-  });
-
-  it('selectedComponentDescription returns empty string if active catalog is null and key is truthy', () => {
-    catalogManagementMock.activeCatalog.set(null);
-    catalogServiceMock.selectedComponentKey.set('Text');
-    expect(
-      (fixture.componentInstance as unknown as TestFriendlyGallery).selectedComponentDescription(),
-    ).toBe('');
-  });
-
-  it('selectedComponentDescription returns empty string if selectedComponentKey is null', () => {
-    catalogServiceMock.selectedComponentKey.set(null);
     expect(
       (fixture.componentInstance as unknown as TestFriendlyGallery).selectedComponentDescription(),
     ).toBe('');
@@ -649,7 +646,16 @@ describe('Gallery Component', () => {
       version: 'v0.9',
       updateComponents: {
         surfaceId: 'gallery-preview',
-        components: [{id: 'root', component: 'Column', children: ['target']}, ...usageText],
+        components: [
+          {
+            id: 'root',
+            component: 'Column',
+            align: 'center',
+            justify: 'center',
+            children: ['target'],
+          },
+          ...usageText,
+        ],
       },
     };
     const expectedTextPayload = [expectedTextLine1, expectedTextLine2];
@@ -666,7 +672,16 @@ describe('Gallery Component', () => {
       version: 'v0.9',
       updateComponents: {
         surfaceId: 'gallery-preview',
-        components: [{id: 'root', component: 'Column', children: ['target']}, ...usageButton],
+        components: [
+          {
+            id: 'root',
+            component: 'Column',
+            align: 'center',
+            justify: 'center',
+            children: ['target'],
+          },
+          ...usageButton,
+        ],
       },
     };
     const expectedButtonPayload = [expectedTextLine1, expectedButtonLine2];

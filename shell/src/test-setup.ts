@@ -17,6 +17,7 @@
 import {getTestBed} from '@angular/core/testing';
 import {BrowserTestingModule, platformBrowserTesting} from '@angular/platform-browser/testing';
 import {webcrypto} from 'node:crypto';
+import {beforeEach} from 'vitest';
 
 if (typeof window !== 'undefined' && (!window.crypto || !window.crypto.subtle)) {
   Object.defineProperty(window, 'crypto', {
@@ -29,7 +30,6 @@ if (!getTestBed().platform) {
   getTestBed().initTestEnvironment(BrowserTestingModule, platformBrowserTesting());
 }
 
-import {beforeEach} from 'vitest';
 beforeEach(() => {
   getTestBed().resetTestingModule();
 });

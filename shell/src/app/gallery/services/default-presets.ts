@@ -27,25 +27,52 @@ export const DEFAULT_PRESETS: Record<string, unknown> = {
       description: 'Audio Clip',
     },
   ],
+  Badge: [
+    {
+      id: 'target',
+      component: 'Badge',
+      text: '3',
+      children: ['BadgeChild'],
+    },
+    {
+      id: 'BadgeChild',
+      component: 'Icon',
+      icon: 'notifications',
+    },
+  ],
   Button: [
     {
       id: 'target',
       component: 'Button',
       child: 'ButtonLabel',
-      event: {
-        name: 'submit',
-        context: [
-          {
-            key: 'formId',
-            value: 'contact-form',
-          },
-        ],
+      action: {
+        event: {
+          name: 'submit',
+          context: [
+            {
+              key: 'formId',
+              value: 'contact-form',
+            },
+          ],
+        },
       },
     },
     {
       id: 'ButtonLabel',
       component: 'Text',
       text: 'Click Me',
+    },
+  ],
+  ButtonToggle: [
+    {
+      id: 'target',
+      component: 'ButtonToggle',
+      options: [
+        {label: 'Left', value: 'left'},
+        {label: 'Center', value: 'center'},
+        {label: 'Right', value: 'right'},
+      ],
+      value: 'center',
     },
   ],
   Card: [
@@ -108,6 +135,34 @@ export const DEFAULT_PRESETS: Record<string, unknown> = {
       enableTime: true,
     },
   ],
+  Dialog: [
+    {
+      id: 'target',
+      component: 'Column',
+      children: ['DialogTriggerButton', 'DialogComponent'],
+    },
+    {
+      id: 'DialogTriggerButton',
+      component: 'Button',
+      child: 'DialogTriggerLabel',
+    },
+    {
+      id: 'DialogTriggerLabel',
+      component: 'Text',
+      text: 'Open Dialog',
+    },
+    {
+      id: 'DialogComponent',
+      component: 'Dialog',
+      title: 'Modal Title',
+      children: ['DialogContent'],
+    },
+    {
+      id: 'DialogContent',
+      component: 'Text',
+      text: 'This is the modal content.',
+    },
+  ],
   Divider: [
     {
       id: 'target',
@@ -115,18 +170,32 @@ export const DEFAULT_PRESETS: Record<string, unknown> = {
       axis: 'horizontal',
     },
   ],
+  ExpansionPanel: [
+    {
+      id: 'target',
+      component: 'ExpansionPanel',
+      title: 'Details',
+      description: 'Click to expand summary info',
+      children: ['PanelContent'],
+    },
+    {
+      id: 'PanelContent',
+      component: 'Text',
+      text: 'This is the expandable content inside the panel.',
+    },
+  ],
   Icon: [
     {
       id: 'target',
       component: 'Icon',
-      name: 'home',
+      icon: 'home',
     },
   ],
   Image: [
     {
       id: 'target',
       component: 'Image',
-      url: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119',
+      url: 'https://gstatic.com/images/branding/googlelogo/svg/googlelogo_clr_74x24px.svg',
       description: 'Visual Artwork',
     },
   ],
@@ -145,6 +214,35 @@ export const DEFAULT_PRESETS: Record<string, unknown> = {
       id: 'list-item-2',
       component: 'Text',
       text: 'List Item Two',
+    },
+  ],
+  Menu: [
+    {
+      id: 'target',
+      component: 'Menu',
+      label: 'Options',
+      icon: 'more_vert',
+      options: [
+        {label: 'Edit', value: 'edit'},
+        {label: 'Share', value: 'share'},
+        {label: 'Delete', value: 'delete'},
+      ],
+    },
+  ],
+  ProgressBar: [
+    {
+      id: 'target',
+      component: 'ProgressBar',
+      mode: 'determinate',
+      value: 70,
+    },
+  ],
+  ProgressSpinner: [
+    {
+      id: 'target',
+      component: 'ProgressSpinner',
+      mode: 'determinate',
+      value: 40,
     },
   ],
   Row: [
@@ -174,6 +272,22 @@ export const DEFAULT_PRESETS: Record<string, unknown> = {
       value: 50,
     },
   ],
+  Table: [
+    {
+      id: 'target',
+      component: 'Table',
+      columns: [
+        {header: 'Name', field: 'name'},
+        {header: 'Age', field: 'age'},
+        {header: 'Role', field: 'role'},
+      ],
+      rows: [
+        {name: 'Alice', age: '30', role: 'Engineer'},
+        {name: 'Bob', age: '25', role: 'Designer'},
+        {name: 'Charlie', age: '35', role: 'Manager'},
+      ],
+    },
+  ],
   Tabs: [
     {
       id: 'target',
@@ -199,7 +313,7 @@ export const DEFAULT_PRESETS: Record<string, unknown> = {
       id: 'target',
       component: 'Text',
       text: 'Headline Large (H1)',
-      variant: 'h1',
+      usageHint: 'h1',
     },
   ],
   TextField: [

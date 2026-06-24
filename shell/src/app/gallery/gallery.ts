@@ -53,9 +53,6 @@ export class Gallery {
   protected readonly catalogManagement = inject(CatalogManagement);
   private readonly hostCommunication = inject(HostCommunication);
 
-  private static readonly A2UI_v09 = 'v0.9';
-  private static readonly DEMO_SURFACE_ID = 'gallery-preview';
-
   constructor() {
     effect(() => {
       const usageString = this.selectedComponentUsage();
@@ -70,41 +67,21 @@ export class Gallery {
         const catalogId = this.catalogId();
         if (!catalog || !catalogId) return;
 
-        // To visually anchor and center the selected component within the sandboxed preview frame,
-        // we wrap it in a 'Column' container. This prevents individual components (like buttons)
-        // from stretching to fill the entire screen, ensuring a more realistic preview.
-        // We perform a case-insensitive lookup (e.g., matching 'Column' or 'column') to support
-        // different naming conventions that different catalogs might use. If no such column layout
-        // component is found in the catalog, we fall back to rendering the target component directly
-        // as the root.
-        const componentKeys = Object.keys(catalog['components'] || {});
-        const columnKey = componentKeys.find(k => k.toLowerCase() === 'column');
+        const componentsPayload = this.getComponentsPayload(componentsArray);
 
-        let componentsPayload: unknown[];
-        if (columnKey) {
-          componentsPayload = [
-            {id: 'root', component: columnKey, children: ['target']},
-            ...componentsArray,
-          ];
-        } else {
-          componentsPayload = componentsArray;
-        }
-
-        /* prettier-ignore */
         const cmd1 = {
-          'version': Gallery.A2UI_v09,
-          'createSurface': {
-            'surfaceId': Gallery.DEMO_SURFACE_ID,
-            'catalogId': catalogId,
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'gallery-preview',
+            catalogId: catalogId,
           },
         };
 
-        /* prettier-ignore */
         const cmd2 = {
-          'version': Gallery.A2UI_v09,
-          'updateComponents': {
-            'surfaceId': Gallery.DEMO_SURFACE_ID,
-            'components': componentsPayload,
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 'gallery-preview',
+            components: componentsPayload,
           },
         };
 
@@ -131,7 +108,7 @@ export class Gallery {
   protected readonly catalogId = computed<string | null>(() => {
     const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) return null;
-    return (catalog['catalogId'] || catalog['$id']) ?? null;
+    return (catalog.catalogId || catalog.$id) ?? null;
   });
 
   /** The table column names mapped by MatTable. */
@@ -146,9 +123,8 @@ export class Gallery {
   /** The resolved schema description for the selected component. */
   protected readonly selectedComponentDescription = computed<string>(() => {
     const key = this.selectedComponentKey();
-    if (!key) return '';
     const catalog = this.catalogManagement.activeCatalog();
-    const comp = catalog?.['components']?.[key];
+    const comp = key ? catalog?.components?.[key] : null;
     return comp && typeof comp['description'] === 'string' ? comp['description'] : '';
   });
 
@@ -159,6 +135,44 @@ export class Gallery {
    */
   protected selectComponent(key: string | null): void {
     this.catalogService.selectComponent(key);
+  }
+
+  private getComponentsPayload(componentsArray: unknown[]): unknown[] {
+    const catalog = this.catalogManagement.activeCatalog();
+    if (!catalog) {
+      return componentsArray;
+    }
+
+    const componentKeys = Object.keys(catalog.components || {});
+    // Support prefixed columns by checking if exactly 'column' or ends with 'column' (case-insensitive).
+    // Prioritize exact match.
+    let columnKey = componentKeys.find(k => k.toLowerCase() === 'column');
+    if (!columnKey) {
+      columnKey = componentKeys.find(k => k.toLowerCase().endsWith('column'));
+    }
+
+    if (columnKey) {
+      return [
+        {
+          id: 'root',
+          component: columnKey,
+          align: 'center',
+          justify: 'center',
+          children: ['target'],
+        },
+        ...componentsArray,
+      ];
+    }
+
+    return componentsArray.map(comp => {
+      if (comp && typeof comp === 'object') {
+        const obj = comp as Record<string, unknown>;
+        if (obj['id'] === 'target') {
+          return {...obj, id: 'root'};
+        }
+      }
+      return comp;
+    });
   }
 
   /**
@@ -181,21 +195,21 @@ export class Gallery {
         return;
       }
 
-      /* prettier-ignore */
       const createSurfaceLine = JSON.stringify({
-        'version': 'v0.9',
-        'createSurface': {
-          'surfaceId': 'gallery-preview',
-          'catalogId': catalogId,
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'gallery-preview',
+          catalogId,
         },
       });
 
-      /* prettier-ignore */
+      const componentsPayload = this.getComponentsPayload(components as unknown[]);
+
       const updateComponentsLine = JSON.stringify({
-        'version': 'v0.9',
-        'updateComponents': {
-          'surfaceId': 'gallery-preview',
-          'components': components,
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'gallery-preview',
+          components: componentsPayload,
         },
       });
 

@@ -958,4 +958,141 @@ describe('CatalogSchemaResolver', () => {
       },
     ]);
   });
+
+  it('resolves common_types.json references from embedded schema when missing locally', () => {
+    const mockSchema = {
+      components: {
+        Component: {
+          type: 'object',
+          properties: {
+            childList: {
+              $ref: 'common_types.json#/$defs/ChildList',
+            },
+          },
+        },
+      },
+    };
+
+    const resolver = new CatalogSchemaResolver(mockSchema);
+    const properties = resolver.resolveComponentProperties('Component');
+
+    expect(properties).toEqual([
+      {
+        name: 'childList',
+        description: '',
+        type: 'array | object',
+        required: false,
+      },
+    ]);
+  });
+
+  it('recursively resolves $ref pointers inside array items', () => {
+    const mockSchema = {
+      components: {
+        ArrayComponent: {
+          type: 'object',
+          properties: {
+            list: {
+              type: 'array',
+              items: {
+                $ref: '#/$defs/ItemType',
+              },
+            },
+          },
+        },
+      },
+      $defs: {
+        ItemType: {
+          type: 'object',
+          properties: {
+            id: {
+              $ref: '#/$defs/IdType',
+            },
+          },
+        },
+        IdType: {
+          type: 'string',
+        },
+      },
+    };
+
+    const resolver = new CatalogSchemaResolver(mockSchema);
+    const propertiesSchema = resolver.resolveComponentPropertiesSchema('ArrayComponent');
+
+    expect(propertiesSchema['list']).toEqual({
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+          },
+        },
+      },
+    });
+  });
+
+  it('recursively resolves $ref pointers inside object properties', () => {
+    const mockSchema = {
+      components: {
+        ObjectComponent: {
+          type: 'object',
+          properties: {
+            nested: {
+              type: 'object',
+              properties: {
+                value: {
+                  $ref: '#/$defs/ValueType',
+                },
+              },
+            },
+          },
+        },
+      },
+      $defs: {
+        ValueType: {
+          type: 'number',
+        },
+      },
+    };
+
+    const resolver = new CatalogSchemaResolver(mockSchema);
+    const propertiesSchema = resolver.resolveComponentPropertiesSchema('ObjectComponent');
+
+    expect(propertiesSchema['nested']).toEqual({
+      type: 'object',
+      properties: {
+        value: {
+          type: 'number',
+        },
+      },
+    });
+  });
+
+  it('falls back to undecoded key when URI decoding fails on malformed pointer', () => {
+    const mockSchema = {
+      components: {
+        Component: {
+          properties: {
+            text: {$ref: '#/$defs/%E0%A4%A'},
+          },
+        },
+      },
+      $defs: {
+        '%E0%A4%A': {
+          type: 'string',
+          description: 'Fallback key match',
+        },
+      },
+    };
+    const resolver = new CatalogSchemaResolver(mockSchema);
+    expect(resolver.resolveComponentProperties('Component')).toEqual([
+      {
+        name: 'text',
+        description: 'Fallback key match',
+        type: 'string',
+        required: false,
+      },
+    ]);
+  });
 });

@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+:host {
+  display: block;
+  height: 100%;
+}
+
 .gallery-container {
   height: 100%;
   width: 100%;
@@ -82,6 +87,8 @@
 }
 
 .gallery-content {
+  box-sizing: border-box;
+  height: 100%;
   padding: 24px;
   background-color: var(--mat-sys-background, #fafafa);
   overflow-y: auto;

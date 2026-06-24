@@ -15,6 +15,7 @@
  */
 
 import {Catalog, CatalogComponentSchema} from '../../storage/models/catalog-storage.model';
+import {COMMON_TYPES_SCHEMA} from './common-types-schema';
 
 /**
  * Represents a parsed property definition extracted from the catalog schema.
@@ -65,7 +66,7 @@ export class CatalogSchemaResolver {
     }
 
     const componentSchema = componentsDict[componentName];
-    const resolved = this.resolveSchema(componentSchema, root, new Set());
+    const resolved = this.resolveInheritedDefinitions(componentSchema, root, new Set());
 
     const parsedProperties: ParsedProperty[] = [];
     for (const [name, propRawSchema] of Object.entries(resolved.properties)) {
@@ -97,7 +98,53 @@ export class CatalogSchemaResolver {
     return parsedProperties;
   }
 
-  private resolveSchema(
+  /**
+   * Resolves and returns the fully resolved schemas for all properties of the specified component.
+   *
+   * @param componentName The name of the component.
+   * @returns A dictionary of property name to resolved schema.
+   */
+  resolveComponentPropertiesSchema(componentName: string): Record<string, CatalogComponentSchema> {
+    if (this.schema == null || typeof this.schema !== 'object') {
+      return {};
+    }
+    const root = this.schema;
+    const components = root['components'];
+    if (components == null || typeof components !== 'object' || Array.isArray(components)) {
+      return {};
+    }
+    const componentsDict = components;
+    if (!Object.prototype.hasOwnProperty.call(componentsDict, componentName)) {
+      return {};
+    }
+
+    const componentSchema = componentsDict[componentName];
+    const resolved = this.resolveInheritedDefinitions(componentSchema, root, new Set());
+
+    const result: Record<string, CatalogComponentSchema> = {};
+    for (const [name, propRawSchema] of Object.entries(resolved.properties)) {
+      const resolvedProp = this.resolvePropertySchema(
+        propRawSchema as CatalogComponentSchema,
+        root,
+        new Set(),
+      );
+      result[name] = resolvedProp;
+    }
+    return result;
+  }
+
+  /**
+   * Recursively resolving inherited definitions.
+   *
+   * Why: JSON Schemas often use `$ref` inheritance or `allOf` compositions to share
+   * fields. This method resolves those paths recursively to merge inherited properties into
+   * a single flattened representation containing all available fields for the component.
+   *
+   * @param schemaObj The schema object to resolve.
+   * @param rootSchema The root catalog schema.
+   * @param visitedRefs Tracked references to prevent infinite loops.
+   */
+  private resolveInheritedDefinitions(
     schemaObj: CatalogComponentSchema | null | undefined,
     rootSchema: Catalog,
     visitedRefs: Set<string>,
@@ -112,36 +159,8 @@ export class CatalogSchemaResolver {
     }
 
     const obj = schemaObj;
-
-    if (typeof obj['$ref'] === 'string') {
-      const ref = obj['$ref'];
-      if (!visitedRefs.has(ref)) {
-        const resolved = this.resolveJsonPointer(rootSchema, ref);
-        if (resolved) {
-          const nextVisited = new Set(visitedRefs);
-          nextVisited.add(ref);
-          const inherited = this.resolveSchema(
-            resolved as CatalogComponentSchema,
-            rootSchema,
-            nextVisited,
-          );
-          this.mergeResolvedSchemas(result, inherited);
-        } else {
-          console.warn(`Failed to resolve schema reference: "${ref}"`);
-        }
-      }
-    }
-
-    if (Array.isArray(obj['allOf'])) {
-      for (const subSchema of obj['allOf']) {
-        const inherited = this.resolveSchema(
-          subSchema as CatalogComponentSchema,
-          rootSchema,
-          visitedRefs,
-        );
-        this.mergeResolvedSchemas(result, inherited);
-      }
-    }
+    this.resolveRef(obj, visitedRefs, rootSchema, result);
+    this.resolveAllOf(obj, rootSchema, visitedRefs, result);
 
     if (
       obj['properties'] &&
@@ -169,6 +188,62 @@ export class CatalogSchemaResolver {
     return result;
   }
 
+  private resolveRef(
+    obj: CatalogComponentSchema,
+    visitedRefs: Set<string>,
+    rootSchema: Catalog,
+    result: ResolvedSchema,
+  ) {
+    if (typeof obj['$ref'] === 'string') {
+      const ref = obj['$ref'];
+      if (!visitedRefs.has(ref)) {
+        const resolved = this.resolveJsonPointer(rootSchema, ref);
+        if (resolved) {
+          const nextVisited = new Set(visitedRefs);
+          nextVisited.add(ref);
+          const inherited = this.resolveInheritedDefinitions(
+            resolved as CatalogComponentSchema,
+            rootSchema,
+            nextVisited,
+          );
+          this.mergeResolvedSchemas(result, inherited);
+        } else {
+          console.warn(`Failed to resolve schema reference: "${ref}"`);
+        }
+      }
+    }
+  }
+
+  private resolveAllOf(
+    obj: CatalogComponentSchema,
+    rootSchema: Catalog,
+    visitedRefs: Set<string>,
+    result: ResolvedSchema,
+  ) {
+    if (Array.isArray(obj['allOf'])) {
+      for (const subSchema of obj['allOf']) {
+        const inherited = this.resolveInheritedDefinitions(
+          subSchema as CatalogComponentSchema,
+          rootSchema,
+          visitedRefs,
+        );
+        this.mergeResolvedSchemas(result, inherited);
+      }
+    }
+  }
+
+  /**
+   * Recursively resolves references and nested structure of a property schema.
+   *
+   * Why: This is the central coordinator for resolving property schemas. It delegates
+   * specific keywords like reference, array items, and object properties to helper methods,
+   * making the resolution process easier to understand and maintain.
+   *
+   * @param propSchema The schema definition of the property to resolve.
+   * @param rootSchema The root catalog schema containing definitions for references.
+   * @param visitedRefs Set of references visited in the current path to detect and prevent circular resolution loops.
+   * @returns A fully resolved component schema with references inline and sub-schemas normalized.
+   */
   private resolvePropertySchema(
     propSchema: CatalogComponentSchema | null | undefined,
     rootSchema: Catalog,
@@ -178,68 +253,180 @@ export class CatalogSchemaResolver {
       return {};
     }
 
-    const obj = propSchema;
-    let merged: CatalogComponentSchema = {...obj};
+    const original = propSchema;
+    let merged: CatalogComponentSchema = {...original};
 
-    if (typeof obj['$ref'] === 'string') {
-      const ref = obj['$ref'];
-      if (!visitedRefs.has(ref)) {
-        const resolved = this.resolveJsonPointer(rootSchema, ref);
-        if (resolved) {
-          const nextVisited = new Set(visitedRefs);
-          nextVisited.add(ref);
-          const resolvedProp = this.resolvePropertySchema(
-            resolved as CatalogComponentSchema,
-            rootSchema,
-            nextVisited,
-          );
-          const {$ref: _$ref, ...rest} = merged;
-          merged = {...resolvedProp, ...rest};
-        } else {
-          console.warn(`Failed to resolve property schema reference: "${ref}"`);
-        }
-      }
-    }
-
-    if (Array.isArray(obj['allOf'])) {
-      let allOfMerged: CatalogComponentSchema = {};
-      for (const sub of obj['allOf']) {
-        const resolvedSub = this.resolvePropertySchema(
-          sub as CatalogComponentSchema,
-          rootSchema,
-          visitedRefs,
-        );
-        allOfMerged = {...allOfMerged, ...resolvedSub};
-      }
-      const {allOf: _allOf, ...rest} = merged;
-      merged = {...allOfMerged, ...rest};
-    }
-
-    if (Array.isArray(obj['oneOf'])) {
-      merged['oneOf'] = (obj['oneOf'] as unknown[]).map(sub =>
-        this.resolvePropertySchema(sub as CatalogComponentSchema, rootSchema, visitedRefs),
-      );
-    }
-    if (Array.isArray(obj['anyOf'])) {
-      merged['anyOf'] = (obj['anyOf'] as unknown[]).map(sub =>
-        this.resolvePropertySchema(sub as CatalogComponentSchema, rootSchema, visitedRefs),
-      );
-    }
+    merged = this.resolveReferenceSchema(merged, original, rootSchema, visitedRefs);
+    merged = this.resolveAllOfSchema(merged, original, rootSchema, visitedRefs);
+    merged = this.resolveUnionSchemas(merged, original, rootSchema, visitedRefs);
+    merged = this.resolveArrayItemsSchema(merged, original, rootSchema, visitedRefs);
+    merged = this.resolveObjectPropertiesSchema(merged, original, rootSchema, visitedRefs);
 
     return merged;
   }
 
-  private resolveJsonPointer(schema: Catalog, pointer: string): unknown {
-    let relativePointer = pointer;
-    const hashIndex = pointer.indexOf('#');
-    if (hashIndex !== -1) {
-      relativePointer = pointer.slice(hashIndex);
+  /**
+   * Resolves `$ref` references in a schema, preventing circular loops using visitedRefs.
+   *
+   * Why: JSON Schema references ($ref) must be resolved to merge the referenced
+   * definition properties into the current property's schema.
+   */
+  private resolveReferenceSchema(
+    merged: CatalogComponentSchema,
+    original: CatalogComponentSchema,
+    rootSchema: Catalog,
+    visitedRefs: Set<string>,
+  ): CatalogComponentSchema {
+    if (typeof original['$ref'] !== 'string') {
+      return merged;
     }
+
+    const ref = original['$ref'];
+    // Avoid re-entering reference resolution if it's already in our visited path.
+    if (visitedRefs.has(ref)) {
+      return merged;
+    }
+
+    const resolved = this.resolveJsonPointer(rootSchema, ref);
+    if (!resolved) {
+      console.warn(`Failed to resolve property schema reference: "${ref}"`);
+      return merged;
+    }
+
+    // Capture reference in visited path for downstream recursion.
+    const nextVisited = new Set(visitedRefs);
+    nextVisited.add(ref);
+    const resolvedProp = this.resolvePropertySchema(
+      resolved as CatalogComponentSchema,
+      rootSchema,
+      nextVisited,
+    );
+
+    // Strip the $ref tag to prevent infinite attempts to re-resolve it.
+    const {$ref: _$ref, ...rest} = merged;
+    return {...resolvedProp, ...rest};
+  }
+
+  /**
+   * Merges multiple sub-schemas from an `allOf` array into a single schema.
+   *
+   * Why: 'allOf' represents an intersection of schemas. We flatten them by merging their properties
+   * to provide a simplified view of the final object fields.
+   */
+  private resolveAllOfSchema(
+    merged: CatalogComponentSchema,
+    original: CatalogComponentSchema,
+    rootSchema: Catalog,
+    visitedRefs: Set<string>,
+  ): CatalogComponentSchema {
+    if (!Array.isArray(original['allOf'])) {
+      return merged;
+    }
+
+    let allOfMerged: CatalogComponentSchema = {};
+    for (const sub of original['allOf']) {
+      const resolvedSub = this.resolvePropertySchema(
+        sub as CatalogComponentSchema,
+        rootSchema,
+        visitedRefs,
+      );
+      allOfMerged = {...allOfMerged, ...resolvedSub};
+    }
+
+    // Strip allOf list so we don't try to process it again.
+    const {allOf: _allOf, ...rest} = merged;
+    return {...allOfMerged, ...rest};
+  }
+
+  /**
+   * Resolves schemas within union types (`oneOf` and `anyOf`).
+   *
+   * Why: Union types specify alternative schemas for a property. We recursively resolve
+   * each alternative so the UI generator can inspect the full options.
+   */
+  private resolveUnionSchemas(
+    merged: CatalogComponentSchema,
+    original: CatalogComponentSchema,
+    rootSchema: Catalog,
+    visitedRefs: Set<string>,
+  ): CatalogComponentSchema {
+    const result = {...merged};
+    if (Array.isArray(original['oneOf'])) {
+      result['oneOf'] = (original['oneOf'] as unknown[]).map(sub =>
+        this.resolvePropertySchema(sub as CatalogComponentSchema, rootSchema, visitedRefs),
+      );
+    }
+    if (Array.isArray(original['anyOf'])) {
+      result['anyOf'] = (original['anyOf'] as unknown[]).map(sub =>
+        this.resolvePropertySchema(sub as CatalogComponentSchema, rootSchema, visitedRefs),
+      );
+    }
+    return result;
+  }
+
+  /**
+   * Resolves the schema of items within an array property.
+   *
+   * Why: Array schemas define the structure of their items. We recursively resolve
+   * the 'items' schema to handle nested lists or objects inside arrays.
+   */
+  private resolveArrayItemsSchema(
+    merged: CatalogComponentSchema,
+    original: CatalogComponentSchema,
+    rootSchema: Catalog,
+    visitedRefs: Set<string>,
+  ): CatalogComponentSchema {
+    if (!original['items'] || typeof original['items'] !== 'object') {
+      return merged;
+    }
+    const result = {...merged};
+    result['items'] = this.resolvePropertySchema(
+      original['items'] as CatalogComponentSchema,
+      rootSchema,
+      visitedRefs,
+    );
+    return result;
+  }
+
+  /**
+   * Resolves schemas for nested properties of an object schema.
+   *
+   * Why: Object schemas contain definitions for their properties. We recursively resolve
+   * each property schema to build a fully resolved nested object tree.
+   */
+  private resolveObjectPropertiesSchema(
+    merged: CatalogComponentSchema,
+    original: CatalogComponentSchema,
+    rootSchema: Catalog,
+    visitedRefs: Set<string>,
+  ): CatalogComponentSchema {
+    if (
+      !original['properties'] ||
+      typeof original['properties'] !== 'object' ||
+      Array.isArray(original['properties'])
+    ) {
+      return merged;
+    }
+
+    const result = {...merged};
+    const resolvedProps = {...((result['properties'] as Record<string, unknown>) || {})};
+    for (const [name, prop] of Object.entries(original['properties'] as Record<string, unknown>)) {
+      resolvedProps[name] = this.resolvePropertySchema(
+        prop as CatalogComponentSchema,
+        rootSchema,
+        visitedRefs,
+      );
+    }
+    result['properties'] = resolvedProps;
+    return result;
+  }
+
+  private resolveJsonPointerBase(targetSchema: unknown, relativePointer: string): unknown {
     if (!relativePointer.startsWith('#/')) {
       return undefined;
     }
     const parts = relativePointer.slice(2).split('/');
-    let current: unknown = schema;
+    let current: unknown = targetSchema;
     for (const part of parts) {
       if (current == null || typeof current !== 'object') {
         return undefined;
@@ -250,12 +437,50 @@ export class CatalogSchemaResolver {
       } catch {
         // Fallback to undecoded key if URI decoding fails.
       }
+      // Security check: Block __proto__, constructor, and prototype to prevent prototype pollution attacks.
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
         return undefined;
       }
       current = (current as CatalogComponentSchema)[key];
     }
     return current;
+  }
+
+  /**
+   * Resolves a JSON pointer against the root schema, fallback to embedded schemas if needed.
+   *
+   * Why: Schema references ($ref) point to internal definitions (e.g. '#/$defs/Icon')
+   * or common schemas (e.g. 'common_types.json#/$defs/Color'). This method resolves the path
+   * against the catalog or our embedded common types schema to retrieve the referenced definition.
+   *
+   * @param schema The root catalog schema.
+   * @param pointer The JSON pointer to resolve.
+   */
+  private resolveJsonPointer(schema: Catalog, pointer: string): unknown {
+    let relativePointer = pointer;
+    const hashIndex = pointer.indexOf('#');
+    if (hashIndex !== -1) {
+      relativePointer = pointer.slice(hashIndex);
+    }
+
+    if (pointer.includes('common_types.json')) {
+      const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
+      if (localResolved !== undefined) {
+        return localResolved;
+      }
+      return this.resolveJsonPointerBase(COMMON_TYPES_SCHEMA, relativePointer);
+    }
+
+    const resolved = this.resolveJsonPointerBase(schema, relativePointer);
+    if (resolved !== undefined) {
+      return resolved;
+    }
+
+    if (relativePointer.startsWith('#/$defs/')) {
+      return this.resolveJsonPointerBase(COMMON_TYPES_SCHEMA, relativePointer);
+    }
+
+    return undefined;
   }
 
   private mergeResolvedSchemas(target: ResolvedSchema, source: ResolvedSchema): void {

@@ -110,7 +110,7 @@ describe('GalleryCatalog', () => {
           type: 'object',
           properties: {
             text: {type: 'string'},
-            variant: {type: 'string'},
+            usageHint: {type: 'string'},
           },
         },
       },
@@ -124,7 +124,7 @@ describe('GalleryCatalog', () => {
         id: 'target',
         component: 'Text',
         text: 'Headline Large (H1)',
-        variant: 'h1',
+        usageHint: 'h1',
       },
     ]);
   });
@@ -180,6 +180,140 @@ describe('GalleryCatalog', () => {
     ]);
   });
 
+  it('handles schemas with array type and extracts the first valid string type', () => {
+    const mockCatalog: Catalog = {
+      components: {
+        CustomComp: {
+          type: 'object',
+          properties: {
+            reqNullableStr: {type: ['string', 'null'] as unknown as string},
+            reqNullableBool: {type: ['boolean', 'null'] as unknown as string},
+          },
+          required: ['reqNullableStr', 'reqNullableBool'],
+        },
+      },
+    };
+    catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.selectComponent('CustomComp');
+
+    const preset = service.selectedComponentPreset();
+    expect(preset).toEqual([
+      {
+        id: 'target',
+        component: 'CustomComp',
+        reqNullableStr: '',
+        reqNullableBool: false,
+      },
+    ]);
+  });
+
+  it('safely handles invalid or non-object schemas in union types', () => {
+    const mockCatalog: Catalog = {
+      components: {
+        CustomComp: {
+          type: 'object',
+          properties: {
+            reqUnionBad: {
+              oneOf: [null, {type: 'string'}] as unknown as CatalogComponentSchema[],
+            } as unknown as CatalogComponentSchema,
+          },
+          required: ['reqUnionBad'],
+        },
+      },
+    };
+    catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.selectComponent('CustomComp');
+
+    const preset = service.selectedComponentPreset();
+    expect(preset).toEqual([
+      {
+        id: 'target',
+        component: 'CustomComp',
+        reqUnionBad: null,
+      },
+    ]);
+  });
+
+  it('recursively generates fallbacks for complex required object and array properties, populating high-value fields and safe image URLs', () => {
+    const mockCatalog: Catalog = {
+      components: {
+        ComplexImageContainer: {
+          type: 'object',
+          properties: {
+            imageSource: {
+              type: 'object',
+              properties: {
+                url: {type: 'string'},
+                title: {type: 'string'},
+                description: {type: 'string'},
+              },
+              required: ['url'],
+            },
+            options: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  label: {type: 'string'},
+                  value: {type: 'number'},
+                  metadata: {
+                    type: 'object',
+                    properties: {
+                      placeholder: {type: 'string'},
+                      tooltip: {type: 'string'},
+                    },
+                  },
+                },
+                required: ['value', 'metadata'],
+              },
+            },
+          },
+          required: ['imageSource', 'options'],
+        },
+      },
+    };
+    catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.selectComponent('ComplexImageContainer');
+
+    const preset = service.selectedComponentPreset();
+    expect(preset).toEqual([
+      {
+        id: 'target',
+        component: 'ComplexImageContainer',
+        imageSource: {
+          url: 'https://gstatic.com/images/branding/googlelogo/svg/googlelogo_clr_74x24px.svg',
+          title: 'Sample Title',
+        },
+        options: [
+          {
+            label: 'Sample Label 1',
+            value: 0,
+            metadata: {
+              placeholder: 'Enter text... 1',
+              tooltip: 'Sample Tooltip 1',
+            },
+          },
+          {
+            label: 'Sample Label 2',
+            value: 0,
+            metadata: {
+              placeholder: 'Enter text... 2',
+              tooltip: 'Sample Tooltip 2',
+            },
+          },
+          {
+            label: 'Sample Label 3',
+            value: 0,
+            metadata: {
+              placeholder: 'Enter text... 3',
+              tooltip: 'Sample Tooltip 3',
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
   it('delivers a deep copy of the visual preset to prevent global mutation', () => {
     const mockCatalog: Catalog = {
       components: {
@@ -187,7 +321,7 @@ describe('GalleryCatalog', () => {
           type: 'object',
           properties: {
             text: {type: 'string'},
-            variant: {type: 'string'},
+            usageHint: {type: 'string'},
           },
         },
         Column: {type: 'object'},
@@ -295,7 +429,7 @@ describe('GalleryCatalog', () => {
           type: 'object',
           properties: {
             text: {type: 'string'},
-            variant: {type: 'string'},
+            usageHint: {type: 'string'},
           },
         },
       },
@@ -311,7 +445,7 @@ describe('GalleryCatalog', () => {
         id: 'target',
         component: 'Text',
         text: 'Headline Large (H1)',
-        variant: 'h1',
+        usageHint: 'h1',
       },
     ]);
   });
@@ -373,7 +507,7 @@ describe('GalleryCatalog', () => {
           type: 'object',
           properties: {
             text: {type: 'string'},
-            variant: {type: 'string'},
+            usageHint: {type: 'string'},
           },
         },
       },
@@ -387,7 +521,7 @@ describe('GalleryCatalog', () => {
         id: 'target',
         component: 'MaterialText',
         text: 'Headline Large (H1)',
-        variant: 'h1',
+        usageHint: 'h1',
       },
     ]);
   });
@@ -721,6 +855,353 @@ describe('GalleryCatalog', () => {
       expect(preset[0]['tabs']).toBeUndefined();
     } finally {
       delete DEFAULT_PRESETS['TestBadTabs'];
+    }
+  });
+
+  it('adapts child to children when component schema supports children but not child', () => {
+    DEFAULT_PRESETS['TestChildToChildren'] = [
+      {
+        id: 'target',
+        component: 'TestChildToChildren',
+        child: 'child-1',
+      },
+      {
+        id: 'child-1',
+        component: 'Text',
+        text: 'Hello',
+      },
+    ];
+
+    try {
+      const mockCatalog: Catalog = {
+        components: {
+          TestChildToChildren: {
+            type: 'object',
+            properties: {
+              children: {type: 'array', items: {type: 'string'}},
+            },
+          },
+          Text: {
+            type: 'object',
+            properties: {
+              text: {type: 'string'},
+            },
+          },
+        },
+      };
+      catalogManagementMock.activeCatalog.set(mockCatalog);
+      service.selectComponent('TestChildToChildren');
+      TestBed.flushEffects();
+
+      const preset = service.selectedComponentPreset();
+      expect(preset).toEqual([
+        {
+          id: 'target',
+          component: 'TestChildToChildren',
+          children: ['child-1'],
+        },
+        {
+          id: 'child-1',
+          component: 'Text',
+          text: 'Hello',
+        },
+      ]);
+    } finally {
+      delete DEFAULT_PRESETS['TestChildToChildren'];
+    }
+  });
+
+  it('adapts child to label when component schema supports label but not child, and child is Text', () => {
+    DEFAULT_PRESETS['TestChildToLabel'] = [
+      {
+        id: 'target',
+        component: 'TestChildToLabel',
+        child: 'child-1',
+      },
+      {
+        id: 'child-1',
+        component: 'Text',
+        text: 'Hello Label',
+      },
+    ];
+
+    try {
+      const mockCatalog: Catalog = {
+        components: {
+          TestChildToLabel: {
+            type: 'object',
+            properties: {
+              label: {type: 'string'},
+            },
+          },
+          Text: {
+            type: 'object',
+            properties: {
+              text: {type: 'string'},
+            },
+          },
+        },
+      };
+      catalogManagementMock.activeCatalog.set(mockCatalog);
+      service.selectComponent('TestChildToLabel');
+      TestBed.flushEffects();
+
+      const preset = service.selectedComponentPreset();
+      expect(preset).toEqual([
+        {
+          id: 'target',
+          component: 'TestChildToLabel',
+          label: 'Hello Label',
+        },
+      ]);
+    } finally {
+      delete DEFAULT_PRESETS['TestChildToLabel'];
+    }
+  });
+
+  it('adapts tabs items (title -> label, child -> content) for non-basic Tabs component', () => {
+    DEFAULT_PRESETS['MaterialTabs'] = [
+      {
+        id: 'target',
+        component: 'MaterialTabs',
+        tabs: [{title: 'Tab 1', child: 'tab-content-1'}],
+      },
+      {
+        id: 'tab-content-1',
+        component: 'Text',
+        text: 'Content 1',
+      },
+    ];
+
+    try {
+      const mockCatalog: Catalog = {
+        components: {
+          MaterialTabs: {
+            type: 'object',
+            properties: {
+              tabs: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: {type: 'string'},
+                    content: {type: 'string'},
+                  },
+                },
+              },
+            },
+          },
+          Text: {
+            type: 'object',
+            properties: {
+              text: {type: 'string'},
+            },
+          },
+        },
+      };
+      catalogManagementMock.activeCatalog.set(mockCatalog);
+      service.selectComponent('MaterialTabs');
+      TestBed.flushEffects();
+
+      const preset = service.selectedComponentPreset();
+      expect(preset).toEqual([
+        {
+          id: 'target',
+          component: 'MaterialTabs',
+          tabs: [{label: 'Tab 1', content: 'tab-content-1'}],
+        },
+        {
+          id: 'tab-content-1',
+          component: 'Text',
+          text: 'Content 1',
+        },
+      ]);
+    } finally {
+      delete DEFAULT_PRESETS['MaterialTabs'];
+    }
+  });
+
+  it('does NOT adapt tabs items for basic Tabs component', () => {
+    const mockCatalog: Catalog = {
+      components: {
+        Tabs: {
+          type: 'object',
+          properties: {
+            tabs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  title: {type: 'string'},
+                  child: {type: 'string'},
+                },
+              },
+            },
+          },
+        },
+        Text: {
+          type: 'object',
+          properties: {
+            text: {type: 'string'},
+          },
+        },
+      },
+    };
+    catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.selectComponent('Tabs');
+    TestBed.flushEffects();
+
+    const preset = service.selectedComponentPreset();
+    expect(preset).toEqual([
+      {
+        id: 'target',
+        component: 'Tabs',
+        tabs: [
+          {title: 'Tab One', child: 'tab-content-1'},
+          {title: 'Tab Two', child: 'tab-content-2'},
+        ],
+      },
+      {
+        id: 'tab-content-1',
+        component: 'Text',
+        text: 'Content of Tab One',
+      },
+      {
+        id: 'tab-content-2',
+        component: 'Text',
+        text: 'Content of Tab Two',
+      },
+    ]);
+  });
+
+  it('resolves union types from anyOf schema for component properties', () => {
+    const mockCatalog: Catalog = {
+      components: {
+        UnionComponent: {
+          type: 'object',
+          properties: {
+            unionField: {
+              anyOf: [{type: 'string'}, {type: 'number'}],
+            },
+          },
+        },
+      },
+    };
+    catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.selectComponent('UnionComponent');
+    TestBed.flushEffects();
+
+    const props = service.selectedComponentProperties();
+    expect(props).toEqual([
+      {
+        name: 'unionField',
+        description: '',
+        type: 'string | number',
+        required: false,
+      },
+    ]);
+  });
+
+  it('spawns a child Text component when component has required child property in dynamic fallback generator', () => {
+    const mockCatalog: Catalog = {
+      components: {
+        ParentComponent: {
+          type: 'object',
+          properties: {
+            child: {
+              type: 'string',
+            },
+          },
+          required: ['child'],
+        },
+        Text: {
+          type: 'object',
+          properties: {
+            text: {
+              type: 'string',
+            },
+          },
+        },
+      },
+    };
+    catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.selectComponent('ParentComponent');
+    TestBed.flushEffects();
+
+    const preset = service.selectedComponentPreset();
+    expect(preset).toEqual([
+      {
+        id: 'target',
+        component: 'ParentComponent',
+        child: 'target-child-0',
+      },
+      {
+        id: 'target-child-0',
+        component: 'Text',
+        text: 'Child Element',
+      },
+    ]);
+  });
+
+  it('passes invalid tab items through without crashing', () => {
+    DEFAULT_PRESETS['CustomTabs'] = [
+      {
+        id: 'target',
+        component: 'CustomTabs',
+        tabs: [null, 'invalid-tab-string', {title: 'Valid Tab', child: 'tab-content-1'}],
+      },
+      {
+        id: 'tab-content-1',
+        component: 'Text',
+        text: 'Content 1',
+      },
+    ];
+
+    try {
+      const mockCatalog: Catalog = {
+        components: {
+          CustomTabs: {
+            type: 'object',
+            properties: {
+              tabs: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: {type: 'string'},
+                    content: {type: 'string'},
+                  },
+                },
+              },
+            },
+          },
+          Text: {
+            type: 'object',
+            properties: {
+              text: {type: 'string'},
+            },
+          },
+        },
+      };
+      catalogManagementMock.activeCatalog.set(mockCatalog);
+      service.selectComponent('CustomTabs');
+      TestBed.flushEffects();
+
+      const preset = service.selectedComponentPreset();
+      expect(preset).toEqual([
+        {
+          id: 'target',
+          component: 'CustomTabs',
+          tabs: [null, 'invalid-tab-string', {label: 'Valid Tab', content: 'tab-content-1'}],
+        },
+        {
+          id: 'tab-content-1',
+          component: 'Text',
+          text: 'Content 1',
+        },
+      ]);
+    } finally {
+      delete DEFAULT_PRESETS['CustomTabs'];
     }
   });
 });
