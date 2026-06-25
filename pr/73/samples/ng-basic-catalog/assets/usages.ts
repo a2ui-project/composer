@@ -1,3 +1,19 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import {type ComponentUsages} from 'a2ui-bridge';
 
 /** Component usages dictionary matching the A2UiComponentV09 usage spec. */
@@ -6,7 +22,7 @@ export const COMPONENT_USAGES: ComponentUsages = {
     {
       id: 'root',
       component: 'AudioPlayer',
-      url: 'https://g3doc.corp.google.com/corp/g3doc/docs/guide/markdown.mp3',
+      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
       description: 'Deep dive into A2UI',
     },
   ],
@@ -163,39 +179,37 @@ export const COMPONENT_USAGES: ComponentUsages = {
   ],
   Modal: [
     {
-      "id": "root",
-      "component": "Column",
-      "align": "center",
-      "justify": "center",
-      "children": [
-        "demo-modal"
-      ]
+      id: 'root',
+      component: 'Column',
+      align: 'center',
+      justify: 'center',
+      children: ['demo-modal'],
     },
     {
-      "id": "demo-modal",
-      "component": "Modal",
-      "trigger": "demo-modal-button",
-      "content": "demo-modal-content"
+      id: 'demo-modal',
+      component: 'Modal',
+      trigger: 'demo-modal-button',
+      content: 'demo-modal-content',
     },
     {
-      "id": "demo-modal-button",
-      "component": "Button",
-      "child": "demo-modal-button-label",
-      "action": {
-        "event": {
-          "name": "open"
-        }
-      }
+      id: 'demo-modal-button',
+      component: 'Button',
+      child: 'demo-modal-button-label',
+      action: {
+        event: {
+          name: 'open',
+        },
+      },
     },
     {
-      "id": "demo-modal-button-label",
-      "component": "Text",
-      "text": "Open Modal"
+      id: 'demo-modal-button-label',
+      component: 'Text',
+      text: 'Open Modal',
     },
     {
-      "id": "demo-modal-content",
-      "component": "Text",
-      "text": "Modal Content"
+      id: 'demo-modal-content',
+      component: 'Text',
+      text: 'Modal Content',
     },
   ],
   Row: [
@@ -252,7 +266,7 @@ export const COMPONENT_USAGES: ComponentUsages = {
     {
       id: 'root',
       component: 'Video',
-      url: 'https://aherrman.users.x20web.corp.google.com/www/GLEE_video.mp4',
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
     },
   ],
 };
