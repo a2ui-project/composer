@@ -22,9 +22,9 @@ Composer and the Renderer Application.
 To further simplify the integration, three framework-specific wrappers are
 provided:
 
-* Angular
-* Lit
-* React
+- Angular
+- Lit
+- React
 
 ## Prerequisites
 
@@ -48,13 +48,10 @@ catalog definitions inside your entrypoint file (`src/main.ts`):
 import {bootstrapLitSandbox} from 'a2ui-bridge/lit';
 import {basicCatalog} from '@a2ui/lit/v0_9';
 
-
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 
 // Exposes the Lit element mapping cast-free using standard workspace interfaces:
-export const AppRoot = bootstrapLitSandbox([
-  basicCatalog as unknown as Catalog<ComponentApi>,
-]);
+export const AppRoot = bootstrapLitSandbox([basicCatalog as unknown as Catalog<ComponentApi>]);
 ```
 
 Replace `basicCatalog` with your catalog.
@@ -112,7 +109,7 @@ bootstrapApplication(AppComponent, {
   providers: [
     provideA2uiSandbox([BasicCatalog]), // Injects and exposes dynamic catalogs
   ],
-}).catch((err) => console.error('A2UI Sandbox Bootstrap Failed:', err));
+}).catch(err => console.error('A2UI Sandbox Bootstrap Failed:', err));
 ```
 
 Make sure to replace `BasicCatalog` with your catalog.
@@ -136,19 +133,14 @@ export function App() {
   const {surface} = useA2uiSandbox([basicCatalog]);
 
   return (
-    <main className = "sandbox-shell" >
-      {
-        surface ?
-          (<A2uiSurface surface = {surface}/>) :
-          (<p>A2UI
-        React Sandbox
-        active
-        . Waiting
-        for RENDER_A2UI
-        payloads...</p>)
-      }
-      < /main>
-  );
+    <main className="sandbox-shell">
+      {surface ? (
+          <A2uiSurface surface={surface} />
+  ) : (
+    <p>A2UI React Sandbox active. Waiting for RENDER_A2UI payloads...</p>
+)}
+  </main>
+);
 }
 ```
 
