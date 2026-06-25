@@ -19,8 +19,8 @@ been created. This is a small amount of Javascript code that the Renderer
 Application incorporates, and coordinates all the communication between the A2UI
 Composer and the Renderer Application.
 
-To further simplify the integration, three framework specific wrappers are
-provide:
+To further simplify the integration, three framework-specific wrappers are
+provided:
 
 * Angular
 * Lit
