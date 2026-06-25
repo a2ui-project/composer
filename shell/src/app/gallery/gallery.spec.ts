@@ -22,6 +22,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {Gallery} from './gallery';
 import {GalleryHarness} from './test/gallery.harness';
 import {GalleryCatalog, CategorizedComponents} from './services/gallery-catalog';
+import {type ComponentUsage} from 'a2ui-bridge';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {ParsedProperty} from './schema/catalog-schema-resolver';
 import {Catalog} from '../storage/models/catalog-storage.model';
@@ -39,10 +40,18 @@ class MockGalleryCatalogService {
   readonly componentsList = signal<CategorizedComponents[]>([]);
   readonly selectedComponentKey = signal<string | null>(null);
   readonly selectedComponentProperties = signal<ParsedProperty[]>([]);
+  readonly selectedComponentPreset = signal<ComponentUsage | null>(null);
   readonly selectedComponentUsage = signal<string>('');
+  private readonly _galleryActive = signal<boolean>(false);
+  readonly galleryActive = this._galleryActive.asReadonly();
+  readonly loadingUsages = signal<boolean>(false);
 
   selectComponent = vi.fn((key: string | null) => {
     this.selectedComponentKey.set(key);
+  });
+
+  setGalleryActive = vi.fn((active: boolean) => {
+    this._galleryActive.set(active);
   });
 }
 
@@ -211,6 +220,7 @@ describe('Gallery Component', () => {
 
     catalogServiceMock.selectedComponentKey.set('Text');
     const mockComponents = [{id: 'target', component: 'Text'}];
+    catalogServiceMock.selectedComponentPreset.set({usage: mockComponents});
     const mockUsage = JSON.stringify(mockComponents, null, 2);
     catalogServiceMock.selectedComponentUsage.set(mockUsage);
     fixture.detectChanges();
@@ -270,6 +280,7 @@ describe('Gallery Component', () => {
     writeTextSpy.mockRejectedValue(new Error('Clipboard error'));
 
     catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({usage: []});
     catalogServiceMock.selectedComponentUsage.set('[]');
     fixture.detectChanges();
 
@@ -293,6 +304,7 @@ describe('Gallery Component', () => {
     });
 
     catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({usage: []});
     catalogServiceMock.selectedComponentUsage.set('[]');
     fixture.detectChanges();
 
@@ -306,40 +318,14 @@ describe('Gallery Component', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('logs an error to the console when copying malformed JSON usage to the clipboard', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
+  it('returns gracefully when selectedComponentPreset is null or has no usage array', async () => {
     catalogServiceMock.selectedComponentKey.set('Text');
-    catalogServiceMock.selectedComponentUsage.set('{invalid-json}');
+    catalogServiceMock.selectedComponentPreset.set(null);
     fixture.detectChanges();
 
     await harness.clickCopyButton();
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to parse or format A2UI usage payload: ',
-      expect.any(SyntaxError),
-    );
     expect(writeTextSpy).not.toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('logs an error to the console when copying a non-array JSON usage to the clipboard', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    catalogServiceMock.selectedComponentKey.set('Text');
-    catalogServiceMock.selectedComponentUsage.set('{"not": "an array"}');
-    fixture.detectChanges();
-
-    await harness.clickCopyButton();
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to parse or format A2UI usage payload: ',
-      expect.any(Error),
-    );
-    expect(writeTextSpy).not.toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
   });
 
   it('throws an error in the harness when trying to click a non-existent navigation link', async () => {
@@ -398,6 +384,7 @@ describe('Gallery Component', () => {
   });
 
   it('dispatches the rendering payload to HostCommunication when selection changes', async () => {
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
     TestBed.flushEffects();
@@ -437,6 +424,7 @@ describe('Gallery Component', () => {
         Text: {type: 'object'},
       }, // No Column component
     });
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
     TestBed.flushEffects();
@@ -459,25 +447,54 @@ describe('Gallery Component', () => {
     ]);
   });
 
-  it('logs an error when rendering effect fails to parse component usage JSON', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    catalogServiceMock.selectedComponentUsage.set('{invalid}');
-    fixture.detectChanges();
-    TestBed.flushEffects();
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to parse component usage JSON:',
-      expect.any(SyntaxError),
-    );
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('does not dispatch rendering payload if usage is not an array', async () => {
-    catalogServiceMock.selectedComponentUsage.set('{"not": "an array"}');
+  it('does not dispatch rendering payload if selectedComponentPreset is null or usage is not an array', async () => {
+    catalogServiceMock.selectedComponentPreset.set(null);
     fixture.detectChanges();
     TestBed.flushEffects();
 
     expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
+  });
+
+  it('dispatches updateDataModel command when preset contains data model', async () => {
+    const mockComponents = [{id: 'target', component: 'TextField'}];
+    const mockData = {user: {name: 'Hello'}};
+    catalogServiceMock.selectedComponentPreset.set({usage: mockComponents, data: mockData});
+    catalogServiceMock.selectedComponentUsage.set(JSON.stringify(mockComponents));
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith([
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'gallery-preview',
+          catalogId: 'https://a2ui.org/default_catalog.json',
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'gallery-preview',
+          components: [
+            {
+              id: 'root',
+              component: 'Column',
+              align: 'center',
+              justify: 'center',
+              children: ['target'],
+            },
+            {id: 'target', component: 'TextField'},
+          ],
+        },
+      },
+      {
+        version: 'v0.9',
+        updateDataModel: {
+          surfaceId: 'gallery-preview',
+          value: mockData,
+        },
+      },
+    ]);
   });
 
   it('wraps the component in Column layout using the exact casing defined in the catalog (e.g. coLuMn)', async () => {
@@ -488,6 +505,7 @@ describe('Gallery Component', () => {
         coLuMn: {type: 'object'}, // Case variation
       },
     });
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
     TestBed.flushEffects();
@@ -538,6 +556,7 @@ describe('Gallery Component', () => {
         Text: {type: 'object'},
       },
     });
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
     TestBed.flushEffects();
@@ -571,6 +590,7 @@ describe('Gallery Component', () => {
     catalogManagementMock.activeCatalog.set({
       catalogId: 'https://a2ui.org/empty.json',
     });
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
     TestBed.flushEffects();
@@ -581,6 +601,7 @@ describe('Gallery Component', () => {
 
   it('does not copy to clipboard if active catalog has no valid ID', () => {
     catalogManagementMock.activeCatalog.set(null);
+    catalogServiceMock.selectedComponentPreset.set({usage: []});
     catalogServiceMock.selectedComponentUsage.set('[]');
     fixture.detectChanges();
     (fixture.componentInstance as unknown as TestFriendlyGallery).copyToClipboard();
@@ -590,6 +611,7 @@ describe('Gallery Component', () => {
   it('does not dispatch render command if active catalog is null', () => {
     hostCommunicationMock.sendRenderA2UI.mockClear();
     catalogManagementMock.activeCatalog.set(null);
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
     TestBed.flushEffects();
@@ -632,6 +654,7 @@ describe('Gallery Component', () => {
     ];
 
     catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({usage: usageText});
     catalogServiceMock.selectedComponentUsage.set(JSON.stringify(usageText));
     fixture.detectChanges();
 
@@ -665,6 +688,7 @@ describe('Gallery Component', () => {
     hostCommunicationMock.sendRenderA2UI.mockClear();
 
     catalogServiceMock.selectedComponentKey.set('Button');
+    catalogServiceMock.selectedComponentPreset.set({usage: usageButton});
     catalogServiceMock.selectedComponentUsage.set(JSON.stringify(usageButton));
     fixture.detectChanges();
 
@@ -687,5 +711,51 @@ describe('Gallery Component', () => {
     const expectedButtonPayload = [expectedTextLine1, expectedButtonLine2];
 
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith(expectedButtonPayload);
+  });
+
+  it('normalizes root and target IDs in custom component usages when wrapping in Column layout', async () => {
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'https://a2ui.org/default_catalog.json',
+      components: {
+        Card: {type: 'object'},
+        Text: {type: 'object'},
+        Column: {type: 'object'},
+      },
+    });
+    catalogServiceMock.selectedComponentKey.set('Card');
+    const mockUsage = [
+      {id: 'root', component: 'Card', children: ['header']},
+      {id: 'header', component: 'Text', text: 'Hello'},
+    ];
+    catalogServiceMock.selectedComponentPreset.set({usage: mockUsage});
+    catalogServiceMock.selectedComponentUsage.set(JSON.stringify(mockUsage));
+    fixture.detectChanges();
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith([
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'gallery-preview',
+          catalogId: 'https://a2ui.org/default_catalog.json',
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'gallery-preview',
+          components: [
+            {
+              id: 'root',
+              component: 'Column',
+              align: 'center',
+              justify: 'center',
+              children: ['target'],
+            },
+            {id: 'target', component: 'Card', children: ['header']},
+            {id: 'header', component: 'Text', text: 'Hello'},
+          ],
+        },
+      },
+    ]);
   });
 });

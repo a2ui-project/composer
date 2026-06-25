@@ -40,8 +40,8 @@ const CONFIGS: IntegrationConfig[] = [
   {
     name: 'React',
     rendererUrl: 'http://localhost:3458',
-    pickupDateLocator: iframe => iframe.locator('div:has(> :text("Pick-up Date")) input'),
-    pickupLocationLocator: iframe => iframe.locator('div:has(> :text("Pick-up Location")) input'),
+    pickupDateLocator: iframe => iframe.locator('label:has-text("Pick-up Date") + input'),
+    pickupLocationLocator: iframe => iframe.locator('label:has-text("Pick-up Location") + input'),
     fillDate: async (locator, value) => {
       await locator.evaluate((el: HTMLInputElement, val) => {
         const prototype = Object.getPrototypeOf(el);

@@ -15,10 +15,13 @@
  */
 
 import {useA2uiSandbox} from 'a2ui-bridge/react';
+import {COMPONENT_USAGES} from './usages.js';
 import {A2uiSurface, basicCatalog} from '@a2ui/react/v0_9';
 
 export function App() {
-  const {surface} = useA2uiSandbox([basicCatalog]);
+  const {surface} = useA2uiSandbox([basicCatalog], {
+    getComponentUsages: async () => COMPONENT_USAGES,
+  });
 
   return (
     <main className="sandbox-shell">

@@ -55,6 +55,17 @@ export interface SurfaceGroupLike {
   };
 }
 
+/** Represents a usage sample for a component, including its UI tree and optional data model. */
+export interface ComponentUsage {
+  /** The component tree definition array. */
+  usage: Record<string, unknown>[];
+  /** Optional initial data model state for the surface. */
+  data?: Record<string, unknown>;
+}
+
+/** A record mapping component names to their usage definition. */
+export type ComponentUsages = Record<string, ComponentUsage>;
+
 /** Configuration and lifecycle callbacks for attaching a renderer. */
 export interface RendererConfig {
   /** The reactive surface group model to connect for data synchronization. */
@@ -69,6 +80,8 @@ export interface RendererConfig {
   catalog?: unknown;
   /** Invoked when a dynamic catalog URN ID is resolved. */
   onCatalogResolved?: (catalogId: string) => void;
+  /** Optional callback to retrieve component usage samples. */
+  getComponentUsages?: () => Promise<ComponentUsages>;
 }
 
 /** A subscription handle to detach a renderer and clean up connections. */

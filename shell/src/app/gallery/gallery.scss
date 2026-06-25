@@ -240,3 +240,14 @@
 .hidden-frame {
   display: none;
 }
+
+.usage-loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  gap: 16px;
+  color: var(--mat-sys-on-surface-variant, #666);
+  font-size: 0.9rem;
+}

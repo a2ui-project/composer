@@ -14,7 +14,15 @@
  * limitations under the License.
  */
 
-import {ChangeDetectionStrategy, Component, computed, effect, inject} from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  OnInit,
+  OnDestroy,
+} from '@angular/core';
 import {JsonPipe} from '@angular/common';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatListModule} from '@angular/material/list';
@@ -22,6 +30,7 @@ import {MatCardModule} from '@angular/material/card';
 import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {GalleryCatalog} from './services/gallery-catalog';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
@@ -42,27 +51,27 @@ import {HostCommunication} from '../shell/host-communication/host-communication'
     MatTableModule,
     MatButtonModule,
     MatIconModule,
+    MatProgressSpinnerModule,
     RenderedFrame,
   ],
   templateUrl: './gallery.ng.html',
   styleUrl: './gallery.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class Gallery {
+export class Gallery implements OnInit, OnDestroy {
   private readonly catalogService = inject(GalleryCatalog);
   protected readonly catalogManagement = inject(CatalogManagement);
   private readonly hostCommunication = inject(HostCommunication);
 
   constructor() {
     effect(() => {
-      const usageString = this.selectedComponentUsage();
-      if (!usageString) return;
+      const preset = this.catalogService.selectedComponentPreset();
+      if (!preset || !preset.usage || !Array.isArray(preset.usage)) return;
 
       try {
-        const parsed = JSON.parse(usageString) as unknown;
-        if (!Array.isArray(parsed)) return;
+        const componentsArray = preset.usage;
+        const dataObj = preset.data;
 
-        const componentsArray = parsed as unknown[];
         const catalog = this.catalogManagement.activeCatalog();
         const catalogId = this.catalogId();
         if (!catalog || !catalogId) return;
@@ -85,13 +94,36 @@ export class Gallery {
           },
         };
 
-        const payload = [cmd1, cmd2];
+        const payload: unknown[] = [cmd1, cmd2];
+
+        if (dataObj !== undefined) {
+          const cmd3 = {
+            version: 'v0.9',
+            updateDataModel: {
+              surfaceId: 'gallery-preview',
+              value: dataObj,
+            },
+          };
+          payload.push(cmd3);
+        }
+
         this.hostCommunication.sendRenderA2UI(payload);
       } catch (e) {
         console.error('Failed to parse component usage JSON:', e);
       }
     });
   }
+
+  ngOnInit(): void {
+    this.catalogService.setGalleryActive(true);
+  }
+
+  ngOnDestroy(): void {
+    this.catalogService.setGalleryActive(false);
+  }
+
+  /** Whether usage samples are currently loading from the bridge. */
+  protected readonly loadingUsages = this.catalogService.loadingUsages;
 
   /** The alphabetized component list categorized by Layout, Content, Input, Feedback, Other. */
   protected readonly componentsList = this.catalogService.componentsList;
@@ -152,6 +184,17 @@ export class Gallery {
     }
 
     if (columnKey) {
+      const normalizedComponents = componentsArray.map(comp => {
+        // Make sure we're not going to have a clash with the id.
+        if (comp && typeof comp === 'object') {
+          const obj = comp as Record<string, unknown>;
+          if (obj['id'] === 'root' || obj['id'] === 'target') {
+            return {...obj, id: 'target'};
+          }
+        }
+        return comp;
+      });
+
       return [
         {
           id: 'root',
@@ -160,7 +203,7 @@ export class Gallery {
           justify: 'center',
           children: ['target'],
         },
-        ...componentsArray,
+        ...normalizedComponents,
       ];
     }
 
@@ -179,16 +222,14 @@ export class Gallery {
    * Copies the usage JSON payload to the system clipboard.
    */
   protected copyToClipboard(): void {
-    const usage = this.selectedComponentUsage();
-    if (!usage) {
+    const preset = this.catalogService.selectedComponentPreset();
+    if (!preset || !preset.usage || !Array.isArray(preset.usage)) {
       return;
     }
 
     try {
-      const components = JSON.parse(usage);
-      if (!Array.isArray(components)) {
-        throw new Error('Component usage is not an array');
-      }
+      const components = preset.usage;
+      const dataObj = preset.data;
 
       const catalogId = this.catalogId();
       if (!catalogId) {
@@ -213,7 +254,18 @@ export class Gallery {
         },
       });
 
-      const payload = `${createSurfaceLine}\n${updateComponentsLine}`;
+      let payload = `${createSurfaceLine}\n${updateComponentsLine}`;
+
+      if (dataObj !== undefined) {
+        const updateDataModelLine = JSON.stringify({
+          version: 'v0.9',
+          updateDataModel: {
+            surfaceId: 'gallery-preview',
+            value: dataObj,
+          },
+        });
+        payload += `\n${updateDataModelLine}`;
+      }
 
       if (!navigator.clipboard) {
         console.error('Clipboard API is not available in this environment.');

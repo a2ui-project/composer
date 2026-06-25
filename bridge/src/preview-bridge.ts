@@ -35,6 +35,8 @@ import type {
   SurfaceGroupLike,
   RendererConfig,
   SurfaceStateSubscription,
+  ComponentUsages,
+  ComponentUsage,
 } from './render-config';
 
 export type {
@@ -43,6 +45,8 @@ export type {
   SurfaceGroupLike,
   RendererConfig,
   SurfaceStateSubscription,
+  ComponentUsages,
+  ComponentUsage,
 };
 
 /**
@@ -312,6 +316,10 @@ export class PreviewBridge {
 
       case PreviewBridgeMessageType.GET_CATALOG:
         void this.handleGetCatalog();
+        break;
+
+      case PreviewBridgeMessageType.GET_COMPONENT_USAGES:
+        void this.handleGetComponentUsages();
         break;
 
       default:
@@ -752,6 +760,26 @@ export class PreviewBridge {
         },
       });
     }
+  }
+
+  /**
+   * Invokes the getComponentUsages callback and returns the resolved usages.
+   */
+  private async handleGetComponentUsages(): Promise<void> {
+    let usages: ComponentUsages = {};
+    if (this.activeRenderer?.config.getComponentUsages) {
+      try {
+        usages = await this.activeRenderer.config.getComponentUsages();
+      } catch (error) {
+        console.error('PreviewBridge: Error invoking getComponentUsages:', error);
+      }
+    }
+    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+    // prettier-ignore
+    this.sendMessage({
+      'type': PreviewBridgeMessageType.COMPONENT_USAGES,
+      'payload': usages,
+    });
   }
 
   /**

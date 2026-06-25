@@ -26,7 +26,7 @@ import {
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
 import type {MarkdownRenderer} from '@a2ui/web_core/types/types';
-import {a2uiBridge, SurfaceStateSubscription} from '../preview-bridge.js';
+import {a2uiBridge, SurfaceStateSubscription, type ComponentUsages} from '../preview-bridge.js';
 
 /**
  * Options block configuring custom element generation and static payload injection
@@ -39,6 +39,8 @@ export interface LitSandboxOptions {
   markdownRenderer?: MarkdownRenderer;
   /** Optional preloaded catalog JSON data, provided directly in memory. */
   catalogJson?: unknown;
+  /** Optional callback to retrieve component usage samples. */
+  getComponentUsages?: () => Promise<ComponentUsages>;
 }
 
 /**
@@ -64,6 +66,8 @@ export class A2uiSandboxRoot extends LitElement {
   static catalogJson?: unknown = undefined;
   /** Optional custom markdown renderer callback shared statically */
   static markdownRenderer?: MarkdownRenderer = undefined;
+  /** Optional callback to retrieve component usage samples shared statically */
+  static getComponentUsages?: () => Promise<ComponentUsages> = undefined;
 
   // Core dynamic processing engine mapping actions outbox proxies
   private processor = new MessageProcessor(
@@ -115,6 +119,7 @@ export class A2uiSandboxRoot extends LitElement {
     this.rendererConnection = a2uiBridge.attachRenderer(this.processor, {
       surfaceGroup: this.processor.model,
       catalogJson: (this.constructor as typeof A2uiSandboxRoot).catalogJson,
+      getComponentUsages: (this.constructor as typeof A2uiSandboxRoot).getComponentUsages,
       onCatalogResolved: catalogId => {
         for (const catalog of (this.constructor as typeof A2uiSandboxRoot).catalogs) {
           if (catalog) {
@@ -176,6 +181,7 @@ export function bootstrapLitSandbox<T extends ComponentApi>(
     clazz.catalogs = catalogs as Catalog<ComponentApi>[];
     clazz.catalogJson = options?.catalogJson;
     clazz.markdownRenderer = options?.markdownRenderer;
+    clazz.getComponentUsages = options?.getComponentUsages;
   };
 
   if (!customElements.get(elementTagName)) {

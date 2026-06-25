@@ -381,6 +381,103 @@ describe('PreviewBridge Core API Runtime', () => {
     );
   });
 
+  it('responds with COMPONENT_USAGES containing usages from getComponentUsages callback (async)', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const mockUsages = {
+      Button: {usage: [{id: 'target', component: 'Button', text: 'Click me'}]},
+    };
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      getComponentUsages: async () => mockUsages,
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_COMPONENT_USAGES},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.COMPONENT_USAGES,
+        payload: mockUsages,
+      },
+      '*',
+    );
+  });
+
+  it('responds with COMPONENT_USAGES containing empty object if getComponentUsages is missing', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_COMPONENT_USAGES},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.COMPONENT_USAGES,
+        payload: {},
+      },
+      '*',
+    );
+  });
+
+  it('responds with COMPONENT_USAGES containing empty object if getComponentUsages throws an error', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      getComponentUsages: () => {
+        throw new Error('Callback failed');
+      },
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {type: PreviewBridgeMessageType.GET_COMPONENT_USAGES},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.COMPONENT_USAGES,
+        payload: {},
+      },
+      '*',
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      'PreviewBridge: Error invoking getComponentUsages:',
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
+  });
+
   it('triggers onCatalogResolved callback when createSurface command contains catalogId', async () => {
     const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
     const processor = {processMessages: vi.fn()};

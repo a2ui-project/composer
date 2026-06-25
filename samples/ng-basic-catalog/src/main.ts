@@ -21,6 +21,14 @@ import {provideA2uiSandbox} from 'a2ui-bridge/angular';
 import {BasicCatalog} from '@a2ui/angular/v0_9';
 import catalogJson from './assets/catalog.json';
 
+import {COMPONENT_USAGES} from './assets/usages.js';
+
 bootstrapApplication(AppComponent, {
-  providers: [provideZonelessChangeDetection(), provideA2uiSandbox([BasicCatalog], {catalogJson})],
+  providers: [
+    provideZonelessChangeDetection(),
+    provideA2uiSandbox([BasicCatalog], {
+      catalogJson,
+      getComponentUsages: async () => COMPONENT_USAGES,
+    }),
+  ],
 }).catch(err => console.error('A2UI Sandbox Bootstrap Failed:', err));

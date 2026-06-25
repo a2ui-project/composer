@@ -22,7 +22,7 @@ import {
   SurfaceModel,
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
-import {a2uiBridge} from '../preview-bridge.js';
+import {a2uiBridge, type ComponentUsages} from '../preview-bridge.js';
 
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   /** The reactive dynamic surface drawing model representing the active canvas. */
@@ -32,6 +32,8 @@ export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
 export interface ReactSandboxOptions {
   /** Optional preloaded catalog JSON data, provided directly in memory. */
   catalogJson?: unknown;
+  /** Optional callback to retrieve component usage samples. */
+  getComponentUsages?: () => Promise<ComponentUsages>;
 }
 
 /**
@@ -59,6 +61,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     const connection = a2uiBridge.attachRenderer(processor, {
       surfaceGroup: processor.model,
       catalogJson: options?.catalogJson,
+      getComponentUsages: options?.getComponentUsages,
       onCatalogResolved: catalogId => {
         for (const catalog of catalogs) {
           if (catalog) {

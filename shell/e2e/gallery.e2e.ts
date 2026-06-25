@@ -86,12 +86,26 @@ test.describe('Components Gallery User Journey', () => {
     // 8. Assert usage card renders the usage JSON block representing a raw components array
     const usageCode = page.locator('pre code');
     await expect(usageCode).toBeVisible();
+    await expect(usageCode).toContainText(`"component": "${firstComponentName!}"`);
     const usageCodeText = (await usageCode.textContent()) || '';
     expect(usageCodeText.trim().startsWith('[')).toBe(true);
     expect(usageCodeText.trim().endsWith(']')).toBe(true);
-    expect(usageCodeText).toContain(`"component": "${firstComponentName!}"`);
+    expect(usageCodeText).not.toContain('"usage": [');
     expect(usageCodeText).not.toContain('createSurface');
     expect(usageCodeText).not.toContain('updateComponents');
+
+    // Explicitly select AudioPlayer to verify its custom usages rendering
+    const audioPlayerItem = page
+      .locator('.catalog-list')
+      .getByRole('button', {name: 'AudioPlayer', exact: true});
+    await expect(audioPlayerItem).toBeVisible();
+    await audioPlayerItem.click();
+    await expect(page.locator('pre code')).toContainText('"description": "Deep dive into A2UI"');
+    const audioUsageCodeText = (await page.locator('pre code').textContent()) || '';
+    expect(audioUsageCodeText).not.toContain('Audio Clip');
+
+    // Click back to first component to continue the rest of the test flow
+    await navItems.first().click();
 
     // 9. Assert sandboxed preview frame is mounted and has an iframe
     const renderedFrame = page.locator('a2ui-composer-rendered-frame');
@@ -164,10 +178,11 @@ test.describe('Components Gallery User Journey', () => {
       page.getByRole('heading', {name: secondComponentName!, exact: true}),
     ).toBeVisible();
 
+    await expect(page.locator('pre code')).toContainText(`"component": "${secondComponentName!}"`);
     const secondUsageCodeText = (await page.locator('pre code').textContent()) || '';
     expect(secondUsageCodeText.trim().startsWith('[')).toBe(true);
     expect(secondUsageCodeText.trim().endsWith(']')).toBe(true);
-    expect(secondUsageCodeText).toContain(`"component": "${secondComponentName!}"`);
+    expect(secondUsageCodeText).not.toContain('"usage": [');
     expect(secondUsageCodeText).not.toContain('createSurface');
     expect(secondUsageCodeText).not.toContain('updateComponents');
 

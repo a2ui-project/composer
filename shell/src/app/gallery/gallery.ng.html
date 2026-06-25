@@ -57,19 +57,28 @@
         <mat-card class="usage-card">
           <mat-card-header class="usage-header">
             <mat-card-title>Usage</mat-card-title>
-            <button
-              mat-icon-button
-              (click)="copyToClipboard()"
-              aria-label="Copy to Clipboard"
-              class="copy-button"
-            >
-              <mat-icon>content_copy</mat-icon>
-            </button>
+            @if (!loadingUsages()) {
+              <button
+                mat-icon-button
+                (click)="copyToClipboard()"
+                aria-label="Copy to Clipboard"
+                class="copy-button"
+              >
+                <mat-icon>content_copy</mat-icon>
+              </button>
+            }
           </mat-card-header>
           <mat-card-content>
-            <pre
-              class="usage-code-block"
-            ><code class="usage-code">{{ selectedComponentUsage() }}</code></pre>
+            @if (loadingUsages()) {
+              <div class="usage-loading-spinner">
+                <mat-spinner diameter="32"></mat-spinner>
+                <span>Loading usage samples...</span>
+              </div>
+            } @else {
+              <pre
+                class="usage-code-block"
+              ><code class="usage-code">{{ selectedComponentUsage() }}</code></pre>
+            }
           </mat-card-content>
         </mat-card>
 

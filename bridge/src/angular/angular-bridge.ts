@@ -30,13 +30,20 @@ import {
   provideMarkdownRenderer,
 } from '@a2ui/angular/v0_9';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
-import {a2uiBridge, RendererProcessor, SurfaceStateSubscription} from '../preview-bridge.js';
+import {
+  a2uiBridge,
+  RendererProcessor,
+  SurfaceStateSubscription,
+  type ComponentUsages,
+} from '../preview-bridge.js';
 
 export interface AngularSandboxOptions {
   /** Optional custom markdown rendering delegate callback hook */
   markdownRendererFn?: (markdown: string) => Promise<string>;
   /** Optional preloaded catalog JSON data, provided directly in memory. */
   catalogJson?: unknown;
+  /** Optional callback to retrieve component usage samples. */
+  getComponentUsages?: () => Promise<ComponentUsages>;
 }
 
 /**
@@ -68,7 +75,7 @@ export class A2uiSandboxConnection implements OnDestroy {
    * Subscribes to the global preview bridge singleton, mapping dynamic renderer callbacks
    * (onSurfaceReady and onSurfaceCleared) directly to local reactive state signals.
    */
-  constructor(catalogJson?: unknown) {
+  constructor(catalogJson?: unknown, getComponentUsages?: () => Promise<ComponentUsages>) {
     const processor: RendererProcessor = {
       processMessages: payload =>
         (this.rendererService as unknown as RendererProcessor).processMessages(payload),
@@ -92,6 +99,7 @@ export class A2uiSandboxConnection implements OnDestroy {
         this.surfaceId.set('');
       },
       catalogJson: catalogJson,
+      getComponentUsages: getComponentUsages,
     });
   }
 
@@ -124,7 +132,8 @@ export function provideA2uiSandbox(
     A2uiRendererService,
     {
       provide: A2uiSandboxConnection,
-      useFactory: () => new A2uiSandboxConnection(options?.catalogJson),
+      useFactory: () =>
+        new A2uiSandboxConnection(options?.catalogJson, options?.getComponentUsages),
     },
     ...catalogsClasses,
     provideMarkdownRenderer(options?.markdownRendererFn),
