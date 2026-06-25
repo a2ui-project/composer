@@ -52,6 +52,18 @@ export interface LlmMessage {
 
   /** Holds the original prompt text payload to re-dispatch upon retry. */
   readonly originalPrompt?: string;
+
+  /** Optional semantic title for error messages. */
+  readonly errorTitle?: string;
+
+  /** Optional user-facing short message for error messages. */
+  readonly errorMessage?: string;
+
+  /** Optional technical details (e.g. stack trace) for error messages. */
+  readonly errorDetails?: string;
+
+  /** Optional user-facing actionable tip for error messages. */
+  readonly errorTip?: string;
 }
 
 /**

@@ -23,6 +23,7 @@ import {StateSync} from '../state-sync/state-sync';
 import {ChatState, LlmLogType} from '../chat-state/chat-state';
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {PreviewBridgeMessageType, RenderA2uiItem, A2uiComponentInstance} from 'a2ui-bridge';
+import {cleanErrorMessage, redactApiKey} from './error-utils';
 
 @Injectable({
   providedIn: 'root',
@@ -417,7 +418,7 @@ export class ChatCoordinator {
               this.chatState.setPipelineStatus(PipelineStatus.HEALING);
               targetType = healedType;
             } else {
-              // Fuzzy search matches (Worker 1 addition)
+              // Fuzzy search matches
               const fuzzyMatch = normalized
                 ? Object.keys(catalog.components).find(
                     key =>
@@ -494,122 +495,192 @@ export class ChatCoordinator {
    * Instantly dismisses overlays locks on network, proxy, or auth failures
    * to restore workspace editing controls immediately.
    */
+  private isConnectivityError(lowerMsg: string): boolean {
+    return (
+      lowerMsg.includes('failed to fetch') ||
+      lowerMsg.includes('fetch') ||
+      lowerMsg.includes('timeout') ||
+      lowerMsg.includes('504') ||
+      lowerMsg.includes('proxy') ||
+      lowerMsg.includes('networkerror') ||
+      lowerMsg.includes('connection') ||
+      lowerMsg.includes('401') ||
+      lowerMsg.includes('403') ||
+      lowerMsg.includes('credential') ||
+      lowerMsg.includes('quota') ||
+      lowerMsg.includes('blocked') ||
+      lowerMsg.includes('503') ||
+      lowerMsg.includes('unavailable') ||
+      lowerMsg.includes('api key') ||
+      lowerMsg.includes('apikey')
+    );
+  }
+
+  private parseError(
+    lowerMsg: string,
+    cleanMsg: string,
+    originalPrompt?: string,
+  ): {
+    errorTitle: string;
+    errorMessage: string;
+    errorTip: string;
+    isRetryable: boolean;
+    showDetails: boolean;
+    errorDetails?: string;
+  } {
+    // Default values (Connectivity Failure)
+    const errorTitle = 'Connectivity Failure';
+    const isJson = cleanMsg.trim().startsWith('{');
+    const errorMessage = isJson ? 'A connectivity error occurred.' : cleanMsg;
+    const errorDetails = isJson ? 'Details: ' + cleanMsg : undefined;
+    const errorTip =
+      'Tip: Please check your network proxy configurations or verify your settings to restore connections.';
+    const isRetryable = !!originalPrompt;
+    const showDetails = true;
+
+    const isValidationError =
+      lowerMsg.includes('validation') ||
+      lowerMsg.includes('syntax recovery') ||
+      lowerMsg.includes('validation failure');
+
+    if (isValidationError) {
+      return {
+        errorTitle: 'Validation Failure',
+        errorMessage: 'The generated layout contains invalid components or structure.',
+        errorTip:
+          'Tip: Try rephrasing your prompt to guide the model to generate valid components.',
+        isRetryable: !!originalPrompt,
+        showDetails: true,
+        errorDetails: 'Details: ' + cleanMsg,
+      };
+    }
+
+    if (lowerMsg.includes('503') || lowerMsg.includes('unavailable')) {
+      return {
+        errorTitle: 'Service Unavailable',
+        errorMessage: 'The generative service is temporarily unavailable. Please try again later.',
+        errorTip: '',
+        isRetryable: true,
+        showDetails: false,
+      };
+    }
+
+    if (lowerMsg.includes('high demand')) {
+      return {
+        errorTitle: 'Model High Demand',
+        errorMessage:
+          'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.',
+        errorTip: '',
+        isRetryable: true,
+        showDetails: false,
+      };
+    }
+
+    if (lowerMsg.includes('timeout') || lowerMsg.includes('504')) {
+      return {
+        errorTitle: 'REST Gateway Timeout',
+        errorMessage: 'Remote generation service did not respond.',
+        errorDetails: 'Details: ' + cleanMsg,
+        errorTip,
+        isRetryable,
+        showDetails: true,
+      };
+    }
+
+    if (lowerMsg.includes('api key') || lowerMsg.includes('apikey')) {
+      return {
+        errorTitle: 'Invalid API Key',
+        errorMessage: 'The provided Gemini API key is invalid or missing.',
+        errorDetails: 'Details: ' + cleanMsg,
+        errorTip:
+          'Tip: Please update your third-party Gemini developer API key on the settings page to restore connections.',
+        isRetryable,
+        showDetails: true,
+      };
+    }
+
+    if (
+      lowerMsg.includes('auth') ||
+      lowerMsg.includes('401') ||
+      lowerMsg.includes('403') ||
+      lowerMsg.includes('credential')
+    ) {
+      return {
+        errorTitle: 'Authentication Refused',
+        errorMessage: 'Authentication failed. Please verify your credentials in Settings.',
+        errorDetails: 'Details: ' + cleanMsg,
+        errorTip,
+        isRetryable,
+        showDetails: true,
+      };
+    }
+
+    if (lowerMsg.includes('quota') || lowerMsg.includes('blocked') || lowerMsg.includes('429')) {
+      return {
+        errorTitle: 'GenAI Service Blocked',
+        errorMessage: 'Resource quota depleted or content safety limits triggered.',
+        errorDetails: 'Details: ' + cleanMsg,
+        errorTip,
+        isRetryable,
+        showDetails: true,
+      };
+    }
+
+    return {
+      errorTitle,
+      errorMessage,
+      errorTip,
+      isRetryable,
+      showDetails,
+      errorDetails,
+    };
+  }
+
   private handleConnectivityError(err: unknown, originalPrompt?: string): void {
-    const errorMsg = err instanceof Error ? err.message : String(err);
+    const rawError = err instanceof Error ? err.message : String(err);
+    const lowerMsg = rawError.toLowerCase();
+    const cleanMsg = cleanErrorMessage(rawError);
 
-    // Intercept timeouts, proxy locks, or public API fetch failures
-    const isConnectivity =
-      errorMsg.includes('Failed to fetch') ||
-      errorMsg.includes('fetch') ||
-      errorMsg.includes('Timeout') ||
-      errorMsg.includes('timeout') ||
-      errorMsg.includes('504') ||
-      errorMsg.includes('Proxy') ||
-      errorMsg.includes('proxy') ||
-      errorMsg.includes('NetworkError') ||
-      errorMsg.includes('TypeError') ||
-      errorMsg.includes('connection') ||
-      errorMsg.includes('Connection') ||
-      errorMsg.includes('401') ||
-      errorMsg.includes('403') ||
-      errorMsg.includes('credential') ||
-      errorMsg.includes('quota') ||
-      errorMsg.includes('blocked') ||
-      errorMsg.includes('503') ||
-      errorMsg.includes('UNAVAILABLE');
-
-    if (isConnectivity) {
-      // Instantly dismiss loading overlay locks
+    if (this.isConnectivityError(lowerMsg)) {
       this.chatState.setPipelineStatus(PipelineStatus.IDLE);
     } else {
       this.chatState.setPipelineStatus(PipelineStatus.FAILED);
     }
     this.chatState.setProgrammaticStreamActive(false);
 
-    let errorDetails: string;
+    const parsed = this.parseError(lowerMsg, cleanMsg, originalPrompt);
+
+    let exceptionDetails = '';
     if (err instanceof Error) {
-      errorDetails = `Exception: ${err.message}\nStack: ${err.stack || 'None'}`;
+      exceptionDetails = 'Exception: ' + err.message + '\nStack: ' + (err.stack || 'None');
     } else {
-      errorDetails = `Unknown Exception: ${JSON.stringify(err)}`;
+      exceptionDetails = 'Unknown Exception: ' + JSON.stringify(err);
     }
 
-    const isValidationError =
-      errorMsg.includes('validation') ||
-      errorMsg.includes('Syntax recovery') ||
-      errorMsg.includes('Validation failure');
-
-    let bubbleText = isValidationError
-      ? '⚠️ Validation Failure. The generated layout contains invalid components or structure.'
-      : '⚠️ Connectivity Failure. Remote gateway communication drop.';
-    let isRetryable = !!originalPrompt;
-
-    // Check specifically for 503 UNAVAILABLE high demand
-    const is503 =
-      errorMsg.includes('503') ||
-      errorMsg.includes('UNAVAILABLE') ||
-      errorMsg.includes('high demand') ||
-      errorMsg.includes('experiencing high demand');
-
-    if (is503) {
-      bubbleText =
-        '⚠️ This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.';
-      isRetryable = true;
-    } else if (errorMsg.includes('Timeout') || errorMsg.includes('504')) {
-      bubbleText =
-        '⚠️ REST Gateway Timeout. Remote generation service ' +
-        'did not respond.\nDetails: ' +
-        errorMsg;
-    } else if (
-      errorMsg.includes('Auth') ||
-      errorMsg.includes('401') ||
-      errorMsg.includes('403') ||
-      errorMsg.includes('credential')
-    ) {
-      bubbleText =
-        '⚠️ Authentication Refused. Please verify your 3P API ' +
-        'credentials in Settings.\nDetails: ' +
-        errorMsg;
-    } else if (
-      errorMsg.includes('quota') ||
-      errorMsg.includes('blocked') ||
-      errorMsg.includes('429')
-    ) {
-      bubbleText =
-        '⚠️ GenAI Service Blocked. Resource quota depleted or ' +
-        'content safety limits triggered.\nDetails: ' +
-        errorMsg;
+    let combinedDetails = '';
+    if (parsed.errorDetails) {
+      combinedDetails += parsed.errorDetails + '\n\n';
     }
+    combinedDetails += exceptionDetails;
 
-    // Guides the developer directly on the error turn bubble content
-    let diagnosticText = bubbleText;
-    if (!is503) {
-      const errorHeader = isValidationError
-        ? '[A2UI Schema Validation or Parsing Exception]'
-        : '[REST Gateway Timeout or Connectivity Exception]';
-      const tipText = isValidationError
-        ? 'Tip: Try rephrasing your prompt to guide the model to generate valid components.'
-        : 'Tip: Please check your network proxy configurations or supply your third-party Gemini developer token key on the settings page to restore connections.';
+    // Apply API key redaction
+    const redactedErrorMessage = redactApiKey(parsed.errorMessage);
+    const redactedErrorDetails = parsed.showDetails ? redactApiKey(combinedDetails) : undefined;
+    const redactedErrorTip = parsed.showDetails ? redactApiKey(parsed.errorTip) : undefined;
 
-      diagnosticText +=
-        '\n\n' +
-        errorHeader +
-        '\n' +
-        '-------------------------------------------------\n' +
-        'Failed to compile generative turn. Diagnostic stack details:\n\n' +
-        errorDetails +
-        '\n\n' +
-        tipText;
-    }
+    console.error('Gemini chat execution failed:', err);
 
-    // Overwrite trailing blank MODEL placeholder bubble in-place to
-    // avoid empty bubble drift
     this.chatState.updateChatHistory(history => {
       const updated = [...history];
       const lastIdx = updated.length - 1;
-      const errorBubble: LlmMessage = {
+      const errorBubble = {
         role: MessageRole.ERROR,
-        content: diagnosticText,
-        ...(isRetryable ? {isRetryable: true, originalPrompt} : {}),
+        content: redactedErrorMessage,
+        errorTitle: parsed.errorTitle,
+        errorMessage: redactedErrorMessage,
+        errorDetails: redactedErrorDetails,
+        errorTip: redactedErrorTip,
+        ...(parsed.isRetryable ? {isRetryable: true, originalPrompt} : {}),
       };
       if (lastIdx >= 0 && updated[lastIdx].role === MessageRole.MODEL) {
         updated[lastIdx] = errorBubble;

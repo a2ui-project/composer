@@ -19,6 +19,7 @@ import {TestBed} from '@angular/core/testing';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ChatCoordinator} from './chat-coordinator';
+import {redactApiKey} from './error-utils';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
@@ -434,8 +435,125 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(history[0].content).toBe('Generate widgets list');
 
     expect(history[1].role).toBe(MessageRole.ERROR);
-    expect(history[1].content).toContain('REST Gateway Timeout or Connectivity Exception');
-    expect(history[1].content).toContain('HTTP 504: Gateway Timeout');
+    expect(history[1].errorTitle).toBe('REST Gateway Timeout');
+    expect(history[1].errorMessage).toBe('Remote generation service did not respond.');
+    expect(history[1].errorDetails).toContain('Details: HTTP 504: Gateway Timeout');
+    expect(history[1].content).toBe(history[1].errorMessage);
+  });
+
+  it('bubbles service unavailable errors to error log without technical details', async () => {
+    const error = new Error('HTTP 503 Service Unavailable');
+    llmClientMock.chatStream = vi.fn(async () => {
+      throw error;
+    });
+
+    await service.submitPrompt('Generate widgets list');
+
+    const history = chatStateMock.chatHistory();
+    expect(history.length).toBe(2);
+    expect(history[1].role).toBe(MessageRole.ERROR);
+    expect(history[1].errorTitle).toBe('Service Unavailable');
+    expect(history[1].errorMessage).toBe(
+      'The generative service is temporarily unavailable. Please try again later.',
+    );
+    expect(history[1].errorDetails).toBeUndefined();
+    expect(history[1].errorTip).toBeUndefined();
+  });
+
+  it('bubbles model high demand errors to error log without technical details', async () => {
+    const error = new Error('Model is experiencing high demand');
+    llmClientMock.chatStream = vi.fn(async () => {
+      throw error;
+    });
+
+    await service.submitPrompt('Generate widgets list');
+
+    const history = chatStateMock.chatHistory();
+    expect(history.length).toBe(2);
+    expect(history[1].role).toBe(MessageRole.ERROR);
+    expect(history[1].errorTitle).toBe('Model High Demand');
+    expect(history[1].errorMessage).toBe(
+      'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.',
+    );
+    expect(history[1].errorDetails).toBeUndefined();
+    expect(history[1].errorTip).toBeUndefined();
+  });
+
+  it('bubbles invalid API key errors to error log with custom error message and specific tip', async () => {
+    const error = new Error('API_KEY_INVALID: API key expired');
+    llmClientMock.chatStream = vi.fn(async () => {
+      throw error;
+    });
+
+    await service.submitPrompt('Generate widgets list');
+
+    const history = chatStateMock.chatHistory();
+    expect(history.length).toBe(2);
+    expect(history[1].role).toBe(MessageRole.ERROR);
+    expect(history[1].errorTitle).toBe('Invalid API Key');
+    expect(history[1].errorMessage).toBe('The provided Gemini API key is invalid or missing.');
+    expect(history[1].errorDetails).toContain('Details: API key expired');
+    expect(history[1].errorTip).toBe(
+      'Tip: Please update your third-party Gemini developer API key on the settings page to restore connections.',
+    );
+    expect(history[1].errorDetails).toBeDefined();
+  });
+
+  it('bubbles authentication failure errors to error log', async () => {
+    const error = new Error('AuthError: 401 Unauthorized');
+    llmClientMock.chatStream = vi.fn(async () => {
+      throw error;
+    });
+
+    await service.submitPrompt('Generate widgets list');
+
+    const history = chatStateMock.chatHistory();
+    expect(history.length).toBe(2);
+    expect(history[1].role).toBe(MessageRole.ERROR);
+    expect(history[1].errorTitle).toBe('Authentication Refused');
+    expect(history[1].errorMessage).toBe(
+      'Authentication failed. Please verify your credentials in Settings.',
+    );
+    expect(history[1].errorDetails).toContain('Details: 401 Unauthorized');
+    expect(history[1].errorTip).toContain(
+      'Please check your network proxy configurations or verify your settings',
+    );
+    expect(history[1].errorDetails).toBeDefined();
+  });
+
+  it('redacts Gemini API keys from error messages and details', async () => {
+    const error = new Error(
+      'API_KEY_INVALID: Invalid API key: AIzaSyDUMMY_KEY_123. Please check key.',
+    );
+    llmClientMock.chatStream = vi.fn(async () => {
+      throw error;
+    });
+
+    await service.submitPrompt('Generate widgets list');
+
+    const history = chatStateMock.chatHistory();
+    expect(history.length).toBe(2);
+    expect(history[1].role).toBe(MessageRole.ERROR);
+    expect(history[1].errorMessage).toBe('The provided Gemini API key is invalid or missing.');
+    expect(history[1].errorDetails).toContain('Invalid API key: redacted for your protection');
+    expect(history[1].errorDetails).not.toContain('AIzaSyDUMMY_KEY_123');
+  });
+
+  it('redacts generic API key patterns even if not matching AIzaSy', async () => {
+    const error = new Error('ConnectivityError: Invalid API key: dummy_key_here');
+    llmClientMock.chatStream = vi.fn(async () => {
+      throw error;
+    });
+
+    await service.submitPrompt('Generate widgets list');
+
+    const history = chatStateMock.chatHistory();
+    expect(history.length).toBe(2);
+    expect(history[1].role).toBe(MessageRole.ERROR);
+    expect(history[1].errorTitle).toBe('Invalid API Key');
+    expect(history[1].errorMessage).toBe('The provided Gemini API key is invalid or missing.');
+    expect(history[1].errorDetails).toContain('Invalid API key: redacted for your protection');
+    expect(history[1].errorDetails).not.toContain('dummy_key_here');
   });
 
   it('monitors rendererUrl mutations triggering flushing resets', async () => {
@@ -541,6 +659,31 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
         undefinedProp: undefined,
         emptyObj: {},
       });
+    });
+  });
+
+  describe('API Key Redaction (Direct)', () => {
+    it('redacts Gemini API keys matching standard pattern', () => {
+      const input = 'Error using key AIzaSyA1B2C3D4E5F6G7H8I9J0K_L-M and some other text';
+      const expected = 'Error using key redacted for your protection and some other text';
+      expect(redactApiKey(input)).toBe(expected);
+    });
+
+    it('redacts Invalid API key: <key> pattern', () => {
+      const input = 'API_KEY_INVALID: Invalid API key: asd';
+      const expected = 'API_KEY_INVALID: Invalid API key: redacted for your protection';
+      expect(redactApiKey(input)).toBe(expected);
+    });
+
+    it('redacts API key: <key> pattern', () => {
+      const input = 'Some details API key: 12345-abc';
+      const expected = 'Some details API key: redacted for your protection';
+      expect(redactApiKey(input)).toBe(expected);
+    });
+
+    it('prevents double redaction of already redacted keys', () => {
+      const input = 'Invalid API key: redacted for your protection';
+      expect(redactApiKey(input)).toBe(input);
     });
   });
 });

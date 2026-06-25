@@ -268,4 +268,20 @@ export class ChatPanel {
     this.userPrompt.set(prompt);
     await this.submitPrompt();
   }
+
+  protected parseMessage(text: string | undefined): Array<{text: string; isRedacted: boolean}> {
+    if (!text) return [];
+    const delimiter = 'redacted for your protection';
+    const parts = text.split(delimiter);
+    const result: Array<{text: string; isRedacted: boolean}> = [];
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i]) {
+        result.push({text: parts[i], isRedacted: false});
+      }
+      if (i < parts.length - 1) {
+        result.push({text: delimiter, isRedacted: true});
+      }
+    }
+    return result;
+  }
 }
