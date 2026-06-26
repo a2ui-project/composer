@@ -207,4 +207,36 @@ export class ChatPanelHarness extends ComponentHarness {
     if (!btn) throw new Error('Add API key button not found.');
     await btn.click();
   }
+
+  async hasErrorDetailsAt(index: number): Promise<boolean> {
+    const selector = `.chat-bubble-container:nth-child(${index + 1}) .error-details`;
+    const details = await this.locatorForOptional(selector)();
+    return details !== null;
+  }
+
+  async getErrorDetailsTextAt(index: number): Promise<string | null> {
+    const selector = `.chat-bubble-container:nth-child(${index + 1}) .error-details pre`;
+    const pre = await this.locatorForOptional(selector)();
+    if (!pre) return null;
+    return pre.text();
+  }
+
+  async toggleErrorDetailsAt(index: number): Promise<void> {
+    const selector = `.chat-bubble-container:nth-child(${index + 1}) .error-details summary`;
+    const summary = await this.locatorForOptional(selector)();
+    if (!summary) throw new Error(`Error details summary not found for bubble ${index}.`);
+    await summary.click();
+  }
+
+  async isRedactedTextItalicizedAt(index: number): Promise<boolean> {
+    const bubbles = await this.locatorForAll('.bubble-body')();
+    if (index < 0 || index >= bubbles.length) {
+      throw new Error(`Index ${index} out of bounds!`);
+    }
+    const html = await bubbles[index].getProperty<string>('innerHTML');
+    return (
+      html.includes('<i>redacted for your protection</i>') ||
+      html.includes('<em>redacted for your protection</em>')
+    );
+  }
 }

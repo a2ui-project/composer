@@ -228,7 +228,8 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       expect(bubbles.length).toBe(2);
 
       const bubbleHeaders = await harness.getBubbleHeaders();
-      expect(bubbleHeaders[1]).toBe('Gateway Exception Diagnostic');
+      expect(bubbleHeaders.length).toBe(1);
+      expect(bubbleHeaders[0]).toBe('You');
       expect(bubbles[1]).toContain('Exception: Internal Server Error');
       expect(bubbleTypes[1]).toBe('diagnostic-error');
     },
@@ -375,10 +376,10 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       fixture.detectChanges();
       expect(await harness.hasLoadingOverlay()).toBe(false);
 
-      // Milestone 6: Aborted/Failed turns (overlay is shown with error status)
+      // Milestone 6: Aborted/Failed turns (overlay is hidden on failure)
       chatStateMock.pipelineStatus.set(PipelineStatus.FAILED);
       fixture.detectChanges();
-      expect(await harness.hasLoadingOverlay()).toBe(true);
+      expect(await harness.hasLoadingOverlay()).toBe(false);
     },
   );
 
@@ -475,5 +476,48 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     fixture.detectChanges();
 
     expect(await harness.isDisabled()).toBe(false);
+  });
+
+  it('bubbles and renders connection gateway diagnostic errors with collapsible technical details', async () => {
+    const errorBubble: LlmMessage = {
+      role: MessageRole.ERROR,
+      content: 'API key is missing.',
+      errorTitle: 'Authentication Refused',
+      errorMessage:
+        'Please verify your 3P API credentials in Settings. Details: API key is missing.',
+      errorDetails: 'Exception: API key is missing.\\nStack: None',
+      errorTip: 'Tip: Please check your network proxy configurations...',
+    };
+
+    const historyMocks: LlmMessage[] = [
+      {role: MessageRole.USER, content: 'create column'},
+      errorBubble,
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+
+    expect(bubbles.length).toBe(2);
+
+    expect(await harness.hasErrorDetailsAt(1)).toBe(true);
+    expect(await harness.getErrorDetailsTextAt(1)).toContain('Exception: API key is missing.');
+  });
+
+  it('renders API key redaction in italics in the error bubble', async () => {
+    const errorBubble: LlmMessage = {
+      role: MessageRole.ERROR,
+      content: 'Error with API key: redacted for your protection',
+      errorTitle: 'Invalid API Key',
+      errorMessage: 'The key redacted for your protection is invalid.',
+      errorTip: 'Tip: redacted for your protection is the message.',
+      errorDetails: 'Details: redacted for your protection',
+    };
+
+    const historyMocks: LlmMessage[] = [{role: MessageRole.USER, content: 'test'}, errorBubble];
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+    expect(await harness.isRedactedTextItalicizedAt(1)).toBe(true);
   });
 });

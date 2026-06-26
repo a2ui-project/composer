@@ -16,7 +16,9 @@
 
 <div class="preview-frame-container">
   <!-- Loading/progress overlays status graphics panel -->
-  @if (pipelineStatus() !== 'idle' && pipelineStatus() !== 'ready') {
+  @if (
+    pipelineStatus() !== 'idle' && pipelineStatus() !== 'ready' && pipelineStatus() !== 'failed'
+  ) {
     <div
       class="pipeline-overlay"
       [class]="pipelineStatus()"
@@ -63,21 +65,65 @@
       } @else {
         @for (turn of visibleChatHistory(); track $index) {
           <div class="chat-bubble-container" [class]="getBubbleClass(turn)">
-            <div class="bubble-header-bar">
-              @if (turn.role === 'user') {
-                <span class="bubble-author-name">{{
-                  turn.isSnapshot ? 'Canvas Revision Snapshot' : 'You'
-                }}</span>
-              } @else if (turn.role === 'model') {
-                <span class="bubble-author-name">Gemini AI</span>
-              } @else if (turn.role === 'error') {
-                <span class="bubble-author-name error-label">Gateway Exception Diagnostic</span>
-              }
-            </div>
+            @if (turn.role !== 'error') {
+              <div class="bubble-header-bar">
+                @if (turn.role === 'user') {
+                  <span class="bubble-author-name">{{
+                    turn.isSnapshot ? 'Canvas Revision Snapshot' : 'You'
+                  }}</span>
+                } @else if (turn.role === 'model') {
+                  <span class="bubble-author-name">Gemini AI</span>
+                }
+              </div>
+            }
 
             <div class="bubble-body">
               @if (turn.isSnapshot) {
                 <p class="bubble-text-content">A2UI JSON: {{ turn.componentCount }} components</p>
+              } @else if (turn.role === 'error') {
+                <div class="error-bubble-content">
+                  <div class="error-title">⚠ {{ turn.errorTitle || 'Error' }}</div>
+                  <div class="error-message">
+                    @for (part of parseMessage(turn.errorMessage || turn.content); track $index) {
+                      @if (part.isRedacted) {
+                        <i>{{ part.text }}</i>
+                      } @else {
+                        {{ part.text }}
+                      }
+                    }
+                  </div>
+                  @if (turn.errorTip) {
+                    <div class="error-tip">
+                      @for (part of parseMessage(turn.errorTip); track $index) {
+                        @if (part.isRedacted) {
+                          <i>{{ part.text }}</i>
+                        } @else {
+                          {{ part.text }}
+                        }
+                      }
+                    </div>
+                  }
+                  @if (turn.errorDetails) {
+                    <details class="error-details">
+                      <summary>Technical Details</summary>
+                      <pre>@for (part of parseMessage(turn.errorDetails); track $index) {@if (part.isRedacted) {<i>{{ part.text }}</i>} @else { {{ part.text }} }}</pre>
+                    </details>
+                  }
+                  @if (turn.isRetryable) {
+                    <div class="retry-action-container">
+                      <button
+                        mat-stroked-button
+                        color="primary"
+                        class="retry-button"
+                        [disabled]="isLocked()"
+                        (click)="retryPrompt(turn.originalPrompt || '')"
+                      >
+                        <mat-icon aria-hidden="true">refresh</mat-icon>
+                        Retry Request
+                      </button>
+                    </div>
+                  }
+                </div>
               } @else {
                 <p class="bubble-text-content">{{ turn.content }}</p>
                 @if (turn.isRetryable) {
