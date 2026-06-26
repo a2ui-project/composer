@@ -19,11 +19,13 @@
  * from the window location query string, enforcing runtime constraints.
  */
 export class QueryParser {
+  /** @nocollapse */
   private static isProhibitedKey(key: string): boolean {
     const words = key.split(/(?=[A-Z])|[_.-]/).map(w => w.toLowerCase());
     return words.some(w => w === 'key' || w === 'token' || w === 'secret');
   }
 
+  /** @nocollapse */
   static parseRendererUrl(searchString: string): string | null {
     const params = new URLSearchParams(searchString);
 

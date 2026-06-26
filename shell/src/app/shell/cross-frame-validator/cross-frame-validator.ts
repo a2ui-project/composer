@@ -66,7 +66,7 @@ export class CrossFrameValidator {
         }
 
         for (const item of msgPayload) {
-          if (!this.validateSingleRenderMessage(item)) {
+          if (!CrossFrameValidator.validateSingleRenderMessage(item)) {
             return false;
           }
         }
