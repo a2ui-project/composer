@@ -31,7 +31,10 @@
                 "output": "samples/ng-basic-catalog"
               }
             ],
-            "styles": ["@angular/material/prebuilt-themes/indigo-pink.css", "src/styles.scss"],
+            "styles": [
+              "@angular/material/prebuilt-themes/indigo-pink.css",
+              "src/global_styles.scss"
+            ],
             "scripts": [],
             "preserveSymlinks": true
           },
