@@ -27,6 +27,7 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
+import type * as monaco from 'monaco-editor';
 
 const {createMock, mockEditor} = vi.hoisted(() => {
   const mockEditor = {
@@ -37,7 +38,7 @@ const {createMock, mockEditor} = vi.hoisted(() => {
     dispose: vi.fn(),
   };
 
-  const create = vi.fn((container: HTMLElement, options: any) => {
+  const create = vi.fn((container: HTMLElement, options: monaco.editor.IStandaloneEditorConstructionOptions) => {
     const textarea = document.createElement('textarea');
     textarea.className = 'mock-monaco-textarea';
     textarea.value = options.value || '';
@@ -50,13 +51,13 @@ const {createMock, mockEditor} = vi.hoisted(() => {
     mockEditor.setValue.mockImplementation((val: string) => {
       textarea.value = val;
     });
-    mockEditor.onDidChangeModelContent.mockImplementation((cb: any) => {
+    mockEditor.onDidChangeModelContent.mockImplementation((cb: () => void) => {
       textarea.addEventListener('input', cb);
       return {
         dispose: () => textarea.removeEventListener('input', cb),
       };
     });
-    mockEditor.updateOptions.mockImplementation((newOpts: any) => {
+    mockEditor.updateOptions.mockImplementation((newOpts: monaco.editor.IEditorOptions) => {
       if (newOpts.readOnly !== undefined) {
         textarea.readOnly = newOpts.readOnly;
       }
@@ -65,7 +66,7 @@ const {createMock, mockEditor} = vi.hoisted(() => {
       textarea.remove();
     });
 
-    return mockEditor as any;
+    return mockEditor as unknown as monaco.editor.IStandaloneCodeEditor;
   });
 
   return {createMock: create, mockEditor};
