@@ -15,6 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {WindowWithMonaco} from './types';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -75,17 +76,34 @@ test.describe('E2E Workspace User Journey', () => {
     // 6. Switch back to Workspace
     await page.getByRole('link', {name: 'Composer Workspace'}).click();
 
-    // 7. Enter malformed JSON in Raw Editor textarea
-    const rawEditor = page.getByPlaceholder('Enter raw JSON here...');
-    await rawEditor.fill('invalid json {');
+    // 7. Wait for Monaco to load and enter malformed JSON
+    const editorLocator = page.locator('.monaco-editor');
+    await expect(editorLocator).toBeVisible();
+
+    await page.waitForFunction(() => {
+      const monaco = (window as unknown as WindowWithMonaco).monaco;
+      return (monaco?.editor?.getModels()?.length ?? 0) > 0;
+    });
+
+    await page.evaluate(() => {
+      const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
+      if (model) {
+        model.setValue('invalid json {');
+      }
+    });
 
     // 8. Assert that warning badge (.invalid-json-badge) appears above textarea
     await expect(page.locator('.invalid-json-badge')).toBeVisible();
 
     // 9. Correct JSON and verify warning badge disappears
-    await rawEditor.fill(
-      '{"version": "v0.9", "createSurface": {"surfaceId": "test", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}',
-    );
+    await page.evaluate(() => {
+      const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
+      if (model) {
+        model.setValue(
+          '{"version": "v0.9", "createSurface": {"surfaceId": "test", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}',
+        );
+      }
+    });
     await expect(page.locator('.invalid-json-badge')).not.toBeVisible();
   });
 });

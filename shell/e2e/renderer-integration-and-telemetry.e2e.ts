@@ -16,6 +16,7 @@
 
 import {test, expect, Locator, FrameLocator} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {WindowWithMonaco} from './types';
 
 interface IntegrationConfig {
   name: string;
@@ -165,15 +166,30 @@ for (const config of CONFIGS) {
       await page.goto(`/?renderer=${config.rendererUrl}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
 
-      const rawJsonTextarea = page.locator('.raw-json-field textarea');
-      await expect(rawJsonTextarea).not.toHaveValue(/^$/);
+      const editorLocator = page.locator('.monaco-editor');
+      await expect(editorLocator).toBeVisible();
 
-      const rawJson = await rawJsonTextarea.inputValue();
+      await page.waitForFunction(() => {
+        const monaco = (window as unknown as WindowWithMonaco).monaco;
+        return (monaco?.editor?.getModels()?.length ?? 0) > 0;
+      });
+
+      const rawJson = await page.evaluate(() => {
+        const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
+        return model ? model.getValue() : '';
+      });
+      expect(rawJson).not.toBe('');
+
       const updatedRawJson = rawJson.replace(
         '"text": "Search Cars"',
         '"text": "Search Rental Cars"',
       );
-      await rawJsonTextarea.fill(updatedRawJson);
+      await page.evaluate((val) => {
+        const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
+        if (model) {
+          model.setValue(val);
+        }
+      }, updatedRawJson);
       await page.waitForTimeout(1000);
 
       const iframe = page.frameLocator('iframe.preview-iframe');
