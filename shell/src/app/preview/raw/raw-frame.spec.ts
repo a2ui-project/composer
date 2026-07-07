@@ -38,36 +38,38 @@ const {createMock, mockEditor} = vi.hoisted(() => {
     dispose: vi.fn(),
   };
 
-  const create = vi.fn((container: HTMLElement, options: monaco.editor.IStandaloneEditorConstructionOptions) => {
-    const textarea = document.createElement('textarea');
-    textarea.className = 'mock-monaco-textarea';
-    textarea.value = options.value || '';
-    if (options.readOnly) {
-      textarea.readOnly = true;
-    }
-    container.appendChild(textarea);
-
-    mockEditor.getValue.mockImplementation(() => textarea.value);
-    mockEditor.setValue.mockImplementation((val: string) => {
-      textarea.value = val;
-    });
-    mockEditor.onDidChangeModelContent.mockImplementation((cb: () => void) => {
-      textarea.addEventListener('input', cb);
-      return {
-        dispose: () => textarea.removeEventListener('input', cb),
-      };
-    });
-    mockEditor.updateOptions.mockImplementation((newOpts: monaco.editor.IEditorOptions) => {
-      if (newOpts.readOnly !== undefined) {
-        textarea.readOnly = newOpts.readOnly;
+  const create = vi.fn(
+    (container: HTMLElement, options: monaco.editor.IStandaloneEditorConstructionOptions) => {
+      const textarea = document.createElement('textarea');
+      textarea.className = 'mock-monaco-textarea';
+      textarea.value = options.value || '';
+      if (options.readOnly) {
+        textarea.readOnly = true;
       }
-    });
-    mockEditor.dispose.mockImplementation(() => {
-      textarea.remove();
-    });
+      container.appendChild(textarea);
 
-    return mockEditor as unknown as monaco.editor.IStandaloneCodeEditor;
-  });
+      mockEditor.getValue.mockImplementation(() => textarea.value);
+      mockEditor.setValue.mockImplementation((val: string) => {
+        textarea.value = val;
+      });
+      mockEditor.onDidChangeModelContent.mockImplementation((cb: () => void) => {
+        textarea.addEventListener('input', cb);
+        return {
+          dispose: () => textarea.removeEventListener('input', cb),
+        };
+      });
+      mockEditor.updateOptions.mockImplementation((newOpts: monaco.editor.IEditorOptions) => {
+        if (newOpts.readOnly !== undefined) {
+          textarea.readOnly = newOpts.readOnly;
+        }
+      });
+      mockEditor.dispose.mockImplementation(() => {
+        textarea.remove();
+      });
+
+      return mockEditor as unknown as monaco.editor.IStandaloneCodeEditor;
+    },
+  );
 
   return {createMock: create, mockEditor};
 });

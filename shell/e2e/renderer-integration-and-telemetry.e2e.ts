@@ -184,7 +184,7 @@ for (const config of CONFIGS) {
         '"text": "Search Cars"',
         '"text": "Search Rental Cars"',
       );
-      await page.evaluate((val) => {
+      await page.evaluate(val => {
         const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
         if (model) {
           model.setValue(val);

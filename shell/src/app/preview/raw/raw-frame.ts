@@ -157,7 +157,7 @@ export class RawFrame implements AfterViewInit, OnDestroy {
     // Configure Monaco loader to use the local assets copy
     loader.config({paths: {vs: 'assets/monaco/vs'}});
 
-    loader.init().then((monacoInstance) => {
+    loader.init().then(monacoInstance => {
       if (this.destroyed) {
         return;
       }
