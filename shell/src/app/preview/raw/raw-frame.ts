@@ -56,6 +56,7 @@ export class RawFrame implements AfterViewInit, OnDestroy {
 
   @ViewChild('editorContainer') editorContainer!: ElementRef<HTMLDivElement>;
   private editor?: monaco.editor.IStandaloneCodeEditor;
+  private destroyed = false;
 
   readonly TEST_ONLY = {
     layoutJson: () => this.layoutJson,
@@ -154,9 +155,12 @@ export class RawFrame implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit() {
     // Configure Monaco loader to use the local assets copy
-    loader.config({paths: {vs: '/assets/monaco/vs'}});
+    loader.config({paths: {vs: 'assets/monaco/vs'}});
 
     loader.init().then((monacoInstance) => {
+      if (this.destroyed) {
+        return;
+      }
       const editor = monacoInstance.editor.create(this.editorContainer.nativeElement, {
         value: this.layoutJson(),
         language: 'json',
@@ -182,6 +186,7 @@ export class RawFrame implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
     if (this.editor) {
       this.editor.dispose();
     }
