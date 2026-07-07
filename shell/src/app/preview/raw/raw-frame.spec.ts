@@ -18,7 +18,6 @@ import {TestBed} from '@angular/core/testing';
 import {RawFrame} from './raw-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
-import {MatInputHarness} from '@angular/material/input/testing';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens/environment-tokens';
@@ -28,6 +27,62 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
+
+const {createMock, mockEditor} = vi.hoisted(() => {
+  const mockEditor = {
+    getValue: vi.fn(() => ''),
+    setValue: vi.fn(),
+    onDidChangeModelContent: vi.fn(() => ({dispose: () => {}})),
+    updateOptions: vi.fn(),
+    dispose: vi.fn(),
+  };
+
+  const create = vi.fn((container: HTMLElement, options: any) => {
+    const textarea = document.createElement('textarea');
+    textarea.className = 'mock-monaco-textarea';
+    textarea.value = options.value || '';
+    if (options.readOnly) {
+      textarea.readOnly = true;
+    }
+    container.appendChild(textarea);
+
+    mockEditor.getValue.mockImplementation(() => textarea.value);
+    mockEditor.setValue.mockImplementation((val: string) => {
+      textarea.value = val;
+    });
+    mockEditor.onDidChangeModelContent.mockImplementation((cb: any) => {
+      textarea.addEventListener('input', cb);
+      return {
+        dispose: () => textarea.removeEventListener('input', cb),
+      };
+    });
+    mockEditor.updateOptions.mockImplementation((newOpts: any) => {
+      if (newOpts.readOnly !== undefined) {
+        textarea.readOnly = newOpts.readOnly;
+      }
+    });
+    mockEditor.dispose.mockImplementation(() => {
+      textarea.remove();
+    });
+
+    return mockEditor as any;
+  });
+
+  return {createMock: create, mockEditor};
+});
+
+vi.mock('@monaco-editor/loader', () => {
+  return {
+    default: {
+      config: vi.fn(),
+      init: vi.fn().mockResolvedValue({
+        editor: {
+          create: createMock,
+        },
+      }),
+    },
+  };
+});
 
 class MockChatState {
   readonly isProgrammaticStreamActive = signal<boolean>(false);
@@ -66,6 +121,19 @@ describe('RawFrame JSON Source Editor View', () => {
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
+
+    mockEditor.getValue.mockClear();
+    mockEditor.setValue.mockClear();
+    mockEditor.onDidChangeModelContent.mockClear();
+    mockEditor.updateOptions.mockClear();
+    mockEditor.dispose.mockClear();
+    createMock.mockClear();
+
+    mockEditor.getValue.mockReturnValue(
+      '{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json", "sendDataModel": true}}\n' +
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "sample-surface", "components": [{"id": "root", "component": "Column", "children": ["title", "location_input", "pickup_input", "dropoff_input", "book_button"], "justify": "start", "align": "stretch"}, {"id": "title", "component": "Text", "text": "Book a Car", "variant": "h1"}, {"id": "location_input", "component": "TextField", "label": "Pick-up Location", "value": {"path": "/booking/location"}, "variant": "shortText"}, {"id": "pickup_input", "component": "DateTimeInput", "label": "Pick-up Date", "value": {"path": "/booking/pickupDate"}, "enableDate": true, "enableTime": false}, {"id": "dropoff_input", "component": "DateTimeInput", "label": "Drop-off Date", "value": {"path": "/booking/dropoffDate"}, "enableDate": true, "enableTime": false}, {"id": "book_button", "component": "Button", "child": "book_button_text", "variant": "primary", "action": {"event": {"name": "searchCars", "context": {"location": {"path": "/booking/location"}, "pickupDate": {"path": "/booking/pickupDate"}, "dropoffDate": {"path": "/booking/dropoffDate"}}}}}, {"id": "book_button_text", "component": "Text", "text": "Search Cars", "variant": "body"}]}}\n' +
+        '{"version": "v0.9", "updateDataModel": {"surfaceId": "sample-surface", "path": "/booking", "value": {"location": "", "pickupDate": "", "dropoffDate": ""}}}',
+    );
   });
 
   afterEach(() => {
@@ -97,12 +165,14 @@ describe('RawFrame JSON Source Editor View', () => {
 
     const fixture = TestBed.createComponent(RawFrame);
     fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
     const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RawFrameHarness);
     const component = fixture.componentInstance;
     return {fixture, harness, component};
   }
 
-  it('renders the raw JSON layout inside an Angular Material form field', async () => {
+  it('renders the raw JSON layout inside the editor', async () => {
     const {harness} = await setup(false);
     expect(await harness.getJsonText()).toContain('"createSurface"');
   });
@@ -290,7 +360,7 @@ describe('RawFrame JSON Source Editor View', () => {
     expect(stateSyncMock.updateDraft).toHaveBeenCalledWith('{"version": "v0.9"}');
   });
 
-  it('locks textarea inputs forcefully during active streams lockouts periods', async () => {
+  it('locks editor inputs forcefully during active streams lockouts periods', async () => {
     const {fixture, harness} = await setup(false);
     expect(await harness.isReadOnly()).toBe(false);
 
@@ -305,11 +375,10 @@ describe('RawFrame JSON Source Editor View', () => {
     expect(await harness.isReadOnly()).toBe(false);
   });
 
-  it('applies the accessible name "Raw layout JSON" to the raw layout textarea', async () => {
-    const {fixture} = await setup(false);
-    const loader = TestbedHarnessEnvironment.loader(fixture);
-    const input = await loader.getHarness(MatInputHarness);
-    const host = await input.host();
-    expect(await host.getAttribute('aria-label')).toBe('Raw layout JSON');
+  it('applies the accessible name "Raw layout JSON" to the raw layout editor options', async () => {
+    await setup(false);
+    expect(createMock).toHaveBeenCalled();
+    const lastCall = createMock.mock.calls[createMock.mock.calls.length - 1];
+    expect(lastCall[1].ariaLabel).toBe('Raw layout JSON');
   });
 });

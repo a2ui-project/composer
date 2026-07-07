@@ -22,13 +22,16 @@ import {
   effect,
   untracked,
   WritableSignal,
+  ElementRef,
+  ViewChild,
+  AfterViewInit,
+  OnDestroy,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {MatFormFieldModule} from '@angular/material/form-field';
-import {MatInputModule} from '@angular/material/input';
-import {FormsModule} from '@angular/forms';
 import {Subject} from 'rxjs';
 import {debounceTime, filter, map} from 'rxjs/operators';
+import loader from '@monaco-editor/loader';
+import type * as monaco from 'monaco-editor';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens/environment-tokens';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
@@ -43,14 +46,16 @@ import {tryParseJsonArray} from '../../utils/json';
 @Component({
   selector: 'a2ui-composer-raw-frame',
   standalone: true,
-  imports: [MatFormFieldModule, MatInputModule, FormsModule],
   templateUrl: './raw-frame.ng.html',
   styleUrl: './raw-frame.scss',
 })
-export class RawFrame {
+export class RawFrame implements AfterViewInit, OnDestroy {
   protected readonly isExtensionMode = inject(IS_EXTENSION_MODE);
   protected readonly layoutJson: WritableSignal<string>;
   protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
+
+  @ViewChild('editorContainer') editorContainer!: ElementRef<HTMLDivElement>;
+  private editor?: monaco.editor.IStandaloneCodeEditor;
 
   readonly TEST_ONLY = {
     layoutJson: () => this.layoutJson,
@@ -92,6 +97,9 @@ export class RawFrame {
         if (this.layoutJson() !== activeDraftVal) {
           queueMicrotask(() => {
             this.layoutJson.set(activeDraftVal);
+            if (this.editor && this.editor.getValue() !== activeDraftVal) {
+              this.editor.setValue(activeDraftVal);
+            }
 
             // Run live render updating matching activeDraft commits
             try {
@@ -106,6 +114,15 @@ export class RawFrame {
               this.isJsonInvalid.set(true);
             }
           });
+        }
+      });
+    });
+
+    effect(() => {
+      const locked = this.isLocked();
+      untracked(() => {
+        if (this.editor) {
+          this.editor.updateOptions({readOnly: locked});
         }
       });
     });
@@ -133,6 +150,41 @@ export class RawFrame {
       .subscribe((payload: unknown[]) => {
         this.hostCommunication.sendRenderA2UI(payload);
       });
+  }
+
+  ngAfterViewInit() {
+    // Configure Monaco loader to use the local assets copy
+    loader.config({paths: {vs: '/assets/monaco/vs'}});
+
+    loader.init().then((monacoInstance) => {
+      const editor = monacoInstance.editor.create(this.editorContainer.nativeElement, {
+        value: this.layoutJson(),
+        language: 'json',
+        theme: 'vs-light',
+        automaticLayout: true,
+        minimap: {enabled: false},
+        readOnly: this.isLocked(),
+        scrollBeyondLastLine: false,
+        lineNumbers: 'on',
+        folding: true,
+        wordWrap: 'on',
+        ariaLabel: 'Raw layout JSON',
+      });
+      this.editor = editor;
+
+      editor.onDidChangeModelContent(() => {
+        const val = editor.getValue();
+        if (val !== this.layoutJson()) {
+          this.onLayoutChange(val);
+        }
+      });
+    });
+  }
+
+  ngOnDestroy() {
+    if (this.editor) {
+      this.editor.dispose();
+    }
   }
 
   protected onLayoutChange(value: string): void {

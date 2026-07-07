@@ -29,6 +29,11 @@
                 "glob": "**/*",
                 "input": "node_modules/ng-basic-catalog/dist/ng-basic-catalog/browser",
                 "output": "samples/ng-basic-catalog"
+              },
+              {
+                "glob": "**/*",
+                "input": "node_modules/monaco-editor/min/vs",
+                "output": "assets/monaco/vs"
               }
             ],
             "styles": [

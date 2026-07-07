@@ -16,7 +16,6 @@
  */
 
 import {ComponentHarness} from '@angular/cdk/testing';
-import {MatInputHarness} from '@angular/material/input/testing';
 
 /**
  * Harness for interacting with the raw-frame preview editor.
@@ -25,7 +24,7 @@ import {MatInputHarness} from '@angular/material/input/testing';
 export class RawFrameHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-raw-frame';
 
-  protected getInputHarness = this.locatorFor(MatInputHarness);
+  private readonly textareaLocator = this.locatorFor('textarea.mock-monaco-textarea');
 
   async isCollapsed(): Promise<boolean> {
     const container = await this.locatorFor('.raw-frame-container')();
@@ -33,13 +32,14 @@ export class RawFrameHarness extends ComponentHarness {
   }
 
   async getJsonText(): Promise<string> {
-    const input = await this.getInputHarness();
-    return input.getValue();
+    const textarea = await this.textareaLocator();
+    return textarea.getProperty('value');
   }
 
   async setJsonText(value: string): Promise<void> {
-    const input = await this.getInputHarness();
-    return input.setValue(value);
+    const textarea = await this.textareaLocator();
+    await textarea.setInputValue(value);
+    await textarea.dispatchEvent('input');
   }
 
   async hasInvalidJsonBadge(): Promise<boolean> {
@@ -48,8 +48,7 @@ export class RawFrameHarness extends ComponentHarness {
   }
 
   async isReadOnly(): Promise<boolean> {
-    const input = await this.getInputHarness();
-    const host = await input.host();
-    return !!(await host.getProperty<boolean>('readOnly'));
+    const textarea = await this.textareaLocator();
+    return textarea.getProperty('readOnly');
   }
 }

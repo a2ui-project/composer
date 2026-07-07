@@ -21,14 +21,5 @@
   @if (isJsonInvalid()) {
     <div class="invalid-json-badge">⚠️ Invalid JSON syntax detected.</div>
   }
-  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="raw-json-field">
-    <textarea
-      matInput
-      aria-label="Raw layout JSON"
-      [ngModel]="layoutJson()"
-      (ngModelChange)="onLayoutChange($event)"
-      [readOnly]="isLocked()"
-      placeholder="Enter raw JSON here..."
-    ></textarea>
-  </mat-form-field>
+  <div #editorContainer class="monaco-editor-container"></div>
 </div>
