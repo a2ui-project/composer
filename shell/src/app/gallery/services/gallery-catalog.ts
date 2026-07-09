@@ -21,6 +21,7 @@ import {CatalogSchemaResolver, ParsedProperty} from '../schema/catalog-schema-re
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {UsageGenerator} from './usage-generator';
 import {PreviewBridgeMessageType, type ComponentUsage, type ComponentUsages} from 'a2ui-bridge';
+import {formatJson} from '../../utils/json';
 
 /**
  * Represents components grouped under a specific category name.
@@ -258,7 +259,7 @@ export class GalleryCatalog {
     }
 
     const preset = this.selectedComponentPreset();
-    return preset && preset.usage ? JSON.stringify(preset.usage, null, 2) : '';
+    return preset && preset.usage ? formatJson(preset.usage) : '';
   });
 
   constructor() {

@@ -174,11 +174,16 @@ for (const config of CONFIGS) {
         return (monaco?.editor?.getModels()?.length ?? 0) > 0;
       });
 
-      const rawJson = await page.evaluate(() => {
-        const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
-        return model ? model.getValue() : '';
-      });
-      expect(rawJson).not.toBe('');
+      let rawJson = '';
+      await expect
+        .poll(async () => {
+          rawJson = await page.evaluate(() => {
+            const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
+            return model ? model.getValue() : '';
+          });
+          return rawJson;
+        })
+        .not.toBe('');
 
       const updatedRawJson = rawJson.replace(
         '"text": "Search Cars"',

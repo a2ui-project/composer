@@ -35,3 +35,13 @@ export function tryParseJsonArray(content: string): unknown[] | null {
   }
   return null;
 }
+
+/**
+ * Formats the given value as a JSON string with 2-space indentation.
+ *
+ * @param value The value to format.
+ * @returns The formatted JSON string.
+ */
+export function formatJson(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}

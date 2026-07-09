@@ -15,6 +15,7 @@
  */
 
 import {Component, inject, signal, computed, linkedSignal, effect, untracked} from '@angular/core';
+import {formatJson} from '../../utils/json';
 import {toObservable} from '@angular/core/rxjs-interop';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -46,7 +47,7 @@ export class DataModel {
     source: this.latestModelValue,
     computation: (newModel: unknown): string => {
       if (newModel === null) return '';
-      return typeof newModel === 'string' ? newModel : JSON.stringify(newModel, null, 2);
+      return typeof newModel === 'string' ? newModel : formatJson(newModel);
     },
   });
 

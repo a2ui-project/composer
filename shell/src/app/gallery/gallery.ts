@@ -35,6 +35,7 @@ import {GalleryCatalog} from './services/gallery-catalog';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
 import {HostCommunication} from '../shell/host-communication/host-communication';
+import {formatJson} from '../utils/json';
 
 /**
  * Displays a split visual catalog gallery enabling search, interactive component selection,
@@ -134,7 +135,7 @@ export class Gallery implements OnInit, OnDestroy {
   /** The parsed property specifications for the selected component. */
   protected readonly selectedComponentProperties = this.catalogService.selectedComponentProperties;
 
-  /** The formatted JSON usage snippet wrapped in the A2UI spec envelope. */
+  /** The formatted JSON usage snippet containing the component array. */
   protected readonly selectedComponentUsage = this.catalogService.selectedComponentUsage;
 
   protected readonly catalogId = computed<string | null>(() => {
@@ -236,36 +237,37 @@ export class Gallery implements OnInit, OnDestroy {
         return;
       }
 
-      const createSurfaceLine = JSON.stringify({
+      const createSurfaceCmd = {
         version: 'v0.9',
         createSurface: {
           surfaceId: 'gallery-preview',
           catalogId,
         },
-      });
+      };
 
       const componentsPayload = this.getComponentsPayload(components as unknown[]);
 
-      const updateComponentsLine = JSON.stringify({
+      const updateComponentsCmd = {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
           components: componentsPayload,
         },
-      });
+      };
 
-      let payload = `${createSurfaceLine}\n${updateComponentsLine}`;
+      const commands: unknown[] = [createSurfaceCmd, updateComponentsCmd];
 
       if (dataObj !== undefined) {
-        const updateDataModelLine = JSON.stringify({
+        commands.push({
           version: 'v0.9',
           updateDataModel: {
             surfaceId: 'gallery-preview',
             value: dataObj,
           },
         });
-        payload += `\n${updateDataModelLine}`;
       }
+
+      const payload = formatJson(commands);
 
       if (!navigator.clipboard) {
         console.error('Clipboard API is not available in this environment.');

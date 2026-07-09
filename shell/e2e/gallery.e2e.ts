@@ -113,7 +113,7 @@ test.describe('Components Gallery User Journey', () => {
     const iframe = renderedFrame.locator('iframe');
     await expect(iframe).toBeVisible();
 
-    // 10. Click copy to clipboard and assert clipboard content represents a JSONLines envelope
+    // 10. Click copy to clipboard and assert clipboard content represents a JSON array envelope
     const copyButton = page.getByRole('button', {name: /copy/i});
     await expect(copyButton).toBeVisible();
     await copyButton.click();
@@ -122,15 +122,18 @@ test.describe('Components Gallery User Journey', () => {
     await expect
       .poll(async () => {
         const text = await page.evaluate(() => navigator.clipboard.readText());
-        const lines = text.trim().split('\n');
-        if (lines.length !== 2) {
-          return {error: `Expected 2 lines, got ${lines.length}`};
-        }
         try {
-          const line1 = JSON.parse(lines[0]) as Record<string, unknown>;
-          const line2 = JSON.parse(lines[1]) as Record<string, unknown>;
-          const createSurface = line1['createSurface'] as Record<string, unknown> | undefined;
-          const updateComponents = line2['updateComponents'] as Record<string, unknown> | undefined;
+          const commands = JSON.parse(text);
+          if (!Array.isArray(commands)) {
+            return {error: 'Expected a JSON array'};
+          }
+          if (commands.length !== 2) {
+            return {error: `Expected 2 commands, got ${commands.length}`};
+          }
+          const cmd1 = commands[0] as Record<string, unknown>;
+          const cmd2 = commands[1] as Record<string, unknown>;
+          const createSurface = cmd1['createSurface'] as Record<string, unknown> | undefined;
+          const updateComponents = cmd2['updateComponents'] as Record<string, unknown> | undefined;
           const components = updateComponents?.['components'] as
             | Array<Record<string, unknown>>
             | undefined;
@@ -138,23 +141,23 @@ test.describe('Components Gallery User Journey', () => {
             Array.isArray(components) &&
             components.some(c => c['component'] === firstComponentName);
           return {
-            line1Version: line1['version'],
+            cmd1Version: cmd1['version'],
             hasCreateSurface: typeof createSurface === 'object' && createSurface !== null,
             hasCatalogId: typeof createSurface?.['catalogId'] === 'string',
-            line2Version: line2['version'],
+            cmd2Version: cmd2['version'],
             hasUpdateComponents: typeof updateComponents === 'object' && updateComponents !== null,
             componentsArray: Array.isArray(components),
             hasComponent,
           };
         } catch (e) {
-          return {error: 'Failed to parse JSON lines'};
+          return {error: 'Failed to parse JSON array'};
         }
       })
       .toEqual({
-        line1Version: 'v0.9',
+        cmd1Version: 'v0.9',
         hasCreateSurface: true,
         hasCatalogId: true,
-        line2Version: 'v0.9',
+        cmd2Version: 'v0.9',
         hasUpdateComponents: true,
         componentsArray: true,
         hasComponent: true,

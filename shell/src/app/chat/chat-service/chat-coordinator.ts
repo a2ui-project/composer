@@ -15,6 +15,7 @@
  */
 
 import {Injectable, inject, computed, effect, untracked} from '@angular/core';
+import {formatJson} from '../../utils/json';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {LlmMessage, LlmClient, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
@@ -231,9 +232,9 @@ export class ChatCoordinator {
       // Stage 3: Ready & Commit Layout Wipes
       this.chatState.setPipelineStatus(PipelineStatus.READY);
 
-      // Turn list of updates back into raw JSON lines text to write to
+      // Turn list of updates back into raw formatted JSON text to write to
       // editor draft
-      const finalLayoutText = parsedBlocks.map(b => JSON.stringify(b)).join('\n') + '\n';
+      const finalLayoutText = formatJson(parsedBlocks);
 
       // Commit layout synchronously to editor viewport before releasing
       // lockout
@@ -705,7 +706,7 @@ export class ChatCoordinator {
       );
     }
 
-    return this.generateSystemPrompt(JSON.stringify(catalog, null, 2));
+    return this.generateSystemPrompt(formatJson(catalog));
   });
 
   private generateSystemPrompt(catalog: string): string {

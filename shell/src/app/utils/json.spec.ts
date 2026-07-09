@@ -15,7 +15,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {tryParseJsonArray} from './json';
+import {tryParseJsonArray, formatJson} from './json';
 
 describe('JSON Array Parser Utilities', () => {
   it('parses valid JSON array strings including whitespace trimming', () => {
@@ -30,5 +30,13 @@ describe('JSON Array Parser Utilities', () => {
     expect(tryParseJsonArray('{"not": "an array"}')).toBeNull();
     expect(tryParseJsonArray('"string primitive"')).toBeNull();
     expect(tryParseJsonArray('123')).toBeNull();
+  });
+});
+
+describe('JSON Formatter Utilities', () => {
+  it('formats objects, arrays, and primitives correctly with 2 spaces', () => {
+    expect(formatJson({hello: 'world'})).toBe('{\n  "hello": "world"\n}');
+    expect(formatJson([1, 2])).toBe('[\n  1,\n  2\n]');
+    expect(formatJson('test')).toBe('"test"');
   });
 });

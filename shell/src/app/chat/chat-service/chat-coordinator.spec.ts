@@ -245,13 +245,25 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     // Verify raw content streamed directly inside model's turn logs
     const updatedHistory = chatStateMock.chatHistory();
     expect(updatedHistory[1].role).toBe(MessageRole.MODEL);
-    expect(updatedHistory[1].content).toContain('"createSurface": {"surfaceId": "s1"');
+    expect(updatedHistory[1].content).toContain('"createSurface": {');
     expect(updatedHistory[1].content).not.toContain('●●●');
 
     // Verify layout committed back in a single commit transaction
     expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalledTimes(1);
     expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalledWith(
-      '{"version":"v0.9","createSurface":{"surfaceId":"s1",' + '"catalogId":"basic"}}\n',
+      JSON.stringify(
+        [
+          {
+            version: 'v0.9',
+            createSurface: {
+              surfaceId: 's1',
+              catalogId: 'basic',
+            },
+          },
+        ],
+        null,
+        2,
+      ),
     );
   });
 
@@ -260,10 +272,8 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     const corruptedRawOutput =
       'Conversational filler text preceding block...\n' +
       '```json\n' +
-      '{"version": "v0.9", "createSurface": {"surfaceId": "s1", ' +
-      '"catalogId": "basic"\n' + // unclosed curly braces!
-      '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", ' +
-      '"components": [{"id": "c1", "component": "Text", "rules": [1, 2],}\n' +
+      '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "basic"}}\n' +
+      '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "Text", "rules": [1, 2],}\n' +
       '```\n' +
       'Filler text following block...';
 
@@ -297,30 +307,24 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
     // Assert that the commited layout is fully healed and sanitized:
     // - Markdown stripped
-    // - missing curly brace appended to createSurface
+    // - missing bracket appended to array
     // - trailing comma removed, mock property 'rules' stripped!
     const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
-    const lines = committedOutput.trim().split('\n');
-    expect(lines.length).toBe(2);
+    const parsed = JSON.parse(committedOutput);
+    expect(parsed.length).toBe(2);
 
-    const parsed1 = JSON.parse(lines[0]);
-    expect(parsed1.createSurface.surfaceId).toBe('s1'); // healed braces!
+    expect(parsed[0].createSurface.surfaceId).toBe('s1');
 
-    const parsed2 = JSON.parse(lines[1]);
-    expect(parsed2.updateComponents.components[0].id).toBe('c1');
+    expect(parsed[1].updateComponents.components[0].id).toBe('c1');
     // mock fields stripped!
-    expect(parsed2.updateComponents.components[0].rules).toBeUndefined();
+    expect(parsed[1].updateComponents.components[0].rules).toBeUndefined();
   });
 
   /* Legacy Widget Fallback healing check */
   it('heals elements with legacy "name" properties mapping to type', async () => {
     const legacyRawOutput =
-      '{"version": "v0.9", "createSurface": {"surfaceId": "s2", ' +
-      '"catalogId": "test"}}\n' +
-      '{"version": "v0.9", "updateComponents": {"surfaceId": "s2", ' +
-      '"components": [' +
-      '  {"id": "c1", "name": "TextField"}' + // legacy name property!
-      ']}}\n';
+      '{"version": "v0.9", "createSurface": {"surfaceId": "s2", "catalogId": "test"}}\n' +
+      '{"version": "v0.9", "updateComponents": {"surfaceId": "s2", "components": [{"id": "c1", "name": "TextField"}]}}';
 
     llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
       const contentStream: AsyncIterable<string> = {
@@ -351,8 +355,8 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
     // Verify committed element has mapped corrected component field
     const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
-    const parsed = JSON.parse(committedOutput.trim().split('\n')[1]);
-    const comp = parsed.updateComponents.components[0];
+    const parsed = JSON.parse(committedOutput);
+    const comp = parsed[1].updateComponents.components[0];
 
     expect(comp.component).toBe('TextField');
     expect(comp.name).toBeUndefined();
@@ -406,8 +410,8 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
     // Verify committed output elements have been mapped correct elements!
     const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
-    const parsed = JSON.parse(committedOutput.trim().split('\n')[1]);
-    const components = parsed.updateComponents.components;
+    const parsed = JSON.parse(committedOutput);
+    const components = parsed[1].updateComponents.components;
 
     expect(components[0].component).toBe('TextField');
     expect(components[1].component).toBe('CheckBox');
@@ -584,6 +588,123 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
     expect(service.isProgrammaticStreamActive()).toBe(false);
     expect(stateSyncMock.flushDraft).toHaveBeenCalledTimes(1);
+  });
+
+  describe('JSONL Parsing & Line-Level Healing', () => {
+    it('successfully parses multiple JSON Lines into a single JSON array', async () => {
+      const jsonlOutput =
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}\n' +
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "TextField"}]}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream: AsyncIterable<string> = {
+          [Symbol.asyncIterator]() {
+            const chunks = [jsonlOutput];
+            let idx = 0;
+            return {
+              async next(): Promise<IteratorResult<string>> {
+                if (idx < chunks.length) {
+                  return {value: chunks[idx++], done: false};
+                }
+                return {value: undefined, done: true};
+              },
+            };
+          },
+        };
+        return {contentStream, complete: Promise.resolve(jsonlOutput)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {
+          TextField: {},
+        },
+      });
+
+      await service.submitPrompt('JSONL test prompt');
+
+      const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
+      const parsed = JSON.parse(committedOutput);
+
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed.length).toBe(2);
+      expect(parsed[0].createSurface.surfaceId).toBe('s1');
+      expect(parsed[1].updateComponents.components[0].component).toBe('TextField');
+    });
+
+    it('heals a truncated last line of JSONL output', async () => {
+      // Last line is truncated, missing closing braces
+      const truncatedJsonlOutput =
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}\n' +
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "TextField"}]';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream: AsyncIterable<string> = {
+          [Symbol.asyncIterator]() {
+            const chunks = [truncatedJsonlOutput];
+            let idx = 0;
+            return {
+              async next(): Promise<IteratorResult<string>> {
+                if (idx < chunks.length) {
+                  return {value: chunks[idx++], done: false};
+                }
+                return {value: undefined, done: true};
+              },
+            };
+          },
+        };
+        return {contentStream, complete: Promise.resolve(truncatedJsonlOutput)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {
+          TextField: {},
+        },
+      });
+
+      await service.submitPrompt('Truncated JSONL test prompt');
+
+      const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
+      const parsed = JSON.parse(committedOutput);
+
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed.length).toBe(2);
+      expect(parsed[1].updateComponents.components[0].component).toBe('TextField');
+    });
+
+    it('throws error when a critical layout line is completely corrupted and cannot be healed', async () => {
+      const corruptedJsonlOutput =
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}\n' +
+        '{"version": "v0.9", "updateComponents": { {{{ corrupt';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream: AsyncIterable<string> = {
+          [Symbol.asyncIterator]() {
+            const chunks = [corruptedJsonlOutput];
+            let idx = 0;
+            return {
+              async next(): Promise<IteratorResult<string>> {
+                if (idx < chunks.length) {
+                  return {value: chunks[idx++], done: false};
+                }
+                return {value: undefined, done: true};
+              },
+            };
+          },
+        };
+        return {contentStream, complete: Promise.resolve(corruptedJsonlOutput)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {},
+      });
+
+      await service.submitPrompt('Corrupted JSONL test prompt');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+    });
   });
 
   describe('sanitizeComponentObject', () => {

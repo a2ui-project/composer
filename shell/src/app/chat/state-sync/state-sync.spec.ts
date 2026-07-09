@@ -102,9 +102,9 @@ describe('StateSync Autosave Draft Integrations', () => {
   });
 
   it('updates draft in-memory synchronously and ignores initial setup debouncer', () => {
-    service.updateDraft('{"version": "v0.9"}');
-    expect(service.hydrateActiveDraft()).toBe('{"version": "v0.9"}');
-    expect(service.activeDraft()).toBe('{"version": "v0.9"}');
+    service.updateDraft('[{"version": "v0.9"}]');
+    expect(service.hydrateActiveDraft()).toBe('[{"version": "v0.9"}]');
+    expect(service.activeDraft()).toBe('[{"version": "v0.9"}]');
 
     // Debounce timer should NOT fire synchronization instantly
     expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe('StateSync Autosave Draft Integrations', () => {
   });
 
   it('triggers history sync after 300ms debouncing, appending a new node', () => {
-    service.updateDraft('{"version": "v0.9"}');
+    service.updateDraft('[{"version": "v0.9"}]');
     TestBed.flushEffects(); // Flush toObservable event boundaries instantly!
 
     vi.advanceTimersByTime(150);
@@ -122,7 +122,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     expect(chatStateMock.setChatHistory).toHaveBeenCalledWith([
       {
         role: MessageRole.USER,
-        content: '{"version":"v0.9"}\n',
+        content: '[\n  {\n    "version": "v0.9"\n  }\n]',
       },
     ]);
   });
@@ -132,11 +132,11 @@ describe('StateSync Autosave Draft Integrations', () => {
     chatStateMock.setChatHistory([
       {
         role: MessageRole.USER,
-        content: '{"version": "v0.9", "orig": true}\n',
+        content: '[\n  {\n    "version": "v0.9",\n    "orig": true\n  }\n]',
       },
     ]);
 
-    service.updateDraft('{"version": "v0.9", "updated": true}');
+    service.updateDraft('[{"version": "v0.9", "updated": true}]');
     TestBed.flushEffects();
 
     vi.advanceTimersByTime(300);
@@ -145,7 +145,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     expect(chatStateMock.setChatHistory).toHaveBeenCalledWith([
       {
         role: MessageRole.USER,
-        content: '{"version":"v0.9","updated":true}\n',
+        content: '[\n  {\n    "version": "v0.9",\n    "updated": true\n  }\n]',
       },
     ]);
     expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
@@ -155,7 +155,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     chatStateMock.setChatHistory([
       {
         role: MessageRole.USER,
-        content: '{"version": "v0.9"}\n',
+        content: '[\n  {\n    "version": "v0.9"\n  }\n]',
       },
       {
         role: MessageRole.MODEL,
@@ -163,7 +163,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       },
     ]);
 
-    service.updateDraft('{"version": "v0.9", "post-turn": true}');
+    service.updateDraft('[{"version": "v0.9", "post-turn": true}]');
     TestBed.flushEffects();
 
     vi.advanceTimersByTime(300);
@@ -174,7 +174,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     const initialMockHistory = [
       {
         role: MessageRole.USER,
-        content: '{"version": "v0.9"}\n',
+        content: '[\n  {\n    "version": "v0.9"\n  }\n]',
       },
       {
         role: MessageRole.MODEL,
@@ -186,7 +186,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     expect(updated).toHaveLength(3);
     expect(updated[2]).toEqual({
       role: MessageRole.USER,
-      content: '{"version":"v0.9","post-turn":true}\n',
+      content: '[\n  {\n    "version": "v0.9",\n    "post-turn": true\n  }\n]',
     });
   });
 
@@ -198,7 +198,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       },
     ]);
 
-    service.updateDraft('{"version": "v0.9", "components": []}');
+    service.updateDraft('[{"version": "v0.9", "components": []}]');
     TestBed.flushEffects();
 
     vi.advanceTimersByTime(300);
@@ -221,7 +221,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     });
     expect(updated[1]).toEqual({
       role: MessageRole.USER,
-      content: '{"version":"v0.9","components":[]}\n',
+      content: '[\n  {\n    "version": "v0.9",\n    "components": []\n  }\n]',
     });
   });
 
@@ -248,10 +248,12 @@ describe('StateSync Autosave Draft Integrations', () => {
   describe('Autosave Draft Sanitizations & Mock Security Checks', () => {
     it('aggressively strips registerMockRules commands', () => {
       const dirtyLayout =
-        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": []}}\n' +
-        '{"registerMockRules": {"rule": "always-fail"}}\n' +
-        '{"mockRulesConfig": {"latency": 500}}\n' +
-        '{"version": "v0.9", "updateDataModel": {"surfaceId": "s-1", "path": "/p1", "value": ""}}';
+        '[\n' +
+        '  {"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": []}},\n' +
+        '  {"registerMockRules": {"rule": "always-fail"}},\n' +
+        '  {"mockRulesConfig": {"latency": 500}},\n' +
+        '  {"version": "v0.9", "updateDataModel": {"surfaceId": "s-1", "path": "/p1", "value": ""}}\n' +
+        ']';
 
       service.updateDraft(dirtyLayout);
       TestBed.flushEffects();
@@ -272,10 +274,10 @@ describe('StateSync Autosave Draft Integrations', () => {
 
     it('recursively strips property keys matching /rules/ or prefix /^mock/i', () => {
       const dirtyLayout =
-        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
+        '[{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
         '{"id": "c-1", "component": "TextField", "label": "L1", "value": {"path": "/p1"}, ' +
         '"rules": ["r1"], "mockProp": "m1"}' +
-        ']}}';
+        ']}}]';
 
       service.updateDraft(dirtyLayout);
       TestBed.flushEffects();
@@ -290,12 +292,9 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(syncedContent).not.toContain('"mockProp"');
     });
 
-    it('discard syntax-corrupt layout components, outputting warning diagnostics', () => {
+    it('discards syntax-corrupt layout, returning empty and outputting warning diagnostics', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const badLayout =
-        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": []}}\n' +
-        '{"corrupted_json_lines...\n' +
-        '{"version": "v0.9", "updateDataModel": {"surfaceId": "s-1", "path": "/p", "value": ""}}';
+      const badLayout = '[ {"version": "v0.9"}, corrupt... ]';
 
       service.updateDraft(badLayout);
       TestBed.flushEffects();
@@ -305,10 +304,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
       const syncedContent = syncCall[0].content;
 
-      expect(syncedContent).toContain('"updateComponents"');
-      expect(syncedContent).toContain('"updateDataModel"');
-      expect(syncedContent).not.toContain('"corrupted_json_lines"');
-
+      expect(syncedContent).toBe('');
       expect(warnSpy).toHaveBeenCalled();
     });
 
@@ -317,12 +313,12 @@ describe('StateSync Autosave Draft Integrations', () => {
         'strips their children array reference markers from layout hierarchy',
       () => {
         const dirtyLayout =
-          '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
+          '[{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
           '{"id": "root", "component": "Column", "children": ["c-1", "mock_rules_container"]},' +
           '{"id": "c-1", "component": "TextField", "label": "L1"},' +
           '{"id": "mock_rules_container", "component": "Container", "children": ["m-1"]},' +
           '{"id": "m-1", "component": "Text", "text": "Mock rule visual element"}' +
-          ']}}';
+          ']}}]';
 
         service.updateDraft(dirtyLayout);
         TestBed.flushEffects();
@@ -333,23 +329,23 @@ describe('StateSync Autosave Draft Integrations', () => {
         const syncedContent = syncCall[0].content;
 
         // Verify component presence and layout structure integrity
-        expect(syncedContent).toContain('"id":"root"');
-        expect(syncedContent).toContain('"id":"c-1"');
+        expect(syncedContent).toContain('"id": "root"');
+        expect(syncedContent).toContain('"id": "c-1"');
 
         // Verify that 'mock_rules_container' component itself is stripped
-        expect(syncedContent).not.toContain('"id":"mock_rules_container"');
+        expect(syncedContent).not.toContain('"id": "mock_rules_container"');
         // Verify that reference to 'mock_rules_container' in root's children array is pruned
-        expect(syncedContent).toContain('"children":["c-1"]');
+        expect(syncedContent).toContain('"c-1"');
         expect(syncedContent).not.toContain('mock_rules_container');
       },
     );
 
     it('handles non-object items in components list during sanitization', () => {
       const dirtyLayout =
-        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
+        '[{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
         '{"id": "c-1", "component": "TextField", "label": "L1"},' +
         '"invalid-string-element"' +
-        ']}}';
+        ']}}]';
 
       service.updateDraft(dirtyLayout);
       TestBed.flushEffects();
@@ -359,15 +355,15 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
       const syncedContent = syncCall[0].content;
 
-      expect(syncedContent).toContain('"id":"c-1"');
+      expect(syncedContent).toContain('"id": "c-1"');
       expect(syncedContent).toContain('"invalid-string-element"');
     });
 
     it('handles component array properties containing primitive values during sanitization', () => {
       const dirtyLayout =
-        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
+        '[{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
         '{"id": "c-1", "component": "ChoicePicker", "options": ["option-1", "option-2"]}' +
-        ']}}';
+        ']}}]';
 
       service.updateDraft(dirtyLayout);
       TestBed.flushEffects();
@@ -395,35 +391,16 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
       const syncedContent = syncCall[0].content;
 
-      expect(syncedContent).toContain('"id":"c-1"');
-    });
-
-    it('handles non-object lines in JSON Lines format during sanitization', () => {
-      const dirtyLayout =
-        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": []}}\n' +
-        '"invalid-primitive-line"\n' +
-        '{"version": "v0.9", "updateDataModel": {"surfaceId": "s-1", "path": "/p", "value": ""}}';
-
-      service.updateDraft(dirtyLayout);
-      TestBed.flushEffects();
-
-      vi.advanceTimersByTime(300);
-
-      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
-      const syncedContent = syncCall[0].content;
-
-      expect(syncedContent).toContain('"updateComponents"');
-      expect(syncedContent).toContain('"updateDataModel"');
-      expect(syncedContent).not.toContain('invalid-primitive-line');
+      expect(syncedContent).toContain('"id": "c-1"');
     });
 
     it('sanitizes objects inside component array properties', () => {
       const dirtyLayout =
-        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
+        '[{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": [' +
         '{"id": "c-1", "component": "ChoicePicker", "options": [' +
         '{"label": "L1", "value": "V1", "mockProp": "strip-me"}' +
         ']}' +
-        ']}}';
+        ']}}]';
 
       service.updateDraft(dirtyLayout);
       TestBed.flushEffects();
@@ -433,7 +410,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
       const syncedContent = syncCall[0].content;
 
-      expect(syncedContent).toContain('"label":"L1"');
+      expect(syncedContent).toContain('"label": "L1"');
       expect(syncedContent).not.toContain('mockProp');
     });
 
@@ -465,8 +442,8 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(syncedContent).toContain('"primitive-element"');
     });
 
-    it('returns empty string when all layout lines are sanitized to null', () => {
-      service.updateDraft('{"registerMockRules": true}');
+    it('returns empty array when all layout lines are sanitized to null', () => {
+      service.updateDraft('[{"registerMockRules": true}]');
       TestBed.flushEffects();
 
       vi.advanceTimersByTime(300);
@@ -474,12 +451,12 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
       const syncedContent = syncCall[0].content;
 
-      expect(syncedContent).toBe('');
+      expect(syncedContent).toBe('[]');
     });
 
     it('handles updateComponents without components array during sanitization', () => {
       const invalidComponents =
-        '{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": "not-an-array"}}';
+        '[{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": "not-an-array"}}]';
 
       service.updateDraft(invalidComponents);
       TestBed.flushEffects();
@@ -489,7 +466,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
       const syncedContent = syncCall[0].content;
 
-      expect(syncedContent).toContain('"components":"not-an-array"');
+      expect(syncedContent).toContain('"components": "not-an-array"');
     });
   });
 
@@ -539,7 +516,7 @@ describe('StateSync Autosave Draft Integrations', () => {
 
       // User has typed some layout (dirty) matching basic catalog
       service.updateDraft(
-        '{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json", "sendDataModel": true}}\n{"version": "v0.9", "updateComponents": {"components": []}}',
+        '[{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json", "sendDataModel": true}}, {"version": "v0.9", "updateComponents": {"components": []}}]',
       );
       TestBed.flushEffects();
 
@@ -564,9 +541,9 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(materialInitialDraft).toContain('material_catalog.json');
 
       // User makes a change (dirty layout) but still on material catalog
-      const editedMaterialDraft =
-        materialInitialDraft +
-        '{"version": "v0.9", "updateComponents": {"components": [{"id": "foo"}]}}';
+      const parsedDraft = JSON.parse(materialInitialDraft);
+      parsedDraft.push({version: 'v0.9', updateComponents: {components: [{id: 'foo'}]}});
+      const editedMaterialDraft = JSON.stringify(parsedDraft, null, 2);
       service.updateDraft(editedMaterialDraft);
       TestBed.flushEffects();
 

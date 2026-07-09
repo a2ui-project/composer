@@ -21,8 +21,8 @@ import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {tryParseJsonArray} from '../../utils/json';
 import {RenderA2uiItem, A2uiComponentInstance, UpdateComponentsDetails} from 'a2ui-bridge';
+import {tryParseJsonArray, formatJson} from '../../utils/json';
 
 /**
  * Manages in-memory volatile autosave draft layouts and bidirectionally
@@ -49,7 +49,7 @@ export class StateSync {
   private readonly chatState = inject(ChatState);
   private readonly catalogManagement = inject(CatalogManagement);
 
-  // A "draft" represents the volatile, unsaved in-memory JSON Lines
+  // A "draft" represents the volatile, unsaved in-memory JSON array
   // payload containing the active surface setup, component hierarchy,
   // and data models currently rendered on the preview canvas.
   //
@@ -133,15 +133,17 @@ export class StateSync {
     if (!catalogId) {
       return '';
     }
-    const draftObj = {
-      version: 'v0.9',
-      createSurface: {
-        surfaceId: 'sample-surface',
-        catalogId,
-        sendDataModel: true,
+    const draftObj = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'sample-surface',
+          catalogId,
+          sendDataModel: true,
+        },
       },
-    };
-    return JSON.stringify(draftObj) + '\n';
+    ];
+    return formatJson(draftObj);
   }
 
   private getCatalogIdFromDraft(draft: string): string | null {
@@ -161,21 +163,7 @@ export class StateSync {
         return parsed.createSurface.catalogId;
       }
     } catch (e) {
-      // Might be JSON Lines
-    }
-
-    const lines = trimmed.split('\n');
-    for (const line of lines) {
-      const lineTrimmed = line.trim();
-      if (!lineTrimmed) continue;
-      try {
-        const parsed = JSON.parse(lineTrimmed);
-        if (parsed?.createSurface?.catalogId) {
-          return parsed.createSurface.catalogId;
-        }
-      } catch (e) {
-        // ignore
-      }
+      // ignore
     }
     return null;
   }
@@ -201,11 +189,11 @@ export class StateSync {
 
     const lastMessage = history[history.length - 1];
     // Verify that the last message is indeed a user message AND starts with
-    // A2UI JSON Lines version wrappers.
+    // A2UI JSON array brackets.
     // This ensures plain user text prompt dispatches are preserved
     // completely intact!
     const isLastMessageLayoutSnapshot =
-      lastMessage.role === MessageRole.USER && lastMessage.content.trim().startsWith('{"version"');
+      lastMessage.role === MessageRole.USER && lastMessage.content.trim().startsWith('[');
 
     if (isLastMessageLayoutSnapshot) {
       // Overwrite trailing turn in-place to avoid array inflation
@@ -238,48 +226,24 @@ export class StateSync {
       return '';
     }
 
-    // Try parsing as a single JSON array first to support pretty-printed or multi-line JSON arrays
-    const parsedArray = tryParseJsonArray(trimmed);
-    if (parsedArray) {
-      const sanitized = parsedArray
+    const parsed = tryParseJsonArray(trimmed);
+    if (parsed) {
+      const sanitized = parsed
         .map(block => {
           if (block && typeof block === 'object' && !Array.isArray(block)) {
             return this.sanitizeBlock(block as RenderA2uiItem);
           }
           return block;
         })
-        .filter(Boolean);
-      return sanitized.map(b => JSON.stringify(b)).join('\n') + '\n';
+        .filter((b): b is RenderA2uiItem => b !== null);
+      return formatJson(sanitized);
     }
 
-    const lines = trimmed
-      .split('\n')
-      .map(l => l.trim())
-      .filter(l => l.length > 0);
-
-    const sanitizedLines: string[] = [];
-
-    for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line);
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          continue;
-        }
-        const sanitized = this.sanitizeBlock(parsed as RenderA2uiItem);
-        if (sanitized) {
-          sanitizedLines.push(JSON.stringify(sanitized));
-        }
-      } catch (err) {
-        // Discard conversational wrappers or malformed syntax blocks
-        console.warn(
-          '[StateSync] Discarding malformed layout JSON Line ' + 'during sanitization:',
-          line,
-          err,
-        );
-      }
-    }
-
-    return sanitizedLines.length > 0 ? sanitizedLines.join('\n') + '\n' : '';
+    console.warn(
+      '[StateSync] Discarding malformed layout JSON during sanitization: not a valid JSON array',
+    );
+    // Return empty fallback content if parsing or sanitization fails completely
+    return '';
   }
 
   private sanitizeBlock(parsed: RenderA2uiItem): RenderA2uiItem | null {

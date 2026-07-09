@@ -37,7 +37,6 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState} from '../../chat/chat-state/chat-state';
-import {tryParseJsonArray} from '../../utils/json';
 
 /**
  * Hosts the raw JSON view of active surface models, allowing direct source editing
@@ -46,6 +45,7 @@ import {tryParseJsonArray} from '../../utils/json';
 @Component({
   selector: 'a2ui-composer-raw-frame',
   standalone: true,
+  imports: [],
   templateUrl: './raw-frame.ng.html',
   styleUrl: './raw-frame.scss',
 })
@@ -201,11 +201,8 @@ export class RawFrame implements AfterViewInit, OnDestroy {
   /**
    * Parses the raw layout configuration string into an array of message objects.
    *
-   * It supports two input formats:
-   * 1. A standard JSON array (e.g. `[ { "createSurface": ... }, ... ]`),
-   *    detected if it starts with `[`.
-   * 2. JSON Lines (JSONL) format, where each non-empty line represents a
-   *    standalone JSON object.
+   * It expects a standard JSON structure (either an array of message objects or a
+   * single message object). If it's a single message object, it wraps it in an array.
    *
    * If parsing fails, it throws a SyntaxError (which callers are expected to catch).
    *
@@ -217,19 +214,11 @@ export class RawFrame implements AfterViewInit, OnDestroy {
     if (!trimmed) {
       return [];
     }
-    // Format 1: Standard JSON Array format
-    if (trimmed.startsWith('[')) {
-      const parsed = tryParseJsonArray(trimmed);
-      if (parsed === null) {
-        throw new SyntaxError('Invalid JSON Array');
-      }
-      return parsed;
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch (err) {
+      throw new SyntaxError('Invalid JSON');
     }
-    // Format 2: JSON Lines (JSONL) format. Parse each line independently.
-    const lines = trimmed
-      .split('\n')
-      .map(l => l.trim())
-      .filter(l => l.length > 0);
-    return lines.map(line => JSON.parse(line));
   }
 }

@@ -209,7 +209,7 @@ describe('Gallery Component', () => {
     });
   });
 
-  it('renders the usage JSON envelope and copies the formatted A2UI JSONLines payload to the clipboard', async () => {
+  it('renders the usage JSON envelope and copies the formatted A2UI JSON array payload to the clipboard', async () => {
     writeTextSpy.mockResolvedValue(undefined);
 
     const mockCatalog: Catalog = {
@@ -230,9 +230,26 @@ describe('Gallery Component', () => {
 
     await harness.clickCopyButton();
 
-    const expectedPayload =
-      `{"version":"v0.9","createSurface":{"surfaceId":"gallery-preview","catalogId":"https://a2ui.org/custom_catalog.json"}}\n` +
-      `{"version":"v0.9","updateComponents":{"surfaceId":"gallery-preview","components":[{"id":"root","component":"Text"}]}}`;
+    const expectedPayload = JSON.stringify(
+      [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'gallery-preview',
+            catalogId: 'https://a2ui.org/custom_catalog.json',
+          },
+        },
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 'gallery-preview',
+            components: [{id: 'root', component: 'Text'}],
+          },
+        },
+      ],
+      null,
+      2,
+    );
 
     expect(writeTextSpy).toHaveBeenCalledWith(expectedPayload);
   });
