@@ -239,4 +239,24 @@ export class ChatPanelHarness extends ComponentHarness {
       html.includes('<em>redacted for your protection</em>')
     );
   }
+
+  async hasAttachmentPreviews(): Promise<boolean> {
+    const previews = await this.locatorForOptional('.attachment-previews')();
+    return previews !== null;
+  }
+
+  async getAttachmentNames(): Promise<string[]> {
+    const names = await this.locatorForAll('.attachment-preview-card .attachment-name')();
+    return Promise.all(names.map(n => n.text()));
+  }
+
+  async clickRemoveAttachmentAt(index: number): Promise<void> {
+    const buttons = await this.locatorForAll(
+      '.attachment-preview-card .remove-attachment-button',
+    )();
+    if (index < 0 || index >= buttons.length) {
+      throw new Error(`Index ${index} out of bounds for remove attachment buttons!`);
+    }
+    await buttons[index].click();
+  }
 }

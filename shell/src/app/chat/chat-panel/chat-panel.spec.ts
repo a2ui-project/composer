@@ -23,8 +23,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {ChatCoordinator} from '../chat-service/chat-coordinator';
 import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {signal, inject} from '@angular/core';
-import {LlmMessage} from '../llm-client/llm-client';
-import {MessageRole} from '../llm-client/llm-client';
+import {LlmMessage, MessageRole, Attachment} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
@@ -83,7 +82,7 @@ class MockChatCoordinator {
     return this.chatState.isProgrammaticStreamActive;
   }
 
-  submitPrompt = vi.fn(async (prompt: string): Promise<void> => {});
+  submitPrompt = vi.fn(async (prompt: string, attachments: Attachment[] = []): Promise<void> => {});
 }
 
 class MockCatalogManagement {
@@ -257,7 +256,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     await harness.clickRetryButtonAt(0);
     fixture.detectChanges();
 
-    expect(submitSpy).toHaveBeenCalledWith('create standard button');
+    expect(submitSpy).toHaveBeenCalledWith('create standard button', []);
   });
 
   it(
@@ -278,7 +277,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       fixture.detectChanges();
 
       // Verify submit service call made with sanitized, trimmed inputs
-      expect(submitSpy).toHaveBeenCalledWith('Make a pretty dashboard layout');
+      expect(submitSpy).toHaveBeenCalledWith('Make a pretty dashboard layout', []);
 
       // Verify textbox cleared out instantly
       expect(await harness.getPromptText()).toBe('');
@@ -295,7 +294,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       await harness.pressKeyOnPrompt('Enter', {shiftKey: false});
       fixture.detectChanges();
 
-      expect(submitSpy).toHaveBeenCalledWith('Add Column');
+      expect(submitSpy).toHaveBeenCalledWith('Add Column', []);
       expect(await harness.getPromptText()).toBe('');
     },
   );
@@ -519,5 +518,69 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     chatStateMock.chatHistory.set(historyMocks);
     fixture.detectChanges();
     expect(await harness.isRedactedTextItalicizedAt(1)).toBe(true);
+  });
+
+  it('supports selecting files and displays attachment previews', async () => {
+    const component = fixture.componentInstance;
+
+    // Simulate selecting a file
+    const file = new File(['dummy content'], 'test-image.png', {type: 'image/png'});
+    const event = {
+      target: {
+        files: [file],
+        value: '',
+      },
+    } as unknown as Event;
+
+    await component.onFilesSelected(event);
+    fixture.detectChanges();
+
+    // Verify files were added to component signal
+    expect(component.attachedFiles().length).toBe(1);
+    expect(component.attachedFiles()[0].name).toBe('test-image.png');
+    expect(component.attachedFiles()[0].mimeType).toBe('image/png');
+
+    // Verify previews are rendered using harness
+    expect(await harness.hasAttachmentPreviews()).toBe(true);
+    const attachmentNames = await harness.getAttachmentNames();
+    expect(attachmentNames).toContain('test-image.png');
+
+    // Remove the attachment using harness
+    await harness.clickRemoveAttachmentAt(0);
+    fixture.detectChanges();
+
+    expect(component.attachedFiles().length).toBe(0);
+    expect(await harness.hasAttachmentPreviews()).toBe(false);
+  });
+
+  it('submits prompts with attached files successfully', async () => {
+    const component = fixture.componentInstance;
+    const submitSpy = chatServiceMock.submitPrompt;
+
+    // Simulate attached files
+    component.attachedFiles.set([
+      {
+        name: 'test-image.png',
+        mimeType: 'image/png',
+        data: 'base64data...',
+        previewUrl: 'data:image/png;base64,base64data...',
+      },
+    ]);
+    component.userPrompt.set('Analyze this image');
+    fixture.detectChanges();
+
+    await harness.clickSubmit();
+    fixture.detectChanges();
+
+    expect(submitSpy).toHaveBeenCalledWith('Analyze this image', [
+      {
+        name: 'test-image.png',
+        mimeType: 'image/png',
+        data: 'base64data...',
+        previewUrl: 'data:image/png;base64,base64data...',
+      },
+    ]);
+    expect(component.attachedFiles().length).toBe(0);
+    expect(component.userPrompt()).toBe('');
   });
 });

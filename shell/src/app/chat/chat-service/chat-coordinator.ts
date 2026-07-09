@@ -16,7 +16,7 @@
 
 import {Injectable, inject, computed, effect, untracked} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {LlmMessage, LlmClient, MessageRole} from '../llm-client/llm-client';
+import {LlmMessage, LlmClient, MessageRole, Attachment} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {StateSync} from '../state-sync/state-sync';
@@ -101,9 +101,9 @@ export class ChatCoordinator {
    * in-stream, buffers packets, runs auto-repair healing and schema
    * validation blocks.
    */
-  async submitPrompt(prompt: string): Promise<void> {
+  async submitPrompt(prompt: string, attachments: Attachment[] = []): Promise<void> {
     const trimmed = prompt.trim();
-    if (!trimmed) return;
+    if (!trimmed && attachments.length === 0) return;
 
     // Lock UI controls and transition state indicators to receiving stream
     this.chatState.setProgrammaticStreamActive(true);
@@ -115,6 +115,7 @@ export class ChatCoordinator {
       {
         role: MessageRole.USER,
         content: trimmed,
+        attachments: attachments.length > 0 ? attachments : undefined,
       },
     ]);
 

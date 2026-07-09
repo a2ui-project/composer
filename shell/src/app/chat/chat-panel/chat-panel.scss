@@ -554,3 +554,159 @@
     color: var(--mat-sys-on-surface-variant);
   }
 }
+
+/* Attachment previews container */
+.attachment-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 4px;
+  max-height: 120px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  margin-bottom: 8px;
+
+  scrollbar-width: thin;
+  &::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--mat-sys-outline-variant);
+    border-radius: 4px;
+  }
+}
+
+/* Individual attachment preview card */
+.attachment-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--mat-sys-surface-container);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  position: relative;
+  max-width: 200px;
+  min-width: 120px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  animation: scaleIn 0.15s ease-out;
+
+  .attachment-thumbnail {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    object-fit: cover;
+    border: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .attachment-file-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    color: var(--mat-sys-primary);
+  }
+
+  .attachment-details {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+
+    .attachment-name {
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--mat-sys-on-surface);
+    }
+  }
+
+  .remove-attachment-button {
+    width: 24px !important;
+    height: 24px !important;
+    line-height: 24px !important;
+    padding: 0 !important;
+    min-width: 0 !important;
+    margin-left: 4px;
+    color: var(--mat-sys-on-surface-variant);
+    opacity: 0.7;
+
+    mat-icon {
+      font-size: 16px !important;
+      width: 16px !important;
+      height: 16px !important;
+    }
+
+    &:hover {
+      opacity: 1;
+      background-color: var(--mat-sys-surface-container-highest);
+    }
+  }
+}
+
+/* Chat bubble attachments rendering */
+.bubble-attachments-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.bubble-attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: color-mix(in srgb, var(--mat-sys-primary-container) 95%, black);
+  border: 1px solid color-mix(in srgb, var(--mat-sys-primary-container) 85%, black);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  max-width: 180px;
+
+  .bubble-attachment-thumbnail {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    object-fit: cover;
+  }
+
+  .bubble-attachment-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: var(--mat-sys-primary);
+  }
+
+  .bubble-attachment-name {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--mat-sys-on-primary-container);
+  }
+}
+
+.bubble-model {
+  .bubble-attachment-card {
+    background-color: var(--mat-sys-surface-container-highest);
+    border-color: var(--mat-sys-outline-variant);
+
+    .bubble-attachment-name {
+      color: var(--mat-sys-on-surface);
+    }
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

@@ -17,7 +17,7 @@
 import {Injectable, inject} from '@angular/core';
 import {LlmClient, LlmMessage, LlmResponse, LlmStreamResponse, MessageRole} from './llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {GoogleGenAI, Content, GenerateContentParameters} from '@google/genai';
+import {GoogleGenAI, Content, GenerateContentParameters, Part} from '@google/genai';
 
 /**
  * Standard public endpoint authentication client utilizing user developer keys.
@@ -56,20 +56,34 @@ export class Standalone3pLlmClient extends LlmClient {
       const mappedRole = m.role === MessageRole.USER ? 'user' : 'model';
       const lastContent = contents[contents.length - 1];
 
+      const parts: Part[] = [];
+      if (m.attachments) {
+        for (const att of m.attachments) {
+          parts.push({
+            inlineData: {
+              mimeType: att.mimeType,
+              data: att.data,
+            },
+          });
+        }
+      }
+      if (m.content) {
+        parts.push({text: m.content});
+      }
+
+      if (parts.length === 0) {
+        parts.push({text: ''});
+      }
+
       if (lastContent && lastContent.role === mappedRole) {
-        // Hardening: Combine consecutive turns of same role by separating with newline
         if (!lastContent.parts) {
           lastContent.parts = [];
         }
-        if (lastContent.parts.length === 0) {
-          lastContent.parts.push({});
-        }
-        const firstPart = lastContent.parts[0];
-        firstPart.text = (firstPart.text || '') + '\n' + m.content;
+        lastContent.parts.push(...parts);
       } else {
         contents.push({
           role: mappedRole,
-          parts: [{text: m.content}],
+          parts,
         });
       }
     }
