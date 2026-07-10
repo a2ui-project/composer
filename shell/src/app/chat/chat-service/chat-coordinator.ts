@@ -637,7 +637,11 @@ export class ChatCoordinator {
     };
   }
 
-  private handleConnectivityError(err: unknown, originalPrompt?: string, attachments: Attachment[] = []): void {
+  private handleConnectivityError(
+    err: unknown,
+    originalPrompt?: string,
+    attachments: Attachment[] = [],
+  ): void {
     const rawError = err instanceof Error ? err.message : String(err);
     const lowerMsg = rawError.toLowerCase();
     const cleanMsg = cleanErrorMessage(rawError);

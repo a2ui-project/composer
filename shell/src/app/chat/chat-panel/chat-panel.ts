@@ -307,19 +307,19 @@ export class ChatPanel {
       const newFiles: AttachedFile[] = [];
       const filesArray = Array.from(input.files);
 
-    for (const file of filesArray) {
-      if (file.size > 10 * 1024 * 1024) {
-        console.warn(`File ${file.name} exceeds the 10MB size limit.`);
-        continue;
-      }
+      for (const file of filesArray) {
+        if (file.size > 10 * 1024 * 1024) {
+          console.warn(`File ${file.name} exceeds the 10MB size limit.`);
+          continue;
+        }
 
-      try {
-        const attached = await this.readFileAsAttachment(file);
-        newFiles.push(attached);
-      } catch (err) {
-        console.error(`Failed to read file ${file.name}:`, err);
+        try {
+          const attached = await this.readFileAsAttachment(file);
+          newFiles.push(attached);
+        } catch (err) {
+          console.error(`Failed to read file ${file.name}:`, err);
+        }
       }
-    }
 
       this.attachedFiles.update(current => [...current, ...newFiles]);
     } finally {
