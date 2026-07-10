@@ -795,7 +795,6 @@ export class PreviewBridge {
       }
     }
   }
-
 }
 
 declare global {
