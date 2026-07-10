@@ -1905,4 +1905,81 @@ describe('PreviewBridge Core API Runtime', () => {
       expect.any(Error),
     );
   });
+
+  it('handles CAPTURE_SCREENSHOT event successfully and posts back PNG', async () => {
+    vi.spyOn(Image.prototype, 'src', 'set').mockImplementation(function (this: HTMLImageElement) {
+      setTimeout(() => {
+        if (this.onload) {
+          this.onload(new Event('load'));
+        }
+      }, 0);
+    });
+
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+      return {
+        drawImage: vi.fn(),
+      } as unknown as CanvasRenderingContext2D;
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
+      'data:image/png;base64,mockPng',
+    );
+
+    const postMessageSpy = vi.spyOn(window.parent, 'postMessage');
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {
+          type: PreviewBridgeMessageType.CAPTURE_SCREENSHOT,
+        },
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(postMessageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.A2UI_SCREENSHOT,
+        payload: {
+          data: 'data:image/png;base64,mockPng',
+        },
+      }),
+      '*',
+    );
+  });
+
+  it('handles CAPTURE_SCREENSHOT error and posts back error details', async () => {
+    vi.spyOn(Image.prototype, 'src', 'set').mockImplementation(function (this: HTMLImageElement) {
+      setTimeout(() => {
+        if (this.onerror) {
+          this.onerror('Mock load error' as unknown as Event);
+        }
+      }, 0);
+    });
+
+    const postMessageSpy = vi.spyOn(window.parent, 'postMessage');
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {
+          type: PreviewBridgeMessageType.CAPTURE_SCREENSHOT,
+        },
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(postMessageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.A2UI_SCREENSHOT,
+        payload: {
+          error: {
+            message: 'Failed to render SVG image to canvas.',
+          },
+        },
+      }),
+      '*',
+    );
+  });
 });

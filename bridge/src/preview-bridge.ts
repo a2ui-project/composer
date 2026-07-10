@@ -322,6 +322,10 @@ export class PreviewBridge {
         void this.handleGetComponentUsages();
         break;
 
+      case PreviewBridgeMessageType.CAPTURE_SCREENSHOT:
+        void this.handleCaptureScreenshot();
+        break;
+
       default:
         console.warn(`PreviewBridge: Unrecognized incoming message type: ${data['type']}`);
     }
@@ -795,6 +799,142 @@ export class PreviewBridge {
       }
     }
   }
+
+  private async handleCaptureScreenshot(): Promise<void> {
+    try {
+      const screenshotData = await captureScreenshotPng();
+      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+      // prettier-ignore
+      this.sendMessage({
+        'type': PreviewBridgeMessageType.A2UI_SCREENSHOT,
+        'payload': {
+          'data': screenshotData,
+        },
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('PreviewBridge: Error capturing screenshot:', error);
+      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+      // prettier-ignore
+      this.sendMessage({
+        'type': PreviewBridgeMessageType.A2UI_SCREENSHOT,
+        'payload': {
+          'error': {
+            'message': errorMessage,
+          },
+        },
+      });
+    }
+  }
+}
+
+async function captureScreenshotPng(): Promise<string> {
+  const width = window.innerWidth || 800;
+
+  // Calculate actual layout height of rendered content
+  let maxBottom = 100;
+  try {
+    const elements = Array.from(document.body.getElementsByTagName('*'));
+    for (const el of elements) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const bottom = rect.bottom;
+        if (bottom > maxBottom) {
+          maxBottom = bottom;
+        }
+      }
+    }
+  } catch (e) {}
+
+  // Add 24px padding to prevent clipping bottom margins/borders, capped at document scrollHeight
+  const height = Math.min(
+    Math.ceil(maxBottom) + 24,
+    document.documentElement.scrollHeight || window.innerHeight || 600,
+  );
+
+  let stylesText = '';
+  try {
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        for (const rule of Array.from(sheet.cssRules)) {
+          stylesText += rule.cssText + '\n';
+        }
+      } catch (e) {
+        // Cross-origin CSS rule reading throws SecurityError
+      }
+    }
+  } catch (e) {}
+
+  // Clone document body to sanitize and prevent canvas tainting
+  const bodyClone = document.body.cloneNode(true) as HTMLElement;
+  const images = Array.from(bodyClone.getElementsByTagName('img'));
+  for (const img of images) {
+    // Replace with a blank placeholder to avoid cross-origin tainting
+    img.src =
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>';
+  }
+
+  // Serialize the clone using XMLSerializer to ensure it is well-formed XHTML
+  let serializedBody = '';
+  try {
+    const serializer = new XMLSerializer();
+    serializedBody = serializer.serializeToString(bodyClone);
+  } catch (e) {
+    console.error('PreviewBridge: failed to serialize body to XML', e);
+    // Fallback to basic string clone if XMLSerializer fails
+    serializedBody = `<body>${bodyClone.innerHTML}</body>`;
+  }
+
+  const svgString = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+      <style>
+        ${stylesText}
+      </style>
+      <foreignObject width="100%" height="100%">
+        ${serializedBody}
+      </foreignObject>
+    </svg>
+  `;
+
+  let svgUrl = '';
+  try {
+    const utf8B64 = btoa(
+      encodeURIComponent(svgString).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+        String.fromCharCode(parseInt(p1, 16)),
+      ),
+    );
+    svgUrl = `data:image/svg+xml;base64,${utf8B64}`;
+  } catch (err) {
+    console.error('PreviewBridge: Failed to base64 encode SVG string:', err);
+    throw err;
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.src = svgUrl;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        try {
+          resolve(canvas.toDataURL('image/png'));
+        } catch (e) {
+          console.error('PreviewBridge: Failed to get canvas Data URL:', e);
+          reject(new Error('Failed to generate PNG from canvas: ' + String(e)));
+        }
+      } else {
+        console.error('PreviewBridge: Canvas 2D context is null');
+        reject(new Error('Canvas 2D context not available'));
+      }
+    };
+    img.onerror = err => {
+      console.error('PreviewBridge: Image load triggered error:', err);
+      reject(new Error('Failed to render SVG image to canvas.'));
+    };
+  });
 }
 
 declare global {

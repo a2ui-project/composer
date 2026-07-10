@@ -93,8 +93,12 @@ class MockAppConfigProvider {
   readonly rendererUrl = signal('http://localhost:4200/renderer');
   readonly geminiApiKey = signal('');
   readonly themePreference = signal<ThemePreference>('light');
+  readonly includeScreenshot = signal<boolean>(true);
   setThemePreference = vi.fn((theme: ThemePreference) => {
     this.themePreference.set(theme);
+  });
+  setIncludeScreenshot = vi.fn((include: boolean) => {
+    this.includeScreenshot.set(include);
   });
 }
 

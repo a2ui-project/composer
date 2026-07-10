@@ -101,12 +101,16 @@ class MockAppConfigProvider extends AppConfigProvider {
   override readonly rendererUrl = signal<string>('http://mock-renderer.com');
   override readonly geminiApiKey = signal<string>('mock-key-123');
   override readonly themePreference = signal<ThemePreference>('light');
+  override readonly includeScreenshot = signal<boolean>(true);
 
   override setRendererUrl(url: string): void {}
   override setGeminiApiKey(key: string): void {}
   override setForcedAuthMode(mode: AuthType): void {}
   override setThemePreference(theme: ThemePreference): void {
     this.themePreference.set(theme);
+  }
+  override setIncludeScreenshot(include: boolean): void {
+    this.includeScreenshot.set(include);
   }
   override flushConfig(): void {}
 }

@@ -43,6 +43,7 @@ class MockAppConfigProvider {
   readonly envMode = signal(EnvMode.STANDALONE);
   readonly authType = signal(AuthType.THREE_PARTY);
   readonly themePreference = signal<ThemePreference>('light');
+  readonly includeScreenshot = signal<boolean>(true);
   setRendererUrl = vi.fn((url: string) => {
     this.rendererUrl.set(url);
   });
@@ -52,6 +53,9 @@ class MockAppConfigProvider {
   setForcedAuthMode = vi.fn();
   setThemePreference = vi.fn((theme: ThemePreference) => {
     this.themePreference.set(theme);
+  });
+  setIncludeScreenshot = vi.fn((include: boolean) => {
+    this.includeScreenshot.set(include);
   });
   flushConfig = vi.fn();
 }

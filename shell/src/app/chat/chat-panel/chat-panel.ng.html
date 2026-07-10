@@ -206,14 +206,15 @@
         ></textarea>
       </mat-form-field>
       <div class="submit-action-bar">
-        <div class="action-bar-left" style="display: flex; align-items: center; gap: 8px">
+        <div class="action-bar-left">
           <button
             mat-icon-button
             class="attach-file-button"
             [disabled]="isLocked() || isReadingFiles()"
             (click)="fileInput.click()"
             type="button"
-            aria-label="Attach files"
+            title="Upload attachment"
+            aria-label="Upload attachment"
           >
             <mat-icon>attach_file</mat-icon>
           </button>
@@ -225,8 +226,20 @@
             [disabled]="isReadingFiles()"
             (change)="onFilesSelected($event)"
           />
-          <button mat-button class="system-instructions-link" (click)="showSystemInstructions()">
-            Show system instructions
+          <button
+            mat-icon-button
+            class="screenshot-toggle-button"
+            [class.active]="includeScreenshot()"
+            [disabled]="isLocked()"
+            (click)="onIncludeScreenshotChange(!includeScreenshot())"
+            type="button"
+            title="Add screenshot"
+            aria-label="Add screenshot"
+          >
+            <mat-icon>photo_camera</mat-icon>
+          </button>
+          <button type="button" class="system-instructions-link" (click)="showSystemInstructions()">
+            Instructions
           </button>
         </div>
         <button

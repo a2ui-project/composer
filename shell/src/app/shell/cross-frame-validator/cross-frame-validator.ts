@@ -71,6 +71,11 @@ export class CrossFrameValidator {
         return true;
       }
 
+      case PreviewBridgeMessageType.CAPTURE_SCREENSHOT:
+      case PreviewBridgeMessageType.A2UI_SCREENSHOT: {
+        return true;
+      }
+
       case PreviewBridgeMessageType.RENDER_A2UI: {
         if (!msgPayload || !Array.isArray(msgPayload)) {
           console.error('Malformed payload for RENDER_A2UI: must be an Array.');

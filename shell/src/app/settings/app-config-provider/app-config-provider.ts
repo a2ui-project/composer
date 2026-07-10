@@ -70,6 +70,16 @@ export abstract class AppConfigProvider {
   /** Exposes the active theme preference selection, light vs dark. */
   abstract readonly themePreference: Signal<ThemePreference>;
 
+  /** Exposes whether screenshots should be automatically attached to LLM prompts. */
+  abstract readonly includeScreenshot: Signal<boolean>;
+
+  /**
+   * Mutates and persists the preferred setting for including screenshots.
+   *
+   * @param include Boolean toggle value.
+   */
+  abstract setIncludeScreenshot(include: boolean): void;
+
   /**
    * Mutates and saves the active renderer URL endpoint.
    * Enables runtime routing configurations for targeted iframe controllers.

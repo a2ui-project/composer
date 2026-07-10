@@ -259,4 +259,21 @@ export class ChatPanelHarness extends ComponentHarness {
     }
     await buttons[index].click();
   }
+
+  async hasScreenshotCheckbox(): Promise<boolean> {
+    const btn = await this.locatorForOptional('.screenshot-toggle-button')();
+    return btn !== null;
+  }
+
+  async isScreenshotChecked(): Promise<boolean> {
+    const btn = await this.locatorForOptional('.screenshot-toggle-button')();
+    if (!btn) return false;
+    return btn.hasClass('active');
+  }
+
+  async toggleScreenshot(): Promise<void> {
+    const btn = await this.locatorForOptional('.screenshot-toggle-button')();
+    if (!btn) throw new Error('Screenshot toggle button not found.');
+    await btn.click();
+  }
 }

@@ -274,6 +274,56 @@ export class HostCommunication implements OnDestroy {
     });
   }
 
+  /**
+   * Triggers a self-screenshot capture within the guest preview iframe.
+   * Dispatches a CAPTURE_SCREENSHOT message and returns a Promise resolving to
+   * the base64 PNG data URL string once the guest frame responds.
+   *
+   * @returns A promise resolving to the base64 PNG data URL.
+   */
+  async captureScreenshot(): Promise<string> {
+    if (!this.iframeElement) {
+      throw new Error('No active iframe element found to capture screenshot.');
+    }
+
+    return new Promise<string>((resolve, reject) => {
+      const listener = (envelope: MessageEnvelope) => {
+        if (envelope.type === PreviewBridgeMessageType.A2UI_SCREENSHOT) {
+          cleanup();
+          const payload = envelope.payload as
+            | {data?: string; error?: {message: string}}
+            | undefined;
+          if (payload?.error) {
+            reject(new Error(payload.error.message));
+          } else if (payload?.data) {
+            resolve(payload.data);
+          } else {
+            reject(new Error('Invalid screenshot response received from preview iframe.'));
+          }
+        }
+      };
+
+      const cleanup = () => {
+        this.removeListener(listener);
+        clearTimeout(timeoutId);
+      };
+
+      this.addListener(listener);
+
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('Timeout: Screenshot capture from iframe timed out.'));
+      }, 3000);
+
+      // Request screenshot
+      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+      // prettier-ignore
+      this.sendMessage({
+        'type': PreviewBridgeMessageType.CAPTURE_SCREENSHOT,
+      });
+    });
+  }
+
   ngOnDestroy(): void {
     this.earlyMessageBuffer.length = 0;
     if (typeof window !== 'undefined') {

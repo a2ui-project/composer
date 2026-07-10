@@ -358,17 +358,48 @@
     width: 100%;
   }
 
+  .action-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
   .system-instructions-link {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--mat-sys-primary);
     text-decoration: none;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
     cursor: pointer;
     font-weight: 500;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  .screenshot-toggle-button {
+    color: var(--mat-sys-on-surface-variant);
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease;
+
+    &.active {
+      color: var(--mat-sys-primary);
+      background-color: var(--mat-sys-primary-container);
+    }
   }
 
   .submit-button {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
+    white-space: nowrap;
   }
 }
 
