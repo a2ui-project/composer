@@ -94,6 +94,8 @@ export class ChatPanel {
    */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
+  protected readonly isReadingFiles = signal<boolean>(false);
+
   /** Backing mutable signal capturing prompts typed by researcher. */
   protected readonly userPrompt = signal<string>('');
 
@@ -272,8 +274,9 @@ export class ChatPanel {
    * Re-dispatches a failed dynamic Human prompt turn, bypassing standard
    * inputs validations.
    */
-  protected async retryPrompt(prompt: string): Promise<void> {
+  protected async retryPrompt(prompt: string, attachments: AttachedFile[] = []): Promise<void> {
     this.userPrompt.set(prompt);
+    this.attachedFiles.set(attachments);
     await this.submitPrompt();
   }
 
@@ -299,8 +302,10 @@ export class ChatPanel {
       return;
     }
 
-    const newFiles: AttachedFile[] = [];
-    const filesArray = Array.from(input.files);
+    this.isReadingFiles.set(true);
+    try {
+      const newFiles: AttachedFile[] = [];
+      const filesArray = Array.from(input.files);
 
     for (const file of filesArray) {
       if (file.size > 10 * 1024 * 1024) {
@@ -316,16 +321,28 @@ export class ChatPanel {
       }
     }
 
-    this.attachedFiles.update(current => [...current, ...newFiles]);
-    input.value = '';
+      this.attachedFiles.update(current => [...current, ...newFiles]);
+    } finally {
+      this.isReadingFiles.set(false);
+      input.value = '';
+    }
   }
 
   private readFileAsAttachment(file: File): Promise<AttachedFile> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = e => {
-        const result = e.target?.result as string;
-        const base64Data = result.split(',')[1];
+        const result = e.target?.result;
+        if (typeof result !== 'string') {
+          reject(new Error('Failed to read file.'));
+          return;
+        }
+        const commaIndex = result.indexOf(',');
+        if (commaIndex === -1) {
+          reject(new Error('Invalid data URL format.'));
+          return;
+        }
+        const base64Data = result.substring(commaIndex + 1);
         resolve({
           name: file.name,
           mimeType: file.type || 'application/octet-stream',

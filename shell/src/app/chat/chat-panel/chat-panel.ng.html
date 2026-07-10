@@ -136,7 +136,7 @@
                         color="primary"
                         class="retry-button"
                         [disabled]="isLocked()"
-                        (click)="retryPrompt(turn.originalPrompt || '')"
+                        (click)="retryPrompt(turn.originalPrompt || '', turn.attachments || [])"
                       >
                         <mat-icon aria-hidden="true">refresh</mat-icon>
                         Retry Request
@@ -153,7 +153,7 @@
                       color="primary"
                       class="retry-button"
                       [disabled]="isLocked()"
-                      (click)="retryPrompt(turn.originalPrompt || '')"
+                      (click)="retryPrompt(turn.originalPrompt || '', turn.attachments || [])"
                     >
                       <mat-icon aria-hidden="true">refresh</mat-icon>
                       Retry Request
@@ -171,7 +171,7 @@
     <div class="chat-controllers-panel">
       @if (attachedFiles().length > 0) {
         <div class="attachment-previews">
-          @for (file of attachedFiles(); track $index) {
+          @for (file of attachedFiles(); track file) {
             <div class="attachment-preview-card">
               @if (isImage(file.mimeType)) {
                 <img [src]="file.previewUrl" class="attachment-thumbnail" alt="Preview" />
@@ -210,7 +210,7 @@
           <button
             mat-icon-button
             class="attach-file-button"
-            [disabled]="isLocked()"
+            [disabled]="isLocked() || isReadingFiles()"
             (click)="fileInput.click()"
             type="button"
             aria-label="Attach files"
@@ -222,6 +222,7 @@
             type="file"
             multiple
             style="display: none"
+            [disabled]="isReadingFiles()"
             (change)="onFilesSelected($event)"
           />
           <button mat-button class="system-instructions-link" (click)="showSystemInstructions()">
@@ -234,6 +235,7 @@
           class="submit-button"
           [disabled]="
             isLocked() ||
+            isReadingFiles() ||
             !isHandshakeComplete() ||
             (!userPrompt().trim() && attachedFiles().length === 0)
           "

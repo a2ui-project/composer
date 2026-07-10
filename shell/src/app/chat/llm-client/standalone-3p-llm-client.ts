@@ -71,16 +71,15 @@ export class Standalone3pLlmClient extends LlmClient {
         parts.push({text: m.content});
       }
 
-      if (parts.length === 0) {
-        parts.push({text: ''});
-      }
-
       if (lastContent && lastContent.role === mappedRole) {
         if (!lastContent.parts) {
           lastContent.parts = [];
         }
         lastContent.parts.push(...parts);
       } else {
+        if (parts.length === 0) {
+          parts.push({text: ''});
+        }
         contents.push({
           role: mappedRole,
           parts,

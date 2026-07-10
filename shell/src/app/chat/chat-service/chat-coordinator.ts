@@ -177,7 +177,7 @@ export class ChatCoordinator {
       this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
       await this.processRawLlmPayload(finalRawText);
     } catch (err: unknown) {
-      this.handleConnectivityError(err, trimmed);
+      this.handleConnectivityError(err, trimmed, attachments);
     }
   }
 
@@ -637,7 +637,7 @@ export class ChatCoordinator {
     };
   }
 
-  private handleConnectivityError(err: unknown, originalPrompt?: string): void {
+  private handleConnectivityError(err: unknown, originalPrompt?: string, attachments: Attachment[] = []): void {
     const rawError = err instanceof Error ? err.message : String(err);
     const lowerMsg = rawError.toLowerCase();
     const cleanMsg = cleanErrorMessage(rawError);
@@ -681,7 +681,7 @@ export class ChatCoordinator {
         errorMessage: redactedErrorMessage,
         errorDetails: redactedErrorDetails,
         errorTip: redactedErrorTip,
-        ...(parsed.isRetryable ? {isRetryable: true, originalPrompt} : {}),
+        ...(parsed.isRetryable ? {isRetryable: true, originalPrompt, attachments} : {}),
       };
       if (lastIdx >= 0 && updated[lastIdx].role === MessageRole.MODEL) {
         updated[lastIdx] = errorBubble;
