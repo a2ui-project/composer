@@ -286,42 +286,55 @@ export class HostCommunication implements OnDestroy {
       throw new Error('No active iframe element found to capture screenshot.');
     }
 
-    return new Promise<string>((resolve, reject) => {
-      const listener = (envelope: MessageEnvelope) => {
-        if (envelope.type === PreviewBridgeMessageType.A2UI_SCREENSHOT) {
-          cleanup();
-          const payload = envelope.payload as
-            | {data?: string; error?: {message: string}}
-            | undefined;
-          if (payload?.error) {
-            reject(new Error(payload.error.message));
-          } else if (payload?.data) {
-            resolve(payload.data);
-          } else {
-            reject(new Error('Invalid screenshot response received from preview iframe.'));
-          }
-        }
-      };
-
-      const cleanup = () => {
-        this.removeListener(listener);
-        clearTimeout(timeoutId);
-      };
-
-      this.addListener(listener);
-
-      const timeoutId = setTimeout(() => {
-        cleanup();
-        reject(new Error('Timeout: Screenshot capture from iframe timed out.'));
-      }, 3000);
-
-      // Request screenshot
-      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-      // prettier-ignore
-      this.sendMessage({
-        'type': PreviewBridgeMessageType.CAPTURE_SCREENSHOT,
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {displaySurface: 'browser'},
+        // @ts-expect-error - preferCurrentTab is a recent/experimental API not yet in TS types
+        preferCurrentTab: true,
       });
-    });
+
+      const [track] = stream.getVideoTracks();
+
+      // @ts-expect-error - RestrictionTarget is a recent API not yet in TS types
+      if (typeof RestrictionTarget !== 'undefined') {
+        // @ts-expect-error
+        const target = await RestrictionTarget.fromElement(this.iframeElement);
+        // @ts-expect-error
+        await track.restrictTo(target);
+      } else {
+        console.warn('RestrictionTarget API not supported, capturing full tab.');
+      }
+
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+
+      await new Promise<void>(resolve => {
+        video.onloadedmetadata = () => {
+          video.play().catch(() => {});
+          resolve();
+        };
+      });
+
+      // Give the browser a tiny buffer to apply the restriction crop visually
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0);
+      }
+
+      // Instantly kill the stream so the "Sharing" indicator disappears
+      track.stop();
+
+      return canvas.toDataURL('image/png');
+    } catch (error) {
+      console.warn('Capture canceled or failed:', error);
+      throw error;
+    }
   }
 
   ngOnDestroy(): void {
