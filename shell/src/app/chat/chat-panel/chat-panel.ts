@@ -164,10 +164,7 @@ export class ChatPanel {
       return;
     }
 
-    // Instantly clear prompt textarea draft and attachments
-    this.userPrompt.set('');
-    this.attachedFiles.set([]);
-
+    let screenshotSuccess = true;
     if (this.includeScreenshot()) {
       this.isReadingFiles.set(true);
       try {
@@ -184,10 +181,19 @@ export class ChatPanel {
         }
       } catch (err) {
         console.error('ChatPanel: Failed to capture screenshot context:', err);
+        screenshotSuccess = false;
       } finally {
         this.isReadingFiles.set(false);
       }
     }
+
+    if (!screenshotSuccess) {
+      return;
+    }
+
+    // Clear prompt textarea draft and attachments only after successful capture
+    this.userPrompt.set('');
+    this.attachedFiles.set([]);
 
     // Trigger vertex async pipeline stream completions
     await this.chatCoordinator.submitPrompt(textVal, attachments);

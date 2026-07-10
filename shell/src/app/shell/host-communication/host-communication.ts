@@ -286,14 +286,22 @@ export class HostCommunication implements OnDestroy {
       throw new Error('No active iframe element found to capture screenshot.');
     }
 
+    if (!navigator?.mediaDevices?.getDisplayMedia) {
+      throw new Error('Screen capture API (getDisplayMedia) is not supported in this environment.');
+    }
+
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      stream = await navigator.mediaDevices.getDisplayMedia({
         video: {displaySurface: 'browser'},
         // @ts-expect-error - preferCurrentTab is a recent/experimental API not yet in TS types
         preferCurrentTab: true,
       });
 
       const [track] = stream.getVideoTracks();
+      if (!track) {
+        throw new Error('No video track found in media stream.');
+      }
 
       // @ts-expect-error - RestrictionTarget is a recent API not yet in TS types
       if (typeof RestrictionTarget !== 'undefined') {
@@ -327,13 +335,14 @@ export class HostCommunication implements OnDestroy {
         ctx.drawImage(video, 0, 0);
       }
 
-      // Instantly kill the stream so the "Sharing" indicator disappears
-      track.stop();
-
       return canvas.toDataURL('image/png');
     } catch (error) {
       console.warn('Capture canceled or failed:', error);
       throw error;
+    } finally {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
     }
   }
 

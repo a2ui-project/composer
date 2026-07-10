@@ -230,6 +230,7 @@
             mat-icon-button
             class="screenshot-toggle-button"
             [class.active]="includeScreenshot()"
+            [attr.aria-pressed]="includeScreenshot()"
             [disabled]="isLocked()"
             (click)="onIncludeScreenshotChange(!includeScreenshot())"
             type="button"
