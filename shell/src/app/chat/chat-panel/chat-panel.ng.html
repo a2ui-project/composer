@@ -78,6 +78,26 @@
             }
 
             <div class="bubble-body">
+              @if (turn.attachments && turn.attachments.length > 0) {
+                <div class="bubble-attachments-container">
+                  @for (file of turn.attachments; track $index) {
+                    <div class="bubble-attachment-card">
+                      @if (isImage(file.mimeType)) {
+                        <img
+                          [src]="'data:' + file.mimeType + ';base64,' + file.data"
+                          class="bubble-attachment-thumbnail"
+                          alt="Attached image"
+                        />
+                      } @else {
+                        <mat-icon class="bubble-attachment-icon">description</mat-icon>
+                      }
+                      <span class="bubble-attachment-name" [title]="file.name">{{
+                        file.name
+                      }}</span>
+                    </div>
+                  }
+                </div>
+              }
               @if (turn.isSnapshot) {
                 <p class="bubble-text-content">A2UI JSON: {{ turn.componentCount }} components</p>
               } @else if (turn.role === 'error') {
@@ -116,7 +136,7 @@
                         color="primary"
                         class="retry-button"
                         [disabled]="isLocked()"
-                        (click)="retryPrompt(turn.originalPrompt || '')"
+                        (click)="retryPrompt(turn.originalPrompt || '', turn.attachments || [])"
                       >
                         <mat-icon aria-hidden="true">refresh</mat-icon>
                         Retry Request
@@ -133,7 +153,7 @@
                       color="primary"
                       class="retry-button"
                       [disabled]="isLocked()"
-                      (click)="retryPrompt(turn.originalPrompt || '')"
+                      (click)="retryPrompt(turn.originalPrompt || '', turn.attachments || [])"
                     >
                       <mat-icon aria-hidden="true">refresh</mat-icon>
                       Retry Request
@@ -149,6 +169,30 @@
 
     <!-- Footer Prompts textareas and lockout submits controls block -->
     <div class="chat-controllers-panel">
+      @if (attachedFiles().length > 0) {
+        <div class="attachment-previews">
+          @for (file of attachedFiles(); track file) {
+            <div class="attachment-preview-card">
+              @if (isImage(file.mimeType)) {
+                <img [src]="file.previewUrl" class="attachment-thumbnail" alt="Preview" />
+              } @else {
+                <mat-icon class="attachment-file-icon">description</mat-icon>
+              }
+              <div class="attachment-details">
+                <span class="attachment-name">{{ file.name }}</span>
+              </div>
+              <button
+                mat-icon-button
+                class="remove-attachment-button"
+                (click)="removeAttachment($index)"
+                aria-label="Remove attachment"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+          }
+        </div>
+      }
       <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-form-field">
         <textarea
           matInput
@@ -162,14 +206,39 @@
         ></textarea>
       </mat-form-field>
       <div class="submit-action-bar">
-        <button mat-button class="system-instructions-link" (click)="showSystemInstructions()">
-          Show system instructions
-        </button>
+        <div class="action-bar-left" style="display: flex; align-items: center; gap: 8px">
+          <button
+            mat-icon-button
+            class="attach-file-button"
+            [disabled]="isLocked() || isReadingFiles()"
+            (click)="fileInput.click()"
+            type="button"
+            aria-label="Attach files"
+          >
+            <mat-icon>attach_file</mat-icon>
+          </button>
+          <input
+            #fileInput
+            type="file"
+            multiple
+            style="display: none"
+            [disabled]="isReadingFiles()"
+            (change)="onFilesSelected($event)"
+          />
+          <button mat-button class="system-instructions-link" (click)="showSystemInstructions()">
+            Show system instructions
+          </button>
+        </div>
         <button
           mat-raised-button
           color="primary"
           class="submit-button"
-          [disabled]="isLocked() || !isHandshakeComplete() || !userPrompt().trim()"
+          [disabled]="
+            isLocked() ||
+            isReadingFiles() ||
+            !isHandshakeComplete() ||
+            (!userPrompt().trim() && attachedFiles().length === 0)
+          "
           (click)="submitPrompt()"
         >
           Send

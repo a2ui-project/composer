@@ -29,6 +29,12 @@ export enum MessageRole {
   ERROR = 'error',
 }
 
+export interface Attachment {
+  readonly name: string;
+  readonly mimeType: string;
+  readonly data: string; // base64 string
+}
+
 /**
  * Represents an individual conversational message segment exchanged in a chat
  * context. Serves as the primary turn record container passing communication
@@ -46,6 +52,9 @@ export interface LlmMessage {
    * segment turn.
    */
   readonly content: string;
+
+  /** Holds the optional attachment files context. */
+  readonly attachments?: Attachment[];
 
   /** Indicates whether a failed gateway transaction is retryable. */
   readonly isRetryable?: boolean;

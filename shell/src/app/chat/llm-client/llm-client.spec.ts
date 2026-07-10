@@ -36,7 +36,11 @@ interface MockGenAiConfig {
 }
 
 interface MockPart {
-  text: string;
+  text?: string;
+  inlineData?: {
+    mimeType: string;
+    data: string;
+  };
 }
 
 interface MockContent {
@@ -311,15 +315,56 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       expect(passedParams.contents).toHaveLength(3);
       expect(passedParams.contents[0]).toEqual({
         role: 'user',
-        parts: [{text: 'Turn 1 part A\nTurn 1 part B'}],
+        parts: [{text: 'Turn 1 part A'}, {text: 'Turn 1 part B'}],
       });
       expect(passedParams.contents[1]).toEqual({
         role: 'model',
-        parts: [{text: 'Response Part A\nResponse Part B'}],
+        parts: [{text: 'Response Part A'}, {text: 'Response Part B'}],
       });
       expect(passedParams.contents[2]).toEqual({
         role: 'user',
         parts: [{text: 'Final Turn'}],
+      });
+    });
+
+    it('supports attachments and maps them to inlineData parts', async () => {
+      mockGenerateContentStream.mockResolvedValue({
+        async *[Symbol.asyncIterator]() {
+          yield {text: 'Response with attachments'};
+        },
+      });
+
+      const messages: LlmMessage[] = [
+        {
+          role: MessageRole.USER,
+          content: 'Look at this file',
+          attachments: [
+            {
+              name: 'test.png',
+              mimeType: 'image/png',
+              data: 'base64image...',
+            },
+          ],
+        },
+      ];
+
+      await client.chat(messages);
+
+      expect(mockGenerateContentStream).toHaveBeenCalledTimes(1);
+      const passedParams = mockGenerateContentStream.mock.calls[0][0];
+
+      expect(passedParams.contents).toHaveLength(1);
+      expect(passedParams.contents[0]).toEqual({
+        role: 'user',
+        parts: [
+          {
+            inlineData: {
+              mimeType: 'image/png',
+              data: 'base64image...',
+            },
+          },
+          {text: 'Look at this file'},
+        ],
       });
     });
   });

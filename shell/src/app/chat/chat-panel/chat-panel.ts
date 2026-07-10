@@ -17,8 +17,7 @@
 import {Component, inject, signal, computed} from '@angular/core';
 import {ChatCoordinator} from '../chat-service/chat-coordinator';
 import {ChatState} from '../chat-state/chat-state';
-import {LlmMessage} from '../llm-client/llm-client';
-import {MessageRole} from '../llm-client/llm-client';
+import {LlmMessage, MessageRole, Attachment} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -34,6 +33,10 @@ import {RouterLink} from '@angular/router';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {RenderA2uiItem} from 'a2ui-bridge';
+
+interface AttachedFile extends Attachment {
+  readonly previewUrl?: string;
+}
 
 /**
  * Displays the interactive Gemini chat dialogue drawer within the Composer
@@ -91,8 +94,13 @@ export class ChatPanel {
    */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
+  protected readonly isReadingFiles = signal<boolean>(false);
+
   /** Backing mutable signal capturing prompts typed by researcher. */
   protected readonly userPrompt = signal<string>('');
+
+  /** Backing mutable signal capturing uploaded files context. */
+  protected readonly attachedFiles = signal<AttachedFile[]>([]);
 
   /**
    * Reactively computed visible logs history turns log list excluding
@@ -143,15 +151,17 @@ export class ChatPanel {
    */
   protected async submitPrompt(): Promise<void> {
     const textVal = this.userPrompt().trim();
-    if (!textVal || this.isLocked()) {
+    const attachments = this.attachedFiles();
+    if ((!textVal && attachments.length === 0) || this.isLocked()) {
       return;
     }
 
-    // Instantly clear prompt textarea draft
+    // Instantly clear prompt textarea draft and attachments
     this.userPrompt.set('');
+    this.attachedFiles.set([]);
 
     // Trigger vertex async pipeline stream completions
-    await this.chatCoordinator.submitPrompt(textVal);
+    await this.chatCoordinator.submitPrompt(textVal, attachments);
   }
 
   /**
@@ -264,8 +274,9 @@ export class ChatPanel {
    * Re-dispatches a failed dynamic Human prompt turn, bypassing standard
    * inputs validations.
    */
-  protected async retryPrompt(prompt: string): Promise<void> {
+  protected async retryPrompt(prompt: string, attachments: AttachedFile[] = []): Promise<void> {
     this.userPrompt.set(prompt);
+    this.attachedFiles.set(attachments);
     await this.submitPrompt();
   }
 
@@ -283,5 +294,72 @@ export class ChatPanel {
       }
     }
     return result;
+  }
+
+  protected async onFilesSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) {
+      return;
+    }
+
+    this.isReadingFiles.set(true);
+    try {
+      const newFiles: AttachedFile[] = [];
+      const filesArray = Array.from(input.files);
+
+      for (const file of filesArray) {
+        if (file.size > 10 * 1024 * 1024) {
+          console.warn(`File ${file.name} exceeds the 10MB size limit.`);
+          continue;
+        }
+
+        try {
+          const attached = await this.readFileAsAttachment(file);
+          newFiles.push(attached);
+        } catch (err) {
+          console.error(`Failed to read file ${file.name}:`, err);
+        }
+      }
+
+      this.attachedFiles.update(current => [...current, ...newFiles]);
+    } finally {
+      this.isReadingFiles.set(false);
+      input.value = '';
+    }
+  }
+
+  private readFileAsAttachment(file: File): Promise<AttachedFile> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const result = e.target?.result;
+        if (typeof result !== 'string') {
+          reject(new Error('Failed to read file.'));
+          return;
+        }
+        const commaIndex = result.indexOf(',');
+        if (commaIndex === -1) {
+          reject(new Error('Invalid data URL format.'));
+          return;
+        }
+        const base64Data = result.substring(commaIndex + 1);
+        resolve({
+          name: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          data: base64Data,
+          previewUrl: file.type.startsWith('image/') ? result : undefined,
+        });
+      };
+      reader.onerror = err => reject(err);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  protected removeAttachment(index: number): void {
+    this.attachedFiles.update(current => current.filter((_, i) => i !== index));
+  }
+
+  protected isImage(mimeType: string): boolean {
+    return mimeType.startsWith('image/');
   }
 }
