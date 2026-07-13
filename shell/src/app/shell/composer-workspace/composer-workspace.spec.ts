@@ -15,7 +15,7 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {ComposerWorkspace} from './composer-workspace';
+import {ComposerWorkspace, ComposerPanelId} from './composer-workspace';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
@@ -264,8 +264,8 @@ describe('ComposerWorkspace Dashboard', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const eventsPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel('events');
-      const errorsPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel('errors');
+      const eventsPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
+      const errorsPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(ComposerPanelId.Errors);
       expect(eventsPanel?.title).toBe('Events (5)');
       expect(errorsPanel?.title).toBe('Errors (3)');
 
@@ -283,14 +283,14 @@ describe('ComposerWorkspace Dashboard', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const mockRulesPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel('mockRules');
+      const mockRulesPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(ComposerPanelId.MockRules);
       expect(mockRulesPanel).toBeDefined();
 
       fixture.componentInstance.showMockRules.set(false);
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const removedPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel('mockRules');
+      const removedPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(ComposerPanelId.MockRules);
       expect(removedPanel).toBeUndefined();
     });
 

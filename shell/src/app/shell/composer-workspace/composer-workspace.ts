@@ -52,6 +52,20 @@ interface WorkspaceMessagePayload {
 }
 
 /**
+ * Defines the possible panel IDs within the Dockview workspace.
+ */
+export enum ComposerPanelId {
+  Chat = 'chat',
+  Rendered = 'rendered',
+  Raw = 'raw',
+  DataModel = 'dataModel',
+  Events = 'events',
+  Errors = 'errors',
+  RawMessages = 'rawMessages',
+  MockRules = 'mockRules',
+}
+
+/**
  * The central workspace hub coordinating split-pane views between
  * the layout editors, active preview frame, and debug consoles.
  */
@@ -88,8 +102,8 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       if (!envelope) return;
 
       const payload = envelope.payload as WorkspaceMessagePayload | undefined;
-      const eventsPanel = this.dockviewApi?.getGroupPanel('events');
-      const errorsPanel = this.dockviewApi?.getGroupPanel('errors');
+      const eventsPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Events);
+      const errorsPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Errors);
 
       if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.['action']) {
         if (!eventsPanel?.api.isVisible) {
@@ -118,7 +132,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
 
     effect(() => {
       const count = this.unreadEventsCount();
-      const panel = untracked(() => this.dockviewApi?.getGroupPanel('events'));
+      const panel = untracked(() => this.dockviewApi?.getGroupPanel(ComposerPanelId.Events));
       if (panel) {
         panel.api.setTitle(count > 0 ? `Events (${count})` : 'Events');
       }
@@ -126,7 +140,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
 
     effect(() => {
       const count = this.unreadErrorsCount();
-      const panel = untracked(() => this.dockviewApi?.getGroupPanel('errors'));
+      const panel = untracked(() => this.dockviewApi?.getGroupPanel(ComposerPanelId.Errors));
       if (panel) {
         panel.api.setTitle(count > 0 ? `Errors (${count})` : 'Errors');
       }
@@ -136,15 +150,15 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       const show = this.showMockRules();
       if (!this.isDockviewInitialized()) return;
 
-      const existingPanel = untracked(() => this.dockviewApi.getGroupPanel('mockRules'));
+      const existingPanel = untracked(() => this.dockviewApi.getGroupPanel(ComposerPanelId.MockRules));
       if (show && !existingPanel) {
-        const dataModel = this.dockviewApi.getGroupPanel('dataModel');
+        const dataModel = this.dockviewApi.getGroupPanel(ComposerPanelId.DataModel);
         if (dataModel) {
           this.dockviewApi.addPanel({
-            id: 'mockRules',
-            component: 'mockRules',
+            id: ComposerPanelId.MockRules,
+            component: ComposerPanelId.MockRules,
             title: 'Mock Rules',
-            position: {referencePanel: 'dataModel', direction: 'within'},
+            position: {referencePanel: ComposerPanelId.DataModel, direction: 'within'},
           });
         }
       } else if (!show && existingPanel) {
@@ -172,29 +186,29 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       defaultRenderer: 'always',
       createComponent: options => {
         let type: Type<unknown> | undefined;
-        switch (options.name) {
-          case 'chat':
+        switch (options.name as ComposerPanelId) {
+          case ComposerPanelId.Chat:
             type = ChatPanel;
             break;
-          case 'rendered':
+          case ComposerPanelId.Rendered:
             type = RenderedFrame;
             break;
-          case 'raw':
+          case ComposerPanelId.Raw:
             type = RawFrame;
             break;
-          case 'dataModel':
+          case ComposerPanelId.DataModel:
             type = DataModel;
             break;
-          case 'events':
+          case ComposerPanelId.Events:
             type = Events;
             break;
-          case 'errors':
+          case ComposerPanelId.Errors:
             type = Errors;
             break;
-          case 'rawMessages':
+          case ComposerPanelId.RawMessages:
             type = RawMessages;
             break;
-          case 'mockRules':
+          case ComposerPanelId.MockRules:
             type = MockRules;
             break;
         }
@@ -234,9 +248,9 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
 
     this.dockviewApi.onDidActivePanelChange(event => {
       const panel = event.panel;
-      if (panel?.id === 'events') {
+      if (panel?.id === ComposerPanelId.Events) {
         untracked(() => this.unreadEventsCount.set(0));
-      } else if (panel?.id === 'errors') {
+      } else if (panel?.id === ComposerPanelId.Errors) {
         untracked(() => this.unreadErrorsCount.set(0));
       }
     });
@@ -254,51 +268,51 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
     }
 
     if (!layoutRestored) {
-      this.dockviewApi.addPanel({id: 'chat', component: 'chat', title: 'Gemini Assistant'});
+      this.dockviewApi.addPanel({id: ComposerPanelId.Chat, component: ComposerPanelId.Chat, title: 'Gemini Assistant'});
       this.dockviewApi.addPanel({
-        id: 'rendered',
-        component: 'rendered',
+        id: ComposerPanelId.Rendered,
+        component: ComposerPanelId.Rendered,
         title: 'Rendered A2UI Preview',
-        position: {direction: 'right', referencePanel: 'chat'},
+        position: {direction: 'right', referencePanel: ComposerPanelId.Chat},
       });
       this.dockviewApi.addPanel({
-        id: 'raw',
-        component: 'raw',
+        id: ComposerPanelId.Raw,
+        component: ComposerPanelId.Raw,
         title: 'A2UI JSON Editor',
-        position: {direction: 'right', referencePanel: 'rendered'},
+        position: {direction: 'right', referencePanel: ComposerPanelId.Rendered},
       });
 
       this.dockviewApi.addPanel({
-        id: 'dataModel',
-        component: 'dataModel',
+        id: ComposerPanelId.DataModel,
+        component: ComposerPanelId.DataModel,
         title: 'Data Model',
-        position: {direction: 'below', referencePanel: 'rendered'},
+        position: {direction: 'below', referencePanel: ComposerPanelId.Rendered},
       });
       this.dockviewApi.addPanel({
-        id: 'events',
-        component: 'events',
+        id: ComposerPanelId.Events,
+        component: ComposerPanelId.Events,
         title: 'Events',
-        position: {direction: 'within', referencePanel: 'dataModel'},
+        position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
       });
       this.dockviewApi.addPanel({
-        id: 'errors',
-        component: 'errors',
+        id: ComposerPanelId.Errors,
+        component: ComposerPanelId.Errors,
         title: 'Errors',
-        position: {direction: 'within', referencePanel: 'dataModel'},
+        position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
       });
       this.dockviewApi.addPanel({
-        id: 'rawMessages',
-        component: 'rawMessages',
+        id: ComposerPanelId.RawMessages,
+        component: ComposerPanelId.RawMessages,
         title: 'Raw Messages',
-        position: {direction: 'within', referencePanel: 'dataModel'},
+        position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
       });
 
       if (this.showMockRules()) {
         this.dockviewApi.addPanel({
-          id: 'mockRules',
-          component: 'mockRules',
+          id: ComposerPanelId.MockRules,
+          component: ComposerPanelId.MockRules,
           title: 'Mock Rules',
-          position: {direction: 'within', referencePanel: 'dataModel'},
+          position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
         });
       }
     }
