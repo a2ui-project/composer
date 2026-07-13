@@ -65,6 +65,6 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(global, 'localStorage', {value: localStorageMock, writable: true});
   Object.defineProperty(global, 'sessionStorage', {value: sessionStorageMock, writable: true});
 
-  (global as any).Storage = MockStorage;
-  (window as any).Storage = MockStorage;
+  Object.defineProperty(global, 'Storage', {value: MockStorage, writable: true});
+  Object.defineProperty(window, 'Storage', {value: MockStorage, writable: true});
 }
