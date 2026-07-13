@@ -152,10 +152,17 @@ describe('ComposerWorkspace Dashboard', () => {
   it('delegates clearLogs to all queried child components when clearAllLogs is called', () => {
     const component = fixture.componentInstance;
 
+    const rawMsgSpy = vi.spyOn(component['rawMessagesInstance']!, 'clearLogs');
+    const eventsSpy = vi.spyOn(component['eventsInstance']!, 'clearLogs');
+    const errorsSpy = vi.spyOn(component['errorsInstance']!, 'clearLogs');
+
     // Use internal state references for the dynamically instantiated components.
     // If they aren't instantiated yet, clearLogs should safely no-op via optional chaining
     component.clearAllLogs();
-    expect(true).toBe(true);
+
+    expect(rawMsgSpy).toHaveBeenCalled();
+    expect(eventsSpy).toHaveBeenCalled();
+    expect(errorsSpy).toHaveBeenCalled();
   });
 
   describe('Unread Tab Badges', () => {

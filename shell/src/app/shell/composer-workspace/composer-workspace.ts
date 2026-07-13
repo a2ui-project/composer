@@ -75,6 +75,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   unreadErrorsCount = signal(0);
   isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
 
+  private readonly isDockviewInitialized = signal(false);
   private dockviewApi!: DockviewComponent;
   private componentRefs: ComponentRef<unknown>[] = [];
 
@@ -87,14 +88,15 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       if (!envelope) return;
 
       const payload = envelope.payload as WorkspaceMessagePayload | undefined;
-      const activePanelId = this.dockviewApi?.activePanel?.id;
+      const eventsPanel = this.dockviewApi?.getGroupPanel('events');
+      const errorsPanel = this.dockviewApi?.getGroupPanel('errors');
 
       if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.['action']) {
-        if (activePanelId !== 'events') {
+        if (!eventsPanel?.api.isVisible) {
           this.unreadEventsCount.update(count => count + 1);
         }
       } else if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
-        if (activePanelId !== 'errors') {
+        if (!errorsPanel?.api.isVisible) {
           this.unreadErrorsCount.update(count => count + 1);
         }
       } else if (
@@ -108,7 +110,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
             ? Object.keys(validationErrors).length > 0
             : !!validationErrors;
 
-        if (hasErrors && activePanelId !== 'errors') {
+        if (hasErrors && !errorsPanel?.api.isVisible) {
           this.unreadErrorsCount.update(count => count + 1);
         }
       }
@@ -132,8 +134,10 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
 
     effect(() => {
       const show = this.showMockRules();
-      const existingPanel = untracked(() => this.dockviewApi?.getGroupPanel('mockRules'));
-      if (show && !existingPanel && this.dockviewApi) {
+      if (!this.isDockviewInitialized()) return;
+
+      const existingPanel = untracked(() => this.dockviewApi.getGroupPanel('mockRules'));
+      if (show && !existingPanel) {
         const dataModel = this.dockviewApi.getGroupPanel('dataModel');
         if (dataModel) {
           this.dockviewApi.addPanel({
@@ -143,7 +147,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
             position: {referencePanel: 'dataModel', direction: 'within'},
           });
         }
-      } else if (!show && existingPanel && this.dockviewApi) {
+      } else if (!show && existingPanel) {
         existingPanel.api.close();
       }
     });
@@ -212,6 +216,15 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
             componentRef.changeDetectorRef.detectChanges();
           },
           dispose: () => {
+            if (componentRef.instance === this.rawMessagesInstance) {
+              this.rawMessagesInstance = undefined;
+            }
+            if (componentRef.instance === this.eventsInstance) {
+              this.eventsInstance = undefined;
+            }
+            if (componentRef.instance === this.errorsInstance) {
+              this.errorsInstance = undefined;
+            }
             componentRef.destroy();
             this.componentRefs = this.componentRefs.filter(r => r !== componentRef);
           },
@@ -290,13 +303,18 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       }
     }
 
+    let saveTimeout: any;
     this.dockviewApi.onDidLayoutChange(() => {
-      localStorage.setItem('composer_dockview_layout', JSON.stringify(this.dockviewApi.toJSON()));
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+        localStorage.setItem('composer_dockview_layout', JSON.stringify(this.dockviewApi.toJSON()));
+      }, 1000);
     });
 
     // Force an initial layout pass. In browsers, ResizeObserver handles this,
     // but in jsdom tests with mocked observers, it requires an explicit call.
     this.dockviewApi.layout(1000, 1000);
+    this.isDockviewInitialized.set(true);
   }
 
   ngOnDestroy() {
