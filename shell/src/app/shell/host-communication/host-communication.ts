@@ -305,9 +305,9 @@ export class HostCommunication implements OnDestroy {
 
       // @ts-expect-error - RestrictionTarget is a recent API not yet in TS types
       if (typeof RestrictionTarget !== 'undefined') {
-        // @ts-expect-error
+        // @ts-expect-error - RestrictionTarget is not in standard TypeScript definitions yet
         const target = await RestrictionTarget.fromElement(this.iframeElement);
-        // @ts-expect-error
+        // @ts-expect-error - restrictTo is not in standard MediaStreamTrack types yet
         await track.restrictTo(target);
       } else {
         console.warn('RestrictionTarget API not supported, capturing full tab.');
