@@ -73,6 +73,7 @@ describe('SystemInstructionsDialog', () => {
       Object.defineProperty(navigator, 'clipboard', {value: undefined});
     }
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it('compiles successfully', () => {

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal} from '@angular/core';
+import {Component, inject, signal, OnDestroy} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -27,17 +27,26 @@ import {MatSnackBar} from '@angular/material/snack-bar';
   templateUrl: './system-instructions-dialog.ng.html',
   styleUrl: './system-instructions-dialog.scss',
 })
-export class SystemInstructionsDialog {
+export class SystemInstructionsDialog implements OnDestroy {
   protected readonly data = inject<string | null>(MAT_DIALOG_DATA);
   protected readonly copied = signal(false);
   private readonly snackBar = inject(MatSnackBar);
   private copyTimeoutId?: ReturnType<typeof setTimeout>;
+
+  ngOnDestroy(): void {
+    if (this.copyTimeoutId) {
+      clearTimeout(this.copyTimeoutId);
+    }
+  }
 
   protected copyToClipboard(): void {
     if (!this.data) return;
 
     if (!navigator.clipboard) {
       console.error('Clipboard API is not available in this environment.');
+      this.snackBar.open('Clipboard copy is not supported in this environment', undefined, {
+        duration: 3000,
+      });
       return;
     }
 
