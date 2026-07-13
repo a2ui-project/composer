@@ -317,7 +317,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       }
     }
 
-    let saveTimeout: any;
+    let saveTimeout: ReturnType<typeof setTimeout>;
     this.dockviewApi.onDidLayoutChange(() => {
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
