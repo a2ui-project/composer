@@ -34,8 +34,9 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
+}
 
-  // Integrate with Angular Material 3 CSS variables
+:host ::ng-deep .dockview-root {
   --dv-group-view-background-color: var(--mat-sys-surface-container);
   --dv-tabs-and-actions-container-background-color: var(--mat-sys-surface-container-high);
   --dv-activegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);

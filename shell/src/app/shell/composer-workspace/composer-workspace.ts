@@ -142,6 +142,14 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
           existingPanel.api.close();
       }
     });
+    
+    effect(() => {
+      const isDark = this.isDarkTheme();
+      const api = untracked(() => this.dockviewApi);
+      if (api) {
+        api.updateOptions({ className: isDark ? 'dockview-theme-dark' : 'dockview-theme-light' });
+      }
+    });
   }
 
   ngOnInit(): void {
@@ -151,6 +159,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit() {
     this.dockviewApi = new DockviewComponent(this.dockviewRoot.nativeElement, {
+      className: this.isDarkTheme() ? 'dockview-theme-dark' : 'dockview-theme-light',
       createComponent: (options) => {
         let type: Type<unknown> | undefined;
         switch (options.name) {
