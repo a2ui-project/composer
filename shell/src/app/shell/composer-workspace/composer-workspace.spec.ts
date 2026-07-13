@@ -138,9 +138,11 @@ describe('ComposerWorkspace Dashboard', () => {
     // Dockview dynamically renders panels via componentRefs.
     // In jsdom without real dimensions, dockview may not attach them all to the DOM,
     // so we verify they were instantiated by the Angular view container.
-    const refs = (fixture.componentInstance as unknown as { componentRefs: unknown[] }).componentRefs;
+    const refs = (fixture.componentInstance as unknown as {componentRefs: unknown[]}).componentRefs;
     expect(refs.length).toBe(7);
-    const types = refs.map((r: unknown) => (r as { componentType: { name: string } }).componentType.name);
+    const types = refs.map(
+      (r: unknown) => (r as {componentType: {name: string}}).componentType.name,
+    );
     expect(types).toContain('ChatPanel');
     expect(types).toContain('RenderedFrame');
     expect(types).toContain('RawFrame');

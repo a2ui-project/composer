@@ -15,5 +15,10 @@
 -->
 
 <div class="workspace-container" [class.extension-mode]="isExtension()">
-  <div #dockviewRoot class="dockview-root" [class.dockview-theme-dark]="isDarkTheme()" [class.dockview-theme-light]="!isDarkTheme()"></div>
+  <div
+    #dockviewRoot
+    class="dockview-root"
+    [class.dockview-theme-dark]="isDarkTheme()"
+    [class.dockview-theme-light]="!isDarkTheme()"
+  ></div>
 </div>

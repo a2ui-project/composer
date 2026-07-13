@@ -43,5 +43,4 @@ export class ComposerWorkspaceHarness extends ComponentHarness {
   async getDataModelHarness(): Promise<DataModelHarness> {
     return this.locatorFor(DataModelHarness)();
   }
-
 }

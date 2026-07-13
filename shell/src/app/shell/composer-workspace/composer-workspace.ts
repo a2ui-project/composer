@@ -28,7 +28,7 @@ import {
   ViewChild,
   ViewContainerRef,
   ComponentRef,
-  Type
+  Type,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ChatPanel} from '../../chat/chat-panel/chat-panel';
@@ -134,20 +134,25 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       const show = this.showMockRules();
       const existingPanel = untracked(() => this.dockviewApi?.getGroupPanel('mockRules'));
       if (show && !existingPanel && this.dockviewApi) {
-          const dataModel = this.dockviewApi.getGroupPanel('dataModel');
-          if (dataModel) {
-             this.dockviewApi.addPanel({ id: 'mockRules', component: 'mockRules', title: 'Mock Rules', position: { referencePanel: 'dataModel', direction: 'within' } });
-          }
+        const dataModel = this.dockviewApi.getGroupPanel('dataModel');
+        if (dataModel) {
+          this.dockviewApi.addPanel({
+            id: 'mockRules',
+            component: 'mockRules',
+            title: 'Mock Rules',
+            position: {referencePanel: 'dataModel', direction: 'within'},
+          });
+        }
       } else if (!show && existingPanel && this.dockviewApi) {
-          existingPanel.api.close();
+        existingPanel.api.close();
       }
     });
-    
+
     effect(() => {
       const isDark = this.isDarkTheme();
       const api = untracked(() => this.dockviewApi);
       if (api) {
-        api.updateOptions({ className: isDark ? 'dockview-theme-dark' : 'dockview-theme-light' });
+        api.updateOptions({className: isDark ? 'dockview-theme-dark' : 'dockview-theme-light'});
       }
     });
   }
@@ -161,49 +166,65 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
     this.dockviewApi = new DockviewComponent(this.dockviewRoot.nativeElement, {
       className: this.isDarkTheme() ? 'dockview-theme-dark' : 'dockview-theme-light',
       defaultRenderer: 'always',
-      createComponent: (options) => {
+      createComponent: options => {
         let type: Type<unknown> | undefined;
         switch (options.name) {
-          case 'chat': type = ChatPanel; break;
-          case 'rendered': type = RenderedFrame; break;
-          case 'raw': type = RawFrame; break;
-          case 'dataModel': type = DataModel; break;
-          case 'events': type = Events; break;
-          case 'errors': type = Errors; break;
-          case 'rawMessages': type = RawMessages; break;
-          case 'mockRules': type = MockRules; break;
+          case 'chat':
+            type = ChatPanel;
+            break;
+          case 'rendered':
+            type = RenderedFrame;
+            break;
+          case 'raw':
+            type = RawFrame;
+            break;
+          case 'dataModel':
+            type = DataModel;
+            break;
+          case 'events':
+            type = Events;
+            break;
+          case 'errors':
+            type = Errors;
+            break;
+          case 'rawMessages':
+            type = RawMessages;
+            break;
+          case 'mockRules':
+            type = MockRules;
+            break;
         }
 
         if (!type) {
-            return { element: document.createElement('div'), init: () => {}, dispose: () => {} };
+          return {element: document.createElement('div'), init: () => {}, dispose: () => {}};
         }
 
         const componentRef = this.viewContainerRef.createComponent(type);
         this.componentRefs.push(componentRef);
-        
+
         if (type === RawMessages) this.rawMessagesInstance = componentRef.instance as RawMessages;
         if (type === Events) this.eventsInstance = componentRef.instance as Events;
         if (type === Errors) this.errorsInstance = componentRef.instance as Errors;
-        
+
         return {
           element: componentRef.location.nativeElement,
-          init: (params) => {
-             componentRef.changeDetectorRef.detectChanges();
+          init: params => {
+            componentRef.changeDetectorRef.detectChanges();
           },
           dispose: () => {
-             componentRef.destroy();
-             this.componentRefs = this.componentRefs.filter(r => r !== componentRef);
-          }
+            componentRef.destroy();
+            this.componentRefs = this.componentRefs.filter(r => r !== componentRef);
+          },
         };
-      }
+      },
     });
 
-    this.dockviewApi.onDidActivePanelChange((event) => {
+    this.dockviewApi.onDidActivePanelChange(event => {
       const panel = event.panel;
       if (panel?.id === 'events') {
-          untracked(() => this.unreadEventsCount.set(0));
+        untracked(() => this.unreadEventsCount.set(0));
       } else if (panel?.id === 'errors') {
-          untracked(() => this.unreadErrorsCount.set(0));
+        untracked(() => this.unreadErrorsCount.set(0));
       }
     });
 
@@ -220,32 +241,67 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
     }
 
     if (!layoutRestored) {
-      this.dockviewApi.addPanel({ id: 'chat', component: 'chat', title: 'Gemini Assistant' });
-      this.dockviewApi.addPanel({ id: 'rendered', component: 'rendered', title: 'Rendered A2UI Preview', position: { direction: 'right', referencePanel: 'chat' } });
-      this.dockviewApi.addPanel({ id: 'raw', component: 'raw', title: 'A2UI JSON Editor', position: { direction: 'right', referencePanel: 'rendered' } });
+      this.dockviewApi.addPanel({id: 'chat', component: 'chat', title: 'Gemini Assistant'});
+      this.dockviewApi.addPanel({
+        id: 'rendered',
+        component: 'rendered',
+        title: 'Rendered A2UI Preview',
+        position: {direction: 'right', referencePanel: 'chat'},
+      });
+      this.dockviewApi.addPanel({
+        id: 'raw',
+        component: 'raw',
+        title: 'A2UI JSON Editor',
+        position: {direction: 'right', referencePanel: 'rendered'},
+      });
 
-      this.dockviewApi.addPanel({ id: 'dataModel', component: 'dataModel', title: 'Data Model', position: { direction: 'below', referencePanel: 'rendered' } });
-      this.dockviewApi.addPanel({ id: 'events', component: 'events', title: 'Events', position: { direction: 'within', referencePanel: 'dataModel' } });
-      this.dockviewApi.addPanel({ id: 'errors', component: 'errors', title: 'Errors', position: { direction: 'within', referencePanel: 'dataModel' } });
-      this.dockviewApi.addPanel({ id: 'rawMessages', component: 'rawMessages', title: 'Raw Messages', position: { direction: 'within', referencePanel: 'dataModel' } });
-      
+      this.dockviewApi.addPanel({
+        id: 'dataModel',
+        component: 'dataModel',
+        title: 'Data Model',
+        position: {direction: 'below', referencePanel: 'rendered'},
+      });
+      this.dockviewApi.addPanel({
+        id: 'events',
+        component: 'events',
+        title: 'Events',
+        position: {direction: 'within', referencePanel: 'dataModel'},
+      });
+      this.dockviewApi.addPanel({
+        id: 'errors',
+        component: 'errors',
+        title: 'Errors',
+        position: {direction: 'within', referencePanel: 'dataModel'},
+      });
+      this.dockviewApi.addPanel({
+        id: 'rawMessages',
+        component: 'rawMessages',
+        title: 'Raw Messages',
+        position: {direction: 'within', referencePanel: 'dataModel'},
+      });
+
       if (this.showMockRules()) {
-        this.dockviewApi.addPanel({ id: 'mockRules', component: 'mockRules', title: 'Mock Rules', position: { direction: 'within', referencePanel: 'dataModel' } });
+        this.dockviewApi.addPanel({
+          id: 'mockRules',
+          component: 'mockRules',
+          title: 'Mock Rules',
+          position: {direction: 'within', referencePanel: 'dataModel'},
+        });
       }
     }
 
     this.dockviewApi.onDidLayoutChange(() => {
       localStorage.setItem('composer_dockview_layout', JSON.stringify(this.dockviewApi.toJSON()));
     });
-    
+
     // Force an initial layout pass. In browsers, ResizeObserver handles this,
     // but in jsdom tests with mocked observers, it requires an explicit call.
     this.dockviewApi.layout(1000, 1000);
   }
 
   ngOnDestroy() {
-     this.dockviewApi?.dispose();
-     this.componentRefs.forEach(ref => ref.destroy());
+    this.dockviewApi?.dispose();
+    this.componentRefs.forEach(ref => ref.destroy());
   }
 
   clearAllLogs(): void {
