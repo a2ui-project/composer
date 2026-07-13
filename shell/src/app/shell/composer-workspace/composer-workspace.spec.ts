@@ -264,8 +264,12 @@ describe('ComposerWorkspace Dashboard', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const eventsPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
-      const errorsPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(ComposerPanelId.Errors);
+      const eventsPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(
+        ComposerPanelId.Events,
+      );
+      const errorsPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(
+        ComposerPanelId.Errors,
+      );
       expect(eventsPanel?.title).toBe('Events (5)');
       expect(errorsPanel?.title).toBe('Errors (3)');
 
@@ -283,14 +287,18 @@ describe('ComposerWorkspace Dashboard', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const mockRulesPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(ComposerPanelId.MockRules);
+      const mockRulesPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(
+        ComposerPanelId.MockRules,
+      );
       expect(mockRulesPanel).toBeDefined();
 
       fixture.componentInstance.showMockRules.set(false);
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const removedPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(ComposerPanelId.MockRules);
+      const removedPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel(
+        ComposerPanelId.MockRules,
+      );
       expect(removedPanel).toBeUndefined();
     });
 
@@ -300,22 +308,26 @@ describe('ComposerWorkspace Dashboard', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      expect(fixture.componentInstance['dockviewApi']?.options.className).toBe('dockview-theme-dark');
+      expect(fixture.componentInstance['dockviewApi']?.options.className).toBe(
+        'dockview-theme-dark',
+      );
 
       configProvider.themePreference.set('light');
       fixture.detectChanges();
       await fixture.whenStable();
 
-      expect(fixture.componentInstance['dockviewApi']?.options.className).toBe('dockview-theme-light');
+      expect(fixture.componentInstance['dockviewApi']?.options.className).toBe(
+        'dockview-theme-light',
+      );
     });
 
     it('restores dockview layout from localStorage on initialization', async () => {
       // Create new fixture since dockview is initialized on AfterViewInit
       vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify({}));
       const newFixture = TestBed.createComponent(ComposerWorkspace);
-      
+
       const apiSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON').mockImplementation(() => {});
-      
+
       newFixture.detectChanges();
       await newFixture.whenStable();
 

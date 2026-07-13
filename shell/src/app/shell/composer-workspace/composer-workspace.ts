@@ -150,7 +150,9 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       const show = this.showMockRules();
       if (!this.isDockviewInitialized()) return;
 
-      const existingPanel = untracked(() => this.dockviewApi.getGroupPanel(ComposerPanelId.MockRules));
+      const existingPanel = untracked(() =>
+        this.dockviewApi.getGroupPanel(ComposerPanelId.MockRules),
+      );
       if (show && !existingPanel) {
         const dataModel = this.dockviewApi.getGroupPanel(ComposerPanelId.DataModel);
         if (dataModel) {
@@ -268,7 +270,11 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
     }
 
     if (!layoutRestored) {
-      this.dockviewApi.addPanel({id: ComposerPanelId.Chat, component: ComposerPanelId.Chat, title: 'Gemini Assistant'});
+      this.dockviewApi.addPanel({
+        id: ComposerPanelId.Chat,
+        component: ComposerPanelId.Chat,
+        title: 'Gemini Assistant',
+      });
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Rendered,
         component: ComposerPanelId.Rendered,
