@@ -20,6 +20,7 @@ import {
   signal,
   DestroyRef,
   effect,
+  computed,
   untracked,
   WritableSignal,
   ElementRef,
@@ -37,6 +38,7 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState} from '../../chat/chat-state/chat-state';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 
 /**
  * Hosts the raw JSON view of active surface models, allowing direct source editing
@@ -67,11 +69,13 @@ export class RawFrame implements AfterViewInit, OnDestroy {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly stateSync = inject(StateSync);
   private readonly chatState = inject(ChatState);
+  private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
   private readonly layoutInput$ = new Subject<string>();
 
   /** Public lock indicator preventing typing deadlocks during generative LLM stream turns. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
+  protected readonly isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
 
   constructor() {
     // Initialize backing editor layout state Signal dynamically from the volatile session cache
@@ -128,6 +132,15 @@ export class RawFrame implements AfterViewInit, OnDestroy {
       });
     });
 
+    effect(() => {
+      const isDark = this.isDarkTheme();
+      untracked(() => {
+        if (this.editor) {
+          this.editor.updateOptions({theme: isDark ? 'vs-dark' : 'vs-light'});
+        }
+      });
+    });
+
     this.layoutInput$
       .pipe(
         debounceTime(300),
@@ -164,7 +177,7 @@ export class RawFrame implements AfterViewInit, OnDestroy {
       const editor = monacoInstance.editor.create(this.editorContainer.nativeElement, {
         value: this.layoutJson(),
         language: 'json',
-        theme: 'vs-light',
+        theme: this.isDarkTheme() ? 'vs-dark' : 'vs-light',
         automaticLayout: true,
         minimap: {enabled: false},
         readOnly: this.isLocked(),

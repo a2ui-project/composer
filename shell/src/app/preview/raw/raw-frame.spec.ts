@@ -27,6 +27,7 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import type * as monaco from 'monaco-editor';
 
 const {createMock, mockEditor} = vi.hoisted(() => {
@@ -236,6 +237,12 @@ describe('RawFrame JSON Source Editor View', () => {
           provide: CatalogManagement,
           useValue: {
             activeCatalog: mockActiveCatalog,
+          },
+        },
+        {
+          provide: AppConfigProvider,
+          useValue: {
+            themePreference: signal('light'),
           },
         },
         {provide: StateSync, useClass: MockStateSync},
