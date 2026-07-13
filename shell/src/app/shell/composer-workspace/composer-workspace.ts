@@ -206,18 +206,36 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       }
     });
 
-    this.dockviewApi.addPanel({ id: 'chat', component: 'chat', title: 'Gemini Assistant' });
-    this.dockviewApi.addPanel({ id: 'rendered', component: 'rendered', title: 'Rendered A2UI Preview', position: { direction: 'right', referencePanel: 'chat' } });
-    this.dockviewApi.addPanel({ id: 'raw', component: 'raw', title: 'A2UI JSON Editor', position: { direction: 'right', referencePanel: 'rendered' } });
+    const savedLayout = localStorage.getItem('composer_dockview_layout');
+    let layoutRestored = false;
 
-    this.dockviewApi.addPanel({ id: 'dataModel', component: 'dataModel', title: 'Data Model', position: { direction: 'below', referencePanel: 'rendered' } });
-    this.dockviewApi.addPanel({ id: 'events', component: 'events', title: 'Events', position: { direction: 'within', referencePanel: 'dataModel' } });
-    this.dockviewApi.addPanel({ id: 'errors', component: 'errors', title: 'Errors', position: { direction: 'within', referencePanel: 'dataModel' } });
-    this.dockviewApi.addPanel({ id: 'rawMessages', component: 'rawMessages', title: 'Raw Messages', position: { direction: 'within', referencePanel: 'dataModel' } });
-    
-    if (this.showMockRules()) {
-      this.dockviewApi.addPanel({ id: 'mockRules', component: 'mockRules', title: 'Mock Rules', position: { direction: 'within', referencePanel: 'dataModel' } });
+    if (savedLayout) {
+      try {
+        this.dockviewApi.fromJSON(JSON.parse(savedLayout));
+        layoutRestored = true;
+      } catch (e) {
+        console.error('Failed to restore dockview layout', e);
+      }
     }
+
+    if (!layoutRestored) {
+      this.dockviewApi.addPanel({ id: 'chat', component: 'chat', title: 'Gemini Assistant' });
+      this.dockviewApi.addPanel({ id: 'rendered', component: 'rendered', title: 'Rendered A2UI Preview', position: { direction: 'right', referencePanel: 'chat' } });
+      this.dockviewApi.addPanel({ id: 'raw', component: 'raw', title: 'A2UI JSON Editor', position: { direction: 'right', referencePanel: 'rendered' } });
+
+      this.dockviewApi.addPanel({ id: 'dataModel', component: 'dataModel', title: 'Data Model', position: { direction: 'below', referencePanel: 'rendered' } });
+      this.dockviewApi.addPanel({ id: 'events', component: 'events', title: 'Events', position: { direction: 'within', referencePanel: 'dataModel' } });
+      this.dockviewApi.addPanel({ id: 'errors', component: 'errors', title: 'Errors', position: { direction: 'within', referencePanel: 'dataModel' } });
+      this.dockviewApi.addPanel({ id: 'rawMessages', component: 'rawMessages', title: 'Raw Messages', position: { direction: 'within', referencePanel: 'dataModel' } });
+      
+      if (this.showMockRules()) {
+        this.dockviewApi.addPanel({ id: 'mockRules', component: 'mockRules', title: 'Mock Rules', position: { direction: 'within', referencePanel: 'dataModel' } });
+      }
+    }
+
+    this.dockviewApi.onDidLayoutChange(() => {
+      localStorage.setItem('composer_dockview_layout', JSON.stringify(this.dockviewApi.toJSON()));
+    });
     
     // Force an initial layout pass. In browsers, ResizeObserver handles this,
     // but in jsdom tests with mocked observers, it requires an explicit call.
