@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ComponentHarness, TestElement} from '@angular/cdk/testing';
+import {ComponentHarness} from '@angular/cdk/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
 
 /**
