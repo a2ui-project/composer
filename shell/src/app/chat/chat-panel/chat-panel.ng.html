@@ -17,7 +17,10 @@
 <div class="preview-frame-container">
   <!-- Loading/progress overlays status graphics panel -->
   @if (
-    pipelineStatus() !== 'idle' && pipelineStatus() !== 'ready' && pipelineStatus() !== 'failed'
+    pipelineStatus() !== 'idle' &&
+    pipelineStatus() !== 'ready' &&
+    pipelineStatus() !== 'failed' &&
+    pipelineStatus() !== 'receiving_stream'
   ) {
     <div
       class="pipeline-overlay"
@@ -95,7 +98,19 @@
                 </div>
               }
               @if (turn.isSnapshot) {
-                <p class="bubble-text-content">A2UI JSON: {{ turn.componentCount }} components</p>
+                @if (turn.thinking) {
+                  <div class="thinking-block">
+                    <div class="thinking-header">
+                      <mat-icon inline="true">psychology</mat-icon> Thinking
+                    </div>
+                    <p class="thinking-text-content" [a2uiComposerAutoScroll]="turn.thinking">
+                      {{ turn.thinking }}
+                    </p>
+                  </div>
+                }
+                <p class="bubble-text-content">
+                  Received {{ turn.componentCount }} A2UI JSON Components
+                </p>
               } @else if (turn.role === 'error') {
                 <div class="error-bubble-content">
                   <div class="error-title">⚠ {{ turn.errorTitle || 'Error' }}</div>
@@ -141,6 +156,16 @@
                   }
                 </div>
               } @else {
+                @if (turn.thinking) {
+                  <div class="thinking-block">
+                    <div class="thinking-header">
+                      <mat-icon inline="true">psychology</mat-icon> Thinking
+                    </div>
+                    <p class="thinking-text-content" [a2uiComposerAutoScroll]="turn.thinking">
+                      {{ turn.thinking }}
+                    </p>
+                  </div>
+                }
                 <p class="bubble-text-content">{{ turn.content }}</p>
                 @if (turn.isRetryable) {
                   <div class="retry-action-container">
@@ -239,20 +264,34 @@
             Instructions
           </button>
         </div>
-        <button
-          mat-raised-button
-          color="primary"
-          class="submit-button"
-          [disabled]="
-            isLocked() ||
-            isReadingFiles() ||
-            !isHandshakeComplete() ||
-            (!userPrompt().trim() && attachedFiles().length === 0)
-          "
-          (click)="submitPrompt()"
-        >
-          Send
-        </button>
+        @if (isLocked()) {
+          <button
+            mat-icon-button
+            color="warn"
+            class="submit-button stop-button"
+            (click)="abortPrompt()"
+            title="Stop generating"
+            aria-label="Stop generating"
+          >
+            <mat-icon>stop_circle</mat-icon>
+          </button>
+        } @else {
+          <button
+            mat-icon-button
+            color="primary"
+            class="submit-button send-button"
+            [disabled]="
+              isReadingFiles() ||
+              !isHandshakeComplete() ||
+              (!userPrompt().trim() && attachedFiles().length === 0)
+            "
+            (click)="submitPrompt()"
+            title="Send prompt"
+            aria-label="Send prompt"
+          >
+            <mat-icon>send</mat-icon>
+          </button>
+        }
       </div>
     </div>
   }

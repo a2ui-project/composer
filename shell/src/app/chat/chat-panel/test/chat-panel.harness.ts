@@ -28,7 +28,7 @@ export class ChatPanelHarness extends ComponentHarness {
 
   protected getPromptInput = this.locatorForOptional(MatInputHarness);
   protected getSubmitButton = this.locatorForOptional(
-    MatButtonHarness.with({selector: '.submit-button'}),
+    MatButtonHarness.with({selector: '.send-button'}),
   );
   protected getScreenshotToggleButton = this.locatorForOptional('.screenshot-toggle-button');
 

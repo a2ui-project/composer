@@ -431,12 +431,16 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       expect(streamResponse.contentStream).toBeDefined();
       expect(streamResponse.complete).toBeDefined();
 
-      const collectedChunks: string[] = [];
+      const collectedChunks: import('./llm-client').LlmStreamChunk[] = [];
       for await (const chunk of streamResponse.contentStream) {
         collectedChunks.push(chunk);
       }
 
-      expect(collectedChunks).toEqual(['Starting', ' streaming ', 'handshakes.']);
+      expect(collectedChunks).toEqual([
+        {content: 'Starting', thinking: ''},
+        {content: ' streaming ', thinking: ''},
+        {content: 'handshakes.', thinking: ''},
+      ]);
 
       const finalSynchronizerValue = await streamResponse.complete;
       expect(finalSynchronizerValue).toBe('Starting streaming handshakes.');
@@ -486,18 +490,24 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       ]);
 
       // Pull chunks from first reader iterator
-      const collected1: string[] = [];
+      const collected1: import('./llm-client').LlmStreamChunk[] = [];
       for await (const chunk of streamResponse.contentStream) {
         collected1.push(chunk);
       }
-      expect(collected1).toEqual(['Replay ', 'packet']);
+      expect(collected1).toEqual([
+        {content: 'Replay ', thinking: ''},
+        {content: 'packet', thinking: ''},
+      ]);
 
       // Pull chunks from second subsequent reader iterator (replay check!)
-      const collected2: string[] = [];
+      const collected2: import('./llm-client').LlmStreamChunk[] = [];
       for await (const chunk of streamResponse.contentStream) {
         collected2.push(chunk);
       }
-      expect(collected2).toEqual(['Replay ', 'packet']);
+      expect(collected2).toEqual([
+        {content: 'Replay ', thinking: ''},
+        {content: 'packet', thinking: ''},
+      ]);
     });
 
     it('supports multiple active iterators stepping in sync', async () => {
@@ -542,8 +552,8 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       resolveChunk1({value: {text: 'A'}, done: false});
 
       const [res1_p1, res2_p1] = await Promise.all([next1_p1, next2_p1]);
-      expect(res1_p1.value).toBe('A');
-      expect(res2_p1.value).toBe('A');
+      expect(res1_p1.value).toEqual({content: 'A', thinking: ''});
+      expect(res2_p1.value).toEqual({content: 'A', thinking: ''});
 
       // Dispatch next concurrent pulls
       const next1_p2 = iter1.next();
@@ -553,8 +563,8 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       resolveChunk2({value: {text: 'B'}, done: false});
 
       const [res1_p2, res2_p2] = await Promise.all([next1_p2, next2_p2]);
-      expect(res1_p2.value).toBe('B');
-      expect(res2_p2.value).toBe('B');
+      expect(res1_p2.value).toEqual({content: 'B', thinking: ''});
+      expect(res2_p2.value).toEqual({content: 'B', thinking: ''});
     });
 
     it('catches setups network failures and throws matches immediately', async () => {

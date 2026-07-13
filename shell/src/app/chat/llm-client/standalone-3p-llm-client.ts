@@ -101,6 +101,8 @@ export class Standalone3pLlmClient extends LlmClient {
   override async chat(messages: LlmMessage[]): Promise<LlmResponse> {
     const stream = await this.chatStream(messages);
     const content = await stream.complete;
+    // We don't get the combined thinking easily back from stream.complete unless we change complete type,
+    // but chat is rarely used directly for full text. We can just return content.
     return {
       content,
     };
@@ -109,12 +111,6 @@ export class Standalone3pLlmClient extends LlmClient {
   /**
    * Generates a streamed, incremental response for the provided chat
    * history.
-   * Dynamically spawns a concurrent eager exhaust loop to buffer results,
-   * returning pointer-safe replay streams.
-   *
-   * @param messages The sequence of messages representing the turn history.
-   * @returns A promise resolving to an active stream response boundary
-   *   interface.
    */
   override async chatStream(messages: LlmMessage[]): Promise<LlmStreamResponse> {
     const apiKeyVal = this.config.geminiApiKey();
@@ -125,16 +121,27 @@ export class Standalone3pLlmClient extends LlmClient {
 
     const {systemInstruction, contents} = this.parseMessages(messages);
 
+    const abortController = new AbortController();
+
+    const config: import('@google/genai').GenerateContentConfig = systemInstruction
+      ? {systemInstruction}
+      : {};
+    config.abortSignal = abortController.signal;
+    config.thinkingConfig = {
+      includeThoughts: true,
+      thinkingBudget: 1024,
+    };
+
     const params: GenerateContentParameters = {
       model: 'gemini-3.5-flash',
       contents,
-      config: systemInstruction ? {systemInstruction} : undefined,
+      config,
     };
 
     // Instantiate response generator stream eagerly
     const responseStream = await ai.models.generateContentStream(params);
 
-    const buffer: string[] = [];
+    const buffer: import('./llm-client').LlmStreamChunk[] = [];
     let accumulatedText = '';
     let isDone = false;
     let streamError: unknown = null;
@@ -160,14 +167,33 @@ export class Standalone3pLlmClient extends LlmClient {
       try {
         for await (const chunk of responseStream) {
           const textVal = chunk.text || '';
+
+          let thoughtVal = '';
+          const parts = chunk.candidates?.[0]?.content?.parts;
+          if (parts) {
+            for (const part of parts) {
+              if (part.thought && part.text) {
+                thoughtVal += part.text;
+              }
+            }
+          }
+
           accumulatedText += textVal;
-          buffer.push(textVal); // Always preserve history in full replay buffer!
+
+          buffer.push({content: textVal, thinking: thoughtVal});
           notifyListeners();
         }
         isDone = true;
         resolveComplete(accumulatedText);
         notifyListeners();
-      } catch (err) {
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          isDone = true;
+          streamError = err;
+          rejectComplete(err);
+          notifyListeners();
+          return;
+        }
         streamError = err;
         rejectComplete(err);
         notifyListeners();
@@ -175,11 +201,11 @@ export class Standalone3pLlmClient extends LlmClient {
     })();
 
     // Independent pointer-safe AsyncIterable reader mapping
-    const contentStream: AsyncIterable<string> = {
+    const contentStream: AsyncIterable<import('./llm-client').LlmStreamChunk> = {
       [Symbol.asyncIterator]() {
         let localBufferIndex = 0;
         return {
-          async next(): Promise<IteratorResult<string>> {
+          async next(): Promise<IteratorResult<import('./llm-client').LlmStreamChunk>> {
             // Wait in-loop while buffer is exhausted and stream is active/errored
             while (localBufferIndex >= buffer.length && !isDone && !streamError) {
               await new Promise<void>((resolve, reject) => {
@@ -214,6 +240,9 @@ export class Standalone3pLlmClient extends LlmClient {
     return {
       contentStream,
       complete,
+      abort: () => {
+        abortController.abort();
+      },
     };
   }
 }

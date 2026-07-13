@@ -205,7 +205,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
       // Bubble 2: Layout snapshot block
       expect(bubbleHeaders[1]).toBe('Canvas Revision Snapshot');
-      expect(bubbles[1]).toBe('A2UI JSON: 1 components');
+      expect(bubbles[1]).toBe('Received 1 A2UI JSON Components');
       expect(bubbleTypes[1]).toBe('layout-snapshot');
 
       // Bubble 3: Model response turn
@@ -362,8 +362,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       // Milestone 1: Receiving LLM stream packets
       chatStateMock.pipelineStatus.set(PipelineStatus.RECEIVING_STREAM);
       fixture.detectChanges();
-      expect(await harness.hasLoadingOverlay()).toBe(true);
-      expect(await harness.getLoadingOverlayText()).toBe('Receiving A2UI JSON stream...');
+      expect(await harness.hasLoadingOverlay()).toBe(false);
 
       // Milestone 2: Received Raw
       chatStateMock.pipelineStatus.set(PipelineStatus.RECEIVED_RAW);
@@ -433,7 +432,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   });
 
   it('attaches structural accessibility attributes (role, tabindex, aria-label) to the pipeline dismiss overlay', async () => {
-    chatStateMock.pipelineStatus.set(PipelineStatus.RECEIVING_STREAM);
+    chatStateMock.pipelineStatus.set(PipelineStatus.VALIDATING);
     fixture.detectChanges();
 
     const attrs = await harness.getPipelineOverlayAttributes();
