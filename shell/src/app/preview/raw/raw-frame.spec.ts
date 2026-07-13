@@ -205,12 +205,14 @@ class MockStateSync {
 describe('RawFrame JSON Source Editor View', () => {
   let sendRenderA2UIMock: ReturnType<typeof vi.fn>;
   let mockActiveCatalog: WritableSignal<Catalog | null>;
+  let mockThemePreference: WritableSignal<string>;
   let stateSyncMock: MockStateSync;
   let chatStateMock: MockChatState;
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
+    mockThemePreference = signal<string>('light');
 
     mockEditor.getValue.mockClear();
     mockEditor.setValue.mockClear();
@@ -242,7 +244,7 @@ describe('RawFrame JSON Source Editor View', () => {
         {
           provide: AppConfigProvider,
           useValue: {
-            themePreference: signal('light'),
+            themePreference: mockThemePreference,
           },
         },
         {provide: StateSync, useClass: MockStateSync},
@@ -470,5 +472,26 @@ describe('RawFrame JSON Source Editor View', () => {
     expect(createMock).toHaveBeenCalled();
     const lastCall = createMock.mock.calls[createMock.mock.calls.length - 1];
     expect(lastCall[1].ariaLabel).toBe('Raw layout JSON');
+  });
+
+  it('initializes monaco with vs-dark theme when dark mode is active', async () => {
+    mockThemePreference.set('dark');
+    await setup(false);
+    expect(createMock).toHaveBeenCalled();
+    const lastCall = createMock.mock.calls[createMock.mock.calls.length - 1];
+    expect(lastCall[1].theme).toBe('vs-dark');
+  });
+
+  it('updates monaco theme dynamically when dark mode preference changes', async () => {
+    const {fixture} = await setup(false);
+    expect(createMock).toHaveBeenCalled();
+    const lastCall = createMock.mock.calls[createMock.mock.calls.length - 1];
+    expect(lastCall[1].theme).toBe('vs-light');
+
+    mockThemePreference.set('dark');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(mockEditor.updateOptions).toHaveBeenCalledWith({theme: 'vs-dark'});
   });
 });

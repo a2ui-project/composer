@@ -23,6 +23,7 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {DockviewComponent} from 'dockview-core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ChatCoordinator} from '../../chat/chat-service/chat-coordinator';
 import {LlmClient, LlmMessage} from '../../chat/llm-client/llm-client';
@@ -254,5 +255,72 @@ describe('ComposerWorkspace Dashboard', () => {
     newFixture.detectChanges();
 
     expect(newFixture.componentInstance.isExtension()).toBe(true);
+  });
+
+  describe('Dockview Layout and Effects', () => {
+    it('updates events and errors panel titles based on unread count', async () => {
+      fixture.componentInstance.unreadEventsCount.set(5);
+      fixture.componentInstance.unreadErrorsCount.set(3);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const eventsPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel('events');
+      const errorsPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel('errors');
+      expect(eventsPanel?.title).toBe('Events (5)');
+      expect(errorsPanel?.title).toBe('Errors (3)');
+
+      fixture.componentInstance.unreadEventsCount.set(0);
+      fixture.componentInstance.unreadErrorsCount.set(0);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(eventsPanel?.title).toBe('Events');
+      expect(errorsPanel?.title).toBe('Errors');
+    });
+
+    it('adds and removes the mockRules panel when showMockRules signal changes', async () => {
+      fixture.componentInstance.showMockRules.set(true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const mockRulesPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel('mockRules');
+      expect(mockRulesPanel).toBeDefined();
+
+      fixture.componentInstance.showMockRules.set(false);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const removedPanel = fixture.componentInstance['dockviewApi']?.getGroupPanel('mockRules');
+      expect(removedPanel).toBeUndefined();
+    });
+
+    it('updates dockview options with dark theme class dynamically', async () => {
+      const configProvider = TestBed.inject(AppConfigProvider) as unknown as MockAppConfigProvider;
+      configProvider.themePreference.set('dark');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance['dockviewApi']?.options.className).toBe('dockview-theme-dark');
+
+      configProvider.themePreference.set('light');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance['dockviewApi']?.options.className).toBe('dockview-theme-light');
+    });
+
+    it('restores dockview layout from localStorage on initialization', async () => {
+      // Create new fixture since dockview is initialized on AfterViewInit
+      vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify({}));
+      const newFixture = TestBed.createComponent(ComposerWorkspace);
+      
+      const apiSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON').mockImplementation(() => {});
+      
+      newFixture.detectChanges();
+      await newFixture.whenStable();
+
+      expect(apiSpy).toHaveBeenCalled();
+      apiSpy.mockRestore();
+    });
   });
 });

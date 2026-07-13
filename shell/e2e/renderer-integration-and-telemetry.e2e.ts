@@ -88,7 +88,7 @@ for (const config of CONFIGS) {
       await page.goto(`/?renderer=${config.rendererUrl}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
 
-      await page.getByRole('tab', {name: 'Raw Messages'}).click();
+      await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
       await page.locator('.raw-messages-container .message-envelope').first().hover({trial: true});
       const envelopes = page.locator(
         '.raw-messages-container [data-testid="raw-message-envelope"], .raw-messages-container [data-testid="llm-log-panel"]',
@@ -130,7 +130,7 @@ for (const config of CONFIGS) {
       await config.fillDate(pickupInput, '2026-05-30');
       await pickupInput.blur();
 
-      await page.getByRole('tab', {name: 'Data Model'}).click();
+      await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
       await expect(page.locator('.data-model-container textarea')).toBeVisible();
       const dataModelTextarea = page.locator('.data-model-field textarea');
       await expect(dataModelTextarea).toHaveValue(/"pickupDate":\s*"2026-05-30"/);
@@ -145,7 +145,7 @@ for (const config of CONFIGS) {
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
 
-      await page.getByRole('tab', {name: 'Data Model'}).click();
+      await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
       await expect(page.locator('.data-model-container textarea')).toBeVisible();
       const dataModelTextarea = page.locator('.data-model-field textarea');
 
@@ -219,13 +219,12 @@ for (const config of CONFIGS) {
       await searchButton.click();
 
       // Verify Event tab notification badge
-      const eventsTab = page.locator('.events-badge-host');
-      const eventsBadge = eventsTab.locator('.mat-badge-content');
-      await expect(eventsBadge).toBeVisible();
-      await expect(eventsBadge).toHaveText('1');
+      const eventsTab = page.locator('.dv-tab', {hasText: /^Events/});
+      await expect(eventsTab).toBeVisible();
+      await expect(eventsTab).toContainText('(1)');
 
       // Verify event table details in Events tab
-      await page.getByRole('tab', {name: 'Events'}).click();
+      await eventsTab.click();
       await expect(page.locator('.events-container table tr.element-row')).toBeVisible();
       const eventRow = page.locator('.events-container table tr.element-row').first();
       await expect(eventRow).toBeVisible();
@@ -236,7 +235,7 @@ for (const config of CONFIGS) {
       );
 
       // Verify SEND_TO_SERVER in Raw Messages tab
-      await page.getByRole('tab', {name: 'Raw Messages'}).click();
+      await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
       await expect(page.locator('.raw-messages-container')).toBeVisible();
       await page.locator('.raw-messages-container .message-envelope').first().hover({trial: true});
       const latestEnvelope = page
@@ -280,7 +279,7 @@ test.describe('Bridge Telemetry Layout Constraints', () => {
       window.parent.postMessage(msg, '*');
     }, blockingMsg);
 
-    await page.getByRole('tab', {name: 'Raw Messages'}).click();
+    await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
     const unblockMsg = {type: PreviewBridgeMessageType.FORCE_UNBLOCK};
     await iframeBody.evaluate((_, msg) => {
       window.parent.postMessage(msg, '*');

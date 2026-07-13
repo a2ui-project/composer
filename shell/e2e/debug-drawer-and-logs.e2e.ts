@@ -41,17 +41,7 @@ test.beforeEach(async ({page}) => {
 });
 
 test.describe('Debugging Panels & Diagnostic Logs', () => {
-  test('verifies collapsible debug drawer layout and global clear sweeps', async ({page}) => {
-    const debugSection = page.locator('.debug-section');
-    await expect(debugSection).not.toHaveClass(/collapsed/);
-
-    const collapseBtn = page.getByRole('button', {name: 'Toggle Debug Panel'});
-    await collapseBtn.click();
-    await expect(debugSection).toHaveClass(/collapsed/);
-
-    await collapseBtn.click();
-    await expect(debugSection).not.toHaveClass(/collapsed/);
-
+  test('verifies diagnostic logs routing', async ({page}) => {
     const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
     await expect(iframeBody).toBeVisible();
     await page.waitForTimeout(1000);
@@ -87,13 +77,13 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     }, errorMsg);
 
     // Verify Events tab mapping
-    await page.getByRole('tab', {name: 'Events'}).click();
+    await page.locator('.dv-tab', {hasText: /^Events/}).click();
     const eventRow = page.locator('.events-container table tr.element-row');
     await expect(eventRow).toHaveCount(1);
     await expect(page.locator('.events-container table')).toContainText('e2e_button_click');
 
     // Verify Errors tab consolidation & stack trace expansion
-    await page.getByRole('tab', {name: 'Errors'}).click();
+    await page.locator('.dv-tab', {hasText: /^Errors/}).click();
     const errorRow = page.locator('.errors-container table tr.element-row');
     await expect(errorRow).toHaveCount(1);
     await expect(page.locator('.errors-container table')).toContainText('E2E Exception trace');
@@ -104,26 +94,13 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     await expect(page.locator('.stack-preview')).toContainText('Error: E2E Failure');
 
     // Verify Data Model tab valid/invalid JSON alerts
-    await page.getByRole('tab', {name: 'Data Model'}).click();
+    await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
     const dataModelField = page.locator('.data-model-field textarea');
     await dataModelField.fill('{"valid": true}');
     await expect(page.locator('.invalid-json-badge')).not.toBeVisible();
 
     await dataModelField.fill('{"invalid": }');
     await expect(page.locator('.invalid-json-badge')).toBeVisible();
-
-    // Verify Global Clear
-    const clearBtn = page.getByRole('button', {name: 'Clear Logs'});
-    await clearBtn.click();
-
-    // Warnings remain, but logs clear
-    await expect(page.locator('.invalid-json-badge')).toBeVisible();
-
-    await page.getByRole('tab', {name: 'Events'}).click();
-    await expect(page.locator('.events-placeholder')).toBeVisible();
-
-    await page.getByRole('tab', {name: 'Errors'}).click();
-    await expect(page.locator('.errors-placeholder')).toBeVisible();
   });
 
   test('verifies console log warning routing from preview frame to Errors tab', async ({page}) => {
@@ -139,7 +116,7 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
       window.parent.postMessage(msg, '*');
     }, logMsg);
 
-    await page.getByRole('tab', {name: 'Errors'}).click();
+    await page.locator('.dv-tab', {hasText: /^Errors/}).click();
     const errorRow = page.locator('.errors-container table tr.element-row').first();
     await expect(errorRow).toBeVisible();
     const rowText = await errorRow.textContent();
@@ -149,15 +126,13 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
   });
 
   test('verifies unread tab badging animations and resets', async ({page}) => {
-    await page.getByRole('tab', {name: 'Data Model'}).click();
+    await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
 
-    const eventsTabLabel = page.locator('.mat-mdc-tab-label-container .mdc-tab:nth-child(2)');
-    const eventsBadge = eventsTabLabel.locator('.mat-badge-content');
-    await expect(eventsBadge).toBeHidden();
+    const eventsTabLabel = page.locator('.dv-tab', {hasText: /^Events/});
+    await expect(eventsTabLabel).not.toContainText('(1)');
 
-    const errorsTabLabel = page.locator('.mat-mdc-tab-label-container .mdc-tab:nth-child(3)');
-    const errorsBadge = errorsTabLabel.locator('.mat-badge-content');
-    await expect(errorsBadge).toBeHidden();
+    const errorsTabLabel = page.locator('.dv-tab', {hasText: /^Errors/});
+    await expect(errorsTabLabel).not.toContainText('(1)');
 
     const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
     await expect(iframeBody).toBeVisible();
@@ -190,16 +165,14 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
       window.parent.postMessage(msg, '*');
     }, crashMsg);
 
-    await expect(eventsBadge).toBeVisible();
-    await expect(eventsBadge).toContainText('1');
-    await expect(errorsBadge).toBeVisible();
-    await expect(errorsBadge).toContainText('1');
+    await expect(eventsTabLabel).toContainText('(1)');
+    await expect(errorsTabLabel).toContainText('(1)');
 
-    await page.getByRole('tab', {name: /Events/}).click();
-    await expect(eventsBadge).toBeHidden();
+    await eventsTabLabel.click();
+    await expect(eventsTabLabel).not.toContainText('(1)');
 
-    await page.getByRole('tab', {name: /Errors/}).click();
-    await expect(errorsBadge).toBeHidden();
+    await errorsTabLabel.click();
+    await expect(errorsTabLabel).not.toContainText('(1)');
   });
 
   test('verifies New Session reset button clears localStorage session cache', async ({page}) => {
