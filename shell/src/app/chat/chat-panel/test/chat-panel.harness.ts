@@ -30,6 +30,7 @@ export class ChatPanelHarness extends ComponentHarness {
   protected getSubmitButton = this.locatorForOptional(
     MatButtonHarness.with({selector: '.submit-button'}),
   );
+  protected getScreenshotToggleButton = this.locatorForOptional('.screenshot-toggle-button');
 
   async getBubblesText(): Promise<string[]> {
     const bubbles = await this.locatorForAll('.bubble-body')();
@@ -261,18 +262,18 @@ export class ChatPanelHarness extends ComponentHarness {
   }
 
   async hasScreenshotCheckbox(): Promise<boolean> {
-    const btn = await this.locatorForOptional('.screenshot-toggle-button')();
+    const btn = await this.getScreenshotToggleButton();
     return btn !== null;
   }
 
   async isScreenshotChecked(): Promise<boolean> {
-    const btn = await this.locatorForOptional('.screenshot-toggle-button')();
+    const btn = await this.getScreenshotToggleButton();
     if (!btn) return false;
     return btn.hasClass('active');
   }
 
   async toggleScreenshot(): Promise<void> {
-    const btn = await this.locatorForOptional('.screenshot-toggle-button')();
+    const btn = await this.getScreenshotToggleButton();
     if (!btn) throw new Error('Screenshot toggle button not found.');
     await btn.click();
   }

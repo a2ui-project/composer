@@ -34,6 +34,4 @@ export enum LocalStorageKey {
   EDITOR_CACHE = 'a2ui_composer_editor_cache',
   /** Key for persisting the user's theme selection (light vs dark). */
   THEME_PREFERENCE = 'a2ui_composer_theme_preference',
-  /** Key for persisting whether screenshots should be included automatically. */
-  INCLUDE_SCREENSHOT = 'a2ui_composer_include_screenshot',
 }

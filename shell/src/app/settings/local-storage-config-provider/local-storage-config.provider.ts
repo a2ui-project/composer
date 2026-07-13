@@ -68,9 +68,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   );
 
   /** Coordinates dynamic inclusion of screenshots context preferences state. */
-  private readonly _includeScreenshot = signal<boolean>(
-    this.localStorageInteractions.getItem(LocalStorageKey.INCLUDE_SCREENSHOT) !== 'false',
-  );
+  private readonly _includeScreenshot = signal<boolean>(false);
 
   /**
    * Orchestrates overall subsystem bootstrapping, sequentially resolving
@@ -144,7 +142,6 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    */
   override setIncludeScreenshot(include: boolean): void {
     this._includeScreenshot.set(include);
-    this.localStorageInteractions.setItem(LocalStorageKey.INCLUDE_SCREENSHOT, String(include));
   }
 
   /**
@@ -234,6 +231,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     this._geminiApiKey.set('');
     this._rendererUrl.set(this.startup.getResolvedRendererUrl() || '');
     this._themePreference.set('light');
+    this._includeScreenshot.set(false);
   }
 
   /**
