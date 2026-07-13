@@ -160,6 +160,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   ngAfterViewInit() {
     this.dockviewApi = new DockviewComponent(this.dockviewRoot.nativeElement, {
       className: this.isDarkTheme() ? 'dockview-theme-dark' : 'dockview-theme-light',
+      defaultRenderer: 'always',
       createComponent: (options) => {
         let type: Type<unknown> | undefined;
         switch (options.name) {
