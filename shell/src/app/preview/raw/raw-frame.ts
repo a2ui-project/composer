@@ -44,6 +44,8 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
  * Hosts the raw JSON view of active surface models, allowing direct source editing
  * and displaying real-time parsing error indicators.
  */
+const LAYOUT_MODEL_URI = 'a2ui://layout.json';
+
 @Component({
   selector: 'a2ui-composer-raw-frame',
   standalone: true,
@@ -58,6 +60,7 @@ export class RawFrame implements AfterViewInit, OnDestroy {
 
   @ViewChild('editorContainer') editorContainer!: ElementRef<HTMLDivElement>;
   private editor?: monaco.editor.IStandaloneCodeEditor;
+  private readonly monacoInstance = signal<typeof monaco | null>(null);
   private destroyed = false;
 
   readonly TEST_ONLY = {
@@ -93,6 +96,75 @@ export class RawFrame implements AfterViewInit, OnDestroy {
           // Ignore initial parse errors
         }
       }
+    });
+
+    effect(() => {
+      const catalog = this.catalogManagement.activeCatalog();
+      const monacoInstance = this.monacoInstance();
+
+      if (!catalog || !monacoInstance) {
+        return;
+      }
+
+      // The active catalog provides schemas for individual UI components (e.g. Text, Button).
+      // However, the JSON payload in the editor is an array of A2UI messages (e.g. createSurface,
+      // updateComponents). We dynamically synthesize a root schema here that describes this payload
+      // structure, injecting the catalog's component schemas into the `updateComponents` block
+      // so Monaco can fully validate the entire JSON tree structure and its component properties.
+      const layoutSchema = {
+        ...catalog,
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            version: {type: 'string'},
+            createSurface: {
+              type: 'object',
+              properties: {
+                surfaceId: {type: 'string'},
+                catalogId: {type: 'string'},
+                sendDataModel: {type: 'boolean'},
+              },
+              required: ['surfaceId', 'catalogId'],
+            },
+            updateComponents: {
+              type: 'object',
+              properties: {
+                surfaceId: {type: 'string'},
+                components: {
+                  type: 'array',
+                  items: {
+                    anyOf: Object.values(catalog.components || {}),
+                  },
+                },
+              },
+              required: ['surfaceId', 'components'],
+            },
+            updateDataModel: {
+              type: 'object',
+              properties: {
+                surfaceId: {type: 'string'},
+                path: {type: 'string'},
+                value: {},
+              },
+              required: ['surfaceId'],
+            },
+          },
+          additionalProperties: false,
+        },
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (monacoInstance.languages as any).json.jsonDefaults.setDiagnosticsOptions({
+        validate: true,
+        schemas: [
+          {
+            uri: 'a2ui-catalog-schema',
+            fileMatch: [LAYOUT_MODEL_URI],
+            schema: layoutSchema,
+          },
+        ],
+      });
     });
 
     // Sync back changes in StateSync activeDraft to editor layoutJson (e.g. from LLM stream completed updates)
@@ -174,9 +246,16 @@ export class RawFrame implements AfterViewInit, OnDestroy {
       if (this.destroyed) {
         return;
       }
+      this.monacoInstance.set(monacoInstance);
+
+      const modelUri = monacoInstance.Uri.parse(LAYOUT_MODEL_URI);
+      let model = monacoInstance.editor.getModel(modelUri);
+      if (!model) {
+        model = monacoInstance.editor.createModel(this.layoutJson(), 'json', modelUri);
+      }
+
       const editor = monacoInstance.editor.create(this.editorContainer.nativeElement, {
-        value: this.layoutJson(),
-        language: 'json',
+        model: model,
         theme: this.isDarkTheme() ? 'vs-dark' : 'vs-light',
         automaticLayout: true,
         minimap: {enabled: false},

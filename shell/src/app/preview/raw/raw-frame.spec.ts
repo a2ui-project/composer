@@ -43,7 +43,7 @@ const {createMock, mockEditor} = vi.hoisted(() => {
     (container: HTMLElement, options: monaco.editor.IStandaloneEditorConstructionOptions) => {
       const textarea = document.createElement('textarea');
       textarea.className = 'mock-monaco-textarea';
-      textarea.value = options.value || '';
+      textarea.value = (options.model as unknown)?.value || '';
       if (options.readOnly) {
         textarea.readOnly = true;
       }
@@ -81,8 +81,20 @@ vi.mock('@monaco-editor/loader', () => {
     default: {
       config: vi.fn(),
       init: vi.fn().mockResolvedValue({
+        Uri: {
+          parse: vi.fn((uri: string) => ({ toString: () => uri })),
+        },
         editor: {
           create: createMock,
+          getModel: vi.fn(() => null),
+          createModel: vi.fn((value, language, uri) => ({ value, language, uri })),
+        },
+        languages: {
+          json: {
+            jsonDefaults: {
+              setDiagnosticsOptions: vi.fn(),
+            },
+          },
         },
       }),
     },
