@@ -206,7 +206,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       }
     });
 
-    this.dockviewApi.addPanel({ id: 'chat', component: 'chat', title: 'Chat' });
+    this.dockviewApi.addPanel({ id: 'chat', component: 'chat', title: 'Gemini Assistant' });
     this.dockviewApi.addPanel({ id: 'rendered', component: 'rendered', title: 'Rendered A2UI Preview', position: { direction: 'right', referencePanel: 'chat' } });
     this.dockviewApi.addPanel({ id: 'raw', component: 'raw', title: 'A2UI JSON Editor', position: { direction: 'right', referencePanel: 'rendered' } });
 
