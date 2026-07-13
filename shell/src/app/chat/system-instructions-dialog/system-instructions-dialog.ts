@@ -14,17 +14,58 @@
  * limitations under the License.
  */
 
-import {Component, inject} from '@angular/core';
+import {Component, inject, signal, OnDestroy} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
 import {MatButtonModule} from '@angular/material/button';
+import {MatIconModule} from '@angular/material/icon';
+import {MatSnackBar} from '@angular/material/snack-bar';
 
 @Component({
   selector: 'a2ui-composer-system-instructions-dialog',
   standalone: true,
-  imports: [MatDialogModule, MatButtonModule],
+  imports: [MatDialogModule, MatButtonModule, MatIconModule],
   templateUrl: './system-instructions-dialog.ng.html',
   styleUrl: './system-instructions-dialog.scss',
 })
-export class SystemInstructionsDialog {
-  protected readonly data = inject<string>(MAT_DIALOG_DATA);
+export class SystemInstructionsDialog implements OnDestroy {
+  protected readonly data = inject<string | null>(MAT_DIALOG_DATA);
+  protected readonly copied = signal(false);
+  private readonly snackBar = inject(MatSnackBar);
+  private copyTimeoutId?: ReturnType<typeof setTimeout>;
+
+  ngOnDestroy(): void {
+    if (this.copyTimeoutId) {
+      clearTimeout(this.copyTimeoutId);
+    }
+  }
+
+  protected copyToClipboard(): void {
+    if (!this.data) return;
+
+    if (!navigator.clipboard) {
+      console.error('Clipboard API is not available in this environment.');
+      this.snackBar.open('Clipboard copy is not supported in this environment', undefined, {
+        duration: 3000,
+      });
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(this.data)
+      .then(() => {
+        this.copied.set(true);
+        this.snackBar.open('System instructions copied', undefined, {
+          duration: 2000,
+        });
+        if (this.copyTimeoutId) {
+          clearTimeout(this.copyTimeoutId);
+        }
+        this.copyTimeoutId = setTimeout(() => {
+          this.copied.set(false);
+        }, 2000);
+      })
+      .catch(err => {
+        console.error('Failed to copy system instructions to clipboard: ', err);
+      });
+  }
 }
