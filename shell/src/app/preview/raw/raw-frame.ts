@@ -250,7 +250,9 @@ export class RawFrame implements AfterViewInit, OnDestroy {
 
       const modelUri = monacoInstance.Uri.parse(LAYOUT_MODEL_URI);
       let model = monacoInstance.editor.getModel(modelUri);
-      if (!model) {
+      if (model) {
+        model.setValue(this.layoutJson());
+      } else {
         model = monacoInstance.editor.createModel(this.layoutJson(), 'json', modelUri);
       }
 

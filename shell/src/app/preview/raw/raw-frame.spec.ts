@@ -87,7 +87,7 @@ vi.mock('@monaco-editor/loader', () => {
         editor: {
           create: createMock,
           getModel: vi.fn(() => null),
-          createModel: vi.fn((value, language, uri) => ({ value, language, uri })),
+          createModel: vi.fn((value, language, uri) => ({ value, language, uri, setValue: vi.fn() })),
         },
         languages: {
           json: {
