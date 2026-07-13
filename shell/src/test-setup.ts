@@ -33,3 +33,26 @@ if (!getTestBed().platform) {
 beforeEach(() => {
   getTestBed().resetTestingModule();
 });
+
+class MockStorage implements Storage {
+  private store = new Map<string, string>();
+  get length() { return this.store.size; }
+  clear() { this.store.clear(); }
+  getItem(key: string) { return this.store.get(key) ?? null; }
+  setItem(key: string, value: string) { this.store.set(key, String(value)); }
+  removeItem(key: string) { this.store.delete(key); }
+  key(index: number) { return Array.from(this.store.keys())[index] ?? null; }
+}
+
+if (typeof window !== 'undefined') {
+  const localStorageMock = new MockStorage();
+  const sessionStorageMock = new MockStorage();
+
+  Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true });
+  Object.defineProperty(window, 'sessionStorage', { value: sessionStorageMock, writable: true });
+  Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
+  Object.defineProperty(global, 'sessionStorage', { value: sessionStorageMock, writable: true });
+
+  (global as any).Storage = MockStorage;
+  (window as any).Storage = MockStorage;
+}

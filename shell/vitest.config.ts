@@ -22,6 +22,11 @@ export default defineConfig({
   test: {
     pool: 'threads',
     environment: 'jsdom',
+    environmentOptions: {
+      jsdom: {
+        url: 'http://localhost:3000/',
+      },
+    },
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.spec.ts'],
     coverage: {
