@@ -14,12 +14,20 @@
  limitations under the License.
 -->
 
-<h2 mat-dialog-title>System Instructions</h2>
+<div class="dialog-header">
+  <h2 mat-dialog-title class="dialog-title-text">System Instructions</h2>
+</div>
 <mat-dialog-content>
-  <div tabindex="0" class="dialog-content-scrollable" aria-label="System instructions text">
-    <pre class="instructions-text">{{ data }}</pre>
-  </div>
+  <textarea class="instructions-textarea" readonly aria-label="System instructions text">{{
+    data
+  }}</textarea>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
+  @if (data) {
+    <button mat-button (click)="copyToClipboard()" class="copy-button">
+      <mat-icon>{{ copied() ? 'check' : 'content_copy' }}</mat-icon>
+      Copy to clipboard
+    </button>
+  }
   <button mat-button mat-dialog-close>Close</button>
 </mat-dialog-actions>

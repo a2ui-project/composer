@@ -14,27 +14,44 @@
  * limitations under the License.
  */
 
+.dialog-header {
+  padding: 0 16px;
+
+  .dialog-title-text {
+    margin: 0;
+    padding: 20px 0 16px 0;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.copy-button {
+  color: var(--mat-sys-primary);
+}
 mat-dialog-content {
   padding-left: 0 !important;
   padding-right: 0 !important;
+  display: flex;
+  flex-direction: column;
 }
-.dialog-content-scrollable {
-  margin: 0 16px;
-  max-height: 400px;
-  overflow-y: auto;
+.instructions-textarea {
+  margin: 0 16px 20px 16px;
+  width: calc(600px - 32px);
+  min-width: 300px;
+  min-height: 200px;
+  height: 400px;
+  resize: both;
   background-color: var(--mat-sys-surface-container-high);
   padding: 16px;
   border-radius: 4px;
-}
-.dialog-content-scrollable:focus {
-  outline: 2px solid var(--mat-sys-primary);
-  outline-offset: -2px;
-}
-.instructions-text {
-  margin: 0;
+  border: 1px solid var(--mat-sys-outline-variant);
   font-family: 'Roboto Mono', Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
-  white-space: pre-wrap;
   color: var(--mat-sys-on-surface);
+  box-sizing: border-box;
+}
+
+.instructions-textarea:focus {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: -2px;
 }

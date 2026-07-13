@@ -294,7 +294,7 @@ export class ChatPanel {
   protected showSystemInstructions(): void {
     this.dialog.open(SystemInstructionsDialog, {
       data: this.chatCoordinator.systemPrompt(),
-      width: '600px',
+      maxWidth: '90vw',
     });
   }
 
