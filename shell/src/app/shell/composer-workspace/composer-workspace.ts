@@ -14,7 +14,22 @@
  * limitations under the License.
  */
 
-import {Component, effect, inject, OnInit, signal, untracked, viewChild} from '@angular/core';
+import {
+  Component,
+  effect,
+  inject,
+  OnInit,
+  AfterViewInit,
+  OnDestroy,
+  signal,
+  untracked,
+  computed,
+  ElementRef,
+  ViewChild,
+  ViewContainerRef,
+  ComponentRef,
+  Type
+} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ChatPanel} from '../../chat/chat-panel/chat-panel';
 import {RawFrame} from '../../preview/raw/raw-frame';
@@ -24,17 +39,11 @@ import {Events} from '../../debug/events/events';
 import {Errors} from '../../debug/errors/errors';
 import {RawMessages} from '../../debug/raw-messages/raw-messages';
 import {MockRules} from '../../debug/mock-rules/mock-rules';
-import {MatTabsModule} from '@angular/material/tabs';
-import {MatIconModule} from '@angular/material/icon';
-import {MatButtonModule} from '@angular/material/button';
-import {MatTooltipModule} from '@angular/material/tooltip';
-import {MatBadgeModule} from '@angular/material/badge';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {HostCommunication} from '../host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-
-const EVENTS_TAB_INDEX = 1;
-const ERRORS_TAB_INDEX = 2;
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {DockviewComponent} from 'dockview';
 
 /** Internal interface mapping raw cross-frame workspace telemetry payloads */
 interface WorkspaceMessagePayload {
@@ -49,54 +58,43 @@ interface WorkspaceMessagePayload {
 @Component({
   selector: 'a2ui-composer-workspace',
   standalone: true,
-  imports: [
-    ChatPanel,
-    RawFrame,
-    RenderedFrame,
-    DataModel,
-    Events,
-    Errors,
-    RawMessages,
-    MockRules,
-    MatTabsModule,
-    MatIconModule,
-    MatButtonModule,
-    MatTooltipModule,
-    MatBadgeModule,
-  ],
   templateUrl: './composer-workspace.ng.html',
   styleUrl: './composer-workspace.scss',
 })
-export class ComposerWorkspace implements OnInit {
+export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   private startupResolution = inject(StartupResolution);
   private hostComm = inject(HostCommunication);
+  private viewContainerRef = inject(ViewContainerRef);
+  private configProvider = inject(AppConfigProvider);
+
+  @ViewChild('dockviewRoot') dockviewRoot!: ElementRef;
 
   isExtension = signal(false);
-  isDebugCollapsed = signal(false);
   showMockRules = signal(false);
-  selectedTabIndex = signal(0);
   unreadEventsCount = signal(0);
   unreadErrorsCount = signal(0);
+  isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
 
-  readonly rawMessages = viewChild(RawMessages);
-  readonly events = viewChild(Events);
-  readonly errors = viewChild(Errors);
+  private dockviewApi!: DockviewComponent;
+  private componentRefs: ComponentRef<unknown>[] = [];
+
+  private rawMessagesInstance?: RawMessages;
+  private eventsInstance?: Events;
+  private errorsInstance?: Errors;
 
   constructor() {
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
       if (!envelope) return;
 
-      // NOTE: Bracket notation is used to access properties on cross-frame message payloads
-      // to prevent compilers from renaming these properties during production minification.
       const payload = envelope.payload as WorkspaceMessagePayload | undefined;
-      const activeTab = this.selectedTabIndex();
+      const activePanelId = this.dockviewApi?.activePanel?.id;
 
       if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.['action']) {
-        if (activeTab !== EVENTS_TAB_INDEX) {
+        if (activePanelId !== 'events') {
           this.unreadEventsCount.update(count => count + 1);
         }
       } else if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
-        if (activeTab !== ERRORS_TAB_INDEX) {
+        if (activePanelId !== 'errors') {
           this.unreadErrorsCount.update(count => count + 1);
         }
       } else if (
@@ -110,22 +108,38 @@ export class ComposerWorkspace implements OnInit {
             ? Object.keys(validationErrors).length > 0
             : !!validationErrors;
 
-        if (hasErrors && activeTab !== ERRORS_TAB_INDEX) {
+        if (hasErrors && activePanelId !== 'errors') {
           this.unreadErrorsCount.update(count => count + 1);
         }
       }
     });
 
     effect(() => {
-      const index = this.selectedTabIndex();
-      if (index === EVENTS_TAB_INDEX) {
-        untracked(() => {
-          this.unreadEventsCount.set(0);
-        });
-      } else if (index === ERRORS_TAB_INDEX) {
-        untracked(() => {
-          this.unreadErrorsCount.set(0);
-        });
+      const count = this.unreadEventsCount();
+      const panel = untracked(() => this.dockviewApi?.getGroupPanel('events'));
+      if (panel) {
+        panel.api.setTitle(count > 0 ? `Events (${count})` : 'Events');
+      }
+    });
+
+    effect(() => {
+      const count = this.unreadErrorsCount();
+      const panel = untracked(() => this.dockviewApi?.getGroupPanel('errors'));
+      if (panel) {
+        panel.api.setTitle(count > 0 ? `Errors (${count})` : 'Errors');
+      }
+    });
+
+    effect(() => {
+      const show = this.showMockRules();
+      const existingPanel = untracked(() => this.dockviewApi?.getGroupPanel('mockRules'));
+      if (show && !existingPanel && this.dockviewApi) {
+          const dataModel = this.dockviewApi.getGroupPanel('dataModel');
+          if (dataModel) {
+             this.dockviewApi.addPanel({ id: 'mockRules', component: 'mockRules', title: 'Mock Rules', position: { referencePanel: 'dataModel', direction: 'within' } });
+          }
+      } else if (!show && existingPanel && this.dockviewApi) {
+          existingPanel.api.close();
       }
     });
   }
@@ -133,18 +147,82 @@ export class ComposerWorkspace implements OnInit {
   ngOnInit(): void {
     const isExt = this.startupResolution.isExtensionMode();
     this.isExtension.set(isExt);
-    if (isExt) {
-      this.isDebugCollapsed.set(true);
-    }
   }
 
-  toggleDebugCollapse(): void {
-    this.isDebugCollapsed.update(c => !c);
+  ngAfterViewInit() {
+    this.dockviewApi = new DockviewComponent(this.dockviewRoot.nativeElement, {
+      createComponent: (options) => {
+        let type: Type<unknown> | undefined;
+        switch (options.name) {
+          case 'chat': type = ChatPanel; break;
+          case 'rendered': type = RenderedFrame; break;
+          case 'raw': type = RawFrame; break;
+          case 'dataModel': type = DataModel; break;
+          case 'events': type = Events; break;
+          case 'errors': type = Errors; break;
+          case 'rawMessages': type = RawMessages; break;
+          case 'mockRules': type = MockRules; break;
+        }
+
+        if (!type) {
+            return { element: document.createElement('div'), init: () => {}, dispose: () => {} };
+        }
+
+        const componentRef = this.viewContainerRef.createComponent(type);
+        this.componentRefs.push(componentRef);
+        
+        if (type === RawMessages) this.rawMessagesInstance = componentRef.instance as RawMessages;
+        if (type === Events) this.eventsInstance = componentRef.instance as Events;
+        if (type === Errors) this.errorsInstance = componentRef.instance as Errors;
+        
+        return {
+          element: componentRef.location.nativeElement,
+          init: (params) => {
+             componentRef.changeDetectorRef.detectChanges();
+          },
+          dispose: () => {
+             componentRef.destroy();
+             this.componentRefs = this.componentRefs.filter(r => r !== componentRef);
+          }
+        };
+      }
+    });
+
+    this.dockviewApi.onDidActivePanelChange((event) => {
+      const panel = event.panel;
+      if (panel?.id === 'events') {
+          untracked(() => this.unreadEventsCount.set(0));
+      } else if (panel?.id === 'errors') {
+          untracked(() => this.unreadErrorsCount.set(0));
+      }
+    });
+
+    this.dockviewApi.addPanel({ id: 'chat', component: 'chat', title: 'Chat' });
+    this.dockviewApi.addPanel({ id: 'rendered', component: 'rendered', title: 'Rendered A2UI Preview', position: { direction: 'right', referencePanel: 'chat' } });
+    this.dockviewApi.addPanel({ id: 'raw', component: 'raw', title: 'A2UI JSON Editor', position: { direction: 'right', referencePanel: 'rendered' } });
+
+    this.dockviewApi.addPanel({ id: 'dataModel', component: 'dataModel', title: 'Data Model', position: { direction: 'below', referencePanel: 'rendered' } });
+    this.dockviewApi.addPanel({ id: 'events', component: 'events', title: 'Events', position: { direction: 'within', referencePanel: 'dataModel' } });
+    this.dockviewApi.addPanel({ id: 'errors', component: 'errors', title: 'Errors', position: { direction: 'within', referencePanel: 'dataModel' } });
+    this.dockviewApi.addPanel({ id: 'rawMessages', component: 'rawMessages', title: 'Raw Messages', position: { direction: 'within', referencePanel: 'dataModel' } });
+    
+    if (this.showMockRules()) {
+      this.dockviewApi.addPanel({ id: 'mockRules', component: 'mockRules', title: 'Mock Rules', position: { direction: 'within', referencePanel: 'dataModel' } });
+    }
+    
+    // Force an initial layout pass. In browsers, ResizeObserver handles this,
+    // but in jsdom tests with mocked observers, it requires an explicit call.
+    this.dockviewApi.layout(1000, 1000);
+  }
+
+  ngOnDestroy() {
+     this.dockviewApi?.dispose();
+     this.componentRefs.forEach(ref => ref.destroy());
   }
 
   clearAllLogs(): void {
-    this.rawMessages()?.clearLogs();
-    this.events()?.clearLogs();
-    this.errors()?.clearLogs();
+    this.rawMessagesInstance?.clearLogs();
+    this.eventsInstance?.clearLogs();
+    this.errorsInstance?.clearLogs();
   }
 }

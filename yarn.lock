@@ -5884,6 +5884,7 @@ __metadata:
     "@vitest/coverage-v8": "npm:4.1.9"
     a2ui-bridge: "npm:0.1.0"
     angular-eslint: "npm:22.0.0"
+    dockview: "npm:^7.0.2"
     eslint: "npm:10.5.0"
     jsdom: "npm:29.1.1"
     monaco-editor: "npm:^0.55.1"
@@ -7085,6 +7086,22 @@ __metadata:
   dependencies:
     "@leichtgewicht/ip-codec": "npm:^2.0.1"
   checksum: 10c0/8948d3d03063fb68e04a1e386875f8c3bcc398fc375f535f2b438fad8f41bf1afa6f5e70893ba44f4ae884c089247e0a31045722fa6ff0f01d228da103f1811d
+  languageName: node
+  linkType: hard
+
+"dockview-core@npm:^7.0.2":
+  version: 7.0.2
+  resolution: "dockview-core@npm:7.0.2"
+  checksum: 10c0/b577d25ef5868dce4e91e082cdd10037cb59f7f53b80bef75649245322f4d3df7aee4750d59ee000e7d3993b1b6223fb57b7674b20726c4929ae7895c6dd61e9
+  languageName: node
+  linkType: hard
+
+"dockview@npm:^7.0.2":
+  version: 7.0.2
+  resolution: "dockview@npm:7.0.2"
+  dependencies:
+    dockview-core: "npm:^7.0.2"
+  checksum: 10c0/f482da9e809e01c9d93b3d235467c266f3212cba5a948c5c13b711cffec41402e6a2ca58dbfd6bcb7abe9e12b64b2ede62a76187ea1feba4f116b10a56c9c1dc
   languageName: node
   linkType: hard
 

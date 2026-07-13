@@ -15,6 +15,7 @@
  */
 
 @use '@angular/material' as mat;
+@import 'dockview/dist/styles/dockview.css';
 
 @include mat.core();
 

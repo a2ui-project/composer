@@ -44,16 +44,4 @@ export class ComposerWorkspaceHarness extends ComponentHarness {
     return this.locatorFor(DataModelHarness)();
   }
 
-  /**
-   * Asserts whether the drawer dashboard debug panels section is collapsed.
-   */
-  async isDebugSectionCollapsed(): Promise<boolean> {
-    const section = await this.locatorFor('.debug-section')();
-    return section.hasClass('collapsed');
-  }
-
-  async getIconsAriaHidden(): Promise<(string | null)[]> {
-    const icons = await this.locatorForAll('.debug-header-controls mat-icon')();
-    return Promise.all(icons.map(i => i.getAttribute('aria-hidden')));
-  }
 }
