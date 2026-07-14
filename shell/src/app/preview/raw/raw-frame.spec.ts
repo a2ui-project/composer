@@ -82,12 +82,12 @@ vi.mock('@monaco-editor/loader', () => {
       config: vi.fn(),
       init: vi.fn().mockResolvedValue({
         Uri: {
-          parse: vi.fn((uri: string) => ({ toString: () => uri })),
+          parse: vi.fn((uri: string) => ({toString: () => uri})),
         },
         editor: {
           create: createMock,
           getModel: vi.fn(() => null),
-          createModel: vi.fn((value, language, uri) => ({ value, language, uri, setValue: vi.fn() })),
+          createModel: vi.fn((value, language, uri) => ({value, language, uri, setValue: vi.fn()})),
         },
         languages: {
           json: {
