@@ -63,16 +63,16 @@ table {
     text-transform: uppercase;
 
     &.exception {
-      background-color: #ffdad6;
-      color: #ba1a1a;
+      background-color: var(--mat-sys-error-container);
+      color: var(--mat-sys-on-error-container);
     }
     &.console {
-      background-color: #ffe082;
-      color: #ff8f00;
+      background-color: var(--mat-sys-tertiary-container);
+      color: var(--mat-sys-on-tertiary-container);
     }
     &.validation {
-      background-color: #e8f5e9;
-      color: #2e7d32;
+      background-color: var(--app-success-container, #e6f4ea);
+      color: var(--app-on-success-container, #137333);
     }
   }
 
@@ -84,21 +84,21 @@ table {
     text-transform: uppercase;
 
     &.error {
-      background-color: #ffdad6;
-      color: #ba1a1a;
+      background-color: var(--mat-sys-error-container);
+      color: var(--mat-sys-on-error-container);
     }
     &.warn {
-      background-color: #ffe082;
-      color: #ff8f00;
+      background-color: var(--mat-sys-tertiary-container);
+      color: var(--mat-sys-on-tertiary-container);
     }
     &.info {
-      background-color: #e8f0fe;
-      color: #1a73e8;
+      background-color: var(--mat-sys-primary-container);
+      color: var(--mat-sys-on-primary-container);
     }
     &.debug,
     &.log {
-      background-color: #f1f3f4;
-      color: #5f6368;
+      background-color: var(--mat-sys-surface-container-high);
+      color: var(--mat-sys-on-surface-variant);
     }
   }
 
@@ -161,7 +161,7 @@ table {
       color: var(--mat-sys-error);
       padding: 8px;
       border-left: 3px solid var(--mat-sys-error);
-      background: rgba(186, 26, 26, 0.05);
+      background: color-mix(in srgb, var(--mat-sys-error) 6%, transparent);
       border-radius: 0 4px 4px 0;
     }
   }

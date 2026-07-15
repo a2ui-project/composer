@@ -18,9 +18,9 @@ body {
   margin: 0;
   padding: 16px;
   font-family: sans-serif;
-  background-color: #ffffff;
+  background-color: var(--mat-sys-background, #ffffff);
   color-scheme: light;
-  color: #333333;
+  color: var(--mat-sys-on-background, #333333);
   box-sizing: border-box;
 }
 *,

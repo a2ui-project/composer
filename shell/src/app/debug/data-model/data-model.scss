@@ -29,7 +29,7 @@
   flex: 1;
 
   .invalid-json-badge {
-    color: #f44336;
+    color: var(--mat-sys-error);
     font-weight: bold;
     padding: 8px 0;
   }
