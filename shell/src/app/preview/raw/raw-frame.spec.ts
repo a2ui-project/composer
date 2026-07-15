@@ -48,6 +48,7 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     getValue: vi.fn(() => ''),
     setValue: vi.fn(),
     executeEdits: vi.fn(),
+    pushUndoStop: vi.fn(),
     trigger: vi.fn(),
     onDidChangeModelContent: vi.fn(() => ({dispose: () => {}})),
     updateOptions: vi.fn(),
@@ -74,14 +75,18 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
       });
       mockEditor.executeEdits.mockImplementation(
         (source: string, edits: monaco.editor.IIdentifiedSingleEditOperation[]) => {
-        if (edits && edits.length > 0) {
-          undoStack.push(textarea.value);
-          redoStack.length = 0;
-          textarea.value = edits[0].text;
-          textarea.dispatchEvent(new Event('input'));
-        }
-        return true;
-      });
+          if (textarea.readOnly) {
+            return false;
+          }
+          if (edits && edits.length > 0) {
+            undoStack.push(textarea.value);
+            redoStack.length = 0;
+            textarea.value = edits[0].text;
+            textarea.dispatchEvent(new Event('input'));
+          }
+          return true;
+        },
+      );
       mockEditor.trigger.mockImplementation((source: string, actionId: string) => {
         if (actionId === 'undo' && undoStack.length > 0) {
           const prev = undoStack.pop()!;
@@ -604,5 +609,24 @@ describe('RawFrame JSON Source Editor View', () => {
 
     // Undo should have no effect because setValue flushed history stack
     expect(await harness.getJsonText()).toBe(fallbackDraft);
+  });
+
+  it('updates editor content via stateSync even when programmatic stream lock (readOnly) is active', async () => {
+    const {fixture, harness} = await setup(false);
+
+    // 1. Lock the active stream
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    fixture.detectChanges();
+    expect(await harness.isReadOnly()).toBe(true);
+
+    // 2. Push a stream update from stateSync while locked
+    const streamDraft = '[{"version": "v0.9", "createSurface": {"surfaceId": "stream-test"}}]';
+    stateSyncMock.activeDraftSignal.set(streamDraft);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // Verify content updated successfully and editor restored back to readOnly: true
+    expect(await harness.getJsonText()).toBe(streamDraft);
+    expect(await harness.isReadOnly()).toBe(true);
   });
 });

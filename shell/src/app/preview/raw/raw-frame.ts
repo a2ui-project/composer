@@ -302,6 +302,11 @@ export class RawFrame implements AfterViewInit, OnDestroy {
     }
     const model = this.editor.getModel();
     if (model) {
+      const isLocked = this.isLocked();
+      if (isLocked) {
+        this.editor.updateOptions({readOnly: false});
+      }
+      this.editor.pushUndoStop();
       this.editor.executeEdits('state-sync', [
         {
           range: model.getFullModelRange(),
@@ -309,6 +314,10 @@ export class RawFrame implements AfterViewInit, OnDestroy {
           forceMoveMarkers: true,
         },
       ]);
+      this.editor.pushUndoStop();
+      if (isLocked) {
+        this.editor.updateOptions({readOnly: true});
+      }
     } else {
       this.editor.setValue(value);
     }
