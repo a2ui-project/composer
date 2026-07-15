@@ -30,13 +30,29 @@ import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-sta
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import type * as monaco from 'monaco-editor';
 
-const {createMock, mockEditor} = vi.hoisted(() => {
+const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() => {
+  const undoStack: string[] = [];
+  const redoStack: string[] = [];
+
+  const mockModel = {
+    getFullModelRange: vi.fn(() => ({
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: 1,
+      endColumn: 1,
+    })),
+    setValue: vi.fn(),
+  };
+
   const mockEditor = {
     getValue: vi.fn(() => ''),
     setValue: vi.fn(),
+    executeEdits: vi.fn(),
+    trigger: vi.fn(),
     onDidChangeModelContent: vi.fn(() => ({dispose: () => {}})),
     updateOptions: vi.fn(),
     dispose: vi.fn(),
+    getModel: vi.fn(() => mockModel),
   };
 
   const create = vi.fn(
@@ -51,8 +67,33 @@ const {createMock, mockEditor} = vi.hoisted(() => {
 
       mockEditor.getValue.mockImplementation(() => textarea.value);
       mockEditor.setValue.mockImplementation((val: string) => {
+        undoStack.length = 0;
+        redoStack.length = 0;
         textarea.value = val;
         textarea.dispatchEvent(new Event('input'));
+      });
+      mockEditor.executeEdits.mockImplementation(
+        (source: string, edits: monaco.editor.IIdentifiedSingleEditOperation[]) => {
+        if (edits && edits.length > 0) {
+          undoStack.push(textarea.value);
+          redoStack.length = 0;
+          textarea.value = edits[0].text;
+          textarea.dispatchEvent(new Event('input'));
+        }
+        return true;
+      });
+      mockEditor.trigger.mockImplementation((source: string, actionId: string) => {
+        if (actionId === 'undo' && undoStack.length > 0) {
+          const prev = undoStack.pop()!;
+          redoStack.push(textarea.value);
+          textarea.value = prev;
+          textarea.dispatchEvent(new Event('input'));
+        } else if (actionId === 'redo' && redoStack.length > 0) {
+          const next = redoStack.pop()!;
+          undoStack.push(textarea.value);
+          textarea.value = next;
+          textarea.dispatchEvent(new Event('input'));
+        }
       });
       mockEditor.onDidChangeModelContent.mockImplementation((cb: () => void) => {
         textarea.addEventListener('input', cb);
@@ -73,7 +114,7 @@ const {createMock, mockEditor} = vi.hoisted(() => {
     },
   );
 
-  return {createMock: create, mockEditor};
+  return {createMock: create, mockEditor, mockModel, undoStack, redoStack};
 });
 
 vi.mock('@monaco-editor/loader', () => {
@@ -226,11 +267,19 @@ describe('RawFrame JSON Source Editor View', () => {
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
     mockThemePreference = signal<string>('light');
 
+    undoStack.length = 0;
+    redoStack.length = 0;
+    mockEditor.trigger.mockClear();
     mockEditor.getValue.mockClear();
     mockEditor.setValue.mockClear();
+    mockEditor.executeEdits.mockClear();
     mockEditor.onDidChangeModelContent.mockClear();
     mockEditor.updateOptions.mockClear();
     mockEditor.dispose.mockClear();
+    mockEditor.getModel.mockClear();
+    mockEditor.getModel.mockReturnValue(mockModel as unknown as monaco.editor.ITextModel);
+    mockModel.getFullModelRange.mockClear();
+    mockModel.setValue.mockClear();
     createMock.mockClear();
   });
 
@@ -505,5 +554,55 @@ describe('RawFrame JSON Source Editor View', () => {
     await fixture.whenStable();
 
     expect(mockEditor.updateOptions).toHaveBeenCalledWith({theme: 'vs-dark'});
+  });
+
+  it('preserves undo and redo history allowing undo to restore previous content when stateSync activeDraft changes', async () => {
+    const {fixture, harness} = await setup(false);
+    const initialContent = await harness.getJsonText();
+
+    // 1. Push a new draft from stateSync
+    const newDraft = '[{"version": "v0.9", "createSurface": {"surfaceId": "undo-test"}}]';
+    stateSyncMock.activeDraftSignal.set(newDraft);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // Verify content updated to newDraft
+    expect(await harness.getJsonText()).toBe(newDraft);
+
+    // 2. Perform undo operation on editor
+    mockEditor.trigger('keyboard', 'undo', null);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // Verify content reverted back to initialContent
+    expect(await harness.getJsonText()).toBe(initialContent);
+
+    // 3. Perform redo operation on editor
+    mockEditor.trigger('keyboard', 'redo', null);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // Verify content restored to newDraft
+    expect(await harness.getJsonText()).toBe(newDraft);
+  });
+
+  it('falls back to setValue (flushing history) when stateSync activeDraft changes and editor model is missing', async () => {
+    const {fixture, harness} = await setup(false);
+    mockEditor.getModel.mockReturnValue(null);
+
+    const fallbackDraft = '[{"version": "v0.9", "createSurface": {"surfaceId": "fallback-test"}}]';
+    stateSyncMock.activeDraftSignal.set(fallbackDraft);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // Verify content updated to fallbackDraft
+    expect(await harness.getJsonText()).toBe(fallbackDraft);
+
+    // Perform undo operation on editor
+    mockEditor.trigger('keyboard', 'undo', null);
+    fixture.detectChanges();
+
+    // Undo should have no effect because setValue flushed history stack
+    expect(await harness.getJsonText()).toBe(fallbackDraft);
   });
 });
