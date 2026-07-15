@@ -24,7 +24,7 @@ import {
   untracked,
   WritableSignal,
   ElementRef,
-  ViewChild,
+  viewChild,
   AfterViewInit,
   OnDestroy,
 } from '@angular/core';
@@ -58,7 +58,7 @@ export class RawFrame implements AfterViewInit, OnDestroy {
   protected readonly layoutJson: WritableSignal<string>;
   protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
 
-  @ViewChild('editorContainer') editorContainer!: ElementRef<HTMLDivElement>;
+  readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
   private editor?: monaco.editor.IStandaloneCodeEditor;
   private readonly monacoInstance = signal<typeof monaco | null>(null);
   private destroyed = false;
@@ -254,7 +254,7 @@ export class RawFrame implements AfterViewInit, OnDestroy {
         model = monacoInstance.editor.createModel(this.layoutJson(), 'json', modelUri);
       }
 
-      const editor = monacoInstance.editor.create(this.editorContainer.nativeElement, {
+      const editor = monacoInstance.editor.create(this.editorContainer().nativeElement, {
         model: model,
         theme: this.isDarkTheme() ? 'vs-dark' : 'vs-light',
         automaticLayout: true,

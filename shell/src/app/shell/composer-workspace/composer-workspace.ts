@@ -25,7 +25,7 @@ import {
   untracked,
   computed,
   ElementRef,
-  ViewChild,
+  viewChild,
   ViewContainerRef,
   ComponentRef,
   Type,
@@ -81,7 +81,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   private viewContainerRef = inject(ViewContainerRef);
   private configProvider = inject(AppConfigProvider);
 
-  @ViewChild('dockviewRoot') dockviewRoot!: ElementRef;
+  readonly dockviewRoot = viewChild.required<ElementRef<HTMLElement>>('dockviewRoot');
 
   isExtension = signal(false);
   showMockRules = signal(false);
@@ -183,7 +183,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    this.dockviewApi = new DockviewComponent(this.dockviewRoot.nativeElement, {
+    this.dockviewApi = new DockviewComponent(this.dockviewRoot().nativeElement, {
       className: this.isDarkTheme() ? 'dockview-theme-dark' : 'dockview-theme-light',
       defaultRenderer: 'always',
       createComponent: options => {
