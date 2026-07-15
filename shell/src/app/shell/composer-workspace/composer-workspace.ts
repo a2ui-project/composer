@@ -20,7 +20,7 @@ import {
   inject,
   OnInit,
   AfterViewInit,
-  OnDestroy,
+  DestroyRef,
   signal,
   untracked,
   computed,
@@ -75,7 +75,8 @@ export enum ComposerPanelId {
   templateUrl: './composer-workspace.ng.html',
   styleUrl: './composer-workspace.scss',
 })
-export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
+export class ComposerWorkspace implements OnInit, AfterViewInit {
+  private readonly destroyRef = inject(DestroyRef);
   private startupResolution = inject(StartupResolution);
   private hostComm = inject(HostCommunication);
   private viewContainerRef = inject(ViewContainerRef);
@@ -98,6 +99,11 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   private errorsInstance?: Errors;
 
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.dockviewApi?.dispose();
+      this.componentRefs.forEach(ref => ref.destroy());
+    });
+
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
       if (!envelope) return;
 
@@ -335,11 +341,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
     // but in jsdom tests with mocked observers, it requires an explicit call.
     this.dockviewApi.layout(1000, 1000);
     this.isDockviewInitialized.set(true);
-  }
-
-  ngOnDestroy() {
-    this.dockviewApi?.dispose();
-    this.componentRefs.forEach(ref => ref.destroy());
   }
 
   clearAllLogs(): void {

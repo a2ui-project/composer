@@ -26,7 +26,6 @@ import {
   ElementRef,
   viewChild,
   AfterViewInit,
-  OnDestroy,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Subject} from 'rxjs';
@@ -53,7 +52,7 @@ const LAYOUT_MODEL_URI = 'a2ui://layout.json';
   templateUrl: './raw-frame.ng.html',
   styleUrl: './raw-frame.scss',
 })
-export class RawFrame implements AfterViewInit, OnDestroy {
+export class RawFrame implements AfterViewInit {
   protected readonly isExtensionMode = inject(IS_EXTENSION_MODE);
   protected readonly layoutJson: WritableSignal<string>;
   protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
@@ -81,6 +80,13 @@ export class RawFrame implements AfterViewInit, OnDestroy {
   protected readonly isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
 
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.destroyed = true;
+      if (this.editor) {
+        this.editor.dispose();
+      }
+    });
+
     // Initialize backing editor layout state Signal dynamically from the volatile session cache
     this.layoutJson = signal(this.stateSync.hydrateActiveDraft());
     effect(() => {
@@ -275,13 +281,6 @@ export class RawFrame implements AfterViewInit, OnDestroy {
         }
       });
     });
-  }
-
-  ngOnDestroy() {
-    this.destroyed = true;
-    if (this.editor) {
-      this.editor.dispose();
-    }
   }
 
   protected onLayoutChange(value: string): void {
