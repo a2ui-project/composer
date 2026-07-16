@@ -31,7 +31,7 @@
   .description {
     margin-bottom: 12px;
     font-size: 13px;
-    color: #555;
+    color: var(--mat-sys-on-surface-variant);
   }
 }
 
@@ -68,8 +68,8 @@
   }
 
   .logs-console {
-    background-color: #1e1e1e;
-    color: #00ff00;
+    background-color: var(--mat-sys-surface-container-lowest);
+    color: var(--mat-sys-primary);
     padding: 12px;
     border-radius: 6px;
     font-family: monospace;

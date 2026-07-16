@@ -36,7 +36,7 @@
   }
 
   .invalid-json-badge {
-    color: #f44336;
+    color: var(--mat-sys-error);
     font-weight: bold;
     padding: 8px 0;
   }
@@ -46,7 +46,7 @@
     height: 100%;
     flex: 1 1 auto;
     display: block;
-    border: 1px solid rgba(0, 0, 0, 0.12);
+    border: 1px solid var(--mat-sys-outline-variant);
     border-radius: 4px;
     overflow: hidden;
   }

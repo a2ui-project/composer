@@ -26,15 +26,15 @@
 
 .gallery-sidenav {
   width: 240px;
-  border-right: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
-  background-color: var(--mat-sys-surface-container-low, #fcfcfc);
+  border-right: 1px solid var(--mat-sys-outline-variant);
+  background-color: var(--mat-sys-surface-container-low);
 }
 
 .catalog-title {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
-  color: var(--mat-sys-on-surface, #1c1b1f);
+  color: var(--mat-sys-on-surface);
 }
 
 .gallery-sidenav .catalog-list {
@@ -65,12 +65,12 @@
 
     &:hover,
     &:focus {
-      background-color: var(--mat-sys-surface-container-low, #f2f2f2);
+      background-color: var(--mat-sys-surface-container-low);
     }
 
     &.mat-mdc-list-item-activated,
     &[activated='true'] {
-      background-color: var(--mat-sys-surface-container-high, #e2e2e2);
+      background-color: var(--mat-sys-surface-container-high);
 
       span[matListItemTitle] {
         font-weight: 500;

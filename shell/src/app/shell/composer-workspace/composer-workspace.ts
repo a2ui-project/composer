@@ -20,12 +20,12 @@ import {
   inject,
   OnInit,
   AfterViewInit,
-  OnDestroy,
+  DestroyRef,
   signal,
   untracked,
   computed,
   ElementRef,
-  ViewChild,
+  viewChild,
   ViewContainerRef,
   ComponentRef,
   Type,
@@ -75,13 +75,14 @@ export enum ComposerPanelId {
   templateUrl: './composer-workspace.ng.html',
   styleUrl: './composer-workspace.scss',
 })
-export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
+export class ComposerWorkspace implements OnInit, AfterViewInit {
+  private readonly destroyRef = inject(DestroyRef);
   private startupResolution = inject(StartupResolution);
   private hostComm = inject(HostCommunication);
   private viewContainerRef = inject(ViewContainerRef);
   private configProvider = inject(AppConfigProvider);
 
-  @ViewChild('dockviewRoot') dockviewRoot!: ElementRef;
+  readonly dockviewRoot = viewChild.required<ElementRef<HTMLElement>>('dockviewRoot');
 
   isExtension = signal(false);
   showMockRules = signal(false);
@@ -98,6 +99,11 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   private errorsInstance?: Errors;
 
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.dockviewApi?.dispose();
+      this.componentRefs.forEach(ref => ref.destroy());
+    });
+
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
       if (!envelope) return;
 
@@ -183,7 +189,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    this.dockviewApi = new DockviewComponent(this.dockviewRoot.nativeElement, {
+    this.dockviewApi = new DockviewComponent(this.dockviewRoot().nativeElement, {
       className: this.isDarkTheme() ? 'dockview-theme-dark' : 'dockview-theme-light',
       defaultRenderer: 'always',
       createComponent: options => {
@@ -335,11 +341,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
     // but in jsdom tests with mocked observers, it requires an explicit call.
     this.dockviewApi.layout(1000, 1000);
     this.isDockviewInitialized.set(true);
-  }
-
-  ngOnDestroy() {
-    this.dockviewApi?.dispose();
-    this.componentRefs.forEach(ref => ref.destroy());
   }
 
   clearAllLogs(): void {
