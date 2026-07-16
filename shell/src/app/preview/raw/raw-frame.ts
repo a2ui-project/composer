@@ -30,6 +30,7 @@ import {
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Subject} from 'rxjs';
 import {debounceTime, filter, map} from 'rxjs/operators';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import loader from '@monaco-editor/loader';
 import type * as monaco from 'monaco-editor';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens/environment-tokens';
@@ -55,7 +56,6 @@ const LAYOUT_MODEL_URI = 'a2ui://layout.json';
 export class RawFrame implements AfterViewInit {
   protected readonly isExtensionMode = inject(IS_EXTENSION_MODE);
   protected readonly layoutJson: WritableSignal<string>;
-  protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
 
   readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
   private editor?: monaco.editor.IStandaloneCodeEditor;
@@ -64,7 +64,6 @@ export class RawFrame implements AfterViewInit {
 
   readonly TEST_ONLY = {
     layoutJson: () => this.layoutJson,
-    isJsonInvalid: () => this.isJsonInvalid,
   };
 
   private readonly hostCommunication = inject(HostCommunication);
@@ -73,6 +72,7 @@ export class RawFrame implements AfterViewInit {
   private readonly chatState = inject(ChatState);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly snackBar = inject(MatSnackBar);
   private readonly layoutInput$ = new Subject<string>();
 
   /** Public lock indicator preventing typing deadlocks during generative LLM stream turns. */
@@ -186,13 +186,12 @@ export class RawFrame implements AfterViewInit {
             try {
               const payload = this.parseLayoutString(activeDraftVal);
               if (payload !== null) {
-                this.isJsonInvalid.set(false);
                 this.hostCommunication.sendRenderA2UI(payload);
               } else {
-                this.isJsonInvalid.set(true);
+                this.showJsonSyntaxError();
               }
             } catch (err) {
-              this.isJsonInvalid.set(true);
+              this.showJsonSyntaxError();
             }
           });
         }
@@ -224,13 +223,12 @@ export class RawFrame implements AfterViewInit {
           try {
             const payload = this.parseLayoutString(value);
             if (payload !== null) {
-              this.isJsonInvalid.set(false);
               return payload;
             }
-            this.isJsonInvalid.set(true);
+            this.showJsonSyntaxError();
             return null;
           } catch (err) {
-            this.isJsonInvalid.set(true);
+            this.showJsonSyntaxError();
             return null;
           }
         }),
@@ -344,5 +342,11 @@ export class RawFrame implements AfterViewInit {
     } catch (err) {
       throw new SyntaxError('Invalid JSON');
     }
+  }
+
+  private showJsonSyntaxError(): void {
+    this.snackBar.open('Invalid JSON syntax detected.', undefined, {
+      duration: 3000,
+    });
   }
 }

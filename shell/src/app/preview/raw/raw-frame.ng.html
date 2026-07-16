@@ -18,8 +18,5 @@
   [class.is-collapsed]="isExtensionMode()"
   [class.is-locked]="isLocked()"
 >
-  @if (isJsonInvalid()) {
-    <div class="invalid-json-badge">⚠️ Invalid JSON syntax detected.</div>
-  }
   <div #editorContainer class="monaco-editor-container"></div>
 </div>

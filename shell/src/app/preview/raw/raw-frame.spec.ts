@@ -29,6 +29,7 @@ import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import type * as monaco from 'monaco-editor';
+import {MatSnackBar} from '@angular/material/snack-bar';
 
 const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() => {
   const undoStack: string[] = [];
@@ -266,11 +267,13 @@ describe('RawFrame JSON Source Editor View', () => {
   let mockThemePreference: WritableSignal<string>;
   let stateSyncMock: MockStateSync;
   let chatStateMock: MockChatState;
+  let snackBarMock: {open: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
     mockThemePreference = signal<string>('light');
+    snackBarMock = {open: vi.fn()};
 
     undoStack.length = 0;
     redoStack.length = 0;
@@ -315,6 +318,7 @@ describe('RawFrame JSON Source Editor View', () => {
         },
         {provide: StateSync, useClass: MockStateSync},
         {provide: ChatState, useClass: MockChatState},
+        {provide: MatSnackBar, useValue: snackBarMock},
       ],
     }).compileComponents();
 
@@ -455,8 +459,7 @@ describe('RawFrame JSON Source Editor View', () => {
     expect(sendRenderA2UIMock).toHaveBeenLastCalledWith([
       {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
     ]);
-    expect(fixture.componentInstance.TEST_ONLY.isJsonInvalid()()).toBe(false);
-    expect(await harness.hasInvalidJsonBadge()).toBe(false);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
   });
 
   it('sets isJsonInvalid to true, suppresses sendRenderA2UI, and displays the invalid JSON badge when malformed JSON is typed', async () => {
@@ -469,8 +472,11 @@ describe('RawFrame JSON Source Editor View', () => {
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
-    expect(fixture.componentInstance.TEST_ONLY.isJsonInvalid()()).toBe(true);
-    expect(await harness.hasInvalidJsonBadge()).toBe(true);
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      undefined,
+      expect.any(Object),
+    );
   });
 
   it('sets isJsonInvalid to true, suppresses sendRenderA2UI, and displays the invalid JSON badge when a malformed JSON array is typed', async () => {
@@ -483,8 +489,11 @@ describe('RawFrame JSON Source Editor View', () => {
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
-    expect(fixture.componentInstance.TEST_ONLY.isJsonInvalid()()).toBe(true);
-    expect(await harness.hasInvalidJsonBadge()).toBe(true);
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      undefined,
+      expect.any(Object),
+    );
   });
 
   it('dispatches initial layout dynamically when activeCatalog transitions from null to a valid catalog', async () => {

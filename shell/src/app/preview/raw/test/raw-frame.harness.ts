@@ -42,11 +42,6 @@ export class RawFrameHarness extends ComponentHarness {
     await textarea.dispatchEvent('input');
   }
 
-  async hasInvalidJsonBadge(): Promise<boolean> {
-    const badge = await this.locatorForOptional('.invalid-json-badge')();
-    return badge !== null;
-  }
-
   async isReadOnly(): Promise<boolean> {
     const textarea = await this.textareaLocator();
     return textarea.getProperty('readOnly');
