@@ -49,16 +49,6 @@
         @if (isThirdParty()) {
           <div class="form-section">
             <h3>Gemini API Provisioning</h3>
-            <p class="description">
-              Your personal Gemini API key is encrypted and stored locally in your browser's secure
-              database using the
-              <a
-                href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API"
-                target="_blank"
-                rel="noopener noreferrer"
-                >Web Crypto API</a
-              >. Neither Google nor anyone else has access to this key.
-            </p>
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Gemini API Key</mat-label>
               <input
@@ -114,6 +104,36 @@
         </div>
       </form>
     </mat-card-content>
+    @if (isThirdParty()) {
+      <mat-card-footer class="get-api-key">
+        To obtain an API key:
+        <ol>
+          <li>
+            Go to
+            <a
+              href="https://aistudio.google.com/api-keys"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Google AI Studio</a
+            >
+            and sign in with your Google account.
+          </li>
+          <li>Click Create API key.</li>
+          <li>Select or create a Google Cloud project when prompted, then click Create key.</li>
+          <li>Save your key in a secure location!</li>
+        </ol>
+
+        A2UI Composer encrypts your key and stores it locally in your browser's secure database
+        using the
+        <a
+          href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Web Crypto API</a
+        >. Neither Google nor anyone else has access to this key.
+      </mat-card-footer>
+    }
     <mat-card-actions align="end">
       <button mat-flat-button color="primary" (click)="saveSettings()">Save Settings</button>
     </mat-card-actions>
