@@ -94,12 +94,14 @@ export interface LlmResponse {
    * Optional final accumulated thought process.
    */
   readonly thinking?: string;
+
+  /**
+   * True if this represents the complete response rather than a partial chunk.
+   */
+  readonly isComplete?: boolean;
 }
 
-export interface LlmStreamChunk {
-  readonly content: string;
-  readonly thinking?: string;
-}
+export const ABORT_ERROR_NAME = 'AbortError';
 
 /**
  * Represents dynamic, real-time incremental tokens compiled asynchronously.
@@ -111,7 +113,7 @@ export interface LlmStreamResponse {
    * An asynchronous iterable stream yielding chunked text fragments as they
    * arrive from the platform pipeline.
    */
-  readonly contentStream: AsyncIterable<LlmStreamChunk>;
+  readonly contentStream: AsyncIterable<LlmResponse>;
 
   /**
    * A promise that resolves to the final accumulated sequence, ensuring

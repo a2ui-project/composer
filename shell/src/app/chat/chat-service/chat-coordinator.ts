@@ -17,7 +17,7 @@
 import {Injectable, inject, computed, effect, untracked} from '@angular/core';
 import {formatJson} from '../../utils/json';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {LlmMessage, LlmClient, MessageRole, Attachment} from '../llm-client/llm-client';
+import {LlmMessage, LlmClient, MessageRole, Attachment, LlmStreamResponse, ABORT_ERROR_NAME} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {StateSync} from '../state-sync/state-sync';
@@ -97,14 +97,14 @@ export class ChatCoordinator {
     ];
   }
 
-  private activeStreamResponse?: import('../llm-client/llm-client').LlmStreamResponse;
-  private isAbortRequested = false;
+  private activeStreamResponse?: LlmStreamResponse;
+  private isCancelRequested = false;
 
   /**
-   * Aborts the currently active streaming request if there is one.
+   * Cancels the currently active streaming request if there is one.
    */
-  abortActiveStream(): void {
-    this.isAbortRequested = true;
+  cancelActiveStream(): void {
+    this.isCancelRequested = true;
     if (this.activeStreamResponse && this.activeStreamResponse.abort) {
       this.activeStreamResponse.abort();
     }
@@ -149,15 +149,15 @@ export class ChatCoordinator {
     ]);
 
     try {
-      this.isAbortRequested = false;
+      this.isCancelRequested = false;
       // Trigger streaming GenAI completions call using client facade
       const responseStream = await this.llmClient.chatStream(fullContext);
 
-      // If an abort was requested while the stream connection was establishing
-      if (this.isAbortRequested) {
+      // If a cancel was requested while the stream connection was establishing
+      if (this.isCancelRequested) {
         if (responseStream.abort) responseStream.abort();
         const err = new Error('Aborted');
-        err.name = 'AbortError';
+        err.name = ABORT_ERROR_NAME;
         throw err;
       }
 
@@ -210,7 +210,7 @@ export class ChatCoordinator {
     } catch (err: unknown) {
       // If it was aborted, don't show an error. Just leave what was generated or remove the bubble.
       // But we probably want to just reset the UI lock.
-      if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
+      if (err && typeof err === 'object' && 'name' in err && err.name === ABORT_ERROR_NAME) {
         this.chatState.setPipelineStatus(PipelineStatus.IDLE);
         this.chatState.setProgrammaticStreamActive(false);
         // Replace trailing pulse or partial JSON with stopped message, and force non-snapshot

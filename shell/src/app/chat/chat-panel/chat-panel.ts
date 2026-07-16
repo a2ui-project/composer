@@ -21,8 +21,8 @@ import {
   computed,
   ElementRef,
   Directive,
-  Input,
-  OnChanges,
+  input,
+  effect,
 } from '@angular/core';
 
 @Directive({
@@ -30,13 +30,16 @@ import {
   selector: '[a2uiComposerAutoScroll]',
   standalone: true,
 })
-export class AutoScrollDirective implements OnChanges {
-  @Input('a2uiComposerAutoScroll') autoScroll: string | undefined = '';
+export class AutoScrollDirective {
+  autoScroll = input<string | undefined>('', {alias: 'a2uiComposerAutoScroll'});
   private readonly el = inject(ElementRef);
 
-  ngOnChanges() {
-    requestAnimationFrame(() => {
-      this.el.nativeElement.scrollTop = this.el.nativeElement.scrollHeight;
+  constructor() {
+    effect(() => {
+      this.autoScroll();
+      requestAnimationFrame(() => {
+        this.el.nativeElement.scrollTop = this.el.nativeElement.scrollHeight;
+      });
     });
   }
 }
@@ -226,10 +229,10 @@ export class ChatPanel {
   }
 
   /**
-   * Aborts the currently active prompt stream.
+   * Cancels the currently active prompt stream.
    */
-  protected abortPrompt(): void {
-    this.chatCoordinator.abortActiveStream();
+  protected cancelPrompt(): void {
+    this.chatCoordinator.cancelActiveStream();
   }
 
   /**

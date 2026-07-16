@@ -15,9 +15,9 @@
  */
 
 import {Injectable, inject} from '@angular/core';
-import {LlmClient, LlmMessage, LlmResponse, LlmStreamResponse, MessageRole} from './llm-client';
+import {LlmClient, LlmMessage, LlmResponse, LlmStreamResponse, MessageRole, ABORT_ERROR_NAME} from './llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {GoogleGenAI, Content, GenerateContentParameters, Part} from '@google/genai';
+import {GoogleGenAI, Content, GenerateContentParameters, Part, GenerateContentConfig} from '@google/genai';
 
 /**
  * Standard public endpoint authentication client utilizing user developer keys.
@@ -105,6 +105,7 @@ export class Standalone3pLlmClient extends LlmClient {
     // but chat is rarely used directly for full text. We can just return content.
     return {
       content,
+      isComplete: true,
     };
   }
 
@@ -123,7 +124,7 @@ export class Standalone3pLlmClient extends LlmClient {
 
     const abortController = new AbortController();
 
-    const config: import('@google/genai').GenerateContentConfig = systemInstruction
+    const config: GenerateContentConfig = systemInstruction
       ? {systemInstruction}
       : {};
     config.abortSignal = abortController.signal;
@@ -141,7 +142,7 @@ export class Standalone3pLlmClient extends LlmClient {
     // Instantiate response generator stream eagerly
     const responseStream = await ai.models.generateContentStream(params);
 
-    const buffer: import('./llm-client').LlmStreamChunk[] = [];
+    const buffer: LlmResponse[] = [];
     let accumulatedText = '';
     let isDone = false;
     let streamError: unknown = null;
@@ -180,14 +181,14 @@ export class Standalone3pLlmClient extends LlmClient {
 
           accumulatedText += textVal;
 
-          buffer.push({content: textVal, thinking: thoughtVal});
+          buffer.push({content: textVal, thinking: thoughtVal, isComplete: false});
           notifyListeners();
         }
         isDone = true;
         resolveComplete(accumulatedText);
         notifyListeners();
       } catch (err: unknown) {
-        if (err instanceof Error && err.name === 'AbortError') {
+        if (err && typeof err === 'object' && 'name' in err && err.name === ABORT_ERROR_NAME) {
           isDone = true;
           streamError = err;
           rejectComplete(err);
@@ -201,11 +202,11 @@ export class Standalone3pLlmClient extends LlmClient {
     })();
 
     // Independent pointer-safe AsyncIterable reader mapping
-    const contentStream: AsyncIterable<import('./llm-client').LlmStreamChunk> = {
+    const contentStream: AsyncIterable<LlmResponse> = {
       [Symbol.asyncIterator]() {
         let localBufferIndex = 0;
         return {
-          async next(): Promise<IteratorResult<import('./llm-client').LlmStreamChunk>> {
+          async next(): Promise<IteratorResult<LlmResponse>> {
             // Wait in-loop while buffer is exhausted and stream is active/errored
             while (localBufferIndex >= buffer.length && !isDone && !streamError) {
               await new Promise<void>((resolve, reject) => {
