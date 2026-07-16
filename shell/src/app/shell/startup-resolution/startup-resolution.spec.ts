@@ -20,6 +20,7 @@ import {StartupResolution} from './startup-resolution';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
 class MockAppConfigProvider {
@@ -43,6 +44,7 @@ describe('StartupResolution Task 2.6', () => {
         StartupResolution,
         LocalStorageInteractions,
         {provide: AppConfigProvider, useValue: mockConfigProvider},
+        {provide: IS_1P_AUTH_ENABLED, useValue: true},
       ],
     });
     service = TestBed.inject(StartupResolution);
@@ -127,7 +129,7 @@ describe('StartupResolution Task 2.6', () => {
     expect(url).toBe('http://fallback-storage:3000');
   });
 
-  it('identifies 3P environment based on hostname or local overrides', () => {
+  it('identifies 3P environment based on hostname or local overrides when 1P auth is enabled', () => {
     const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
     const hostnameSpy = vi.spyOn(service, 'getWindowHostname');
 
@@ -230,5 +232,43 @@ describe('StartupResolution Task 2.6', () => {
   it('returns window search and hostname safely', () => {
     expect(typeof service.getWindowSearch()).toBe('string');
     expect(typeof service.getWindowHostname()).toBe('string');
+  });
+
+  it('returns true immediately for 3P environment when IS_1P_AUTH_ENABLED is false', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        StartupResolution,
+        LocalStorageInteractions,
+        {provide: AppConfigProvider, useValue: mockConfigProvider},
+        {provide: IS_1P_AUTH_ENABLED, useValue: false},
+      ],
+    });
+    const customService = TestBed.inject(StartupResolution);
+    const hostnameSpy = vi.spyOn(customService, 'getWindowHostname');
+
+    hostnameSpy.mockReturnValue('google.com');
+
+    expect(customService.isThirdPartyEnvironment()).toBe(true);
+  });
+
+  it('consults IS_1P_AUTH_ENABLED when determining 3P environment on google.com with FORCE_3P true', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        StartupResolution,
+        LocalStorageInteractions,
+        {provide: AppConfigProvider, useValue: mockConfigProvider},
+        {provide: IS_1P_AUTH_ENABLED, useValue: true},
+      ],
+    });
+    const customService = TestBed.inject(StartupResolution);
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
+    const hostnameSpy = vi.spyOn(customService, 'getWindowHostname');
+
+    hostnameSpy.mockReturnValue('google.com');
+    getItemSpy.mockImplementation(key => (key === LocalStorageKey.FORCE_3P ? 'true' : null));
+
+    expect(customService.isThirdPartyEnvironment()).toBe(true);
   });
 });

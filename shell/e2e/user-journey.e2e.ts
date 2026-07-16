@@ -26,7 +26,6 @@ test.beforeEach(async ({page}) => {
   await page.evaluate(() => {
     try {
       localStorage.clear();
-      localStorage.setItem('a2ui_composer_force_1p', 'true');
     } catch (e) {}
   });
   await page.goto('/');
@@ -48,33 +47,15 @@ test.describe('E2E Workspace User Journey', () => {
     await expect(page.locator('.bridge-badge')).toBeVisible();
     await expect(page.locator('.catalog-badge')).toBeVisible();
 
-    // 4. Toggle Forced 3P Authentication Mode, verify localStorage, and assert API key provisioning section appears
-    const force3pSwitch = page.getByRole('switch', {
-      name: 'Force External Third-Party Authentication Mode',
-    });
-    await force3pSwitch.click();
-    await page.waitForURL(url => url.pathname === '/');
-    await page.goto('/settings');
-
-    const isForce3p = await page.evaluate(() => localStorage.getItem('a2ui_composer_force_3p'));
-    expect(isForce3p).toBe('true');
-
+    // 4. Verify auth section is hidden and API key provisioning section appears when IS_1P_AUTH_ENABLED is false
+    await expect(page.locator('.first-party-auth-section')).toBeHidden();
     await expect(page.getByText('Gemini API Provisioning')).toBeVisible();
 
-    // 5. Toggle back to 1P mode and verify API key section disappears
-    await force3pSwitch.click();
-    await page.waitForURL('**/');
-
-    const isForce3pAfter = await page.evaluate(() =>
-      localStorage.getItem('a2ui_composer_force_3p'),
-    );
-    expect(isForce3pAfter).toBeNull();
-
-    await page.goto('/settings');
-    await expect(page.getByText('Gemini API Provisioning')).not.toBeVisible();
-
-    // 6. Switch back to Workspace
-    await page.getByRole('link', {name: 'Composer Workspace'}).click();
+    // 5. Provide API key and save settings to unlock workspace
+    await page.getByLabel('Gemini API Key').fill('test-api-key');
+    const saveBtn = page.getByRole('button', {name: 'Save Settings'});
+    await Promise.all([page.waitForURL(url => url.pathname === '/'), saveBtn.click()]);
+    await page.waitForLoadState('load');
 
     // 7. Wait for Monaco to load and enter malformed JSON
     const editorLocator = page.locator('.monaco-editor');

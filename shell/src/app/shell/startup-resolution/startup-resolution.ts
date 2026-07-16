@@ -19,6 +19,7 @@ import {QueryParser} from '../query-parser/query-parser';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 
 /**
  * Represents the resolved runtime configuration for the application,
@@ -41,6 +42,7 @@ export class StartupResolution {
   private readonly _isLockedContext = signal(false);
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly injector = inject(Injector);
+  private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
   readonly isLockedContext = this._isLockedContext.asReadonly();
@@ -111,17 +113,21 @@ export class StartupResolution {
   }
 
   isThirdPartyEnvironment(): boolean {
+    if (!this.is1PAuthEnabled) {
+      return true;
+    }
+
     const force1P = this.localStorageInteractions.getItem(LocalStorageKey.FORCE_1P) === 'true';
     if (force1P) {
       return false;
     }
 
-    const hostname = this.getWindowHostname();
     const force3P = this.localStorageInteractions.getItem(LocalStorageKey.FORCE_3P) === 'true';
     if (force3P) {
       return true;
     }
 
+    const hostname = this.getWindowHostname();
     const is1P =
       hostname === 'google.com' ||
       hostname.endsWith('.google.com') ||

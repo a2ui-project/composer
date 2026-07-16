@@ -37,9 +37,9 @@ export enum AuthType {
   /** Default authentication resolved dynamically based on runtime environment. */
   DEFAULT = 'default',
   /** Enterprise identity protocol for internal developer services. */
-  ONE_PARTY = '1p',
+  FIRST_PARTY = '1p',
   /** Public endpoint authentication utilizing user developer keys. */
-  THREE_PARTY = '3p',
+  THIRD_PARTY = '3p',
 }
 
 /** Strong type representation for Light/Dark mode theme options. */

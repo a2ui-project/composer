@@ -90,7 +90,7 @@ class MockStateSync {
 
 class MockAppConfigProvider {
   readonly envMode = signal(EnvMode.STANDALONE);
-  readonly authType = signal(AuthType.ONE_PARTY);
+  readonly authType = signal(AuthType.FIRST_PARTY);
   readonly rendererUrl = signal('http://localhost:4200/renderer');
   readonly geminiApiKey = signal('');
   readonly themePreference = signal<ThemePreference>('light');

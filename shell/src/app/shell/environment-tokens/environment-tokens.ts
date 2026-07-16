@@ -24,3 +24,12 @@ export const IS_EXTENSION_MODE = new InjectionToken<Signal<boolean>>('IS_EXTENSI
   providedIn: 'root',
   factory: () => signal(false),
 });
+
+/**
+ * Injection token indicating whether internal first-party (1P) authentication
+ * overrides and developer toggles are enabled in the current environment.
+ */
+export const IS_1P_AUTH_ENABLED = new InjectionToken<boolean>('IS_1P_AUTH_ENABLED', {
+  providedIn: 'root',
+  factory: () => false,
+});

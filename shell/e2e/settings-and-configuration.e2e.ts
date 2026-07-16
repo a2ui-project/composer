@@ -114,14 +114,13 @@ test.describe('Settings and Client Configuration', () => {
       );
     });
 
-    test('verifies forced 3P authentication mode toggle and API key provisioning panel visibility', async ({
+    test('verifies auth section is hidden when IS_1P_AUTH_ENABLED is false and API key provisioning panel visibility', async ({
       page,
     }) => {
       await page.goto('/');
       await page.evaluate(() => {
         try {
           localStorage.clear();
-          localStorage.setItem('a2ui_composer_force_1p', 'true');
         } catch (e) {}
       });
       await page.goto('/settings');
@@ -130,26 +129,9 @@ test.describe('Settings and Client Configuration', () => {
       await expect(page.locator('.bridge-badge')).toBeVisible();
       await expect(page.locator('.catalog-badge')).toBeVisible();
 
-      const force3pSwitch = page.getByRole('switch', {
-        name: 'Force External Third-Party Authentication Mode',
-      });
-      await force3pSwitch.click();
-      await page.waitForURL(url => url.pathname === '/');
-      await page.goto('/settings');
-
-      const isForce3p = await page.evaluate(() => localStorage.getItem('a2ui_composer_force_3p'));
-      expect(isForce3p).toBe('true');
+      // Since IS_1P_AUTH_ENABLED is false, auth section is hidden and 3P API provisioning is visible
+      await expect(page.locator('.first-party-auth-section')).toBeHidden();
       await expect(page.getByText('Gemini API Provisioning')).toBeVisible();
-
-      // Toggle back and verify it goes to workspace (as reload happens when changing to 1P)
-      await force3pSwitch.click();
-      await page.waitForURL('**/');
-
-      const isForce3pAfter = await page.evaluate(() =>
-        localStorage.getItem('a2ui_composer_force_3p'),
-      );
-      expect(isForce3pAfter).toBeNull();
-      await expect(page.getByText('Gemini API Provisioning')).not.toBeVisible();
     });
   });
 });

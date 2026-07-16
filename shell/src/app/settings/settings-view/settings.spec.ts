@@ -29,9 +29,15 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {signal, WritableSignal, Signal, computed} from '@angular/core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {AppConfigProvider, AuthType, EnvMode} from '../app-config-provider/app-config-provider';
+import {
+  AppConfigProvider,
+  AuthType,
+  EnvMode,
+  ThemePreference,
+} from '../app-config-provider/app-config-provider';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SettingsHarness} from './test/settings.harness';
+import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
 
 vi.mock('safevalues/dom', () => {
   return {
@@ -96,8 +102,8 @@ describe('Settings', () => {
         return override;
       }
       return mockStartupResolution.isThirdPartyEnvironment()
-        ? AuthType.THREE_PARTY
-        : AuthType.ONE_PARTY;
+        ? AuthType.THIRD_PARTY
+        : AuthType.FIRST_PARTY;
     });
 
     mockConfigProvider = {
@@ -130,7 +136,7 @@ describe('Settings', () => {
     localStorage.clear();
   });
 
-  async function setupComponent() {
+  async function setupComponent(enable1PAuth = true) {
     await TestBed.configureTestingModule({
       imports: [Settings],
       providers: [
@@ -157,6 +163,7 @@ describe('Settings', () => {
           provide: PlatformLocation,
           useValue: mockPlatformLocation,
         },
+        {provide: IS_1P_AUTH_ENABLED, useValue: enable1PAuth},
       ],
     }).compileComponents();
 
@@ -322,22 +329,24 @@ describe('Settings', () => {
   });
 
   class FakeAppConfigProvider extends AppConfigProvider {
-    initialize = vi.fn().mockResolvedValue(undefined);
-    envMode = signal(EnvMode.STANDALONE);
-    authType = computed(() => {
+    override authType = computed(() => {
       return localStorage.getItem('a2ui_composer_force_3p') === 'true'
-        ? AuthType.THREE_PARTY
-        : AuthType.ONE_PARTY;
+        ? AuthType.THIRD_PARTY
+        : AuthType.FIRST_PARTY;
     });
-    rendererUrl = signal('');
-    geminiApiKey = signal('');
-    themePreference = signal<ThemePreference>('light');
-    setRendererUrl = vi.fn();
-    setGeminiApiKey = vi.fn();
-    setForcedAuthMode = vi.fn();
-    setThemePreference = vi.fn();
-    flushConfig = vi.fn();
-    purgeGeminiApiKey = vi.fn();
+    override envMode = signal(EnvMode.STANDALONE);
+    override geminiApiKey = signal('');
+    override includeScreenshot = signal(false);
+    override rendererUrl = signal('');
+    override themePreference = signal<ThemePreference>('light');
+    override flushConfig = vi.fn();
+    override initialize = vi.fn().mockResolvedValue(undefined);
+    override purgeGeminiApiKey = vi.fn();
+    override setForcedAuthMode = vi.fn();
+    override setGeminiApiKey = vi.fn();
+    override setIncludeScreenshot = vi.fn();
+    override setRendererUrl = vi.fn();
+    override setThemePreference = vi.fn();
   }
 
   it('renders third-party context layout when a2ui_composer_force_3p storage override key is present using a real StartupResolution', async () => {
@@ -366,6 +375,7 @@ describe('Settings', () => {
               catalogError: mockCatalogError,
             },
           },
+          {provide: IS_1P_AUTH_ENABLED, useValue: true},
         ],
       }).compileComponents();
 
@@ -394,14 +404,14 @@ describe('Settings', () => {
     fixture.detectChanges();
 
     expect(component.forceThirdPartyAuth()).toBe(true);
-    expect(mockConfigProvider.setForcedAuthMode).toHaveBeenCalledWith(AuthType.THREE_PARTY);
+    expect(mockConfigProvider.setForcedAuthMode).toHaveBeenCalledWith(AuthType.THIRD_PARTY);
     expect(reloadSpy).toHaveBeenCalled();
 
     await harness.toggleForceThirdPartyAuth();
     fixture.detectChanges();
 
     expect(component.forceThirdPartyAuth()).toBe(false);
-    expect(mockConfigProvider.setForcedAuthMode).toHaveBeenLastCalledWith(AuthType.ONE_PARTY);
+    expect(mockConfigProvider.setForcedAuthMode).toHaveBeenLastCalledWith(AuthType.FIRST_PARTY);
     expect(reloadSpy).toHaveBeenCalledTimes(2);
   });
 
@@ -484,11 +494,17 @@ describe('Settings', () => {
     const {component, harness} = await setupComponent();
 
     await harness.setRendererUrlValue('/samples/ng-basic-catalog/index.html');
+    expect(component.settingsForm.valid).toBe(true);
     await component.saveSettings();
 
-    expect(component.settingsForm.valid).toBe(true);
     expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith(
       '/samples/ng-basic-catalog/index.html',
     );
+  });
+
+  it('hides authentication overrides section when IS_1P_AUTH_ENABLED is false', async () => {
+    const {fixture} = await setupComponent(false);
+    const section = fixture.nativeElement.querySelector('.first-party-auth-section');
+    expect(section.hidden).toBe(true);
   });
 });

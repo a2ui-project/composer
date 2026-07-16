@@ -23,7 +23,7 @@ import {AppConfigProvider, EnvMode, AuthType, ThemePreference} from './app-confi
  */
 class TestConfigProvider extends AppConfigProvider {
   private readonly internalEnvMode: WritableSignal<EnvMode> = signal(EnvMode.STANDALONE);
-  private readonly internalAuthType: WritableSignal<AuthType> = signal(AuthType.THREE_PARTY);
+  private readonly internalAuthType: WritableSignal<AuthType> = signal(AuthType.THIRD_PARTY);
   private readonly internalRendererUrl: WritableSignal<string> = signal(
     'https://test-renderer.com',
   );
@@ -55,7 +55,7 @@ class TestConfigProvider extends AppConfigProvider {
 
   override flushConfig(): void {
     this.internalEnvMode.set(EnvMode.STANDALONE);
-    this.internalAuthType.set(AuthType.THREE_PARTY);
+    this.internalAuthType.set(AuthType.THIRD_PARTY);
     this.internalRendererUrl.set('https://test-renderer.com');
     this.internalGeminiApiKey.set('test-api-key');
     this.internalThemePreference.set('light');
@@ -67,7 +67,7 @@ describe('AppConfigProvider', () => {
     const provider = new TestConfigProvider();
 
     expect(provider.envMode()).toBe(EnvMode.STANDALONE);
-    expect(provider.authType()).toBe(AuthType.THREE_PARTY);
+    expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
     expect(provider.rendererUrl()).toBe('https://test-renderer.com');
     expect(provider.geminiApiKey()).toBe('test-api-key');
   });
@@ -86,8 +86,8 @@ describe('AppConfigProvider', () => {
 
   it('overrides target authentication modes as expected', () => {
     const provider = new TestConfigProvider();
-    provider.setForcedAuthMode(AuthType.ONE_PARTY);
-    expect(provider.authType()).toBe(AuthType.ONE_PARTY);
+    provider.setForcedAuthMode(AuthType.FIRST_PARTY);
+    expect(provider.authType()).toBe(AuthType.FIRST_PARTY);
   });
 
   it('flushes dynamic configurations as expected', () => {

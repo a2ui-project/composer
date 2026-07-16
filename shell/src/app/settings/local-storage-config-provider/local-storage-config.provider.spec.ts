@@ -24,6 +24,7 @@ import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
+import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
 
 class MockSecureCredentialsStorage {
   private storage = new Map<string, string>();
@@ -69,7 +70,7 @@ describe('LocalStorageAppConfigProvider', () => {
     vi.restoreAllMocks();
   });
 
-  function setupProvider(): LocalStorageAppConfigProvider {
+  function setupProvider(enable1PAuth = false): LocalStorageAppConfigProvider {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
@@ -77,26 +78,34 @@ describe('LocalStorageAppConfigProvider', () => {
         LocalStorageInteractions,
         {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
         {provide: StartupResolution, useValue: mockStartupService},
+        {provide: IS_1P_AUTH_ENABLED, useValue: enable1PAuth},
       ],
     });
     return TestBed.inject(LocalStorageAppConfigProvider);
   }
 
-  it('initializes forcedAuth with ONE_PARTY when FORCE_1P is true', () => {
+  it('ignores FORCE_1P when IS_1P_AUTH_ENABLED is false', () => {
+    mockStartupService.isThirdPartyEnvironment.mockReturnValue(true);
     localStorage.setItem(LocalStorageKey.FORCE_1P, 'true');
     const provider = setupProvider();
-    expect(provider.authType()).toBe(AuthType.ONE_PARTY);
+    expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
   });
 
-  it('initializes forcedAuth with THREE_PARTY when FORCE_3P is true', () => {
+  it('initializes forcedAuth with ONE_PARTY when FORCE_1P is true and IS_1P_AUTH_ENABLED is true', () => {
+    localStorage.setItem(LocalStorageKey.FORCE_1P, 'true');
+    const provider = setupProvider(true);
+    expect(provider.authType()).toBe(AuthType.FIRST_PARTY);
+  });
+
+  it('initializes forcedAuth with THREE_PARTY when FORCE_3P is true and IS_1P_AUTH_ENABLED is true', () => {
     localStorage.setItem(LocalStorageKey.FORCE_3P, 'true');
-    const provider = setupProvider();
-    expect(provider.authType()).toBe(AuthType.THREE_PARTY);
+    const provider = setupProvider(true);
+    expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
   });
 
   it('initializes forcedAuth with null when no force keys are present', () => {
     const provider = setupProvider();
-    expect(provider.authType()).toBe(AuthType.ONE_PARTY); // Fallback is 1P
+    expect(provider.authType()).toBe(AuthType.FIRST_PARTY); // Fallback is 1P
   });
 
   it('initializes geminiApiKey with the stored API key from SecureCredentialsStorage', async () => {
@@ -168,35 +177,35 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(provider.envMode()).toBe(EnvMode.STANDALONE);
   });
 
-  it('defines authType based on forcedAuth, overriding storage keys', () => {
+  it('ensures 3p even when 1p in local storage when 1p not enabled', () => {
     localStorage.setItem(LocalStorageKey.FORCE_1P, 'true');
     const provider = setupProvider();
-    expect(provider.authType()).toBe(AuthType.ONE_PARTY);
+    expect(provider.authType()).toBe(AuthType.FIRST_PARTY);
 
-    provider.setForcedAuthMode(AuthType.THREE_PARTY);
-    expect(provider.authType()).toBe(AuthType.THREE_PARTY);
+    provider.setForcedAuthMode(AuthType.THIRD_PARTY);
+    expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
   });
 
   it('defines authType based on storage override keys if forcedAuth is DEFAULT', () => {
     mockStartupService.isThirdPartyEnvironment.mockReturnValue(true);
     const provider = setupProvider();
     // No local storage override yet, so uses fallback: 3P
-    expect(provider.authType()).toBe(AuthType.THREE_PARTY);
+    expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
 
     // Write FORCE_1P directly to storage mimicking pre-existing config
     localStorage.setItem(LocalStorageKey.FORCE_1P, 'true');
-    const providerWithStorage = setupProvider();
-    expect(providerWithStorage.authType()).toBe(AuthType.ONE_PARTY);
+    const providerWithStorage = setupProvider(true);
+    expect(providerWithStorage.authType()).toBe(AuthType.FIRST_PARTY);
   });
 
   it('defines authType based on fallback environment if no overrides exist', () => {
     mockStartupService.isThirdPartyEnvironment.mockReturnValue(true);
     const provider = setupProvider();
-    expect(provider.authType()).toBe(AuthType.THREE_PARTY);
+    expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
 
     mockStartupService.isThirdPartyEnvironment.mockReturnValue(false);
     const provider2 = setupProvider();
-    expect(provider2.authType()).toBe(AuthType.ONE_PARTY);
+    expect(provider2.authType()).toBe(AuthType.FIRST_PARTY);
   });
 
   it('persists updated renderer URL to localStorage and updates signal', () => {
@@ -249,14 +258,14 @@ describe('LocalStorageAppConfigProvider', () => {
     const provider = setupProvider();
 
     // Force 1P
-    provider.setForcedAuthMode(AuthType.ONE_PARTY);
-    expect(provider.authType()).toBe(AuthType.ONE_PARTY);
+    provider.setForcedAuthMode(AuthType.FIRST_PARTY);
+    expect(provider.authType()).toBe(AuthType.FIRST_PARTY);
     expect(localStorage.getItem(LocalStorageKey.FORCE_1P)).toBe('true');
     expect(localStorage.getItem(LocalStorageKey.FORCE_3P)).toBeNull();
 
     // Force 3P
-    provider.setForcedAuthMode(AuthType.THREE_PARTY);
-    expect(provider.authType()).toBe(AuthType.THREE_PARTY);
+    provider.setForcedAuthMode(AuthType.THIRD_PARTY);
+    expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
     expect(localStorage.getItem(LocalStorageKey.FORCE_3P)).toBe('true');
     expect(localStorage.getItem(LocalStorageKey.FORCE_1P)).toBeNull();
 
@@ -273,14 +282,14 @@ describe('LocalStorageAppConfigProvider', () => {
 
     provider.setRendererUrl('https://dirty-renderer.com');
     await provider.setGeminiApiKey('dirty-token');
-    provider.setForcedAuthMode(AuthType.THREE_PARTY);
+    provider.setForcedAuthMode(AuthType.THIRD_PARTY);
     provider.setThemePreference('dark');
 
     await provider.flushConfig();
 
     expect(provider.rendererUrl()).toBe('https://base-url.com');
     expect(provider.geminiApiKey()).toBe('');
-    expect(provider.authType()).toBe(AuthType.ONE_PARTY); // Fallback 1P
+    expect(provider.authType()).toBe(AuthType.FIRST_PARTY); // Fallback 1P
     expect(provider.themePreference()).toBe('light');
 
     expect(localStorage.getItem(LocalStorageKey.RENDERER_URL)).toBeNull();
@@ -380,14 +389,14 @@ describe('LocalStorageAppConfigProvider', () => {
       const provider = setupProvider();
       expect(provider.rendererUrl()).toBe('https://default-renderer.com');
       expect(provider.geminiApiKey()).toBe('');
-      expect(provider.authType()).toBe(AuthType.ONE_PARTY);
+      expect(provider.authType()).toBe(AuthType.FIRST_PARTY);
       expect(provider.themePreference()).toBe('light');
 
       // Verify saving/mutations do not throw ReferenceError
       expect(() => provider.setRendererUrl('https://any-url.com')).not.toThrow();
       expect(() => provider.setGeminiApiKey('any-key')).not.toThrow();
       expect(() => provider.purgeGeminiApiKey()).not.toThrow();
-      expect(() => provider.setForcedAuthMode(AuthType.THREE_PARTY)).not.toThrow();
+      expect(() => provider.setForcedAuthMode(AuthType.THIRD_PARTY)).not.toThrow();
       expect(() => provider.setThemePreference('dark')).not.toThrow();
       expect(() => provider.flushConfig()).not.toThrow();
     });

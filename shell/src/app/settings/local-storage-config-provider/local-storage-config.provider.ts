@@ -27,6 +27,7 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
+import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
 
 /**
  * Concrete implementation of the AppConfigProvider that integrates with
@@ -46,6 +47,8 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
   /** Highly secure credentials asynchronous storage engine. */
   private readonly secureCredentialsStorage = inject(SecureCredentialsStorage);
+
+  private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
   /** Tracks local overrides for authentication modes at runtime. */
   private readonly _forcedAuthOverride = signal<AuthType>(this.getInitialForcedAuth());
@@ -120,7 +123,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     if (override !== AuthType.DEFAULT) {
       return override;
     }
-    return this.startup.isThirdPartyEnvironment() ? AuthType.THREE_PARTY : AuthType.ONE_PARTY;
+    return this.startup.isThirdPartyEnvironment() ? AuthType.THIRD_PARTY : AuthType.FIRST_PARTY;
   });
 
   /** Exposes the active preview frame target URL wrapper signal. */
@@ -204,10 +207,10 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   override setForcedAuthMode(mode: AuthType): void {
     this._forcedAuthOverride.set(mode);
 
-    if (mode === AuthType.ONE_PARTY) {
+    if (mode === AuthType.FIRST_PARTY) {
       this.localStorageInteractions.setItem(LocalStorageKey.FORCE_1P, 'true');
       this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_3P);
-    } else if (mode === AuthType.THREE_PARTY) {
+    } else if (mode === AuthType.THIRD_PARTY) {
       this.localStorageInteractions.setItem(LocalStorageKey.FORCE_3P, 'true');
       this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_1P);
     } else {
@@ -241,11 +244,14 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    * @returns Active AuthType mapping.
    */
   private getInitialForcedAuth(): AuthType {
+    if (!this.is1PAuthEnabled) {
+      return AuthType.DEFAULT;
+    }
     if (this.localStorageInteractions.getItem(LocalStorageKey.FORCE_1P) === 'true') {
-      return AuthType.ONE_PARTY;
+      return AuthType.FIRST_PARTY;
     }
     if (this.localStorageInteractions.getItem(LocalStorageKey.FORCE_3P) === 'true') {
-      return AuthType.THREE_PARTY;
+      return AuthType.THIRD_PARTY;
     }
     return AuthType.DEFAULT;
   }

@@ -91,7 +91,7 @@
           </div>
         }
 
-        <div class="form-section developer-auth-section">
+        <div class="form-section first-party-auth-section" [hidden]="!is1PAuthEnabled">
           <h3>Developer Authentication Overrides</h3>
           <p class="description">
             Simulate external 3P context to verify Gemini API key provisioning workflows.

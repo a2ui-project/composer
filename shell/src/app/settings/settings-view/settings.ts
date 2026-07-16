@@ -28,6 +28,7 @@ import {DOCUMENT, PlatformLocation} from '@angular/common';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
+import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
 import {locationAssign} from 'safevalues/dom';
 
 /**
@@ -58,6 +59,8 @@ export class Settings implements OnInit {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
+
+  protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
   readonly isLocked: WritableSignal<boolean> = signal(false);
   readonly isThirdParty: WritableSignal<boolean> = signal(false);
@@ -94,7 +97,7 @@ export class Settings implements OnInit {
     const is3P = this.startupResolution.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
 
-    this.forceThirdPartyAuth.set(this.configProvider.authType() === AuthType.THREE_PARTY);
+    this.forceThirdPartyAuth.set(this.configProvider.authType() === AuthType.THIRD_PARTY);
 
     const initialUrl = this.configProvider.rendererUrl();
     const initialApiKey = this.configProvider.geminiApiKey();
@@ -155,7 +158,7 @@ export class Settings implements OnInit {
     }
     const newState = !this.forceThirdPartyAuth();
     this.forceThirdPartyAuth.set(newState);
-    this.configProvider.setForcedAuthMode(newState ? AuthType.THREE_PARTY : AuthType.ONE_PARTY);
+    this.configProvider.setForcedAuthMode(newState ? AuthType.THIRD_PARTY : AuthType.FIRST_PARTY);
     this.reloadWindow();
   }
 }
