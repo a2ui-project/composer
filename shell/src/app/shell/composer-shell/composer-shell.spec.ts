@@ -16,7 +16,8 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ComposerShell} from './composer-shell';
-import {provideRouter} from '@angular/router';
+import {provideRouter, Router, RouterLinkActive} from '@angular/router';
+import {By} from '@angular/platform-browser';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerShellHarness} from './test/composer-shell.harness';
@@ -161,14 +162,14 @@ describe('ComposerShell Layout', () => {
   );
 
   it(
-    'toggles the left sidebar opened and closed states upon clicking ' +
+    'toggles the left sidebar collapsed state upon clicking ' +
       'the hamburger button via test harness interaction',
     async () => {
-      expect(await harness.isSidenavOpened()).toBe(true);
+      expect(await harness.isSidenavCollapsed()).toBe(true);
       await harness.clickHamburgerButton();
-      expect(await harness.isSidenavOpened()).toBe(false);
+      expect(await harness.isSidenavCollapsed()).toBe(false);
       await harness.clickHamburgerButton();
-      expect(await harness.isSidenavOpened()).toBe(true);
+      expect(await harness.isSidenavCollapsed()).toBe(true);
     },
   );
 
@@ -190,16 +191,64 @@ describe('ComposerShell Layout', () => {
     expect(configProviderMock.setThemePreference).toHaveBeenCalledWith('light');
   });
 
-  it('renders the Components Gallery navigation link in the sidebar by default', async () => {
+  it('renders the Components Gallery navigation link in the sidebar when expanded', async () => {
+    await harness.clickHamburgerButton();
     const links = await harness.getNavigationLinksText();
     expect(links).toContain('Components Gallery');
   });
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(2);
+    expect(hiddenAttrs.length).toBe(5);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
+  });
+
+  it('renders Material icons inside navigation list items', async () => {
+    const icons = await harness.getNavListIconsText();
+    expect(icons).toEqual(['construction', 'widgets', 'settings']);
+  });
+
+  it('enables tooltips on navigation items and hides labels when collapsed initially', async () => {
+    expect(await harness.getNavListTooltipsDisabled()).toEqual([false, false, false]);
+    expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(0);
+    await harness.clickHamburgerButton();
+    expect(await harness.isSidenavCollapsed()).toBe(false);
+    expect(await harness.getNavListTooltipsDisabled()).toEqual([true, true, true]);
+    expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(3);
+  });
+
+  it('sets explicit aria-label attributes on navigation links and connects hamburger button to sidenav via aria-controls', () => {
+    const navLinks = Array.from(fixture.nativeElement.querySelectorAll('mat-nav-list a'));
+    const ariaLabels = navLinks.map((link: unknown) =>
+      (link as Element).getAttribute('aria-label'),
+    );
+    expect(ariaLabels).toEqual(['Composer Workspace', 'Components Gallery', 'Settings']);
+
+    const sidenavEl = fixture.nativeElement.querySelector('mat-sidenav');
+    expect(sidenavEl.getAttribute('id')).toBe('composer-sidenav');
+
+    const hamburgerButton = fixture.nativeElement.querySelector('.hamburger-button');
+    expect(hamburgerButton.getAttribute('aria-controls')).toBe('composer-sidenav');
+  });
+
+  it('applies routerLinkActive="active-nav-item" to navigation links with exact matching on root so active anchor receives active-nav-item class', async () => {
+    const navLinks = Array.from(fixture.nativeElement.querySelectorAll('mat-nav-list a'));
+    const rlaAttrs = navLinks.map((link: unknown) =>
+      (link as Element).getAttribute('routerLinkActive'),
+    );
+    expect(rlaAttrs).toEqual(['active-nav-item', 'active-nav-item', 'active-nav-item']);
+
+    const rlaDirectives = fixture.debugElement.queryAll(By.directive(RouterLinkActive));
+    expect(rlaDirectives.length).toBe(3);
+    const rlaInstances = rlaDirectives.map(de => de.injector.get(RouterLinkActive));
+    expect(rlaInstances[0].routerLinkActiveOptions).toEqual({exact: true});
+
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect((navLinks[0] as HTMLElement).classList.contains('active-nav-item')).toBe(true);
   });
 });

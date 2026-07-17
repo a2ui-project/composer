@@ -64,6 +64,21 @@ export class ComposerShellHarness extends ComponentHarness {
     return sidenav.isOpen();
   }
 
+  async isSidenavCollapsed(): Promise<boolean> {
+    const sidenav = await this.locatorFor('.composer-sidenav')();
+    return sidenav.hasClass('collapsed');
+  }
+
+  async getNavListIconsText(): Promise<string[]> {
+    const icons = await this.locatorForAll('mat-nav-list mat-icon')();
+    return Promise.all(icons.map(icon => icon.text()));
+  }
+
+  async getNavListTooltipsDisabled(): Promise<boolean[]> {
+    const tooltips = await this.locatorForAll(MatTooltipHarness.with({ancestor: 'mat-nav-list'}))();
+    return Promise.all(tooltips.map(t => t.isDisabled()));
+  }
+
   async getNavigationLinksText(): Promise<string[]> {
     const list = await this.getNavList();
     const items = await list.getItems();
