@@ -267,13 +267,13 @@ describe('RawFrame JSON Source Editor View', () => {
   let mockThemePreference: WritableSignal<string>;
   let stateSyncMock: MockStateSync;
   let chatStateMock: MockChatState;
-  let snackBarMock: {open: ReturnType<typeof vi.fn>};
+  let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
     mockThemePreference = signal<string>('light');
-    snackBarMock = {open: vi.fn()};
+    snackBarMock = {open: vi.fn(), dismiss: vi.fn()};
 
     undoStack.length = 0;
     redoStack.length = 0;
