@@ -189,8 +189,10 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
         let title = 'Tab';
         if (panelId === ComposerPanelId.Gallery) title = 'Components Gallery';
         if (panelId === ComposerPanelId.Settings) title = 'Settings';
-        
-        const ref = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat) ? ComposerPanelId.Chat : undefined;
+
+        const ref = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat)
+          ? ComposerPanelId.Chat
+          : undefined;
         this.dockviewApi.addPanel({
           id: panelId,
           component: panelId,

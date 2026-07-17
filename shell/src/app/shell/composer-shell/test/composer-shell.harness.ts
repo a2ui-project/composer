@@ -49,8 +49,6 @@ export class ComposerShellHarness extends ComponentHarness {
     await button.click();
   }
 
-
-
   async getIconsAriaHidden(): Promise<(string | null)[]> {
     const icons = await this.locatorForAll('mat-icon')();
     return Promise.all(icons.map(i => i.getAttribute('aria-hidden')));

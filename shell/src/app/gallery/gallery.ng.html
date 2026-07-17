@@ -16,9 +16,17 @@
 
 <div class="gallery-container">
   <div class="gallery-header">
-    <mat-form-field appearance="outline" class="component-selector" subscriptSizing="dynamic" floatLabel="always">
+    <mat-form-field
+      appearance="outline"
+      class="component-selector"
+      subscriptSizing="dynamic"
+      floatLabel="always"
+    >
       <mat-label>Component</mat-label>
-      <mat-select [value]="selectedComponentKey()" (selectionChange)="selectComponent($event.value)">
+      <mat-select
+        [value]="selectedComponentKey()"
+        (selectionChange)="selectComponent($event.value)"
+      >
         @for (group of componentsList(); track group.category) {
           <mat-optgroup [label]="group.category">
             @for (comp of group.components; track comp) {
@@ -129,12 +137,12 @@
         </div>
       </div>
 
-      <mat-expansion-panel class="schema-expansion-panel">
-        <mat-expansion-panel-header class="schema-expansion-header">
-          <mat-panel-title class="section-title">JSON Schema</mat-panel-title>
-        </mat-expansion-panel-header>
-        <pre class="schema-code-block"><code class="schema-code">{{ selectedComponentSchema() }}</code></pre>
-      </mat-expansion-panel>
+      <div class="gallery-section">
+        <h3 class="section-title">JSON Schema</h3>
+        <pre
+          class="schema-code-block"
+        ><code class="schema-code">{{ selectedComponentSchema() }}</code></pre>
+      </div>
     } @else if (catalogManagement.catalogError()) {
       <div class="empty-state error-state">
         <mat-icon class="empty-icon text-danger">error_outline</mat-icon>

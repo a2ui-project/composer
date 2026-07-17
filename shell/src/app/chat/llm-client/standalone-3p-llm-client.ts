@@ -15,9 +15,22 @@
  */
 
 import {Injectable, inject} from '@angular/core';
-import {LlmClient, LlmMessage, LlmResponse, LlmStreamResponse, MessageRole, ABORT_ERROR_NAME} from './llm-client';
+import {
+  LlmClient,
+  LlmMessage,
+  LlmResponse,
+  LlmStreamResponse,
+  MessageRole,
+  ABORT_ERROR_NAME,
+} from './llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {GoogleGenAI, Content, GenerateContentParameters, Part, GenerateContentConfig} from '@google/genai';
+import {
+  GoogleGenAI,
+  Content,
+  GenerateContentParameters,
+  Part,
+  GenerateContentConfig,
+} from '@google/genai';
 
 /**
  * Standard public endpoint authentication client utilizing user developer keys.
@@ -124,9 +137,7 @@ export class Standalone3pLlmClient extends LlmClient {
 
     const abortController = new AbortController();
 
-    const config: GenerateContentConfig = systemInstruction
-      ? {systemInstruction}
-      : {};
+    const config: GenerateContentConfig = systemInstruction ? {systemInstruction} : {};
     config.abortSignal = abortController.signal;
     config.thinkingConfig = {
       includeThoughts: true,

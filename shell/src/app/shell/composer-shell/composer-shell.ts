@@ -37,13 +37,7 @@ import {WorkspacePanelManager} from '../composer-workspace/workspace-panel-manag
 @Component({
   selector: 'a2ui-composer-shell',
   standalone: true,
-  imports: [
-    MatToolbarModule,
-    MatButtonModule,
-    MatIconModule,
-    RouterOutlet,
-    MatTooltipModule,
-  ],
+  imports: [MatToolbarModule, MatButtonModule, MatIconModule, RouterOutlet, MatTooltipModule],
   templateUrl: './composer-shell.ng.html',
   styleUrl: './composer-shell.scss',
 })

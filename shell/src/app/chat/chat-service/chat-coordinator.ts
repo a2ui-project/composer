@@ -17,7 +17,14 @@
 import {Injectable, inject, computed, effect, untracked} from '@angular/core';
 import {formatJson} from '../../utils/json';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {LlmMessage, LlmClient, MessageRole, Attachment, LlmStreamResponse, ABORT_ERROR_NAME} from '../llm-client/llm-client';
+import {
+  LlmMessage,
+  LlmClient,
+  MessageRole,
+  Attachment,
+  LlmStreamResponse,
+  ABORT_ERROR_NAME,
+} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {StateSync} from '../state-sync/state-sync';

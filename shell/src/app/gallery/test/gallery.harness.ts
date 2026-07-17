@@ -15,7 +15,6 @@
  */
 
 import {ComponentHarness} from '@angular/cdk/testing';
-import {MatSelectHarness} from '@angular/material/select/testing';
 import {MatTableHarness} from '@angular/material/table/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
 import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
@@ -44,17 +43,19 @@ export class GalleryHarness extends ComponentHarness {
     const selectEl = await this.locatorFor('mat-select')();
     await selectEl.click();
     const groups = await this.documentRootLocatorFactory().locatorForAll('mat-optgroup')();
-    return Promise.all(groups.map(async g => {
-      const nativeEl = (g as any).element as HTMLElement | undefined;
-      if (nativeEl) {
-        const labelEl = nativeEl.querySelector('.mat-mdc-optgroup-label');
-        if (labelEl) {
-          return labelEl.textContent?.trim() || '';
+    return Promise.all(
+      groups.map(async g => {
+        const nativeEl = (g as unknown as {element: HTMLElement}).element;
+        if (nativeEl) {
+          const labelEl = nativeEl.querySelector('.mat-mdc-optgroup-label');
+          if (labelEl) {
+            return labelEl.textContent?.trim() || '';
+          }
         }
-      }
-      const label = await g.getAttribute('label');
-      return label || '';
-    }));
+        const label = await g.getAttribute('label');
+        return label || '';
+      }),
+    );
   }
 
   /**
@@ -163,4 +164,3 @@ export class GalleryHarness extends ComponentHarness {
     return records;
   }
 }
-
