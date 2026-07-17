@@ -345,8 +345,11 @@ export class RawFrame implements AfterViewInit {
   }
 
   private showJsonSyntaxError(): void {
+    if (this.isLocked()) {
+      return;
+    }
     this.snackBar.open('Invalid JSON syntax detected.', undefined, {
-      duration: 3000,
+      duration: 5000,
     });
   }
 }

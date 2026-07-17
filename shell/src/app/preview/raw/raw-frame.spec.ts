@@ -496,6 +496,24 @@ describe('RawFrame JSON Source Editor View', () => {
     );
   });
 
+  it('suppresses the snackbar notification when malformed JSON is typed during an active stream (isLocked is true)', async () => {
+    const {fixture, harness} = await setup(false);
+    vi.useFakeTimers();
+
+    // Lock active stream
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    fixture.detectChanges();
+
+    await harness.setJsonText('{"version": "v0.9", invalid_json...');
+    fixture.detectChanges();
+
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+
+    expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+  });
+
   it('dispatches initial layout dynamically when activeCatalog transitions from null to a valid catalog', async () => {
     mockActiveCatalog = signal(null);
     const {fixture} = await setup(false);
