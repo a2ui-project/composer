@@ -101,7 +101,7 @@ export interface LlmResponse {
   readonly isComplete?: boolean;
 }
 
-export const ABORT_ERROR_NAME = 'AbortError';
+export const CANCEL_ERROR_NAME = 'CancelError';
 
 /**
  * Represents dynamic, real-time incremental tokens compiled asynchronously.
@@ -122,9 +122,9 @@ export interface LlmStreamResponse {
   readonly complete: Promise<string>;
 
   /**
-   * Optional abort controller function to terminate the stream early.
+   * Optional cancel function to terminate the stream early.
    */
-  readonly abort?: () => void;
+  readonly cancel?: () => void;
 }
 
 /**

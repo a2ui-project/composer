@@ -15,9 +15,22 @@
  */
 
 import {Injectable, inject} from '@angular/core';
-import {LlmClient, LlmMessage, LlmResponse, LlmStreamResponse, MessageRole, ABORT_ERROR_NAME} from './llm-client';
+import {
+  LlmClient,
+  LlmMessage,
+  LlmResponse,
+  LlmStreamResponse,
+  MessageRole,
+  CANCEL_ERROR_NAME,
+} from './llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {GoogleGenAI, Content, GenerateContentParameters, Part, GenerateContentConfig} from '@google/genai';
+import {
+  GoogleGenAI,
+  Content,
+  GenerateContentParameters,
+  Part,
+  GenerateContentConfig,
+} from '@google/genai';
 
 /**
  * Standard public endpoint authentication client utilizing user developer keys.
@@ -124,9 +137,7 @@ export class Standalone3pLlmClient extends LlmClient {
 
     const abortController = new AbortController();
 
-    const config: GenerateContentConfig = systemInstruction
-      ? {systemInstruction}
-      : {};
+    const config: GenerateContentConfig = systemInstruction ? {systemInstruction} : {};
     config.abortSignal = abortController.signal;
     config.thinkingConfig = {
       includeThoughts: true,
@@ -188,15 +199,27 @@ export class Standalone3pLlmClient extends LlmClient {
         resolveComplete(accumulatedText);
         notifyListeners();
       } catch (err: unknown) {
-        if (err && typeof err === 'object' && 'name' in err && err.name === ABORT_ERROR_NAME) {
+        let finalErr = err;
+        if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
+          const cancelErr = new Error('Cancelled');
+          cancelErr.name = CANCEL_ERROR_NAME;
+          finalErr = cancelErr;
+        }
+
+        if (
+          finalErr &&
+          typeof finalErr === 'object' &&
+          'name' in finalErr &&
+          finalErr.name === CANCEL_ERROR_NAME
+        ) {
           isDone = true;
-          streamError = err;
-          rejectComplete(err);
+          streamError = finalErr;
+          rejectComplete(finalErr);
           notifyListeners();
           return;
         }
-        streamError = err;
-        rejectComplete(err);
+        streamError = finalErr;
+        rejectComplete(finalErr);
         notifyListeners();
       }
     })();
@@ -241,7 +264,7 @@ export class Standalone3pLlmClient extends LlmClient {
     return {
       contentStream,
       complete,
-      abort: () => {
+      cancel: () => {
         abortController.abort();
       },
     };

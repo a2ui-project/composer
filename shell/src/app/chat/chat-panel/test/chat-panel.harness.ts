@@ -31,6 +31,9 @@ export class ChatPanelHarness extends ComponentHarness {
     MatButtonHarness.with({selector: '.send-button'}),
   );
   protected getScreenshotToggleButton = this.locatorForOptional('.screenshot-toggle-button');
+  protected getStopButton = this.locatorForOptional(
+    MatButtonHarness.with({selector: '.stop-button'}),
+  );
 
   async getBubblesText(): Promise<string[]> {
     const bubbles = await this.locatorForAll('.bubble-body')();
@@ -79,6 +82,17 @@ export class ChatPanelHarness extends ComponentHarness {
     const btn = await this.getSubmitButton();
     if (!btn) throw new Error('Submit button not found.');
     await btn.click();
+  }
+
+  async clickStop(): Promise<void> {
+    const btn = await this.getStopButton();
+    if (!btn) throw new Error('Stop button not found.');
+    await btn.click();
+  }
+
+  async hasStopButton(): Promise<boolean> {
+    const btn = await this.getStopButton();
+    return btn !== null;
   }
 
   async isSubmitDisabled(): Promise<boolean> {

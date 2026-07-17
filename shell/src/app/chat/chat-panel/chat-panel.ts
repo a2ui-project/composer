@@ -30,7 +30,7 @@ import {
   selector: '[a2uiComposerAutoScroll]',
   standalone: true,
 })
-export class AutoScrollDirective {
+export class AutoScroll {
   autoScroll = input<string | undefined>('', {alias: 'a2uiComposerAutoScroll'});
   private readonly el = inject(ElementRef);
 
@@ -85,7 +85,7 @@ interface AttachedFile extends Attachment {
     MatIconModule,
     MatDialogModule,
     RouterLink,
-    AutoScrollDirective,
+    AutoScroll,
   ],
   templateUrl: './chat-panel.ng.html',
   styleUrl: './chat-panel.scss',

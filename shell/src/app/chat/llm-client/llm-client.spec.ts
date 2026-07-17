@@ -17,7 +17,7 @@
 import {TestBed} from '@angular/core/testing';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {LlmClient, LlmMessage, LlmResponse} from './llm-client';
+import {LlmClient, LlmMessage, LlmResponse, CANCEL_ERROR_NAME} from './llm-client';
 import {Standalone3pLlmClient} from './standalone-3p-llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {MessageRole} from './llm-client';
@@ -389,6 +389,7 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
 
       expect(result).toEqual({
         content: 'Final response generated payload.',
+        isComplete: true,
       });
     });
 
@@ -609,6 +610,45 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       await expect(streamResponse.complete).rejects.toThrow(
         'Network transport layer broke mid-packet.',
       );
+    });
+
+    it('supports stream cancellation via cancel()', async () => {
+      let abortSignal!: AbortSignal;
+      mockGenerateContentStream.mockImplementation(async params => {
+        abortSignal = params.config?.abortSignal;
+        return {
+          async *[Symbol.asyncIterator]() {
+            while (true) {
+              if (abortSignal.aborted) {
+                const err = new DOMException('The user aborted a request.', 'AbortError');
+                throw err;
+              }
+              yield {text: 'Chunk'};
+              await new Promise(resolve => setTimeout(resolve, 0));
+            }
+          },
+        };
+      });
+
+      const streamResponse = await client.chatStream([
+        {role: MessageRole.USER, content: 'Cancel test'},
+      ]);
+
+      const iterator = streamResponse.contentStream[Symbol.asyncIterator]();
+      const firstChunk = await iterator.next();
+      expect(firstChunk.value).toEqual({content: 'Chunk', thinking: '', isComplete: false});
+
+      expect(abortSignal.aborted).toBe(false);
+      expect(streamResponse.cancel).toBeDefined();
+
+      // Trigger cancel
+      streamResponse.cancel?.();
+
+      expect(abortSignal.aborted).toBe(true);
+
+      // Verify that further iterator pulls reject with CancelError
+      await expect(iterator.next()).rejects.toThrow('Cancelled');
+      await expect(streamResponse.complete).rejects.toThrow('Cancelled');
     });
   });
 });

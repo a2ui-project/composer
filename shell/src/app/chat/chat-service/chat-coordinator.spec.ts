@@ -30,7 +30,13 @@ import {
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {StateSync} from '../state-sync/state-sync';
-import {LlmClient, LlmMessage, LlmStreamResponse, MessageRole} from '../llm-client/llm-client';
+import {
+  LlmClient,
+  LlmMessage,
+  LlmStreamResponse,
+  MessageRole,
+  CANCEL_ERROR_NAME,
+} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 
 class MockCatalogManagement {
@@ -592,6 +598,76 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
     expect(service.isProgrammaticStreamActive()).toBe(false);
     expect(stateSyncMock.flushDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles active stream cancellation cleanly', async () => {
+    let cancelCalled = false;
+    let resolveCompletePromise!: (val: string) => void;
+    let rejectCompletePromise!: (err: unknown) => void;
+    const completePromise = new Promise<string>((resolve, reject) => {
+      resolveCompletePromise = resolve;
+      rejectCompletePromise = reject;
+    });
+    completePromise.catch(() => {});
+
+    const mockCancel = vi.fn(() => {
+      cancelCalled = true;
+      const err = new Error('Cancelled');
+      err.name = CANCEL_ERROR_NAME;
+      rejectCompletePromise(err);
+    });
+
+    const contentStream: AsyncIterable<any> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next(): Promise<IteratorResult<any>> {
+            if (cancelCalled) {
+              const err = new Error('Cancelled');
+              err.name = CANCEL_ERROR_NAME;
+              throw err;
+            }
+            // Hang or wait until cancel is called
+            await new Promise<void>((resolve, reject) => {
+              const check = setInterval(() => {
+                if (cancelCalled) {
+                  clearInterval(check);
+                  const err = new Error('Cancelled');
+                  err.name = CANCEL_ERROR_NAME;
+                  reject(err);
+                }
+              }, 10);
+            });
+            return {value: undefined, done: true};
+          },
+        };
+      },
+    };
+
+    llmClientMock.chatStream.mockResolvedValue({
+      contentStream,
+      complete: completePromise,
+      cancel: mockCancel,
+    });
+
+    const promptPromise = service.submitPrompt('Cancel me');
+
+    // Wait a tiny bit for stream turn setup to run
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(service.pipelineStatus()).toBe(PipelineStatus.RECEIVING_STREAM);
+    expect(service.isProgrammaticStreamActive()).toBe(true);
+
+    // Trigger cancel
+    service.cancelActiveStream();
+
+    await expect(promptPromise).resolves.toBeUndefined();
+
+    expect(mockCancel).toHaveBeenCalled();
+    expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+    expect(service.isProgrammaticStreamActive()).toBe(false);
+
+    const history = chatStateMock.chatHistory();
+    expect(history[history.length - 1].content).toBe('*You stopped this response.*');
   });
 
   describe('JSONL Parsing & Line-Level Healing', () => {

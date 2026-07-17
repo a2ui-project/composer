@@ -17,7 +17,14 @@
 import {Injectable, inject, computed, effect, untracked} from '@angular/core';
 import {formatJson} from '../../utils/json';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {LlmMessage, LlmClient, MessageRole, Attachment, LlmStreamResponse, ABORT_ERROR_NAME} from '../llm-client/llm-client';
+import {
+  LlmMessage,
+  LlmClient,
+  MessageRole,
+  Attachment,
+  LlmStreamResponse,
+  CANCEL_ERROR_NAME,
+} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {StateSync} from '../state-sync/state-sync';
@@ -105,8 +112,8 @@ export class ChatCoordinator {
    */
   cancelActiveStream(): void {
     this.isCancelRequested = true;
-    if (this.activeStreamResponse && this.activeStreamResponse.abort) {
-      this.activeStreamResponse.abort();
+    if (this.activeStreamResponse && this.activeStreamResponse.cancel) {
+      this.activeStreamResponse.cancel();
     }
   }
 
@@ -155,9 +162,9 @@ export class ChatCoordinator {
 
       // If a cancel was requested while the stream connection was establishing
       if (this.isCancelRequested) {
-        if (responseStream.abort) responseStream.abort();
-        const err = new Error('Aborted');
-        err.name = ABORT_ERROR_NAME;
+        if (responseStream.cancel) responseStream.cancel();
+        const err = new Error('Cancelled');
+        err.name = CANCEL_ERROR_NAME;
         throw err;
       }
 
@@ -208,9 +215,9 @@ export class ChatCoordinator {
       this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
       await this.processRawLlmPayload(finalRawText);
     } catch (err: unknown) {
-      // If it was aborted, don't show an error. Just leave what was generated or remove the bubble.
+      // If it was cancelled, don't show an error. Just leave what was generated or remove the bubble.
       // But we probably want to just reset the UI lock.
-      if (err && typeof err === 'object' && 'name' in err && err.name === ABORT_ERROR_NAME) {
+      if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
         this.chatState.setPipelineStatus(PipelineStatus.IDLE);
         this.chatState.setProgrammaticStreamActive(false);
         // Replace trailing pulse or partial JSON with stopped message, and force non-snapshot

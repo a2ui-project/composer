@@ -84,6 +84,7 @@ class MockChatCoordinator {
   }
 
   submitPrompt = vi.fn(async (prompt: string, attachments: Attachment[] = []): Promise<void> => {});
+  cancelActiveStream = vi.fn();
 }
 
 class MockCatalogManagement {
@@ -352,6 +353,23 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       expect(await harness.isSubmitDisabled()).toBe(false);
     },
   );
+
+  it('displays stop button during active stream and triggers cancellation on click', async () => {
+    expect(await harness.hasStopButton()).toBe(false);
+
+    // Lock panel simulating active stream
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    fixture.detectChanges();
+
+    expect(await harness.hasStopButton()).toBe(true);
+
+    const cancelSpy = vi.spyOn(chatServiceMock, 'cancelActiveStream');
+
+    await harness.clickStop();
+    fixture.detectChanges();
+
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
+  });
 
   it(
     'transitions progress badge overlays reactively matching pipeline ' +
