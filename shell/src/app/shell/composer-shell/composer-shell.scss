@@ -35,7 +35,10 @@
 .composer-content {
   padding: 0;
   box-sizing: border-box;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .theme-toggle-button {
   margin-left: 8px;

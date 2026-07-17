@@ -15,13 +15,16 @@
  */
 
 :host {
-  display: block;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .workspace-container {
   display: flex;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   box-sizing: border-box;
 
   &.extension-mode {
