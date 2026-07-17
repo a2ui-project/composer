@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, viewChild, ElementRef, effect, computed} from '@angular/core';
+import {Component, inject, viewChild, ElementRef, effect, computed, input} from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -36,6 +36,9 @@ export class RenderedFrame {
   private startupResolution = inject(StartupResolution);
   private hostCommunication = inject(HostCommunication);
   private chatState = inject(ChatState);
+
+  /** Target surface ID filter or scope constraint. Default is workspace-preview. */
+  surfaceId = input<string>('workspace-preview');
 
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
@@ -69,13 +72,24 @@ export class RenderedFrame {
   });
 
   constructor() {
-    effect(() => {
-      const ref = this.iframeRef();
-      if (typeof this.hostCommunication.registerIframeElement === 'function') {
-        this.hostCommunication.registerIframeElement(ref?.nativeElement || null);
-      }
-      if (typeof this.hostCommunication.registerIframe === 'function') {
-        this.hostCommunication.registerIframe(ref?.nativeElement?.contentWindow || null);
+    effect(onCleanup => {
+      const ref = this.iframeRef()?.nativeElement || null;
+      const targetId = this.surfaceId();
+      if (ref) {
+        if (typeof this.hostCommunication.registerIframeElement === 'function') {
+          this.hostCommunication.registerIframeElement(ref, targetId);
+        }
+        if (typeof this.hostCommunication.registerIframe === 'function') {
+          this.hostCommunication.registerIframe(ref.contentWindow, targetId);
+        }
+        onCleanup(() => {
+          if (typeof this.hostCommunication.unregisterIframeElement === 'function') {
+            this.hostCommunication.unregisterIframeElement(ref);
+          }
+          if (ref.contentWindow && typeof this.hostCommunication.unregisterIframe === 'function') {
+            this.hostCommunication.unregisterIframe(ref.contentWindow);
+          }
+        });
       }
     });
   }

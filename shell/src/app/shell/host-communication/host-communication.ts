@@ -34,6 +34,8 @@ export interface MessageEnvelope {
   origin: string;
   /** Epoch millisecond timestamp recording when the message was received */
   timestamp: number;
+  /** The source category of the guest frame: 'gallery-preview' or 'workspace-preview' */
+  sourceLabel?: string;
 }
 
 declare global {
@@ -53,6 +55,8 @@ export class HostCommunication implements OnDestroy {
   private readonly startupResolution = inject(StartupResolution);
   private iframeWindow: Window | null = null;
   private iframeElement: HTMLIFrameElement | null = null;
+  private readonly iframeWindows = new Map<Window, string>();
+  private readonly iframeElements = new Map<HTMLIFrameElement, string>();
   private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
 
   /** Readonly signal tracking the most recent message envelope */
@@ -127,7 +131,32 @@ export class HostCommunication implements OnDestroy {
 
   private readonly messageListener = (event: MessageEvent) => {
     const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
-    if (!activeWindow) {
+    let isMatchedSource = event.source === activeWindow;
+    let sourceLabel = 'workspace-preview';
+
+    if (isMatchedSource) {
+      sourceLabel = 'workspace-preview';
+    } else {
+      for (const [win, label] of this.iframeWindows.entries()) {
+        if (event.source === win) {
+          isMatchedSource = true;
+          sourceLabel = label;
+          break;
+        }
+      }
+    }
+
+    if (!isMatchedSource) {
+      for (const [el, label] of this.iframeElements.entries()) {
+        if (el.contentWindow && event.source === el.contentWindow) {
+          isMatchedSource = true;
+          sourceLabel = label;
+          break;
+        }
+      }
+    }
+
+    if (!isMatchedSource) {
       // NOTE: Bracket notation is used to access properties on the incoming postMessage event
       // to prevent compilers from renaming these property accesses during minification.
       const isBridgeMessage =
@@ -141,9 +170,6 @@ export class HostCommunication implements OnDestroy {
       if (this.earlyMessageBuffer.length > 20) {
         this.earlyMessageBuffer.shift();
       }
-      return;
-    }
-    if (event.source !== activeWindow) {
       return;
     }
 
@@ -171,6 +197,7 @@ export class HostCommunication implements OnDestroy {
         payload: data['payload'],
         origin: event.origin,
         timestamp: Date.now(),
+        sourceLabel,
       };
       if (type === PreviewBridgeMessageType.A2UI_CATALOG) {
         this.latestCatalogEnvelope = envelope;
@@ -215,12 +242,24 @@ export class HostCommunication implements OnDestroy {
    * Registers an active content window directly and flushes any buffered early messages.
    * @param contentWindow Target guest window reference
    */
-  registerIframe(contentWindow: Window | null): void {
+  registerIframe(contentWindow: Window | null, label = 'workspace-preview'): void {
     this.iframeWindow = contentWindow;
     if (contentWindow === null) {
       this.earlyMessageBuffer.length = 0;
     } else {
+      this.iframeWindows.set(contentWindow, label);
       this.flushEarlyMessages();
+    }
+  }
+
+  /**
+   * Unregisters an active content window directly from the bridge.
+   * @param contentWindow Target guest window reference to unregister
+   */
+  unregisterIframe(contentWindow: Window): void {
+    this.iframeWindows.delete(contentWindow);
+    if (this.iframeWindow === contentWindow) {
+      this.iframeWindow = null;
     }
   }
 
@@ -228,17 +267,54 @@ export class HostCommunication implements OnDestroy {
    * Registers an iframe DOM element and flushes any buffered early messages.
    * @param element Target iframe DOM element reference
    */
-  registerIframeElement(element: HTMLIFrameElement | null): void {
+  registerIframeElement(element: HTMLIFrameElement | null, label = 'workspace-preview'): void {
     this.iframeElement = element;
     if (element === null) {
       this.earlyMessageBuffer.length = 0;
     } else {
+      this.iframeElements.set(element, label);
       this.flushEarlyMessages();
     }
   }
 
   /**
-   * Validates and dispatches a structured postMessage payload to the registered guest frame.
+   * Unregisters an active iframe DOM element directly from the bridge.
+   * @param element Target iframe DOM element reference to unregister
+   */
+  unregisterIframeElement(element: HTMLIFrameElement): void {
+    this.iframeElements.delete(element);
+    if (this.iframeElement === element) {
+      this.iframeElement = null;
+    }
+  }
+
+  private getSurfaceIdFromPayload(payload: unknown): string | null {
+    if (!Array.isArray(payload)) return null;
+    for (const item of payload) {
+      if (item && typeof item === 'object') {
+        const createSurface = item['createSurface'];
+        if (createSurface && typeof createSurface['surfaceId'] === 'string') {
+          return createSurface['surfaceId'];
+        }
+        const updateComponents = item['updateComponents'];
+        if (updateComponents && typeof updateComponents['surfaceId'] === 'string') {
+          return updateComponents['surfaceId'];
+        }
+        const updateDataModel = item['updateDataModel'];
+        if (updateDataModel && typeof updateDataModel['surfaceId'] === 'string') {
+          return updateDataModel['surfaceId'];
+        }
+        const deleteSurface = item['deleteSurface'];
+        if (deleteSurface && typeof deleteSurface['surfaceId'] === 'string') {
+          return deleteSurface['surfaceId'];
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Validates and dispatches a structured postMessage payload to all registered guest frames.
    * @param message Structured message payload
    */
   sendMessage(message: {type: PreviewBridgeMessageType; payload?: unknown}): void {
@@ -247,15 +323,68 @@ export class HostCommunication implements OnDestroy {
       return;
     }
 
-    const targetWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
-    if (!targetWindow) return;
-
     const expectedUrl = this.startupResolution.getResolvedRendererUrl();
     if (!expectedUrl) return;
 
     try {
       const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
-      targetWindow.postMessage(message, targetOrigin);
+
+      let targetSurfaceId: string | null = 'workspace-preview';
+      if (message.type === PreviewBridgeMessageType.RENDER_A2UI) {
+        const extracted = this.getSurfaceIdFromPayload(message.payload);
+        if (extracted === 'gallery-preview') {
+          targetSurfaceId = 'gallery-preview';
+        }
+      } else if (message.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
+        const payloadObj = message.payload as Record<string, unknown> | null | undefined;
+        const updateDataModel = payloadObj?.['updateDataModel'] as
+          | Record<string, unknown>
+          | null
+          | undefined;
+        if (updateDataModel?.['surfaceId'] === 'gallery-preview') {
+          targetSurfaceId = 'gallery-preview';
+        }
+      } else {
+        // General handshake, catalog fetching, and overlays are broadcasted to all frames
+        targetSurfaceId = null;
+      }
+
+      const targets = new Set<Window>();
+
+      if (targetSurfaceId === null) {
+        if (this.iframeWindow) targets.add(this.iframeWindow);
+        if (this.iframeElement?.contentWindow) targets.add(this.iframeElement.contentWindow);
+        for (const [win] of this.iframeWindows.entries()) {
+          targets.add(win);
+        }
+        for (const [el] of this.iframeElements.entries()) {
+          if (el.contentWindow) {
+            targets.add(el.contentWindow);
+          }
+        }
+      } else {
+        if (this.iframeWindow && targetSurfaceId === 'workspace-preview') {
+          targets.add(this.iframeWindow);
+        }
+        if (this.iframeElement?.contentWindow && targetSurfaceId === 'workspace-preview') {
+          targets.add(this.iframeElement.contentWindow);
+        }
+
+        for (const [win, label] of this.iframeWindows.entries()) {
+          if (label === targetSurfaceId) {
+            targets.add(win);
+          }
+        }
+        for (const [el, label] of this.iframeElements.entries()) {
+          if (label === targetSurfaceId && el.contentWindow) {
+            targets.add(el.contentWindow);
+          }
+        }
+      }
+
+      for (const targetWindow of targets) {
+        targetWindow.postMessage(message, targetOrigin);
+      }
     } catch (err) {
       // Ignore malformed URL
     }

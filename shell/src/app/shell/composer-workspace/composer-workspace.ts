@@ -106,6 +106,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   constructor() {
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
       if (!envelope) return;
+      if (envelope.sourceLabel === 'gallery-preview') return;
 
       const payload = envelope.payload as WorkspaceMessagePayload | undefined;
       const eventsPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Events);
