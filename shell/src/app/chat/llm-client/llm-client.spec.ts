@@ -620,7 +620,7 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
           async *[Symbol.asyncIterator]() {
             while (true) {
               if (abortSignal.aborted) {
-                const err = abortSignal.reason || new DOMException('The user aborted a request.', 'CancelError');
+                const err = abortSignal.reason || new DOMException('The user aborted a request.', CANCEL_ERROR_NAME);
                 throw err;
               }
               yield {text: 'Chunk'};
