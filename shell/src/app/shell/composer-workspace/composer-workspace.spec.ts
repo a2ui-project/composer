@@ -140,7 +140,7 @@ describe('ComposerWorkspace Dashboard', () => {
     // In jsdom without real dimensions, dockview may not attach them all to the DOM,
     // so we verify they were instantiated by the Angular view container.
     const refs = (fixture.componentInstance as unknown as {componentRefs: unknown[]}).componentRefs;
-    expect(refs.length).toBe(7);
+    expect(refs.length).toBe(8);
     const types = refs.map(
       (r: unknown) => (r as {componentType: {name: string}}).componentType.name,
     );
