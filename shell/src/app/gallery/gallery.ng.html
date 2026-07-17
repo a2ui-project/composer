@@ -14,132 +14,127 @@
  limitations under the License.
 -->
 
-<mat-sidenav-container class="gallery-container">
-  <mat-sidenav mode="side" opened class="gallery-sidenav">
-    <mat-nav-list class="catalog-list">
-      @for (group of componentsList(); track group.category) {
-        <div mat-subheader class="category-header">{{ group.category }}</div>
-        @for (comp of group.components; track comp) {
-          <button
-            mat-list-item
-            [activated]="comp === selectedComponentKey()"
-            (click)="selectComponent(comp)"
-            class="component-nav-item"
-          >
-            <span matListItemTitle>{{ comp }}</span>
-          </button>
+<div class="gallery-container">
+  <div class="gallery-header">
+    <mat-form-field appearance="outline" class="component-selector" subscriptSizing="dynamic" floatLabel="always">
+      <mat-label>Component</mat-label>
+      <mat-select [value]="selectedComponentKey()" (selectionChange)="selectComponent($event.value)">
+        @for (group of componentsList(); track group.category) {
+          <mat-optgroup [label]="group.category">
+            @for (comp of group.components; track comp) {
+              <mat-option [value]="comp">{{ comp }}</mat-option>
+            }
+          </mat-optgroup>
         }
-      }
-    </mat-nav-list>
-  </mat-sidenav>
+      </mat-select>
+    </mat-form-field>
+  </div>
 
-  <mat-sidenav-content class="gallery-content">
-    <div [class.hidden-frame]="!selectedComponentKey()">
-      <mat-card class="preview-card">
-        <mat-card-header>
-          <mat-card-title>Preview</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
-        </mat-card-content>
-      </mat-card>
-    </div>
-
+  <div class="gallery-content">
     @if (selectedComponentKey() && catalogManagement.activeCatalog()) {
-      <div class="details-panel">
-        <div class="details-header">
-          <h2 class="component-title">{{ selectedComponentKey() }}</h2>
-          @if (selectedComponentDescription()) {
-            <p class="component-description">{{ selectedComponentDescription() }}</p>
+      @if (selectedComponentDescription()) {
+        <div class="component-intro">
+          <p class="component-description">{{ selectedComponentDescription() }}</p>
+        </div>
+      }
+
+      <div class="gallery-section">
+        <h3 class="section-title">Preview</h3>
+        <div class="preview-container">
+          <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
+        </div>
+      </div>
+
+      <div class="gallery-section">
+        <div class="section-header">
+          <h3 class="section-title">Usage</h3>
+          @if (!loadingUsages()) {
+            <button
+              mat-icon-button
+              (click)="copyToClipboard()"
+              aria-label="Copy to Clipboard"
+              class="copy-button"
+            >
+              <mat-icon>content_copy</mat-icon>
+            </button>
           }
         </div>
-
-        <mat-card class="usage-card">
-          <mat-card-header class="usage-header">
-            <mat-card-title>Usage</mat-card-title>
-            @if (!loadingUsages()) {
-              <button
-                mat-icon-button
-                (click)="copyToClipboard()"
-                aria-label="Copy to Clipboard"
-                class="copy-button"
-              >
-                <mat-icon>content_copy</mat-icon>
-              </button>
-            }
-          </mat-card-header>
-          <mat-card-content>
-            @if (loadingUsages()) {
-              <div class="usage-loading-spinner">
-                <mat-spinner diameter="32"></mat-spinner>
-                <span>Loading usage samples...</span>
-              </div>
-            } @else {
-              <pre
-                class="usage-code-block"
-              ><code class="usage-code">{{ selectedComponentUsage() }}</code></pre>
-            }
-          </mat-card-content>
-        </mat-card>
-
-        <mat-card class="properties-card">
-          <mat-card-header>
-            <mat-card-title>Properties</mat-card-title>
-          </mat-card-header>
-          <mat-card-content class="properties-content">
-            <table mat-table [dataSource]="selectedComponentProperties()" class="properties-table">
-              <!-- Name Column -->
-              <ng-container matColumnDef="name">
-                <th mat-header-cell *matHeaderCellDef>Name</th>
-                <td mat-cell *matCellDef="let prop" class="prop-name">{{ prop.name }}</td>
-              </ng-container>
-
-              <!-- Description Column -->
-              <ng-container matColumnDef="description">
-                <th mat-header-cell *matHeaderCellDef>Description</th>
-                <td mat-cell *matCellDef="let prop" class="prop-description">
-                  {{ prop.description || '-' }}
-                </td>
-              </ng-container>
-
-              <!-- Type Column -->
-              <ng-container matColumnDef="type">
-                <th mat-header-cell *matHeaderCellDef>Type</th>
-                <td mat-cell *matCellDef="let prop" class="prop-type">
-                  <code>{{ prop.type }}</code>
-                </td>
-              </ng-container>
-
-              <!-- Required Column -->
-              <ng-container matColumnDef="required">
-                <th mat-header-cell *matHeaderCellDef>Required</th>
-                <td mat-cell *matCellDef="let prop" class="prop-required">
-                  @if (prop.required) {
-                    <mat-icon color="primary">check_circle</mat-icon>
-                  } @else {
-                    <span class="optional-label">optional</span>
-                  }
-                </td>
-              </ng-container>
-
-              <!-- Default Value Column -->
-              <ng-container matColumnDef="defaultValue">
-                <th mat-header-cell *matHeaderCellDef>Default</th>
-                <td mat-cell *matCellDef="let prop" class="prop-default">
-                  @if (prop.defaultValue !== undefined) {
-                    <code>{{ prop.defaultValue | json }}</code>
-                  } @else {
-                    -
-                  }
-                </td>
-              </ng-container>
-
-              <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-              <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-            </table>
-          </mat-card-content>
-        </mat-card>
+        <div class="usage-container">
+          @if (loadingUsages()) {
+            <div class="usage-loading-spinner">
+              <mat-spinner diameter="24"></mat-spinner>
+              <span>Loading usage samples...</span>
+            </div>
+          } @else {
+            <pre
+              class="usage-code-block"
+            ><code class="usage-code">{{ selectedComponentUsage() }}</code></pre>
+          }
+        </div>
       </div>
+
+      <div class="gallery-section">
+        <h3 class="section-title">Properties</h3>
+        <div class="properties-container">
+          <table mat-table [dataSource]="selectedComponentProperties()" class="properties-table">
+            <!-- Name Column -->
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Name</th>
+              <td mat-cell *matCellDef="let prop" class="prop-name">{{ prop.name }}</td>
+            </ng-container>
+
+            <!-- Description Column -->
+            <ng-container matColumnDef="description">
+              <th mat-header-cell *matHeaderCellDef>Description</th>
+              <td mat-cell *matCellDef="let prop" class="prop-description">
+                {{ prop.description || '-' }}
+              </td>
+            </ng-container>
+
+            <!-- Type Column -->
+            <ng-container matColumnDef="type">
+              <th mat-header-cell *matHeaderCellDef>Type</th>
+              <td mat-cell *matCellDef="let prop" class="prop-type">
+                <code>{{ prop.type }}</code>
+              </td>
+            </ng-container>
+
+            <!-- Required Column -->
+            <ng-container matColumnDef="required">
+              <th mat-header-cell *matHeaderCellDef>Required</th>
+              <td mat-cell *matCellDef="let prop" class="prop-required">
+                @if (prop.required) {
+                  <mat-icon color="primary">check_circle</mat-icon>
+                } @else {
+                  <span class="optional-label">optional</span>
+                }
+              </td>
+            </ng-container>
+
+            <!-- Default Value Column -->
+            <ng-container matColumnDef="defaultValue">
+              <th mat-header-cell *matHeaderCellDef>Default</th>
+              <td mat-cell *matCellDef="let prop" class="prop-default">
+                @if (prop.defaultValue !== undefined) {
+                  <code>{{ prop.defaultValue | json }}</code>
+                } @else {
+                  -
+                }
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+          </table>
+        </div>
+      </div>
+
+      <mat-expansion-panel class="schema-expansion-panel">
+        <mat-expansion-panel-header class="schema-expansion-header">
+          <mat-panel-title class="section-title">JSON Schema</mat-panel-title>
+        </mat-expansion-panel-header>
+        <pre class="schema-code-block"><code class="schema-code">{{ selectedComponentSchema() }}</code></pre>
+      </mat-expansion-panel>
     } @else if (catalogManagement.catalogError()) {
       <div class="empty-state error-state">
         <mat-icon class="empty-icon text-danger">error_outline</mat-icon>
@@ -153,10 +148,10 @@
         <mat-icon class="empty-icon">analytics</mat-icon>
         <h3 class="empty-title">No Component Selected</h3>
         <p class="empty-subtitle">
-          Choose a component from the sidebar catalog to view its schema details, presets, and usage
+          Choose a component from the dropdown to view its schema details, presets, and usage
           snippet.
         </p>
       </div>
     }
-  </mat-sidenav-content>
-</mat-sidenav-container>
+  </div>
+</div>

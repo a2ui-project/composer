@@ -160,17 +160,7 @@ describe('ComposerShell Layout', () => {
     },
   );
 
-  it(
-    'toggles the left sidebar opened and closed states upon clicking ' +
-      'the hamburger button via test harness interaction',
-    async () => {
-      expect(await harness.isSidenavOpened()).toBe(true);
-      await harness.clickHamburgerButton();
-      expect(await harness.isSidenavOpened()).toBe(false);
-      await harness.clickHamburgerButton();
-      expect(await harness.isSidenavOpened()).toBe(true);
-    },
-  );
+
 
   it('reads the persisted theme preference from storage on initialization', async () => {
     configProviderMock.themePreference.set('dark');
@@ -190,10 +180,7 @@ describe('ComposerShell Layout', () => {
     expect(configProviderMock.setThemePreference).toHaveBeenCalledWith('light');
   });
 
-  it('renders the Components Gallery navigation link in the sidebar by default', async () => {
-    const links = await harness.getNavigationLinksText();
-    expect(links).toContain('Components Gallery');
-  });
+
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();

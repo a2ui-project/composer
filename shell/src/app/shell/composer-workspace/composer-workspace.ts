@@ -44,6 +44,9 @@ import {HostCommunication} from '../host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {DockviewComponent} from 'dockview';
+import {Gallery} from '../../gallery/gallery';
+import {Settings} from '../../settings/settings-view/settings';
+import {WorkspacePanelManager} from './workspace-panel-manager';
 
 /** Internal interface mapping raw cross-frame workspace telemetry payloads */
 interface WorkspaceMessagePayload {
@@ -63,6 +66,8 @@ export enum ComposerPanelId {
   Errors = 'errors',
   RawMessages = 'rawMessages',
   MockRules = 'mockRules',
+  Gallery = 'gallery',
+  Settings = 'settings',
 }
 
 /**
@@ -80,6 +85,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
   private hostComm = inject(HostCommunication);
   private viewContainerRef = inject(ViewContainerRef);
   private configProvider = inject(AppConfigProvider);
+  private workspacePanelManager = inject(WorkspacePanelManager);
 
   @ViewChild('dockviewRoot') dockviewRoot!: ElementRef;
 
@@ -175,6 +181,26 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
         api.updateOptions({className: isDark ? 'dockview-theme-dark' : 'dockview-theme-light'});
       }
     });
+
+    this.workspacePanelManager.openPanel$.pipe(takeUntilDestroyed()).subscribe(panelId => {
+      if (!this.dockviewApi) return;
+      const existingPanel = this.dockviewApi.getGroupPanel(panelId);
+      if (!existingPanel) {
+        let title = 'Tab';
+        if (panelId === ComposerPanelId.Gallery) title = 'Components Gallery';
+        if (panelId === ComposerPanelId.Settings) title = 'Settings';
+        
+        const ref = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat) ? ComposerPanelId.Chat : undefined;
+        this.dockviewApi.addPanel({
+          id: panelId,
+          component: panelId,
+          title: title,
+          position: ref ? {referencePanel: ref, direction: 'within'} : undefined,
+        });
+      } else {
+        existingPanel.api.setActive();
+      }
+    });
   }
 
   ngOnInit(): void {
@@ -212,6 +238,12 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
             break;
           case ComposerPanelId.MockRules:
             type = MockRules;
+            break;
+          case ComposerPanelId.Gallery:
+            type = Gallery;
+            break;
+          case ComposerPanelId.Settings:
+            type = Settings;
             break;
         }
 
@@ -264,6 +296,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
       try {
         this.dockviewApi.fromJSON(JSON.parse(savedLayout));
         layoutRestored = true;
+        this.ensureDefaultPanelsExist();
       } catch (e) {
         console.error('Failed to restore dockview layout', e);
       }
@@ -271,9 +304,15 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
 
     if (!layoutRestored) {
       this.dockviewApi.addPanel({
+        id: ComposerPanelId.Gallery,
+        component: ComposerPanelId.Gallery,
+        title: 'Components Gallery',
+      });
+      this.dockviewApi.addPanel({
         id: ComposerPanelId.Chat,
         component: ComposerPanelId.Chat,
         title: 'Gemini Assistant',
+        position: {direction: 'right', referencePanel: ComposerPanelId.Gallery},
       });
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Rendered,
@@ -346,5 +385,50 @@ export class ComposerWorkspace implements OnInit, AfterViewInit, OnDestroy {
     this.rawMessagesInstance?.clearLogs();
     this.eventsInstance?.clearLogs();
     this.errorsInstance?.clearLogs();
+  }
+
+  private ensureDefaultPanelsExist(): void {
+    const panelsToCheck = [
+      {id: ComposerPanelId.Gallery, title: 'Components Gallery', target: ComposerPanelId.Chat},
+      {id: ComposerPanelId.Chat, title: 'Gemini Assistant', target: ComposerPanelId.Rendered},
+      {id: ComposerPanelId.Rendered, title: 'Rendered A2UI Preview', target: ComposerPanelId.Chat},
+      {id: ComposerPanelId.Raw, title: 'A2UI JSON Editor', target: ComposerPanelId.Rendered},
+      {id: ComposerPanelId.DataModel, title: 'Data Model', target: ComposerPanelId.Events},
+      {id: ComposerPanelId.Events, title: 'Events', target: ComposerPanelId.DataModel},
+      {id: ComposerPanelId.Errors, title: 'Errors', target: ComposerPanelId.DataModel},
+      {id: ComposerPanelId.RawMessages, title: 'Raw Messages', target: ComposerPanelId.DataModel},
+    ];
+
+    for (const p of panelsToCheck) {
+      if (!this.dockviewApi.getGroupPanel(p.id)) {
+        const refPanel = this.dockviewApi.getGroupPanel(p.target);
+        if (refPanel) {
+          this.dockviewApi.addPanel({
+            id: p.id,
+            component: p.id,
+            title: p.title,
+            position: {referencePanel: p.target, direction: 'within'},
+          });
+        } else {
+          this.dockviewApi.addPanel({
+            id: p.id,
+            component: p.id,
+            title: p.title,
+          });
+        }
+      }
+    }
+
+    if (this.showMockRules() && !this.dockviewApi.getGroupPanel(ComposerPanelId.MockRules)) {
+      const ref = this.dockviewApi.getGroupPanel(ComposerPanelId.DataModel)
+        ? ComposerPanelId.DataModel
+        : undefined;
+      this.dockviewApi.addPanel({
+        id: ComposerPanelId.MockRules,
+        component: ComposerPanelId.MockRules,
+        title: 'Mock Rules',
+        position: ref ? {referencePanel: ref, direction: 'within'} : undefined,
+      });
+    }
   }
 }

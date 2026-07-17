@@ -15,7 +15,7 @@
  */
 
 import {ComponentHarness} from '@angular/cdk/testing';
-import {MatNavListHarness} from '@angular/material/list/testing';
+import {MatSelectHarness} from '@angular/material/select/testing';
 import {MatTableHarness} from '@angular/material/table/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
 import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
@@ -27,34 +27,44 @@ export class GalleryHarness extends ComponentHarness {
   /** The CSS selector used to locate the host element. */
   static hostSelector = 'a2ui-composer-gallery';
 
-  private readonly getCategoryHeaders = this.locatorForAll('.category-header');
-  private readonly getNavList = this.locatorFor(MatNavListHarness);
   private readonly getTable = this.locatorForOptional(MatTableHarness);
-  private readonly getTitle = this.locatorForOptional('.component-title');
   private readonly getDescription = this.locatorForOptional('.component-description');
   private readonly getUsageCode = this.locatorForOptional('.usage-code');
   private readonly getCopyButton = this.locatorForOptional(
     MatButtonHarness.with({selector: '.copy-button'}),
   );
   private readonly getEmptySubtitle = this.locatorForOptional('.empty-subtitle');
-  private readonly getCardTitles = this.locatorForAll('mat-card-title');
+  private readonly getCardTitles = this.locatorForAll('.section-title');
   private readonly getRenderedFrame = this.locatorForOptional(RenderedFrameHarness);
 
   /**
    * Retrieves the text labels of all category subheaders.
    */
   async getCategoryHeadersText(): Promise<string[]> {
-    const headers = await this.getCategoryHeaders();
-    return Promise.all(headers.map(h => h.text()));
+    const selectEl = await this.locatorFor('mat-select')();
+    await selectEl.click();
+    const groups = await this.documentRootLocatorFactory().locatorForAll('mat-optgroup')();
+    return Promise.all(groups.map(async g => {
+      const nativeEl = (g as any).element as HTMLElement | undefined;
+      if (nativeEl) {
+        const labelEl = nativeEl.querySelector('.mat-mdc-optgroup-label');
+        if (labelEl) {
+          return labelEl.textContent?.trim() || '';
+        }
+      }
+      const label = await g.getAttribute('label');
+      return label || '';
+    }));
   }
 
   /**
    * Retrieves the text contents of all component navigation list items.
    */
   async getNavigationLinksText(): Promise<string[]> {
-    const list = await this.getNavList();
-    const items = await list.getItems();
-    return Promise.all(items.map(item => item.getFullText()));
+    const selectEl = await this.locatorFor('mat-select')();
+    await selectEl.click();
+    const options = await this.documentRootLocatorFactory().locatorForAll('mat-option')();
+    return Promise.all(options.map(item => item.text()));
   }
 
   /**
@@ -63,20 +73,20 @@ export class GalleryHarness extends ComponentHarness {
    * @param text The component link text to click.
    */
   async clickNavigationLink(text: string): Promise<void> {
-    const list = await this.getNavList();
-    const items = await list.getItems({text});
-    if (items.length === 0) {
+    const selectEl = await this.locatorFor('mat-select')();
+    await selectEl.click();
+    const options = await this.documentRootLocatorFactory().locatorForAll('mat-option')();
+    let found = false;
+    for (const opt of options) {
+      if ((await opt.text()).trim() === text) {
+        await opt.click();
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
       throw new Error(`Could not find navigation link with text: "${text}"`);
     }
-    await items[0].click();
-  }
-
-  /**
-   * Retrieves the title of the active component details panel.
-   */
-  async getSelectedComponentTitle(): Promise<string | null> {
-    const titleEl = await this.getTitle();
-    return titleEl ? titleEl.text() : null;
   }
 
   /**
@@ -153,3 +163,4 @@ export class GalleryHarness extends ComponentHarness {
     return records;
   }
 }
+

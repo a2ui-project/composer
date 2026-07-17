@@ -15,20 +15,21 @@
 -->
 
 <mat-toolbar class="composer-header">
-  <button
-    mat-icon-button
-    class="hamburger-button"
-    (click)="sidenav.toggle()"
-    aria-label="Toggle sidenav"
-  >
-    <mat-icon aria-hidden="true">menu</mat-icon>
-  </button>
   <span class="header-title" [matTooltip]="activeCatalogDescription() || ''"
     >A2UI Composer{{ activeCatalogTitle() ? ' - ' + activeCatalogTitle() : '' }}</span
   >
   <span class="spacer"></span>
   <button mat-button class="reset-session-button" color="primary" (click)="resetSession()">
     New Session
+  </button>
+  <button
+    mat-icon-button
+    (click)="openSettings()"
+    class="settings-button"
+    color="primary"
+    aria-label="Settings"
+  >
+    <mat-icon aria-hidden="true">settings</mat-icon>
   </button>
   <button
     mat-icon-button
@@ -41,16 +42,6 @@
   </button>
 </mat-toolbar>
 
-<mat-sidenav-container class="composer-sidenav-container">
-  <mat-sidenav #sidenav mode="side" opened class="composer-sidenav">
-    <mat-nav-list>
-      <a mat-list-item routerLink="/">Composer Workspace</a>
-      <a mat-list-item routerLink="/gallery">Components Gallery</a>
-      <a mat-list-item routerLink="/settings">Settings</a>
-    </mat-nav-list>
-  </mat-sidenav>
-
-  <mat-sidenav-content class="composer-content">
-    <router-outlet></router-outlet>
-  </mat-sidenav-content>
-</mat-sidenav-container>
+<div class="composer-content">
+  <router-outlet></router-outlet>
+</div>

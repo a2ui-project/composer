@@ -317,6 +317,17 @@ export class GalleryCatalog {
         this._loadingUsages.set(false);
       }
     });
+
+    effect(() => {
+      const list = this.componentsList();
+      const current = this.selectedComponentKey();
+      const allComponents = list.flatMap(g => g.components);
+      if (allComponents.length > 0 && (!current || !allComponents.includes(current))) {
+        untracked(() => {
+          this.selectComponent(allComponents[0]);
+        });
+      }
+    });
   }
 
   /**

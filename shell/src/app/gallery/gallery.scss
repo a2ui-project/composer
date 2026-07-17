@@ -17,190 +17,162 @@
 :host {
   display: block;
   height: 100%;
+  background-color: var(--mat-sys-surface-container-lowest, #ffffff);
 }
 
 .gallery-container {
   height: 100%;
   width: 100%;
+  display: flex;
+    flex-direction: column;
 }
 
-.gallery-sidenav {
-  width: 240px;
-  border-right: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
-  background-color: var(--mat-sys-surface-container-low, #fcfcfc);
+.gallery-header {
+  padding: 8px 16px;
+  background-color: var(--mat-sys-surface-container-lowest, #ffffff);
+  display: flex;
+  align-items: center;
 }
 
-.catalog-title {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--mat-sys-on-surface, #1c1b1f);
-}
+.component-selector {
+  width: 100%;
+  max-width: 240px;
 
-.gallery-sidenav .catalog-list {
-  .category-header {
-    font: var(--mat-sys-typescale-label-medium);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-  }
-
-  .component-nav-item {
-    display: flex;
-    justify-content: flex-start;
-    text-align: left;
-    border: none;
-    background: transparent;
-    border-radius: 20px;
-    margin: 2px 12px;
-    padding-left: 12px;
-    width: calc(100% - 24px);
-    box-sizing: border-box;
-    --mdc-list-list-item-container-height: 36px;
-    cursor: pointer;
-
-    ::ng-deep .mdc-list-item__content {
-      text-align: left;
-    }
-
-    &:hover,
-    &:focus {
-      background-color: var(--mat-sys-surface-container-low, #f2f2f2);
-    }
-
-    &.mat-mdc-list-item-activated,
-    &[activated='true'] {
-      background-color: var(--mat-sys-surface-container-high, #e2e2e2);
-
-      span[matListItemTitle] {
-        font-weight: 500;
+  /* Custom compact sizing overrides for material form field */
+    ::ng-deep {
+      .mat-mdc-form-field-infix {
+        min-height: unset !important;
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
       }
+        .mat-mdc-text-field-wrapper {
+          padding-left: 8px !important;
+          padding-right: 8px !important;
     }
-
-    span[matListItemTitle] {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      display: block;
+        .mat-mdc-form-field-flex {
+          height: 32px !important;
+          align-items: center !important;
+    }
+        .mat-mdc-select-trigger {
+          font-size: 13px !important;
+        }
+        .mat-mdc-form-field-label-wrapper {
+          top: -8px !important;
     }
   }
 }
 
 .gallery-content {
   box-sizing: border-box;
-  height: 100%;
-  padding: 24px;
-  background-color: var(--mat-sys-background, #fafafa);
+  flex: 1;
+  padding: 16px;
+  background-color: var(--mat-sys-surface-container-lowest, #ffffff);
   overflow-y: auto;
-}
-
-.empty-state {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 80%;
-  text-align: center;
-  color: var(--mat-sys-on-surface-variant, #666);
+  gap: 20px;
 }
 
-.empty-icon {
-  font-size: 48px;
-  height: 48px;
-  width: 48px;
-  margin-bottom: 16px;
-  opacity: 0.5;
-}
-
-.empty-title {
-  margin: 0 0 8px 0;
-  font-size: 1.25rem;
-  font-weight: 500;
-}
-
-.empty-subtitle {
-  margin: 0;
-  max-width: 400px;
-  font-size: 0.9rem;
-  opacity: 0.8;
-}
-
-.details-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.details-header {
-  border-bottom: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
-  padding-bottom: 16px;
-}
-
-.component-title {
-  margin: 0 0 8px 0;
-  font-size: 1.75rem;
-  font-weight: 400;
+.component-intro {
+  margin-bottom: 12px;
 }
 
 .component-description {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 12px;
   color: var(--mat-sys-on-surface-variant, #49454f);
   line-height: 1.4;
 }
 
-.preview-card,
-.usage-card,
-.properties-card {
-  border-radius: 8px;
-  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
-  background-color: var(--mat-sys-surface, #ffffff);
-}
 
-.preview-placeholder {
-  min-height: 160px;
+
+.gallery-section {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--mat-sys-surface-container-highest, #f0f0f0);
-  border: 2px dashed var(--mat-sys-outline-variant, #e0e0e0);
-  border-radius: 4px;
-  font-style: italic;
-  color: var(--mat-sys-on-surface-variant, #777);
+  flex-direction: column;
+    gap: 8px;
 }
 
-.usage-header {
+.section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-right: 8px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--mat-sys-on-surface-variant, #7f7f7f);
 }
 
 .copy-button {
+  height: 24px;
+    width: 24px;
+    line-height: 24px;
+    padding: 0;
   color: var(--mat-sys-primary, #6750a4);
+mat-icon {
+    font-size: 16px;
+    height: 16px;
+    width: 16px;
+  }
 }
 
-.usage-code-block {
-  margin: 0;
-  padding: 12px;
-  background-color: var(--mat-sys-surface-container-high, #f5f5f5);
+.preview-container {
+  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
   border-radius: 4px;
+  background-color: var(--mat-sys-surface-container-lowest, #ffffff);
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
+.usage-code-block,
+.schema-code-block {
+  margin: 0;
+  padding: 10px;
+    background-color: var(--mat-sys-surface-container-low, #f5f5f5);
+  border-radius: 4px;
+  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
   overflow-x: auto;
 }
 
-.usage-code {
+.usage-code,
+.schema-code {
   font-family: 'Roboto Mono', monospace;
-  font-size: 0.85rem;
-  line-height: 1.5;
+  font-size: 12px;
+    line-height: 1.4;
   color: var(--mat-sys-on-surface, #333);
 }
 
+.properties-container {
+  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  border-radius: 4px;
+  overflow: hidden;
+}
 .properties-table {
   width: 100%;
   background: transparent;
 
+  tr.mat-mdc-header-row {
+      height: 32px;
+      background-color: var(--mat-sys-surface-container-low, #f5f5f5);
+    }
+  
+    tr.mat-mdc-row {
+      height: 32px;
+    }
+  
+    th,
+    td {
+      font-size: 12px;
+      padding: 0 12px !important;
+    }
   th {
     font-weight: 600;
+    color: var(--mat-sys-on-surface-variant, #555);
   }
 
   .prop-name {
@@ -210,44 +182,90 @@
 
   .prop-type code {
     background-color: var(--mat-sys-surface-container-high, #f0f0f0);
-    padding: 2px 6px;
+    padding: 2px 4px;
     border-radius: 4px;
-    font-size: 0.8rem;
+    font-size: 11px;
   }
 
   .prop-required {
     mat-icon {
-      font-size: 18px;
-      height: 18px;
-      width: 18px;
+      font-size: 14px;
+        height: 14px;
+        width: 14px;
     }
   }
 
   .optional-label {
-    font-size: 0.8rem;
+    font-size: 11px;
     font-style: italic;
     opacity: 0.6;
   }
 
   .prop-default code {
     background-color: var(--mat-sys-surface-container-high, #f0f0f0);
-    padding: 2px 6px;
+    padding: 2px 4px;
     border-radius: 4px;
-    font-size: 0.8rem;
-  }
+    font-size: 11px;
+    }
+    }
+    
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
+      text-align: center;
+      color: var(--mat-sys-on-surface-variant, #666);
+    }
+    
+    .empty-icon {
+      font-size: 32px;
+      height: 32px;
+      width: 32px;
+      margin-bottom: 8px;
+      opacity: 0.5;
+    }
+.empty-title {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.hidden-frame {
-  display: none;
+.empty-subtitle {
+  margin: 0;
+  max-width: 320px;
+  font-size: 12px;
+  opacity: 0.8;
 }
 
 .usage-loading-spinner {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  gap: 16px;
+  padding: 16px;
+    gap: 12px;
   color: var(--mat-sys-on-surface-variant, #666);
-  font-size: 0.9rem;
+  font-size: 12px;
+  }
+  
+  .schema-expansion-panel {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: 1px solid var(--mat-sys-outline-variant, #e0e0e0) !important;
+    border-radius: 4px !important;
+  
+    .schema-expansion-header {
+      height: 36px !important;
+      padding: 0 12px !important;
+  
+      ::ng-deep .mat-content {
+        align-items: center;
+      }
+    }
+  
+    ::ng-deep .mat-expansion-panel-body {
+      padding: 0 12px 12px !important;
+    }
 }
+

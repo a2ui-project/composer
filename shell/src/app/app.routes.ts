@@ -33,17 +33,7 @@ export const routes: Routes = [
         title: 'A2UI Composer Workspace',
         canActivate: [startupGuard],
       },
-      {
-        path: 'gallery',
-        loadComponent: () => import('./gallery/gallery').then(m => m.Gallery),
-        title: 'A2UI Components Gallery',
-        canActivate: [startupGuard],
-      },
-      {
-        path: 'settings',
-        loadComponent: () => import('./settings/settings-view/settings').then(m => m.Settings),
-        title: 'A2UI Composer Settings',
-      },
+
       {
         path: '**',
         redirectTo: '',

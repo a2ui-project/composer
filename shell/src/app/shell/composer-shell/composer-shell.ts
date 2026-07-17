@@ -16,11 +16,9 @@
 
 import {Component, computed, effect, inject} from '@angular/core';
 import {MatToolbarModule} from '@angular/material/toolbar';
-import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
-import {MatListModule} from '@angular/material/list';
-import {RouterLink, RouterOutlet} from '@angular/router';
+import {RouterOutlet} from '@angular/router';
 import {DOCUMENT} from '@angular/common';
 import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
 import {MatTooltipModule} from '@angular/material/tooltip';
@@ -29,6 +27,7 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
+import {WorkspacePanelManager} from '../composer-workspace/workspace-panel-manager';
 
 /**
  * The primary layout container for the A2UI Composer.
@@ -40,12 +39,9 @@ import {SessionStorageInteractions} from '../../storage/session-storage-interact
   standalone: true,
   imports: [
     MatToolbarModule,
-    MatSidenavModule,
     MatButtonModule,
     MatIconModule,
-    MatListModule,
     RouterOutlet,
-    RouterLink,
     MatTooltipModule,
   ],
   templateUrl: './composer-shell.ng.html',
@@ -59,6 +55,7 @@ export class ComposerShell {
   private readonly sessionStorage = inject(SessionStorageInteractions);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly document = inject(DOCUMENT);
+  private readonly workspacePanelManager = inject(WorkspacePanelManager);
 
   activeCatalogTitle = this.catalogManagement.activeCatalogTitle;
   activeCatalogDescription = this.catalogManagement.activeCatalogDescription;
@@ -93,5 +90,9 @@ export class ComposerShell {
       this.document.defaultView.location.reload();
     }
     console.log('Session state cleared.');
+  }
+
+  openSettings(): void {
+    this.workspacePanelManager.openPanel('settings');
   }
 }

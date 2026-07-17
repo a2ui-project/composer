@@ -389,6 +389,7 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
 
       expect(result).toEqual({
         content: 'Final response generated payload.',
+        isComplete: true,
       });
     });
 

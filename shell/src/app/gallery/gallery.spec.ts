@@ -150,7 +150,7 @@ describe('Gallery Component', () => {
     expect(catalogServiceMock.selectComponent).toHaveBeenCalledWith('Text');
   });
 
-  it('updates the details card header with name and description when a component is selected', async () => {
+  it('updates the details description when a component is selected', async () => {
     const mockCatalog: Catalog = {
       catalogId: 'https://a2ui.org/default_catalog.json',
       components: {
@@ -165,10 +165,8 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentKey.set('Text');
     fixture.detectChanges();
 
-    const title = await harness.getSelectedComponentTitle();
     const description = await harness.getSelectedComponentDescription();
 
-    expect(title).toBe('Text');
     expect(description).toBe('A text block.');
   });
 
@@ -258,9 +256,6 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentKey.set(null);
     fixture.detectChanges();
 
-    const title = await harness.getSelectedComponentTitle();
-    expect(title).toBeNull();
-
     const desc = await harness.getSelectedComponentDescription();
     expect(desc).toBeNull();
 
@@ -268,10 +263,10 @@ describe('Gallery Component', () => {
     expect(usage).toBeNull();
 
     const placeholderText = await harness.getEmptyStateSubtitleText();
-    expect(placeholderText).toContain('Choose a component from the sidebar catalog');
+    expect(placeholderText).toContain('Choose a component from the dropdown');
   });
 
-  it('updates the details card header with name and empty description when component has no description', async () => {
+  it('renders no description when component has no description', async () => {
     const mockCatalog: Catalog = {
       catalogId: 'https://a2ui.org/default_catalog.json',
       components: {
@@ -284,9 +279,6 @@ describe('Gallery Component', () => {
 
     catalogServiceMock.selectedComponentKey.set('Text');
     fixture.detectChanges();
-
-    const title = await harness.getSelectedComponentTitle();
-    expect(title).toBe('Text');
 
     const description = await harness.getSelectedComponentDescription();
     expect(description).toBeNull();
@@ -389,7 +381,7 @@ describe('Gallery Component', () => {
     fixture.detectChanges();
 
     const titles = await harness.getCardTitlesText();
-    expect(titles).toEqual(['Preview', 'Usage', 'Properties']);
+    expect(titles).toEqual(['Preview', 'Usage', 'Properties', 'JSON Schema']);
   });
 
   it('displays catalog configuration error state when catalogError is set', async () => {
