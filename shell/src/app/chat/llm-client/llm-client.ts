@@ -56,6 +56,9 @@ export interface LlmMessage {
   /** Holds the optional attachment files context. */
   readonly attachments?: Attachment[];
 
+  /** Holds the optional model thinking or thought process. */
+  readonly thinking?: string;
+
   /** Indicates whether a failed gateway transaction is retryable. */
   readonly isRetryable?: boolean;
 
@@ -86,7 +89,19 @@ export interface LlmResponse {
    * LLM client.
    */
   readonly content: string;
+
+  /**
+   * Optional final accumulated thought process.
+   */
+  readonly thinking?: string;
+
+  /**
+   * True if this represents the complete response rather than a partial chunk.
+   */
+  readonly isComplete?: boolean;
 }
+
+export const CANCEL_ERROR_NAME = 'CancelError';
 
 /**
  * Represents dynamic, real-time incremental tokens compiled asynchronously.
@@ -98,13 +113,18 @@ export interface LlmStreamResponse {
    * An asynchronous iterable stream yielding chunked text fragments as they
    * arrive from the platform pipeline.
    */
-  readonly contentStream: AsyncIterable<string>;
+  readonly contentStream: AsyncIterable<LlmResponse>;
 
   /**
    * A promise that resolves to the final accumulated sequence, ensuring
    * downstream processes can synchronize operations upon generator depletion.
    */
   readonly complete: Promise<string>;
+
+  /**
+   * Optional cancel function to terminate the stream early.
+   */
+  readonly cancel?: () => void;
 }
 
 /**

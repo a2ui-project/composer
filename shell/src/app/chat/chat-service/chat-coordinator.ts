@@ -17,7 +17,14 @@
 import {Injectable, inject, computed, effect, untracked} from '@angular/core';
 import {formatJson} from '../../utils/json';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {LlmMessage, LlmClient, MessageRole, Attachment} from '../llm-client/llm-client';
+import {
+  LlmMessage,
+  LlmClient,
+  MessageRole,
+  Attachment,
+  LlmStreamResponse,
+  CANCEL_ERROR_NAME,
+} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {StateSync} from '../state-sync/state-sync';
@@ -97,6 +104,19 @@ export class ChatCoordinator {
     ];
   }
 
+  private activeStreamResponse?: LlmStreamResponse;
+  private isCancelRequested = false;
+
+  /**
+   * Cancels the currently active streaming request if there is one.
+   */
+  cancelActiveStream(): void {
+    this.isCancelRequested = true;
+    if (this.activeStreamResponse && this.activeStreamResponse.cancel) {
+      this.activeStreamResponse.cancel();
+    }
+  }
+
   /**
    * Dispatches a fresh text instruction, triggers GenAI completions
    * in-stream, buffers packets, runs auto-repair healing and schema
@@ -136,13 +156,28 @@ export class ChatCoordinator {
     ]);
 
     try {
+      this.isCancelRequested = false;
       // Trigger streaming GenAI completions call using client facade
       const responseStream = await this.llmClient.chatStream(fullContext);
 
+      // If a cancel was requested while the stream connection was establishing
+      if (this.isCancelRequested) {
+        if (responseStream.cancel) responseStream.cancel();
+        const err = new Error('Cancelled');
+        err.name = CANCEL_ERROR_NAME;
+        throw err;
+      }
+
+      this.activeStreamResponse = responseStream;
+
       // Loop asynchronously over incoming stream packets to compile text
       let accumulatedRawText = '';
-      for await (const packet of responseStream.contentStream) {
-        accumulatedRawText += packet;
+      let accumulatedThinking = '';
+      for await (const chunk of responseStream.contentStream) {
+        accumulatedRawText += chunk.content;
+        if (chunk.thinking) {
+          accumulatedThinking += chunk.thinking;
+        }
 
         // Update history bubble in real-time with trailing pulse indicator
         this.chatState.updateChatHistory(history => {
@@ -152,6 +187,7 @@ export class ChatCoordinator {
             updated[lastIdx] = {
               role: MessageRole.MODEL,
               content: accumulatedRawText + ' ●●●',
+              thinking: accumulatedThinking,
             };
           }
           return updated;
@@ -170,6 +206,7 @@ export class ChatCoordinator {
           updated[lastIdx] = {
             role: MessageRole.MODEL,
             content: finalRawText,
+            thinking: accumulatedThinking,
           };
         }
         return updated;
@@ -178,7 +215,28 @@ export class ChatCoordinator {
       this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
       await this.processRawLlmPayload(finalRawText);
     } catch (err: unknown) {
-      this.handleConnectivityError(err, trimmed, attachments);
+      // If it was cancelled, don't show an error. Just leave what was generated or remove the bubble.
+      // But we probably want to just reset the UI lock.
+      if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
+        this.chatState.setPipelineStatus(PipelineStatus.IDLE);
+        this.chatState.setProgrammaticStreamActive(false);
+        // Replace trailing pulse or partial JSON with stopped message, and force non-snapshot
+        this.chatState.updateChatHistory(history => {
+          const updated = [...history];
+          const lastIdx = updated.length - 1;
+          if (updated[lastIdx]?.role === MessageRole.MODEL) {
+            updated[lastIdx] = {
+              ...updated[lastIdx],
+              content: '*You stopped this response.*',
+            };
+          }
+          return updated;
+        });
+      } else {
+        this.handleConnectivityError(err, trimmed, attachments);
+      }
+    } finally {
+      this.activeStreamResponse = undefined;
     }
   }
 

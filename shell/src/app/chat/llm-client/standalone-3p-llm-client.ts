@@ -15,9 +15,22 @@
  */
 
 import {Injectable, inject} from '@angular/core';
-import {LlmClient, LlmMessage, LlmResponse, LlmStreamResponse, MessageRole} from './llm-client';
+import {
+  LlmClient,
+  LlmMessage,
+  LlmResponse,
+  LlmStreamResponse,
+  MessageRole,
+  CANCEL_ERROR_NAME,
+} from './llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {GoogleGenAI, Content, GenerateContentParameters, Part} from '@google/genai';
+import {
+  GoogleGenAI,
+  Content,
+  GenerateContentParameters,
+  Part,
+  GenerateContentConfig,
+} from '@google/genai';
 
 /**
  * Standard public endpoint authentication client utilizing user developer keys.
@@ -101,20 +114,17 @@ export class Standalone3pLlmClient extends LlmClient {
   override async chat(messages: LlmMessage[]): Promise<LlmResponse> {
     const stream = await this.chatStream(messages);
     const content = await stream.complete;
+    // We don't get the combined thinking easily back from stream.complete unless we change complete type,
+    // but chat is rarely used directly for full text. We can just return content.
     return {
       content,
+      isComplete: true,
     };
   }
 
   /**
    * Generates a streamed, incremental response for the provided chat
    * history.
-   * Dynamically spawns a concurrent eager exhaust loop to buffer results,
-   * returning pointer-safe replay streams.
-   *
-   * @param messages The sequence of messages representing the turn history.
-   * @returns A promise resolving to an active stream response boundary
-   *   interface.
    */
   override async chatStream(messages: LlmMessage[]): Promise<LlmStreamResponse> {
     const apiKeyVal = this.config.geminiApiKey();
@@ -125,16 +135,25 @@ export class Standalone3pLlmClient extends LlmClient {
 
     const {systemInstruction, contents} = this.parseMessages(messages);
 
+    const abortController = new AbortController();
+
+    const config: GenerateContentConfig = systemInstruction ? {systemInstruction} : {};
+    config.abortSignal = abortController.signal;
+    config.thinkingConfig = {
+      includeThoughts: true,
+      thinkingBudget: 1024,
+    };
+
     const params: GenerateContentParameters = {
       model: 'gemini-3.5-flash',
       contents,
-      config: systemInstruction ? {systemInstruction} : undefined,
+      config,
     };
 
     // Instantiate response generator stream eagerly
     const responseStream = await ai.models.generateContentStream(params);
 
-    const buffer: string[] = [];
+    const buffer: LlmResponse[] = [];
     let accumulatedText = '';
     let isDone = false;
     let streamError: unknown = null;
@@ -160,26 +179,55 @@ export class Standalone3pLlmClient extends LlmClient {
       try {
         for await (const chunk of responseStream) {
           const textVal = chunk.text || '';
+
+          let thoughtVal = '';
+          const parts = chunk.candidates?.[0]?.content?.parts;
+          if (parts) {
+            for (const part of parts) {
+              if (part.thought && part.text) {
+                thoughtVal += part.text;
+              }
+            }
+          }
+
           accumulatedText += textVal;
-          buffer.push(textVal); // Always preserve history in full replay buffer!
+
+          buffer.push({content: textVal, thinking: thoughtVal, isComplete: false});
           notifyListeners();
         }
         isDone = true;
         resolveComplete(accumulatedText);
         notifyListeners();
-      } catch (err) {
-        streamError = err;
-        rejectComplete(err);
+      } catch (err: unknown) {
+        let finalErr = err;
+        if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
+          finalErr = err;
+        }
+
+        if (
+          finalErr &&
+          typeof finalErr === 'object' &&
+          'name' in finalErr &&
+          finalErr.name === CANCEL_ERROR_NAME
+        ) {
+          isDone = true;
+          streamError = finalErr;
+          rejectComplete(finalErr);
+          notifyListeners();
+          return;
+        }
+        streamError = finalErr;
+        rejectComplete(finalErr);
         notifyListeners();
       }
     })();
 
     // Independent pointer-safe AsyncIterable reader mapping
-    const contentStream: AsyncIterable<string> = {
+    const contentStream: AsyncIterable<LlmResponse> = {
       [Symbol.asyncIterator]() {
         let localBufferIndex = 0;
         return {
-          async next(): Promise<IteratorResult<string>> {
+          async next(): Promise<IteratorResult<LlmResponse>> {
             // Wait in-loop while buffer is exhausted and stream is active/errored
             while (localBufferIndex >= buffer.length && !isDone && !streamError) {
               await new Promise<void>((resolve, reject) => {
@@ -214,6 +262,11 @@ export class Standalone3pLlmClient extends LlmClient {
     return {
       contentStream,
       complete,
+      cancel: () => {
+        const cancelErr = new Error('Cancelled');
+        cancelErr.name = CANCEL_ERROR_NAME;
+        abortController.abort(cancelErr);
+      },
     };
   }
 }

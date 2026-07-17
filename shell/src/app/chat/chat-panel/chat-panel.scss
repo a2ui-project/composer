@@ -212,6 +212,41 @@
     margin: 0;
     white-space: pre-wrap;
   }
+
+  .thinking-block {
+    margin-bottom: 8px;
+    border-radius: 8px;
+    background-color: var(--mat-sys-surface-container-highest);
+    border: 1px solid var(--mat-sys-outline-variant);
+    color: var(--mat-sys-on-surface-variant);
+    overflow: hidden;
+
+    .thinking-header {
+      padding: 6px 10px;
+      font: var(--mat-sys-label-medium);
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+      mat-icon {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+      }
+    }
+
+    .thinking-text-content {
+      margin: 0;
+      padding: 8px 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+      opacity: 0.8;
+    }
+  }
 }
 
 /* Diagnostic Connectivity / Gateway exceptions logs turns alerts */

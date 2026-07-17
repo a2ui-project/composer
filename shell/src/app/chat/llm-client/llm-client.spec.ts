@@ -17,7 +17,7 @@
 import {TestBed} from '@angular/core/testing';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {LlmClient, LlmMessage} from './llm-client';
+import {LlmClient, LlmMessage, LlmResponse, CANCEL_ERROR_NAME} from './llm-client';
 import {Standalone3pLlmClient} from './standalone-3p-llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {MessageRole} from './llm-client';
@@ -389,6 +389,7 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
 
       expect(result).toEqual({
         content: 'Final response generated payload.',
+        isComplete: true,
       });
     });
 
@@ -431,12 +432,16 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       expect(streamResponse.contentStream).toBeDefined();
       expect(streamResponse.complete).toBeDefined();
 
-      const collectedChunks: string[] = [];
+      const collectedChunks: LlmResponse[] = [];
       for await (const chunk of streamResponse.contentStream) {
         collectedChunks.push(chunk);
       }
 
-      expect(collectedChunks).toEqual(['Starting', ' streaming ', 'handshakes.']);
+      expect(collectedChunks).toEqual([
+        {content: 'Starting', thinking: '', isComplete: false},
+        {content: ' streaming ', thinking: '', isComplete: false},
+        {content: 'handshakes.', thinking: '', isComplete: false},
+      ]);
 
       const finalSynchronizerValue = await streamResponse.complete;
       expect(finalSynchronizerValue).toBe('Starting streaming handshakes.');
@@ -486,18 +491,24 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       ]);
 
       // Pull chunks from first reader iterator
-      const collected1: string[] = [];
+      const collected1: LlmResponse[] = [];
       for await (const chunk of streamResponse.contentStream) {
         collected1.push(chunk);
       }
-      expect(collected1).toEqual(['Replay ', 'packet']);
+      expect(collected1).toEqual([
+        {content: 'Replay ', thinking: '', isComplete: false},
+        {content: 'packet', thinking: '', isComplete: false},
+      ]);
 
       // Pull chunks from second subsequent reader iterator (replay check!)
-      const collected2: string[] = [];
+      const collected2: LlmResponse[] = [];
       for await (const chunk of streamResponse.contentStream) {
         collected2.push(chunk);
       }
-      expect(collected2).toEqual(['Replay ', 'packet']);
+      expect(collected2).toEqual([
+        {content: 'Replay ', thinking: '', isComplete: false},
+        {content: 'packet', thinking: '', isComplete: false},
+      ]);
     });
 
     it('supports multiple active iterators stepping in sync', async () => {
@@ -542,8 +553,8 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       resolveChunk1({value: {text: 'A'}, done: false});
 
       const [res1_p1, res2_p1] = await Promise.all([next1_p1, next2_p1]);
-      expect(res1_p1.value).toBe('A');
-      expect(res2_p1.value).toBe('A');
+      expect(res1_p1.value).toEqual({content: 'A', thinking: '', isComplete: false});
+      expect(res2_p1.value).toEqual({content: 'A', thinking: '', isComplete: false});
 
       // Dispatch next concurrent pulls
       const next1_p2 = iter1.next();
@@ -553,8 +564,8 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       resolveChunk2({value: {text: 'B'}, done: false});
 
       const [res1_p2, res2_p2] = await Promise.all([next1_p2, next2_p2]);
-      expect(res1_p2.value).toBe('B');
-      expect(res2_p2.value).toBe('B');
+      expect(res1_p2.value).toEqual({content: 'B', thinking: '', isComplete: false});
+      expect(res2_p2.value).toEqual({content: 'B', thinking: '', isComplete: false});
     });
 
     it('catches setups network failures and throws matches immediately', async () => {
@@ -599,6 +610,47 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       await expect(streamResponse.complete).rejects.toThrow(
         'Network transport layer broke mid-packet.',
       );
+    });
+
+    it('supports stream cancellation via cancel()', async () => {
+      let abortSignal!: AbortSignal;
+      mockGenerateContentStream.mockImplementation(async params => {
+        abortSignal = params.config?.abortSignal;
+        return {
+          async *[Symbol.asyncIterator]() {
+            while (true) {
+              if (abortSignal.aborted) {
+                const err =
+                  abortSignal.reason ||
+                  new DOMException('The user aborted a request.', CANCEL_ERROR_NAME);
+                throw err;
+              }
+              yield {text: 'Chunk'};
+              await new Promise(resolve => setTimeout(resolve, 0));
+            }
+          },
+        };
+      });
+
+      const streamResponse = await client.chatStream([
+        {role: MessageRole.USER, content: 'Cancel test'},
+      ]);
+
+      const iterator = streamResponse.contentStream[Symbol.asyncIterator]();
+      const firstChunk = await iterator.next();
+      expect(firstChunk.value).toEqual({content: 'Chunk', thinking: '', isComplete: false});
+
+      expect(abortSignal.aborted).toBe(false);
+      expect(streamResponse.cancel).toBeDefined();
+
+      // Trigger cancel
+      streamResponse.cancel?.();
+
+      expect(abortSignal.aborted).toBe(true);
+
+      // Verify that further iterator pulls reject with CancelError
+      await expect(iterator.next()).rejects.toThrow('Cancelled');
+      await expect(streamResponse.complete).rejects.toThrow('Cancelled');
     });
   });
 });

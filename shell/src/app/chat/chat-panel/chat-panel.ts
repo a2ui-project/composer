@@ -14,7 +14,35 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, computed} from '@angular/core';
+import {
+  Component,
+  inject,
+  signal,
+  computed,
+  ElementRef,
+  Directive,
+  input,
+  effect,
+} from '@angular/core';
+
+@Directive({
+  // eslint-disable-next-line @angular-eslint/directive-selector
+  selector: '[a2uiComposerAutoScroll]',
+  standalone: true,
+})
+export class AutoScroll {
+  autoScroll = input<string | undefined>('', {alias: 'a2uiComposerAutoScroll'});
+  private readonly el = inject(ElementRef);
+
+  constructor() {
+    effect(() => {
+      this.autoScroll();
+      requestAnimationFrame(() => {
+        this.el.nativeElement.scrollTop = this.el.nativeElement.scrollHeight;
+      });
+    });
+  }
+}
 import {ChatCoordinator} from '../chat-service/chat-coordinator';
 import {ChatState} from '../chat-state/chat-state';
 import {LlmMessage, MessageRole, Attachment} from '../llm-client/llm-client';
@@ -57,6 +85,7 @@ interface AttachedFile extends Attachment {
     MatIconModule,
     MatDialogModule,
     RouterLink,
+    AutoScroll,
   ],
   templateUrl: './chat-panel.ng.html',
   styleUrl: './chat-panel.scss',
@@ -197,6 +226,13 @@ export class ChatPanel {
 
     // Trigger vertex async pipeline stream completions
     await this.chatCoordinator.submitPrompt(textVal, attachments);
+  }
+
+  /**
+   * Cancels the currently active prompt stream.
+   */
+  protected cancelPrompt(): void {
+    this.chatCoordinator.cancelActiveStream();
   }
 
   /**
