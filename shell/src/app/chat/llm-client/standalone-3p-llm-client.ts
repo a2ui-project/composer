@@ -200,10 +200,8 @@ export class Standalone3pLlmClient extends LlmClient {
         notifyListeners();
       } catch (err: unknown) {
         let finalErr = err;
-        if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
-          const cancelErr = new Error('Cancelled');
-          cancelErr.name = CANCEL_ERROR_NAME;
-          finalErr = cancelErr;
+        if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
+          finalErr = err;
         }
 
         if (
@@ -265,7 +263,9 @@ export class Standalone3pLlmClient extends LlmClient {
       contentStream,
       complete,
       cancel: () => {
-        abortController.abort();
+        const cancelErr = new Error('Cancelled');
+        cancelErr.name = CANCEL_ERROR_NAME;
+        abortController.abort(cancelErr);
       },
     };
   }
