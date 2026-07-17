@@ -138,7 +138,6 @@ export class RawFrame {
     this.stateSync.updateDraft(value);
   }
 
-
   /**
    * Parses the raw layout configuration string into an array of message objects.
    *
