@@ -33,6 +33,7 @@ import {StateSync} from '../state-sync/state-sync';
 import {
   LlmClient,
   LlmMessage,
+  LlmResponse,
   LlmStreamResponse,
   MessageRole,
   CANCEL_ERROR_NAME,
@@ -602,10 +603,8 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
   it('handles active stream cancellation cleanly', async () => {
     let cancelCalled = false;
-    let resolveCompletePromise!: (val: string) => void;
     let rejectCompletePromise!: (err: unknown) => void;
-    const completePromise = new Promise<string>((resolve, reject) => {
-      resolveCompletePromise = resolve;
+    const completePromise = new Promise<string>((_, reject) => {
       rejectCompletePromise = reject;
     });
     completePromise.catch(() => {});
@@ -617,10 +616,10 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       rejectCompletePromise(err);
     });
 
-    const contentStream: AsyncIterable<any> = {
+    const contentStream: AsyncIterable<LlmResponse> = {
       [Symbol.asyncIterator]() {
         return {
-          async next(): Promise<IteratorResult<any>> {
+          async next(): Promise<IteratorResult<LlmResponse>> {
             if (cancelCalled) {
               const err = new Error('Cancelled');
               err.name = CANCEL_ERROR_NAME;
