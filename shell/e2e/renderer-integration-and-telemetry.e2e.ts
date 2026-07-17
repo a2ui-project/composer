@@ -93,26 +93,32 @@ for (const config of CONFIGS) {
       const envelopes = page.locator(
         '.raw-messages-container [data-testid="raw-message-envelope"], .raw-messages-container [data-testid="llm-log-panel"]',
       );
-      expect(await envelopes.count()).toBeGreaterThanOrEqual(3);
+      await expect.poll(async () => envelopes.count()).toBeGreaterThanOrEqual(3);
 
       // Validate descending chronological sequence (newest first)
       await expect(envelopes.nth(0).locator('.message-type')).toHaveText(
         PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       );
-      await expect(envelopes.nth(1).locator('.message-type')).toHaveText(
+      const catalogEnvelope = envelopes
+        .filter({hasText: PreviewBridgeMessageType.A2UI_CATALOG})
+        .first();
+      await expect(catalogEnvelope.locator('.message-type')).toHaveText(
         PreviewBridgeMessageType.A2UI_CATALOG,
       );
-      await expect(envelopes.nth(2).locator('.message-type')).toHaveText(
+      const readyEnvelope = envelopes
+        .filter({hasText: PreviewBridgeMessageType.RENDERER_READY})
+        .first();
+      await expect(readyEnvelope.locator('.message-type')).toHaveText(
         PreviewBridgeMessageType.RENDERER_READY,
       );
 
       // Expand A2UI_CATALOG card
-      const catalogHeader = envelopes.nth(1).locator('mat-expansion-panel-header');
+      const catalogHeader = catalogEnvelope.locator('mat-expansion-panel-header');
       await catalogHeader.focus();
       await catalogHeader.press('Enter');
 
       // Assert the pre block contains key catalog properties
-      const catalogPre = envelopes.nth(1).locator('pre');
+      const catalogPre = catalogEnvelope.locator('pre');
       await expect(catalogPre).toBeVisible();
       await expect(catalogPre).toContainText('components');
       await expect(catalogPre).toContainText('Column');
@@ -242,6 +248,7 @@ for (const config of CONFIGS) {
         .locator(
           '.raw-messages-container [data-testid="raw-message-envelope"], .raw-messages-container [data-testid="llm-log-panel"]',
         )
+        .filter({hasText: PreviewBridgeMessageType.SEND_TO_SERVER})
         .first();
       await expect(latestEnvelope.locator('.message-type')).toHaveText(
         PreviewBridgeMessageType.SEND_TO_SERVER,

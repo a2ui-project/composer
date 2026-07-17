@@ -18,8 +18,10 @@
   <button
     mat-icon-button
     class="hamburger-button"
-    (click)="sidenav.toggle()"
+    (click)="toggleCollapsed()"
+    [attr.aria-expanded]="!isCollapsed()"
     aria-label="Toggle sidenav"
+    aria-controls="composer-sidenav"
   >
     <mat-icon aria-hidden="true">menu</mat-icon>
   </button>
@@ -42,11 +44,61 @@
 </mat-toolbar>
 
 <mat-sidenav-container class="composer-sidenav-container">
-  <mat-sidenav #sidenav mode="side" opened class="composer-sidenav">
+  <mat-sidenav
+    #sidenav
+    id="composer-sidenav"
+    mode="side"
+    [opened]="true"
+    class="composer-sidenav"
+    [class.collapsed]="isCollapsed()"
+  >
     <mat-nav-list>
-      <a mat-list-item routerLink="/">Composer Workspace</a>
-      <a mat-list-item routerLink="/gallery">Components Gallery</a>
-      <a mat-list-item routerLink="/settings">Settings</a>
+      <a
+        mat-list-item
+        routerLink="/"
+        routerLinkActive="active-nav-item"
+        aria-label="Composer Workspace"
+        matTooltip="Composer Workspace"
+        matTooltipPosition="right"
+        [routerLinkActiveOptions]="{exact: true}"
+        [matTooltipDisabled]="!isCollapsed()"
+        (click)="ensureCollapsed()"
+      >
+        <mat-icon matListItemIcon aria-hidden="true">construction</mat-icon>
+        @if (!isCollapsed()) {
+          <span class="nav-label">Composer Workspace</span>
+        }
+      </a>
+      <a
+        mat-list-item
+        routerLink="/gallery"
+        routerLinkActive="active-nav-item"
+        aria-label="Components Gallery"
+        matTooltip="Components Gallery"
+        matTooltipPosition="right"
+        [matTooltipDisabled]="!isCollapsed()"
+        (click)="ensureCollapsed()"
+      >
+        <mat-icon matListItemIcon aria-hidden="true">widgets</mat-icon>
+        @if (!isCollapsed()) {
+          <span class="nav-label">Components Gallery</span>
+        }
+      </a>
+      <a
+        mat-list-item
+        routerLink="/settings"
+        routerLinkActive="active-nav-item"
+        aria-label="Settings"
+        matTooltip="Settings"
+        matTooltipPosition="right"
+        [matTooltipDisabled]="!isCollapsed()"
+        (click)="ensureCollapsed()"
+      >
+        <mat-icon matListItemIcon aria-hidden="true">settings</mat-icon>
+        @if (!isCollapsed()) {
+          <span class="nav-label">Settings</span>
+        }
+      </a>
     </mat-nav-list>
   </mat-sidenav>
 

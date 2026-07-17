@@ -44,9 +44,44 @@
   --mat-drawer-container-shape: 0px;
   border-radius: 0px;
   --mat-sidenav-background-color: var(--mat-sys-surface-container);
+  transition: width 200ms ease-in-out;
 
   ::ng-deep .mat-drawer-inner-container {
     border-radius: 0px;
+    white-space: nowrap;
+    overflow-x: hidden;
+  }
+
+  mat-nav-list {
+    padding: 8px;
+
+    a[mat-list-item] {
+      border-radius: 28px;
+      margin-bottom: 4px;
+
+      &.active-nav-item {
+        background-color: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+
+        mat-icon {
+          color: var(--mat-sys-primary);
+        }
+      }
+    }
+  }
+
+  &.collapsed {
+    width: 64px;
+
+    a[mat-list-item] {
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+
+      ::ng-deep .mdc-list-item__start {
+        margin: 0;
+      }
+    }
   }
 }
 .composer-content {
