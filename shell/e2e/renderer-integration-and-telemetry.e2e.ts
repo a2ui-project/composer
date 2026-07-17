@@ -157,6 +157,9 @@ for (const config of CONFIGS) {
 
       await expect(dataModelTextarea).not.toHaveValue(/^$/);
 
+      // Wait for initial DATA_MODEL_CHANGE sync from iframe to complete to avoid race condition
+      await page.waitForTimeout(1000);
+
       const currentValue = await dataModelTextarea.inputValue();
       const parsedModel = JSON.parse(currentValue);
       parsedModel.booking.location = 'LAX';

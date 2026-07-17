@@ -223,6 +223,7 @@ export class RawFrame implements AfterViewInit {
           try {
             const payload = this.parseLayoutString(value);
             if (payload !== null) {
+              this.snackBar.dismiss();
               return payload;
             }
             this.showJsonSyntaxError();

@@ -66,6 +66,8 @@ test.describe('E2E Workspace User Journey', () => {
       return (monaco?.editor?.getModels()?.length ?? 0) > 0;
     });
 
+    await page.waitForTimeout(500); // Give Monaco time to fully attach event listeners
+
     await page.evaluate(() => {
       const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
       if (model) {
@@ -73,10 +75,11 @@ test.describe('E2E Workspace User Journey', () => {
       }
     });
 
-    // 8. Assert that warning badge (.invalid-json-badge) appears above textarea
-    await expect(page.locator('.invalid-json-badge')).toBeVisible();
+    // 8. Assert that snackbar appears
+    const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
+    await expect(snackbarLocator).toContainText('Invalid JSON syntax detected.');
 
-    // 9. Correct JSON and verify warning badge disappears
+    // 9. Correct JSON and verify snackbar disappears
     await page.evaluate(() => {
       const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
       if (model) {
@@ -85,6 +88,7 @@ test.describe('E2E Workspace User Journey', () => {
         );
       }
     });
-    await expect(page.locator('.invalid-json-badge')).not.toBeVisible();
+    // With dismissal logic, it should disappear immediately
+    await expect(page.locator('.mat-mdc-snack-bar-label')).toHaveCount(0, {timeout: 3000});
   });
 });
