@@ -32,6 +32,8 @@ import {ChatState, LlmLogType} from '../chat-state/chat-state';
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {PreviewBridgeMessageType, RenderA2uiItem, A2uiComponentInstance} from 'a2ui-bridge';
 import {cleanErrorMessage, redactApiKey} from './error-utils';
+import {CatalogSummarizer} from './catalog-summarizer/catalog-summarizer';
+import {A2uiValidator} from './a2ui-validator/a2ui-validator';
 
 @Injectable({
   providedIn: 'root',
@@ -48,6 +50,8 @@ export class ChatCoordinator {
   private readonly stateSync = inject(StateSync);
   private readonly chatState = inject(ChatState);
   private readonly llmClient = inject(LlmClient);
+  private readonly a2uiValidator = inject(A2uiValidator);
+  private readonly catalogSummarizer = inject(CatalogSummarizer);
 
   /** Reactively mapped rendering pipeline execution milestones. */
   readonly pipelineStatus = this.chatState.pipelineStatus;
@@ -243,7 +247,7 @@ export class ChatCoordinator {
   /**
    * Post-processes, extracts, syntax heals, and validates raw JSON lines.
    */
-  private async processRawLlmPayload(rawText: string): Promise<void> {
+  private async processRawLlmPayload(rawText: string, isRetry = false): Promise<void> {
     // Stage 1: Parse and Syntax Healing
     let parsedBlocks: unknown[] = [];
     try {
@@ -287,6 +291,51 @@ export class ChatCoordinator {
 
       // Catalog Component Schema Check & Name Typos Healing
       this.runCatalogComponentSchemaCheck(parsedBlocks);
+
+      // Client-Side Self-Healing Guardrail Validation:
+      // Perform local validation against envelope rules and catalog required fields.
+      const validationResult = this.a2uiValidator.validate(
+        parsedBlocks,
+        this.catalogManagement.activeCatalog(),
+      );
+      if (!validationResult.isValid) {
+        // Self-Healing Retry Guardrail (`isRetry`):
+        // - When isRetry is false (initial invocation), allow exactly 1 client-side
+        //   self-healing turn using the generated repairPrompt.
+        // - The repaired response is then passed recursively with isRetry = true.
+        // - On recursive invocation (isRetry = true), retries are exhausted and any
+        //   subsequent failure throws immediately rather than looping indefinitely.
+        if (!isRetry && validationResult.repairPrompt) {
+          this.chatState.setPipelineStatus(PipelineStatus.HEALING);
+          const historyContext = this.getFullMessageContext();
+          const baseContext =
+            historyContext[historyContext.length - 1]?.role === MessageRole.MODEL
+              ? historyContext.slice(0, -1)
+              : historyContext;
+          const repairContext = [
+            ...baseContext,
+            {role: MessageRole.MODEL, content: rawText},
+            {role: MessageRole.USER, content: validationResult.repairPrompt},
+          ];
+          const responseStream = await this.llmClient.chatStream(repairContext);
+          const repairedText = await responseStream.complete;
+          this.chatState.updateChatHistory(history => {
+            const updated = [...history];
+            const lastIdx = updated.length - 1;
+            if (updated[lastIdx]?.role === MessageRole.MODEL) {
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                content: repairedText,
+              };
+            }
+            return updated;
+          });
+          return await this.processRawLlmPayload(repairedText, true);
+        }
+        throw new Error(
+          `Validation failure:\n${validationResult.repairPrompt ?? 'Invalid A2UI layout payload.'}`,
+        );
+      }
 
       // Stage 3: Ready & Commit Layout Wipes
       this.chatState.setPipelineStatus(PipelineStatus.READY);
@@ -348,7 +397,13 @@ export class ChatCoordinator {
         } else {
           // If it looks like A2UI JSON but couldn't be repaired, throw
           // validation error
-          if (line.includes('"version"') || line.includes('"createSurface"')) {
+          if (
+            line.includes('"version"') ||
+            line.includes('"createSurface"') ||
+            line.includes('"updateComponents"') ||
+            line.includes('"updateDataModel"') ||
+            line.includes('"deleteSurface"')
+          ) {
             throw new Error(`Syntax recovery failed for corrupted JSON Line:\n"${line}"`);
           }
         }
@@ -478,18 +533,16 @@ export class ChatCoordinator {
               this.chatState.setPipelineStatus(PipelineStatus.HEALING);
               targetType = healedType;
             } else {
-              // Fuzzy search matches
-              const fuzzyMatch = normalized
+              // Exact case-insensitive normalized match
+              const exactMatch = normalized
                 ? Object.keys(catalog.components).find(
-                    key =>
-                      key.toLowerCase().includes(normalized) ||
-                      normalized.includes(key.toLowerCase()),
+                    key => key.toLowerCase().replace(/[^a-z]/g, '') === normalized,
                   )
                 : undefined;
 
-              if (fuzzyMatch) {
+              if (exactMatch) {
                 this.chatState.setPipelineStatus(PipelineStatus.HEALING);
-                targetType = fuzzyMatch;
+                targetType = exactMatch;
               } else {
                 throw new Error(
                   `Validation failure: Component type "${compType}" is ` +
@@ -769,10 +822,13 @@ export class ChatCoordinator {
       );
     }
 
-    return this.generateSystemPrompt(formatJson(catalog));
+    return this.generateSystemPrompt(
+      this.catalogSummarizer.summarizeCatalog(catalog),
+      catalog.catalogId || catalog.$id || '',
+    );
   });
 
-  private generateSystemPrompt(catalog: string): string {
+  private generateSystemPrompt(catalogSummary: string, catalogId = ''): string {
     return `
   # A2UI Generation Expert
 
@@ -785,10 +841,9 @@ export class ChatCoordinator {
   format. Each JSON object MUST be flattened to a single line without unescaped
   newline characters.
 
-  The generated A2UI MUST conform to this A2UI JSON:
-  \`\`\`json
-  ${catalog}.
-  \`\`\`
+  The generated A2UI MUST conform to these component contracts and TypeScript
+  interface skeletons (catalogId: ${catalogId}):
+  ${catalogSummary}
 
   ## Protocol
   When building the \`createSurface\` message, you MUST set the \`catalogId\` to

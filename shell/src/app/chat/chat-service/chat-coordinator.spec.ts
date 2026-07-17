@@ -196,10 +196,10 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
     expect(prompt).toContain('A2UI Generation Expert');
     expect(prompt).toContain('test-catalog-123');
-    expect(prompt).toContain('"Mock Catalog Custom"');
-    expect(prompt).toContain('"Provides mock interface components."');
-    expect(prompt).toContain('"CustomButton"');
-    expect(prompt).toContain('"label"');
+    expect(prompt).toContain('### Property Contract Table');
+    expect(prompt).toContain('### TypeScript Interface Skeletons');
+    expect(prompt).toContain('interface CustomButton {');
+    expect(prompt).toContain('label');
   });
 
   it('stringifies dynamic catalog even with empty components lists', () => {
@@ -213,8 +213,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     catalogManagementMock.activeCatalog.set(emptyCatalog);
     const prompt = service.systemPrompt();
 
-    expect(prompt).toContain('"Empty Catalog"');
-    expect(prompt).toContain('"components": {}');
+    expect(prompt).toContain('No components defined in catalog.');
   });
 
   /* Pipeline submit and Lockout assertions */
@@ -275,7 +274,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       'Conversational filler text preceding block...\n' +
       '```json\n' +
       '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "basic"}}\n' +
-      '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "Text", "rules": [1, 2],}\n' +
+      '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "root", "component": "Text", "rules": [1, 2],}\n' +
       '```\n' +
       'Filler text following block...';
 
@@ -304,7 +303,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
     expect(parsed[0].createSurface.surfaceId).toBe('s1');
 
-    expect(parsed[1].updateComponents.components[0].id).toBe('c1');
+    expect(parsed[1].updateComponents.components[0].id).toBe('root');
     // mock fields stripped!
     expect(parsed[1].updateComponents.components[0].rules).toBeUndefined();
   });
@@ -313,7 +312,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
   it('heals elements with legacy "name" properties mapping to type', async () => {
     const legacyRawOutput =
       '{"version": "v0.9", "createSurface": {"surfaceId": "s2", "catalogId": "test"}}\n' +
-      '{"version": "v0.9", "updateComponents": {"surfaceId": "s2", "components": [{"id": "c1", "name": "TextField"}]}}';
+      '{"version": "v0.9", "updateComponents": {"surfaceId": "s2", "components": [{"id": "root", "name": "TextField"}]}}';
 
     llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
       const contentStream = createMockStream([legacyRawOutput]);
@@ -347,10 +346,10 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       '"catalogId": "test"}}\n' +
       '{"version": "v0.9", "updateComponents": {"surfaceId": "s2", ' +
       '"components": [' +
-      '  {"id": "c1", "component": "textbox"},' +
+      '  {"id": "root", "component": "textbox"},' +
       '  {"id": "c2", "component": "checkbox"},' +
       '  {"id": "c3", "component": "datepicker"},' +
-      '  {"id": "c4", "component": "ButtonVariantGroup"}' + // matches Button!
+      '  {"id": "c4", "component": "b_u_t_t_o_n"}' + // exact normalized match to Button
       ']}}\n';
 
     llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
@@ -371,15 +370,54 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
     await service.submitPrompt('Typos prompt');
 
-    // Verify committed output elements have been mapped correct elements!
     const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
     const parsed = JSON.parse(committedOutput);
-    const components = parsed[1].updateComponents.components;
+    const components = (parsed[1] as RenderA2uiItem).updateComponents!
+      .components as A2uiComponentInstance[];
 
-    expect(components[0].component).toBe('TextField');
-    expect(components[1].component).toBe('CheckBox');
-    expect(components[2].component).toBe('DateTimeInput');
-    expect(components[3].component).toBe('Button'); // fuzzy match success!
+    expect(components[0]['component']).toBe('TextField');
+    expect(components[1]['component']).toBe('CheckBox');
+    expect(components[2]['component']).toBe('DateTimeInput');
+    expect(components[3]['component']).toBe('Button');
+  });
+
+  it('rejects component types that are only partial substring matches', async () => {
+    const rawOutput =
+      '{"version": "v0.9", "createSurface": {"surfaceId": "s2", "catalogId": "test"}}\n' +
+      '{"version": "v0.9", "updateComponents": {"surfaceId": "s2", "components": [' +
+      '  {"id": "root", "component": "ButtonVariantGroup"}' +
+      ']}}\n';
+
+    llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+      const contentStream: AsyncIterable<string> = {
+        [Symbol.asyncIterator]() {
+          const chunks = [rawOutput];
+          let idx = 0;
+          return {
+            async next(): Promise<IteratorResult<string>> {
+              if (idx < chunks.length) {
+                return {value: chunks[idx++], done: false};
+              }
+              return {value: undefined, done: true};
+            },
+          };
+        },
+      };
+      return {contentStream, complete: Promise.resolve(rawOutput)};
+    });
+
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'test',
+      components: {
+        Button: {},
+      },
+    });
+
+    await service.submitPrompt('Substring match test prompt');
+
+    expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+    const lastMsg = service.chatState.chatHistory().slice(-1)[0];
+    expect(lastMsg?.errorDetails).toContain('not registered in the active custom catalog');
   });
 
   it('bubbles connectivity and gateway timeout exceptions to error log', async () => {
@@ -625,7 +663,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     it('successfully parses multiple JSON Lines into a single JSON array', async () => {
       const jsonlOutput =
         '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}\n' +
-        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "TextField"}]}}';
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "root", "component": "TextField"}]}}';
 
       llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
         const contentStream = createMockStream([jsonlOutput]);
@@ -654,7 +692,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       // Last line is truncated, missing closing braces
       const truncatedJsonlOutput =
         '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}\n' +
-        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "TextField"}]';
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "root", "component": "TextField"}]';
 
       llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
         const contentStream = createMockStream([truncatedJsonlOutput]);
@@ -696,6 +734,193 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       await service.submitPrompt('Corrupted JSONL test prompt');
 
       expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+    });
+
+    it.each(['"updateComponents"', '"updateDataModel"', '"deleteSurface"'])(
+      'throws error when an unrecoverable line contains %s even without version',
+      async keyword => {
+        const corruptedOutput =
+          '{"version": "v0.9", "updateDataModel": {"value": 1}}\n' +
+          `{ ${keyword}: { {{{ corrupt unrecoverable`;
+
+        llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+          const contentStream: AsyncIterable<string> = {
+            [Symbol.asyncIterator]() {
+              const chunks = [corruptedOutput];
+              let idx = 0;
+              return {
+                async next(): Promise<IteratorResult<string>> {
+                  if (idx < chunks.length) {
+                    return {value: chunks[idx++], done: false};
+                  }
+                  return {value: undefined, done: true};
+                },
+              };
+            },
+          };
+          return {contentStream, complete: Promise.resolve(corruptedOutput)};
+        });
+
+        catalogManagementMock.activeCatalog.set({
+          catalogId: 'test',
+          components: {},
+        });
+
+        await service.submitPrompt('Corrupted test prompt');
+
+        expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+        const lastMsg = service.chatState.chatHistory().slice(-1)[0];
+        expect(lastMsg?.errorDetails).toContain('Syntax recovery failed');
+      },
+    );
+
+    it('triggers A2UIValidator client-side self-healing loop when layout validation fails', async () => {
+      const invalidOutput =
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "MaterialButton"}]}}'; // missing root id & required label
+      const repairedOutput =
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "root", "component": "MaterialButton", "label": "Submit"}]}}';
+
+      let callCount = 0;
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const output = callCount++ === 0 ? invalidOutput : repairedOutput;
+        const contentStream: AsyncIterable<string> = {
+          [Symbol.asyncIterator]() {
+            const chunks = [output];
+            let idx = 0;
+            return {
+              async next(): Promise<IteratorResult<string>> {
+                if (idx < chunks.length) {
+                  return {value: chunks[idx++], done: false};
+                }
+                return {value: undefined, done: true};
+              },
+            };
+          },
+        };
+        return {contentStream, complete: Promise.resolve(output)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {
+          MaterialButton: {
+            required: ['label'],
+            properties: {
+              label: {type: 'string'},
+            },
+          },
+        },
+      });
+
+      await service.submitPrompt('Button test prompt');
+
+      expect(llmClientMock.chatStream).toHaveBeenCalledTimes(2);
+      expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalledTimes(1);
+    });
+
+    it('strips trailing MODEL turn when constructing repairContext and updates chatHistory with repairedText on success', async () => {
+      const invalidOutput =
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "MaterialButton"}]}}';
+      const repairedOutput =
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "root", "component": "MaterialButton", "label": "Submit"}]}}';
+
+      let callCount = 0;
+      llmClientMock.chatStream = vi.fn(
+        async (messages: LlmMessage[]): Promise<LlmStreamResponse> => {
+          if (callCount === 1) {
+            // Verify that repairContext does not contain consecutive MODEL turns
+            for (let i = 0; i < messages.length - 1; i++) {
+              const currentRole = messages[i]?.role;
+              const nextRole = messages[i + 1]?.role;
+              expect(currentRole === MessageRole.MODEL && nextRole === MessageRole.MODEL).toBe(
+                false,
+              );
+            }
+            // The last two turns in repairContext must be MODEL (invalidOutput) and USER (repairPrompt)
+            expect(messages[messages.length - 2]).toEqual({
+              role: MessageRole.MODEL,
+              content: invalidOutput,
+            });
+            expect(messages[messages.length - 1]?.role).toBe(MessageRole.USER);
+          }
+          const output = callCount++ === 0 ? invalidOutput : repairedOutput;
+          const contentStream: AsyncIterable<string> = {
+            [Symbol.asyncIterator]() {
+              const chunks = [output];
+              let idx = 0;
+              return {
+                async next(): Promise<IteratorResult<string>> {
+                  if (idx < chunks.length) {
+                    return {value: chunks[idx++], done: false};
+                  }
+                  return {value: undefined, done: true};
+                },
+              };
+            },
+          };
+          return {contentStream, complete: Promise.resolve(output)};
+        },
+      );
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {
+          MaterialButton: {
+            required: ['label'],
+            properties: {
+              label: {type: 'string'},
+            },
+          },
+        },
+      });
+
+      await service.submitPrompt('Button test prompt');
+
+      expect(llmClientMock.chatStream).toHaveBeenCalledTimes(2);
+      const history = service.chatState.chatHistory();
+      const lastModelTurn = history[history.length - 1];
+      expect(lastModelTurn?.role).toBe(MessageRole.MODEL);
+      expect(lastModelTurn?.content).toBe(repairedOutput);
+    });
+
+    it('throws error on self-healing exhaustion when repaired text also fails validation', async () => {
+      const invalidOutput =
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "MaterialButton"}]}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream: AsyncIterable<string> = {
+          [Symbol.asyncIterator]() {
+            const chunks = [invalidOutput];
+            let idx = 0;
+            return {
+              async next(): Promise<IteratorResult<string>> {
+                if (idx < chunks.length) {
+                  return {value: chunks[idx++], done: false};
+                }
+                return {value: undefined, done: true};
+              },
+            };
+          },
+        };
+        return {contentStream, complete: Promise.resolve(invalidOutput)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {
+          MaterialButton: {
+            required: ['label'],
+            properties: {
+              label: {type: 'string'},
+            },
+          },
+        },
+      });
+
+      await service.submitPrompt('Exhaustion test prompt');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+      expect(llmClientMock.chatStream).toHaveBeenCalledTimes(2);
     });
   });
 
