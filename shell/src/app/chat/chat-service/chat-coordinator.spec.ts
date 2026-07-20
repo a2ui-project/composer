@@ -109,21 +109,10 @@ class MockStateSync {
   hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
 }
 
-function createMockStream(chunks: string[]): AsyncIterable<LlmResponse> {
-  return {
-    [Symbol.asyncIterator]() {
-      let idx = 0;
-      return {
-        async next(): Promise<IteratorResult<LlmResponse>> {
-          if (idx < chunks.length) {
-            const content = chunks[idx++];
-            return {value: {content}, done: false};
-          }
-          return {value: undefined, done: true};
-        },
-      };
-    },
-  };
+async function* createMockStream(chunks: string[]): AsyncIterable<LlmResponse> {
+  for (const content of chunks) {
+    yield {content};
+  }
 }
 
 class MockLlmClient {
