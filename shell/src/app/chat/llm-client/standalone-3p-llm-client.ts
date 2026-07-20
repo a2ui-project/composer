@@ -48,7 +48,19 @@ export function is503UnavailableError(err: unknown): boolean {
   }
   if (typeof err === 'object') {
     const e = err as Record<string, unknown>;
-    if (e['status'] === 503 || e['statusCode'] === 503 || e['code'] === 503) {
+    if (
+      e['status'] === 503 ||
+      e['status'] === '503' ||
+      e['statusCode'] === 503 ||
+      e['statusCode'] === '503' ||
+      e['code'] === 503 ||
+      e['code'] === '503'
+    ) {
+      return true;
+    }
+    const message = typeof e['message'] === 'string' ? e['message'] : '';
+    const statusText = typeof e['statusText'] === 'string' ? e['statusText'] : '';
+    if (/503|unavailable|overloaded prefill queue/i.test(`${message} ${statusText}`)) {
       return true;
     }
   }

@@ -681,10 +681,20 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
         expect(is503UnavailableError({code: 503})).toBe(true);
       });
 
+      it('returns true for plain JS objects with status "503", message, or statusText', () => {
+        expect(is503UnavailableError({status: '503'})).toBe(true);
+        expect(is503UnavailableError({statusCode: '503'})).toBe(true);
+        expect(is503UnavailableError({code: '503'})).toBe(true);
+        expect(is503UnavailableError({message: '503 Service Unavailable'})).toBe(true);
+        expect(is503UnavailableError({statusText: 'Service Unavailable'})).toBe(true);
+        expect(is503UnavailableError({message: 'Overloaded prefill queue'})).toBe(true);
+      });
+
       it('returns false for non-503 errors and invalid objects', () => {
         expect(is503UnavailableError(new Error('404 Not Found'))).toBe(false);
         expect(is503UnavailableError(new Error('401 Unauthorized'))).toBe(false);
         expect(is503UnavailableError({status: 400})).toBe(false);
+        expect(is503UnavailableError({status: '404', message: 'Not Found'})).toBe(false);
         expect(is503UnavailableError(null)).toBe(false);
         expect(is503UnavailableError(undefined)).toBe(false);
       });
@@ -708,6 +718,16 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
         await expect(sleepPromise).rejects.toThrow('Already cancelled');
       });
 
+      it('rejects with default DOMException when controller.abort() reason is omitted before sleep', async () => {
+        const controller = new AbortController();
+        controller.abort();
+
+        const sleepPromise = sleepWithSignal(1000, controller.signal);
+        await expect(sleepPromise).rejects.toSatisfy(
+          (err: unknown) => (err as {name?: string})?.name === 'AbortError',
+        );
+      });
+
       it('rejects immediately if signal aborts while sleeping', async () => {
         const controller = new AbortController();
         const sleepPromise = sleepWithSignal(5000, controller.signal);
@@ -718,6 +738,18 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
 
         await expect(sleepPromise).rejects.toThrow('Cancelled mid-sleep');
       });
+
+      it('rejects with default DOMException when controller.abort() reason is omitted while sleeping', async () => {
+        const controller = new AbortController();
+        const sleepPromise = sleepWithSignal(5000, controller.signal);
+
+        vi.advanceTimersByTime(1000);
+        controller.abort();
+
+        await expect(sleepPromise).rejects.toSatisfy(
+          (err: unknown) => (err as {name?: string})?.name === 'AbortError',
+        );
+      });
     });
 
     describe('Standalone3pLlmClient.chatStream retries', () => {
@@ -726,17 +758,22 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
         mockGenerateContentStream.mockRejectedValue(err503);
 
         const streamPromise = client.chatStream([{role: MessageRole.USER, content: 'Retry test'}]);
-        let caughtError: unknown;
-        streamPromise.catch(err => {
-          caughtError = err;
-        });
+        streamPromise.catch(() => {});
 
-        await vi.advanceTimersByTimeAsync(30000);
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(2);
+
+        await vi.advanceTimersByTimeAsync(2500);
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(3);
+
+        await vi.advanceTimersByTimeAsync(4500);
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(4);
 
         await expect(streamPromise).rejects.toThrow(
           '503 Service Unavailable: Overloaded prefill queue',
         );
-        expect(mockGenerateContentStream).toHaveBeenCalledTimes(4); // Initial try + 3 retries
         for (const call of mockGenerateContentStream.mock.calls) {
           expect(call[0].model).toBe('gemini-3.5-flash');
         }
@@ -758,15 +795,17 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
         const streamPromise = client.chatStream([
           {role: MessageRole.USER, content: 'Recovery test'},
         ]);
-        let caughtError: unknown;
-        streamPromise.catch(err => {
-          caughtError = err;
-        });
+        streamPromise.catch(() => {});
 
-        await vi.advanceTimersByTimeAsync(30000);
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(2);
+
+        await vi.advanceTimersByTimeAsync(2500);
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(3);
 
         const streamResponse = await streamPromise;
-        expect(mockGenerateContentStream).toHaveBeenCalledTimes(3);
         for (const call of mockGenerateContentStream.mock.calls) {
           expect(call[0].model).toBe('gemini-3.5-flash');
         }
@@ -782,13 +821,60 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
         const streamPromise = client.chatStream([
           {role: MessageRole.USER, content: 'No retry test'},
         ]);
-        let caughtError: unknown;
-        streamPromise.catch(err => {
-          caughtError = err;
-        });
+        streamPromise.catch(() => {});
 
         await expect(streamPromise).rejects.toThrow('400 Bad Request');
         expect(mockGenerateContentStream).toHaveBeenCalledTimes(1);
+      });
+
+      it('cancels mid-sleep backoff retry when abort signal is triggered during sleep', async () => {
+        let capturedSignal!: AbortSignal;
+        const err503 = new Error('503 Service Unavailable');
+
+        mockGenerateContentStream.mockImplementation(async params => {
+          capturedSignal = params.config?.abortSignal;
+          throw err503;
+        });
+
+        const streamPromise = client.chatStream([
+          {role: MessageRole.USER, content: 'Mid-sleep cancel test'},
+        ]);
+        streamPromise.catch(() => {});
+
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(1);
+        expect(capturedSignal).toBeDefined();
+
+        const cancelErr = new Error('Cancelled');
+        cancelErr.name = CANCEL_ERROR_NAME;
+        Object.defineProperty(capturedSignal, 'reason', {value: cancelErr, configurable: true});
+        Object.defineProperty(capturedSignal, 'aborted', {value: true, configurable: true});
+
+        let dispatched = false;
+        try {
+          capturedSignal.dispatchEvent(new Event('abort'));
+          dispatched = true;
+        } catch {}
+
+        if (!dispatched) {
+          const NodeEvent = (globalThis as unknown as Record<symbol, unknown>)[
+            Symbol.for('nodejs.Event')
+          ] as (new (type: string) => Event) | undefined;
+          if (NodeEvent) {
+            capturedSignal.dispatchEvent(new NodeEvent('abort'));
+          } else {
+            // Fallback: trigger listeners directly if event construction is restricted by jsdom/node realm boundary
+            const listeners = (capturedSignal as unknown as Record<string, Function[]>)[
+              'listeners'
+            ];
+            if (Array.isArray(listeners)) {
+              for (const l of listeners) {
+                l();
+              }
+            }
+          }
+        }
+
+        await expect(streamPromise).rejects.toThrow('Cancelled');
       });
     });
   });
