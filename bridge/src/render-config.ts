@@ -80,6 +80,8 @@ export interface RendererConfig {
   catalog?: unknown;
   /** Invoked when a dynamic catalog URN ID is resolved. */
   onCatalogResolved?: (catalogId: string) => void;
+  /** Invoked when the theme preference changes. */
+  onThemeChange?: (theme: 'light' | 'dark') => void;
   /** Optional callback to retrieve component usage samples. */
   getComponentUsages?: () => Promise<ComponentUsages>;
 }

@@ -44,6 +44,8 @@ export interface AngularSandboxOptions {
   catalogJson?: unknown;
   /** Optional callback to retrieve component usage samples. */
   getComponentUsages?: () => Promise<ComponentUsages>;
+  /** Optional callback when theme changes. */
+  onThemeChange?: (theme: 'light' | 'dark') => void;
 }
 
 /**
@@ -75,7 +77,11 @@ export class A2uiSandboxConnection implements OnDestroy {
    * Subscribes to the global preview bridge singleton, mapping dynamic renderer callbacks
    * (onSurfaceReady and onSurfaceCleared) directly to local reactive state signals.
    */
-  constructor(catalogJson?: unknown, getComponentUsages?: () => Promise<ComponentUsages>) {
+  constructor(
+    catalogJson?: unknown,
+    getComponentUsages?: () => Promise<ComponentUsages>,
+    onThemeChange?: (theme: 'light' | 'dark') => void,
+  ) {
     const processor: RendererProcessor = {
       processMessages: payload =>
         (this.rendererService as unknown as RendererProcessor).processMessages(payload),
@@ -100,6 +106,7 @@ export class A2uiSandboxConnection implements OnDestroy {
       },
       catalogJson: catalogJson,
       getComponentUsages: getComponentUsages,
+      onThemeChange: onThemeChange,
     });
   }
 
@@ -133,7 +140,11 @@ export function provideA2uiSandbox(
     {
       provide: A2uiSandboxConnection,
       useFactory: () =>
-        new A2uiSandboxConnection(options?.catalogJson, options?.getComponentUsages),
+        new A2uiSandboxConnection(
+          options?.catalogJson,
+          options?.getComponentUsages,
+          options?.onThemeChange,
+        ),
     },
     ...catalogsClasses,
     provideMarkdownRenderer(options?.markdownRendererFn),

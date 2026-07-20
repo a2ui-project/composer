@@ -21,6 +21,7 @@ import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {signal, WritableSignal} from '@angular/core';
 
@@ -45,16 +46,20 @@ describe('RenderedFrame Live Preview Viewport', () => {
   let startupResolutionServiceMock: Partial<StartupResolution>;
   let hostCommunicationServiceMock: Partial<HostCommunication>;
   let resolvedUrlSignal: WritableSignal<string | null>;
+  let themePreferenceSignal: WritableSignal<'light' | 'dark'>;
   let chatStateMock: MockChatState;
 
   beforeEach(async () => {
     resolvedUrlSignal = signal('http://localhost:3000/renderer');
+    themePreferenceSignal = signal<'light' | 'dark'>('light');
     startupResolutionServiceMock = {
       resolvedUrl: resolvedUrlSignal,
     };
 
     hostCommunicationServiceMock = {
+      registerIframeElement: vi.fn(),
       registerIframe: vi.fn(),
+      sendTheme: vi.fn(),
     };
 
     await TestBed.configureTestingModule({
@@ -67,6 +72,12 @@ describe('RenderedFrame Live Preview Viewport', () => {
         {
           provide: HostCommunication,
           useValue: hostCommunicationServiceMock,
+        },
+        {
+          provide: AppConfigProvider,
+          useValue: {
+            themePreference: themePreferenceSignal,
+          },
         },
         {
           provide: ChatState,
@@ -84,12 +95,23 @@ describe('RenderedFrame Live Preview Viewport', () => {
   it('renders the iframe securely bound to the active renderer URL', async () => {
     expect(await harness.hasIframe()).toBe(true);
     expect(await harness.getIframeSrc()).toBe(
-      'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000',
+      'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
     );
   });
 
-  it('registers the iframe contentWindow with HostCommunication upon view initialization', () => {
-    expect(hostCommunicationServiceMock.registerIframe).toHaveBeenCalled();
+  it('registers the iframe element with HostCommunication upon view initialization', () => {
+    expect(hostCommunicationServiceMock.registerIframeElement).toHaveBeenCalled();
+  });
+
+  it('dispatches sendTheme via hostCommunication when theme preference changes without reloading iframe URL', async () => {
+    expect(hostCommunicationServiceMock.sendTheme).toHaveBeenCalledWith('light');
+    const initialSrc = await harness.getIframeSrc();
+
+    themePreferenceSignal.set('dark');
+    fixture.detectChanges();
+
+    expect(hostCommunicationServiceMock.sendTheme).toHaveBeenCalledWith('dark');
+    expect(await harness.getIframeSrc()).toBe(initialSrc);
   });
 
   it('renders a placeholder when no renderer URL is resolved', async () => {
@@ -130,7 +152,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
 
     expect(await relativeHarness.hasIframe()).toBe(true);
     expect(await relativeHarness.getIframeSrc()).toBe(
-      'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000',
+      'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
     );
   });
 

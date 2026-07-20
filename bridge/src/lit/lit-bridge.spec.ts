@@ -370,4 +370,24 @@ describe('Lit Framework Adapter Spec', () => {
 
     preElement.remove();
   });
+
+  it('passes onThemeChange option through sandbox configuration to attachRenderer', () => {
+    const onThemeChange = vi.fn();
+    bootstrapLitSandbox([dummyCatalog], {
+      elementTagName: 'app-root-theme-test',
+      onThemeChange,
+    });
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    const ctor = customElements.get('app-root-theme-test');
+    const element = new ctor!();
+    document.body.appendChild(element);
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.lastCall![1];
+    expect(configPassed.onThemeChange).toBe(onThemeChange);
+
+    element.remove();
+  });
 });

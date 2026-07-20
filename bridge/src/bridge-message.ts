@@ -29,6 +29,12 @@ export enum PreviewBridgeMessageType {
   RENDERER_READY = 'RENDERER_READY',
   SEND_TO_SERVER = 'SEND_TO_SERVER',
   SET_BLOCKING_STATE = 'SET_BLOCKING_STATE',
+  SET_THEME = 'SET_THEME',
+}
+
+/** Payload for SET_THEME message type. */
+export interface SetThemePayload {
+  theme: 'light' | 'dark';
 }
 
 /**

@@ -189,4 +189,36 @@ describe('React Hook Adapter Spec', () => {
     });
     container.remove();
   });
+
+  it('passes onThemeChange option through sandbox configuration to attachRenderer', async () => {
+    const dummyCatalog = {
+      id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
+
+    const onThemeChange = vi.fn();
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    function TestComponent() {
+      useA2uiSandbox([dummyCatalog], {onThemeChange});
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(React.createElement(TestComponent));
+    });
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.lastCall![1];
+    expect(configPassed.onThemeChange).toBe(onThemeChange);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
 });

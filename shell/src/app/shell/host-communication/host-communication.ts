@@ -18,6 +18,7 @@ import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {ReplaySubject} from 'rxjs';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {CrossFrameValidator} from '../cross-frame-validator/cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
@@ -51,6 +52,7 @@ declare global {
 })
 export class HostCommunication implements OnDestroy {
   private readonly startupResolution = inject(StartupResolution);
+  private readonly configProvider = inject(AppConfigProvider);
   private iframeWindow: Window | null = null;
   private iframeElement: HTMLIFrameElement | null = null;
   private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
@@ -175,6 +177,9 @@ export class HostCommunication implements OnDestroy {
       if (type === PreviewBridgeMessageType.A2UI_CATALOG) {
         this.latestCatalogEnvelope = envelope;
       }
+      if (type === PreviewBridgeMessageType.RENDERER_READY) {
+        this.sendTheme(this.configProvider.themePreference());
+      }
       if (type !== PreviewBridgeMessageType.CONSOLE_LOG) {
         this.messageHistoryBuffer.push(envelope);
         if (this.messageHistoryBuffer.length > 100) {
@@ -259,6 +264,21 @@ export class HostCommunication implements OnDestroy {
     } catch (err) {
       // Ignore malformed URL
     }
+  }
+
+  /**
+   * Helper utility dispatching a SET_THEME message to the preview renderer.
+   * @param theme Target theme option ('light' or 'dark')
+   */
+  sendTheme(theme: 'light' | 'dark'): void {
+    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+    // prettier-ignore
+    this.sendMessage({
+      'type': PreviewBridgeMessageType.SET_THEME,
+      'payload': {
+        'theme': theme,
+      },
+    });
   }
 
   /**

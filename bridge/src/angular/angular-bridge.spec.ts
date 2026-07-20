@@ -183,4 +183,30 @@ describe('Angular Sandbox Connection Spec', () => {
 
     connInstance.ngOnDestroy();
   });
+
+  it('passes onThemeChange option through sandbox configuration to attachRenderer', () => {
+    const onThemeChange = vi.fn();
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([], {onThemeChange}),
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const connInstance = TestBed.inject(A2uiSandboxConnection);
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.lastCall![1];
+    expect(configPassed.onThemeChange).toBe(onThemeChange);
+
+    connInstance.ngOnDestroy();
+  });
 });

@@ -540,6 +540,62 @@ describe('CrossFrameValidator', () => {
     });
   });
 
+  describe('SET_THEME', () => {
+    it('accepts valid SET_THEME payload with theme light', () => {
+      const payload = {theme: 'light'};
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_THEME,
+          payload,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid SET_THEME payload with theme dark', () => {
+      const payload = {theme: 'dark'};
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_THEME,
+          payload,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects SET_THEME with missing payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_THEME,
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith('Malformed payload for SET_THEME: must be an object.');
+    });
+
+    it('rejects SET_THEME with non-object payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_THEME,
+          payload: 'light',
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith('Malformed payload for SET_THEME: must be an object.');
+    });
+
+    it('rejects SET_THEME with invalid theme value', () => {
+      const payload = {theme: 'blue'};
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_THEME,
+          payload,
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Malformed payload for SET_THEME: theme must be "light" or "dark".',
+      );
+    });
+  });
+
   describe('DATA_MODEL_CHANGE', () => {
     it('accepts valid DATA_MODEL_CHANGE payload', () => {
       const payload = {

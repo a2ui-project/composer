@@ -1905,4 +1905,135 @@ describe('PreviewBridge Core API Runtime', () => {
       expect.any(Error),
     );
   });
+
+  describe('Theme Synchronization', () => {
+    it('applies initial theme from window.location.search on instantiation when theme=dark', () => {
+      const originalLocation = window.location;
+      delete (window as unknown as {location?: unknown}).location;
+      window.location = new URL('http://localhost/?theme=dark') as unknown as Location;
+
+      const themeBridge = new PreviewBridge();
+      expect(document.documentElement.classList.contains('dark-theme')).toBe(true);
+      expect(document.documentElement.style.colorScheme).toBe('dark');
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+
+      themeBridge.destroy();
+      window.location = originalLocation;
+    });
+
+    it('applies initial theme from window.location.search on instantiation when theme=light', () => {
+      document.documentElement.classList.add('dark-theme');
+      const originalLocation = window.location;
+      delete (window as unknown as {location?: unknown}).location;
+      window.location = new URL('http://localhost/?theme=light') as unknown as Location;
+
+      const themeBridge = new PreviewBridge();
+      expect(document.documentElement.classList.contains('dark-theme')).toBe(false);
+      expect(document.documentElement.style.colorScheme).toBe('light');
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+
+      themeBridge.destroy();
+      window.location = originalLocation;
+    });
+
+    it('handles SET_THEME message to apply theme and call onThemeChange', () => {
+      const onThemeChange = vi.fn();
+      const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+      const processor = {processMessages: vi.fn()};
+
+      bridge.attachRenderer(processor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+        onThemeChange,
+      });
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.SET_THEME,
+            payload: {theme: 'dark'},
+          },
+        }),
+      );
+
+      expect(document.documentElement.classList.contains('dark-theme')).toBe(true);
+      expect(document.documentElement.style.colorScheme).toBe('dark');
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+      expect(onThemeChange).toHaveBeenCalledWith('dark');
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.SET_THEME,
+            payload: {theme: 'light'},
+          },
+        }),
+      );
+
+      expect(document.documentElement.classList.contains('dark-theme')).toBe(false);
+      expect(document.documentElement.style.colorScheme).toBe('light');
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+      expect(onThemeChange).toHaveBeenCalledWith('light');
+    });
+
+    it('logs warning if SET_THEME payload format is invalid', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.SET_THEME,
+            payload: {theme: 'invalid-theme'},
+          },
+        }),
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith('PreviewBridge: Received invalid SET_THEME payload:', {
+        theme: 'invalid-theme',
+      });
+    });
+
+    it('short-circuits applyThemeToDom when setting the same theme repeatedly', () => {
+      const setAttributeSpy = vi.spyOn(document.documentElement, 'setAttribute');
+
+      bridge.applyThemeToDom('dark');
+      expect(setAttributeSpy).toHaveBeenCalledWith('data-theme', 'dark');
+      setAttributeSpy.mockClear();
+
+      bridge.applyThemeToDom('dark');
+      expect(setAttributeSpy).not.toHaveBeenCalled();
+    });
+
+    it('logs error if onThemeChange callback throws an exception', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+      const processor = {processMessages: vi.fn()};
+
+      bridge.attachRenderer(processor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+        onThemeChange: () => {
+          throw new Error('Theme callback crashed');
+        },
+      });
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            type: PreviewBridgeMessageType.SET_THEME,
+            payload: {theme: 'dark'},
+          },
+        }),
+      );
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'PreviewBridge: Error inside onThemeChange callback:',
+        expect.any(Error),
+      );
+    });
+  });
 });

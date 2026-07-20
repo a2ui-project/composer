@@ -34,6 +34,8 @@ export interface ReactSandboxOptions {
   catalogJson?: unknown;
   /** Optional callback to retrieve component usage samples. */
   getComponentUsages?: () => Promise<ComponentUsages>;
+  /** Optional callback when theme changes. */
+  onThemeChange?: (theme: 'light' | 'dark') => void;
 }
 
 /**
@@ -62,6 +64,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
       surfaceGroup: processor.model,
       catalogJson: options?.catalogJson,
       getComponentUsages: options?.getComponentUsages,
+      onThemeChange: options?.onThemeChange,
       onCatalogResolved: catalogId => {
         for (const catalog of catalogs) {
           if (catalog) {

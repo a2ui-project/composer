@@ -17,14 +17,18 @@
 import {TestBed} from '@angular/core/testing';
 import {HostCommunication, MessageEnvelope} from './host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {signal, WritableSignal} from '@angular/core';
 
 describe('HostCommunication', () => {
   let service: HostCommunication;
   let startupResolutionMock: Partial<StartupResolution>;
+  let themePreferenceSignal: WritableSignal<'light' | 'dark'>;
 
   beforeEach(() => {
+    themePreferenceSignal = signal<'light' | 'dark'>('light');
     startupResolutionMock = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://localhost:3000/renderer'),
     };
@@ -34,6 +38,12 @@ describe('HostCommunication', () => {
         {
           provide: StartupResolution,
           useValue: startupResolutionMock,
+        },
+        {
+          provide: AppConfigProvider,
+          useValue: {
+            themePreference: themePreferenceSignal,
+          },
         },
       ],
     });
@@ -540,5 +550,42 @@ describe('HostCommunication', () => {
     consoleErrorSpy.mockRestore();
     service.removeListener(throwingListener);
     service.removeListener(safeListener);
+  });
+
+  it('dispatches SET_THEME message via sendTheme', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    service.sendTheme('dark');
+
+    expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.SET_THEME,
+        payload: {theme: 'dark'},
+      },
+      'http://localhost:3000',
+    );
+  });
+
+  it('automatically re-sends current themePreference when RENDERER_READY is received', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+    themePreferenceSignal.set('dark');
+
+    const event = new MessageEvent('message', {
+      source: mockIframeWindow,
+      origin: 'http://localhost:3000',
+      data: {type: PreviewBridgeMessageType.RENDERER_READY},
+    });
+
+    window.dispatchEvent(event);
+
+    expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.SET_THEME,
+        payload: {theme: 'dark'},
+      },
+      'http://localhost:3000',
+    );
   });
 });

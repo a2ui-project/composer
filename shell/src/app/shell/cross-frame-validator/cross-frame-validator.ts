@@ -22,6 +22,7 @@ import {
   UpdateComponentsDetails,
   UpdateDataModelDetails,
   SetBlockingStatePayload,
+  SetThemePayload,
   DataModelChangePayload,
 } from 'a2ui-bridge';
 
@@ -105,6 +106,20 @@ export class CrossFrameValidator {
           console.error(
             'Malformed payload for SET_BLOCKING_STATE: message property must be a string if present.',
           );
+          return false;
+        }
+        return true;
+      }
+
+      case PreviewBridgeMessageType.SET_THEME: {
+        if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
+          console.error('Malformed payload for SET_THEME: must be an object.');
+          return false;
+        }
+
+        const themePayload = msgPayload as SetThemePayload;
+        if (themePayload['theme'] !== 'light' && themePayload['theme'] !== 'dark') {
+          console.error('Malformed payload for SET_THEME: theme must be "light" or "dark".');
           return false;
         }
         return true;

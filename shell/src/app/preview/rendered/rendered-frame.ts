@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import {Component, inject, viewChild, ElementRef, effect, computed} from '@angular/core';
+import {Component, inject, viewChild, ElementRef, effect, computed, untracked} from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../../chat/chat-state/chat-state';
 
 /**
@@ -35,6 +36,7 @@ export class RenderedFrame {
   private sanitizer = inject(DomSanitizer);
   private startupResolution = inject(StartupResolution);
   private hostCommunication = inject(HostCommunication);
+  private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
 
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
@@ -60,6 +62,8 @@ export class RenderedFrame {
       // against a list of allowed internal domains (such as localhost.corp.google.com) to prevent
       // unauthorized cross-site framing.
       url.searchParams.set('origin', baseOrigin);
+      const initialTheme = untracked(() => this.configProvider.themePreference());
+      url.searchParams.set('theme', initialTheme);
 
       return this.sanitizer.bypassSecurityTrustResourceUrl(url.toString());
     } catch (e) {
@@ -71,11 +75,13 @@ export class RenderedFrame {
   constructor() {
     effect(() => {
       const ref = this.iframeRef();
-      if (typeof this.hostCommunication.registerIframeElement === 'function') {
-        this.hostCommunication.registerIframeElement(ref?.nativeElement || null);
-      }
-      if (typeof this.hostCommunication.registerIframe === 'function') {
-        this.hostCommunication.registerIframe(ref?.nativeElement?.contentWindow || null);
+      this.hostCommunication.registerIframeElement(ref?.nativeElement || null);
+    });
+
+    effect(() => {
+      const theme = this.configProvider.themePreference();
+      if (typeof this.hostCommunication.sendTheme === 'function') {
+        this.hostCommunication.sendTheme(theme);
       }
     });
   }
