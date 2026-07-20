@@ -167,5 +167,92 @@ export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
         },
       ],
     },
+    AccessibilityAttributes: {
+      type: 'object',
+      description:
+        'Attributes to enhance accessibility when using assistive technologies like screen readers.',
+      properties: {
+        label: {
+          $ref: '#/$defs/DynamicString',
+          description:
+            "A short string, typically 1 to 3 words, used by assistive technologies to convey the purpose or intent of an element. For example, an input field might have an accessible label of 'User ID' or a button might be labeled 'Submit'.",
+        },
+        description: {
+          $ref: '#/$defs/DynamicString',
+          description:
+            "Additional information provided by assistive technologies about an element such as instructions, format requirements, or result of an action. For example, a mute button might have a label of 'Mute' and a description of 'Silences notifications about this conversation'.",
+        },
+      },
+    },
+    ComponentCommon: {
+      type: 'object',
+      properties: {
+        id: {
+          $ref: '#/$defs/ComponentId',
+        },
+        accessibility: {
+          $ref: '#/$defs/AccessibilityAttributes',
+        },
+      },
+      required: ['id'],
+    },
+    DynamicStringList: {
+      description:
+        'Represents a value that can be either a literal array of strings, a path to a string array in the data model, or a function call returning a string array.',
+      oneOf: [
+        {
+          type: 'array',
+          items: {
+            type: 'string',
+          },
+        },
+        {
+          $ref: '#/$defs/DataBinding',
+        },
+        {
+          allOf: [
+            {
+              $ref: '#/$defs/FunctionCall',
+            },
+            {
+              properties: {
+                returnType: {
+                  const: 'array',
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+    CheckRule: {
+      type: 'object',
+      description: 'A single validation rule applied to an input component.',
+      properties: {
+        condition: {
+          $ref: '#/$defs/DynamicBoolean',
+        },
+        message: {
+          type: 'string',
+          description: 'The error message to display if the check fails.',
+        },
+      },
+      required: ['condition', 'message'],
+      additionalProperties: false,
+    },
+    Checkable: {
+      description: 'Properties for components that support client-side checks.',
+      type: 'object',
+      properties: {
+        checks: {
+          type: 'array',
+          description:
+            'A list of checks to perform. These are function calls that must return a boolean indicating validity.',
+          items: {
+            $ref: '#/$defs/CheckRule',
+          },
+        },
+      },
+    },
   },
 };
