@@ -137,8 +137,9 @@ export class MonacoEditor {
       // via the AMD loader (@monaco-editor/loader), the runtime object still attaches the JSON
       // API to `monaco.languages.json`.
       // It is completely safe to cast this here because the runtime object structure matches the
-      // ESM `monaco.json` type definitions. There are no alternative interfaces exposed by the AMD
-      // runtime to access `jsonDefaults`.
+      // ESM `monaco.json` type definitions. We cast through `unknown` first because TypeScript
+      // considers the deprecated type and the ESM type as non-overlapping. There are no alternative
+      // interfaces exposed by the AMD runtime to access `jsonDefaults`.
       const jsonContrib = (monacoInstance.languages as unknown as {json: typeof monaco.json}).json;
       jsonContrib.jsonDefaults.setDiagnosticsOptions({
         validate: true,
