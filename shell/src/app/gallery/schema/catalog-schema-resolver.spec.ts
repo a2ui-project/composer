@@ -1137,17 +1137,17 @@ describe('CatalogSchemaResolver', () => {
               allOf: [
                 {
                   properties: {
-                    baseProp: { type: 'string' }
-                  }
+                    baseProp: {type: 'string'},
+                  },
                 },
                 {
                   properties: {
-                    extendedProp: { type: 'number' }
-                  }
-                }
-              ]
-            }
-          }
+                    extendedProp: {type: 'number'},
+                  },
+                },
+              ],
+            },
+          },
         },
       },
     };
@@ -1155,8 +1155,8 @@ describe('CatalogSchemaResolver', () => {
     const propertiesSchema = resolver.resolveComponentPropertiesSchema('MergedComponent');
     expect(propertiesSchema['sharedObject']).toEqual({
       properties: {
-        baseProp: { type: 'string' },
-        extendedProp: { type: 'number' },
+        baseProp: {type: 'string'},
+        extendedProp: {type: 'number'},
       },
     });
   });
