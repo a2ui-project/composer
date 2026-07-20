@@ -99,9 +99,13 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   private errorsInstance?: Errors;
 
   private resizeObserver?: ResizeObserver;
+  private animationFrameId?: number;
 
   constructor() {
     this.destroyRef.onDestroy(() => {
+      if (this.animationFrameId !== undefined) {
+        cancelAnimationFrame(this.animationFrameId);
+      }
       this.resizeObserver?.disconnect();
       this.dockviewApi?.dispose();
       this.componentRefs.forEach(ref => ref.destroy());
@@ -355,11 +359,16 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   }
 
   private checkTabOverflow(): void {
-    requestAnimationFrame(() => {
-      const rootEl = this.dockviewRoot().nativeElement;
-      const containers = rootEl.querySelectorAll('.dv-tabs-container');
+    if (this.animationFrameId !== undefined) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+    this.animationFrameId = requestAnimationFrame(() => {
+      this.animationFrameId = undefined;
+      const rootEl = this.dockviewRoot()?.nativeElement;
+      if (!rootEl) return;
+      const tabContainers = rootEl.querySelectorAll<HTMLElement>('.dv-tabs-container');
       let hasOverflow = false;
-      containers.forEach(container => {
+      tabContainers.forEach(container => {
         if (container.scrollWidth > container.clientWidth + 2) {
           hasOverflow = true;
         }

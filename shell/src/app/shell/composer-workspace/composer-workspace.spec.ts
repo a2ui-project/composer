@@ -362,5 +362,43 @@ describe('ComposerWorkspace Dashboard', () => {
 
       expect(rootEl.classList.contains('has-tab-overflow')).toBe(false);
     });
+
+    it('coalesces pending animation frames on multiple rapid calls to checkTabOverflow()', () => {
+      const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame');
+      let nextId = 100;
+      const requestSpy = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation(() => ++nextId);
+
+      const component = fixture.componentInstance as unknown as {
+        checkTabOverflow: () => void;
+        animationFrameId?: number;
+      };
+      component.animationFrameId = undefined;
+
+      component.checkTabOverflow();
+      component.checkTabOverflow();
+
+      expect(cancelSpy).toHaveBeenCalledWith(101);
+      requestSpy.mockRestore();
+      cancelSpy.mockRestore();
+    });
+
+    it('cancels any pending animation frame when the component is destroyed', () => {
+      const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame');
+      const requestSpy = vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(999);
+
+      const component = fixture.componentInstance as unknown as {
+        checkTabOverflow: () => void;
+        animationFrameId?: number;
+      };
+      component.checkTabOverflow();
+
+      fixture.destroy();
+
+      expect(cancelSpy).toHaveBeenCalledWith(999);
+      requestSpy.mockRestore();
+      cancelSpy.mockRestore();
+    });
   });
 });
