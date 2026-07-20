@@ -18,8 +18,7 @@ import {
   Component,
   ElementRef,
   input,
-  Output,
-  EventEmitter,
+  output,
   inject,
   effect,
   signal,
@@ -47,8 +46,7 @@ export class MonacoEditor {
 
   readonly value = input<string>('');
   readonly readOnly = input<boolean>(false);
-
-  @Output() valueChange = new EventEmitter<string>();
+  readonly valueChange = output<string>();
 
   private editor?: monaco.editor.IStandaloneCodeEditor;
   private readonly monacoInstance = signal<typeof monaco | null>(null);
