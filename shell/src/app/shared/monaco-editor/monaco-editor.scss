@@ -15,37 +15,17 @@
  */
 
 :host {
-  flex: 1;
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.raw-frame-container {
-  display: flex;
-  flex-direction: column;
-  padding: 0;
+.monaco-editor-container {
+  width: 100%;
   height: 100%;
-  box-sizing: border-box;
-  transition: all 0.3s ease;
-
-  &.is-locked {
-    opacity: 0.55;
-    pointer-events: none;
-    cursor: not-allowed;
-  }
-
-  a2ui-composer-monaco-editor {
-    width: 100%;
-    height: 100%;
-    flex: 1 1 auto;
-    display: block;
-    overflow: hidden;
-  }
-
-  &.is-collapsed {
-    a2ui-composer-monaco-editor {
-      font-size: 12px;
-    }
-  }
+  flex: 1 1 auto;
+  display: block;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  overflow: hidden;
 }

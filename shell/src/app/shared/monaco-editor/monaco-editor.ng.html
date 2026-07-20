@@ -13,18 +13,4 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-<div
-  class="raw-frame-container"
-  [class.is-collapsed]="isExtensionMode()"
-  [class.is-locked]="isLocked()"
->
-  @if (isJsonInvalid()) {
-    <div class="invalid-json-badge">Invalid JSON syntax</div>
-  }
-
-  <a2ui-composer-monaco-editor
-    [value]="layoutJson()"
-    [readOnly]="isLocked()"
-    (valueChange)="onLayoutChange($event)"
-  />
-</div>
+<div #editorContainer class="monaco-editor-container"></div>

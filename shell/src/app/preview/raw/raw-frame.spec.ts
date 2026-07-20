@@ -54,7 +54,11 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     onDidChangeModelContent: vi.fn(() => ({dispose: () => {}})),
     updateOptions: vi.fn(),
     dispose: vi.fn(),
-    getModel: vi.fn(() => mockModel),
+    getModel: vi.fn(() => ({
+      getFullModelRange: vi.fn(() => ({})),
+    })),
+    pushUndoStop: vi.fn(),
+    executeEdits: vi.fn(),
   };
 
   const create = vi.fn(
