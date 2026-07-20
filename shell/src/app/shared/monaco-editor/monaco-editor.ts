@@ -132,8 +132,9 @@ export class MonacoEditor {
         },
       };
 
-      // @ts-expect-error monaco.languages.json is deprecated in types but required at runtime
-      monacoInstance.languages.json.jsonDefaults.setDiagnosticsOptions({
+      // The AMD loader exports jsonDefaults under languages.json despite the ESM types
+      const jsonContrib = (monacoInstance.languages as unknown as {json: typeof monaco.json}).json;
+      jsonContrib.jsonDefaults.setDiagnosticsOptions({
         validate: true,
         schemas: [
           {
