@@ -334,5 +334,33 @@ describe('ComposerWorkspace Dashboard', () => {
       expect(apiSpy).toHaveBeenCalled();
       apiSpy.mockRestore();
     });
+
+    it('applies Material M3 tab styling class hook to the Dockview root element', () => {
+      const rootEl = fixture.nativeElement.querySelector('.dockview-root');
+      expect(rootEl.classList.contains('mat-m3-dockview-tabs')).toBe(true);
+    });
+
+    it('toggles has-tab-overflow on the #dockviewRoot element when .dv-tabs-container has scrollWidth > clientWidth + 2', async () => {
+      const rootEl: HTMLElement = fixture.nativeElement.querySelector('.dockview-root');
+      const tabsContainer = document.createElement('div');
+      tabsContainer.className = 'dv-tabs-container';
+      rootEl.appendChild(tabsContainer);
+
+      Object.defineProperty(tabsContainer, 'scrollWidth', {value: 200, configurable: true});
+      Object.defineProperty(tabsContainer, 'clientWidth', {value: 100, configurable: true});
+
+      (fixture.componentInstance as unknown as {checkTabOverflow: () => void}).checkTabOverflow();
+      await new Promise(resolve => requestAnimationFrame(resolve));
+
+      expect(rootEl.classList.contains('has-tab-overflow')).toBe(true);
+
+      Object.defineProperty(tabsContainer, 'scrollWidth', {value: 102, configurable: true});
+      Object.defineProperty(tabsContainer, 'clientWidth', {value: 100, configurable: true});
+
+      (fixture.componentInstance as unknown as {checkTabOverflow: () => void}).checkTabOverflow();
+      await new Promise(resolve => requestAnimationFrame(resolve));
+
+      expect(rootEl.classList.contains('has-tab-overflow')).toBe(false);
+    });
   });
 });

@@ -98,8 +98,11 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   private eventsInstance?: Events;
   private errorsInstance?: Errors;
 
+  private resizeObserver?: ResizeObserver;
+
   constructor() {
     this.destroyRef.onDestroy(() => {
+      this.resizeObserver?.disconnect();
       this.dockviewApi?.dispose();
       this.componentRefs.forEach(ref => ref.destroy());
     });
@@ -261,6 +264,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
       } else if (panel?.id === ComposerPanelId.Errors) {
         untracked(() => this.unreadErrorsCount.set(0));
       }
+      this.checkTabOverflow();
     });
 
     const savedLayout = localStorage.getItem('composer_dockview_layout');
@@ -331,16 +335,37 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
 
     let saveTimeout: ReturnType<typeof setTimeout>;
     this.dockviewApi.onDidLayoutChange(() => {
+      this.checkTabOverflow();
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
         localStorage.setItem('composer_dockview_layout', JSON.stringify(this.dockviewApi.toJSON()));
       }, 1000);
     });
+    this.dockviewApi.onDidAddPanel(() => this.checkTabOverflow());
+    this.dockviewApi.onDidRemovePanel(() => this.checkTabOverflow());
+
+    this.resizeObserver = new ResizeObserver(() => this.checkTabOverflow());
+    this.resizeObserver.observe(this.dockviewRoot().nativeElement);
 
     // Force an initial layout pass. In browsers, ResizeObserver handles this,
     // but in jsdom tests with mocked observers, it requires an explicit call.
     this.dockviewApi.layout(1000, 1000);
     this.isDockviewInitialized.set(true);
+    this.checkTabOverflow();
+  }
+
+  private checkTabOverflow(): void {
+    requestAnimationFrame(() => {
+      const rootEl = this.dockviewRoot().nativeElement;
+      const containers = rootEl.querySelectorAll('.dv-tabs-container');
+      let hasOverflow = false;
+      containers.forEach(container => {
+        if (container.scrollWidth > container.clientWidth + 2) {
+          hasOverflow = true;
+        }
+      });
+      rootEl.classList.toggle('has-tab-overflow', hasOverflow);
+    });
   }
 
   clearAllLogs(): void {
