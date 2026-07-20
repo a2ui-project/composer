@@ -262,6 +262,7 @@ export class CatalogSchemaResolver {
     merged = this.resolveUnionSchemas(merged, original, rootSchema, visitedRefs);
     merged = this.resolveArrayItemsSchema(merged, original, rootSchema, visitedRefs);
     merged = this.resolveObjectPropertiesSchema(merged, original, rootSchema, visitedRefs);
+    merged = this.resolveAdditionalPropertiesSchema(merged, original, rootSchema, visitedRefs);
 
     return merged;
   }
@@ -331,12 +332,14 @@ export class CatalogSchemaResolver {
         rootSchema,
         visitedRefs,
       );
-      allOfMerged = {...allOfMerged, ...resolvedSub};
+      // Deep merge is required here so that nested objects (like 'properties')
+      // from multiple schemas are combined together instead of being overwritten.
+      allOfMerged = this.mergePropertySchemas(allOfMerged, resolvedSub) as CatalogComponentSchema;
     }
 
     // Strip allOf list so we don't try to process it again.
     const {allOf: _allOf, ...rest} = merged;
-    return {...allOfMerged, ...rest};
+    return this.mergePropertySchemas(allOfMerged, rest) as CatalogComponentSchema;
   }
 
   /**
@@ -419,6 +422,30 @@ export class CatalogSchemaResolver {
       );
     }
     result['properties'] = resolvedProps;
+    return result;
+  }
+
+  /**
+   * Resolves schemas for additionalProperties of an object schema.
+   *
+   * Why: Map or dictionary schemas define the structure of their values in additionalProperties.
+   * We recursively resolve it to handle nested references.
+   */
+  private resolveAdditionalPropertiesSchema(
+    merged: CatalogComponentSchema,
+    original: CatalogComponentSchema,
+    rootSchema: Catalog,
+    visitedRefs: Set<string>,
+  ): CatalogComponentSchema {
+    if (!original['additionalProperties'] || typeof original['additionalProperties'] !== 'object') {
+      return merged;
+    }
+    const result = {...merged};
+    result['additionalProperties'] = this.resolvePropertySchema(
+      original['additionalProperties'] as CatalogComponentSchema,
+      rootSchema,
+      visitedRefs,
+    );
     return result;
   }
 
