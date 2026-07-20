@@ -132,8 +132,8 @@ export class MonacoEditor {
         },
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (monacoInstance.languages as any).json.jsonDefaults.setDiagnosticsOptions({
+      // @ts-expect-error monaco.languages.json is deprecated in types but required at runtime
+      monacoInstance.languages.json.jsonDefaults.setDiagnosticsOptions({
         validate: true,
         schemas: [
           {
