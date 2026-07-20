@@ -56,6 +56,7 @@ export class MonacoEditor {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
+  protected readonly monacoTheme = computed(() => (this.isDarkTheme() ? 'vs-dark' : 'vs-light'));
 
   constructor() {
     // Synchronize external value changes into the Monaco editor instance
@@ -132,14 +133,10 @@ export class MonacoEditor {
         },
       };
 
-      // In the modern @types/monaco-editor (ESM), `monaco.languages.json` is marked as deprecated
-      // in favor of a top-level `monaco.json` module. However, because we dynamically load Monaco
-      // via the AMD loader (@monaco-editor/loader), the runtime object still attaches the JSON
-      // API to `monaco.languages.json`.
-      // It is completely safe to cast this here because the runtime object structure matches the
-      // ESM `monaco.json` type definitions. We cast through `unknown` first because TypeScript
-      // considers the deprecated type and the ESM type as non-overlapping. There are no alternative
-      // interfaces exposed by the AMD runtime to access `jsonDefaults`.
+      // @types/monaco-editor deprecates `monaco.languages.json` in favor of `monaco.json`,
+      // but our AMD loader still attaches the JSON API to `monaco.languages.json`.
+      // We safely cast through `unknown` to the modern ESM type, as the runtime structures
+      // match and no alternative AMD interfaces exist for `jsonDefaults`.
       const jsonContrib = (monacoInstance.languages as unknown as {json: typeof monaco.json}).json;
       jsonContrib.jsonDefaults.setDiagnosticsOptions({
         validate: true,
@@ -156,10 +153,10 @@ export class MonacoEditor {
     // Update the editor's theme (dark vs. light mode) in response to
     // application-level theme preference changes.
     effect(() => {
-      const isDark = this.isDarkTheme();
+      const theme = this.monacoTheme();
       untracked(() => {
         if (this.editor) {
-          this.editor.updateOptions({theme: isDark ? 'vs-dark' : 'vs-light'});
+          this.editor.updateOptions({theme});
         }
       });
     });
@@ -191,7 +188,7 @@ export class MonacoEditor {
 
         const editor = monacoInstance.editor.create(this.editorContainer().nativeElement, {
           model: model,
-          theme: this.isDarkTheme() ? 'vs-dark' : 'vs-light',
+          theme: this.monacoTheme(),
           automaticLayout: true,
           minimap: {enabled: false},
           readOnly: this.readOnly(),
