@@ -358,6 +358,12 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     this.checkTabOverflow();
   }
 
+  /**
+   * If the tabs don't fit in the available space, then we want the dockview
+   * overflow selector to be displayed. Otherwise, it's redundant, so it
+   * should be hidden. Unfortunately, there doesn't seem to be a "native"
+   * mechanism in dockview to support this.
+   */
   private checkTabOverflow(): void {
     if (this.animationFrameId !== undefined) {
       cancelAnimationFrame(this.animationFrameId);
