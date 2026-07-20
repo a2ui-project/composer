@@ -132,7 +132,13 @@ export class MonacoEditor {
         },
       };
 
-      // The AMD loader exports jsonDefaults under languages.json despite the ESM types
+      // In the modern @types/monaco-editor (ESM), `monaco.languages.json` is marked as deprecated
+      // in favor of a top-level `monaco.json` module. However, because we dynamically load Monaco
+      // via the AMD loader (@monaco-editor/loader), the runtime object still attaches the JSON
+      // API to `monaco.languages.json`.
+      // It is completely safe to cast this here because the runtime object structure matches the
+      // ESM `monaco.json` type definitions. There are no alternative interfaces exposed by the AMD
+      // runtime to access `jsonDefaults`.
       const jsonContrib = (monacoInstance.languages as unknown as {json: typeof monaco.json}).json;
       jsonContrib.jsonDefaults.setDiagnosticsOptions({
         validate: true,
