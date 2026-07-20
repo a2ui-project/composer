@@ -98,8 +98,15 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   private eventsInstance?: Events;
   private errorsInstance?: Errors;
 
+  private resizeObserver?: ResizeObserver;
+  private animationFrameId?: number;
+
   constructor() {
     this.destroyRef.onDestroy(() => {
+      if (this.animationFrameId !== undefined) {
+        cancelAnimationFrame(this.animationFrameId);
+      }
+      this.resizeObserver?.disconnect();
       this.dockviewApi?.dispose();
       this.componentRefs.forEach(ref => ref.destroy());
     });
@@ -261,6 +268,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
       } else if (panel?.id === ComposerPanelId.Errors) {
         untracked(() => this.unreadErrorsCount.set(0));
       }
+      this.checkTabOverflow();
     });
 
     const savedLayout = localStorage.getItem('composer_dockview_layout');
@@ -331,16 +339,48 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
 
     let saveTimeout: ReturnType<typeof setTimeout>;
     this.dockviewApi.onDidLayoutChange(() => {
+      this.checkTabOverflow();
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
         localStorage.setItem('composer_dockview_layout', JSON.stringify(this.dockviewApi.toJSON()));
       }, 1000);
     });
+    this.dockviewApi.onDidAddPanel(() => this.checkTabOverflow());
+    this.dockviewApi.onDidRemovePanel(() => this.checkTabOverflow());
+
+    this.resizeObserver = new ResizeObserver(() => this.checkTabOverflow());
+    this.resizeObserver.observe(this.dockviewRoot().nativeElement);
 
     // Force an initial layout pass. In browsers, ResizeObserver handles this,
     // but in jsdom tests with mocked observers, it requires an explicit call.
     this.dockviewApi.layout(1000, 1000);
     this.isDockviewInitialized.set(true);
+    this.checkTabOverflow();
+  }
+
+  /**
+   * If the tabs don't fit in the available space, then we want the dockview
+   * overflow selector to be displayed. Otherwise, it's redundant, so it
+   * should be hidden. Unfortunately, there doesn't seem to be a "native"
+   * mechanism in dockview to support this.
+   */
+  private checkTabOverflow(): void {
+    if (this.animationFrameId !== undefined) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+    this.animationFrameId = requestAnimationFrame(() => {
+      this.animationFrameId = undefined;
+      const rootEl = this.dockviewRoot()?.nativeElement;
+      if (!rootEl) return;
+      const tabContainers = rootEl.querySelectorAll<HTMLElement>('.dv-tabs-container');
+      let hasOverflow = false;
+      tabContainers.forEach(container => {
+        if (container.scrollWidth > container.clientWidth + 2) {
+          hasOverflow = true;
+        }
+      });
+      rootEl.classList.toggle('has-tab-overflow', hasOverflow);
+    });
   }
 
   clearAllLogs(): void {

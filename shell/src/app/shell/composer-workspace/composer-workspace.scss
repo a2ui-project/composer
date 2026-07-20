@@ -37,21 +37,101 @@
 }
 
 :host ::ng-deep .dockview-root {
-  --dv-group-view-background-color: var(--mat-sys-surface-container);
-  --dv-tabs-and-actions-container-background-color: var(--mat-sys-surface-container-high);
-  --dv-activegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
-  --dv-activegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container-high);
-  --dv-inactivegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container-high);
-  --dv-tab-divider-color: var(--mat-sys-surface-container);
-  --dv-activegroup-visiblepanel-tab-color: var(--mat-sys-on-surface);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container);
   --dv-activegroup-hiddenpanel-tab-color: var(--mat-sys-on-surface-variant);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
+  --dv-activegroup-visiblepanel-tab-color: var(--mat-sys-primary);
+  --dv-group-view-background-color: var(--mat-sys-surface);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--mat-sys-on-surface-variant);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
   --dv-inactivegroup-visiblepanel-tab-color: var(--mat-sys-on-surface-variant);
-  --dv-inactivegroup-hiddenpanel-tab-color: var(--mat-sys-outline);
-  --dv-separator-border: var(--mat-sys-outline-variant);
   --dv-paneview-header-border-color: var(--mat-sys-outline-variant);
+  --dv-separator-border: var(--mat-sys-outline-variant);
+  --dv-tab-divider-color: var(--mat-sys-outline-variant);
+  --dv-tabs-and-actions-container-background-color: var(--mat-sys-surface-container);
+
+  .dv-tabs-and-actions-container {
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
 
   .dv-default-tab-action {
     display: none;
+  }
+
+  &:not(.has-tab-overflow) .dv-right-actions-container {
+    display: none;
+  }
+
+  .dv-tab {
+    height: var(--dv-tabs-and-actions-container-height, 48px);
+    padding: 0 16px 0 26px;
+    font-family: var(--mat-sys-title-small-font, Roboto, sans-serif);
+    font-size: var(--mat-sys-title-small-size, 14px);
+    font-weight: var(--mat-sys-title-small-weight, 500);
+    position: relative;
+    display: flex;
+    align-items: center;
+
+    &:hover:not(.dv-tab--dragging) {
+      z-index: 10;
+
+      .dv-default-tab::before {
+        visibility: visible;
+        opacity: 0.85;
+        color: var(--mat-sys-on-surface-variant);
+      }
+    }
+
+    .dv-default-tab {
+      position: relative;
+
+      &::before {
+        content: '\e945';
+        font-family: 'Material Icons', 'Material Symbols Outlined', sans-serif;
+        font-size: 18px;
+        position: absolute;
+        left: -20px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px;
+        height: 18px;
+        line-height: 18px;
+        visibility: hidden;
+        opacity: 0;
+        z-index: 10;
+        transition: opacity 0.2s ease;
+        // Prevent intercepting pointerdown/dragstart events handled by Dockview
+        // drag-and-drop.
+        pointer-events: none;
+      }
+    }
+
+    &.dv-active-tab,
+    &.dv-active-tab:focus,
+    &.dv-active-tab:focus-within,
+    &[aria-selected='true'],
+    &[aria-selected='true']:focus,
+    &[aria-selected='true']:focus-within {
+      box-sizing: border-box;
+      box-shadow: none;
+
+      &::after {
+        content: '';
+        position: absolute;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: auto;
+        height: 3px;
+        outline: none;
+        border-top-left-radius: 3px;
+        border-top-right-radius: 3px;
+        background: var(--mat-sys-primary);
+        z-index: 100;
+        pointer-events: none;
+      }
+    }
   }
 }
