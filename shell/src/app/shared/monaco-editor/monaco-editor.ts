@@ -17,9 +17,6 @@
 import {
   Component,
   ElementRef,
-  ViewChild,
-  AfterViewInit,
-  OnDestroy,
   input,
   Output,
   EventEmitter,
@@ -28,6 +25,9 @@ import {
   signal,
   untracked,
   computed,
+  viewChild,
+  afterNextRender,
+  DestroyRef,
 } from '@angular/core';
 import loader from '@monaco-editor/loader';
 import type * as monaco from 'monaco-editor';
@@ -42,8 +42,8 @@ const LAYOUT_MODEL_URI = 'a2ui://layout.json';
   templateUrl: './monaco-editor.ng.html',
   styleUrl: './monaco-editor.scss',
 })
-export class MonacoEditor implements AfterViewInit, OnDestroy {
-  @ViewChild('editorContainer') editorContainer!: ElementRef<HTMLDivElement>;
+export class MonacoEditor {
+  readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
 
   readonly value = input<string>('');
   readonly readOnly = input<boolean>(false);
@@ -52,14 +52,16 @@ export class MonacoEditor implements AfterViewInit, OnDestroy {
 
   private editor?: monaco.editor.IStandaloneCodeEditor;
   private readonly monacoInstance = signal<typeof monaco | null>(null);
-  private destroyed = false;
 
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
 
   constructor() {
+    // Synchronize external value changes into the Monaco editor instance
+    // when the value signal is updated from outside.
     effect(() => {
       const val = this.value();
       untracked(() => {
@@ -69,6 +71,7 @@ export class MonacoEditor implements AfterViewInit, OnDestroy {
       });
     });
 
+    // Toggle the editor's read-only state when the corresponding input signal changes.
     effect(() => {
       const val = this.readOnly();
       untracked(() => {
@@ -78,6 +81,8 @@ export class MonacoEditor implements AfterViewInit, OnDestroy {
       });
     });
 
+    // Dynamically register and update the JSON schema validation for Monaco
+    // based on the currently active A2UI catalog to provide real-time linting.
     effect(() => {
       const catalog = this.catalogManagement.activeCatalog();
       const monacoInstance = this.monacoInstance();
@@ -142,6 +147,8 @@ export class MonacoEditor implements AfterViewInit, OnDestroy {
       });
     });
 
+    // Update the editor's theme (dark vs. light mode) in response to
+    // application-level theme preference changes.
     effect(() => {
       const isDark = this.isDarkTheme();
       untracked(() => {
@@ -150,53 +157,54 @@ export class MonacoEditor implements AfterViewInit, OnDestroy {
         }
       });
     });
-  }
 
-  ngAfterViewInit() {
-    loader.config({paths: {vs: 'assets/monaco/vs'}});
-
-    loader.init().then(monacoInstance => {
-      if (this.destroyed) {
-        return;
+    let destroyed = false;
+    this.destroyRef.onDestroy(() => {
+      destroyed = true;
+      if (this.editor) {
+        this.editor.dispose();
       }
-      this.monacoInstance.set(monacoInstance);
+    });
 
-      const modelUri = monacoInstance.Uri.parse(LAYOUT_MODEL_URI);
-      let model = monacoInstance.editor.getModel(modelUri);
-      if (model) {
-        model.setValue(this.value());
-      } else {
-        model = monacoInstance.editor.createModel(this.value(), 'json', modelUri);
-      }
+    afterNextRender(() => {
+      loader.config({paths: {vs: 'assets/monaco/vs'}});
 
-      const editor = monacoInstance.editor.create(this.editorContainer.nativeElement, {
-        model: model,
-        theme: this.isDarkTheme() ? 'vs-dark' : 'vs-light',
-        automaticLayout: true,
-        minimap: {enabled: false},
-        readOnly: this.readOnly(),
-        scrollBeyondLastLine: false,
-        lineNumbers: 'on',
-        folding: true,
-        wordWrap: 'on',
-        ariaLabel: 'Raw layout JSON',
-      });
-      this.editor = editor;
-
-      editor.onDidChangeModelContent(() => {
-        const val = editor.getValue();
-        if (val !== this.value()) {
-          this.valueChange.emit(val);
+      loader.init().then(monacoInstance => {
+        if (destroyed) {
+          return;
         }
+        this.monacoInstance.set(monacoInstance);
+
+        const modelUri = monacoInstance.Uri.parse(LAYOUT_MODEL_URI);
+        let model = monacoInstance.editor.getModel(modelUri);
+        if (model) {
+          model.setValue(this.value());
+        } else {
+          model = monacoInstance.editor.createModel(this.value(), 'json', modelUri);
+        }
+
+        const editor = monacoInstance.editor.create(this.editorContainer().nativeElement, {
+          model: model,
+          theme: this.isDarkTheme() ? 'vs-dark' : 'vs-light',
+          automaticLayout: true,
+          minimap: {enabled: false},
+          readOnly: this.readOnly(),
+          scrollBeyondLastLine: false,
+          lineNumbers: 'on',
+          folding: true,
+          wordWrap: 'on',
+          ariaLabel: 'Raw layout JSON',
+        });
+        this.editor = editor;
+
+        editor.onDidChangeModelContent(() => {
+          const val = editor.getValue();
+          if (val !== this.value()) {
+            this.valueChange.emit(val);
+          }
+        });
       });
     });
-  }
-
-  ngOnDestroy() {
-    this.destroyed = true;
-    if (this.editor) {
-      this.editor.dispose();
-    }
   }
 
   private updateEditorContent(value: string): void {
