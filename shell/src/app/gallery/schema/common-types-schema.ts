@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+/**
+ * This is a copy synchronized from https://github.com/a2ui-project/a2ui/blob/main/specification/v0_9/json/common_types.json
+ */
 export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
   $defs: {
     ComponentId: {
@@ -60,6 +63,16 @@ export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
         },
         args: {
           type: 'object',
+          additionalProperties: {
+            anyOf: [
+              {
+                $ref: '#/$defs/DynamicValue',
+              },
+              {
+                type: 'object',
+              },
+            ],
+          },
         },
         returnType: {
           type: 'string',
@@ -68,6 +81,11 @@ export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
         },
       },
       required: ['call'],
+      oneOf: [
+        {
+          $ref: 'catalog.json#/$defs/anyFunction',
+        },
+      ],
     },
     DynamicString: {
       oneOf: [
@@ -78,7 +96,18 @@ export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
           $ref: '#/$defs/DataBinding',
         },
         {
-          $ref: '#/$defs/FunctionCall',
+          allOf: [
+            {
+              $ref: '#/$defs/FunctionCall',
+            },
+            {
+              properties: {
+                returnType: {
+                  const: 'string',
+                },
+              },
+            },
+          ],
         },
       ],
     },
@@ -91,7 +120,18 @@ export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
           $ref: '#/$defs/DataBinding',
         },
         {
-          $ref: '#/$defs/FunctionCall',
+          allOf: [
+            {
+              $ref: '#/$defs/FunctionCall',
+            },
+            {
+              properties: {
+                returnType: {
+                  const: 'boolean',
+                },
+              },
+            },
+          ],
         },
       ],
     },
@@ -104,7 +144,18 @@ export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
           $ref: '#/$defs/DataBinding',
         },
         {
-          $ref: '#/$defs/FunctionCall',
+          allOf: [
+            {
+              $ref: '#/$defs/FunctionCall',
+            },
+            {
+              properties: {
+                returnType: {
+                  const: 'number',
+                },
+              },
+            },
+          ],
         },
       ],
     },
