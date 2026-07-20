@@ -16,6 +16,7 @@
 
 import {Catalog, CatalogComponentSchema} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from './common-types-schema';
+import {BASIC_CATALOG_SCHEMA} from './basic-catalog-schema';
 
 /**
  * Represents a parsed property definition extracted from the catalog schema.
@@ -469,6 +470,14 @@ export class CatalogSchemaResolver {
         return localResolved;
       }
       return this.resolveJsonPointerBase(COMMON_TYPES_SCHEMA, relativePointer);
+    }
+
+    if (pointer.includes('catalog.json')) {
+      const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
+      if (localResolved !== undefined) {
+        return localResolved;
+      }
+      return this.resolveJsonPointerBase(BASIC_CATALOG_SCHEMA, relativePointer);
     }
 
     const resolved = this.resolveJsonPointerBase(schema, relativePointer);
