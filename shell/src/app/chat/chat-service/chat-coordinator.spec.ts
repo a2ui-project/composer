@@ -109,27 +109,18 @@ class MockStateSync {
   hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
 }
 
+async function* createMockStream(chunks: string[]): AsyncIterable<LlmResponse> {
+  for (const content of chunks) {
+    yield {content};
+  }
+}
+
 class MockLlmClient {
   chat = vi.fn();
   chatStream = vi.fn(async (messages: LlmMessage[]): Promise<LlmStreamResponse> => {
-    const contentStream: AsyncIterable<string> = {
-      [Symbol.asyncIterator]() {
-        const chunks = [
-          '{"version": "v0.9", "createSurface": {"surfaceId": "s1", ' + '"catalogId": "basic"}}\n',
-        ];
-        let idx = 0;
-        return {
-          async next(): Promise<IteratorResult<string>> {
-            if (idx < chunks.length) {
-              const value = chunks[idx];
-              idx++;
-              return {value, done: false};
-            }
-            return {value: undefined, done: true};
-          },
-        };
-      },
-    };
+    const contentStream = createMockStream([
+      '{"version": "v0.9", "createSurface": {"surfaceId": "s1", ' + '"catalogId": "basic"}}\n',
+    ]);
     const complete = Promise.resolve(
       '{"version": "v0.9", "createSurface": {"surfaceId": "s1", ' + '"catalogId": "basic"}}\n',
     );
@@ -289,20 +280,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       'Filler text following block...';
 
     llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
-      const contentStream: AsyncIterable<string> = {
-        [Symbol.asyncIterator]() {
-          const chunks = [corruptedRawOutput];
-          let idx = 0;
-          return {
-            async next(): Promise<IteratorResult<string>> {
-              if (idx < chunks.length) {
-                return {value: chunks[idx++], done: false};
-              }
-              return {value: undefined, done: true};
-            },
-          };
-        },
-      };
+      const contentStream = createMockStream([corruptedRawOutput]);
       return {contentStream, complete: Promise.resolve(corruptedRawOutput)};
     });
 
@@ -338,20 +316,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       '{"version": "v0.9", "updateComponents": {"surfaceId": "s2", "components": [{"id": "c1", "name": "TextField"}]}}';
 
     llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
-      const contentStream: AsyncIterable<string> = {
-        [Symbol.asyncIterator]() {
-          const chunks = [legacyRawOutput];
-          let idx = 0;
-          return {
-            async next(): Promise<IteratorResult<string>> {
-              if (idx < chunks.length) {
-                return {value: chunks[idx++], done: false};
-              }
-              return {value: undefined, done: true};
-            },
-          };
-        },
-      };
+      const contentStream = createMockStream([legacyRawOutput]);
       return {contentStream, complete: Promise.resolve(legacyRawOutput)};
     });
 
@@ -389,20 +354,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       ']}}\n';
 
     llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
-      const contentStream: AsyncIterable<string> = {
-        [Symbol.asyncIterator]() {
-          const chunks = [typosRawOutput];
-          let idx = 0;
-          return {
-            async next(): Promise<IteratorResult<string>> {
-              if (idx < chunks.length) {
-                return {value: chunks[idx++], done: false};
-              }
-              return {value: undefined, done: true};
-            },
-          };
-        },
-      };
+      const contentStream = createMockStream([typosRawOutput]);
       return {contentStream, complete: Promise.resolve(typosRawOutput)};
     });
 
@@ -592,7 +544,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     await Promise.resolve();
 
     // Wait for the scheduled microtask to execute
-    await new Promise(resolve => queueMicrotask(resolve));
+    await new Promise<void>(resolve => queueMicrotask(() => resolve()));
 
     // Verify dynamic flushes wipes resets instantly execute!
     expect(chatStateMock.chatHistory()).toEqual([]);
@@ -676,20 +628,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
         '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "TextField"}]}}';
 
       llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
-        const contentStream: AsyncIterable<string> = {
-          [Symbol.asyncIterator]() {
-            const chunks = [jsonlOutput];
-            let idx = 0;
-            return {
-              async next(): Promise<IteratorResult<string>> {
-                if (idx < chunks.length) {
-                  return {value: chunks[idx++], done: false};
-                }
-                return {value: undefined, done: true};
-              },
-            };
-          },
-        };
+        const contentStream = createMockStream([jsonlOutput]);
         return {contentStream, complete: Promise.resolve(jsonlOutput)};
       });
 
@@ -718,20 +657,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
         '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "TextField"}]';
 
       llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
-        const contentStream: AsyncIterable<string> = {
-          [Symbol.asyncIterator]() {
-            const chunks = [truncatedJsonlOutput];
-            let idx = 0;
-            return {
-              async next(): Promise<IteratorResult<string>> {
-                if (idx < chunks.length) {
-                  return {value: chunks[idx++], done: false};
-                }
-                return {value: undefined, done: true};
-              },
-            };
-          },
-        };
+        const contentStream = createMockStream([truncatedJsonlOutput]);
         return {contentStream, complete: Promise.resolve(truncatedJsonlOutput)};
       });
 
@@ -758,20 +684,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
         '{"version": "v0.9", "updateComponents": { {{{ corrupt';
 
       llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
-        const contentStream: AsyncIterable<string> = {
-          [Symbol.asyncIterator]() {
-            const chunks = [corruptedJsonlOutput];
-            let idx = 0;
-            return {
-              async next(): Promise<IteratorResult<string>> {
-                if (idx < chunks.length) {
-                  return {value: chunks[idx++], done: false};
-                }
-                return {value: undefined, done: true};
-              },
-            };
-          },
-        };
+        const contentStream = createMockStream([corruptedJsonlOutput]);
         return {contentStream, complete: Promise.resolve(corruptedJsonlOutput)};
       });
 
