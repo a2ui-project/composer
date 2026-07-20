@@ -39,6 +39,49 @@ import {
  * Constructor-injects dynamic settings contexts to initialize Gemini
  * handshakes securely under native Standalone Browser-Native environments.
  */
+/**
+ * Helper function to check if an error is a 503 UNAVAILABLE or overloaded prefill queue error.
+ */
+export function is503UnavailableError(err: unknown): boolean {
+  if (!err) {
+    return false;
+  }
+  if (typeof err === 'object') {
+    const e = err as Record<string, unknown>;
+    if (e['status'] === 503 || e['statusCode'] === 503 || e['code'] === 503) {
+      return true;
+    }
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return /503|unavailable|overloaded prefill queue/i.test(message);
+}
+
+/**
+ * Abort-aware sleep helper. Resolves after `ms` milliseconds or rejects immediately if `signal` is aborted.
+ */
+export function sleepWithSignal(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout>;
+
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    };
+
+    signal.addEventListener('abort', onAbort, {once: true});
+
+    timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+  });
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -150,8 +193,27 @@ export class Standalone3pLlmClient extends LlmClient {
       config,
     };
 
-    // Instantiate response generator stream eagerly
-    const responseStream = await ai.models.generateContentStream(params);
+    // Instantiate response generator stream eagerly with Exponential Backoff & Jitter retries
+    const maxRetries = 3;
+    let responseStream: Awaited<ReturnType<typeof ai.models.generateContentStream>> | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        responseStream = await ai.models.generateContentStream(params);
+        break;
+      } catch (err: unknown) {
+        if (attempt < maxRetries && is503UnavailableError(err)) {
+          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+          await sleepWithSignal(delay, abortController.signal);
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!responseStream) {
+      throw new Error('Failed to initialize content stream.');
+    }
 
     const buffer: LlmResponse[] = [];
     let accumulatedText = '';

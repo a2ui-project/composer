@@ -16,9 +16,13 @@
 
 import {TestBed} from '@angular/core/testing';
 import {signal} from '@angular/core';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {LlmClient, LlmMessage, LlmResponse, CANCEL_ERROR_NAME} from './llm-client';
-import {Standalone3pLlmClient} from './standalone-3p-llm-client';
+import {
+  Standalone3pLlmClient,
+  is503UnavailableError,
+  sleepWithSignal,
+} from './standalone-3p-llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {MessageRole} from './llm-client';
 import {
@@ -651,6 +655,141 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       // Verify that further iterator pulls reject with CancelError
       await expect(iterator.next()).rejects.toThrow('Cancelled');
       await expect(streamResponse.complete).rejects.toThrow('Cancelled');
+    });
+  });
+
+  // ---------------------------------------------------------
+  // EXPONENTIAL BACKOFF & JITTER RETRY HANDLING (503 / OVERLOADED QUEUE)
+  // ---------------------------------------------------------
+
+  describe('Exponential Backoff & Full Jitter Retry Handling', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    describe('is503UnavailableError helper', () => {
+      it('returns true for 503 status codes and 503 / unavailable / overloaded prefill queue messages', () => {
+        expect(is503UnavailableError(new Error('503 Service Unavailable'))).toBe(true);
+        expect(is503UnavailableError(new Error('Overloaded prefill queue'))).toBe(true);
+        expect(is503UnavailableError(new Error('UNAVAILABLE: backend overloaded'))).toBe(true);
+        expect(is503UnavailableError({status: 503, message: 'Server busy'})).toBe(true);
+        expect(is503UnavailableError({statusCode: 503})).toBe(true);
+        expect(is503UnavailableError({code: 503})).toBe(true);
+      });
+
+      it('returns false for non-503 errors and invalid objects', () => {
+        expect(is503UnavailableError(new Error('404 Not Found'))).toBe(false);
+        expect(is503UnavailableError(new Error('401 Unauthorized'))).toBe(false);
+        expect(is503UnavailableError({status: 400})).toBe(false);
+        expect(is503UnavailableError(null)).toBe(false);
+        expect(is503UnavailableError(undefined)).toBe(false);
+      });
+    });
+
+    describe('sleepWithSignal helper', () => {
+      it('resolves after specified milliseconds', async () => {
+        const controller = new AbortController();
+        const sleepPromise = sleepWithSignal(1000, controller.signal);
+
+        vi.advanceTimersByTime(1000);
+        await expect(sleepPromise).resolves.toBeUndefined();
+      });
+
+      it('rejects immediately if signal is already aborted', async () => {
+        const controller = new AbortController();
+        const cancelErr = new Error('Already cancelled');
+        controller.abort(cancelErr);
+
+        const sleepPromise = sleepWithSignal(1000, controller.signal);
+        await expect(sleepPromise).rejects.toThrow('Already cancelled');
+      });
+
+      it('rejects immediately if signal aborts while sleeping', async () => {
+        const controller = new AbortController();
+        const sleepPromise = sleepWithSignal(5000, controller.signal);
+
+        vi.advanceTimersByTime(1000);
+        const cancelErr = new Error('Cancelled mid-sleep');
+        controller.abort(cancelErr);
+
+        await expect(sleepPromise).rejects.toThrow('Cancelled mid-sleep');
+      });
+    });
+
+    describe('Standalone3pLlmClient.chatStream retries', () => {
+      it('detects 503 / Overloaded prefill queue error and retries up to 3 times before failing', async () => {
+        const err503 = new Error('503 Service Unavailable: Overloaded prefill queue');
+        mockGenerateContentStream.mockRejectedValue(err503);
+
+        const streamPromise = client.chatStream([{role: MessageRole.USER, content: 'Retry test'}]);
+        let caughtError: unknown;
+        streamPromise.catch(err => {
+          caughtError = err;
+        });
+
+        await vi.advanceTimersByTimeAsync(30000);
+
+        await expect(streamPromise).rejects.toThrow(
+          '503 Service Unavailable: Overloaded prefill queue',
+        );
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(4); // Initial try + 3 retries
+        for (const call of mockGenerateContentStream.mock.calls) {
+          expect(call[0].model).toBe('gemini-3.5-flash');
+        }
+      });
+
+      it('succeeds when a retry attempt recovers after 503 errors', async () => {
+        const err503 = new Error('Overloaded prefill queue');
+        const mockSuccessStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {text: 'Recovered success payload'};
+          },
+        };
+
+        mockGenerateContentStream
+          .mockRejectedValueOnce(err503)
+          .mockRejectedValueOnce(err503)
+          .mockResolvedValueOnce(mockSuccessStream);
+
+        const streamPromise = client.chatStream([
+          {role: MessageRole.USER, content: 'Recovery test'},
+        ]);
+        let caughtError: unknown;
+        streamPromise.catch(err => {
+          caughtError = err;
+        });
+
+        await vi.advanceTimersByTimeAsync(30000);
+
+        const streamResponse = await streamPromise;
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(3);
+        for (const call of mockGenerateContentStream.mock.calls) {
+          expect(call[0].model).toBe('gemini-3.5-flash');
+        }
+
+        const result = await streamResponse.complete;
+        expect(result).toBe('Recovered success payload');
+      });
+
+      it('does not retry non-503 errors', async () => {
+        const err400 = new Error('400 Bad Request');
+        mockGenerateContentStream.mockRejectedValue(err400);
+
+        const streamPromise = client.chatStream([
+          {role: MessageRole.USER, content: 'No retry test'},
+        ]);
+        let caughtError: unknown;
+        streamPromise.catch(err => {
+          caughtError = err;
+        });
+
+        await expect(streamPromise).rejects.toThrow('400 Bad Request');
+        expect(mockGenerateContentStream).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });
