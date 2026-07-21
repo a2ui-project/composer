@@ -16,6 +16,7 @@
 
 import {Catalog, CatalogComponentSchema} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from './common-types-schema';
+import {BASIC_CATALOG_SCHEMA} from './basic-catalog-schema';
 
 /**
  * Represents a parsed property definition extracted from the catalog schema.
@@ -261,6 +262,7 @@ export class CatalogSchemaResolver {
     merged = this.resolveUnionSchemas(merged, original, rootSchema, visitedRefs);
     merged = this.resolveArrayItemsSchema(merged, original, rootSchema, visitedRefs);
     merged = this.resolveObjectPropertiesSchema(merged, original, rootSchema, visitedRefs);
+    merged = this.resolveAdditionalPropertiesSchema(merged, original, rootSchema, visitedRefs);
 
     return merged;
   }
@@ -330,12 +332,14 @@ export class CatalogSchemaResolver {
         rootSchema,
         visitedRefs,
       );
-      allOfMerged = {...allOfMerged, ...resolvedSub};
+      // Deep merge is required here so that nested objects (like 'properties')
+      // from multiple schemas are combined together instead of being overwritten.
+      allOfMerged = this.mergePropertySchemas(allOfMerged, resolvedSub) as CatalogComponentSchema;
     }
 
     // Strip allOf list so we don't try to process it again.
     const {allOf: _allOf, ...rest} = merged;
-    return {...allOfMerged, ...rest};
+    return this.mergePropertySchemas(allOfMerged, rest) as CatalogComponentSchema;
   }
 
   /**
@@ -421,6 +425,30 @@ export class CatalogSchemaResolver {
     return result;
   }
 
+  /**
+   * Resolves schemas for additionalProperties of an object schema.
+   *
+   * Why: Map or dictionary schemas define the structure of their values in additionalProperties.
+   * We recursively resolve it to handle nested references.
+   */
+  private resolveAdditionalPropertiesSchema(
+    merged: CatalogComponentSchema,
+    original: CatalogComponentSchema,
+    rootSchema: Catalog,
+    visitedRefs: Set<string>,
+  ): CatalogComponentSchema {
+    if (!original['additionalProperties'] || typeof original['additionalProperties'] !== 'object') {
+      return merged;
+    }
+    const result = {...merged};
+    result['additionalProperties'] = this.resolvePropertySchema(
+      original['additionalProperties'] as CatalogComponentSchema,
+      rootSchema,
+      visitedRefs,
+    );
+    return result;
+  }
+
   private resolveJsonPointerBase(targetSchema: unknown, relativePointer: string): unknown {
     if (!relativePointer.startsWith('#/')) {
       return undefined;
@@ -463,12 +491,23 @@ export class CatalogSchemaResolver {
       relativePointer = pointer.slice(hashIndex);
     }
 
-    if (pointer.includes('common_types.json')) {
+    const isCommonTypes =
+      pointer === 'common_types.json' || pointer.startsWith('common_types.json#');
+    if (isCommonTypes) {
       const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
       if (localResolved !== undefined) {
         return localResolved;
       }
       return this.resolveJsonPointerBase(COMMON_TYPES_SCHEMA, relativePointer);
+    }
+
+    const isCatalog = pointer === 'catalog.json' || pointer.startsWith('catalog.json#');
+    if (isCatalog) {
+      const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
+      if (localResolved !== undefined) {
+        return localResolved;
+      }
+      return this.resolveJsonPointerBase(BASIC_CATALOG_SCHEMA, relativePointer);
     }
 
     const resolved = this.resolveJsonPointerBase(schema, relativePointer);
