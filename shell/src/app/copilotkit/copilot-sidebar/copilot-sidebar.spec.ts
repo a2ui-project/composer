@@ -15,11 +15,14 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {Component, input} from '@angular/core';
-import {describe, it, expect, beforeEach} from 'vitest';
+import {Component, input, signal} from '@angular/core';
+import {provideRouter} from '@angular/router';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {CopilotChat, CopilotKit, provideCopilotKit} from '@copilotkit/angular';
 import {CopilotSidebar} from './copilot-sidebar';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 
 /**
  * Lightweight stand-in for the heavy real `<copilot-chat>` view. It shares the
@@ -28,6 +31,8 @@ import {CopilotSidebar} from './copilot-sidebar';
  * a boot of the full CopilotKit chat runtime.
  */
 @Component({
+  // Must mirror the real component's selector so the sidebar template resolves.
+  // eslint-disable-next-line @angular-eslint/component-selector
   selector: 'copilot-chat',
   standalone: true,
   template: '',
@@ -36,17 +41,45 @@ class CopilotChatStub {
   readonly agentId = input<string>('');
 }
 
+/**
+ * Minimal fake for {@link AppConfigProvider} exposing only the reactive
+ * `geminiApiKey` the sidebar reads, as a writable signal tests can flip to
+ * exercise the key gate.
+ */
+class FakeAppConfigProvider {
+  readonly geminiApiKey = signal('test-key');
+}
+
+/**
+ * Minimal fake for {@link CatalogManagement} exposing only the reactive
+ * `activeCatalog` the sidebar reads when tailoring starter chips.
+ */
+class FakeCatalogManagement {
+  readonly activeCatalog = signal<{title?: string} | null>(null);
+}
+
 describe('CopilotSidebar', () => {
   let fixture: ComponentFixture<CopilotSidebar>;
+  let fakeConfig: FakeAppConfigProvider;
+  let fakeCatalog: FakeCatalogManagement;
 
   function host(): HTMLElement {
     return fixture.nativeElement as HTMLElement;
   }
 
   beforeEach(async () => {
+    fakeConfig = new FakeAppConfigProvider();
+    fakeCatalog = new FakeCatalogManagement();
+
     await TestBed.configureTestingModule({
       imports: [CopilotSidebar],
-      providers: [provideNoopAnimations(), provideCopilotKit({agents: {}})],
+      providers: [
+        provideNoopAnimations(),
+        provideRouter([]),
+        provideCopilotKit({agents: {}}),
+        {provide: AppConfigProvider, useValue: fakeConfig},
+        {provide: CatalogManagement, useValue: fakeCatalog},
+      ],
     })
       .overrideComponent(CopilotSidebar, {
         remove: {imports: [CopilotChat]},
@@ -61,6 +94,109 @@ describe('CopilotSidebar', () => {
   it('mounts and renders a <copilot-chat> bound to the default agent', () => {
     const chat = host().querySelector('copilot-chat');
     expect(chat).toBeTruthy();
+  });
+
+  it('hides the chat and shows the add-key CTA when there is no Gemini key', () => {
+    fakeConfig.geminiApiKey.set('');
+    fixture.detectChanges();
+
+    expect(host().querySelector('copilot-chat')).toBeNull();
+
+    const cta = host().querySelector<HTMLAnchorElement>('a[href="/settings"]');
+    expect(cta).toBeTruthy();
+    expect(cta!.textContent).toContain('Add Gemini API key');
+    expect(host().textContent).toContain('Add your Gemini API key to start generating.');
+  });
+
+  it('shows the chat and hides the add-key CTA once a key is present', () => {
+    // Whitespace-only keys do not count as a real key.
+    fakeConfig.geminiApiKey.set('   ');
+    fixture.detectChanges();
+    expect(host().querySelector('copilot-chat')).toBeNull();
+
+    fakeConfig.geminiApiKey.set('a-real-key');
+    fixture.detectChanges();
+
+    expect(host().querySelector('copilot-chat')).toBeTruthy();
+    expect(host().querySelector('a[href="/settings"]')).toBeNull();
+  });
+
+  it('exposes four generic starter chips when no catalog is active', () => {
+    const chips = fixture.componentInstance.starterSuggestions();
+
+    expect(chips.map(chip => chip.title)).toEqual([
+      'Book a Car',
+      'A sign-up form',
+      'A pricing card',
+      'A product dashboard header',
+    ]);
+    for (const chip of chips) {
+      expect(chip.title.trim().length).toBeGreaterThan(0);
+      expect(chip.message.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it('tailors the starter chip prompts to the active catalog name', () => {
+    fakeCatalog.activeCatalog.set({title: 'Acme Kit'});
+    fixture.detectChanges();
+
+    const chips = fixture.componentInstance.starterSuggestions();
+    for (const chip of chips) {
+      expect(chip.message).toContain('Acme Kit');
+    }
+  });
+
+  it('publishes the starter chips to the shared default agent on an empty thread', () => {
+    const copilotKit = TestBed.inject(CopilotKit);
+    // The real <copilot-chat> reloads suggestions when a config is registered;
+    // replicate that here since the chat view is stubbed in this unit test.
+    copilotKit.core.reloadSuggestions('default');
+
+    const published = copilotKit.core.getSuggestions('default').suggestions;
+    const expected = fixture.componentInstance.starterSuggestions();
+
+    expect(published.map(s => s.title)).toEqual(expected.map(c => c.title));
+    // Each chip carries the exact prompt that selecting it submits to the store.
+    expect(published.map(s => s.message)).toEqual(expected.map(c => c.message));
+  });
+
+  it('does not publish starter chips while there is no key', () => {
+    const copilotKit = TestBed.inject(CopilotKit);
+
+    fakeConfig.geminiApiKey.set('');
+    fixture.detectChanges();
+    copilotKit.core.reloadSuggestions('default');
+
+    expect(copilotKit.core.getSuggestions('default').suggestions).toHaveLength(0);
+  });
+
+  it('scopes the published config to the default agent and to before the first message', () => {
+    const copilotKit = TestBed.inject(CopilotKit);
+    // Drop then restore the key so the registration effect re-runs while spied.
+    fakeConfig.geminiApiKey.set('');
+    fixture.detectChanges();
+    const addSpy = vi.spyOn(copilotKit, 'addSuggestionsConfig');
+    fakeConfig.geminiApiKey.set('key-again');
+    fixture.detectChanges();
+
+    expect(addSpy).toHaveBeenCalledTimes(1);
+    expect(addSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        consumerAgentId: 'default',
+        available: 'before-first-message',
+      }),
+    );
+  });
+
+  it('withdraws its starter chips when the sidebar is destroyed', () => {
+    const copilotKit = TestBed.inject(CopilotKit);
+    copilotKit.core.reloadSuggestions('default');
+    expect(copilotKit.core.getSuggestions('default').suggestions.length).toBeGreaterThan(0);
+
+    fixture.destroy();
+    copilotKit.core.reloadSuggestions('default');
+
+    expect(copilotKit.core.getSuggestions('default').suggestions).toHaveLength(0);
   });
 
   it('is expanded by default at the docked panel width', () => {

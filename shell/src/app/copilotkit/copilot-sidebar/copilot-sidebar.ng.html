@@ -40,6 +40,16 @@
     </button>
   </div>
   <div class="chat">
-    <copilot-chat agentId="default" />
+    @if (hasKey()) {
+      <copilot-chat agentId="default" />
+    } @else {
+      <div class="no-key">
+        <mat-icon class="no-key__icon" aria-hidden="true">vpn_key</mat-icon>
+        <p class="no-key__message">Add your Gemini API key to start generating.</p>
+        <a mat-flat-button color="primary" routerLink="/settings" class="no-key__cta">
+          Add Gemini API key
+        </a>
+      </div>
+    }
   </div>
 }
