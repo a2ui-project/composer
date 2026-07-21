@@ -101,6 +101,21 @@
       </a>
       <a
         mat-list-item
+        routerLink="/catalog-reference"
+        routerLinkActive="active-nav-item"
+        aria-label="Catalog Reference"
+        matTooltip="Catalog Reference"
+        matTooltipPosition="right"
+        [matTooltipDisabled]="!isCollapsed()"
+        (click)="ensureCollapsed()"
+      >
+        <mat-icon matListItemIcon aria-hidden="true">menu_book</mat-icon>
+        @if (!isCollapsed()) {
+          <span class="nav-label">Catalog Reference</span>
+        }
+      </a>
+      <a
+        mat-list-item
         routerLink="/settings"
         routerLinkActive="active-nav-item"
         aria-label="Settings"
