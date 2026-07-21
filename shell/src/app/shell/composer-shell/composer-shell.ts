@@ -41,9 +41,6 @@ import {SessionStorageInteractions} from '../../storage/session-storage-interact
 @Component({
   selector: 'a2ui-composer-shell',
   standalone: true,
-  host: {
-    '[style.overflow]': "'hidden'",
-  },
   imports: [
     MatToolbarModule,
     MatSidenavModule,
