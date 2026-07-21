@@ -1,0 +1,45 @@
+:host {
+  display: block;
+}
+
+.repair-card {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.02);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+.repair-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.87);
+  text-align: left;
+  cursor: pointer;
+}
+
+.repair-card__chevron {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.repair-card__list {
+  margin: 0;
+  padding: 4px 12px 10px 12px;
+  list-style: none;
+}
+
+.repair-card__row {
+  padding: 2px 0;
+  color: rgba(0, 0, 0, 0.6);
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,30 @@
+:host {
+  display: block;
+}
+
+.a2ui-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.02);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.a2ui-card__title {
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.87);
+}
+
+.a2ui-card__status {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.a2ui-card__caption {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.45);
+}
