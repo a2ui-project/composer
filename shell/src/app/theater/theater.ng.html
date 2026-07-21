@@ -1,0 +1,158 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="th-page">
+  <header class="th-header">
+    <div class="th-intro">
+      <h1 class="th-title">Theater</h1>
+      <p class="th-subtitle">
+        Replay a recorded A2UI v0.9 message stream into a live surface — watch the UI get built and
+        re-bound, message by message.
+      </p>
+    </div>
+    <mat-button-toggle-group
+      class="th-recording-switch"
+      [value]="activeRecordingId()"
+      (change)="selectRecording($event.value)"
+      aria-label="Recording"
+      hideSingleSelectionIndicator
+    >
+      @for (rec of recordings; track rec.id) {
+        <mat-button-toggle [value]="rec.id">
+          <mat-icon aria-hidden="true">{{ rec.icon }}</mat-icon>
+          <span class="th-recording-label">{{ rec.label }}</span>
+        </mat-button-toggle>
+      }
+    </mat-button-toggle-group>
+  </header>
+
+  <div class="th-body">
+    <section class="th-left">
+      <div class="th-stage">
+        <div class="th-pane-label">Surface</div>
+        <div class="th-surface-scroll">
+          @if (step() === 0) {
+            <div class="th-empty">
+              <mat-icon class="th-empty-icon" aria-hidden="true">movie</mat-icon>
+              <p class="th-empty-text">
+                Press play to replay {{ totalSteps() }} messages of “{{ activeRecording().label }}”.
+              </p>
+            </div>
+          }
+          <a2ui-v09-surface [surfaceId]="playbackSurfaceId()"></a2ui-v09-surface>
+        </div>
+      </div>
+
+      <div class="th-transport">
+        <div class="th-controls">
+          <button
+            type="button"
+            mat-icon-button
+            aria-label="Reset"
+            [disabled]="step() === 0"
+            (click)="reset()"
+          >
+            <mat-icon>restart_alt</mat-icon>
+          </button>
+          <button
+            type="button"
+            mat-icon-button
+            aria-label="Step back"
+            [disabled]="step() === 0"
+            (click)="stepBack()"
+          >
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+          <button
+            type="button"
+            mat-icon-button
+            class="th-play"
+            [attr.aria-label]="isPlaying() ? 'Pause' : 'Play'"
+            (click)="togglePlay()"
+          >
+            <mat-icon>{{ isPlaying() ? 'pause' : 'play_arrow' }}</mat-icon>
+          </button>
+          <button
+            type="button"
+            mat-icon-button
+            aria-label="Step forward"
+            [disabled]="step() === totalSteps()"
+            (click)="stepForward()"
+          >
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+          <span class="th-step-readout">{{ step() }} / {{ totalSteps() }}</span>
+        </div>
+        <div class="th-progress" role="progressbar" [attr.aria-valuenow]="step()" [attr.aria-valuemax]="totalSteps()">
+          <div class="th-progress-fill" [style.width.%]="progress()"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="th-inspector">
+      <mat-button-toggle-group
+        class="th-inspector-tabs"
+        [value]="inspectorTab()"
+        (change)="setInspectorTab($event.value)"
+        aria-label="Inspector"
+        hideSingleSelectionIndicator
+      >
+        <mat-button-toggle value="events">Events</mat-button-toggle>
+        <mat-button-toggle value="data">Data</mat-button-toggle>
+        <mat-button-toggle value="config">Config</mat-button-toggle>
+      </mat-button-toggle-group>
+
+      <div class="th-inspector-body">
+        @switch (inspectorTab()) {
+          @case ('events') {
+            <ol class="th-events">
+              @for (event of events(); track event.index) {
+                <li>
+                  <button
+                    type="button"
+                    class="th-event"
+                    [class.active]="event.index === currentIndex()"
+                    [class.applied]="event.index <= currentIndex()"
+                    (click)="seek(event.index + 1)"
+                  >
+                    <span class="th-event-num">{{ event.index + 1 }}</span>
+                    <span class="th-event-type th-type-{{ event.type }}">{{ event.type }}</span>
+                    <span class="th-event-summary">{{ event.summary }}</span>
+                  </button>
+                </li>
+              }
+            </ol>
+          }
+          @case ('data') {
+            <pre class="th-code"><code>{{ currentData() }}</code></pre>
+          }
+          @case ('config') {
+            <dl class="th-config">
+              <dt>Recording</dt>
+              <dd>{{ config().label }}</dd>
+              <dt>Surface id</dt>
+              <dd><code>{{ config().surfaceId }}</code></dd>
+              <dt>Catalog id</dt>
+              <dd><code>{{ config().catalogId }}</code></dd>
+              <dt>Messages</dt>
+              <dd>{{ config().totalSteps }}</dd>
+            </dl>
+          }
+        }
+      </div>
+    </section>
+  </div>
+</div>
