@@ -187,8 +187,8 @@ export class PreviewBridge {
     if (typeof window === 'undefined' || !window.location || !window.location.search) return;
     const params = new URLSearchParams(window.location.search);
     const theme = params.get('theme');
-    if (theme === ThemePreference.LIGHT || theme === ThemePreference.DARK) {
-      this.applyThemeToDom(theme);
+    if (theme && Object.values(ThemePreference).includes(theme as ThemePreference)) {
+      this.applyThemeToDom(theme as ThemePreference);
     }
   }
 
@@ -383,11 +383,7 @@ export class PreviewBridge {
    */
   private handleSetTheme(payload: unknown): void {
     const payloadObj = payload as SetThemePayload | undefined;
-    if (
-      payloadObj &&
-      (payloadObj['theme'] === ThemePreference.LIGHT ||
-        payloadObj['theme'] === ThemePreference.DARK)
-    ) {
+    if (payloadObj && Object.values(ThemePreference).includes(payloadObj['theme'])) {
       const theme = payloadObj['theme'];
       this.applyThemeToDom(theme);
       if (this.activeRenderer?.config.onThemeChange) {
@@ -398,7 +394,7 @@ export class PreviewBridge {
         }
       }
     } else {
-      console.warn('PreviewBridge: Received invalid SET_THEME payload:', payload);
+      console.warn('PreviewBridge: Malformed SET_THEME payload received:', payload);
     }
   }
 

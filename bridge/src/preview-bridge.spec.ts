@@ -1991,7 +1991,7 @@ describe('PreviewBridge Core API Runtime', () => {
         }),
       );
 
-      expect(warnSpy).toHaveBeenCalledWith('PreviewBridge: Received invalid SET_THEME payload:', {
+      expect(warnSpy).toHaveBeenCalledWith('PreviewBridge: Malformed SET_THEME payload received:', {
         theme: 'invalid-theme',
       });
     });

@@ -119,15 +119,11 @@ export class CrossFrameValidator {
         }
 
         const themePayload = msgPayload as SetThemePayload;
-        if (
-          themePayload['theme'] !== ThemePreference.LIGHT &&
-          themePayload['theme'] !== ThemePreference.DARK
-        ) {
-          console.error(
-            `Malformed payload for SET_THEME: theme must be "${ThemePreference.LIGHT}" or "${ThemePreference.DARK}".`,
-          );
+        if (!Object.values(ThemePreference).includes(themePayload['theme'])) {
+          console.error(`Invalid theme preference mode: ${String(themePayload['theme'])}`);
           return false;
         }
+
         return true;
       }
 

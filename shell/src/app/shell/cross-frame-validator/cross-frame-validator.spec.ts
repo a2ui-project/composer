@@ -590,9 +590,7 @@ describe('CrossFrameValidator', () => {
           payload,
         }),
       ).toBe(false);
-      expect(errorSpy).toHaveBeenCalledWith(
-        'Malformed payload for SET_THEME: theme must be "light" or "dark".',
-      );
+      expect(errorSpy).toHaveBeenCalledWith('Invalid theme preference mode: blue');
     });
   });
 
