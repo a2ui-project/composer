@@ -491,7 +491,9 @@ export class CatalogSchemaResolver {
       relativePointer = pointer.slice(hashIndex);
     }
 
-    if (pointer.includes('common_types.json')) {
+    const isCommonTypes =
+      pointer === 'common_types.json' || pointer.startsWith('common_types.json#');
+    if (isCommonTypes) {
       const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
       if (localResolved !== undefined) {
         return localResolved;
@@ -499,7 +501,8 @@ export class CatalogSchemaResolver {
       return this.resolveJsonPointerBase(COMMON_TYPES_SCHEMA, relativePointer);
     }
 
-    if (pointer.includes('catalog.json')) {
+    const isCatalog = pointer === 'catalog.json' || pointer.startsWith('catalog.json#');
+    if (isCatalog) {
       const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
       if (localResolved !== undefined) {
         return localResolved;

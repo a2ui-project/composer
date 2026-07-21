@@ -1160,4 +1160,48 @@ describe('CatalogSchemaResolver', () => {
       },
     });
   });
+
+  it('does not resolve from common_types.json if the pointer only partially matches (e.g. my_common_types.json)', () => {
+    const mockSchema = {
+      components: {
+        TestComponent: {
+          properties: {
+            prop: {
+              $ref: 'my_common_types.json#/$defs/Type',
+            },
+          },
+        },
+      },
+    };
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const resolver = new CatalogSchemaResolver(mockSchema);
+    const properties = resolver.resolveComponentProperties('TestComponent');
+    expect(properties).toEqual([{name: 'prop', description: '', type: 'unknown', required: false}]);
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      'Failed to resolve property schema reference: "my_common_types.json#/$defs/Type"',
+    );
+    consoleWarnSpy.mockRestore();
+  });
+
+  it('does not resolve from catalog.json if the pointer only partially matches (e.g. my_cool_catalog.json)', () => {
+    const mockSchema = {
+      components: {
+        TestComponent: {
+          properties: {
+            prop: {
+              $ref: 'my_cool_catalog.json#/$defs/anyFunction',
+            },
+          },
+        },
+      },
+    };
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const resolver = new CatalogSchemaResolver(mockSchema);
+    const properties = resolver.resolveComponentProperties('TestComponent');
+    expect(properties).toEqual([{name: 'prop', description: '', type: 'unknown', required: false}]);
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      'Failed to resolve property schema reference: "my_cool_catalog.json#/$defs/anyFunction"',
+    );
+    consoleWarnSpy.mockRestore();
+  });
 });
