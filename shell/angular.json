@@ -58,7 +58,10 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "buildTarget": "a2ui-composer:build:development"
+            "buildTarget": "a2ui-composer:build:development",
+            "prebundle": {
+              "exclude": ["a2ui-bridge"]
+            }
           },
           "configurations": {
             "production": {
