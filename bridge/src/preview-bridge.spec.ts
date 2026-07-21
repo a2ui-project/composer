@@ -22,7 +22,7 @@ import {
   SurfaceInstance,
   RendererConfig,
 } from './preview-bridge';
-import {PreviewBridgeMessageType} from './bridge-message';
+import {PreviewBridgeMessageType, ThemePreference} from './bridge-message';
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
 declare const process: {
@@ -1952,7 +1952,7 @@ describe('PreviewBridge Core API Runtime', () => {
           source: window,
           data: {
             type: PreviewBridgeMessageType.SET_THEME,
-            payload: {theme: 'dark'},
+            payload: {theme: ThemePreference.DARK},
           },
         }),
       );
@@ -1960,14 +1960,14 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(document.documentElement.classList.contains('dark-theme')).toBe(true);
       expect(document.documentElement.style.colorScheme).toBe('dark');
       expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-      expect(onThemeChange).toHaveBeenCalledWith('dark');
+      expect(onThemeChange).toHaveBeenCalledWith(ThemePreference.DARK);
 
       window.dispatchEvent(
         new MessageEvent('message', {
           source: window,
           data: {
             type: PreviewBridgeMessageType.SET_THEME,
-            payload: {theme: 'light'},
+            payload: {theme: ThemePreference.LIGHT},
           },
         }),
       );
@@ -1975,7 +1975,7 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(document.documentElement.classList.contains('dark-theme')).toBe(false);
       expect(document.documentElement.style.colorScheme).toBe('light');
       expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-      expect(onThemeChange).toHaveBeenCalledWith('light');
+      expect(onThemeChange).toHaveBeenCalledWith(ThemePreference.LIGHT);
     });
 
     it('logs warning if SET_THEME payload format is invalid', () => {
@@ -1999,11 +1999,11 @@ describe('PreviewBridge Core API Runtime', () => {
     it('short-circuits applyThemeToDom when setting the same theme repeatedly', () => {
       const setAttributeSpy = vi.spyOn(document.documentElement, 'setAttribute');
 
-      bridge.applyThemeToDom('dark');
+      bridge.applyThemeToDom(ThemePreference.DARK);
       expect(setAttributeSpy).toHaveBeenCalledWith('data-theme', 'dark');
       setAttributeSpy.mockClear();
 
-      bridge.applyThemeToDom('dark');
+      bridge.applyThemeToDom(ThemePreference.DARK);
       expect(setAttributeSpy).not.toHaveBeenCalled();
     });
 
@@ -2025,7 +2025,7 @@ describe('PreviewBridge Core API Runtime', () => {
           source: window,
           data: {
             type: PreviewBridgeMessageType.SET_THEME,
-            payload: {theme: 'dark'},
+            payload: {theme: ThemePreference.DARK},
           },
         }),
       );
@@ -2037,7 +2037,7 @@ describe('PreviewBridge Core API Runtime', () => {
     });
 
     it('immediately invokes onThemeChange with current applied theme when attachRenderer is called', () => {
-      bridge.applyThemeToDom('dark');
+      bridge.applyThemeToDom(ThemePreference.DARK);
 
       const onThemeChange = vi.fn();
       const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
@@ -2050,12 +2050,12 @@ describe('PreviewBridge Core API Runtime', () => {
       });
 
       expect(onThemeChange).toHaveBeenCalledTimes(1);
-      expect(onThemeChange).toHaveBeenCalledWith('dark');
+      expect(onThemeChange).toHaveBeenCalledWith(ThemePreference.DARK);
     });
 
     it('logs error if onThemeChange callback throws an exception during attachRenderer', () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      bridge.applyThemeToDom('dark');
+      bridge.applyThemeToDom(ThemePreference.DARK);
 
       const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
       const processor = {processMessages: vi.fn()};

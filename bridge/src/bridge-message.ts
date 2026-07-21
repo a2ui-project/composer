@@ -32,9 +32,15 @@ export enum PreviewBridgeMessageType {
   SET_THEME = 'SET_THEME',
 }
 
+/** Enum representing the supported theme preference modes. */
+export enum ThemePreference {
+  LIGHT = 'light',
+  DARK = 'dark',
+}
+
 /** Payload for SET_THEME message type. */
 export interface SetThemePayload {
-  theme: 'light' | 'dark';
+  theme: ThemePreference;
 }
 
 /**

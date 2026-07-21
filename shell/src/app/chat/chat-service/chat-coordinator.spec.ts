@@ -49,7 +49,7 @@ class MockAppConfigProvider {
   readonly geminiApiKey = signal<string>('sample-api-key');
   readonly envMode = signal(EnvMode.STANDALONE);
   readonly authType = signal(AuthType.THIRD_PARTY);
-  readonly themePreference = signal<ThemePreference>('light');
+  readonly themePreference = signal<ThemePreference>(ThemePreference.LIGHT);
   readonly includeScreenshot = signal<boolean>(true);
   setRendererUrl = vi.fn((url: string) => {
     this.rendererUrl.set(url);

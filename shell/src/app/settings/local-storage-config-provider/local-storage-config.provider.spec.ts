@@ -19,7 +19,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
 
-import {EnvMode, AuthType} from '../app-config-provider/app-config-provider';
+import {EnvMode, AuthType, ThemePreference} from '../app-config-provider/app-config-provider';
 import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
@@ -156,13 +156,13 @@ describe('LocalStorageAppConfigProvider', () => {
 
   it('initializes themePreference to light mode by default', () => {
     const provider = setupProvider();
-    expect(provider.themePreference()).toBe('light');
+    expect(provider.themePreference()).toBe(ThemePreference.LIGHT);
   });
 
   it('initializes themePreference to stored preference', () => {
-    localStorage.setItem(LocalStorageKey.THEME_PREFERENCE, 'dark');
+    localStorage.setItem(LocalStorageKey.THEME_PREFERENCE, ThemePreference.DARK);
     const provider = setupProvider();
-    expect(provider.themePreference()).toBe('dark');
+    expect(provider.themePreference()).toBe(ThemePreference.DARK);
   });
 
   it('defines envMode as EXTENSION when startup is in extension mode', () => {
@@ -249,9 +249,9 @@ describe('LocalStorageAppConfigProvider', () => {
 
   it('persists updated theme selection to localStorage and updates signal', () => {
     const provider = setupProvider();
-    provider.setThemePreference('dark');
-    expect(provider.themePreference()).toBe('dark');
-    expect(localStorage.getItem(LocalStorageKey.THEME_PREFERENCE)).toBe('dark');
+    provider.setThemePreference(ThemePreference.DARK);
+    expect(provider.themePreference()).toBe(ThemePreference.DARK);
+    expect(localStorage.getItem(LocalStorageKey.THEME_PREFERENCE)).toBe(ThemePreference.DARK);
   });
 
   it('persists forced authentication mode and manages storage keys correctly', () => {
@@ -283,14 +283,14 @@ describe('LocalStorageAppConfigProvider', () => {
     provider.setRendererUrl('https://dirty-renderer.com');
     await provider.setGeminiApiKey('dirty-token');
     provider.setForcedAuthMode(AuthType.THIRD_PARTY);
-    provider.setThemePreference('dark');
+    provider.setThemePreference(ThemePreference.DARK);
 
     await provider.flushConfig();
 
     expect(provider.rendererUrl()).toBe('https://base-url.com');
     expect(provider.geminiApiKey()).toBe('');
     expect(provider.authType()).toBe(AuthType.FIRST_PARTY); // Fallback 1P
-    expect(provider.themePreference()).toBe('light');
+    expect(provider.themePreference()).toBe(ThemePreference.LIGHT);
 
     expect(localStorage.getItem(LocalStorageKey.RENDERER_URL)).toBeNull();
     expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBeNull();
@@ -390,14 +390,14 @@ describe('LocalStorageAppConfigProvider', () => {
       expect(provider.rendererUrl()).toBe('https://default-renderer.com');
       expect(provider.geminiApiKey()).toBe('');
       expect(provider.authType()).toBe(AuthType.FIRST_PARTY);
-      expect(provider.themePreference()).toBe('light');
+      expect(provider.themePreference()).toBe(ThemePreference.LIGHT);
 
       // Verify saving/mutations do not throw ReferenceError
       expect(() => provider.setRendererUrl('https://any-url.com')).not.toThrow();
       expect(() => provider.setGeminiApiKey('any-key')).not.toThrow();
       expect(() => provider.purgeGeminiApiKey()).not.toThrow();
       expect(() => provider.setForcedAuthMode(AuthType.THIRD_PARTY)).not.toThrow();
-      expect(() => provider.setThemePreference('dark')).not.toThrow();
+      expect(() => provider.setThemePreference(ThemePreference.DARK)).not.toThrow();
       expect(() => provider.flushConfig()).not.toThrow();
     });
   });

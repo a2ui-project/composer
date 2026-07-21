@@ -28,7 +28,10 @@ import {ParsedProperty} from './schema/catalog-schema-resolver';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
-import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
 
 interface TestFriendlyGallery {
@@ -95,7 +98,7 @@ describe('Gallery Component', () => {
         {provide: CatalogManagement, useClass: MockCatalogManagement},
         {provide: HostCommunication, useClass: MockHostCommunication},
         {provide: StartupResolution, useClass: MockStartupResolution},
-        {provide: AppConfigProvider, useValue: {themePreference: signal('light')}},
+        {provide: AppConfigProvider, useValue: {themePreference: signal(ThemePreference.LIGHT)}},
         {provide: ChatState, useClass: MockChatState},
       ],
     }).compileComponents();

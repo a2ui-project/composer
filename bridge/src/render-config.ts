@@ -66,6 +66,8 @@ export interface ComponentUsage {
 /** A record mapping component names to their usage definition. */
 export type ComponentUsages = Record<string, ComponentUsage>;
 
+import {ThemePreference} from './bridge-message';
+
 /** Configuration and lifecycle callbacks for attaching a renderer. */
 export interface RendererConfig {
   /** The reactive surface group model to connect for data synchronization. */
@@ -81,7 +83,7 @@ export interface RendererConfig {
   /** Invoked when a dynamic catalog URN ID is resolved. */
   onCatalogResolved?: (catalogId: string) => void;
   /** Invoked when the theme preference changes. */
-  onThemeChange?: (theme: 'light' | 'dark') => void;
+  onThemeChange?: (theme: ThemePreference) => void;
   /** Optional callback to retrieve component usage samples. */
   getComponentUsages?: () => Promise<ComponentUsages>;
 }

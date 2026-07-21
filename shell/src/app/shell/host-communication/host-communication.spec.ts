@@ -17,7 +17,10 @@
 import {TestBed} from '@angular/core/testing';
 import {HostCommunication, MessageEnvelope} from './host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {signal, WritableSignal} from '@angular/core';
@@ -25,10 +28,10 @@ import {signal, WritableSignal} from '@angular/core';
 describe('HostCommunication', () => {
   let service: HostCommunication;
   let startupResolutionMock: Partial<StartupResolution>;
-  let themePreferenceSignal: WritableSignal<'light' | 'dark'>;
+  let themePreferenceSignal: WritableSignal<ThemePreference>;
 
   beforeEach(() => {
-    themePreferenceSignal = signal<'light' | 'dark'>('light');
+    themePreferenceSignal = signal<ThemePreference>(ThemePreference.LIGHT);
     startupResolutionMock = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://localhost:3000/renderer'),
     };
@@ -556,12 +559,12 @@ describe('HostCommunication', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
 
-    service.sendTheme('dark');
+    service.sendTheme(ThemePreference.DARK);
 
     expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.SET_THEME,
-        payload: {theme: 'dark'},
+        payload: {theme: ThemePreference.DARK},
       },
       'http://localhost:3000',
     );
@@ -570,7 +573,7 @@ describe('HostCommunication', () => {
   it('automatically re-sends current themePreference when RENDERER_READY is received', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
-    themePreferenceSignal.set('dark');
+    themePreferenceSignal.set(ThemePreference.DARK);
 
     const event = new MessageEvent('message', {
       source: mockIframeWindow,
@@ -583,7 +586,7 @@ describe('HostCommunication', () => {
     expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.SET_THEME,
-        payload: {theme: 'dark'},
+        payload: {theme: ThemePreference.DARK},
       },
       'http://localhost:3000',
     );

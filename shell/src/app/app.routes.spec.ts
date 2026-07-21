@@ -29,6 +29,7 @@ import {
   AppConfigProvider,
   EnvMode,
   AuthType,
+  ThemePreference,
 } from './settings/app-config-provider/app-config-provider';
 import {LlmClient} from './chat/llm-client/llm-client';
 import {CatalogManagement} from './storage/catalog-management/catalog-management';
@@ -71,7 +72,7 @@ class MockAppConfigProvider {
   readonly authType = signal(AuthType.FIRST_PARTY);
   readonly rendererUrl = signal('http://localhost:4200/renderer');
   readonly geminiApiKey = signal('');
-  readonly themePreference = signal('light');
+  readonly themePreference = signal<ThemePreference>(ThemePreference.LIGHT);
   readonly includeScreenshot = signal<boolean>(true);
   setThemePreference = vi.fn();
   setGeminiApiKey = vi.fn();

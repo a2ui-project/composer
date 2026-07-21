@@ -25,7 +25,10 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {DOCUMENT} from '@angular/common';
 import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
 import {signal, WritableSignal} from '@angular/core';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
@@ -42,8 +45,8 @@ describe('ComposerShell Layout', () => {
     activeCatalogDescription: WritableSignal<string>;
   };
   let configProviderMock: {
-    themePreference: WritableSignal<'light' | 'dark'>;
-    setThemePreference: (theme: 'light' | 'dark') => void;
+    themePreference: WritableSignal<ThemePreference>;
+    setThemePreference: (theme: ThemePreference) => void;
   };
 
   beforeEach(async () => {
@@ -65,8 +68,8 @@ describe('ComposerShell Layout', () => {
     };
 
     configProviderMock = {
-      themePreference: signal('light'),
-      setThemePreference: vi.fn((theme: 'light' | 'dark') => {
+      themePreference: signal(ThemePreference.LIGHT),
+      setThemePreference: vi.fn((theme: ThemePreference) => {
         configProviderMock.themePreference.set(theme);
       }),
     };
@@ -174,7 +177,7 @@ describe('ComposerShell Layout', () => {
   );
 
   it('reads the persisted theme preference from storage on initialization', async () => {
-    configProviderMock.themePreference.set('dark');
+    configProviderMock.themePreference.set(ThemePreference.DARK);
     const newFixture = TestBed.createComponent(ComposerShell);
     newFixture.detectChanges();
 
@@ -185,10 +188,10 @@ describe('ComposerShell Layout', () => {
   it('persists theme preference to storage upon toggling theme', async () => {
     expect(configProviderMock.setThemePreference).not.toHaveBeenCalled();
     await harness.clickThemeToggleButton();
-    expect(configProviderMock.setThemePreference).toHaveBeenCalledWith('dark');
+    expect(configProviderMock.setThemePreference).toHaveBeenCalledWith(ThemePreference.DARK);
 
     await harness.clickThemeToggleButton();
-    expect(configProviderMock.setThemePreference).toHaveBeenCalledWith('light');
+    expect(configProviderMock.setThemePreference).toHaveBeenCalledWith(ThemePreference.LIGHT);
   });
 
   it('renders the Components Gallery navigation link in the sidebar when expanded', async () => {

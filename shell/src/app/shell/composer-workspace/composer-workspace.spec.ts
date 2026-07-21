@@ -93,7 +93,7 @@ class MockAppConfigProvider {
   readonly authType = signal(AuthType.FIRST_PARTY);
   readonly rendererUrl = signal('http://localhost:4200/renderer');
   readonly geminiApiKey = signal('');
-  readonly themePreference = signal<ThemePreference>('light');
+  readonly themePreference = signal<ThemePreference>(ThemePreference.LIGHT);
   readonly includeScreenshot = signal<boolean>(true);
   setThemePreference = vi.fn((theme: ThemePreference) => {
     this.themePreference.set(theme);
@@ -304,7 +304,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('updates dockview options with dark theme class dynamically', async () => {
       const configProvider = TestBed.inject(AppConfigProvider) as unknown as MockAppConfigProvider;
-      configProvider.themePreference.set('dark');
+      configProvider.themePreference.set(ThemePreference.DARK);
       fixture.detectChanges();
       await fixture.whenStable();
 
@@ -312,7 +312,7 @@ describe('ComposerWorkspace Dashboard', () => {
         'dockview-theme-dark',
       );
 
-      configProvider.themePreference.set('light');
+      configProvider.themePreference.set(ThemePreference.LIGHT);
       fixture.detectChanges();
       await fixture.whenStable();
 

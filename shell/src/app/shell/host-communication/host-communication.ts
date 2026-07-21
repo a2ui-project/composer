@@ -18,7 +18,10 @@ import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {ReplaySubject} from 'rxjs';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
 import {CrossFrameValidator} from '../cross-frame-validator/cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
@@ -268,9 +271,9 @@ export class HostCommunication implements OnDestroy {
 
   /**
    * Helper utility dispatching a SET_THEME message to the preview renderer.
-   * @param theme Target theme option ('light' or 'dark')
+   * @param theme Target theme option
    */
-  sendTheme(theme: 'light' | 'dark'): void {
+  sendTheme(theme: ThemePreference): void {
     // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
     // prettier-ignore
     this.sendMessage({

@@ -21,7 +21,10 @@ import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {signal, WritableSignal} from '@angular/core';
 
@@ -46,12 +49,12 @@ describe('RenderedFrame Live Preview Viewport', () => {
   let startupResolutionServiceMock: Partial<StartupResolution>;
   let hostCommunicationServiceMock: Partial<HostCommunication>;
   let resolvedUrlSignal: WritableSignal<string | null>;
-  let themePreferenceSignal: WritableSignal<'light' | 'dark'>;
+  let themePreferenceSignal: WritableSignal<ThemePreference>;
   let chatStateMock: MockChatState;
 
   beforeEach(async () => {
     resolvedUrlSignal = signal('http://localhost:3000/renderer');
-    themePreferenceSignal = signal<'light' | 'dark'>('light');
+    themePreferenceSignal = signal<ThemePreference>(ThemePreference.LIGHT);
     startupResolutionServiceMock = {
       resolvedUrl: resolvedUrlSignal,
     };
@@ -104,13 +107,13 @@ describe('RenderedFrame Live Preview Viewport', () => {
   });
 
   it('dispatches sendTheme via hostCommunication when theme preference changes without reloading iframe URL', async () => {
-    expect(hostCommunicationServiceMock.sendTheme).toHaveBeenCalledWith('light');
+    expect(hostCommunicationServiceMock.sendTheme).toHaveBeenCalledWith(ThemePreference.LIGHT);
     const initialSrc = await harness.getIframeSrc();
 
-    themePreferenceSignal.set('dark');
+    themePreferenceSignal.set(ThemePreference.DARK);
     fixture.detectChanges();
 
-    expect(hostCommunicationServiceMock.sendTheme).toHaveBeenCalledWith('dark');
+    expect(hostCommunicationServiceMock.sendTheme).toHaveBeenCalledWith(ThemePreference.DARK);
     expect(await harness.getIframeSrc()).toBe(initialSrc);
   });
 

@@ -34,6 +34,7 @@ import {
   a2uiBridge,
   RendererProcessor,
   SurfaceStateSubscription,
+  ThemePreference,
   type ComponentUsages,
 } from '../preview-bridge.js';
 
@@ -45,7 +46,7 @@ export interface AngularSandboxOptions {
   /** Optional callback to retrieve component usage samples. */
   getComponentUsages?: () => Promise<ComponentUsages>;
   /** Optional callback when theme changes. */
-  onThemeChange?: (theme: 'light' | 'dark') => void;
+  onThemeChange?: (theme: ThemePreference) => void;
 }
 
 /**
@@ -80,7 +81,7 @@ export class A2uiSandboxConnection implements OnDestroy {
   constructor(
     catalogJson?: unknown,
     getComponentUsages?: () => Promise<ComponentUsages>,
-    onThemeChange?: (theme: 'light' | 'dark') => void,
+    onThemeChange?: (theme: ThemePreference) => void,
   ) {
     const processor: RendererProcessor = {
       processMessages: payload =>

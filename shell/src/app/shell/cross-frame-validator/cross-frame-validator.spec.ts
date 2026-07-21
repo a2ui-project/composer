@@ -16,7 +16,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {CrossFrameValidator} from './cross-frame-validator';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 
 describe('CrossFrameValidator', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
@@ -542,7 +542,7 @@ describe('CrossFrameValidator', () => {
 
   describe('SET_THEME', () => {
     it('accepts valid SET_THEME payload with theme light', () => {
-      const payload = {theme: 'light'};
+      const payload = {theme: ThemePreference.LIGHT};
       expect(
         CrossFrameValidator.validateOutgoingMessage({
           type: PreviewBridgeMessageType.SET_THEME,
@@ -553,7 +553,7 @@ describe('CrossFrameValidator', () => {
     });
 
     it('accepts valid SET_THEME payload with theme dark', () => {
-      const payload = {theme: 'dark'};
+      const payload = {theme: ThemePreference.DARK};
       expect(
         CrossFrameValidator.validateOutgoingMessage({
           type: PreviewBridgeMessageType.SET_THEME,

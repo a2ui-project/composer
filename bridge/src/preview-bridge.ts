@@ -27,6 +27,7 @@ import {
   SetThemePayload,
   DataModelChangePayload,
   CreateSurfaceCommand,
+  ThemePreference,
 } from './bridge-message';
 export * from './bridge-message';
 
@@ -150,7 +151,7 @@ export class PreviewBridge {
   private activeConnections = new Set<{unsubscribe(): void}>();
 
   /** Tracks the currently applied theme in the DOM to avoid redundant DOM mutations. */
-  private currentAppliedTheme?: 'light' | 'dark';
+  private currentAppliedTheme?: ThemePreference;
 
   /**
    * Initializes a new PreviewBridge instance.
@@ -168,12 +169,12 @@ export class PreviewBridge {
    *
    * @param theme The target theme ('light' or 'dark').
    */
-  applyThemeToDom(theme: 'light' | 'dark'): void {
+  applyThemeToDom(theme: ThemePreference): void {
     if (typeof document === 'undefined' || !document.documentElement) return;
     if (this.currentAppliedTheme === theme) return;
 
     this.currentAppliedTheme = theme;
-    if (theme === 'dark') {
+    if (theme === ThemePreference.DARK) {
       document.documentElement.classList.add('dark-theme');
     } else {
       document.documentElement.classList.remove('dark-theme');
@@ -186,7 +187,7 @@ export class PreviewBridge {
     if (typeof window === 'undefined' || !window.location || !window.location.search) return;
     const params = new URLSearchParams(window.location.search);
     const theme = params.get('theme');
-    if (theme === 'light' || theme === 'dark') {
+    if (theme === ThemePreference.LIGHT || theme === ThemePreference.DARK) {
       this.applyThemeToDom(theme);
     }
   }
@@ -382,7 +383,11 @@ export class PreviewBridge {
    */
   private handleSetTheme(payload: unknown): void {
     const payloadObj = payload as SetThemePayload | undefined;
-    if (payloadObj && (payloadObj['theme'] === 'light' || payloadObj['theme'] === 'dark')) {
+    if (
+      payloadObj &&
+      (payloadObj['theme'] === ThemePreference.LIGHT ||
+        payloadObj['theme'] === ThemePreference.DARK)
+    ) {
       const theme = payloadObj['theme'];
       this.applyThemeToDom(theme);
       if (this.activeRenderer?.config.onThemeChange) {

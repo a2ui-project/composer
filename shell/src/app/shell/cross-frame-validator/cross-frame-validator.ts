@@ -24,6 +24,7 @@ import {
   SetBlockingStatePayload,
   SetThemePayload,
   DataModelChangePayload,
+  ThemePreference,
 } from 'a2ui-bridge';
 
 /**
@@ -118,8 +119,13 @@ export class CrossFrameValidator {
         }
 
         const themePayload = msgPayload as SetThemePayload;
-        if (themePayload['theme'] !== 'light' && themePayload['theme'] !== 'dark') {
-          console.error('Malformed payload for SET_THEME: theme must be "light" or "dark".');
+        if (
+          themePayload['theme'] !== ThemePreference.LIGHT &&
+          themePayload['theme'] !== ThemePreference.DARK
+        ) {
+          console.error(
+            `Malformed payload for SET_THEME: theme must be "${ThemePreference.LIGHT}" or "${ThemePreference.DARK}".`,
+          );
           return false;
         }
         return true;

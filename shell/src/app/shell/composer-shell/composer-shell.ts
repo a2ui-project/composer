@@ -25,7 +25,10 @@ import {DOCUMENT} from '@angular/common';
 import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
@@ -54,7 +57,7 @@ import {SessionStorageInteractions} from '../../storage/session-storage-interact
 })
 export class ComposerShell {
   readonly isCollapsed = signal(true);
-  isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
+  isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly indexedDbStorage = inject(IndexedDbStorage);
   private readonly storage = inject(LocalStorageInteractions);
@@ -91,7 +94,9 @@ export class ComposerShell {
    * Switches between light and dark visual design system palettes.
    */
   toggleTheme(): void {
-    this.configProvider.setThemePreference(this.isDarkTheme() ? 'light' : 'dark');
+    this.configProvider.setThemePreference(
+      this.isDarkTheme() ? ThemePreference.LIGHT : ThemePreference.DARK,
+    );
   }
 
   /**

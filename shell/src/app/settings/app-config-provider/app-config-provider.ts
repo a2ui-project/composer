@@ -42,8 +42,7 @@ export enum AuthType {
   THIRD_PARTY = '3p',
 }
 
-/** Strong type representation for Light/Dark mode theme options. */
-export type ThemePreference = 'light' | 'dark';
+export {ThemePreference} from 'a2ui-bridge';
 
 /**
  * Declares abstract configuration parameters, shielding the workspace

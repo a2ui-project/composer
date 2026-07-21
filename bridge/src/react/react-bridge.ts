@@ -22,7 +22,7 @@ import {
   SurfaceModel,
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
-import {a2uiBridge, type ComponentUsages} from '../preview-bridge.js';
+import {a2uiBridge, ThemePreference, type ComponentUsages} from '../preview-bridge.js';
 
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   /** The reactive dynamic surface drawing model representing the active canvas. */
@@ -35,7 +35,7 @@ export interface ReactSandboxOptions {
   /** Optional callback to retrieve component usage samples. */
   getComponentUsages?: () => Promise<ComponentUsages>;
   /** Optional callback when theme changes. */
-  onThemeChange?: (theme: 'light' | 'dark') => void;
+  onThemeChange?: (theme: ThemePreference) => void;
 }
 
 /**

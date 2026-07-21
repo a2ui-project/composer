@@ -67,7 +67,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   private readonly _themePreference = signal<ThemePreference>(
     (this.localStorageInteractions.getItem(
       LocalStorageKey.THEME_PREFERENCE,
-    ) as ThemePreference | null) || 'light',
+    ) as ThemePreference | null) || ThemePreference.LIGHT,
   );
 
   /** Coordinates dynamic inclusion of screenshots context preferences state. */
@@ -233,7 +233,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     this._forcedAuthOverride.set(AuthType.DEFAULT);
     this._geminiApiKey.set('');
     this._rendererUrl.set(this.startup.getResolvedRendererUrl() || '');
-    this._themePreference.set('light');
+    this._themePreference.set(ThemePreference.LIGHT);
     this._includeScreenshot.set(false);
   }
 

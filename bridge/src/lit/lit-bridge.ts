@@ -26,7 +26,12 @@ import {
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
 import type {MarkdownRenderer} from '@a2ui/web_core/types/types';
-import {a2uiBridge, SurfaceStateSubscription, type ComponentUsages} from '../preview-bridge.js';
+import {
+  a2uiBridge,
+  SurfaceStateSubscription,
+  ThemePreference,
+  type ComponentUsages,
+} from '../preview-bridge.js';
 
 /**
  * Options block configuring custom element generation and static payload injection
@@ -42,7 +47,7 @@ export interface LitSandboxOptions {
   /** Optional callback to retrieve component usage samples. */
   getComponentUsages?: () => Promise<ComponentUsages>;
   /** Optional callback when theme changes. */
-  onThemeChange?: (theme: 'light' | 'dark') => void;
+  onThemeChange?: (theme: ThemePreference) => void;
 }
 
 /**
@@ -71,7 +76,7 @@ export class A2uiSandboxRoot extends LitElement {
   /** Optional callback to retrieve component usage samples shared statically */
   static getComponentUsages?: () => Promise<ComponentUsages> = undefined;
   /** Optional callback when theme changes shared statically */
-  static onThemeChange?: (theme: 'light' | 'dark') => void = undefined;
+  static onThemeChange?: (theme: ThemePreference) => void = undefined;
 
   // Core dynamic processing engine mapping actions outbox proxies
   private processor = new MessageProcessor(

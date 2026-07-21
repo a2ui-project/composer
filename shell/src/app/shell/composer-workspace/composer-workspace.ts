@@ -42,7 +42,10 @@ import {MockRules} from '../../debug/mock-rules/mock-rules';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {HostCommunication} from '../host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
 import {DockviewComponent} from 'dockview';
 
 /** Internal interface mapping raw cross-frame workspace telemetry payloads */
@@ -88,7 +91,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   showMockRules = signal(false);
   unreadEventsCount = signal(0);
   unreadErrorsCount = signal(0);
-  isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
+  isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
 
   private readonly isDockviewInitialized = signal(false);
   private dockviewApi!: DockviewComponent;

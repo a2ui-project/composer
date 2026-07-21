@@ -28,7 +28,9 @@ class TestConfigProvider extends AppConfigProvider {
     'https://test-renderer.com',
   );
   private readonly internalGeminiApiKey: WritableSignal<string> = signal('test-api-key');
-  private readonly internalThemePreference: WritableSignal<ThemePreference> = signal('light');
+  private readonly internalThemePreference: WritableSignal<ThemePreference> = signal(
+    ThemePreference.LIGHT,
+  );
 
   override readonly envMode: Signal<EnvMode> = this.internalEnvMode.asReadonly();
   override readonly authType: Signal<AuthType> = this.internalAuthType.asReadonly();
@@ -58,7 +60,7 @@ class TestConfigProvider extends AppConfigProvider {
     this.internalAuthType.set(AuthType.THIRD_PARTY);
     this.internalRendererUrl.set('https://test-renderer.com');
     this.internalGeminiApiKey.set('test-api-key');
-    this.internalThemePreference.set('light');
+    this.internalThemePreference.set(ThemePreference.LIGHT);
   }
 }
 

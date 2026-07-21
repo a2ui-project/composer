@@ -27,7 +27,10 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
 import type * as monaco from 'monaco-editor';
 import {MatSnackBar} from '@angular/material/snack-bar';
 
@@ -268,7 +271,7 @@ class MockStateSync {
 describe('RawFrame JSON Source Editor View', () => {
   let sendRenderA2UIMock: ReturnType<typeof vi.fn>;
   let mockActiveCatalog: WritableSignal<Catalog | null>;
-  let mockThemePreference: WritableSignal<string>;
+  let mockThemePreference: WritableSignal<ThemePreference>;
   let stateSyncMock: MockStateSync;
   let chatStateMock: MockChatState;
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
@@ -276,7 +279,7 @@ describe('RawFrame JSON Source Editor View', () => {
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
-    mockThemePreference = signal<string>('light');
+    mockThemePreference = signal<ThemePreference>(ThemePreference.LIGHT);
     snackBarMock = {open: vi.fn(), dismiss: vi.fn()};
 
     undoStack.length = 0;
@@ -572,7 +575,7 @@ describe('RawFrame JSON Source Editor View', () => {
   });
 
   it('initializes monaco with vs-dark theme when dark mode is active', async () => {
-    mockThemePreference.set('dark');
+    mockThemePreference.set(ThemePreference.DARK);
     await setup(false);
     expect(createMock).toHaveBeenCalled();
     const lastCall = createMock.mock.calls[createMock.mock.calls.length - 1];
@@ -585,7 +588,7 @@ describe('RawFrame JSON Source Editor View', () => {
     const lastCall = createMock.mock.calls[createMock.mock.calls.length - 1];
     expect(lastCall[1].theme).toBe('vs-light');
 
-    mockThemePreference.set('dark');
+    mockThemePreference.set(ThemePreference.DARK);
     fixture.detectChanges();
     await fixture.whenStable();
 
