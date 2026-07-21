@@ -66,8 +66,29 @@ export class GeminiA2uiAgent extends AbstractAgent {
           emit({type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta: STATUS_NARRATION} as BaseEvent);
           emit({type: EventType.TEXT_MESSAGE_END, messageId} as BaseEvent);
 
+          // Stream the model's thinking as an AG-UI reasoning message so the
+          // sidebar shows it live in a collapsible reasoning bubble. Only the
+          // thoughts flow here — the raw JSONL still never reaches the thread.
+          const reasoningId = crypto.randomUUID();
+          let reasoningStarted = false;
+          const onThinking = (delta: string) => {
+            if (!delta || this.cancelled) return;
+            if (!reasoningStarted) {
+              reasoningStarted = true;
+              emit({
+                type: EventType.REASONING_MESSAGE_START,
+                messageId: reasoningId,
+                role: 'reasoning',
+              } as BaseEvent);
+            }
+            emit({type: EventType.REASONING_MESSAGE_CONTENT, messageId: reasoningId, delta} as BaseEvent);
+          };
+
           const messages = this.toLlmContext(input.messages);
-          const result = await this.generation.generate(messages);
+          const result = await this.generation.generate(messages, {onThinking});
+          if (reasoningStarted) {
+            emit({type: EventType.REASONING_MESSAGE_END, messageId: reasoningId} as BaseEvent);
+          }
           if (this.cancelled) {
             subscriber.complete();
             return;
