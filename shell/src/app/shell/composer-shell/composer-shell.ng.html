@@ -116,6 +116,21 @@
       </a>
       <a
         mat-list-item
+        routerLink="/theater"
+        routerLinkActive="active-nav-item"
+        aria-label="Theater"
+        matTooltip="Theater"
+        matTooltipPosition="right"
+        [matTooltipDisabled]="!isCollapsed()"
+        (click)="ensureCollapsed()"
+      >
+        <mat-icon matListItemIcon aria-hidden="true">movie</mat-icon>
+        @if (!isCollapsed()) {
+          <span class="nav-label">Theater</span>
+        }
+      </a>
+      <a
+        mat-list-item
         routerLink="/settings"
         routerLinkActive="active-nav-item"
         aria-label="Settings"
