@@ -1,0 +1,290 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  height: 100%;
+  box-sizing: border-box;
+  color: var(--cpk-text-primary);
+  font-family: var(--cpk-font-body);
+}
+
+.ref-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: var(--cpk-space-4);
+  padding: var(--cpk-space-5);
+  box-sizing: border-box;
+}
+
+.ref-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cpk-space-5);
+  flex-wrap: wrap;
+}
+
+.ref-title {
+  margin: 0 0 var(--cpk-space-1);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.ref-subtitle {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--cpk-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.ref-view-switch {
+  border: 1px solid var(--cpk-border);
+  border-radius: var(--cpk-radius-pill);
+  overflow: hidden;
+  background: var(--cpk-surface-elevated);
+  flex: 0 0 auto;
+
+  ::ng-deep .mat-button-toggle-label-content {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cpk-space-2);
+    line-height: 36px;
+    padding: 0 var(--cpk-space-4);
+  }
+
+  ::ng-deep .mat-button-toggle {
+    color: var(--cpk-text-secondary);
+  }
+
+  ::ng-deep .mat-button-toggle-checked {
+    background: var(--cpk-accent-bg);
+    color: var(--cpk-accent);
+  }
+
+  ::ng-deep mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.ref-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--cpk-space-4);
+
+  @media (max-width: 760px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.ref-sidebar {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--cpk-space-3);
+  border: 1px solid var(--cpk-border);
+  border-radius: var(--cpk-radius-lg);
+  background: var(--cpk-surface-elevated);
+  box-shadow: var(--cpk-shadow-card);
+}
+
+.ref-group-header {
+  padding: var(--cpk-space-3) var(--cpk-space-2) var(--cpk-space-1);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cpk-text-secondary);
+}
+
+.ref-nav-item {
+  text-align: left;
+  padding: var(--cpk-space-2) var(--cpk-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--cpk-radius-md, 8px);
+  background: transparent;
+  color: var(--cpk-text-primary);
+  font-family: var(--cpk-font-body);
+  font-size: 0.8125rem;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--cpk-glass-bg-hover);
+  }
+
+  &.active {
+    background: var(--cpk-accent-bg);
+    border-color: var(--cpk-accent);
+    color: var(--cpk-accent);
+    font-weight: 600;
+  }
+}
+
+.ref-detail {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cpk-space-4);
+  padding-right: var(--cpk-space-1);
+}
+
+.ref-detail-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cpk-space-3);
+  flex-wrap: wrap;
+}
+
+.ref-component-name {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.ref-category-chip,
+.ref-path-chip {
+  font-size: 0.7rem;
+  padding: 2px 10px;
+  border-radius: var(--cpk-radius-pill);
+  background: var(--cpk-accent-bg);
+  color: var(--cpk-accent);
+  font-weight: 600;
+}
+
+.ref-path-chip {
+  background: var(--cpk-divider);
+  color: var(--cpk-text-secondary);
+  font-family: var(--cpk-font-mono);
+  font-weight: 400;
+}
+
+.ref-component-desc {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--cpk-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.ref-card {
+  border: 1px solid var(--cpk-border);
+  border-radius: var(--cpk-radius-lg);
+  background: var(--cpk-surface-elevated);
+  box-shadow: var(--cpk-shadow-card);
+  overflow: hidden;
+}
+
+.ref-card-label {
+  padding: var(--cpk-space-3) var(--cpk-space-4);
+  border-bottom: 1px solid var(--cpk-divider);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cpk-text-secondary);
+}
+
+.ref-card-label--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0;
+  padding-bottom: 0;
+  min-height: 44px;
+}
+
+.ref-copy {
+  color: var(--cpk-accent);
+}
+
+.ref-preview {
+  padding: var(--cpk-space-5);
+  overflow-x: auto;
+}
+
+.ref-code {
+  margin: 0;
+  padding: var(--cpk-space-4);
+  overflow-x: auto;
+  background: var(--cpk-surface-sunken, rgba(0, 0, 0, 0.04));
+  font-family: var(--cpk-font-mono);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--cpk-text-primary);
+  white-space: pre;
+}
+
+.ref-source {
+  max-height: none;
+  border-radius: var(--cpk-radius-lg);
+  border: 1px solid var(--cpk-border);
+  background: var(--cpk-surface-elevated);
+  box-shadow: var(--cpk-shadow-card);
+}
+
+.ref-props {
+  width: 100%;
+  background: transparent;
+
+  ::ng-deep .mat-mdc-header-cell,
+  ::ng-deep .mat-mdc-cell {
+    color: var(--cpk-text-primary);
+    border-bottom-color: var(--cpk-divider);
+    padding: var(--cpk-space-2) var(--cpk-space-3);
+  }
+
+  ::ng-deep .mat-mdc-header-cell {
+    color: var(--cpk-text-secondary);
+    font-weight: 600;
+  }
+}
+
+.ref-prop-name {
+  font-weight: 600;
+  color: var(--cpk-accent);
+}
+
+.ref-prop-type {
+  font-family: var(--cpk-font-mono);
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--cpk-divider);
+  color: var(--cpk-text-primary);
+  white-space: nowrap;
+}
+
+.ref-req {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--cpk-accent);
+}
+
+.ref-opt {
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--cpk-text-secondary);
+}
