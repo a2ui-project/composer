@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, computed, effect, untracked} from '@angular/core';
+import {Injectable, inject, effect, untracked} from '@angular/core';
 import {formatJson} from '../../utils/json';
-import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {
   LlmMessage,
   LlmClient,
@@ -30,20 +29,22 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
 import {StateSync} from '../state-sync/state-sync';
 import {ChatState, LlmLogType} from '../chat-state/chat-state';
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
-import {PreviewBridgeMessageType, RenderA2uiItem, A2uiComponentInstance} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, A2uiComponentInstance} from 'a2ui-bridge';
 import {cleanErrorMessage, redactApiKey} from './error-utils';
+import {A2uiGenerationService} from '../../copilotkit/a2ui-generation/a2ui-generation.service';
 
 @Injectable({
   providedIn: 'root',
 })
 /**
- * Dynamic chat panel coordinator managing system prompt generation using
- * dynamic component configurations. Manages LLM completions transport
- * streams, self-healing parsers, schemas typo corrections, and gateway
- * error fallbacks.
+ * Dynamic chat panel coordinator managing the conversational chat-bubble UX
+ * around A2UI generation. Owns the streamed chat history turns, the loading
+ * pulse indicator, and gateway error bubbles, while delegating the headless
+ * generation pipeline (system prompt, JSON healing, schema validation, catalog
+ * healing, and error mapping) to the shared {@link A2uiGenerationService}.
  */
 export class ChatCoordinator {
-  private readonly catalogManagement = inject(CatalogManagement);
+  private readonly generationService = inject(A2uiGenerationService);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly stateSync = inject(StateSync);
   private readonly chatState = inject(ChatState);
@@ -57,6 +58,13 @@ export class ChatCoordinator {
    * during streams.
    */
   readonly isProgrammaticStreamActive = this.chatState.isProgrammaticStreamActive;
+
+  /**
+   * A dynamic, reactive, computed signal property constructing conformed JSON
+   * catalog schema specifications system instructions. Delegated to the shared
+   * generation service so both chat and headless agent drivers share prompts.
+   */
+  readonly systemPrompt = this.generationService.systemPrompt;
 
   private lastSeenRendererUrl = '';
   private isFirstUrlEffectRun = true;
@@ -242,12 +250,15 @@ export class ChatCoordinator {
 
   /**
    * Post-processes, extracts, syntax heals, and validates raw JSON lines.
+   * The parsing, healing, and catalog schema checks are delegated to the
+   * shared {@link A2uiGenerationService}; this method retains the chat-panel
+   * pipeline status transitions and layout commit.
    */
   private async processRawLlmPayload(rawText: string): Promise<void> {
     // Stage 1: Parse and Syntax Healing
     let parsedBlocks: unknown[] = [];
     try {
-      parsedBlocks = this.parseAndHealJsonLines(rawText);
+      parsedBlocks = this.generationService.parseAndHealJsonLines(rawText);
     } catch (err: unknown) {
       this.chatState.setPipelineStatus(PipelineStatus.FAILED);
       this.chatState.setProgrammaticStreamActive(false);
@@ -286,7 +297,7 @@ export class ChatCoordinator {
       }
 
       // Catalog Component Schema Check & Name Typos Healing
-      this.runCatalogComponentSchemaCheck(parsedBlocks);
+      this.generationService.runCatalogComponentSchemaCheck(parsedBlocks);
 
       // Stage 3: Ready & Commit Layout Wipes
       this.chatState.setPipelineStatus(PipelineStatus.READY);
@@ -309,392 +320,10 @@ export class ChatCoordinator {
     }
   }
 
-  /**
-   * Robust parser extracting JSON objects from blocks, performing syntax
-   * repairs.
-   */
-  private parseAndHealJsonLines(text: string): unknown[] {
-    let content = text.trim();
-
-    // Markdown Extraction: If output has Markdown wrappers, extract content
-    const mdJsonRegex = /```json\s*([\s\S]*?)\s*```/;
-    const match = content.match(mdJsonRegex);
-    if (match && match[1]) {
-      this.chatState.setPipelineStatus(PipelineStatus.HEALING);
-      content = match[1].trim();
-    }
-
-    const lines = content
-      .split('\n')
-      .map(l => l.trim())
-      .filter(l => l.length > 0);
-    const parsedBlocks: unknown[] = [];
-
-    for (const line of lines) {
-      // Skip Markdown code tags if they leaked, or general prompt filler
-      // text lines
-      if (line.startsWith('```') || (!line.startsWith('{') && !line.startsWith('['))) {
-        continue;
-      }
-
-      try {
-        parsedBlocks.push(JSON.parse(line));
-      } catch (err) {
-        // Syntax Healing Loop
-        this.chatState.setPipelineStatus(PipelineStatus.HEALING);
-        const healedObj = this.attemptSyntaxHealing(line);
-        if (healedObj !== null) {
-          parsedBlocks.push(healedObj);
-        } else {
-          // If it looks like A2UI JSON but couldn't be repaired, throw
-          // validation error
-          if (line.includes('"version"') || line.includes('"createSurface"')) {
-            throw new Error(`Syntax recovery failed for corrupted JSON Line:\n"${line}"`);
-          }
-        }
-      }
-    }
-
-    if (parsedBlocks.length === 0) {
-      throw new Error('No valid A2UI JSON layout command block could be parsed or recovered.');
-    }
-
-    return parsedBlocks;
-  }
-
-  /**
-   * Attempts structural syntax patching on broken JSON strings.
-   */
-  private attemptSyntaxHealing(line: string): unknown | null {
-    let patched = line.trim();
-
-    // Repair 1: Strip trailing commas inside properties arrays
-    patched = patched.replace(/,\s*([\]}])/g, '$1');
-
-    // Repair 2: Auto-close braces
-    try {
-      return JSON.parse(patched);
-    } catch (e) {
-      // Loop to try appending up to 5 missing closing curly braces
-      for (let i = 1; i <= 5; i++) {
-        try {
-          return JSON.parse(patched + '}'.repeat(i));
-        } catch (_) {}
-      }
-
-      // Loop to try appending matching square brackets then curly braces
-      for (let i = 1; i <= 3; i++) {
-        for (let j = 1; j <= 3; j++) {
-          try {
-            return JSON.parse(patched + ']'.repeat(i) + '}'.repeat(j));
-          } catch (_) {}
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Validates parsed components against custom catalog schemas, healing name
-   * typos, mapping legacy names, and recursively stripping out custom mock
-   * rules configurations.
-   */
-  private runCatalogComponentSchemaCheck(parsedBlocks: unknown[]): void {
-    const catalog = this.catalogManagement.activeCatalog();
-    const componentHealMap: Record<string, string> = {};
-
-    if (catalog && catalog['components']) {
-      for (const key of Object.keys(catalog['components'])) {
-        const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, '');
-        componentHealMap[normalizedKey] = key;
-      }
-    }
-
-    const SYNONYM_MAP: Record<string, string> = {
-      textbox: 'textfield',
-      textinput: 'textfield',
-      rowlayout: 'row',
-      columnlayout: 'column',
-      choice: 'choicepicker',
-      datepicker: 'datetimeinput',
-      datetimepicker: 'datetimeinput',
-    };
-
-    for (const block of parsedBlocks) {
-      if (!block || typeof block !== 'object') {
-        continue;
-      }
-      const bObj = block as RenderA2uiItem;
-      const updateComponents = bObj['updateComponents'];
-      if (
-        !updateComponents ||
-        typeof updateComponents !== 'object' ||
-        !Array.isArray(updateComponents['components'])
-      ) {
-        continue;
-      }
-
-      const cleanedComponents: unknown[] = [];
-      for (const comp of updateComponents['components']) {
-        if (!comp || typeof comp !== 'object' || Array.isArray(comp)) {
-          cleanedComponents.push(comp);
-          continue;
-        }
-
-        const compObj = comp as A2uiComponentInstance;
-        let compType = compObj['component'] as string;
-
-        // legacy property "name" fallback: heal to "component" key mapping
-        if (compObj['name'] && !compObj['component']) {
-          this.chatState.setPipelineStatus(PipelineStatus.HEALING);
-          compType = compObj['name'] as string;
-          compObj['component'] = compType;
-          delete compObj['name'];
-        }
-
-        if (typeof compType !== 'string') {
-          throw new Error('Component declaration is missing component type name string.');
-        }
-
-        let targetType = compType;
-
-        // Schema validation (only if catalog is actively loaded with components)
-        if (catalog && catalog.components) {
-          if (!catalog.components[compType]) {
-            // Unrecognized component type - check case-insensitive lookup!
-            const normalized = compType.toLowerCase().replace(/[^a-z]/g, '');
-            let healedType = componentHealMap[normalized];
-
-            // If not found directly, check synonym translation dictionary
-            if (!healedType) {
-              const synonymTarget = SYNONYM_MAP[normalized];
-              if (synonymTarget) {
-                healedType = componentHealMap[synonymTarget];
-              }
-            }
-
-            if (healedType && catalog.components[healedType]) {
-              this.chatState.setPipelineStatus(PipelineStatus.HEALING);
-              targetType = healedType;
-            } else {
-              // Fuzzy search matches
-              const fuzzyMatch = normalized
-                ? Object.keys(catalog.components).find(
-                    key =>
-                      key.toLowerCase().includes(normalized) ||
-                      normalized.includes(key.toLowerCase()),
-                  )
-                : undefined;
-
-              if (fuzzyMatch) {
-                this.chatState.setPipelineStatus(PipelineStatus.HEALING);
-                targetType = fuzzyMatch;
-              } else {
-                throw new Error(
-                  `Validation failure: Component type "${compType}" is ` +
-                    'not registered in the active custom catalog.',
-                );
-              }
-            }
-          }
-        }
-
-        // Recursively strip out dynamic mock setups configuration fields
-        const cleanedComp = this.sanitizeComponentObject(compObj);
-        // Restore corrected element name
-        cleanedComp['component'] = targetType;
-        cleanedComponents.push(cleanedComp);
-      }
-
-      // Commit sanitized array back in-place
-      updateComponents['components'] = cleanedComponents;
-    }
-  }
-
-  /**
-   * Unifies recursive sanitization traversal and strips out dynamic mock setups
-   * configurations recursively.
-   */
-  private sanitizeValue(val: unknown): unknown {
-    if (val === null || typeof val !== 'object') {
-      return val;
-    }
-
-    if (Array.isArray(val)) {
-      return val.map(item => this.sanitizeValue(item));
-    }
-
-    const obj = val as Record<string, unknown>;
-    const cleaned: Record<string, unknown> = {};
-
-    for (const [key, propVal] of Object.entries(obj)) {
-      if (key === 'rules' || /^mock/i.test(key)) {
-        continue;
-      }
-      cleaned[key] = this.sanitizeValue(propVal);
-    }
-
-    return cleaned;
-  }
-
-  /**
-   * Recursively sanitizes component declarations maps.
-   * Strips out dynamic rules configs matching /rules/ or prefix /^mock/i.
-   */
-  private sanitizeComponentObject(obj: A2uiComponentInstance): A2uiComponentInstance {
-    return this.sanitizeValue(obj) as A2uiComponentInstance;
-  }
-
   readonly TEST_ONLY = {
-    sanitizeComponentObject: (obj: A2uiComponentInstance) => this.sanitizeComponentObject(obj),
+    sanitizeComponentObject: (obj: A2uiComponentInstance) =>
+      this.generationService.sanitizeComponentObject(obj),
   };
-
-  /**
-   * Connectivity Exception Handling: bubbles diagnostics stack details.
-   * Instantly dismisses overlays locks on network, proxy, or auth failures
-   * to restore workspace editing controls immediately.
-   */
-  private isConnectivityError(lowerMsg: string): boolean {
-    return (
-      lowerMsg.includes('failed to fetch') ||
-      lowerMsg.includes('fetch') ||
-      lowerMsg.includes('timeout') ||
-      lowerMsg.includes('504') ||
-      lowerMsg.includes('proxy') ||
-      lowerMsg.includes('networkerror') ||
-      lowerMsg.includes('connection') ||
-      lowerMsg.includes('401') ||
-      lowerMsg.includes('403') ||
-      lowerMsg.includes('credential') ||
-      lowerMsg.includes('quota') ||
-      lowerMsg.includes('blocked') ||
-      lowerMsg.includes('503') ||
-      lowerMsg.includes('unavailable') ||
-      lowerMsg.includes('api key') ||
-      lowerMsg.includes('apikey')
-    );
-  }
-
-  private parseError(
-    lowerMsg: string,
-    cleanMsg: string,
-    originalPrompt?: string,
-  ): {
-    errorTitle: string;
-    errorMessage: string;
-    errorTip: string;
-    isRetryable: boolean;
-    showDetails: boolean;
-    errorDetails?: string;
-  } {
-    // Default values (Connectivity Failure)
-    const errorTitle = 'Connectivity Failure';
-    const isJson = cleanMsg.trim().startsWith('{');
-    const errorMessage = isJson ? 'A connectivity error occurred.' : cleanMsg;
-    const errorDetails = isJson ? 'Details: ' + cleanMsg : undefined;
-    const errorTip =
-      'Tip: Please check your network proxy configurations or verify your settings to restore connections.';
-    const isRetryable = !!originalPrompt;
-    const showDetails = true;
-
-    const isValidationError =
-      lowerMsg.includes('validation') ||
-      lowerMsg.includes('syntax recovery') ||
-      lowerMsg.includes('validation failure');
-
-    if (isValidationError) {
-      return {
-        errorTitle: 'Validation Failure',
-        errorMessage: 'The generated layout contains invalid components or structure.',
-        errorTip:
-          'Tip: Try rephrasing your prompt to guide the model to generate valid components.',
-        isRetryable: !!originalPrompt,
-        showDetails: true,
-        errorDetails: 'Details: ' + cleanMsg,
-      };
-    }
-
-    if (lowerMsg.includes('503') || lowerMsg.includes('unavailable')) {
-      return {
-        errorTitle: 'Service Unavailable',
-        errorMessage: 'The generative service is temporarily unavailable. Please try again later.',
-        errorTip: '',
-        isRetryable: true,
-        showDetails: false,
-      };
-    }
-
-    if (lowerMsg.includes('high demand')) {
-      return {
-        errorTitle: 'Model High Demand',
-        errorMessage:
-          'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.',
-        errorTip: '',
-        isRetryable: true,
-        showDetails: false,
-      };
-    }
-
-    if (lowerMsg.includes('timeout') || lowerMsg.includes('504')) {
-      return {
-        errorTitle: 'REST Gateway Timeout',
-        errorMessage: 'Remote generation service did not respond.',
-        errorDetails: 'Details: ' + cleanMsg,
-        errorTip,
-        isRetryable,
-        showDetails: true,
-      };
-    }
-
-    if (lowerMsg.includes('api key') || lowerMsg.includes('apikey')) {
-      return {
-        errorTitle: 'Invalid API Key',
-        errorMessage: 'The provided Gemini API key is invalid or missing.',
-        errorDetails: 'Details: ' + cleanMsg,
-        errorTip:
-          'Tip: Please update your third-party Gemini developer API key on the settings page to restore connections.',
-        isRetryable,
-        showDetails: true,
-      };
-    }
-
-    if (
-      lowerMsg.includes('auth') ||
-      lowerMsg.includes('401') ||
-      lowerMsg.includes('403') ||
-      lowerMsg.includes('credential')
-    ) {
-      return {
-        errorTitle: 'Authentication Refused',
-        errorMessage: 'Authentication failed. Please verify your credentials in Settings.',
-        errorDetails: 'Details: ' + cleanMsg,
-        errorTip,
-        isRetryable,
-        showDetails: true,
-      };
-    }
-
-    if (lowerMsg.includes('quota') || lowerMsg.includes('blocked') || lowerMsg.includes('429')) {
-      return {
-        errorTitle: 'GenAI Service Blocked',
-        errorMessage: 'Resource quota depleted or content safety limits triggered.',
-        errorDetails: 'Details: ' + cleanMsg,
-        errorTip,
-        isRetryable,
-        showDetails: true,
-      };
-    }
-
-    return {
-      errorTitle,
-      errorMessage,
-      errorTip,
-      isRetryable,
-      showDetails,
-      errorDetails,
-    };
-  }
 
   private handleConnectivityError(
     err: unknown,
@@ -705,14 +334,14 @@ export class ChatCoordinator {
     const lowerMsg = rawError.toLowerCase();
     const cleanMsg = cleanErrorMessage(rawError);
 
-    if (this.isConnectivityError(lowerMsg)) {
+    if (this.generationService.isConnectivityError(lowerMsg)) {
       this.chatState.setPipelineStatus(PipelineStatus.IDLE);
     } else {
       this.chatState.setPipelineStatus(PipelineStatus.FAILED);
     }
     this.chatState.setProgrammaticStreamActive(false);
 
-    const parsed = this.parseError(lowerMsg, cleanMsg, originalPrompt);
+    const parsed = this.generationService.parseError(lowerMsg, cleanMsg, originalPrompt);
 
     let exceptionDetails = '';
     if (err instanceof Error) {
@@ -753,125 +382,5 @@ export class ChatCoordinator {
       updated.push(errorBubble);
       return updated;
     });
-  }
-
-  /**
-   * A dynamic, reactive, computed signal property constructing conformed JSON
-   * catalog schema specifications system instructions.
-   */
-  readonly systemPrompt = computed<string>(() => {
-    const catalog = this.catalogManagement.activeCatalog();
-    if (!catalog) {
-      return (
-        'You are an AI assistant designed to help model mock screens ' +
-        'inside A2UI Composer shell.\n' +
-        'Status: Awaiting renderer dynamic handshake settlement...'
-      );
-    }
-
-    return this.generateSystemPrompt(formatJson(catalog));
-  });
-
-  private generateSystemPrompt(catalog: string): string {
-    return `
-  # A2UI Generation Expert
-
-  ## Role
-  You are an A2UI expert. Your job is to translate the user's request into valid
-  A2UI messages.
-
-  # Overview
-  You MUST ensure all payloads strictly adhere to the **JSON Lines (JSONL)**
-  format. Each JSON object MUST be flattened to a single line without unescaped
-  newline characters.
-
-  The generated A2UI MUST conform to this A2UI JSON:
-  \`\`\`json
-  ${catalog}.
-  \`\`\`
-
-  ## Protocol
-  When building the \`createSurface\` message, you MUST set the \`catalogId\` to
-  reference the appropriate catalog schema URL.
-
-  You MUST follow the strict message sequence (\`createSurface\` ->
-  \`updateComponents\` -> \`updateDataModel\`) and use JSON Pointers for data
-  binding.
-
-  ## Validation
-
-  A complete A2UI payload consists of one or more message objects sent as
-  continuous JSON objects (or JSON Lines). Every message object MUST include a
-  top-level \`"version": "v0.9"\` field.
-
-  The four primary messages you must use to manage a UI surface are:
-
-  1.  **\`createSurface\`**: Sent **FIRST** to signal the client to create a new
-      surface. It defines the \`catalogId\` and optional \`theme\` parameters.
-  2.  **\`updateComponents\`**: Used to define or update the UI component tree. You
-      must provide a flat list of components. One component MUST have an \`id\` of
-      \`"root"\`.
-  3.  **\`updateDataModel\`**: Used to define or update data values that the
-      components bind to.
-  4.  **\`deleteSurface\`**: Signals the client to destroy the surface.
-
-  ## Lifecycle and Ordering
-
-  Typical sequence: \`createSurface\` -> \`updateComponents\` -> \`updateDataModel\` (or
-  combined/interleaved after creation).
-
-  ## Examples
-
-    * **Simple Example**: A basic column with text:
-      \`\`\`jsonl
-      {"version": "v0.9", "createSurface": {"surfaceId": "main", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version": "v0.9", "updateComponents": {"surfaceId": "main", "components": [{"id": "root", "component": "MaterialColumn", "children": ["header", "content"]}, {"id": "header", "component": "MaterialText", "text": "Welcome"}, {"id": "content", "component": "MaterialText", "text": {"path": "/message"}}]}}
-      {"version": "v0.9", "updateDataModel": {"surfaceId": "main", "path": "/message", "value": "Hello, world!"}}
-      \`\`\`
-
-    * **Complex Form Example**: A vacation booking form demonstrating advanced
-      Material form controls (\`MaterialDatepicker\`, \`MaterialSelect\`,
-      \`MaterialSlideToggle\`) and buttons using the modernized Material catalog:
-      \`\`\`jsonl
-      {"version": "v0.9", "createSurface": {"surfaceId": "vacation_booking", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version": "v0.9", "updateComponents": {"surfaceId": "vacation_booking", "components": [{"id": "root", "component": "MaterialColumn", "children": ["title", "destination_input", "checkin_datepicker", "checkout_datepicker", "room_type_select", "passenger_select", "flexible_dates_toggle", "search_button"]}, {"id": "title", "component": "MaterialText", "text": {"path": "/title_label"}, "usageHint": "h1"}, {"id": "destination_input", "component": "MaterialInput", "label": {"path": "/destination_label"}, "value": {"path": "/destination_value"}}, {"id": "checkin_datepicker", "component": "MaterialDatepicker", "label": {"path": "/checkin_label"}, "value": {"path": "/checkin_value"}}, {"id": "checkout_datepicker", "component": "MaterialDatepicker", "label": {"path": "/checkout_label"}, "value": {"path": "/checkout_value"}}, {"id": "room_type_select", "component": "MaterialSelect", "label": {"path": "/room_type_label"}, "value": {"path": "/room_type_value"}, "options": [{"label": "Standard Room", "value": "standard"}, {"label": "Deluxe Suite", "value": "deluxe"}]}, {"id": "passenger_select", "component": "MaterialSelect", "label": {"path": "/passenger_label"}, "value": {"path": "/passenger_value"}, "options": [{"label": "1 Passenger", "value": "1"}, {"label": "2 Passengers", "value": "2"}, {"label": "3+ Passengers", "value": "3"}]}, {"id": "flexible_dates_toggle", "component": "MaterialSlideToggle", "label": {"path": "/flexible_dates_label"}, "checked": {"path": "/flexible_dates_checked"}, "color": "primary"}, {"id": "search_button", "component": "MaterialButton", "label": {"path": "/search_label"}, "action": {"event": {"name": "searchVacation"}}}]}}
-      {"version": "v0.9", "updateDataModel": {"surfaceId": "vacation_booking", "value": {"title_label": "Book Your Dream Vacation", "destination_label": "Destination", "destination_value": "Hawaii", "checkin_label": "Check-in Date", "checkin_value": "2026-07-01", "checkout_label": "Check-out Date", "checkout_value": "2026-07-14", "room_type_label": "Room Type", "room_type_value": "standard", "passenger_label": "Passengers", "passenger_value": "2", "flexible_dates_label": "Flexible Dates (+/- 3 days)", "flexible_dates_checked": true, "search_label": "Search Flights & Hotels"}}}
-      \`\`\`
-
-    * **Dynamic List Example**: An example using templates to render a list of
-      items.
-      \`\`\`jsonl
-      {"version": "v0.9", "createSurface": {"surfaceId": "dynamic_list_demo", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version": "v0.9", "updateComponents": {"surfaceId": "dynamic_list_demo", "components": [{"id": "root", "component": "MaterialColumn", "children": ["title", "list_container"]}, {"id": "title", "component": "MaterialText", "text": "Dynamic List Demo"}, {"id": "list_container", "component": "MaterialColumn", "children": {"componentId": "item_template", "path": "/items"}}, {"id": "item_template", "component": "MaterialText", "text": {"path": "text"}}]}}
-      {"version": "v0.9", "updateDataModel": {"surfaceId": "dynamic_list_demo", "value": {"items": [{"text": "Item One"}, {"text": "Item Two"}]}}}
-      \`\`\`
-
-  ## Data Binding
-  Every component property value MUST come from the data model (with minor
-  exceptions for static primitives).
-
-  When referencing data in the data model, you MUST use valid JSON Pointer syntax
-  starting with \`/\`.
-
-  ## Actions and Context
-
-  When defining actions (e.g., on buttons), the \`context\` payload is a standard
-  JSON object, rather than an array of key-value pairs.
-
-  Example action definition:
-
-  \`\`\`jsonl
-  "action": {
-    "event": {
-      "name": "selectItem",
-      "context": {
-        "itemId": "12345",
-        "itemName": {"path": "/selected/name"}
-      }
-    }
-  }
-  \`\`\`
-
-  `;
   }
 }
