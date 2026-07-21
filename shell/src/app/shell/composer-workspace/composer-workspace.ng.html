@@ -15,6 +15,31 @@
 -->
 
 <div class="workspace-container" [class.extension-mode]="isExtension()">
+  <div class="workspace-toolbar">
+    <mat-button-toggle-group
+      class="preset-switcher"
+      [value]="activePreset()"
+      (change)="applyPreset($event.value)"
+      aria-label="Workspace layout preset"
+      hideSingleSelectionIndicator
+    >
+      <mat-button-toggle value="chat" matTooltip="Chat only">
+        <mat-icon aria-hidden="true">forum</mat-icon>
+        <span class="preset-label">Chat</span>
+      </mat-button-toggle>
+      <mat-button-toggle value="chat-preview" matTooltip="Chat + live preview">
+        <mat-icon aria-hidden="true">preview</mat-icon>
+        <span class="preset-label">Chat + Preview</span>
+      </mat-button-toggle>
+      <mat-button-toggle
+        value="full"
+        matTooltip="Chat, preview, JSON editor + data/engine panels"
+      >
+        <mat-icon aria-hidden="true">dashboard</mat-icon>
+        <span class="preset-label">Code &amp; Engine</span>
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+  </div>
   <div
     #dockviewRoot
     class="dockview-root mat-m3-dockview-tabs"
