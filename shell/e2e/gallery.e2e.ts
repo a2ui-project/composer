@@ -135,8 +135,7 @@ test.describe('Components Gallery User Journey', () => {
           const createSurface = cmd1['createSurface'] as Record<string, unknown> | undefined;
           const updateComponents = cmd2['updateComponents'] as Record<string, unknown> | undefined;
           const components = updateComponents?.['components'] as
-            | Array<Record<string, unknown>>
-            | undefined;
+            Array<Record<string, unknown>> | undefined;
           const hasComponent =
             Array.isArray(components) &&
             components.some(c => c['component'] === firstComponentName);

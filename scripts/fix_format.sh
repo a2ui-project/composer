@@ -15,20 +15,29 @@
 
 set -euo pipefail
 
-CHECK_ONLY=false
-if [[ "${1:-}" == "--check" ]]; then
-  CHECK_ONLY=true
-fi
+CHECK_ONLY="${CHECK_ONLY:-true}"
+
+for arg in "$@"; do
+  case "$arg" in
+    --check)
+      CHECK_ONLY=true
+      ;;
+    --fix|--write)
+      CHECK_ONLY=false
+      ;;
+  esac
+done
 
 # Get repo root
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-echo "Running Prettier..."
 if [ "$CHECK_ONLY" = true ]; then
-  npx -y prettier --config .prettierrc --check .
+  echo "Checking Prettier formatting..."
+  corepack yarn prettier:check
 else
-  npx -y prettier --config .prettierrc --write .
+  echo "Fixing Prettier formatting..."
+  corepack yarn prettier
 fi
 
 echo "Done."

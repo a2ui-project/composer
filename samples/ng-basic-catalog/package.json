@@ -7,6 +7,7 @@
     "build": "yarn lint && ng build",
     "test": "vitest run",
     "prettier": "prettier --ignore-path ../../.prettierignore --write . | grep -v '(unchanged)'",
+    "prettier:check": "prettier --ignore-path ../../.prettierignore --check .",
     "clean": "rm -rf dist .angular node_modules/.vite",
     "lint": "eslint ."
   },

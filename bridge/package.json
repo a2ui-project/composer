@@ -26,6 +26,7 @@
     "clean": "rm -rf dist",
     "test": "NODE_ENV=test vitest run --coverage",
     "prettier": "prettier --ignore-path ../.prettierignore --write . | grep -v '(unchanged)'",
+    "prettier:check": "prettier --ignore-path ../.prettierignore --check .",
     "lint": "eslint ."
   },
   "devDependencies": {
