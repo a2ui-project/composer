@@ -17,12 +17,14 @@
 :host {
   display: block;
   height: 100%;
+  overflow: hidden;
 }
 
 .workspace-container {
   display: flex;
   height: 100%;
   box-sizing: border-box;
+  overflow: hidden;
 
   &.extension-mode {
     flex-direction: column;

@@ -254,4 +254,10 @@ describe('ComposerShell Layout', () => {
     await fixture.whenStable();
     expect((navLinks[0] as HTMLElement).classList.contains('active-nav-item')).toBe(true);
   });
+
+  it('applies overflow hidden styles on host root element to prevent whole-UI window scrollbars', () => {
+    const hostEl = fixture.nativeElement as HTMLElement;
+    const computedStyle = getComputedStyle(hostEl);
+    expect(computedStyle.overflow).toBe('hidden');
+  });
 });

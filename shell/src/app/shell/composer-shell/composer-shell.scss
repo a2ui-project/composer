@@ -18,7 +18,9 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
 }
+
 .composer-header {
   position: relative;
   z-index: 2;
@@ -32,22 +34,25 @@
 .spacer {
   flex: 1 1 auto;
 }
+
 .composer-sidenav-container {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
+
 .composer-sidenav {
   width: 250px;
   background-color: var(--mat-sys-surface-container);
   border-right: 1px solid var(--mat-sys-outline-variant);
   --mat-sidenav-container-shape: 0px;
   --mat-drawer-container-shape: 0px;
-  border-radius: 0px;
+  border-radius: 0;
   --mat-sidenav-background-color: var(--mat-sys-surface-container);
   transition: width 200ms ease-in-out;
 
   ::ng-deep .mat-drawer-inner-container {
-    border-radius: 0px;
+    border-radius: 0;
     white-space: nowrap;
     overflow-x: hidden;
   }
@@ -88,10 +93,13 @@
   padding: 0;
   box-sizing: border-box;
   height: 100%;
+  overflow: hidden;
 }
+
 .hamburger-button {
   margin-right: 8px;
 }
+
 .theme-toggle-button {
   margin-left: 8px;
 }
