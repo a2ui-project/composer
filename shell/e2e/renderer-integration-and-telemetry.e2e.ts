@@ -175,7 +175,7 @@ for (const config of CONFIGS) {
       await page.goto(`/?renderer=${config.rendererUrl}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
 
-      const editorLocator = page.locator('.monaco-editor');
+      const editorLocator = page.locator('a2ui-composer-monaco-editor');
       await expect(editorLocator).toBeVisible();
 
       await page.waitForFunction(() => {
