@@ -31,6 +31,9 @@ import {
   Type,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
+import {MatButtonToggleModule} from '@angular/material/button-toggle';
+import {MatIconModule} from '@angular/material/icon';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {ChatPanel} from '../../chat/chat-panel/chat-panel';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
@@ -68,6 +71,12 @@ export enum ComposerPanelId {
   MockRules = 'mockRules',
 }
 
+/** Named workspace layout presets selectable from the panel-setup switcher. */
+export type WorkspacePreset = 'chat' | 'chat-preview' | 'full';
+
+/** localStorage key remembering the last-applied preset (for the toggle highlight). */
+const WORKSPACE_PRESET_KEY = 'composer_workspace_preset';
+
 /**
  * The central workspace hub coordinating split-pane views between
  * the layout editors, active preview frame, and debug consoles.
@@ -75,6 +84,7 @@ export enum ComposerPanelId {
 @Component({
   selector: 'a2ui-composer-workspace',
   standalone: true,
+  imports: [MatButtonToggleModule, MatIconModule, MatTooltipModule],
   templateUrl: './composer-workspace.ng.html',
   styleUrl: './composer-workspace.scss',
 })
@@ -92,6 +102,9 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   unreadEventsCount = signal(0);
   unreadErrorsCount = signal(0);
   isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
+
+  /** The workspace layout preset currently applied (drives the switcher highlight). */
+  readonly activePreset = signal<WorkspacePreset>('chat-preview');
 
   private readonly isDockviewInitialized = signal(false);
   private dockviewApi!: DockviewComponent;
@@ -287,57 +300,9 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     }
 
     if (!layoutRestored) {
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Chat,
-        component: ComposerPanelId.Chat,
-        title: 'Gemini Assistant',
-      });
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Rendered,
-        component: ComposerPanelId.Rendered,
-        title: 'Rendered A2UI Preview',
-        position: {direction: 'right', referencePanel: ComposerPanelId.Chat},
-      });
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Raw,
-        component: ComposerPanelId.Raw,
-        title: 'A2UI JSON Editor',
-        position: {direction: 'right', referencePanel: ComposerPanelId.Rendered},
-      });
-
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.DataModel,
-        component: ComposerPanelId.DataModel,
-        title: 'Data Model',
-        position: {direction: 'below', referencePanel: ComposerPanelId.Rendered},
-      });
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Events,
-        component: ComposerPanelId.Events,
-        title: 'Events',
-        position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
-      });
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Errors,
-        component: ComposerPanelId.Errors,
-        title: 'Errors',
-        position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
-      });
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.RawMessages,
-        component: ComposerPanelId.RawMessages,
-        title: 'Raw Messages',
-        position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
-      });
-
-      if (this.showMockRules()) {
-        this.dockviewApi.addPanel({
-          id: ComposerPanelId.MockRules,
-          component: ComposerPanelId.MockRules,
-          title: 'Mock Rules',
-          position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
-        });
-      }
+      // Fresh workspace opens on the "Chat + Preview" preset (focus on render)
+      // rather than the full debug layout. Users switch via the preset toolbar.
+      this.buildChatPreviewLayout();
     }
 
     let saveTimeout: ReturnType<typeof setTimeout>;
@@ -359,6 +324,102 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     this.dockviewApi.layout(1000, 1000);
     this.isDockviewInitialized.set(true);
     this.checkTabOverflow();
+
+    // Highlight the toggle matching the last-applied preset. The layout itself
+    // is Google's saved freeform JSON when present, so the toggle is a hint of
+    // the last chosen arrangement, not a guarantee the layout still matches it.
+    const savedPreset = localStorage.getItem(WORKSPACE_PRESET_KEY);
+    if (savedPreset === 'chat' || savedPreset === 'chat-preview' || savedPreset === 'full') {
+      this.activePreset.set(savedPreset);
+    }
+  }
+
+  /**
+   * Applies a named layout preset: clears the workspace and rebuilds it with the
+   * preset's panel subset. Dockview's debounced layout-save then records the
+   * result, so a reload restores it (freeform edits included). No-op until the
+   * Dockview instance is initialized.
+   */
+  applyPreset(preset: WorkspacePreset): void {
+    if (!this.isDockviewInitialized()) return;
+    this.dockviewApi.clear();
+    if (preset === 'chat') {
+      this.buildChatLayout();
+    } else if (preset === 'chat-preview') {
+      this.buildChatPreviewLayout();
+    } else {
+      this.buildFullLayout();
+    }
+    this.activePreset.set(preset);
+    localStorage.setItem(WORKSPACE_PRESET_KEY, preset);
+  }
+
+  /** Preset "Chat": conversation only. */
+  private buildChatLayout(): void {
+    this.dockviewApi.addPanel({
+      id: ComposerPanelId.Chat,
+      component: ComposerPanelId.Chat,
+      title: 'Gemini Assistant',
+    });
+  }
+
+  /** Preset "Chat + Preview": conversation beside the live render (default focus). */
+  private buildChatPreviewLayout(): void {
+    this.buildChatLayout();
+    this.dockviewApi.addPanel({
+      id: ComposerPanelId.Rendered,
+      component: ComposerPanelId.Rendered,
+      title: 'Rendered A2UI Preview',
+      position: {direction: 'right', referencePanel: ComposerPanelId.Chat},
+    });
+  }
+
+  /**
+   * Preset "Chat + Preview + Code & Engine": the full workspace — chat, render,
+   * JSON editor, and the data-model / events / errors / raw-messages consoles.
+   * This is Google's original default layout.
+   */
+  private buildFullLayout(): void {
+    this.buildChatPreviewLayout();
+    this.dockviewApi.addPanel({
+      id: ComposerPanelId.Raw,
+      component: ComposerPanelId.Raw,
+      title: 'A2UI JSON Editor',
+      position: {direction: 'right', referencePanel: ComposerPanelId.Rendered},
+    });
+    this.dockviewApi.addPanel({
+      id: ComposerPanelId.DataModel,
+      component: ComposerPanelId.DataModel,
+      title: 'Data Model',
+      position: {direction: 'below', referencePanel: ComposerPanelId.Rendered},
+    });
+    this.dockviewApi.addPanel({
+      id: ComposerPanelId.Events,
+      component: ComposerPanelId.Events,
+      title: 'Events',
+      position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
+    });
+    this.dockviewApi.addPanel({
+      id: ComposerPanelId.Errors,
+      component: ComposerPanelId.Errors,
+      title: 'Errors',
+      position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
+    });
+    this.dockviewApi.addPanel({
+      id: ComposerPanelId.RawMessages,
+      component: ComposerPanelId.RawMessages,
+      title: 'Raw Messages',
+      position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
+    });
+
+    if (this.showMockRules()) {
+      this.dockviewApi.addPanel({
+        id: ComposerPanelId.MockRules,
+        component: ComposerPanelId.MockRules,
+        title: 'Mock Rules',
+        position: {direction: 'within', referencePanel: ComposerPanelId.DataModel},
+      });
+    }
   }
 
   /**
