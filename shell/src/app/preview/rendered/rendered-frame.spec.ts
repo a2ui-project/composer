@@ -60,7 +60,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
     };
 
     hostCommunicationServiceMock = {
-      registerIframeElement: vi.fn(),
       registerIframe: vi.fn(),
       sendTheme: vi.fn(),
     };
@@ -103,7 +102,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
   });
 
   it('registers the iframe element with HostCommunication upon view initialization', () => {
-    expect(hostCommunicationServiceMock.registerIframeElement).toHaveBeenCalled();
+    expect(hostCommunicationServiceMock.registerIframe).toHaveBeenCalled();
   });
 
   it('dispatches sendTheme via hostCommunication when theme preference changes without reloading iframe URL', async () => {

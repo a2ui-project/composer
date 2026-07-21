@@ -66,7 +66,6 @@ class MockCatalogManagement {
 
 class MockHostCommunication {
   sendRenderA2UI = vi.fn();
-  registerIframeElement = vi.fn();
   registerIframe = vi.fn();
   sendTheme = vi.fn();
 }

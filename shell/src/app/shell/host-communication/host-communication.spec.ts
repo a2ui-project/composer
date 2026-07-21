@@ -150,6 +150,7 @@ describe('HostCommunication', () => {
   it('blocks sendMessage when payload is malformed', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
+    (mockIframeWindow.postMessage as ReturnType<typeof vi.fn>).mockClear();
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     service.sendMessage({
@@ -169,6 +170,7 @@ describe('HostCommunication', () => {
   it('blocks sendRenderA2UI when array items lack version v0.9', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
+    (mockIframeWindow.postMessage as ReturnType<typeof vi.fn>).mockClear();
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     service.sendRenderA2UI([{updateDataModel: {surfaceId: 's-1'}}]);
@@ -195,7 +197,7 @@ describe('HostCommunication', () => {
   it('validates origin and emits envelope when message is received from registered iframe element', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     const mockIFrameElement = {contentWindow: mockIframeWindow} as unknown as HTMLIFrameElement;
-    service.registerIframeElement(mockIFrameElement);
+    service.registerIframe(mockIFrameElement);
 
     const event = new MessageEvent('message', {
       source: mockIframeWindow,
@@ -216,7 +218,7 @@ describe('HostCommunication', () => {
   it('sends message back to registered iframe element', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     const mockIFrameElement = {contentWindow: mockIframeWindow} as unknown as HTMLIFrameElement;
-    service.registerIframeElement(mockIFrameElement);
+    service.registerIframe(mockIFrameElement);
 
     service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
 
@@ -357,7 +359,7 @@ describe('HostCommunication', () => {
 
     expect(service.latestEnvelope()).toBeNull();
 
-    service.registerIframeElement(mockIFrameElement);
+    service.registerIframe(mockIFrameElement);
 
     expect(service.latestEnvelope()).toEqual({
       type: PreviewBridgeMessageType.RENDERER_READY,
@@ -590,5 +592,46 @@ describe('HostCommunication', () => {
       },
       'http://localhost:3000',
     );
+  });
+
+  it('automatically dispatches current themePreference upon iframe registration', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    themePreferenceSignal.set(ThemePreference.DARK);
+
+    service.registerIframe(mockIframeWindow);
+
+    expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.SET_THEME,
+        payload: {theme: ThemePreference.DARK},
+      },
+      'http://localhost:3000',
+    );
+  });
+
+  it('preserves early message buffer when registering an unattached iframe element with null contentWindow', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {status: 'early'}},
+      }),
+    );
+
+    const unattachedIframe = {contentWindow: null} as unknown as HTMLIFrameElement;
+    service.registerIframe(unattachedIframe);
+
+    expect(service.latestEnvelope()).toBeNull();
+
+    service.registerIframe(mockIframeWindow);
+
+    expect(service.latestEnvelope()).toEqual({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      payload: {status: 'early'},
+      origin: 'http://localhost:3000',
+      timestamp: expect.any(Number),
+    });
   });
 });

@@ -220,28 +220,31 @@ export class HostCommunication implements OnDestroy {
   }
 
   /**
-   * Registers an active content window directly and flushes any buffered early messages.
-   * @param contentWindow Target guest window reference
+   * Registers an active iframe DOM element or content window target and flushes
+   * any buffered early messages.
+   * @param target Target iframe element, window reference, or null to unregister
    */
-  registerIframe(contentWindow: Window | null): void {
-    this.iframeWindow = contentWindow;
-    if (contentWindow === null) {
+  registerIframe(target: HTMLIFrameElement | Window | null): void {
+    if (!target) {
+      this.iframeElement = null;
+      this.iframeWindow = null;
       this.earlyMessageBuffer.length = 0;
-    } else {
-      this.flushEarlyMessages();
+      return;
     }
-  }
 
-  /**
-   * Registers an iframe DOM element and flushes any buffered early messages.
-   * @param element Target iframe DOM element reference
-   */
-  registerIframeElement(element: HTMLIFrameElement | null): void {
-    this.iframeElement = element;
-    if (element === null) {
-      this.earlyMessageBuffer.length = 0;
+    let windowTarget: Window | null = null;
+    if ('contentWindow' in target) {
+      this.iframeElement = target as HTMLIFrameElement;
+      windowTarget = target.contentWindow;
     } else {
+      this.iframeElement = null;
+      windowTarget = target as Window;
+    }
+
+    this.iframeWindow = windowTarget;
+    if (windowTarget) {
       this.flushEarlyMessages();
+      this.sendTheme(this.configProvider.themePreference());
     }
   }
 
