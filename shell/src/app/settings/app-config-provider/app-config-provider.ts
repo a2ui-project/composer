@@ -16,6 +16,7 @@
  */
 
 import {Signal} from '@angular/core';
+import {ThemePreference} from 'a2ui-bridge';
 
 /**
  * Identifies the host operational target modes.
@@ -42,7 +43,7 @@ export enum AuthType {
   THIRD_PARTY = '3p',
 }
 
-export {ThemePreference} from 'a2ui-bridge';
+export {ThemePreference};
 
 /**
  * Declares abstract configuration parameters, shielding the workspace

@@ -31,7 +31,10 @@ import {
 import loader from '@monaco-editor/loader';
 import type * as monaco from 'monaco-editor';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
 
 const LAYOUT_MODEL_URI = 'a2ui://layout.json';
 
@@ -55,7 +58,9 @@ export class MonacoEditor {
   private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
 
-  protected readonly isDarkTheme = computed(() => this.configProvider.themePreference() === 'dark');
+  protected readonly isDarkTheme = computed(
+    () => this.configProvider.themePreference() === ThemePreference.DARK,
+  );
   protected readonly monacoTheme = computed(() => (this.isDarkTheme() ? 'vs-dark' : 'vs-light'));
 
   constructor() {

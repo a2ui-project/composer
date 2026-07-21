@@ -32,10 +32,6 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState} from '../../chat/chat-state/chat-state';
-import {
-  AppConfigProvider,
-  ThemePreference,
-} from '../../settings/app-config-provider/app-config-provider';
 import {MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
 
 /**
@@ -68,9 +64,6 @@ export class RawFrame {
 
   /** Public lock indicator preventing typing deadlocks during generative LLM stream turns. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
-  protected readonly isDarkTheme = computed(
-    () => this.configProvider.themePreference() === ThemePreference.DARK,
-  );
 
   constructor() {
     // Initialize backing editor layout state Signal dynamically from the volatile session cache
