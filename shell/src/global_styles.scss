@@ -41,7 +41,7 @@ $dark-theme: mat.define-theme(
 
 :root,
 .light-theme {
-  @include mat.all-component-themes($light-theme);
+  @include mat.all-component-colors($light-theme);
   @include mat.theme-overrides(
     (
       primary: #3f51b5,
