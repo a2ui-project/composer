@@ -33,7 +33,7 @@ import {DashboardCardApi} from '../../apis';
     <div class="cc-card">
       <div class="cc-card__header">
         <div class="cc-card__title">{{ title() }}</div>
-        @if (subtitle() != null) {
+        @if (subtitle() !== null) {
           <div class="cc-card__subtitle">{{ subtitle() }}</div>
         }
       </div>
