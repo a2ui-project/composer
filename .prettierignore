@@ -24,3 +24,4 @@ coverage
 **/coverage/**
 **/.angular/
 **/test-results/
+**/*.generated.ts

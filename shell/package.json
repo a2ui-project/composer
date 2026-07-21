@@ -15,6 +15,7 @@
     "prettier": "prettier --ignore-path ../.prettierignore --write . | grep -v '(unchanged)'",
     "prettier:check": "prettier --ignore-path ../.prettierignore --check .",
     "clean": "rm -rf dist .angular node_modules/.vite",
+    "generate:catalog-source": "node scripts/generate-catalog-source.mjs",
     "lint": "eslint ."
   },
   "dependencies": {
