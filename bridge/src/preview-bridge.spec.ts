@@ -2035,5 +2035,43 @@ describe('PreviewBridge Core API Runtime', () => {
         expect.any(Error),
       );
     });
+
+    it('immediately invokes onThemeChange with current applied theme when attachRenderer is called', () => {
+      bridge.applyThemeToDom('dark');
+
+      const onThemeChange = vi.fn();
+      const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+      const processor = {processMessages: vi.fn()};
+
+      bridge.attachRenderer(processor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+        onThemeChange,
+      });
+
+      expect(onThemeChange).toHaveBeenCalledTimes(1);
+      expect(onThemeChange).toHaveBeenCalledWith('dark');
+    });
+
+    it('logs error if onThemeChange callback throws an exception during attachRenderer', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      bridge.applyThemeToDom('dark');
+
+      const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+      const processor = {processMessages: vi.fn()};
+
+      bridge.attachRenderer(processor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+        onThemeChange: () => {
+          throw new Error('Attachment theme callback crashed');
+        },
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'PreviewBridge: Error inside onThemeChange callback during attachment:',
+        expect.any(Error),
+      );
+    });
   });
 });

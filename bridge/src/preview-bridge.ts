@@ -225,6 +225,17 @@ export class PreviewBridge {
       activeSurfaceIds,
     };
 
+    if (this.currentAppliedTheme && config.onThemeChange) {
+      try {
+        config.onThemeChange(this.currentAppliedTheme);
+      } catch (error) {
+        console.error(
+          'PreviewBridge: Error inside onThemeChange callback during attachment:',
+          error,
+        );
+      }
+    }
+
     // Dispatches the dynamic startup handshake message to the host Shell context
     // ONLY after this modular framework application has completed its asynchronous
     // bootstrapping and attached its active renderer. This guarantees that the
