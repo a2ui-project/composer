@@ -1,0 +1,134 @@
+[
+  {
+    "name": "Q1",
+    "data": {
+      "period": {
+        "title": "Q1 2025 Sales Dashboard",
+        "date_range": "Jan 1 \u2013 Mar 31, 2025"
+      },
+      "kpis": {
+        "revenue":   { "label": "Total", "value": "$980K", "trend": "up",      "trendValue": "+8.5%" },
+        "customers": { "label": "Count", "value": "2,940", "trend": "up",      "trendValue": "+5.2%" },
+        "aov":       { "label": "AOV",   "value": "$333",  "trend": "down",    "trendValue": "-2.1%" },
+        "churn":     { "label": "Rate",  "value": "4.4%",  "trend": "neutral", "trendValue": "+0.3%" }
+      },
+      "revenue_by_region": [
+        { "label": "North America", "value": 58, "color": "#3b82f6" },
+        { "label": "Europe",        "value": 25, "color": "#8b5cf6" },
+        { "label": "APAC",          "value": 12, "color": "#ec4899" },
+        { "label": "LATAM",         "value": 5,  "color": "#f59e0b" }
+      ],
+      "monthly_revenue": [
+        { "label": "Jan", "value": 305 },
+        { "label": "Feb", "value": 320 },
+        { "label": "Mar", "value": 355 }
+      ],
+      "recent_orders": [
+        { "id": "#10112", "customer": "Initrode",     "region": "NA",   "total": "$9,420",  "status": "Paid" },
+        { "id": "#10118", "customer": "Stark Ind.",   "region": "NA",   "total": "$7,880",  "status": "Paid" },
+        { "id": "#10121", "customer": "Massive Dyn.", "region": "EU",   "total": "$5,310",  "status": "Pending" },
+        { "id": "#10127", "customer": "Tyrell Corp",  "region": "APAC", "total": "$4,760",  "status": "Paid" },
+        { "id": "#10133", "customer": "Wayne Ent.",   "region": "NA",   "total": "$3,990",  "status": "Failed" }
+      ]
+    }
+  },
+  {
+    "name": "Q2",
+    "data": {
+      "period": {
+        "title": "Q2 2025 Sales Dashboard",
+        "date_range": "Apr 1 \u2013 Jun 30, 2025"
+      },
+      "kpis": {
+        "revenue":   { "label": "Total", "value": "$1.12M", "trend": "up",      "trendValue": "+14.3%" },
+        "customers": { "label": "Count", "value": "3,160",  "trend": "up",      "trendValue": "+11.8%" },
+        "aov":       { "label": "AOV",   "value": "$354",   "trend": "up",      "trendValue": "+0.4%" },
+        "churn":     { "label": "Rate",  "value": "4.2%",   "trend": "neutral", "trendValue": "\u00b10.0%" }
+      },
+      "revenue_by_region": [
+        { "label": "North America", "value": 54, "color": "#3b82f6" },
+        { "label": "Europe",        "value": 27, "color": "#8b5cf6" },
+        { "label": "APAC",          "value": 14, "color": "#ec4899" },
+        { "label": "LATAM",         "value": 5,  "color": "#f59e0b" }
+      ],
+      "monthly_revenue": [
+        { "label": "Apr", "value": 360 },
+        { "label": "May", "value": 370 },
+        { "label": "Jun", "value": 390 }
+      ],
+      "recent_orders": [
+        { "id": "#10284", "customer": "Acme Corp",   "region": "NA",   "total": "$11,200", "status": "Paid" },
+        { "id": "#10292", "customer": "Globex",      "region": "EU",   "total": "$7,640",  "status": "Paid" },
+        { "id": "#10301", "customer": "Cyberdyne",   "region": "APAC", "total": "$6,480",  "status": "Pending" },
+        { "id": "#10308", "customer": "Pied Piper",  "region": "NA",   "total": "$5,120",  "status": "Paid" },
+        { "id": "#10314", "customer": "Soylent Co.", "region": "NA",   "total": "$4,830",  "status": "Paid" }
+      ]
+    }
+  },
+  {
+    "name": "Q3",
+    "data": {
+      "period": {
+        "title": "Q3 2025 Sales Dashboard",
+        "date_range": "Jul 1 \u2013 Sep 30, 2025"
+      },
+      "kpis": {
+        "revenue":   { "label": "Total", "value": "$1.24M", "trend": "up",      "trendValue": "+19.2%" },
+        "customers": { "label": "Count", "value": "3,258",  "trend": "up",      "trendValue": "+15.7%" },
+        "aov":       { "label": "AOV",   "value": "$380",   "trend": "up",      "trendValue": "+1.2%" },
+        "churn":     { "label": "Rate",  "value": "4.1%",   "trend": "neutral", "trendValue": "-0.2%" }
+      },
+      "revenue_by_region": [
+        { "label": "North America", "value": 51, "color": "#3b82f6" },
+        { "label": "Europe",        "value": 28, "color": "#8b5cf6" },
+        { "label": "APAC",          "value": 16, "color": "#ec4899" },
+        { "label": "LATAM",         "value": 5,  "color": "#f59e0b" }
+      ],
+      "monthly_revenue": [
+        { "label": "Jul", "value": 395 },
+        { "label": "Aug", "value": 415 },
+        { "label": "Sep", "value": 430 }
+      ],
+      "recent_orders": [
+        { "id": "#10402", "customer": "Hooli",       "region": "NA",   "total": "$13,880", "status": "Paid" },
+        { "id": "#10411", "customer": "Oscorp",      "region": "EU",   "total": "$9,050",  "status": "Paid" },
+        { "id": "#10418", "customer": "LexCorp",     "region": "NA",   "total": "$7,320",  "status": "Pending" },
+        { "id": "#10425", "customer": "Aperture",    "region": "NA",   "total": "$6,110",  "status": "Paid" },
+        { "id": "#10429", "customer": "Weyland-Y.",  "region": "APAC", "total": "$4,950",  "status": "Failed" }
+      ]
+    }
+  },
+  {
+    "name": "Q4",
+    "data": {
+      "period": {
+        "title": "Q4 2025 Sales Dashboard",
+        "date_range": "Oct 1 \u2013 Dec 31, 2025"
+      },
+      "kpis": {
+        "revenue":   { "label": "Total", "value": "$1.28M", "trend": "up",      "trendValue": "+12.4%" },
+        "customers": { "label": "Count", "value": "3,482",  "trend": "up",      "trendValue": "+8.1%" },
+        "aov":       { "label": "AOV",   "value": "$367",   "trend": "down",    "trendValue": "-2.3%" },
+        "churn":     { "label": "Rate",  "value": "4.0%",   "trend": "neutral", "trendValue": "\u00b10.0%" }
+      },
+      "revenue_by_region": [
+        { "label": "North America", "value": 48, "color": "#3b82f6" },
+        { "label": "Europe",        "value": 29, "color": "#8b5cf6" },
+        { "label": "APAC",          "value": 18, "color": "#ec4899" },
+        { "label": "LATAM",         "value": 5,  "color": "#f59e0b" }
+      ],
+      "monthly_revenue": [
+        { "label": "Oct", "value": 410 },
+        { "label": "Nov", "value": 425 },
+        { "label": "Dec", "value": 445 }
+      ],
+      "recent_orders": [
+        { "id": "#10482", "customer": "Acme Corp",     "region": "NA",   "total": "$12,480", "status": "Paid" },
+        { "id": "#10483", "customer": "Globex",        "region": "EU",   "total": "$8,320",  "status": "Paid" },
+        { "id": "#10484", "customer": "Initech",       "region": "NA",   "total": "$6,150",  "status": "Pending" },
+        { "id": "#10485", "customer": "Hooli",         "region": "NA",   "total": "$5,940",  "status": "Paid" },
+        { "id": "#10486", "customer": "Umbrella Corp", "region": "APAC", "total": "$4,220",  "status": "Failed" }
+      ]
+    }
+  }
+]

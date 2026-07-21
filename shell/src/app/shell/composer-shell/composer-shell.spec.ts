@@ -202,7 +202,7 @@ describe('ComposerShell Layout', () => {
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(5);
+    expect(hiddenAttrs.length).toBe(6);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
@@ -210,16 +210,16 @@ describe('ComposerShell Layout', () => {
 
   it('renders Material icons inside navigation list items', async () => {
     const icons = await harness.getNavListIconsText();
-    expect(icons).toEqual(['construction', 'widgets', 'settings']);
+    expect(icons).toEqual(['construction', 'widgets', 'dashboard_customize', 'settings']);
   });
 
   it('enables tooltips on navigation items and hides labels when collapsed initially', async () => {
-    expect(await harness.getNavListTooltipsDisabled()).toEqual([false, false, false]);
+    expect(await harness.getNavListTooltipsDisabled()).toEqual([false, false, false, false]);
     expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(0);
     await harness.clickHamburgerButton();
     expect(await harness.isSidenavCollapsed()).toBe(false);
-    expect(await harness.getNavListTooltipsDisabled()).toEqual([true, true, true]);
-    expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(3);
+    expect(await harness.getNavListTooltipsDisabled()).toEqual([true, true, true, true]);
+    expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(4);
   });
 
   it('sets explicit aria-label attributes on navigation links and connects hamburger button to sidenav via aria-controls', () => {
@@ -227,7 +227,12 @@ describe('ComposerShell Layout', () => {
     const ariaLabels = navLinks.map((link: unknown) =>
       (link as Element).getAttribute('aria-label'),
     );
-    expect(ariaLabels).toEqual(['Composer Workspace', 'Components Gallery', 'Settings']);
+    expect(ariaLabels).toEqual([
+      'Composer Workspace',
+      'Components Gallery',
+      'Custom Catalog',
+      'Settings',
+    ]);
 
     const sidenavEl = fixture.nativeElement.querySelector('mat-sidenav');
     expect(sidenavEl.getAttribute('id')).toBe('composer-sidenav');
@@ -241,10 +246,15 @@ describe('ComposerShell Layout', () => {
     const rlaAttrs = navLinks.map((link: unknown) =>
       (link as Element).getAttribute('routerLinkActive'),
     );
-    expect(rlaAttrs).toEqual(['active-nav-item', 'active-nav-item', 'active-nav-item']);
+    expect(rlaAttrs).toEqual([
+      'active-nav-item',
+      'active-nav-item',
+      'active-nav-item',
+      'active-nav-item',
+    ]);
 
     const rlaDirectives = fixture.debugElement.queryAll(By.directive(RouterLinkActive));
-    expect(rlaDirectives.length).toBe(3);
+    expect(rlaDirectives.length).toBe(4);
     const rlaInstances = rlaDirectives.map(de => de.injector.get(RouterLinkActive));
     expect(rlaInstances[0].routerLinkActiveOptions).toEqual({exact: true});
 

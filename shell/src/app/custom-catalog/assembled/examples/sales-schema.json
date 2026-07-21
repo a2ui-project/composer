@@ -1,0 +1,158 @@
+[
+  {
+    "id": "root",
+    "component": "Column",
+    "gap": 20,
+    "children": ["hero", "kpi-row", "charts-row", "orders-card"]
+  },
+
+  {
+    "id": "hero",
+    "component": "Column",
+    "gap": 4,
+    "children": ["hero-title", "hero-sub"]
+  },
+  {
+    "id": "hero-title",
+    "component": "Title",
+    "text": { "path": "/period/title" },
+    "level": "h1"
+  },
+  {
+    "id": "hero-sub",
+    "component": "Title",
+    "text": { "path": "/period/date_range" },
+    "level": "h3"
+  },
+
+  {
+    "id": "kpi-row",
+    "component": "Row",
+    "gap": 16,
+    "children": ["card-revenue", "card-customers", "card-aov", "card-churn"]
+  },
+
+  {
+    "id": "card-revenue",
+    "component": "DashboardCard",
+    "title": "Revenue",
+    "subtitle": "Quarter-to-date",
+    "child": "metric-revenue"
+  },
+  {
+    "id": "metric-revenue",
+    "component": "Metric",
+    "label":      { "path": "/kpis/revenue/label" },
+    "value":      { "path": "/kpis/revenue/value" },
+    "trendValue": { "path": "/kpis/revenue/trendValue" },
+    "trend": "up"
+  },
+
+  {
+    "id": "card-customers",
+    "component": "DashboardCard",
+    "title": "New customers",
+    "subtitle": "vs. last year",
+    "child": "metric-customers"
+  },
+  {
+    "id": "metric-customers",
+    "component": "Metric",
+    "label":      { "path": "/kpis/customers/label" },
+    "value":      { "path": "/kpis/customers/value" },
+    "trendValue": { "path": "/kpis/customers/trendValue" },
+    "trend": "up"
+  },
+
+  {
+    "id": "card-aov",
+    "component": "DashboardCard",
+    "title": "Avg order value",
+    "subtitle": "vs. last year",
+    "child": "metric-aov"
+  },
+  {
+    "id": "metric-aov",
+    "component": "Metric",
+    "label":      { "path": "/kpis/aov/label" },
+    "value":      { "path": "/kpis/aov/value" },
+    "trendValue": { "path": "/kpis/aov/trendValue" },
+    "trend": "down"
+  },
+
+  {
+    "id": "card-churn",
+    "component": "DashboardCard",
+    "title": "Churn",
+    "subtitle": "Monthly average",
+    "child": "metric-churn"
+  },
+  {
+    "id": "metric-churn",
+    "component": "Metric",
+    "label":      { "path": "/kpis/churn/label" },
+    "value":      { "path": "/kpis/churn/value" },
+    "trendValue": { "path": "/kpis/churn/trendValue" },
+    "trend": "neutral"
+  },
+
+  {
+    "id": "charts-row",
+    "component": "Row",
+    "gap": 16,
+    "children": ["card-region", "card-monthly"]
+  },
+  {
+    "id": "card-region",
+    "component": "DashboardCard",
+    "title": "Revenue by region",
+    "subtitle": "Share of total",
+    "child": "pie-region"
+  },
+  {
+    "id": "pie-region",
+    "component": "PieChart",
+    "data": { "path": "/revenue_by_region" }
+  },
+  {
+    "id": "card-monthly",
+    "component": "DashboardCard",
+    "title": "Monthly revenue",
+    "subtitle": "Months in this quarter",
+    "child": "bar-monthly"
+  },
+  {
+    "id": "bar-monthly",
+    "component": "BarChart",
+    "data": { "path": "/monthly_revenue" },
+    "color": "#10b981",
+    "valuePrefix": "$",
+    "valueSuffix": "K"
+  },
+
+  {
+    "id": "orders-card",
+    "component": "DashboardCard",
+    "title": "Recent orders",
+    "subtitle": "Top 5 by value this week",
+    "child": "orders-table"
+  },
+  {
+    "id": "orders-table",
+    "component": "DataTable",
+    "columns": [
+      { "key": "id",       "label": "Order" },
+      { "key": "customer", "label": "Customer" },
+      { "key": "region",   "label": "Region" },
+      { "key": "total",    "label": "Total" },
+      { "key": "status",   "label": "Status" }
+    ],
+    "rows": [
+      { "id": "#10482", "customer": "Acme Corp",     "region": "NA",   "total": "$12,480", "status": "Paid" },
+      { "id": "#10483", "customer": "Globex",        "region": "EU",   "total": "$8,320",  "status": "Paid" },
+      { "id": "#10484", "customer": "Initech",       "region": "NA",   "total": "$6,150",  "status": "Pending" },
+      { "id": "#10485", "customer": "Hooli",         "region": "NA",   "total": "$5,940",  "status": "Paid" },
+      { "id": "#10486", "customer": "Umbrella Corp", "region": "APAC", "total": "$4,220",  "status": "Failed" }
+    ]
+  }
+]

@@ -1,0 +1,86 @@
+[
+  {
+    "name": "Morning Flights",
+    "data": {
+      "flights": [
+        {
+          "id": "ua-1201",
+          "airline": "United Airlines",
+          "airlineLogo": "https://www.google.com/s2/favicons?domain=united.com&sz=128",
+          "flightNumber": "UA 1201",
+          "origin": "SFO",
+          "destination": "JFK",
+          "date": "Tue, Mar 18",
+          "departureTime": "08:15",
+          "arrivalTime": "16:40",
+          "duration": "5h 25m",
+          "status": "On Time",
+          "price": "$289"
+        },
+        {
+          "id": "dl-2204",
+          "airline": "Delta Air Lines",
+          "airlineLogo": "https://www.google.com/s2/favicons?domain=delta.com&sz=128",
+          "flightNumber": "DL 2204",
+          "origin": "SFO",
+          "destination": "JFK",
+          "date": "Tue, Mar 18",
+          "departureTime": "10:45",
+          "arrivalTime": "19:30",
+          "duration": "5h 45m",
+          "status": "Delayed",
+          "price": "$312"
+        }
+      ]
+    }
+  },
+  {
+    "name": "Afternoon Flights",
+    "data": {
+      "flights": [
+        {
+          "id": "aa-1140",
+          "airline": "American Airlines",
+          "airlineLogo": "https://www.google.com/s2/favicons?domain=aa.com&sz=128",
+          "flightNumber": "AA 1140",
+          "origin": "SFO",
+          "destination": "JFK",
+          "date": "Tue, Mar 18",
+          "departureTime": "12:20",
+          "arrivalTime": "20:55",
+          "duration": "5h 35m",
+          "status": "On Time",
+          "price": "$298"
+        },
+        {
+          "id": "b6-1218",
+          "airline": "JetBlue Airways",
+          "airlineLogo": "https://www.google.com/s2/favicons?domain=jetblue.com&sz=128",
+          "flightNumber": "B6 1218",
+          "origin": "SFO",
+          "destination": "JFK",
+          "date": "Tue, Mar 18",
+          "departureTime": "14:05",
+          "arrivalTime": "22:30",
+          "duration": "5h 25m",
+          "status": "Boarding",
+          "price": "$264"
+        },
+        {
+          "id": "as-32",
+          "airline": "Alaska Airlines",
+          "airlineLogo": "https://www.google.com/s2/favicons?domain=alaskaair.com&sz=128",
+          "flightNumber": "AS 32",
+          "origin": "SFO",
+          "destination": "JFK",
+          "date": "Tue, Mar 18",
+          "departureTime": "21:30",
+          "arrivalTime": "05:50",
+          "duration": "5h 20m",
+          "status": "On Time",
+          "price": "$276"
+        }
+      ]
+    }
+  }
+]
