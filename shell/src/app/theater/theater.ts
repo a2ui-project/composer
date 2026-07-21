@@ -87,7 +87,6 @@ export class Theater {
 
   /** Number of messages applied so far (0..totalSteps). */
   protected readonly step = signal<number>(0);
-  private appliedStep = 0;
   private gen = 0;
   protected readonly playbackSurfaceId = signal<string>('theater-0');
 
@@ -145,50 +144,52 @@ export class Theater {
     }
   }
 
-  /** Moves the playhead to `target` (clamped), rebuilding on a rewind. */
+  /**
+   * Moves the playhead to `target` (clamped). Always replays the prefix
+   * `[0, target)` as a single batch onto a fresh surface generation: this
+   * keeps `createSurface` + `updateComponents` (+ data) in one
+   * `processMessages` call — the form the native renderer renders correctly —
+   * and creates the surface in the same synchronous tick the template switches
+   * to its id, so there is no mount-before-create gap. Old generations linger
+   * harmlessly in the service.
+   */
   protected seek(target: number): void {
     const clamped = Math.max(0, Math.min(target, this.totalSteps()));
-    const messages = this.activeRecording().messages;
-    if (clamped < this.appliedStep) {
-      this.gen += 1;
-      this.playbackSurfaceId.set(`theater-${this.gen}`);
-      this.appliedStep = 0;
-      this.applyRange(messages, 0, clamped);
-    } else if (clamped > this.appliedStep) {
-      this.applyRange(messages, this.appliedStep, clamped);
+    this.gen += 1;
+    const surfaceId = `theater-${this.gen}`;
+    this.playbackSurfaceId.set(surfaceId);
+    const batch = this.activeRecording()
+      .messages.slice(0, clamped)
+      .map(message => this.toNativeMessage(message, surfaceId));
+    if (batch.length > 0) {
+      this.renderer.processMessages(batch as never);
     }
-    this.appliedStep = clamped;
     this.step.set(clamped);
   }
 
-  private applyRange(messages: TheaterMessage[], from: number, to: number): void {
-    const surfaceId = this.playbackSurfaceId();
-    for (let i = from; i < to; i++) {
-      this.renderer.processMessages([this.withSurfaceId(messages[i], surfaceId)] as never);
-    }
-  }
-
-  /** Clones a message with its sub-message `surfaceId` rewritten to `surfaceId`. */
-  private withSurfaceId(msg: TheaterMessage, surfaceId: string): TheaterMessage {
-    const clone: TheaterMessage = {...msg};
+  /**
+   * Converts a recorded v0.9 envelope into the unwrapped message the native
+   * renderer expects: drops the top-level `version` field (the native
+   * `processMessages` takes bare `{createSurface|updateComponents|
+   * updateDataModel: {...}}`, as the Assembled/Reference pages send) and
+   * rewrites the sub-message `surfaceId` to the live generation.
+   */
+  private toNativeMessage(msg: TheaterMessage, surfaceId: string): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
     for (const key of ['createSurface', 'updateComponents', 'updateDataModel'] as const) {
-      const sub = clone[key];
+      const sub = msg[key];
       if (sub && typeof sub === 'object') {
-        clone[key] = {...(sub as Record<string, unknown>), surfaceId};
+        out[key] = {...(sub as Record<string, unknown>), surfaceId};
       }
     }
-    return clone;
+    return out;
   }
 
   protected selectRecording(id: string): void {
     if (id === this.activeRecordingId()) return;
     this.pause();
     this.activeRecordingId.set(id);
-    // Start the new recording blank on a fresh generation.
-    this.gen += 1;
-    this.playbackSurfaceId.set(`theater-${this.gen}`);
-    this.appliedStep = 0;
-    this.step.set(0);
+    this.seek(0); // fresh generation, blank surface
   }
 
   protected setInspectorTab(tab: InspectorTab): void {
