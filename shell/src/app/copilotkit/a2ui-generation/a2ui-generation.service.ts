@@ -129,7 +129,10 @@ export class A2uiGenerationService {
    * bubbles. Expected generation, validation, and connectivity failures resolve
    * to an `{ok: false}` result rather than throwing.
    */
-  async generate(messages: LlmMessage[]): Promise<GenerationResult> {
+  async generate(
+    messages: LlmMessage[],
+    opts?: {onThinking?: (delta: string, accumulated: string) => void},
+  ): Promise<GenerationResult> {
     // Lock UI controls and transition state indicators to receiving stream
     this.chatState.setProgrammaticStreamActive(true);
     this.chatState.setPipelineStatus(PipelineStatus.RECEIVING_STREAM);
@@ -152,11 +155,15 @@ export class A2uiGenerationService {
       this.activeStreamResponse = responseStream;
 
       // Drive the stream to completion so an in-flight cancel can interrupt
-      // it. Chunk content is surfaced to chat bubbles only by ChatCoordinator,
-      // so streamed fragments intentionally produce no side effects here.
-      for await (const _chunk of responseStream.contentStream) {
-        // Intentionally empty: the headless pipeline consumes only the final
-        // accumulated text resolved by `complete` below.
+      // it. Chunk content is surfaced to chat bubbles only by ChatCoordinator;
+      // here we forward only the model's thinking deltas, letting a driver
+      // stream the reasoning live. The final layout still comes from `complete`.
+      let accumulatedThinking = '';
+      for await (const chunk of responseStream.contentStream) {
+        if (chunk.thinking) {
+          accumulatedThinking += chunk.thinking;
+          opts?.onThinking?.(chunk.thinking, accumulatedThinking);
+        }
       }
 
       // Stream exhausted, resolve final complete text

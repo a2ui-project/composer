@@ -93,6 +93,15 @@ function streamOf(payload: string): LlmStreamResponse {
   };
 }
 
+/** A stream whose chunks may carry `thinking` deltas alongside content. */
+async function* createThinkingStream(
+  chunks: Array<{content?: string; thinking?: string}>,
+): AsyncIterable<LlmResponse> {
+  for (const chunk of chunks) {
+    yield {content: chunk.content ?? '', thinking: chunk.thinking};
+  }
+}
+
 class MockLlmClient {
   chat = vi.fn();
   chatStream = vi.fn(async (): Promise<LlmStreamResponse> => streamOf(''));
@@ -205,6 +214,33 @@ describe('A2uiGenerationService', () => {
     expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
     expect(chatStateMock.pipelineStatus()).toBe(PipelineStatus.FAILED);
     expect(chatStateMock.isProgrammaticStreamActive()).toBe(false);
+  });
+
+  it('forwards the model thinking deltas to the onThinking callback', async () => {
+    llmClientMock.chatStream = vi.fn(async () => ({
+      contentStream: createThinkingStream([
+        {thinking: 'First I '},
+        {thinking: 'plan the layout.'},
+        {content: 'streamed-content-with-no-thinking'},
+      ]),
+      complete: Promise.resolve(VALID_THREE_LINE_PAYLOAD),
+    }));
+
+    const deltas: string[] = [];
+    let lastAccumulated = '';
+    const result = await service.generate(USER_MESSAGES, {
+      onThinking: (delta, accumulated) => {
+        deltas.push(delta);
+        lastAccumulated = accumulated;
+      },
+    });
+
+    // Only chunks carrying `thinking` fire the callback; content-only chunks don't.
+    expect(deltas).toEqual(['First I ', 'plan the layout.']);
+    expect(lastAccumulated).toBe('First I plan the layout.');
+    // The final layout still comes from `complete`, not the streamed chunks.
+    expect(result.ok).toBe(true);
+    expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalledTimes(1);
   });
 
   it('cancels an active stream and resolves without committing', async () => {

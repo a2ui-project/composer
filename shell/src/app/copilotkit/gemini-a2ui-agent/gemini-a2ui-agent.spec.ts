@@ -29,9 +29,20 @@ class FakeGenerationService {
     heals: [],
     surfaceTitle: 'Book a Car',
   };
+  /** Thinking deltas replayed through `opts.onThinking` during generate(). */
+  thinkingDeltas: string[] = [];
   cancel = vi.fn();
   systemPrompt = () => 'SYSTEM PROMPT';
-  generate = vi.fn(async () => this.result);
+  generate = vi.fn(
+    async (_messages: unknown, opts?: {onThinking?: (delta: string, accumulated: string) => void}) => {
+      let accumulated = '';
+      for (const delta of this.thinkingDeltas) {
+        accumulated += delta;
+        opts?.onThinking?.(delta, accumulated);
+      }
+      return this.result;
+    },
+  );
 }
 
 function makeInput(userText: string): RunAgentInput {
@@ -84,6 +95,40 @@ describe('GeminiA2uiAgent', () => {
     // Raw model JSONL is never streamed as assistant content.
     const content = events.find(e => e.type === EventType.TEXT_MESSAGE_CONTENT) as {delta: string};
     expect(content.delta).toBe('Generating your UI…');
+  });
+
+  it('streams the model thinking as an AG-UI reasoning message before the tool call', async () => {
+    fake.thinkingDeltas = ['I need ', 'a booking form'];
+    const events = await runToEvents(agent, makeInput('a booking form'));
+
+    expect(events.map(e => e.type)).toEqual([
+      EventType.RUN_STARTED,
+      EventType.TEXT_MESSAGE_START,
+      EventType.TEXT_MESSAGE_CONTENT,
+      EventType.TEXT_MESSAGE_END,
+      EventType.REASONING_MESSAGE_START,
+      EventType.REASONING_MESSAGE_CONTENT,
+      EventType.REASONING_MESSAGE_CONTENT,
+      EventType.REASONING_MESSAGE_END,
+      EventType.TOOL_CALL_START,
+      EventType.TOOL_CALL_ARGS,
+      EventType.TOOL_CALL_END,
+      EventType.RUN_FINISHED,
+    ]);
+
+    const start = events.find(e => e.type === EventType.REASONING_MESSAGE_START) as {role: string};
+    expect(start.role).toBe('reasoning');
+    const deltas = events
+      .filter(e => e.type === EventType.REASONING_MESSAGE_CONTENT)
+      .map(e => (e as {delta: string}).delta);
+    expect(deltas).toEqual(['I need ', 'a booking form']);
+  });
+
+  it('emits no reasoning events when the model returns no thinking', async () => {
+    const events = await runToEvents(agent, makeInput('a form'));
+    const types = events.map(e => e.type);
+    expect(types).not.toContain(EventType.REASONING_MESSAGE_START);
+    expect(types).not.toContain(EventType.REASONING_MESSAGE_CONTENT);
   });
 
   it('emits an a2ui_repair tool call when the pipeline healed component names', async () => {
