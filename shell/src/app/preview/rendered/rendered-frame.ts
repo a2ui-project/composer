@@ -80,9 +80,7 @@ export class RenderedFrame {
 
     effect(() => {
       const theme = this.configProvider.themePreference();
-      if (typeof this.hostCommunication.sendTheme === 'function') {
-        this.hostCommunication.sendTheme(theme);
-      }
+      this.hostCommunication.sendTheme(theme);
     });
   }
 }

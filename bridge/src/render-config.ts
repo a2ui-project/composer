@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import {ThemePreference} from './bridge-message';
 
 /**
  * A lightweight, framework-agnostic representation of an observable data model stream.
@@ -65,8 +66,6 @@ export interface ComponentUsage {
 
 /** A record mapping component names to their usage definition. */
 export type ComponentUsages = Record<string, ComponentUsage>;
-
-import {ThemePreference} from './bridge-message';
 
 /** Configuration and lifecycle callbacks for attaching a renderer. */
 export interface RendererConfig {
