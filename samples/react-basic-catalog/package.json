@@ -15,23 +15,23 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@a2ui/react": "0.10.1",
-    "@a2ui/web_core": "0.10.2",
+    "@a2ui/react": "0.10.2",
+    "@a2ui/web_core": "0.10.5",
     "a2ui-bridge": "0.1.0",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.2",
-    "eslint": "10.5.0",
+    "@vitejs/plugin-react": "6.0.3",
+    "eslint": "10.7.0",
     "jsdom": "29.1.1",
-    "prettier": "3.8.4",
+    "prettier": "3.9.6",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.61.1",
-    "vite": "8.0.16",
-    "vitest": "4.1.8"
+    "typescript-eslint": "8.65.0",
+    "vite": "8.1.5",
+    "vitest": "4.1.10"
   }
 }
