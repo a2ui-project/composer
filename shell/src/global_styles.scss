@@ -37,9 +37,11 @@ $dark-theme: mat.define-theme(
   )
 );
 
-@include mat.all-component-themes($light-theme);
+@include mat.all-component-bases($light-theme);
 
-:root {
+:root,
+.light-theme {
+  @include mat.all-component-themes($light-theme);
   @include mat.theme-overrides(
     (
       primary: #3f51b5,
