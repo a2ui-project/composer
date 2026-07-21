@@ -18,9 +18,11 @@ import {TestBed} from '@angular/core/testing';
 import {provideRouter, Router} from '@angular/router';
 import {RouterTestingHarness} from '@angular/router/testing';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {signal} from '@angular/core';
+import {Component, signal} from '@angular/core';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {routes} from './app.routes';
+import {ComposerWorkspace} from './shell/composer-workspace/composer-workspace';
+import {CopilotSidebar} from './copilotkit/copilot-sidebar/copilot-sidebar';
 import {StartupResolution} from './shell/startup-resolution/startup-resolution';
 import {ChatState} from './chat/chat-state/chat-state';
 import {ChatCoordinator} from './chat/chat-service/chat-coordinator';
@@ -36,6 +38,17 @@ import {CatalogManagement} from './storage/catalog-management/catalog-management
 import {IndexedDbStorage} from './storage/indexed-db-storage/indexed-db-storage';
 import {LocalStorageInteractions} from './storage/local-storage-interactions/local-storage-interactions';
 import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
+
+/**
+ * Stubs the docked sidebar so routing into the workspace does not require the
+ * CopilotKit runtime (COPILOT_KIT_CONFIG) — this suite verifies routing only.
+ */
+@Component({
+  selector: 'a2ui-composer-copilot-sidebar',
+  standalone: true,
+  template: '',
+})
+class CopilotSidebarStub {}
 
 class MockStartupResolution {
   readonly resolvedUrl = signal('http://localhost:4200');
@@ -123,7 +136,12 @@ describe('App Routes Active Verification', () => {
           useValue: {removeItem: vi.fn(), getItem: vi.fn().mockReturnValue(null)},
         },
       ],
-    }).compileComponents();
+    })
+      .overrideComponent(ComposerWorkspace, {
+        remove: {imports: [CopilotSidebar]},
+        add: {imports: [CopilotSidebarStub]},
+      })
+      .compileComponents();
 
     harness = await RouterTestingHarness.create();
     router = TestBed.inject(Router);
