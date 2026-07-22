@@ -803,8 +803,7 @@ export class PreviewBridge {
       const catalog = this.parseCatalogData(resolved.rawData);
 
       const catalogId = (catalog as Record<string, unknown> | undefined)?.['catalogId'] as
-        | string
-        | undefined;
+        string | undefined;
       if (catalogId) {
         this.notifyCatalogResolved(catalogId);
       }
