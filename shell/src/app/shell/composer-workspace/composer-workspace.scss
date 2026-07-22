@@ -28,45 +28,6 @@
   overflow: hidden;
 }
 
-.workspace-toolbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: var(--cpk-space-3);
-  padding: var(--cpk-space-2) var(--cpk-space-3);
-}
-
-.preset-switcher {
-  border: 1px solid var(--cpk-border);
-  border-radius: var(--cpk-radius-pill);
-  overflow: hidden;
-  background: var(--cpk-surface-elevated);
-  font-family: var(--cpk-font-body);
-
-  ::ng-deep .mat-button-toggle-label-content {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--cpk-space-2);
-    line-height: 34px;
-    padding: 0 var(--cpk-space-3);
-  }
-
-  ::ng-deep .mat-button-toggle {
-    color: var(--cpk-text-secondary);
-  }
-
-  ::ng-deep .mat-button-toggle-checked {
-    background: var(--cpk-accent-bg);
-    color: var(--cpk-accent);
-  }
-
-  ::ng-deep mat-icon {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
-  }
-}
-
 .dockview-root {
   width: 100%;
   flex: 1 1 auto;

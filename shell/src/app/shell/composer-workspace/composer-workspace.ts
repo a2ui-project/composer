@@ -31,9 +31,6 @@ import {
   Type,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {MatButtonToggleModule} from '@angular/material/button-toggle';
-import {MatIconModule} from '@angular/material/icon';
-import {MatTooltipModule} from '@angular/material/tooltip';
 import {ChatPanel} from '../../chat/chat-panel/chat-panel';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
@@ -49,6 +46,7 @@ import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
+import {WorkspaceLayout, WorkspacePreset} from '../workspace-layout/workspace-layout';
 import {DockviewComponent} from 'dockview';
 
 /** Internal interface mapping raw cross-frame workspace telemetry payloads */
@@ -71,12 +69,6 @@ export enum ComposerPanelId {
   MockRules = 'mockRules',
 }
 
-/** Named workspace layout presets selectable from the panel-setup switcher. */
-export type WorkspacePreset = 'chat' | 'chat-preview' | 'full';
-
-/** localStorage key remembering the last-applied preset (for the toggle highlight). */
-const WORKSPACE_PRESET_KEY = 'composer_workspace_preset';
-
 /**
  * The central workspace hub coordinating split-pane views between
  * the layout editors, active preview frame, and debug consoles.
@@ -84,7 +76,7 @@ const WORKSPACE_PRESET_KEY = 'composer_workspace_preset';
 @Component({
   selector: 'a2ui-composer-workspace',
   standalone: true,
-  imports: [MatButtonToggleModule, MatIconModule, MatTooltipModule],
+  imports: [],
   templateUrl: './composer-workspace.ng.html',
   styleUrl: './composer-workspace.scss',
 })
@@ -94,6 +86,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   private hostComm = inject(HostCommunication);
   private viewContainerRef = inject(ViewContainerRef);
   private configProvider = inject(AppConfigProvider);
+  private readonly layout = inject(WorkspaceLayout);
 
   readonly dockviewRoot = viewChild.required<ElementRef<HTMLElement>>('dockviewRoot');
 
@@ -103,8 +96,12 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   unreadErrorsCount = signal(0);
   isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
 
-  /** The workspace layout preset currently applied (drives the switcher highlight). */
-  readonly activePreset = signal<WorkspacePreset>('chat-preview');
+  /**
+   * The workspace layout preset currently applied. Owned by WorkspaceLayout so
+   * the header toggle and this workspace share one source of truth; re-exposed
+   * here for programmatic and test access.
+   */
+  readonly activePreset = this.layout.activePreset;
 
   private readonly isDockviewInitialized = signal(false);
   private dockviewApi!: DockviewComponent;
@@ -325,22 +322,32 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     this.isDockviewInitialized.set(true);
     this.checkTabOverflow();
 
-    // Highlight the toggle matching the last-applied preset. The layout itself
-    // is Google's saved freeform JSON when present, so the toggle is a hint of
+    // Expose this workspace to the header's layout toggle while it is mounted,
+    // and tear the registration down on destroy. WorkspaceLayout already
+    // reflects the last-applied preset on the toggle; the saved Dockview layout
+    // above is Google's freeform JSON when present, so the toggle is a hint of
     // the last chosen arrangement, not a guarantee the layout still matches it.
-    const savedPreset = localStorage.getItem(WORKSPACE_PRESET_KEY);
-    if (savedPreset === 'chat' || savedPreset === 'chat-preview' || savedPreset === 'full') {
-      this.activePreset.set(savedPreset);
-    }
+    this.destroyRef.onDestroy(this.layout.register(preset => this.rebuildLayout(preset)));
   }
 
   /**
-   * Applies a named layout preset: clears the workspace and rebuilds it with the
-   * preset's panel subset. Dockview's debounced layout-save then records the
-   * result, so a reload restores it (freeform edits included). No-op until the
-   * Dockview instance is initialized.
+   * Applies a named layout preset through WorkspaceLayout, which rebuilds this
+   * workspace (via the registered callback), updates the header toggle, and
+   * persists the choice. Dockview's debounced layout-save then records the
+   * result, so a reload restores it (freeform edits included). A thin
+   * pass-through for programmatic/host and test use; the header toggle drives
+   * normal usage.
    */
   applyPreset(preset: WorkspacePreset): void {
+    this.layout.apply(preset);
+  }
+
+  /**
+   * Clears and rebuilds the Dockview layout for a preset. Registered with
+   * WorkspaceLayout so the header toggle can drive it; WorkspaceLayout owns the
+   * active-preset signal and persistence. No-op until Dockview is initialized.
+   */
+  private rebuildLayout(preset: WorkspacePreset): void {
     if (!this.isDockviewInitialized()) return;
     this.dockviewApi.clear();
     if (preset === 'chat') {
@@ -350,8 +357,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     } else {
       this.buildFullLayout();
     }
-    this.activePreset.set(preset);
-    localStorage.setItem(WORKSPACE_PRESET_KEY, preset);
   }
 
   /** Preset "Chat": conversation only. */

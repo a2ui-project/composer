@@ -103,3 +103,53 @@
 .theme-toggle-button {
   margin-left: 8px;
 }
+
+// Single IDE-style layout toggle: shows the active workspace layout and cycles
+// to the next on click (Chat -> Chat + Preview -> Code & Engine -> Chat).
+.layout-cycle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  margin-left: 8px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--mat-sys-on-surface);
+  font-family: inherit;
+  font-size: var(--mat-sys-label-large-size, 14px);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-high);
+    border-color: var(--mat-sys-outline);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+  }
+
+  .layout-cycle-label {
+    white-space: nowrap;
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .layout-cycle-caret {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}

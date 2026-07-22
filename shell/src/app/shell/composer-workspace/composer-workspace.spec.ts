@@ -16,6 +16,7 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ComposerWorkspace, ComposerPanelId} from './composer-workspace';
+import {WorkspaceLayout} from '../workspace-layout/workspace-layout';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
@@ -332,9 +333,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('restores dockview layout from localStorage on initialization', async () => {
       // Create new fixture since dockview is initialized on AfterViewInit
-      const getItemSpy = vi
-        .spyOn(Storage.prototype, 'getItem')
-        .mockReturnValue(JSON.stringify({}));
+      const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify({}));
       const newFixture = TestBed.createComponent(ComposerWorkspace);
 
       const apiSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON').mockImplementation(() => {});
@@ -466,6 +465,20 @@ describe('ComposerWorkspace Dashboard', () => {
     it('persists the applied preset to localStorage', () => {
       fixture.componentInstance.applyPreset('chat');
       expect(localStorage.getItem('composer_workspace_preset')).toBe('chat');
+    });
+
+    it('registers with WorkspaceLayout so the header toggle can drive a rebuild', () => {
+      const layout = TestBed.inject(WorkspaceLayout);
+      expect(layout.isActive()).toBe(true);
+      expect(layout.activePreset()).toBe('chat-preview');
+
+      layout.cycle(); // chat-preview -> full
+      fixture.detectChanges();
+
+      expect(layout.activePreset()).toBe('full');
+      const ids = fixture.componentInstance['dockviewApi'].panels.map(p => p.id);
+      expect(ids).toContain(ComposerPanelId.Raw);
+      expect(ids).toContain(ComposerPanelId.DataModel);
     });
   });
 });

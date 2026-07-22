@@ -32,6 +32,19 @@
   <button mat-button class="reset-session-button" color="primary" (click)="resetSession()">
     New Session
   </button>
+  @if (layout.isActive()) {
+    <button
+      type="button"
+      class="layout-cycle-button"
+      (click)="layout.cycle()"
+      [matTooltip]="'Switch to ' + layout.nextPresetMeta().label"
+      aria-label="Switch workspace layout"
+    >
+      <mat-icon aria-hidden="true">{{ layout.activePresetMeta().icon }}</mat-icon>
+      <span class="layout-cycle-label">{{ layout.activePresetMeta().label }}</span>
+      <mat-icon class="layout-cycle-caret" aria-hidden="true">unfold_more</mat-icon>
+    </button>
+  }
   <button
     mat-icon-button
     class="theme-toggle-button"
