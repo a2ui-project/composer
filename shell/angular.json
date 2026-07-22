@@ -39,6 +39,7 @@
             ],
             "styles": [
               "@angular/material/prebuilt-themes/indigo-pink.css",
+              "dockview/dist/styles/dockview.css",
               "src/global_styles.scss"
             ],
             "scripts": [],
