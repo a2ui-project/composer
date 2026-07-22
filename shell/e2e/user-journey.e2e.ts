@@ -58,7 +58,7 @@ test.describe('E2E Workspace User Journey', () => {
     await page.waitForLoadState('load');
 
     // 7. Wait for Monaco to load and enter malformed JSON
-    const editorLocator = page.locator('a2ui-composer-monaco-editor');
+    const editorLocator = page.locator('.monaco-editor');
     await expect(editorLocator).toBeVisible();
 
     await page.waitForFunction(() => {
