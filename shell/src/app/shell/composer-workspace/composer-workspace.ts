@@ -31,7 +31,8 @@ import {
   Type,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {ChatPanel} from '../../chat/chat-panel/chat-panel';
+import {MatButtonModule} from '@angular/material/button';
+import {MatIconModule} from '@angular/material/icon';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {DataModel} from '../../debug/data-model/data-model';
@@ -46,6 +47,9 @@ import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
+import {ChatState} from '../../chat/chat-state/chat-state';
+import {PipelineStatus} from '../../chat/pipeline-status/pipeline-status';
+import {CopilotSidebar} from '../../copilotkit/copilot-sidebar/copilot-sidebar';
 import {DockviewComponent} from 'dockview';
 
 /** Internal interface mapping raw cross-frame workspace telemetry payloads */
@@ -75,6 +79,7 @@ export enum ComposerPanelId {
 @Component({
   selector: 'a2ui-composer-workspace',
   standalone: true,
+  imports: [CopilotSidebar, MatButtonModule, MatIconModule],
   templateUrl: './composer-workspace.ng.html',
   styleUrl: './composer-workspace.scss',
 })
@@ -84,6 +89,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   private hostComm = inject(HostCommunication);
   private viewContainerRef = inject(ViewContainerRef);
   private configProvider = inject(AppConfigProvider);
+  private chatState = inject(ChatState);
 
   readonly dockviewRoot = viewChild.required<ElementRef<HTMLElement>>('dockviewRoot');
 
@@ -92,6 +98,15 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   unreadEventsCount = signal(0);
   unreadErrorsCount = signal(0);
   isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
+
+  /** Whether the on-demand A2UI JSON editor ("source") panel is open. */
+  readonly isSourceOpen = signal(false);
+
+  /** Guards the first-READY auto-reveal so it fires at most once. */
+  private hasAutoRevealedSource = false;
+
+  /** Set once the user opens/closes source manually, suppressing auto-reveal. */
+  private userToggledSource = false;
 
   private readonly isDockviewInitialized = signal(false);
   private dockviewApi!: DockviewComponent;
@@ -191,6 +206,22 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
         api.updateOptions({className: isDark ? 'dockview-theme-dark' : 'dockview-theme-light'});
       }
     });
+
+    // Auto-reveal the A2UI JSON editor the first time a generation completes
+    // (pipeline reaches READY). Fires at most once, and never if the user has
+    // already toggled the source panel themselves.
+    effect(() => {
+      const status = this.chatState.pipelineStatus();
+      const initialized = this.isDockviewInitialized();
+      if (!initialized || status !== PipelineStatus.READY) return;
+      untracked(() => {
+        if (this.hasAutoRevealedSource || this.userToggledSource) return;
+        this.hasAutoRevealedSource = true;
+        if (!this.dockviewApi.getGroupPanel(ComposerPanelId.Raw)) {
+          this.addRawPanel();
+        }
+      });
+    });
   }
 
   ngOnInit(): void {
@@ -205,9 +236,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
       createComponent: options => {
         let type: Type<unknown> | undefined;
         switch (options.name as ComposerPanelId) {
-          case ComposerPanelId.Chat:
-            type = ChatPanel;
-            break;
           case ComposerPanelId.Rendered:
             type = RenderedFrame;
             break;
@@ -287,22 +315,13 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     }
 
     if (!layoutRestored) {
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Chat,
-        component: ComposerPanelId.Chat,
-        title: 'Gemini Assistant',
-      });
+      // Chat now lives in the docked CopilotKit sidebar (a Dockview sibling),
+      // so it is no longer a panel here. The A2UI JSON editor ("Raw") is hidden
+      // at first load and revealed on demand via toggleSource()/auto-reveal.
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Rendered,
         component: ComposerPanelId.Rendered,
         title: 'Rendered A2UI Preview',
-        position: {direction: 'right', referencePanel: ComposerPanelId.Chat},
-      });
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Raw,
-        component: ComposerPanelId.Raw,
-        title: 'A2UI JSON Editor',
-        position: {direction: 'right', referencePanel: ComposerPanelId.Rendered},
       });
 
       this.dockviewApi.addPanel({
@@ -348,8 +367,14 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
         localStorage.setItem('composer_dockview_layout', JSON.stringify(this.dockviewApi.toJSON()));
       }, 1000);
     });
-    this.dockviewApi.onDidAddPanel(() => this.checkTabOverflow());
-    this.dockviewApi.onDidRemovePanel(() => this.checkTabOverflow());
+    this.dockviewApi.onDidAddPanel(panel => {
+      if (panel.id === ComposerPanelId.Raw) this.isSourceOpen.set(true);
+      this.checkTabOverflow();
+    });
+    this.dockviewApi.onDidRemovePanel(panel => {
+      if (panel.id === ComposerPanelId.Raw) this.isSourceOpen.set(false);
+      this.checkTabOverflow();
+    });
 
     this.resizeObserver = new ResizeObserver(() => this.checkTabOverflow());
     this.resizeObserver.observe(this.dockviewRoot().nativeElement);
@@ -357,8 +382,41 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     // Force an initial layout pass. In browsers, ResizeObserver handles this,
     // but in jsdom tests with mocked observers, it requires an explicit call.
     this.dockviewApi.layout(1000, 1000);
+    // Sync the source toggle with whatever the (possibly restored) layout holds.
+    this.isSourceOpen.set(!!this.dockviewApi.getGroupPanel(ComposerPanelId.Raw));
     this.isDockviewInitialized.set(true);
     this.checkTabOverflow();
+  }
+
+  /**
+   * Adds the A2UI JSON editor ("Raw") panel to the right of the rendered
+   * preview, tolerating layouts where that reference panel is absent.
+   */
+  private addRawPanel(): void {
+    const rendered = this.dockviewApi.getGroupPanel(ComposerPanelId.Rendered);
+    this.dockviewApi.addPanel({
+      id: ComposerPanelId.Raw,
+      component: ComposerPanelId.Raw,
+      title: 'A2UI JSON Editor',
+      ...(rendered
+        ? {position: {direction: 'right', referencePanel: ComposerPanelId.Rendered}}
+        : {}),
+    });
+  }
+
+  /**
+   * Reveals or hides the on-demand A2UI JSON editor panel. Marks the source
+   * panel as user-controlled so the first-READY auto-reveal no longer fires.
+   */
+  toggleSource(): void {
+    if (!this.isDockviewInitialized()) return;
+    this.userToggledSource = true;
+    const existing = this.dockviewApi.getGroupPanel(ComposerPanelId.Raw);
+    if (existing) {
+      existing.api.close();
+    } else {
+      this.addRawPanel();
+    }
   }
 
   /**

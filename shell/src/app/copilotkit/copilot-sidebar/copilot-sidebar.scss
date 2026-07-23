@@ -1,0 +1,102 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// The docked width is driven by an inline host style binding (see the
+// component `host` metadata) so the rail/panel transition is the single source
+// of truth. This host only owns the non-width chrome: full height, the divider
+// facing the Dockview region, its own scroll containment, and flex layout.
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-right: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 4px 0 16px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.header__title {
+  font-family: var(--mat-sys-title-small-font, Roboto, sans-serif);
+  font-size: var(--mat-sys-title-small-size, 14px);
+  font-weight: var(--mat-sys-title-small-weight, 500);
+  color: var(--mat-sys-on-surface);
+}
+
+// The chat region owns its own vertical scroll so long threads never push the
+// header off-screen or spill into the Dockview region.
+.chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+
+  copilot-chat {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  padding-top: 4px;
+  box-sizing: border-box;
+}
+
+// Bring-your-own-key empty state shown in place of the chat when no Gemini key
+// is configured. Centered within the chat region's own scroll container.
+.no-key {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.no-key__icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.no-key__message {
+  margin: 0;
+  max-width: 280px;
+  font-family: var(--mat-sys-body-medium-font, Roboto, sans-serif);
+  font-size: var(--mat-sys-body-medium-size, 14px);
+  color: var(--mat-sys-on-surface-variant);
+}

@@ -30,13 +30,26 @@ import {LlmClient, LlmMessage} from '../../chat/llm-client/llm-client';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {PipelineStatus} from '../../chat/pipeline-status/pipeline-status';
+import {CopilotSidebar} from '../../copilotkit/copilot-sidebar/copilot-sidebar';
 import {
   AppConfigProvider,
   EnvMode,
   AuthType,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
-import {signal} from '@angular/core';
+import {Component, signal} from '@angular/core';
+
+/**
+ * Stand-in for the real docked sidebar. Sharing its selector lets the workspace
+ * template resolve without booting the CopilotKit chat runtime, keeping this
+ * suite focused on Dockview orchestration (the sidebar has its own spec).
+ */
+@Component({
+  selector: 'a2ui-composer-copilot-sidebar',
+  standalone: true,
+  template: '',
+})
+class CopilotSidebarStub {}
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -124,7 +137,12 @@ describe('ComposerWorkspace Dashboard', () => {
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
         {provide: LlmClient, useClass: MockLlmClient},
       ],
-    }).compileComponents();
+    })
+      .overrideComponent(ComposerWorkspace, {
+        remove: {imports: [CopilotSidebar]},
+        add: {imports: [CopilotSidebarStub]},
+      })
+      .compileComponents();
 
     fixture = TestBed.createComponent(ComposerWorkspace);
     fixture.detectChanges();
@@ -135,19 +153,35 @@ describe('ComposerWorkspace Dashboard', () => {
     expect(harness).toBeTruthy();
   });
 
-  it('mounts all primary feature drawer placeholder components', () => {
+  it('mounts the default feature drawer components without Chat or Raw', () => {
     // Dockview dynamically renders panels via componentRefs.
     // In jsdom without real dimensions, dockview may not attach them all to the DOM,
     // so we verify they were instantiated by the Angular view container.
+    // Chat now lives in the docked sidebar and the Raw JSON editor is hidden at
+    // first load, so the default set is Rendered + DataModel + Events + Errors +
+    // RawMessages (5 panels).
     const refs = (fixture.componentInstance as unknown as {componentRefs: unknown[]}).componentRefs;
-    expect(refs.length).toBe(7);
+    expect(refs.length).toBe(5);
     const types = refs.map(
       (r: unknown) => (r as {componentType: {name: string}}).componentType.name,
     );
-    expect(types).toContain('ChatPanel');
     expect(types).toContain('RenderedFrame');
-    expect(types).toContain('RawFrame');
     expect(types).toContain('DataModel');
+    expect(types).toContain('Events');
+    expect(types).toContain('Errors');
+    expect(types).toContain('RawMessages');
+    expect(types).not.toContain('ChatPanel');
+    expect(types).not.toContain('RawFrame');
+  });
+
+  it('mounts the CopilotKit sidebar as a sibling of the Dockview region', () => {
+    const container = fixture.nativeElement.querySelector('.workspace-container');
+    const sidebar = container?.querySelector('a2ui-composer-copilot-sidebar');
+    const region = container?.querySelector('.dockview-region');
+    expect(sidebar).toBeTruthy();
+    expect(region).toBeTruthy();
+    // Sidebar precedes the Dockview region within the flex container.
+    expect(sidebar?.nextElementSibling).toBe(region);
   });
 
   it('delegates clearLogs to all queried child components when clearAllLogs is called', () => {
@@ -399,6 +433,99 @@ describe('ComposerWorkspace Dashboard', () => {
       expect(cancelSpy).toHaveBeenCalledWith(999);
       requestSpy.mockRestore();
       cancelSpy.mockRestore();
+    });
+  });
+
+  describe('Source (A2UI JSON editor) panel reveal', () => {
+    function rawPanel() {
+      return fixture.componentInstance['dockviewApi']?.getGroupPanel(ComposerPanelId.Raw);
+    }
+
+    it('hides the A2UI JSON editor at first load', () => {
+      expect(rawPanel()).toBeUndefined();
+      expect(fixture.componentInstance.isSourceOpen()).toBe(false);
+    });
+
+    it('toggleSource() reveals then hides the Raw panel and tracks isSourceOpen', async () => {
+      fixture.componentInstance.toggleSource();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(rawPanel()).toBeDefined();
+      expect(fixture.componentInstance.isSourceOpen()).toBe(true);
+
+      fixture.componentInstance.toggleSource();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(rawPanel()).toBeUndefined();
+      expect(fixture.componentInstance.isSourceOpen()).toBe(false);
+    });
+
+    it('updates the source toggle button label to reflect the panel state', async () => {
+      const button: HTMLButtonElement = fixture.nativeElement.querySelector('.source-toggle');
+      expect(button.textContent).toContain('Show source');
+
+      fixture.componentInstance.toggleSource();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(button.textContent).toContain('Hide source');
+    });
+
+    it('auto-reveals the Raw panel the first time the pipeline reaches READY', async () => {
+      const chatState = TestBed.inject(ChatState) as unknown as MockChatState;
+      expect(rawPanel()).toBeUndefined();
+
+      chatState.setPipelineStatus(PipelineStatus.READY);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(rawPanel()).toBeDefined();
+      expect(fixture.componentInstance.isSourceOpen()).toBe(true);
+    });
+
+    it('auto-reveals at most once, even after the user closes the panel', async () => {
+      const chatState = TestBed.inject(ChatState) as unknown as MockChatState;
+
+      chatState.setPipelineStatus(PipelineStatus.READY);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(rawPanel()).toBeDefined();
+
+      // User closes the source panel.
+      fixture.componentInstance.toggleSource();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(rawPanel()).toBeUndefined();
+
+      // A subsequent generation cycle must not re-open it.
+      chatState.setPipelineStatus(PipelineStatus.IDLE);
+      chatState.setPipelineStatus(PipelineStatus.READY);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(rawPanel()).toBeUndefined();
+    });
+
+    it('does not auto-reveal when the user has already toggled source', async () => {
+      const chatState = TestBed.inject(ChatState) as unknown as MockChatState;
+
+      // User opens then closes source before any generation completes.
+      fixture.componentInstance.toggleSource();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.componentInstance.toggleSource();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(rawPanel()).toBeUndefined();
+
+      chatState.setPipelineStatus(PipelineStatus.READY);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      // Auto-reveal is suppressed because the user already controlled it.
+      expect(rawPanel()).toBeUndefined();
     });
   });
 });

@@ -19,7 +19,8 @@
   },
   "resolutions": {
     "@a2ui/web_core": "0.10.2",
-    "@google/genai": "2.8.0"
+    "@google/genai": "2.8.0",
+    "rxjs": "7.8.2"
   },
   "packageManager": "yarn@4.5.0",
   "engines": {

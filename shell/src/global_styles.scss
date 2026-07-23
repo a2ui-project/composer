@@ -16,6 +16,7 @@
 
 @use '@angular/material' as mat;
 @import 'dockview/dist/styles/dockview.css';
+@import '@copilotkit/angular/styles.css'; // TEMPORARY (spike): CopilotKit sidebar styles
 
 @include mat.core();
 

@@ -15,10 +15,25 @@
 -->
 
 <div class="workspace-container" [class.extension-mode]="isExtension()">
-  <div
-    #dockviewRoot
-    class="dockview-root mat-m3-dockview-tabs"
-    [class.dockview-theme-dark]="isDarkTheme()"
-    [class.dockview-theme-light]="!isDarkTheme()"
-  ></div>
+  <a2ui-composer-copilot-sidebar />
+  <div class="dockview-region">
+    <div class="dockview-toolbar">
+      <button
+        mat-stroked-button
+        type="button"
+        class="source-toggle"
+        [attr.aria-pressed]="isSourceOpen()"
+        (click)="toggleSource()"
+      >
+        <mat-icon>{{ isSourceOpen() ? 'code_off' : 'code' }}</mat-icon>
+        {{ isSourceOpen() ? 'Hide source' : 'Show source' }}
+      </button>
+    </div>
+    <div
+      #dockviewRoot
+      class="dockview-root mat-m3-dockview-tabs"
+      [class.dockview-theme-dark]="isDarkTheme()"
+      [class.dockview-theme-light]="!isDarkTheme()"
+    ></div>
+  </div>
 </div>

@@ -27,6 +27,7 @@
     "@angular/material": "22.0.4",
     "@angular/platform-browser": "22.0.6",
     "@angular/router": "22.0.6",
+    "@copilotkit/angular": "^0.1.2",
     "@google/genai": "2.11.0",
     "@monaco-editor/loader": "1.7.0",
     "a2ui-bridge": "0.1.0",

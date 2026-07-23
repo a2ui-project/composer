@@ -22,7 +22,9 @@ import {
 } from '@angular/core';
 import {provideRouter} from '@angular/router';
 import {provideAnimations} from '@angular/platform-browser/animations';
+import {COPILOT_KIT_CONFIG} from '@copilotkit/angular';
 import {routes} from './app.routes';
+import {GeminiA2uiAgent} from './copilotkit/gemini-a2ui-agent/gemini-a2ui-agent';
 import {StartupResolution} from './shell/startup-resolution/startup-resolution';
 import {AppConfigProvider} from './settings/app-config-provider/app-config-provider';
 import {LocalStorageAppConfigProvider} from './settings/local-storage-config-provider/local-storage-config.provider';
@@ -38,6 +40,14 @@ export const appConfig: ApplicationConfig = {
     provideZonelessChangeDetection(),
     provideRouter(routes),
     provideAnimations(),
+    // Register the in-browser AG-UI agent as the default CopilotKit agent.
+    // provideCopilotKit only binds COPILOT_KIT_CONFIG as a value, so we bind it
+    // via a factory to inject the DI-constructed GeminiA2uiAgent (no runtimeUrl —
+    // the agent runs entirely client-side).
+    {
+      provide: COPILOT_KIT_CONFIG,
+      useFactory: () => ({agents: {default: inject(GeminiA2uiAgent)}}),
+    },
     provideAppInitializer(() => {
       const startupResolution = inject(StartupResolution);
       const configProvider = inject(AppConfigProvider);
