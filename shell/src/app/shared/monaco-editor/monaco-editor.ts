@@ -35,9 +35,19 @@ import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
+import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
+import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
 
 const LAYOUT_MODEL_URI = 'a2ui://layout.json';
 
+/**
+ * A standalone Angular component that wraps the Monaco Editor.
+ *
+ * This component provides an embedded code editor specifically configured for
+ * editing A2UI layout JSON. It automatically synchronizes theme preferences
+ * (dark/light mode) and integrates with the active A2UI catalog to provide
+ * real-time schema validation and autocompletion for component properties.
+ */
 @Component({
   selector: 'a2ui-composer-monaco-editor',
   standalone: true,
@@ -145,13 +155,7 @@ export class MonacoEditor {
       const jsonContrib = (monacoInstance.languages as unknown as {json: typeof monaco.json}).json;
       jsonContrib.jsonDefaults.setDiagnosticsOptions({
         validate: true,
-        schemas: [
-          {
-            uri: 'a2ui-catalog-schema',
-            fileMatch: [LAYOUT_MODEL_URI],
-            schema: layoutSchema,
-          },
-        ],
+        schemas: this.buildValidationSchemas(layoutSchema),
       });
     });
 
@@ -192,7 +196,7 @@ export class MonacoEditor {
         }
 
         const editor = monacoInstance.editor.create(this.editorContainer().nativeElement, {
-          model: model,
+          model,
           theme: this.monacoTheme(),
           automaticLayout: true,
           minimap: {enabled: false},
@@ -213,6 +217,49 @@ export class MonacoEditor {
         });
       });
     });
+  }
+
+  /**
+   * Constructs the array of JSON schemas provided to the Monaco Editor's JSON worker
+   * for real-time validation and autocompletion.
+   *
+   * @param layoutSchema The dynamically generated schema representing the full A2UI layout
+   *        structure, including the active catalog's components.
+   * @returns An array of schemas configured with URIs that match `$ref` references
+   *          within the component schemas. We map local constants (like COMMON_TYPES_SCHEMA)
+   *          to both `file:///` and HTTP URIs so the Monaco JSON worker can resolve them
+   *          synchronously without needing an external schema request service.
+   */
+  private buildValidationSchemas(
+    layoutSchema: unknown,
+  ): monaco.json.DiagnosticsOptions['schemas'] {
+    return [
+      {
+        uri: 'a2ui-catalog-schema',
+        fileMatch: [LAYOUT_MODEL_URI],
+        schema: layoutSchema,
+      },
+      {
+        uri: 'file:///common_types.json',
+        schema: COMMON_TYPES_SCHEMA,
+      },
+      {
+        uri: 'file:///catalog.json',
+        schema: BASIC_CATALOG_SCHEMA,
+      },
+      {
+        uri: 'https://a2ui.org/specification/v0_9/common_types.json',
+        schema: COMMON_TYPES_SCHEMA,
+      },
+      {
+        uri: 'https://a2ui.org/specification/v0_9/catalog.json',
+        schema: BASIC_CATALOG_SCHEMA,
+      },
+      {
+        uri: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+        schema: BASIC_CATALOG_SCHEMA,
+      },
+    ];
   }
 
   private updateEditorContent(value: string): void {
