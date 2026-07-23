@@ -403,16 +403,17 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('uses container element dimensions during initial dockview layout pass', async () => {
       const layoutSpy = vi.spyOn(DockviewComponent.prototype, 'layout');
-      const newFixture = TestBed.createComponent(ComposerWorkspace);
-      const rootEl = newFixture.nativeElement.querySelector('.dockview-root');
-      Object.defineProperty(rootEl, 'clientWidth', {value: 1200, configurable: true});
-      Object.defineProperty(rootEl, 'clientHeight', {value: 800, configurable: true});
+      const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
+      const heightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
 
+      const newFixture = TestBed.createComponent(ComposerWorkspace);
       newFixture.detectChanges();
       await newFixture.whenStable();
 
       expect(layoutSpy).toHaveBeenCalledWith(1200, 800);
       layoutSpy.mockRestore();
+      widthSpy.mockRestore();
+      heightSpy.mockRestore();
     });
   });
 });
