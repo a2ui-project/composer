@@ -52,15 +52,15 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Enable Corepack
+        run: corepack enable
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: "yarn"
           cache-dependency-path: "yarn.lock"
-
-      - name: Enable Corepack
-        run: corepack enable
 
       - name: Install Dependencies
         run: yarn install --immutable
