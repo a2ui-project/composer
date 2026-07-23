@@ -32,6 +32,8 @@ export enum LocalStorageKey {
   ACTIVE_DRAFT = 'a2ui_composer_active_draft',
   SESSION_STATE = 'a2ui_composer_session_state',
   EDITOR_CACHE = 'a2ui_composer_editor_cache',
+  /** Key for persisting dockview window split layout state. */
+  DOCKVIEW_LAYOUT = 'composer_dockview_layout',
   /** Key for persisting the user's theme selection (light vs dark). */
   THEME_PREFERENCE = 'a2ui_composer_theme_preference',
 }

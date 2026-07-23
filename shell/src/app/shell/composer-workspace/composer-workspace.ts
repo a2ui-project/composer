@@ -46,6 +46,8 @@ import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
+import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {DockviewComponent} from 'dockview';
 
 /** Internal interface mapping raw cross-frame workspace telemetry payloads */
@@ -84,6 +86,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   private hostComm = inject(HostCommunication);
   private viewContainerRef = inject(ViewContainerRef);
   private configProvider = inject(AppConfigProvider);
+  private storage = inject(LocalStorageInteractions);
 
   readonly dockviewRoot = viewChild.required<ElementRef<HTMLElement>>('dockviewRoot');
 
@@ -274,7 +277,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
       this.checkTabOverflow();
     });
 
-    const savedLayout = localStorage.getItem('composer_dockview_layout');
+    const savedLayout = this.storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
     let layoutRestored = false;
 
     if (savedLayout) {
@@ -345,7 +348,10 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
       this.checkTabOverflow();
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
-        localStorage.setItem('composer_dockview_layout', JSON.stringify(this.dockviewApi.toJSON()));
+        this.storage.setItem(
+          LocalStorageKey.DOCKVIEW_LAYOUT,
+          JSON.stringify(this.dockviewApi.toJSON()),
+        );
       }, 1000);
     });
     this.dockviewApi.onDidAddPanel(() => this.checkTabOverflow());
@@ -356,7 +362,9 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
 
     // Force an initial layout pass. In browsers, ResizeObserver handles this,
     // but in jsdom tests with mocked observers, it requires an explicit call.
-    this.dockviewApi.layout(1000, 1000);
+    const width = this.dockviewRoot().nativeElement.clientWidth || 1000;
+    const height = this.dockviewRoot().nativeElement.clientHeight || 1000;
+    this.dockviewApi.layout(width, height);
     this.isDockviewInitialized.set(true);
     this.checkTabOverflow();
   }

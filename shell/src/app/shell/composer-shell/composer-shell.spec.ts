@@ -146,6 +146,9 @@ describe('ComposerShell Layout', () => {
         LocalStorageKey.SESSION_STATE,
       );
       expect(localStorageServiceMock.removeItem).toHaveBeenCalledWith(LocalStorageKey.EDITOR_CACHE);
+      expect(localStorageServiceMock.removeItem).not.toHaveBeenCalledWith(
+        LocalStorageKey.DOCKVIEW_LAYOUT,
+      );
       expect(sessionStorageServiceMock.clear).toHaveBeenCalled();
       expect(consoleSpy).toHaveBeenCalledWith('Session state cleared.');
     },

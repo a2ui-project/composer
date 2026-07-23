@@ -400,5 +400,19 @@ describe('ComposerWorkspace Dashboard', () => {
       requestSpy.mockRestore();
       cancelSpy.mockRestore();
     });
+
+    it('uses container element dimensions during initial dockview layout pass', async () => {
+      const layoutSpy = vi.spyOn(DockviewComponent.prototype, 'layout');
+      const newFixture = TestBed.createComponent(ComposerWorkspace);
+      const rootEl = newFixture.nativeElement.querySelector('.dockview-root');
+      Object.defineProperty(rootEl, 'clientWidth', {value: 1200, configurable: true});
+      Object.defineProperty(rootEl, 'clientHeight', {value: 800, configurable: true});
+
+      newFixture.detectChanges();
+      await newFixture.whenStable();
+
+      expect(layoutSpy).toHaveBeenCalledWith(1200, 800);
+      layoutSpy.mockRestore();
+    });
   });
 });
