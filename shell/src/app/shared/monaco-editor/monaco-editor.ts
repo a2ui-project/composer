@@ -230,9 +230,7 @@ export class MonacoEditor {
    *          to both `file:///` and HTTP URIs so the Monaco JSON worker can resolve them
    *          synchronously without needing an external schema request service.
    */
-  private buildValidationSchemas(
-    layoutSchema: unknown,
-  ): monaco.json.DiagnosticsOptions['schemas'] {
+  private buildValidationSchemas(layoutSchema: unknown): monaco.json.DiagnosticsOptions['schemas'] {
     return [
       {
         uri: 'a2ui-catalog-schema',
