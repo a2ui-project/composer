@@ -507,4 +507,93 @@ describe('Settings', () => {
     const section = fixture.nativeElement.querySelector('.first-party-auth-section');
     expect(section.hidden).toBe(true);
   });
+
+  describe('Reactive Form Enablement & Value Synchronization', () => {
+    it('dynamically applies validators and enables apiKeyControl when switching to 3P mode, and disables/clears validators in 1P mode without clobbering dirty user input', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
+      const {fixture, component} = await setupComponent();
+
+      expect(component.isThirdParty()).toBe(false);
+      expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
+      expect(component.settingsForm.controls.apiKey.validator).toBeNull();
+      expect(component.settingsForm.valid).toBe(true);
+
+      component.settingsForm.controls.apiKey.setValue('dirty-user-input');
+      component.settingsForm.controls.apiKey.markAsDirty();
+
+      component.isThirdParty.set(true);
+      TestBed.flushEffects();
+      fixture.detectChanges();
+
+      expect(component.settingsForm.controls.apiKey.enabled).toBe(true);
+      expect(component.settingsForm.controls.apiKey.validator).toBeTruthy();
+      expect(component.settingsForm.controls.apiKey.value).toBe('dirty-user-input');
+
+      component.settingsForm.controls.apiKey.setValue('   ');
+      expect(component.settingsForm.controls.apiKey.invalid).toBe(true);
+      expect(component.settingsForm.invalid).toBe(true);
+
+      component.isThirdParty.set(false);
+      TestBed.flushEffects();
+      fixture.detectChanges();
+
+      expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
+      expect(component.settingsForm.controls.apiKey.validator).toBeNull();
+      expect(component.settingsForm.valid).toBe(true);
+      expect(component.settingsForm.controls.apiKey.value).toBe('   ');
+    });
+
+    it('synchronizes geminiApiKey signal from config provider into apiKey control without clobbering dirty user input', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      const {fixture, component} = await setupComponent();
+
+      mockGeminiApiKey.set('loaded-idb-key');
+      TestBed.flushEffects();
+      fixture.detectChanges();
+
+      expect(component.settingsForm.controls.apiKey.value).toBe('loaded-idb-key');
+
+      component.settingsForm.controls.apiKey.setValue('user-typed-key');
+      component.settingsForm.controls.apiKey.markAsDirty();
+
+      mockGeminiApiKey.set('background-sync-key');
+      TestBed.flushEffects();
+      fixture.detectChanges();
+
+      expect(component.settingsForm.controls.apiKey.value).toBe('user-typed-key');
+    });
+  });
+
+  describe('Anti-Silent Failure UI Alert & Error Reporting (saveSettings)', () => {
+    it('sets saveErrorMessage when form validation fails upon saveSettings()', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      const {fixture, component, harness} = await setupComponent();
+
+      await harness.setRendererUrlValue('');
+      await component.saveSettings();
+      fixture.detectChanges();
+
+      expect(component.saveErrorMessage()).toContain('Please resolve validation errors');
+      expect(await harness.hasSaveErrorBanner()).toBe(true);
+      expect(await harness.getSaveErrorBannerText()).toContain('Please resolve validation errors');
+    });
+
+    it('sets saveErrorMessage when storage persistence rejects during saveSettings()', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      const {fixture, component, harness} = await setupComponent();
+
+      mockConfigProvider.setGeminiApiKey.mockRejectedValueOnce(
+        new Error('Simulated Storage Rejection'),
+      );
+
+      await harness.setRendererUrlValue('http://valid-url.com');
+      await harness.setGeminiApiKeyValue('valid-key');
+      await component.saveSettings();
+      fixture.detectChanges();
+
+      expect(component.saveErrorMessage()).toBe('Simulated Storage Rejection');
+      expect(await harness.hasSaveErrorBanner()).toBe(true);
+      expect(await harness.getSaveErrorBannerText()).toContain('Simulated Storage Rejection');
+    });
+  });
 });

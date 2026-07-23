@@ -18,7 +18,7 @@
  * Database record schema representing a cached component catalog
  * stored inside the IndexedDB object store.
  */
-export interface CachedCatalogRecord {
+export declare interface CachedCatalogRecord {
   rendererUrl: string;
   catalogString: string;
   checksumHash: string;
@@ -29,7 +29,7 @@ export interface CachedCatalogRecord {
  * Schema defining metadata and structure for a single component definition
  * registered within a catalog.
  */
-export interface CatalogComponentSchema {
+export declare interface CatalogComponentSchema {
   [key: string]: unknown;
 }
 
@@ -37,7 +37,7 @@ export interface CatalogComponentSchema {
  * Represents a complete validated catalog package containing components,
  * identifiers, versions, and origin URLs.
  */
-export interface Catalog {
+export declare interface Catalog {
   $schema?: string;
   $id?: string;
   title?: string;

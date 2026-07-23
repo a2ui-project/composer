@@ -31,6 +31,7 @@ export class SettingsHarness extends ComponentHarness {
 
   protected getLockedNotice = this.locatorForOptional('.locked-notice');
   protected getAuthLockedNotice = this.locatorForOptional('.auth-locked-notice');
+  protected getSaveErrorBanner = this.locatorForOptional('.save-error-banner');
   protected getErrors = this.locatorForAll('mat-error');
   protected getFormSections = this.locatorForAll('.form-section');
   protected getLogsConsole = this.locatorFor('.logs-console');
@@ -172,5 +173,14 @@ export class SettingsHarness extends ComponentHarness {
   async getIconsAriaHidden(): Promise<(string | null)[]> {
     const icons = await this.locatorForAll('mat-icon')();
     return Promise.all(icons.map(i => i.getAttribute('aria-hidden')));
+  }
+
+  async hasSaveErrorBanner(): Promise<boolean> {
+    return (await this.getSaveErrorBanner()) !== null;
+  }
+
+  async getSaveErrorBannerText(): Promise<string | null> {
+    const node = await this.getSaveErrorBanner();
+    return node ? node.text() : null;
   }
 }

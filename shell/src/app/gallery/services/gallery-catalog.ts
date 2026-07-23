@@ -197,9 +197,9 @@ export class GalleryCatalog {
       Other: [],
     };
 
-    for (const key of Object.keys(catalog['components'])) {
+    for (const key of Object.keys(catalog['components'] || {})) {
       const cat = getCategoryForComponent(key);
-      grouped[cat].push(key);
+      (grouped[cat] || grouped['Other']).push(key);
     }
 
     return CATEGORIES_ORDER.map(category => ({
