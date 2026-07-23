@@ -41,17 +41,19 @@ concurrency:
   group: gh-pages-deployment
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
-  deploy-preview:
+  parse-metadata:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+    outputs:
+      pr_number: ${{ steps.metadata.outputs.pr_number }}
+      action: ${{ steps.metadata.outputs.action }}
+      head_sha: ${{ steps.metadata.outputs.head_sha }}
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Download PR Preview Artifact
         uses: actions/download-artifact@v4
         with:
@@ -60,6 +62,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Read & Validate PR Metadata
+        id: metadata
         run: |
           if [ ! -f pr_meta/metadata.json ]; then
             echo "Error: pr_meta/metadata.json missing from downloaded artifact."
@@ -75,32 +78,55 @@ jobs:
             exit 1
           fi
 
-          echo "PR_NUM=${PR_NUM}" >> $GITHUB_ENV
-          echo "ACTION=${ACTION}" >> $GITHUB_ENV
-          echo "HEAD_SHA=${HEAD_SHA}" >> $GITHUB_ENV
+          if [ "$ACTION" = "closed" ]; then
+            ACTION="cleanup"
+          fi
+
+          echo "pr_number=${PR_NUM}" >> $GITHUB_OUTPUT
+          echo "action=${ACTION}" >> $GITHUB_OUTPUT
+          echo "head_sha=${HEAD_SHA}" >> $GITHUB_OUTPUT
+
+  deploy-preview:
+    needs: parse-metadata
+    if: needs.parse-metadata.outputs.action != 'cleanup'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download PR Preview Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-preview-payload
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish Preview to gh-pages Subfolder
-        if: env.ACTION == 'opened' || env.ACTION == 'synchronize' || env.ACTION == 'reopened'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./deploy_dist
-          destination_dir: pr/${{ env.PR_NUM }}
+          destination_dir: pr/${{ needs.parse-metadata.outputs.pr_number }}
           keep_files: true
 
       - name: Post PR Preview Comment
-        if: env.ACTION == 'opened' || env.ACTION == 'synchronize' || env.ACTION == 'reopened'
         uses: actions/github-script@v7
         env:
-          PR_NUM: ${{ env.PR_NUM }}
+          PR_NUM: ${{ needs.parse-metadata.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.parse-metadata.outputs.head_sha }}
         with:
           script: |
             try {
               const prNum = parseInt(process.env.PR_NUM, 10);
+              const headSha = (process.env.HEAD_SHA || '').slice(0, 7);
               const repoName = context.repo.repo;
               const ownerName = context.repo.owner;
               const previewUrl = `https://${ownerName}.github.io/${repoName}/pr/${prNum}/`;
-              const commentBody = `### ⚡ A2UI Composer PR Preview\n\nYour automated preview is successfully live:\n👉 **[Launch PR Preview](${previewUrl})**\n\n> *Note: This environment will be wiped automatically when the PR is merged or closed.*`;
+              const shaText = headSha ? ` (commit \`${headSha}\`)` : '';
+              const commentBody = `### ⚡ A2UI Composer PR Preview\n\nYour automated preview is successfully live${shaText}:\n👉 **[Launch PR Preview](${previewUrl})**\n\n> *Note: This environment will be wiped automatically when the PR is merged or closed.*`;
 
               const comments = await github.paginate(github.rest.issues.listComments, {
                 owner: ownerName,
@@ -108,7 +134,7 @@ jobs:
                 issue_number: prNum,
               });
 
-              const botComment = comments.find(c => c.user.type === 'Bot' && c.body.includes('A2UI Composer PR Preview'));
+              const botComment = comments.find(c => c.user?.type === 'Bot' && c.body?.includes('A2UI Composer PR Preview'));
               if (botComment) {
                 await github.rest.issues.updateComment({
                   owner: ownerName,
@@ -128,10 +154,20 @@ jobs:
               console.warn('Failed to post or update PR preview comment:', error);
             }
 
+  cleanup-preview:
+    needs: parse-metadata
+    if: needs.parse-metadata.outputs.action == 'cleanup'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Delete PR Preview Folder from gh-pages Branch
-        if: env.ACTION == 'closed'
         env:
-          PR_NUM: ${{ env.PR_NUM }}
+          PR_NUM: ${{ needs.parse-metadata.outputs.pr_number }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -168,10 +204,9 @@ jobs:
           fi
 
       - name: Post Preview Demolition Comment
-        if: env.ACTION == 'closed'
         uses: actions/github-script@v7
         env:
-          PR_NUM: ${{ env.PR_NUM }}
+          PR_NUM: ${{ needs.parse-metadata.outputs.pr_number }}
         with:
           script: |
             try {
@@ -182,7 +217,7 @@ jobs:
                 issue_number: prNum,
               });
 
-              const botComment = comments.find(c => c.user.type === 'Bot' && c.body.includes('A2UI Composer PR Preview'));
+              const botComment = comments.find(c => c.user?.type === 'Bot' && c.body?.includes('A2UI Composer PR Preview'));
               if (botComment) {
                 await github.rest.issues.updateComment({
                   owner: context.repo.owner,
