@@ -1,0 +1,134 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ==============================================================================
+# PR Preview Build (Stage 1)
+#
+# Purpose:
+#   Stage 1 of the two-stage PR preview workflow.
+#
+# Architecture & Security:
+#   Runs under the `pull_request` event with unprivileged `contents: read`
+#   permissions. This allows safe execution of untrusted build scripts (e.g.,
+#   from cross-repository forks) without exposing repository write credentials
+#   or secrets.
+#
+# Relationship to Stage 2:
+#   Packages built static distribution assets (`deploy_dist/`) and metadata
+#   (`pr_meta/metadata.json`) into the `pr-preview-payload` artifact. When
+#   completed, GitHub Actions automatically triggers Stage 2
+#   (`pr_preview_deploy.yml`).
+# ==============================================================================
+
+name: PR Preview Build
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-pr-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Generate PR Metadata
+        env:
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_ACTION: ${{ github.event.action }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p pr_meta
+          jq -n \
+            --arg pr_number "$PR_NUM" \
+            --arg action "$PR_ACTION" \
+            --arg head_sha "$HEAD_SHA" \
+            '{pr_number: ($pr_number | tonumber), action: $action, head_sha: $head_sha}' > pr_meta/metadata.json
+
+      - name: Setup Node.js
+        if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "yarn"
+          cache-dependency-path: "yarn.lock"
+
+      - name: Enable Corepack
+        if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened'
+        run: corepack enable
+
+      - name: Install Dependencies
+        if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened'
+        run: yarn install --immutable
+
+      - name: Build Core Bridge Dependency
+        if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened'
+        run: yarn workspace a2ui-bridge build
+
+      - name: Build Shell & Catalogs with PR-Specific Base URLs
+        if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened'
+        env:
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          yarn workspace ng-basic-catalog run build --base-href=/composer/pr/${PR_NUM}/samples/ng-basic-catalog/
+          yarn workspace a2ui-composer-shell run build --base-href=/composer/pr/${PR_NUM}/
+          yarn workspace lit-basic-catalog run build --base=/composer/pr/${PR_NUM}/samples/lit-basic-catalog/
+          yarn workspace react-basic-catalog run build --base=/composer/pr/${PR_NUM}/samples/react-basic-catalog/
+
+      - name: Assemble Staging Directory (deploy_dist)
+        if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened'
+        run: |
+          mkdir -p deploy_dist/samples/ng-basic-catalog
+          mkdir -p deploy_dist/samples/lit-basic-catalog
+          mkdir -p deploy_dist/samples/react-basic-catalog
+
+          if [ -d "shell/dist/a2ui-composer/browser" ]; then
+            cp -r shell/dist/a2ui-composer/browser/. deploy_dist/
+          else
+            cp -r shell/dist/a2ui-composer/. deploy_dist/
+          fi
+
+          if [ -d "samples/ng-basic-catalog/dist/ng-basic-catalog/browser" ]; then
+            cp -r samples/ng-basic-catalog/dist/ng-basic-catalog/browser/. deploy_dist/samples/ng-basic-catalog/
+          else
+            cp -r samples/ng-basic-catalog/dist/ng-basic-catalog/. deploy_dist/samples/ng-basic-catalog/
+          fi
+
+          cp -r samples/lit-basic-catalog/dist/. deploy_dist/samples/lit-basic-catalog/
+          cp -r samples/react-basic-catalog/dist/. deploy_dist/samples/react-basic-catalog/
+
+          touch deploy_dist/.nojekyll
+
+      - name: Ensure Staging Directory Exists for Closed Action
+        if: github.event.action == 'closed'
+        run: |
+          mkdir -p deploy_dist
+          touch deploy_dist/.nojekyll
+
+      - name: Upload PR Preview Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-preview-payload
+          path: |
+            pr_meta/metadata.json
+            deploy_dist/
+          retention-days: 1

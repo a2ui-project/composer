@@ -12,96 +12,91 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: Deploy PR Previews
+# ==============================================================================
+# PR Preview Deploy (Stage 2)
+#
+# Purpose:
+#   Stage 2 of the two-stage PR preview workflow.
+#
+# Architecture & Security:
+#   Triggered by `workflow_run` upon successful completion of Stage 1 ("PR
+#   Preview Build"). It runs in the privileged context of the default (`main`)
+#   branch with `contents: write` and `pull-requests: write` permissions.
+#
+# Relationship to Stage 1:
+#   Downloads the `pr-preview-payload` static artifact created by Stage 1,
+#   deploys static files to `gh-pages` under `pr/${PR_NUM}`, and posts PR
+#   comments. It never checks out or executes any code or build scripts from the
+#   pull request.
+# ==============================================================================
+
+name: PR Preview Deploy
 
 on:
-  pull_request:
-    types: [opened, synchronize, closed]
-
-permissions:
-  contents: write
-  pull-requests: write
+  workflow_run:
+    workflows: ["PR Preview Build"]
+    types: [completed]
 
 concurrency:
-  group: pages-pr-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: gh-pages-deployment
+  cancel-in-progress: false
 
 jobs:
   deploy-preview:
-    if: github.event.action == 'opened' || github.event.action == 'synchronize'
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download PR Preview Artifact
+        uses: actions/download-artifact@v4
         with:
-          node-version: "24"
-          cache: "yarn"
-          cache-dependency-path: "yarn.lock"
+          name: pr-preview-payload
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Install Dependencies
-        run: yarn install --immutable
-
-      # Only compile prerequisite bridge dependency in baseline step
-      - name: Build Core Bridge Dependency
-        run: yarn workspace a2ui-bridge build
-
-      - name: Build Shell & Catalogs with PR-Specific Base URLs
-        env:
-          PR_NUM: ${{ github.event.pull_request.number }}
+      - name: Read & Validate PR Metadata
         run: |
-          yarn workspace ng-basic-catalog run build --base-href=/composer/pr/${PR_NUM}/samples/ng-basic-catalog/
-          yarn workspace a2ui-composer-shell run build --base-href=/composer/pr/${PR_NUM}/
-          yarn workspace lit-basic-catalog run build --base=/composer/pr/${PR_NUM}/samples/lit-basic-catalog/
-          yarn workspace react-basic-catalog run build --base=/composer/pr/${PR_NUM}/samples/react-basic-catalog/
-
-      # Explicitly pre-create all destination directories and use cp -r SOURCE/. DEST/
-      - name: Assemble Staging Directory (deploy_dist)
-        run: |
-          mkdir -p deploy_dist/samples/ng-basic-catalog
-          mkdir -p deploy_dist/samples/lit-basic-catalog
-          mkdir -p deploy_dist/samples/react-basic-catalog
-
-          if [ -d "shell/dist/a2ui-composer/browser" ]; then
-            cp -r shell/dist/a2ui-composer/browser/. deploy_dist/
-          else
-            cp -r shell/dist/a2ui-composer/. deploy_dist/
+          if [ ! -f pr_meta/metadata.json ]; then
+            echo "Error: pr_meta/metadata.json missing from downloaded artifact."
+            exit 1
           fi
 
-          if [ -d "samples/ng-basic-catalog/dist/ng-basic-catalog/browser" ]; then
-            cp -r samples/ng-basic-catalog/dist/ng-basic-catalog/browser/. deploy_dist/samples/ng-basic-catalog/
-          else
-            cp -r samples/ng-basic-catalog/dist/ng-basic-catalog/. deploy_dist/samples/ng-basic-catalog/
+          PR_NUM=$(jq -r '.pr_number // empty' pr_meta/metadata.json)
+          ACTION=$(jq -r '.action // empty' pr_meta/metadata.json)
+          HEAD_SHA=$(jq -r '.head_sha // empty' pr_meta/metadata.json)
+
+          if ! [[ "$PR_NUM" =~ ^[0-9]+$ ]]; then
+            echo "Error: Invalid PR_NUM '$PR_NUM'. Must be a positive integer matching ^[0-9]+$"
+            exit 1
           fi
 
-          cp -r samples/lit-basic-catalog/dist/. deploy_dist/samples/lit-basic-catalog/
-          cp -r samples/react-basic-catalog/dist/. deploy_dist/samples/react-basic-catalog/
-
-          touch deploy_dist/.nojekyll
+          echo "PR_NUM=${PR_NUM}" >> $GITHUB_ENV
+          echo "ACTION=${ACTION}" >> $GITHUB_ENV
+          echo "HEAD_SHA=${HEAD_SHA}" >> $GITHUB_ENV
 
       - name: Publish Preview to gh-pages Subfolder
+        if: env.ACTION == 'opened' || env.ACTION == 'synchronize' || env.ACTION == 'reopened'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./deploy_dist
-          destination_dir: pr/${{ github.event.pull_request.number }}
+          destination_dir: pr/${{ env.PR_NUM }}
           keep_files: true
 
-      # Implement paginated github.paginate comment queries and non-blocking try..catch fault tolerance
       - name: Post PR Preview Comment
+        if: env.ACTION == 'opened' || env.ACTION == 'synchronize' || env.ACTION == 'reopened'
         uses: actions/github-script@v7
+        env:
+          PR_NUM: ${{ env.PR_NUM }}
         with:
           script: |
             try {
-              const prNum = context.payload.pull_request.number;
+              const prNum = parseInt(process.env.PR_NUM, 10);
               const repoName = context.repo.repo;
               const ownerName = context.repo.owner;
               const previewUrl = `https://${ownerName}.github.io/${repoName}/pr/${prNum}/`;
@@ -133,30 +128,34 @@ jobs:
               console.warn('Failed to post or update PR preview comment:', error);
             }
 
-  cleanup-preview:
-    if: github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Delete PR Preview Folder from gh-pages Branch
+        if: env.ACTION == 'closed'
+        env:
+          PR_NUM: ${{ env.PR_NUM }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin gh-pages
+          git fetch origin gh-pages || true
+
+          if ! git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            echo "Remote branch gh-pages does not exist yet; no cleanup necessary."
+            exit 0
+          fi
 
           # Safely check out the remote branch
           git checkout -B gh-pages origin/gh-pages
 
-          PR_DIR="pr/${{ github.event.pull_request.number }}"
+          PR_DIR="pr/${PR_NUM}"
           if [ -d "$PR_DIR" ]; then
             git rm -rf "$PR_DIR"
-            git commit -m "Automated cleanup of PR #${{ github.event.pull_request.number }} preview"
+            git commit -m "Automated cleanup of PR #${PR_NUM} preview"
 
             # Robust push with an exponential backoff and rebase loop to handle concurrent updates
             for i in {1..5}; do
-              git pull origin gh-pages --rebase && git push origin gh-pages && break
+              if git pull origin gh-pages --rebase && git push origin gh-pages; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
               if [ $i -eq 5 ]; then
                 echo "Failed to push cleanup after 5 merge conflict attempts."
                 exit 1
@@ -168,13 +167,15 @@ jobs:
             echo "Preview directory $PR_DIR does not exist; no cleanup necessary."
           fi
 
-      # Implement paginated github.paginate queries and non-blocking try..catch fault tolerance
       - name: Post Preview Demolition Comment
+        if: env.ACTION == 'closed'
         uses: actions/github-script@v7
+        env:
+          PR_NUM: ${{ env.PR_NUM }}
         with:
           script: |
             try {
-              const prNum = context.payload.pull_request.number;
+              const prNum = parseInt(process.env.PR_NUM, 10);
               const comments = await github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
