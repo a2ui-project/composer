@@ -73,7 +73,7 @@ export class StateSync {
     effect(() => {
       const catalog = this.catalogManagement.activeCatalog();
       if (catalog) {
-        const catalogId = catalog.catalogId || '';
+        const catalogId = (catalog['catalogId'] as string) || (catalog['$id'] as string) || '';
         untracked(() => {
           const currentDraft = this._activeDraft();
           const draftCatalogId = this.getCatalogIdFromDraft(currentDraft);
@@ -122,7 +122,9 @@ export class StateSync {
    */
   flushDraft(): void {
     const catalog = this.catalogManagement.activeCatalog();
-    const catalogId = catalog?.catalogId || '';
+    const catalogId = catalog
+      ? (catalog['catalogId'] as string) || (catalog['$id'] as string) || ''
+      : '';
     this._activeDraft.set(this.getInitialDraft(catalogId));
   }
 
@@ -133,13 +135,15 @@ export class StateSync {
     if (!catalogId) {
       return '';
     }
+    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+    // prettier-ignore
     const draftObj = [
       {
-        version: 'v0.9',
-        createSurface: {
-          surfaceId: 'sample-surface',
-          catalogId,
-          sendDataModel: true,
+        'version': 'v0.9',
+        'createSurface': {
+          'surfaceId': 'sample-surface',
+          'catalogId': catalogId,
+          'sendDataModel': true,
         },
       },
     ];
@@ -155,12 +159,27 @@ export class StateSync {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
         for (const item of parsed) {
-          if (item?.createSurface?.catalogId) {
-            return item.createSurface.catalogId;
+          const createSurface =
+            item && typeof item === 'object'
+              ? (item as Record<string, unknown>)['createSurface']
+              : undefined;
+          if (
+            createSurface &&
+            typeof createSurface === 'object' &&
+            (createSurface as Record<string, unknown>)['catalogId']
+          ) {
+            return (createSurface as Record<string, unknown>)['catalogId'] as string;
           }
         }
-      } else if (parsed?.createSurface?.catalogId) {
-        return parsed.createSurface.catalogId;
+      } else if (parsed && typeof parsed === 'object') {
+        const createSurface = (parsed as Record<string, unknown>)['createSurface'];
+        if (
+          createSurface &&
+          typeof createSurface === 'object' &&
+          (createSurface as Record<string, unknown>)['catalogId']
+        ) {
+          return (createSurface as Record<string, unknown>)['catalogId'] as string;
+        }
       }
     } catch (e) {
       // ignore

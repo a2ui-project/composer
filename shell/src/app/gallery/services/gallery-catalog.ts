@@ -283,8 +283,10 @@ export class GalleryCatalog {
           clearTimeout(this.usageTimeoutId);
         }
 
+        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+        // prettier-ignore
         this.hostCommunication.sendMessage({
-          type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
+          'type': PreviewBridgeMessageType.GET_COMPONENT_USAGES,
         });
 
         this.usageTimeoutId = setTimeout(() => {

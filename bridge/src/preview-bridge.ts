@@ -535,10 +535,14 @@ export class PreviewBridge {
     const {processor, config, activeSurfaceIds} = this.activeRenderer;
     for (const surfaceId of activeSurfaceIds) {
       try {
+        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+        // prettier-ignore
         processor.processMessages([
           {
-            version: 'v0.9',
-            deleteSurface: {surfaceId},
+            'version': 'v0.9',
+            'deleteSurface': {
+              'surfaceId': surfaceId,
+            },
           } as A2uiMessage,
         ]);
       } catch (e: unknown) {

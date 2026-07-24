@@ -94,7 +94,7 @@ export class A2uiSandboxConnection implements OnDestroy {
         if (catalogs) {
           for (const catalog of catalogs) {
             if (catalog) {
-              (catalog as {id: string}).id = catalogId;
+              (catalog as unknown as Record<string, unknown>)['id'] = catalogId;
             }
           }
         }

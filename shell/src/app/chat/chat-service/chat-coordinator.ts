@@ -402,10 +402,13 @@ export class ChatCoordinator {
    */
   private runCatalogComponentSchemaCheck(parsedBlocks: unknown[]): void {
     const catalog = this.catalogManagement.activeCatalog();
+    const componentsObj = catalog
+      ? (catalog['components'] as Record<string, unknown> | undefined)
+      : undefined;
     const componentHealMap: Record<string, string> = {};
 
-    if (catalog && catalog['components']) {
-      for (const key of Object.keys(catalog['components'])) {
+    if (componentsObj) {
+      for (const key of Object.keys(componentsObj)) {
         const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, '');
         componentHealMap[normalizedKey] = key;
       }
@@ -460,8 +463,8 @@ export class ChatCoordinator {
         let targetType = compType;
 
         // Schema validation (only if catalog is actively loaded with components)
-        if (catalog && catalog.components) {
-          if (!catalog.components[compType]) {
+        if (componentsObj) {
+          if (!componentsObj[compType]) {
             // Unrecognized component type - check case-insensitive lookup!
             const normalized = compType.toLowerCase().replace(/[^a-z]/g, '');
             let healedType = componentHealMap[normalized];
@@ -474,13 +477,13 @@ export class ChatCoordinator {
               }
             }
 
-            if (healedType && catalog.components[healedType]) {
+            if (healedType && componentsObj[healedType]) {
               this.chatState.setPipelineStatus(PipelineStatus.HEALING);
               targetType = healedType;
             } else {
               // Fuzzy search matches
               const fuzzyMatch = normalized
-                ? Object.keys(catalog.components).find(
+                ? Object.keys(componentsObj).find(
                     key =>
                       key.toLowerCase().includes(normalized) ||
                       normalized.includes(key.toLowerCase()),

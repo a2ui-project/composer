@@ -141,7 +141,7 @@ export class Gallery implements OnInit, OnDestroy {
   protected readonly catalogId = computed<string | null>(() => {
     const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) return null;
-    return (catalog.catalogId || catalog.$id) ?? null;
+    return ((catalog['catalogId'] as string) || (catalog['$id'] as string)) ?? null;
   });
 
   /** The table column names mapped by MatTable. */
@@ -157,8 +157,11 @@ export class Gallery implements OnInit, OnDestroy {
   protected readonly selectedComponentDescription = computed<string>(() => {
     const key = this.selectedComponentKey();
     const catalog = this.catalogManagement.activeCatalog();
-    const comp = key ? catalog?.components?.[key] : null;
-    return comp && typeof comp['description'] === 'string' ? comp['description'] : '';
+    const comp =
+      key && catalog && catalog['components']
+        ? (catalog['components'] as Record<string, Record<string, unknown>>)[key]
+        : null;
+    return comp && typeof comp['description'] === 'string' ? (comp['description'] as string) : '';
   });
 
   /**
@@ -176,7 +179,10 @@ export class Gallery implements OnInit, OnDestroy {
       return componentsArray;
     }
 
-    const componentKeys = Object.keys(catalog.components || {});
+    const componentsObj = catalog
+      ? (catalog['components'] as Record<string, unknown> | undefined)
+      : undefined;
+    const componentKeys = Object.keys(componentsObj || {});
     // Support prefixed columns by checking if exactly 'column' or ends with 'column' (case-insensitive).
     // Prioritize exact match.
     let columnKey = componentKeys.find(k => k.toLowerCase() === 'column');
@@ -237,32 +243,38 @@ export class Gallery implements OnInit, OnDestroy {
         return;
       }
 
+      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+      // prettier-ignore
       const createSurfaceCmd = {
-        version: 'v0.9',
-        createSurface: {
-          surfaceId: 'gallery-preview',
-          catalogId,
+        'version': 'v0.9',
+        'createSurface': {
+          'surfaceId': 'gallery-preview',
+          'catalogId': catalogId,
         },
       };
 
       const componentsPayload = this.getComponentsPayload(components as unknown[]);
 
+      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+      // prettier-ignore
       const updateComponentsCmd = {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: 'gallery-preview',
-          components: componentsPayload,
+        'version': 'v0.9',
+        'updateComponents': {
+          'surfaceId': 'gallery-preview',
+          'components': componentsPayload,
         },
       };
 
       const commands: unknown[] = [createSurfaceCmd, updateComponentsCmd];
 
       if (dataObj !== undefined) {
+        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+        // prettier-ignore
         commands.push({
-          version: 'v0.9',
-          updateDataModel: {
-            surfaceId: 'gallery-preview',
-            value: dataObj,
+          'version': 'v0.9',
+          'updateDataModel': {
+            'surfaceId': 'gallery-preview',
+            'value': dataObj,
           },
         });
       }

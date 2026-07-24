@@ -1718,6 +1718,32 @@ describe('PreviewBridge Core API Runtime', () => {
       }).not.toThrow();
     });
 
+    it('dispatches reset payload with explicit quoted keys for protocol properties during resetActiveRendererState', () => {
+      const processSpy = vi.fn();
+      const mockGroup = {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      };
+
+      bridge.attachRenderer(
+        {processMessages: processSpy},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+        },
+      );
+
+      bridge['activeRenderer']!.activeSurfaceIds.add('surf-1');
+
+      bridge['resetActiveRendererState']();
+
+      expect(processSpy).toHaveBeenCalledWith([
+        {
+          version: 'v0.9',
+          deleteSurface: {surfaceId: 'surf-1'},
+        },
+      ]);
+    });
+
     it('logs warning and falls back to entire message payload when RENDER_A2UI data payload field is omitted', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const mockGroup = {

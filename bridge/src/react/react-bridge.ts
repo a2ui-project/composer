@@ -68,7 +68,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
       onCatalogResolved: catalogId => {
         for (const catalog of catalogs) {
           if (catalog) {
-            (catalog as {id: string}).id = catalogId;
+            (catalog as unknown as Record<string, unknown>)['id'] = catalogId;
           }
         }
       },

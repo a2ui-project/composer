@@ -133,7 +133,7 @@ export class A2uiSandboxRoot extends LitElement {
       onCatalogResolved: catalogId => {
         for (const catalog of (this.constructor as typeof A2uiSandboxRoot).catalogs) {
           if (catalog) {
-            (catalog as {id: string}).id = catalogId;
+            (catalog as unknown as Record<string, unknown>)['id'] = catalogId;
           }
         }
       },
