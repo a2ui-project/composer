@@ -79,30 +79,36 @@ export class Gallery implements OnInit, OnDestroy {
 
         const componentsPayload = this.getComponentsPayload(componentsArray);
 
+        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+        // prettier-ignore
         const cmd1 = {
-          version: 'v0.9',
-          createSurface: {
-            surfaceId: 'gallery-preview',
-            catalogId: catalogId,
+          'version': 'v0.9',
+          'createSurface': {
+            'surfaceId': 'gallery-preview',
+            'catalogId': catalogId,
           },
         };
 
+        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+        // prettier-ignore
         const cmd2 = {
-          version: 'v0.9',
-          updateComponents: {
-            surfaceId: 'gallery-preview',
-            components: componentsPayload,
+          'version': 'v0.9',
+          'updateComponents': {
+            'surfaceId': 'gallery-preview',
+            'components': componentsPayload,
           },
         };
 
         const payload: unknown[] = [cmd1, cmd2];
 
         if (dataObj !== undefined) {
+          // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
+          // prettier-ignore
           const cmd3 = {
-            version: 'v0.9',
-            updateDataModel: {
-              surfaceId: 'gallery-preview',
-              value: dataObj,
+            'version': 'v0.9',
+            'updateDataModel': {
+              'surfaceId': 'gallery-preview',
+              'value': dataObj,
             },
           };
           payload.push(cmd3);
