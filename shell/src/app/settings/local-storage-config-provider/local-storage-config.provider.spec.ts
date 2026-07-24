@@ -315,22 +315,23 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(provider.geminiApiKey()).toBe('');
   });
 
-  it('attaches catch handler and logs warning when setGeminiApiKey write fails', async () => {
+  it('attaches catch handler and logs warning when setGeminiApiKey write fails, but updates signal and resolves without throwing', async () => {
     const warnSpy = vi.spyOn(console, 'warn');
     vi.spyOn(mockSecureStorage, 'setCredential').mockRejectedValue(
       new Error('Simulated Write Failure'),
     );
 
     const provider = setupProvider();
-    await expect(provider.setGeminiApiKey('failed-key')).rejects.toThrow('Simulated Write Failure');
+    await expect(provider.setGeminiApiKey('failed-key')).resolves.not.toThrow();
+    expect(provider.geminiApiKey()).toBe('failed-key');
 
     expect(warnSpy).toHaveBeenCalledWith(
-      'Failed to persist Gemini API key to SecureCredentialsStorage',
+      expect.stringContaining('Failed to persist Gemini API key to SecureCredentialsStorage'),
       expect.any(Error),
     );
   });
 
-  it('does not update geminiApiKey signal when setCredential persistence fails', async () => {
+  it('updates geminiApiKey signal even when setCredential persistence fails so runtime session works', async () => {
     await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'initial-key');
     const provider = setupProvider();
     await provider.initialize();
@@ -340,11 +341,24 @@ describe('LocalStorageAppConfigProvider', () => {
       new Error('Simulated Write Failure'),
     );
 
-    await expect(provider.setGeminiApiKey('new-failed-key')).rejects.toThrow(
-      'Simulated Write Failure',
+    await expect(provider.setGeminiApiKey('new-failed-key')).resolves.not.toThrow();
+
+    expect(provider.geminiApiKey()).toBe('new-failed-key');
+  });
+
+  it('wraps setGeminiApiKey in robust error handling so it does not throw when storage rejects with SecurityError or QuotaExceededError', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    vi.spyOn(mockSecureStorage, 'setCredential').mockRejectedValue(
+      new DOMException('SecurityError in sandboxed iframe', 'SecurityError'),
     );
 
-    expect(provider.geminiApiKey()).toBe('initial-key');
+    const provider = setupProvider();
+    await expect(provider.setGeminiApiKey('sandboxed-key')).resolves.not.toThrow();
+    expect(provider.geminiApiKey()).toBe('sandboxed-key');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to persist Gemini API key'),
+      expect.anything(),
+    );
   });
 
   it('attaches catch handler and logs warning when removeCredential delete fails during flushConfig', async () => {

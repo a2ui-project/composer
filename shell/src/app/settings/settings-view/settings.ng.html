@@ -34,7 +34,11 @@
           }
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Target Renderer URL</mat-label>
-            <input matInput formControlName="rendererUrl" placeholder="http://localhost:3000" />
+            <input
+              matInput
+              [formControl]="settingsForm.controls.rendererUrl"
+              placeholder="http://localhost:3000"
+            />
             @if (settingsForm.controls.rendererUrl.hasError('required')) {
               <mat-error>Renderer URL is required.</mat-error>
             }
@@ -54,7 +58,7 @@
               <input
                 matInput
                 [type]="hideApiKey() ? 'password' : 'text'"
-                formControlName="apiKey"
+                [formControl]="settingsForm.controls.apiKey"
                 placeholder="Enter your Gemini API key"
               />
               <button
@@ -134,8 +138,16 @@
         >. Neither Google nor anyone else has access to this key.
       </mat-card-footer>
     }
+    @if (saveErrorMessage()) {
+      <div class="save-error-banner" role="alert">
+        <mat-icon color="warn" aria-hidden="true">error</mat-icon>
+        <span>{{ saveErrorMessage() }}</span>
+      </div>
+    }
     <mat-card-actions align="end">
-      <button mat-flat-button color="primary" (click)="saveSettings()">Save Settings</button>
+      <button mat-flat-button color="primary" [disabled]="isSaving()" (click)="saveSettings()">
+        {{ isSaving() ? 'Saving...' : 'Save Settings' }}
+      </button>
     </mat-card-actions>
   </mat-card>
 

@@ -163,16 +163,15 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    * @param key The fresh Gemini developer API key credential.
    */
   override async setGeminiApiKey(key: string): Promise<void> {
+    const trimmedKey = key.trim();
+    this._geminiApiKey.set(trimmedKey);
     try {
-      const trimmedKey = key.trim();
       await this.secureCredentialsStorage.setCredential(
         SecureCredentialsKey.GEMINI_API_KEY,
         trimmedKey,
       );
-      this._geminiApiKey.set(trimmedKey);
     } catch (err) {
-      console.warn('Failed to persist Gemini API key to SecureCredentialsStorage', err);
-      throw err;
+      console.warn('Failed to persist Gemini API key to SecureCredentialsStorage:', err);
     }
   }
 

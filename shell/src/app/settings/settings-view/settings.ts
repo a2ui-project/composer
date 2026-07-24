@@ -14,7 +14,16 @@
  * limitations under the License.
  */
 
-import {Component, computed, inject, OnInit, signal, Signal, WritableSignal} from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  OnInit,
+  signal,
+  Signal,
+  WritableSignal,
+} from '@angular/core';
 import {NonNullableFormBuilder, ReactiveFormsModule, Validators} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -66,6 +75,8 @@ export class Settings implements OnInit {
   readonly isThirdParty: WritableSignal<boolean> = signal(false);
   readonly hideApiKey: WritableSignal<boolean> = signal(true);
   readonly forceThirdPartyAuth: WritableSignal<boolean> = signal(false);
+  readonly saveErrorMessage: WritableSignal<string | null> = signal(null);
+  readonly isSaving: WritableSignal<boolean> = signal(false);
 
   readonly bridgeConnected: Signal<boolean> = computed(
     () => this.hostCommunication.latestEnvelope() !== null,
@@ -90,55 +101,87 @@ export class Settings implements OnInit {
     apiKey: [''],
   });
 
+  constructor() {
+    effect(() => {
+      const currentKey = this.configProvider.geminiApiKey();
+      const apiKeyControl = this.settingsForm.controls.apiKey;
+      if (!apiKeyControl.dirty && apiKeyControl.value !== currentKey) {
+        apiKeyControl.setValue(currentKey, {emitEvent: false});
+      }
+    });
+  }
+
   ngOnInit(): void {
     const locked = this.startupResolution.isContextLocked();
     this.isLocked.set(locked);
 
     const is3P = this.startupResolution.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
+    this.configureApiKeyControl(is3P);
 
     this.forceThirdPartyAuth.set(this.configProvider.authType() === AuthType.THIRD_PARTY);
 
     const initialUrl = this.configProvider.rendererUrl();
-    const initialApiKey = this.configProvider.geminiApiKey();
 
     this.settingsForm.patchValue({
       rendererUrl: initialUrl,
-      apiKey: initialApiKey,
     });
 
     if (locked) {
       this.settingsForm.controls.rendererUrl.disable();
     }
+  }
 
+  private configureApiKeyControl(is3P: boolean): void {
+    const apiKeyControl = this.settingsForm.controls.apiKey;
     if (is3P) {
-      const apiKeyControl = this.settingsForm.controls.apiKey;
       apiKeyControl.setValidators([Validators.pattern(/\S/)]);
-      apiKeyControl.updateValueAndValidity();
+      if (apiKeyControl.disabled) {
+        apiKeyControl.enable({emitEvent: false});
+      }
+    } else {
+      apiKeyControl.clearValidators();
+      if (apiKeyControl.enabled) {
+        apiKeyControl.disable({emitEvent: false});
+      }
     }
+    apiKeyControl.updateValueAndValidity({emitEvent: false});
   }
 
   async saveSettings(): Promise<void> {
+    this.saveErrorMessage.set(null);
+
     if (this.settingsForm.invalid) {
       this.settingsForm.markAllAsTouched();
+      this.saveErrorMessage.set('Please resolve validation errors before saving settings.');
       return;
     }
 
-    const values = this.settingsForm.getRawValue();
+    this.isSaving.set(true);
+    try {
+      const values = this.settingsForm.getRawValue();
 
-    if (this.isThirdParty()) {
-      if (!this.isLocked()) {
-        this.configProvider.setRendererUrl(values.rendererUrl.trim());
+      if (this.isThirdParty()) {
+        if (!this.isLocked()) {
+          this.configProvider.setRendererUrl(values.rendererUrl.trim());
+        }
+        await this.configProvider.setGeminiApiKey(values.apiKey.trim());
+      } else {
+        await this.configProvider.purgeGeminiApiKey();
+        if (!this.isLocked()) {
+          this.configProvider.setRendererUrl(values.rendererUrl.trim());
+        }
       }
-      await this.configProvider.setGeminiApiKey(values.apiKey.trim());
-    } else {
-      await this.configProvider.purgeGeminiApiKey();
-      if (!this.isLocked()) {
-        this.configProvider.setRendererUrl(values.rendererUrl.trim());
-      }
+
+      this.reloadWindow();
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+      this.saveErrorMessage.set(
+        err instanceof Error ? err.message : 'An unexpected error occurred while saving settings.',
+      );
+    } finally {
+      this.isSaving.set(false);
     }
-
-    this.reloadWindow();
   }
 
   /**
