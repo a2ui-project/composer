@@ -18,18 +18,87 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
   overflow: hidden;
+  background-color: var(--cpk-page-bg, #dedee9);
+  font-family: var(--cpk-font-body, 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif);
+  color: var(--cpk-text-primary, #010507);
+}
+
+/* Signature CopilotKit depth cue: six soft blur circles behind all content. */
+.composer-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.blur-circle {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(103px);
+}
+
+.blur-circle--1 {
+  width: 446px;
+  height: 446px;
+  left: 1040px;
+  top: 11px;
+  background: var(--cpk-blur-warm);
+}
+
+.blur-circle--2 {
+  width: 609px;
+  height: 609px;
+  left: 1339px;
+  top: 625px;
+  background: var(--cpk-blur-cool);
+}
+
+.blur-circle--3 {
+  width: 609px;
+  height: 609px;
+  left: 670px;
+  top: -365px;
+  background: var(--cpk-blur-cool);
+}
+
+.blur-circle--4 {
+  width: 609px;
+  height: 609px;
+  left: 508px;
+  top: 702px;
+  background: var(--cpk-blur-bright);
+}
+
+.blur-circle--5 {
+  width: 446px;
+  height: 446px;
+  left: 128px;
+  top: 331px;
+  background: var(--cpk-blur-gold);
+}
+
+.blur-circle--6 {
+  width: 446px;
+  height: 446px;
+  left: -205px;
+  top: 803px;
+  background: var(--cpk-blur-warm);
 }
 
 .composer-header {
   position: relative;
   z-index: 2;
   flex-shrink: 0;
-  background-color: var(--mat-sys-surface-container);
-  color: var(--mat-sys-on-surface);
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
-  --mat-toolbar-container-background-color: var(--mat-sys-surface-container);
-  --mat-toolbar-container-text-color: var(--mat-sys-on-surface);
+  background-color: var(--cpk-glass-bg);
+  color: var(--cpk-text-primary);
+  border-bottom: 1px solid var(--cpk-glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  --mat-toolbar-container-background-color: transparent;
+  --mat-toolbar-container-text-color: var(--cpk-text-primary);
 }
 .spacer {
   flex: 1 1 auto;
@@ -39,16 +108,23 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
+  // Let the lavender page + blur circles show through the drawer container.
+  background-color: transparent;
+  --mat-sidenav-container-background-color: transparent;
 }
 
 .composer-sidenav {
   width: 250px;
-  background-color: var(--mat-sys-surface-container);
-  border-right: 1px solid var(--mat-sys-outline-variant);
+  background-color: var(--cpk-glass-bg);
+  border-right: 1px solid var(--cpk-glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   --mat-sidenav-container-shape: 0px;
   --mat-drawer-container-shape: 0px;
-  border-radius: 0;
-  --mat-sidenav-background-color: var(--mat-sys-surface-container);
+  border-radius: 0px;
+  --mat-sidenav-background-color: var(--cpk-glass-bg);
   transition: width 200ms ease-in-out;
 
   ::ng-deep .mat-drawer-inner-container {

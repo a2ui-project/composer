@@ -226,15 +226,165 @@ $dark-theme: mat.define-theme(
   }
 }
 
+/* =====================================================================
+ * CopilotKit / AG-UI design-system token layer
+ * ---------------------------------------------------------------------
+ * Layered on top of Google's Material M3 theme. Shell/component styles
+ * read colour, spacing, radius, shadow and typography through these
+ * semantic `--cpk-*` tokens. The look builds on the CopilotKit dojo
+ * aesthetic: a cool lavender-gray page, frost-glass surfaces, white
+ * glass borders, soft blur circles and Plus Jakarta Sans type.
+ *
+ * Tokens are defined for BOTH themes. `:root` carries light; `.dark-theme`
+ * (stamped on <body>) re-declares the SAME token names with dark values so
+ * the nav, toolbar and panel chrome theme correctly in dark mode. These
+ * `:root`/`.dark-theme` blocks appear AFTER Google's `mat.theme-overrides`
+ * output, so the few `--mat-sys-*` retints below win by cascade order and
+ * make `.mat-app-background` resolve to the lavender page.
+ * ===================================================================== */
+:root {
+  // --- Surface -------------------------------------------------------
+  --cpk-page-bg: #dedee9;
+  --cpk-surface: rgba(255, 255, 255, 0.5); // glass panel body
+  --cpk-surface-elevated: #ffffff; // solid raised cards / menus
+  --cpk-glass-bg: rgba(255, 255, 255, 0.5);
+  --cpk-glass-bg-hover: rgba(255, 255, 255, 0.62);
+  --cpk-glass-bg-selected: rgba(255, 255, 255, 0.78);
+
+  // --- Background blur circles (signature depth cue behind all routes) ---
+  --cpk-blur-warm: rgba(255, 172, 77, 0.2);
+  --cpk-blur-cool: #c9c9da;
+  --cpk-blur-bright: #f3f3fc;
+  --cpk-blur-gold: rgba(255, 243, 136, 0.3);
+
+  // --- Line ----------------------------------------------------------
+  --cpk-glass-border: #ffffff;
+  --cpk-border: #cfcfe0;
+  --cpk-divider: #dbdbe5;
+
+  // --- Text ----------------------------------------------------------
+  --cpk-text-primary: #010507;
+  --cpk-text-secondary: #57575b;
+  --cpk-text-faint: #838389;
+  --cpk-text-muted: #838389; // legacy alias
+
+  // --- Accent (brand indigo; interactive emphasis, never a status) ---
+  --cpk-accent: #4355b9;
+  --cpk-accent-hover: #37479e;
+  --cpk-accent-contrast: #ffffff;
+  --cpk-accent-bg: rgba(67, 85, 185, 0.1);
+
+  // --- Status (semantic; separate from the accent) -------------------
+  --cpk-success: #1e7d4f;
+  --cpk-success-bg: rgba(30, 125, 79, 0.12);
+  --cpk-warning: #9a5b00;
+  --cpk-warning-bg: rgba(154, 91, 0, 0.14);
+  --cpk-critical: #ba1a1a;
+  --cpk-critical-bg: rgba(186, 26, 26, 0.1);
+
+  // --- Spacing scale -------------------------------------------------
+  --cpk-space-1: 4px;
+  --cpk-space-2: 8px;
+  --cpk-space-3: 12px;
+  --cpk-space-4: 16px;
+  --cpk-space-5: 24px;
+  --cpk-space-6: 32px;
+
+  // --- Layout measure ------------------------------------------------
+  --cpk-content-max: 720px;
+
+  // --- Radius scale --------------------------------------------------
+  --cpk-radius-sm: 4px;
+  --cpk-radius-item: 4px;
+  --cpk-radius-card: 8px;
+  --cpk-radius-lg: 16px;
+  --cpk-radius-pill: 9999px;
+
+  // --- Elevation scale ----------------------------------------------
+  --cpk-shadow-sm: 0px 2px 4px -1px rgba(1, 5, 7, 0.06);
+  --cpk-shadow-card: 0px 6px 6px -2px rgba(1, 5, 7, 0.08);
+  --cpk-shadow-elevated: 0px 16px 24px -8px rgba(1, 5, 7, 0.12);
+
+  // --- Typography ----------------------------------------------------
+  --cpk-font-body: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --cpk-font-mono: 'Spline Sans Mono', ui-monospace, monospace;
+
+  // Retint the Material system tokens the shell chrome reads (light).
+  --mat-sys-background: #dedee9;
+  --mat-sys-on-background: #010507;
+  --mat-sys-on-surface: #010507;
+}
+
+/* Dark theme: re-declare EVERY --cpk-* token so nav + toolbar + panel
+ * chrome theme correctly. Stamped on <body> by the shell; wins over the
+ * html `:root` values above. */
+.dark-theme {
+  // --- Surface -------------------------------------------------------
+  --cpk-page-bg: #0e0e12;
+  --cpk-surface: rgba(38, 38, 46, 0.55);
+  --cpk-surface-elevated: #201f20;
+  --cpk-glass-bg: rgba(38, 38, 46, 0.55);
+  --cpk-glass-bg-hover: rgba(58, 58, 68, 0.6);
+  --cpk-glass-bg-selected: rgba(78, 78, 92, 0.72);
+
+  // --- Background blur circles (subtle brand glows over the dark page) ---
+  --cpk-blur-warm: rgba(255, 172, 77, 0.06);
+  --cpk-blur-cool: rgba(67, 85, 185, 0.2);
+  --cpk-blur-bright: rgba(99, 102, 160, 0.14);
+  --cpk-blur-gold: rgba(186, 195, 255, 0.05);
+
+  // --- Line ----------------------------------------------------------
+  --cpk-glass-border: rgba(255, 255, 255, 0.12);
+  --cpk-border: rgba(255, 255, 255, 0.16);
+  --cpk-divider: rgba(255, 255, 255, 0.1);
+
+  // --- Text ----------------------------------------------------------
+  --cpk-text-primary: #f4f2f7;
+  --cpk-text-secondary: #bcbbc6;
+  --cpk-text-faint: #8f8e99;
+  --cpk-text-muted: #8f8e99;
+
+  // --- Accent --------------------------------------------------------
+  --cpk-accent: #bac3ff;
+  --cpk-accent-hover: #d3d9ff;
+  --cpk-accent-contrast: #08218a;
+  --cpk-accent-bg: rgba(186, 195, 255, 0.16);
+
+  // --- Status --------------------------------------------------------
+  --cpk-success: #6fdfa0;
+  --cpk-success-bg: rgba(111, 223, 160, 0.16);
+  --cpk-warning: #ffc078;
+  --cpk-warning-bg: rgba(255, 192, 120, 0.16);
+  --cpk-critical: #ffb4ab;
+  --cpk-critical-bg: rgba(255, 180, 171, 0.16);
+
+  // --- Elevation (deeper shadows read on dark surfaces) --------------
+  --cpk-shadow-sm: 0px 2px 4px -1px rgba(0, 0, 0, 0.4);
+  --cpk-shadow-card: 0px 6px 10px -2px rgba(0, 0, 0, 0.5);
+  --cpk-shadow-elevated: 0px 16px 28px -8px rgba(0, 0, 0, 0.6);
+
+  // Retint the Material system tokens the shell chrome reads (dark).
+  --mat-sys-background: #0e0e12;
+  --mat-sys-on-background: #f4f2f7;
+  --mat-sys-on-surface: #f4f2f7;
+}
+
 html,
 body {
   height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background-color: var(--mat-sys-background);
-  color: var(--mat-sys-on-background);
-  font-family: Roboto, 'Helvetica Neue', sans-serif;
+  background-color: var(--cpk-page-bg);
+  color: var(--cpk-text-primary);
+  font-family: var(--cpk-font-body);
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--cpk-font-mono);
 }
 
 /* High-specificity global overrides resolving slide toggle label checks collisions */
