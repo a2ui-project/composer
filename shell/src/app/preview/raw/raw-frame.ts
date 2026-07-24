@@ -33,6 +33,7 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState} from '../../chat/chat-state/chat-state';
 import {MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 /**
  * Hosts the raw JSON view of active surface models, allowing direct source editing
@@ -61,11 +62,16 @@ export class RawFrame {
   private readonly destroyRef = inject(DestroyRef);
   private readonly snackBar = inject(MatSnackBar);
   private readonly layoutInput$ = new Subject<string>();
+  private isDestroyed = false;
 
   /** Public lock indicator preventing typing deadlocks during generative LLM stream turns. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.isDestroyed = true;
+    });
+
     // Initialize backing editor layout state Signal dynamically from the volatile session cache
     this.layoutJson = signal(this.stateSync.hydrateActiveDraft());
     effect(() => {
@@ -83,12 +89,35 @@ export class RawFrame {
       }
     });
 
+    this.hostCommunication.messageStream$
+      .pipe(
+        filter(envelope => envelope?.type === PreviewBridgeMessageType.RENDERER_READY),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => {
+        try {
+          const payload = this.parseLayoutString(this.layoutJson());
+          if (payload !== null) {
+            this.hostCommunication.sendRenderA2UI(payload);
+          }
+        } catch (err) {
+          if (err instanceof SyntaxError) {
+            console.warn('Syntax error on RENDERER_READY:', err);
+          } else {
+            console.error('Unexpected error on RENDERER_READY:', err);
+          }
+        }
+      });
+
     // Sync back changes in StateSync activeDraft to editor layoutJson (e.g. from LLM stream completed updates)
     effect(() => {
       const activeDraftVal = this.stateSync.activeDraft();
       untracked(() => {
         if (this.layoutJson() !== activeDraftVal) {
           queueMicrotask(() => {
+            if (this.isDestroyed) {
+              return;
+            }
             this.layoutJson.set(activeDraftVal);
 
             // Run live render updating matching activeDraft commits
@@ -125,7 +154,7 @@ export class RawFrame {
           }
         }),
         filter((payload): payload is unknown[] => payload !== null),
-        takeUntilDestroyed(this.destroyRef),
+        takeUntilDestroyed(),
       )
       .subscribe((payload: unknown[]) => {
         this.hostCommunication.sendRenderA2UI(payload);

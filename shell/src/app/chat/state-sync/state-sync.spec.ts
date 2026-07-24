@@ -88,7 +88,7 @@ describe('StateSync Autosave Draft Integrations', () => {
 
     // Eagerly flush Angular change detection effect bindings instantly upon
     // setup to prevent microtask leaks
-    TestBed.flushEffects();
+    TestBed.tick();
   });
 
   afterEach(() => {
@@ -113,7 +113,7 @@ describe('StateSync Autosave Draft Integrations', () => {
 
   it('triggers history sync after 300ms debouncing, appending a new node', () => {
     service.updateDraft('[{"version": "v0.9"}]');
-    TestBed.flushEffects(); // Flush toObservable event boundaries instantly!
+    TestBed.tick(); // Flush toObservable event boundaries instantly!
 
     vi.advanceTimersByTime(150);
     expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
@@ -137,7 +137,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     ]);
 
     service.updateDraft('[{"version": "v0.9", "updated": true}]');
-    TestBed.flushEffects();
+    TestBed.tick();
 
     vi.advanceTimersByTime(300);
 
@@ -164,7 +164,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     ]);
 
     service.updateDraft('[{"version": "v0.9", "post-turn": true}]');
-    TestBed.flushEffects();
+    TestBed.tick();
 
     vi.advanceTimersByTime(300);
 
@@ -199,7 +199,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     ]);
 
     service.updateDraft('[{"version": "v0.9", "components": []}]');
-    TestBed.flushEffects();
+    TestBed.tick();
 
     vi.advanceTimersByTime(300);
 
@@ -227,7 +227,7 @@ describe('StateSync Autosave Draft Integrations', () => {
 
   it('commits layouts from LLM synchronously, suppressing history syncs', () => {
     service.commitLayoutFromLlm('{"version": "v0.9", "from-llm": true}');
-    TestBed.flushEffects();
+    TestBed.tick();
 
     expect(service.hydrateActiveDraft()).toBe('{"version": "v0.9", "from-llm": true}');
 
@@ -256,7 +256,7 @@ describe('StateSync Autosave Draft Integrations', () => {
         ']';
 
       service.updateDraft(dirtyLayout);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -280,7 +280,7 @@ describe('StateSync Autosave Draft Integrations', () => {
         ']}}]';
 
       service.updateDraft(dirtyLayout);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -297,7 +297,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       const badLayout = '[ {"version": "v0.9"}, corrupt... ]';
 
       service.updateDraft(badLayout);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -321,7 +321,7 @@ describe('StateSync Autosave Draft Integrations', () => {
           ']}}]';
 
         service.updateDraft(dirtyLayout);
-        TestBed.flushEffects();
+        TestBed.tick();
 
         vi.advanceTimersByTime(300);
 
@@ -348,7 +348,7 @@ describe('StateSync Autosave Draft Integrations', () => {
         ']}}]';
 
       service.updateDraft(dirtyLayout);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -366,7 +366,7 @@ describe('StateSync Autosave Draft Integrations', () => {
         ']}}]';
 
       service.updateDraft(dirtyLayout);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -384,7 +384,7 @@ describe('StateSync Autosave Draft Integrations', () => {
         ']}}]';
 
       service.updateDraft(arrayLayout);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -403,7 +403,7 @@ describe('StateSync Autosave Draft Integrations', () => {
         ']}}]';
 
       service.updateDraft(dirtyLayout);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -416,7 +416,7 @@ describe('StateSync Autosave Draft Integrations', () => {
 
     it('returns empty string when sanitizing empty or whitespace layout', () => {
       service.updateDraft('   ');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -431,7 +431,7 @@ describe('StateSync Autosave Draft Integrations', () => {
         '[{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": []}}, "primitive-element"]';
 
       service.updateDraft(arrayWithPrimitive);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -444,7 +444,7 @@ describe('StateSync Autosave Draft Integrations', () => {
 
     it('returns empty array when all layout lines are sanitized to null', () => {
       service.updateDraft('[{"registerMockRules": true}]');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -459,7 +459,7 @@ describe('StateSync Autosave Draft Integrations', () => {
         '[{"version": "v0.9", "updateComponents": {"surfaceId": "s-1", "components": "not-an-array"}}]';
 
       service.updateDraft(invalidComponents);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
@@ -485,7 +485,7 @@ describe('StateSync Autosave Draft Integrations', () => {
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
       });
       const newService = TestBed.inject(StateSync);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(newService.activeDraft()).toContain('material_catalog.json');
       expect(newService.activeDraft()).not.toContain('Book a Car');
@@ -496,7 +496,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       service.updateDraft('{"version": "dirty"}');
       expect(service.activeDraft()).toBe('{"version": "dirty"}');
@@ -511,20 +511,20 @@ describe('StateSync Autosave Draft Integrations', () => {
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
       expect(service.activeDraft()).toBe(CAR_BOOKING);
 
       // User has typed some layout (dirty) matching basic catalog
       service.updateDraft(
         '[{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json", "sendDataModel": true}}, {"version": "v0.9", "updateComponents": {"components": []}}]',
       );
-      TestBed.flushEffects();
+      TestBed.tick();
 
       // Catalog changes to material
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       // Expect draft to be reset to material initial draft because the old draft was basic catalog
       expect(service.activeDraft()).toContain('material_catalog.json');
@@ -536,7 +536,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
       const materialInitialDraft = service.activeDraft();
       expect(materialInitialDraft).toContain('material_catalog.json');
 
@@ -545,14 +545,14 @@ describe('StateSync Autosave Draft Integrations', () => {
       parsedDraft.push({version: 'v0.9', updateComponents: {components: [{id: 'foo'}]}});
       const editedMaterialDraft = JSON.stringify(parsedDraft, null, 2);
       service.updateDraft(editedMaterialDraft);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       // Trigger a catalog change with the same catalog ID (e.g. metadata refresh)
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
         title: 'New Title', // different title, same catalogId
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       // Expect draft NOT to be reset, preserving user changes
       expect(service.activeDraft()).toBe(editedMaterialDraft);
@@ -562,18 +562,18 @@ describe('StateSync Autosave Draft Integrations', () => {
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const singleObjectDraft =
         '{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json", "sendDataModel": true}}';
       service.updateDraft(singleObjectDraft);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
         title: 'New Title',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(service.activeDraft()).toBe(singleObjectDraft);
     });
@@ -582,18 +582,18 @@ describe('StateSync Autosave Draft Integrations', () => {
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const arrayDraft =
         '[{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json", "sendDataModel": true}}]';
       service.updateDraft(arrayDraft);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
         title: 'New Title',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(service.activeDraft()).toBe(arrayDraft);
     });
@@ -602,16 +602,16 @@ describe('StateSync Autosave Draft Integrations', () => {
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       service.updateDraft('{"version": "v0.9", "updateComponents": {"components": []}}');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
         title: 'New Title',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(service.activeDraft()).toContain('material_catalog.json');
       expect(service.activeDraft()).not.toContain('updateComponents');
@@ -621,16 +621,16 @@ describe('StateSync Autosave Draft Integrations', () => {
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       service.updateDraft('   ');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
         title: 'New Title',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(service.activeDraft()).toContain('material_catalog.json');
     });
@@ -639,7 +639,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       catalogManagementMock.activeCatalog.set({
         catalogId: '',
       });
-      TestBed.flushEffects();
+      TestBed.tick();
       service.updateDraft('{"version": "dirty"}');
 
       service.flushDraft();

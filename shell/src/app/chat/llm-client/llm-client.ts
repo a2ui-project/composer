@@ -29,7 +29,7 @@ export enum MessageRole {
   ERROR = 'error',
 }
 
-export interface Attachment {
+export declare interface Attachment {
   readonly name: string;
   readonly mimeType: string;
   readonly data: string; // base64 string
@@ -40,7 +40,7 @@ export interface Attachment {
  * context. Serves as the primary turn record container passing communication
  * boundaries.
  */
-export interface LlmMessage {
+export declare interface LlmMessage {
   /**
    * The semantic role of the message originator (e.g. system, user, model).
    * Restricts boundary to system, user, or model origin context.

@@ -19,7 +19,7 @@ import {ThemePreference} from './bridge-message';
  * A lightweight, framework-agnostic representation of an observable data model stream.
  * Enables subscribing to reactive updates on component value states.
  */
-export interface DataModelObservable {
+export declare interface DataModelObservable {
   /**
    * Subscribes a callback function to be notified of data model updates.
    *
@@ -33,7 +33,7 @@ export interface DataModelObservable {
 /**
  * Represents an active component surface instance rendered within a sandbox container.
  */
-export interface SurfaceInstance {
+export declare interface SurfaceInstance {
   /** The unique identifier of the surface, corresponding to a Composer surface layout. */
   id: string;
   /** The reactive data model observable facilitating component value synchronization. */
@@ -43,7 +43,7 @@ export interface SurfaceInstance {
 /**
  * A framework-agnostic structural interface representing a collection or group of rendering surfaces.
  */
-export interface SurfaceGroupLike {
+export declare interface SurfaceGroupLike {
   /** An observable stream emitting notifications when a new surface instance is created. */
   onSurfaceCreated: {
     /**
@@ -57,7 +57,7 @@ export interface SurfaceGroupLike {
 }
 
 /** Represents a usage sample for a component, including its UI tree and optional data model. */
-export interface ComponentUsage {
+export declare interface ComponentUsage {
   /** The component tree definition array. */
   usage: Record<string, unknown>[];
   /** Optional initial data model state for the surface. */
@@ -68,7 +68,7 @@ export interface ComponentUsage {
 export type ComponentUsages = Record<string, ComponentUsage>;
 
 /** Configuration and lifecycle callbacks for attaching a renderer. */
-export interface RendererConfig {
+export declare interface RendererConfig {
   /** The reactive surface group model to connect for data synchronization. */
   surfaceGroup: SurfaceGroupLike;
   /** Invoked with the dynamic surfaceId when a new surface layout is built. */
@@ -88,7 +88,7 @@ export interface RendererConfig {
 }
 
 /** A subscription handle to detach a renderer and clean up connections. */
-export interface SurfaceStateSubscription {
+export declare interface SurfaceStateSubscription {
   /** Unsubscribes the renderer and cleans up all active bridge bindings. */
   unsubscribe(): void;
 }

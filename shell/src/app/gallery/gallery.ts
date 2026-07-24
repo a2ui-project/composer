@@ -23,6 +23,8 @@ import {
   OnInit,
   OnDestroy,
 } from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
+import {filter} from 'rxjs/operators';
 import {JsonPipe} from '@angular/common';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatListModule} from '@angular/material/list';
@@ -36,6 +38,7 @@ import {CatalogManagement} from '../storage/catalog-management/catalog-managemen
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {formatJson} from '../utils/json';
+import {PreviewBridgeMessageType, ComponentUsage, RenderA2uiItem} from 'a2ui-bridge';
 
 /**
  * Displays a split visual catalog gallery enabling search, interactive component selection,
@@ -65,60 +68,73 @@ export class Gallery implements OnInit, OnDestroy {
   private readonly hostCommunication = inject(HostCommunication);
 
   constructor() {
-    effect(() => {
-      const preset = this.catalogService.selectedComponentPreset();
-      if (!preset || !preset.usage || !Array.isArray(preset.usage)) return;
-
-      try {
-        const componentsArray = preset.usage;
-        const dataObj = preset.data;
-
-        const catalog = this.catalogManagement.activeCatalog();
-        const catalogId = this.catalogId();
-        if (!catalog || !catalogId) return;
-
-        const componentsPayload = this.getComponentsPayload(componentsArray);
-
-        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-        // prettier-ignore
-        const cmd1 = {
-          'version': 'v0.9',
-          'createSurface': {
-            'surfaceId': 'gallery-preview',
-            'catalogId': catalogId,
-          },
-        };
-
-        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-        // prettier-ignore
-        const cmd2 = {
-          'version': 'v0.9',
-          'updateComponents': {
-            'surfaceId': 'gallery-preview',
-            'components': componentsPayload,
-          },
-        };
-
-        const payload: unknown[] = [cmd1, cmd2];
-
-        if (dataObj !== undefined) {
-          // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-          // prettier-ignore
-          const cmd3 = {
-            'version': 'v0.9',
-            'updateDataModel': {
-              'surfaceId': 'gallery-preview',
-              'value': dataObj,
-            },
-          };
-          payload.push(cmd3);
+    this.hostCommunication.messageStream$
+      .pipe(
+        filter(envelope => envelope?.type === PreviewBridgeMessageType.RENDERER_READY),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => {
+        try {
+          this.dispatchSelectedComponentPayload();
+        } catch (e) {
+          console.error('Failed to send A2UI render payload on RENDERER_READY:', e);
         }
+      });
 
-        this.hostCommunication.sendRenderA2UI(payload);
-      } catch (e) {
-        console.error('Failed to parse component usage JSON:', e);
-      }
+    effect(() => {
+      this.dispatchSelectedComponentPayload();
     });
+  }
+
+  private buildA2UIPayload(preset: ComponentUsage, catalogId: string): RenderA2uiItem[] {
+    const payload: RenderA2uiItem[] = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'gallery-preview',
+          catalogId: catalogId,
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'gallery-preview',
+          components: this.getComponentsPayload(preset.usage),
+        },
+      },
+    ];
+
+    const dataObj = preset.data;
+    if (dataObj !== undefined) {
+      const cmd3: RenderA2uiItem = {
+        version: 'v0.9',
+        updateDataModel: {
+          surfaceId: 'gallery-preview',
+          value: dataObj,
+        },
+      };
+      payload.push(cmd3);
+    }
+
+    return payload;
+  }
+
+  private dispatchSelectedComponentPayload(): void {
+    const preset = this.catalogService.selectedComponentPreset();
+    if (!preset || !preset.usage || !Array.isArray(preset.usage)) return;
+
+    try {
+      const catalog = this.catalogManagement.activeCatalog();
+      const catalogId = this.catalogId();
+      if (!catalog || !catalogId) return;
+
+      const payload = this.buildA2UIPayload(preset, catalogId);
+
+      this.hostCommunication.sendRenderA2UI(payload);
+    } catch (e) {
+      console.error('Failed to parse component usage JSON:', e);
+      throw e;
+    }
   }
 
   ngOnInit(): void {
@@ -147,7 +163,7 @@ export class Gallery implements OnInit, OnDestroy {
   protected readonly catalogId = computed<string | null>(() => {
     const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) return null;
-    return ((catalog['catalogId'] as string) || (catalog['$id'] as string)) ?? null;
+    return catalog.catalogId || catalog.$id || null;
   });
 
   /** The table column names mapped by MatTable. */
@@ -164,8 +180,8 @@ export class Gallery implements OnInit, OnDestroy {
     const key = this.selectedComponentKey();
     const catalog = this.catalogManagement.activeCatalog();
     const comp =
-      key && catalog && catalog['components']
-        ? (catalog['components'] as Record<string, Record<string, unknown>>)[key]
+      key && catalog && catalog.components
+        ? (catalog.components as Record<string, Record<string, unknown>>)[key]
         : null;
     return comp && typeof comp['description'] === 'string' ? (comp['description'] as string) : '';
   });
@@ -179,15 +195,15 @@ export class Gallery implements OnInit, OnDestroy {
     this.catalogService.selectComponent(key);
   }
 
-  private getComponentsPayload(componentsArray: unknown[]): unknown[] {
+  private getComponentsPayload(
+    componentsArray: Record<string, unknown>[],
+  ): Record<string, unknown>[] {
     const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) {
       return componentsArray;
     }
 
-    const componentsObj = catalog
-      ? (catalog['components'] as Record<string, unknown> | undefined)
-      : undefined;
+    const componentsObj = catalog.components;
     const componentKeys = Object.keys(componentsObj || {});
     // Support prefixed columns by checking if exactly 'column' or ends with 'column' (case-insensitive).
     // Prioritize exact match.
@@ -241,50 +257,12 @@ export class Gallery implements OnInit, OnDestroy {
     }
 
     try {
-      const components = preset.usage;
-      const dataObj = preset.data;
-
       const catalogId = this.catalogId();
       if (!catalogId) {
         return;
       }
 
-      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-      // prettier-ignore
-      const createSurfaceCmd = {
-        'version': 'v0.9',
-        'createSurface': {
-          'surfaceId': 'gallery-preview',
-          'catalogId': catalogId,
-        },
-      };
-
-      const componentsPayload = this.getComponentsPayload(components as unknown[]);
-
-      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-      // prettier-ignore
-      const updateComponentsCmd = {
-        'version': 'v0.9',
-        'updateComponents': {
-          'surfaceId': 'gallery-preview',
-          'components': componentsPayload,
-        },
-      };
-
-      const commands: unknown[] = [createSurfaceCmd, updateComponentsCmd];
-
-      if (dataObj !== undefined) {
-        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-        // prettier-ignore
-        commands.push({
-          'version': 'v0.9',
-          'updateDataModel': {
-            'surfaceId': 'gallery-preview',
-            'value': dataObj,
-          },
-        });
-      }
-
+      const commands = this.buildA2UIPayload(preset, catalogId);
       const payload = formatJson(commands);
 
       if (!navigator.clipboard) {

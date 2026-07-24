@@ -38,10 +38,8 @@ export class CrossFrameValidator {
       return false;
     }
 
-    // NOTE: Bracket notation is used to access properties on the incoming message object
-    // to prevent compilers from renaming these property accesses during minification.
-    const msgType = message['type'];
-    const msgPayload = message['payload'];
+    const msgType = message.type;
+    const msgPayload = message.payload;
 
     if (typeof msgType !== 'string' || !msgType.trim()) {
       console.error('Malformed message: type must be a non-empty string.');
@@ -94,16 +92,13 @@ export class CrossFrameValidator {
         }
 
         const blockingState = msgPayload as SetBlockingStatePayload;
-        if (typeof blockingState['blocked'] !== 'boolean') {
+        if (typeof blockingState.blocked !== 'boolean') {
           console.error(
             'Malformed payload for SET_BLOCKING_STATE: must contain boolean property blocked.',
           );
           return false;
         }
-        if (
-          blockingState['message'] !== undefined &&
-          typeof blockingState['message'] !== 'string'
-        ) {
+        if (blockingState.message !== undefined && typeof blockingState.message !== 'string') {
           console.error(
             'Malformed payload for SET_BLOCKING_STATE: message property must be a string if present.',
           );
@@ -119,8 +114,8 @@ export class CrossFrameValidator {
         }
 
         const themePayload = msgPayload as SetThemePayload;
-        if (!Object.values(ThemePreference).includes(themePayload['theme'])) {
-          console.error(`Invalid theme preference mode: ${String(themePayload['theme'])}`);
+        if (!Object.values(ThemePreference).includes(themePayload.theme)) {
+          console.error(`Invalid theme preference mode: ${String(themePayload.theme)}`);
           return false;
         }
 
@@ -134,7 +129,7 @@ export class CrossFrameValidator {
         }
 
         const changePayload = msgPayload as DataModelChangePayload;
-        const updateObj = changePayload['updateDataModel'];
+        const updateObj = changePayload.updateDataModel;
         if (!updateObj || typeof updateObj !== 'object' || Array.isArray(updateObj)) {
           console.error(
             'Malformed payload for DATA_MODEL_CHANGE: must contain an updateDataModel object.',
@@ -143,13 +138,13 @@ export class CrossFrameValidator {
         }
 
         const updateData = updateObj as UpdateDataModelDetails;
-        if (typeof updateData['surfaceId'] !== 'string') {
+        if (typeof updateData.surfaceId !== 'string') {
           console.error(
             'Malformed payload for DATA_MODEL_CHANGE: updateDataModel must contain a valid surfaceId string.',
           );
           return false;
         }
-        if (updateData['path'] !== undefined && typeof updateData['path'] !== 'string') {
+        if (updateData.path !== undefined && typeof updateData.path !== 'string') {
           console.error(
             'Malformed payload for DATA_MODEL_CHANGE: updateDataModel path must be a string if present.',
           );
@@ -171,16 +166,16 @@ export class CrossFrameValidator {
       return false;
     }
 
-    // NOTE: Bracket notation is used to access properties on cross-frame message objects
-    // to prevent compilers from renaming these properties during production minification.
     const itemObj = item as RenderA2uiItem;
-    if (itemObj['version'] !== 'v0.9') {
+    if (itemObj.version !== 'v0.9') {
       console.error('Malformed payload for RENDER_A2UI: array items must specify version "v0.9".');
       return false;
     }
 
     const updateKeys = ['createSurface', 'updateComponents', 'updateDataModel', 'deleteSurface'];
-    const presentKeys = updateKeys.filter(key => key in itemObj && itemObj[key] !== undefined);
+    const presentKeys = updateKeys.filter(
+      key => key in itemObj && (itemObj as Record<string, unknown>)[key] !== undefined,
+    );
 
     if (presentKeys.length === 0) {
       console.error(
@@ -197,7 +192,7 @@ export class CrossFrameValidator {
     }
 
     const updateType = presentKeys[0];
-    const updateObj = itemObj[updateType];
+    const updateObj = (itemObj as Record<string, unknown>)[updateType];
 
     if (!updateObj || typeof updateObj !== 'object' || Array.isArray(updateObj)) {
       console.error(`Malformed payload for RENDER_A2UI: ${updateType} property must be an object.`);
@@ -205,7 +200,7 @@ export class CrossFrameValidator {
     }
 
     const updateData = updateObj as BaseSurfaceDetails;
-    if (typeof updateData['surfaceId'] !== 'string') {
+    if (typeof updateData.surfaceId !== 'string') {
       console.error(
         `Malformed payload for RENDER_A2UI: ${updateType} must contain a valid surfaceId string.`,
       );
@@ -214,15 +209,15 @@ export class CrossFrameValidator {
 
     if (updateType === 'createSurface') {
       const createDetails = updateObj as CreateSurfaceDetails;
-      if (typeof createDetails['catalogId'] !== 'string') {
+      if (typeof createDetails.catalogId !== 'string') {
         console.error(
           'Malformed payload for RENDER_A2UI: createSurface must contain a valid catalogId string.',
         );
         return false;
       }
       if (
-        createDetails['sendDataModel'] !== undefined &&
-        typeof createDetails['sendDataModel'] !== 'boolean'
+        createDetails.sendDataModel !== undefined &&
+        typeof createDetails.sendDataModel !== 'boolean'
       ) {
         console.error(
           'Malformed payload for RENDER_A2UI: createSurface sendDataModel must be a boolean if present.',
@@ -231,13 +226,13 @@ export class CrossFrameValidator {
       }
     } else if (updateType === 'updateComponents') {
       const updateCompDetails = updateObj as UpdateComponentsDetails;
-      if (!Array.isArray(updateCompDetails['components'])) {
+      if (!Array.isArray(updateCompDetails.components)) {
         console.error(
           'Malformed payload for RENDER_A2UI: updateComponents must contain a components Array.',
         );
         return false;
       }
-      for (const comp of updateCompDetails['components']) {
+      for (const comp of updateCompDetails.components) {
         if (!comp || typeof comp !== 'object' || Array.isArray(comp)) {
           console.error(
             'Malformed payload for RENDER_A2UI: updateComponents components array items must be objects.',
@@ -247,10 +242,7 @@ export class CrossFrameValidator {
       }
     } else if (updateType === 'updateDataModel') {
       const updateModelDetails = updateObj as UpdateDataModelDetails;
-      if (
-        updateModelDetails['path'] !== undefined &&
-        typeof updateModelDetails['path'] !== 'string'
-      ) {
+      if (updateModelDetails.path !== undefined && typeof updateModelDetails.path !== 'string') {
         console.error(
           'Malformed payload for RENDER_A2UI: updateDataModel path must be a string if present.',
         );

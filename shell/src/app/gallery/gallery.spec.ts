@@ -19,10 +19,11 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {ReplaySubject} from 'rxjs';
 import {Gallery} from './gallery';
 import {GalleryHarness} from './test/gallery.harness';
 import {GalleryCatalog, CategorizedComponents} from './services/gallery-catalog';
-import {type ComponentUsage} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, type ComponentUsage} from 'a2ui-bridge';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {ParsedProperty} from './schema/catalog-schema-resolver';
 import {Catalog} from '../storage/models/catalog-storage.model';
@@ -68,6 +69,7 @@ class MockHostCommunication {
   sendRenderA2UI = vi.fn();
   registerIframe = vi.fn();
   sendTheme = vi.fn();
+  readonly messageStream$ = new ReplaySubject<unknown>(1);
 }
 
 class MockStartupResolution {
@@ -409,7 +411,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
-    TestBed.flushEffects();
+    TestBed.tick();
 
     // Since 'Column' is in the default mock catalog, it should wrap it
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith([
@@ -449,7 +451,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
-    TestBed.flushEffects();
+    TestBed.tick();
 
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith([
       {
@@ -472,7 +474,7 @@ describe('Gallery Component', () => {
   it('does not dispatch rendering payload if selectedComponentPreset is null or usage is not an array', async () => {
     catalogServiceMock.selectedComponentPreset.set(null);
     fixture.detectChanges();
-    TestBed.flushEffects();
+    TestBed.tick();
 
     expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
   });
@@ -483,7 +485,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: mockComponents, data: mockData});
     catalogServiceMock.selectedComponentUsage.set(JSON.stringify(mockComponents));
     fixture.detectChanges();
-    TestBed.flushEffects();
+    TestBed.tick();
 
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith([
       {
@@ -530,7 +532,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
-    TestBed.flushEffects();
+    TestBed.tick();
 
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith([
       {
@@ -581,7 +583,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
-    TestBed.flushEffects();
+    TestBed.tick();
 
     expect((fixture.componentInstance as unknown as TestFriendlyGallery).catalogId()).toBe(
       'https://a2ui.org/fallback_catalog.json',
@@ -615,7 +617,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
-    TestBed.flushEffects();
+    TestBed.tick();
 
     // Should safely proceed without throwing errors and render unwrapped
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalled();
@@ -636,7 +638,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     catalogServiceMock.selectedComponentUsage.set('[{"id":"target","component":"Text"}]');
     fixture.detectChanges();
-    TestBed.flushEffects();
+    TestBed.tick();
 
     expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
   });
@@ -779,5 +781,194 @@ describe('Gallery Component', () => {
         },
       },
     ]);
+  });
+
+  it('builds A2UI payload array using buildA2UIPayload helper method', () => {
+    const preset = {
+      usage: [{id: 'target', component: 'Text', text: 'Hello'}],
+      data: {key: 'val'},
+    };
+    const payload = (
+      fixture.componentInstance as unknown as Record<
+        string,
+        (preset: unknown, catalogUrl: string) => unknown
+      >
+    )['buildA2UIPayload'](preset, 'https://a2ui.org/default_catalog.json');
+
+    expect(payload).toEqual([
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'gallery-preview',
+          catalogId: 'https://a2ui.org/default_catalog.json',
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'gallery-preview',
+          components: [
+            {
+              id: 'root',
+              component: 'Column',
+              align: 'center',
+              justify: 'center',
+              children: ['target'],
+            },
+            {id: 'target', component: 'Text', text: 'Hello'},
+          ],
+        },
+      },
+      {
+        version: 'v0.9',
+        updateDataModel: {
+          surfaceId: 'gallery-preview',
+          value: {key: 'val'},
+        },
+      },
+    ]);
+  });
+
+  it('re-dispatches preview payload when RENDERER_READY message is received on messageStream$', () => {
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
+    fixture.detectChanges();
+    TestBed.tick();
+
+    hostCommunicationMock.sendRenderA2UI.mockClear();
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledTimes(1);
+  });
+
+  it('catches payload construction errors in RENDERER_READY listener without breaking subscription', () => {
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
+    fixture.detectChanges();
+    TestBed.tick();
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(fixture.componentInstance, 'buildA2UIPayload').mockImplementationOnce(() => {
+      throw new Error('Payload construction error');
+    });
+
+    hostCommunicationMock.sendRenderA2UI.mockClear();
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to send A2UI render payload on RENDERER_READY:',
+      expect.any(Error),
+    );
+    expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
+
+    // Subsequent RENDERER_READY messages should still be handled
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledTimes(1);
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('dispatches preview payload when default component auto-selection sets selectedComponentPreset', () => {
+    hostCommunicationMock.sendRenderA2UI.mockClear();
+
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Button'}],
+    });
+    fixture.detectChanges();
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith([
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'gallery-preview',
+          catalogId: 'https://a2ui.org/default_catalog.json',
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'gallery-preview',
+          components: [
+            {
+              id: 'root',
+              component: 'Column',
+              align: 'center',
+              justify: 'center',
+              children: ['target'],
+            },
+            {id: 'target', component: 'Button'},
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('verifies JSON stringified postMessage payload key structure contains required protocol fields', () => {
+    writeTextSpy.mockResolvedValue(undefined);
+    catalogServiceMock.selectedComponentKey.set('Button');
+    const mockUsage = [{id: 'target', component: 'Button'}];
+    const mockData = {count: 1};
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: mockUsage,
+      data: mockData,
+    });
+    catalogServiceMock.selectedComponentUsage.set(JSON.stringify(mockUsage));
+    fixture.detectChanges();
+
+    (fixture.componentInstance as unknown as TestFriendlyGallery).copyToClipboard();
+
+    expect(writeTextSpy).toHaveBeenCalled();
+    const copiedPayloadString = writeTextSpy.mock.calls[0][0] as string;
+    const parsedPayload = JSON.parse(copiedPayloadString);
+
+    expect(parsedPayload[0]).toHaveProperty('version');
+    expect(parsedPayload[0]).toHaveProperty('createSurface');
+    expect(parsedPayload[0].createSurface).toHaveProperty('surfaceId');
+    expect(parsedPayload[0].createSurface).toHaveProperty('catalogId');
+
+    expect(parsedPayload[1]).toHaveProperty('version');
+    expect(parsedPayload[1]).toHaveProperty('updateComponents');
+    expect(parsedPayload[1].updateComponents).toHaveProperty('surfaceId');
+    expect(parsedPayload[1].updateComponents).toHaveProperty('components');
+
+    expect(parsedPayload[2]).toHaveProperty('version');
+    expect(parsedPayload[2]).toHaveProperty('updateDataModel');
+    expect(parsedPayload[2].updateDataModel).toHaveProperty('surfaceId');
+    expect(parsedPayload[2].updateDataModel).toHaveProperty('value');
+  });
+
+  it('verifies JSON stringified postMessage payload contains exact quoted keys', () => {
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Text'}],
+    });
+    fixture.detectChanges();
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalled();
+    const payload = hostCommunicationMock.sendRenderA2UI.mock.calls[0][0];
+    const rawJson = JSON.stringify(payload);
+
+    expect(rawJson).toContain('"version":"v0.9"');
+    expect(rawJson).toContain('"createSurface":');
+    expect(rawJson).toContain('"surfaceId":"gallery-preview"');
+    expect(rawJson).toContain('"catalogId":');
+    expect(rawJson).toContain('"updateComponents":');
+    expect(rawJson).toContain('"components":');
+    expect(rawJson).toContain('"id":"root"');
+    expect(rawJson).toContain('"component":"Column"');
   });
 });

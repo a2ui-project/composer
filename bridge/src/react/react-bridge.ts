@@ -17,12 +17,12 @@
 import {useState, useEffect} from 'react';
 import {
   MessageProcessor,
+  SurfaceModel,
   Catalog,
   ComponentApi,
-  SurfaceModel,
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
-import {a2uiBridge, ThemePreference, type ComponentUsages} from '../preview-bridge.js';
+import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages} from '../preview-bridge.js';
 
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   /** The reactive dynamic surface drawing model representing the active canvas. */
@@ -68,7 +68,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
       onCatalogResolved: catalogId => {
         for (const catalog of catalogs) {
           if (catalog) {
-            (catalog as unknown as Record<string, unknown>)['id'] = catalogId;
+            (catalog as unknown as CatalogDetails).id = catalogId;
           }
         }
       },

@@ -20,16 +20,17 @@ import {ContextProvider} from '@lit/context';
 import {Context} from '@a2ui/lit/v0_9';
 import {
   MessageProcessor,
+  SurfaceModel,
   Catalog,
   ComponentApi,
-  SurfaceModel,
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
 import type {MarkdownRenderer} from '@a2ui/web_core/types/types';
 import {
   a2uiBridge,
-  SurfaceStateSubscription,
   ThemePreference,
+  SurfaceStateSubscription,
+  CatalogDetails,
   type ComponentUsages,
 } from '../preview-bridge.js';
 
@@ -133,7 +134,7 @@ export class A2uiSandboxRoot extends LitElement {
       onCatalogResolved: catalogId => {
         for (const catalog of (this.constructor as typeof A2uiSandboxRoot).catalogs) {
           if (catalog) {
-            (catalog as unknown as Record<string, unknown>)['id'] = catalogId;
+            (catalog as unknown as CatalogDetails).id = catalogId;
           }
         }
       },

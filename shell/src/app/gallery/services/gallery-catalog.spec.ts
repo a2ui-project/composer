@@ -139,6 +139,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('Text');
 
     const preset = service.selectedComponentPreset();
@@ -186,6 +187,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('CustomComp');
 
     const preset = service.selectedComponentPreset();
@@ -221,6 +223,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('CustomComp');
 
     const preset = service.selectedComponentPreset();
@@ -251,6 +254,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('CustomComp');
 
     const preset = service.selectedComponentPreset();
@@ -304,6 +308,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('ComplexImageContainer');
 
     const preset = service.selectedComponentPreset();
@@ -361,6 +366,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('Text');
 
     const preset1 = service.selectedComponentPreset()!;
@@ -445,6 +451,7 @@ describe('GalleryCatalog', () => {
         },
       };
       catalogManagementMock.activeCatalog.set(mockCatalog);
+      service.setGalleryActive(true);
       service.selectComponent('EmptyArrComp');
 
       const usage = service.selectedComponentUsage();
@@ -468,6 +475,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('Text');
 
     const usage = service.selectedComponentUsage();
@@ -496,6 +504,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('Row');
 
     const usage = service.selectedComponentUsage();
@@ -548,6 +557,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('MaterialText');
 
     const preset = service.selectedComponentPreset();
@@ -586,6 +596,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('CustomContainer');
 
     const preset = service.selectedComponentPreset();
@@ -621,6 +632,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('CustomContainer');
 
     const preset = service.selectedComponentPreset();
@@ -646,6 +658,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('MaterialRow');
 
     const preset = service.selectedComponentPreset();
@@ -694,6 +707,7 @@ describe('GalleryCatalog', () => {
         },
       };
       catalogManagementMock.activeCatalog.set(mockCatalog);
+      service.setGalleryActive(true);
       service.selectComponent('MaterialList');
 
       const preset = service.selectedComponentPreset();
@@ -728,6 +742,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('Text');
 
     const preset = service.selectedComponentPreset();
@@ -775,6 +790,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('Card');
 
     const preset = service.selectedComponentPreset();
@@ -798,6 +814,7 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('Tabs');
 
     const preset = service.selectedComponentPreset();
@@ -831,8 +848,14 @@ describe('GalleryCatalog', () => {
         },
       });
 
+      service.setGalleryActive(true);
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.COMPONENT_USAGES,
+        payload: {},
+      });
       service.selectComponent('MaterialTestBadComponent');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const preset = service.selectedComponentPreset();
       expect(preset).toBeTruthy();
@@ -862,8 +885,14 @@ describe('GalleryCatalog', () => {
         },
       });
 
+      service.setGalleryActive(true);
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.COMPONENT_USAGES,
+        payload: {},
+      });
       service.selectComponent('TestBadChildren');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const preset = service.selectedComponentPreset();
       // child-1 should be pruned since it was a string child ID, target should be stripped of children
@@ -904,8 +933,14 @@ describe('GalleryCatalog', () => {
         },
       });
 
+      service.setGalleryActive(true);
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.COMPONENT_USAGES,
+        payload: {},
+      });
       service.selectComponent('TestBadTabs');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const preset = service.selectedComponentPreset();
       // child-1 should be pruned (referenced by tab 3 child string), target should be stripped of tabs
@@ -951,8 +986,14 @@ describe('GalleryCatalog', () => {
         },
       };
       catalogManagementMock.activeCatalog.set(mockCatalog);
+      service.setGalleryActive(true);
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.COMPONENT_USAGES,
+        payload: {},
+      });
       service.selectComponent('TestChildToChildren');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const preset = service.selectedComponentPreset();
       expect(preset).toEqual({
@@ -1008,8 +1049,14 @@ describe('GalleryCatalog', () => {
         },
       };
       catalogManagementMock.activeCatalog.set(mockCatalog);
+      service.setGalleryActive(true);
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.COMPONENT_USAGES,
+        payload: {},
+      });
       service.selectComponent('TestChildToLabel');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const preset = service.selectedComponentPreset();
       expect(preset).toEqual({
@@ -1069,8 +1116,14 @@ describe('GalleryCatalog', () => {
         },
       };
       catalogManagementMock.activeCatalog.set(mockCatalog);
+      service.setGalleryActive(true);
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.COMPONENT_USAGES,
+        payload: {},
+      });
       service.selectComponent('MaterialTabs');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const preset = service.selectedComponentPreset();
       expect(preset).toEqual({
@@ -1119,8 +1172,14 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
+    TestBed.tick();
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.COMPONENT_USAGES,
+      payload: {},
+    });
     service.selectComponent('Tabs');
-    TestBed.flushEffects();
+    TestBed.tick();
 
     const preset = service.selectedComponentPreset();
     expect(preset).toEqual({
@@ -1161,8 +1220,9 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
     service.selectComponent('UnionComponent');
-    TestBed.flushEffects();
+    TestBed.tick();
 
     const props = service.selectedComponentProperties();
     expect(props).toEqual([
@@ -1198,8 +1258,14 @@ describe('GalleryCatalog', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
+    service.setGalleryActive(true);
+    TestBed.tick();
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.COMPONENT_USAGES,
+      payload: {},
+    });
     service.selectComponent('ParentComponent');
-    TestBed.flushEffects();
+    TestBed.tick();
 
     const preset = service.selectedComponentPreset();
     expect(preset).toEqual({
@@ -1261,8 +1327,14 @@ describe('GalleryCatalog', () => {
         },
       };
       catalogManagementMock.activeCatalog.set(mockCatalog);
+      service.setGalleryActive(true);
+      TestBed.tick();
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.COMPONENT_USAGES,
+        payload: {},
+      });
       service.selectComponent('CustomTabs');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const preset = service.selectedComponentPreset();
       expect(preset).toEqual({
@@ -1295,7 +1367,7 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(true);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith({
         type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
@@ -1310,7 +1382,7 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(false);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(hostCommunicationMock.sendMessage).not.toHaveBeenCalled();
       expect(service.loadingUsages()).toBe(false);
@@ -1323,7 +1395,7 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(true);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(service.loadingUsages()).toBe(true);
 
@@ -1350,7 +1422,7 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(true);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(service.loadingUsages()).toBe(true);
 
@@ -1371,7 +1443,7 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(true);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(service.loadingUsages()).toBe(true);
 
@@ -1412,7 +1484,7 @@ describe('GalleryCatalog', () => {
       };
       catalogManagementMock.activeCatalog.set(mockCatalog);
       service.setGalleryActive(true);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const mockUsages = {
         Button: {
@@ -1428,7 +1500,7 @@ describe('GalleryCatalog', () => {
       });
 
       service.selectComponent('Button');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const preset = service.selectedComponentPreset();
       expect(preset).toEqual({
@@ -1455,7 +1527,7 @@ describe('GalleryCatalog', () => {
       catalogManagementMock.activeCatalog.set(mockCatalog);
       service.setGalleryActive(true);
       service.selectComponent('Button');
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(service.loadingUsages()).toBe(true);
       expect(service.cachedUsages()).toBeNull();
@@ -1469,7 +1541,7 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(true);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const timeoutId = service['usageTimeoutId'];
       expect(timeoutId).toBeDefined();
@@ -1479,7 +1551,7 @@ describe('GalleryCatalog', () => {
         catalogId: 'https://a2ui.org/catalog2.json',
         components: {},
       });
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(spy).toHaveBeenCalledWith(timeoutId);
     });
@@ -1491,13 +1563,13 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(true);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       const timeoutId = service['usageTimeoutId'];
       expect(timeoutId).toBeDefined();
 
       service.setGalleryActive(false);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(spy).toHaveBeenCalledWith(timeoutId);
     });
@@ -1509,12 +1581,12 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(true);
-      TestBed.flushEffects();
 
       // Receive usages to set loadingUsages to false
+      const mockUsages = {Button: {usage: []}};
       hostCommunicationMock.messageStream$.next({
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
-        payload: {},
+        payload: mockUsages,
         origin: 'http://localhost',
         timestamp: Date.now(),
       });
@@ -1524,7 +1596,7 @@ describe('GalleryCatalog', () => {
       vi.runAllTimers();
 
       // The timeout callback ran, but it should not have set cachedUsages to {}
-      expect(service.cachedUsages()).toEqual({});
+      expect(service.cachedUsages()).toEqual(mockUsages);
 
       spyClear.mockRestore();
     });
@@ -1535,7 +1607,7 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(true);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(service.loadingUsages()).toBe(true);
 
@@ -1556,7 +1628,7 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(true);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       // Clear the timeout manually to simulate undefined timeoutId
       service['usageTimeoutId'] = undefined;
@@ -1578,7 +1650,7 @@ describe('GalleryCatalog', () => {
         components: {},
       });
       service.setGalleryActive(true);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       hostCommunicationMock.messageStream$.next({
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
@@ -1589,6 +1661,183 @@ describe('GalleryCatalog', () => {
 
       expect(service.loadingUsages()).toBe(false);
       expect(service.cachedUsages()).toEqual({});
+    });
+
+    it('sends GET_COMPONENT_USAGES when requestComponentUsages is invoked while gallery is active', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/default_catalog.json',
+        components: {Text: {type: 'object'}},
+      });
+      service.setGalleryActive(true);
+      TestBed.tick();
+      hostCommunicationMock.sendMessage.mockClear();
+
+      service.requestComponentUsages();
+
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith({
+        type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
+      });
+    });
+
+    it('auto-selects first available component when catalog loads if none selected', () => {
+      service.setGalleryActive(true);
+      expect(service.selectedComponentKey()).toBeNull();
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/default_catalog.json',
+        components: {
+          Text: {type: 'object'},
+          Column: {type: 'object'},
+        },
+      });
+      TestBed.tick();
+
+      expect(service.selectedComponentKey()).toBe('Column');
+    });
+
+    it('re-requests component usages when RENDERER_READY is received and gallery is active', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/default_catalog.json',
+        components: {Text: {type: 'object'}},
+      });
+      service.setGalleryActive(true);
+      hostCommunicationMock.sendMessage.mockClear();
+
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+      });
+
+      expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith({
+        type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
+      });
+    });
+
+    it('auto-selects first available component when active catalog switches to a catalog not containing current selection', () => {
+      service.setGalleryActive(true);
+      const catalog1: Catalog = {
+        components: {
+          Text: {type: 'object'},
+          Button: {type: 'object'},
+        },
+      };
+      catalogManagementMock.activeCatalog.set(catalog1);
+      TestBed.tick();
+
+      service.selectComponent('Text');
+      expect(service.selectedComponentKey()).toBe('Text');
+
+      const catalog2: Catalog = {
+        components: {
+          Alert: {type: 'object'},
+          Card: {type: 'object'},
+        },
+      };
+      catalogManagementMock.activeCatalog.set(catalog2);
+      TestBed.tick();
+
+      expect(service.selectedComponentKey()).toBe('Card');
+    });
+
+    it('retains selected component when active catalog switches to a catalog that contains current selection', () => {
+      service.setGalleryActive(true);
+      const catalog1: Catalog = {
+        components: {
+          Text: {type: 'object'},
+          Button: {type: 'object'},
+        },
+      };
+      catalogManagementMock.activeCatalog.set(catalog1);
+      TestBed.tick();
+
+      service.selectComponent('Button');
+      expect(service.selectedComponentKey()).toBe('Button');
+
+      const catalog2: Catalog = {
+        components: {
+          Alert: {type: 'object'},
+          Button: {type: 'object'},
+        },
+      };
+      catalogManagementMock.activeCatalog.set(catalog2);
+      TestBed.tick();
+
+      expect(service.selectedComponentKey()).toBe('Button');
+    });
+  });
+
+  describe('Auto-selection of Default Component', () => {
+    beforeEach(() => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/default_catalog.json',
+        components: {
+          Text: {type: 'object'},
+          Column: {type: 'object'},
+          Button: {type: 'object'},
+        },
+      });
+      TestBed.tick();
+    });
+
+    it('auto-selects first component key when galleryActive is true and selectedComponentKey is null', () => {
+      service.setGalleryActive(true);
+      TestBed.tick();
+      expect(service.selectedComponentKey()).toBe('Column');
+    });
+
+    it('auto-selects first component key when selectedComponentKey is invalid for current catalog', () => {
+      service.selectComponent('NonExistentComponent');
+      service.setGalleryActive(true);
+      TestBed.tick();
+      expect(service.selectedComponentKey()).toBe('Column');
+    });
+
+    it('preserves valid selectedComponentKey when galleryActive becomes true', () => {
+      service.selectComponent('Button');
+      service.setGalleryActive(true);
+      TestBed.tick();
+      expect(service.selectedComponentKey()).toBe('Button');
+    });
+
+    it('resets selectedComponentKey to null when galleryActive becomes false', () => {
+      service.setGalleryActive(true);
+      TestBed.tick();
+      expect(service.selectedComponentKey()).toBe('Column');
+
+      service.setGalleryActive(false);
+      TestBed.tick();
+      expect(service.selectedComponentKey()).toBeNull();
+    });
+
+    it('resets selectedComponentKey to null when galleryActive is true but componentsList is empty', () => {
+      service.setGalleryActive(true);
+      TestBed.tick();
+      expect(service.selectedComponentKey()).toBe('Column');
+
+      catalogManagementMock.activeCatalog.set(null);
+      TestBed.tick();
+      expect(service.selectedComponentKey()).toBeNull();
+    });
+  });
+
+  it('retries GET_COMPONENT_USAGES request when RENDERER_READY is received while galleryActive is true and cachedUsages is null', () => {
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'https://a2ui.org/default_catalog.json',
+      components: {Text: {type: 'object'}},
+    });
+    service.setGalleryActive(true);
+    expect(service.cachedUsages()).toBeNull();
+    hostCommunicationMock.sendMessage.mockClear();
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith({
+      type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
     });
   });
 });

@@ -19,7 +19,7 @@ import {Injectable} from '@angular/core';
 /**
  * Represents a key-value record stored within the highly secure IndexedDB instance.
  */
-export interface CredentialRecord {
+export declare interface CredentialRecord {
   /** The unique credential identifier key. */
   key: string;
   /** Binary Web Crypto AES-GCM encrypted ciphertext. */
@@ -29,7 +29,7 @@ export interface CredentialRecord {
 }
 
 /** Represents a persistent unextractable Web Crypto master key record. */
-export interface MasterKeyRecord {
+export declare interface MasterKeyRecord {
   /** The unique master key identifier. */
   key: string;
   /** The unextractable Web Crypto CryptoKey instance. */

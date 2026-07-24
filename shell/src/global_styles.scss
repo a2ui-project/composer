@@ -203,7 +203,8 @@ $dark-theme: mat.define-theme(
     --mdc-chip-with-trailing-icon-disabled-trailing-icon-color: #e5e2e2;
   }
 
-  // High-contrast overrides guaranteeing clean legibility for primary buttons and icon buttons in dark mode.
+  // High-contrast overrides guaranteeing clean legibility for primary buttons
+  // and icon buttons in dark mode.
   .mat-mdc-button.mat-primary,
   .mat-mdc-outlined-button.mat-primary,
   .mat-mdc-raised-button.mat-primary,
@@ -242,13 +243,13 @@ body .mat-mdc-slide-toggle .mdc-form-field,
 body .mat-mdc-slide-toggle .mat-internal-form-field {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 16px !important; /* Clean spacer gap between switch and text label */
+  gap: 16px !important; // Clean spacer gap between switch and text label
 }
 
 body .mat-mdc-slide-toggle label,
 body .mat-mdc-slide-toggle .mdc-label {
-  padding-left: 16px !important; /* Safe spacing cushion blocking handle overlaps */
-  white-space: normal !important; /* Forces clean wrapping on narrow viewports */
+  padding-left: 16px !important; // Safe spacing cushion blocking handle overlaps
+  white-space: normal !important; // Forces clean wrapping on narrow viewports
   line-height: 1.4 !important;
   color: var(--mat-sys-on-surface) !important;
 }

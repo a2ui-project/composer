@@ -57,7 +57,6 @@ test.describe('Components Gallery User Journey', () => {
     // 3. Redirected to /gallery and layout loads successfully
     await page.waitForURL('**/gallery');
     await expect(page.locator('.gallery-container')).toBeVisible();
-    await expect(page.getByRole('heading', {name: 'No Component Selected'})).toBeVisible();
 
     // 4. Verify component catalog navigation is visible
     const navItems = page.locator('.catalog-list').getByRole('button');
@@ -67,10 +66,7 @@ test.describe('Components Gallery User Journey', () => {
     const firstComponentName = (await navItems.first().textContent())?.trim();
     expect(firstComponentName).toBeTruthy();
 
-    // 5. Click the first component
-    await navItems.first().click();
-
-    // 6. Assert details pane is updated
+    // 5. Assert first component is automatically selected upon gallery navigation and details pane is updated
     await expect(page.getByRole('heading', {name: firstComponentName!, exact: true})).toBeVisible();
 
     // Assert card headers are visible

@@ -32,9 +32,10 @@ import {
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {
   a2uiBridge,
+  ThemePreference,
   RendererProcessor,
   SurfaceStateSubscription,
-  ThemePreference,
+  CatalogDetails,
   type ComponentUsages,
 } from '../preview-bridge.js';
 
@@ -94,7 +95,7 @@ export class A2uiSandboxConnection implements OnDestroy {
         if (catalogs) {
           for (const catalog of catalogs) {
             if (catalog) {
-              (catalog as unknown as Record<string, unknown>)['id'] = catalogId;
+              (catalog as unknown as CatalogDetails).id = catalogId;
             }
           }
         }
@@ -116,7 +117,7 @@ export class A2uiSandboxConnection implements OnDestroy {
    * Disposes active bridge connections and releases event listener subscriptions
    * to prevent memory leaks and observer bloat in high-frequency test runs.
    */
-  ngOnDestroy() {
+  ngOnDestroy(): void {
     this.rendererConnection?.unsubscribe();
     this.rendererConnection = null;
   }

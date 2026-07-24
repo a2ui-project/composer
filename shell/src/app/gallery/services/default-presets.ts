@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
+import {ComponentUsages} from 'a2ui-bridge';
+
 /**
  * Pre-defined rich visual component rendering presets.
  * Maps component types to A2UI structures/configurations.
  */
-export const DEFAULT_PRESETS: Record<string, unknown> = {
+export const DEFAULT_PRESETS: ComponentUsages = {
   AudioPlayer: {
     usage: [
       {

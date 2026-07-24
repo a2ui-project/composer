@@ -29,7 +29,7 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
  * Schema representing a structured postMessage payload used to communicate
  * event data and lifecycle checks between the host and preview frame.
  */
-export interface MessageEnvelope {
+export declare interface MessageEnvelope {
   /** Discriminator action type identifying the specific message intent */
   type: string;
   /** Optional payload attached to the message transaction */
@@ -43,6 +43,14 @@ export interface MessageEnvelope {
 declare global {
   interface Window {
     a2uiHostCommunication?: HostCommunication;
+  }
+
+  class RestrictionTarget {
+    static fromElement(element: Element): Promise<RestrictionTarget>;
+  }
+
+  interface MediaStreamTrack {
+    restrictTo(target: RestrictionTarget | null): Promise<void>;
   }
 }
 
@@ -133,13 +141,11 @@ export class HostCommunication implements OnDestroy {
   private readonly messageListener = (event: MessageEvent) => {
     const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
     if (!activeWindow) {
-      // NOTE: Bracket notation is used to access properties on the incoming postMessage event
-      // to prevent compilers from renaming these property accesses during minification.
       const isBridgeMessage =
         event.data &&
         typeof event.data === 'object' &&
-        Object.values(PreviewBridgeMessageType).includes(event.data['type']);
-      if (!isBridgeMessage || event.data['type'] === PreviewBridgeMessageType.CONSOLE_LOG) {
+        Object.values(PreviewBridgeMessageType).includes(event.data.type);
+      if (!isBridgeMessage || event.data.type === PreviewBridgeMessageType.CONSOLE_LOG) {
         return;
       }
       this.earlyMessageBuffer.push(event);
@@ -167,13 +173,11 @@ export class HostCommunication implements OnDestroy {
     }
 
     const data = event.data;
-    // NOTE: Bracket notation is used to access properties on the incoming postMessage event
-    // to prevent compilers from renaming these property accesses during minification.
-    if (data && typeof data === 'object' && data['type']) {
-      const type = data['type'] as string;
+    if (data && typeof data === 'object' && data.type) {
+      const type = data.type as string;
       const envelope: MessageEnvelope = {
         type,
-        payload: data['payload'],
+        payload: data.payload,
         origin: event.origin,
         timestamp: Date.now(),
       };
@@ -277,12 +281,10 @@ export class HostCommunication implements OnDestroy {
    * @param theme Target theme option
    */
   sendTheme(theme: ThemePreference): void {
-    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-    // prettier-ignore
     this.sendMessage({
-      'type': PreviewBridgeMessageType.SET_THEME,
-      'payload': {
-        'theme': theme,
+      type: PreviewBridgeMessageType.SET_THEME,
+      payload: {
+        theme: theme,
       },
     });
   }
@@ -292,11 +294,9 @@ export class HostCommunication implements OnDestroy {
    * @param payload Array of layout nodes or configuration objects
    */
   sendRenderA2UI(payload: unknown[]): void {
-    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-    // prettier-ignore
     this.sendMessage({
-      'type': PreviewBridgeMessageType.RENDER_A2UI,
-      'payload': payload,
+      type: PreviewBridgeMessageType.RENDER_A2UI,
+      payload: payload,
     });
   }
 
@@ -318,10 +318,11 @@ export class HostCommunication implements OnDestroy {
 
     let stream: MediaStream | null = null;
     try {
+      // prettier-ignore
       stream = await navigator.mediaDevices.getDisplayMedia({
         video: {displaySurface: 'browser'},
         // @ts-expect-error - preferCurrentTab is a recent/experimental API not yet in TS types
-        preferCurrentTab: true,
+        'preferCurrentTab': true,
       });
 
       const [track] = stream.getVideoTracks();
@@ -329,12 +330,23 @@ export class HostCommunication implements OnDestroy {
         throw new Error('No video track found in media stream.');
       }
 
-      // @ts-expect-error - RestrictionTarget is a recent API not yet in TS types
-      if (typeof RestrictionTarget !== 'undefined') {
-        // @ts-expect-error - RestrictionTarget is not in standard TypeScript definitions yet
-        const target = await RestrictionTarget.fromElement(this.iframeElement);
-        // @ts-expect-error - restrictTo is not in standard MediaStreamTrack types yet
-        await track.restrictTo(target);
+      const restrictionTargetClass = (globalThis as Record<string, unknown>)[
+        'RestrictionTarget'
+      ] as {fromElement?: (element: Element) => Promise<RestrictionTarget>} | undefined;
+
+      if (
+        typeof restrictionTargetClass?.fromElement === 'function' &&
+        typeof track?.restrictTo === 'function'
+      ) {
+        try {
+          const target = await restrictionTargetClass.fromElement(this.iframeElement);
+          await track.restrictTo(target);
+        } catch (restrictionError) {
+          console.warn(
+            'Failed to restrict video track to element, falling back to full tab capture:',
+            restrictionError,
+          );
+        }
       } else {
         console.warn('RestrictionTarget API not supported, capturing full tab.');
       }

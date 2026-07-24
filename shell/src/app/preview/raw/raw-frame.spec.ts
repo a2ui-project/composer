@@ -22,6 +22,7 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens/environment-tokens';
 import {signal, WritableSignal} from '@angular/core';
+import {Subject} from 'rxjs';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
@@ -31,6 +32,7 @@ import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import type * as monaco from 'monaco-editor';
 import {MatSnackBar} from '@angular/material/snack-bar';
 
@@ -275,12 +277,14 @@ describe('RawFrame JSON Source Editor View', () => {
   let stateSyncMock: MockStateSync;
   let chatStateMock: MockChatState;
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
+  let messageStreamSubject: Subject<unknown>;
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
     mockThemePreference = signal<ThemePreference>(ThemePreference.LIGHT);
     snackBarMock = {open: vi.fn(), dismiss: vi.fn()};
+    messageStreamSubject = new Subject<unknown>();
 
     undoStack.length = 0;
     redoStack.length = 0;
@@ -310,7 +314,13 @@ describe('RawFrame JSON Source Editor View', () => {
       providers: [
         provideNoopAnimations(),
         {provide: IS_EXTENSION_MODE, useValue: signal(isExtension)},
-        {provide: HostCommunication, useValue: {sendRenderA2UI: sendRenderA2UIMock}},
+        {
+          provide: HostCommunication,
+          useValue: {
+            sendRenderA2UI: sendRenderA2UIMock,
+            messageStream$: messageStreamSubject.asObservable(),
+          },
+        },
         {
           provide: CatalogManagement,
           useValue: {
@@ -662,5 +672,46 @@ describe('RawFrame JSON Source Editor View', () => {
     // Verify content updated successfully and editor restored back to readOnly: true
     expect(await harness.getJsonText()).toBe(streamDraft);
     expect(await harness.isReadOnly()).toBe(true);
+  });
+
+  it('re-dispatches layout payload when receiving RENDERER_READY event from messageStream$', async () => {
+    await setup(false);
+    sendRenderA2UIMock.mockClear();
+
+    messageStreamSubject.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://test',
+      timestamp: Date.now(),
+    });
+
+    expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('tracks isDestroyed state on component destruction', async () => {
+    const {fixture, component} = await setup(false);
+    expect(component['isDestroyed']).toBe(false);
+
+    fixture.destroy();
+    expect(component['isDestroyed']).toBe(true);
+  });
+
+  it('handles SyntaxError gracefully when parsing invalid layout JSON string', async () => {
+    const {component} = await setup(false);
+    expect(() => component['parseLayoutString']('{invalid json}')).toThrow(SyntaxError);
+  });
+
+  it('aborts microtask execution and signal update guard when component is destroyed before microtask runs', async () => {
+    const {fixture, component} = await setup(false);
+    const initialLayout = component.TEST_ONLY.layoutJson()();
+
+    stateSyncMock.activeDraftSignal.set(
+      '[{"version": "v0.9", "createSurface": {"surfaceId": "abort-test"}}]',
+    );
+
+    fixture.destroy();
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(component.TEST_ONLY.layoutJson()()).toBe(initialLayout);
   });
 });

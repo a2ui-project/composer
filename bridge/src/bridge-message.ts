@@ -39,19 +39,17 @@ export enum ThemePreference {
 }
 
 /** Payload for SET_THEME message type. */
-export interface SetThemePayload {
+export declare interface SetThemePayload {
   theme: ThemePreference;
 }
 
 /**
  * Represents a message structure transmitted across the Preview Bridge iframe boundary.
  *
- * NOTE: To prevent compilers from renaming properties during minification in
- * production builds, all properties of this message must be constructed using
- * quoted keys (e.g. {'type': ...}) and accessed using bracket notation (e.g.
- * message['type']) when communicating across compilation boundaries.
+ * NOTE: Declared as a `declare interface` so `tsickle` generates compiler `@externs`
+ * definitions for JSCompiler (Closure Compiler), preventing property renaming across frame boundaries.
  */
-export interface BridgeMessage {
+export declare interface BridgeMessage {
   /** The unique type identifier representing the event. */
   type: PreviewBridgeMessageType;
   /** Optional payload data associated with the message event. */
@@ -61,65 +59,65 @@ export interface BridgeMessage {
 }
 
 /** Payload for CONSOLE_LOG message type. */
-export interface ConsoleLogPayload {
+export declare interface ConsoleLogPayload {
   level: string;
   message: string;
   stack?: string;
 }
 
 /** Base interface for all surface layout commands containing surfaceId. */
-export interface BaseSurfaceDetails {
+export declare interface BaseSurfaceDetails {
   surfaceId: string;
 }
 
 /** Inner details for DATA_MODEL_CHANGE payload. */
-export interface UpdateDataModelDetails extends BaseSurfaceDetails {
+export declare interface UpdateDataModelDetails extends BaseSurfaceDetails {
   path?: string;
   value: unknown;
 }
 
 /** Payload for DATA_MODEL_CHANGE message type. */
-export interface DataModelChangePayload {
+export declare interface DataModelChangePayload {
   updateDataModel: UpdateDataModelDetails;
 }
 
 /** Payload for SET_BLOCKING_STATE message type. */
-export interface SetBlockingStatePayload {
+export declare interface SetBlockingStatePayload {
   blocked: boolean;
   message?: string;
 }
 
 /** Details for error in A2UI_CATALOG handshake. */
-export interface CatalogErrorDetails {
+export declare interface CatalogErrorDetails {
   message: string;
 }
 
 /** Payload for A2UI_CATALOG message type. */
-export interface CatalogHandshakePayload {
+export declare interface CatalogHandshakePayload {
   error?: CatalogErrorDetails;
   [key: string]: unknown;
 }
 
 /** Payload for SEND_TO_SERVER message type. */
-export interface SendToServerPayload {
+export declare interface SendToServerPayload {
   version: string;
   action: unknown;
 }
 
 /** Inner details for createSurface command in RENDER_A2UI payload. */
-export interface CreateSurfaceDetails extends BaseSurfaceDetails {
+export declare interface CreateSurfaceDetails extends BaseSurfaceDetails {
   catalogId: string;
   sendDataModel?: boolean;
 }
 
 /** Layout command structure containing createSurface in RENDER_A2UI payload. */
-export interface CreateSurfaceCommand {
+export declare interface CreateSurfaceCommand {
   createSurface?: CreateSurfaceDetails;
   [key: string]: unknown;
 }
 
 /** Inner details for updateComponents command in RENDER_A2UI payload. */
-export interface UpdateComponentsDetails extends BaseSurfaceDetails {
+export declare interface UpdateComponentsDetails extends BaseSurfaceDetails {
   components: unknown[];
 }
 
@@ -127,7 +125,7 @@ export interface UpdateComponentsDetails extends BaseSurfaceDetails {
 export type DeleteSurfaceDetails = BaseSurfaceDetails;
 
 /** Represents a single layout command item inside the RENDER_A2UI array. */
-export interface RenderA2uiItem {
+export declare interface RenderA2uiItem {
   version: string;
   createSurface?: CreateSurfaceDetails;
   updateComponents?: UpdateComponentsDetails;
@@ -137,14 +135,14 @@ export interface RenderA2uiItem {
 }
 
 /** Minimal catalog definition representation used by the Preview Bridge. */
-export interface CatalogDetails {
+export declare interface CatalogDetails {
   catalogId?: string;
   $id?: string;
   [key: string]: unknown;
 }
 
 /** Represents a component instance definition in the A2UI layout tree. */
-export interface A2uiComponentInstance {
+export declare interface A2uiComponentInstance {
   component: string;
   id?: string;
   [key: string]: unknown;

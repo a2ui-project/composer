@@ -51,7 +51,7 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {DockviewComponent} from 'dockview';
 
 /** Internal interface mapping raw cross-frame workspace telemetry payloads */
-interface WorkspaceMessagePayload {
+export declare interface WorkspaceMessagePayload {
   action?: unknown;
   validationErrors?: unknown[] | Record<string, unknown> | string | boolean;
 }
@@ -124,7 +124,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
       const eventsPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Events);
       const errorsPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Errors);
 
-      if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.['action']) {
+      if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.action) {
         if (!eventsPanel?.api.isVisible) {
           this.unreadEventsCount.update(count => count + 1);
         }
@@ -134,9 +134,9 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
         }
       } else if (
         envelope.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE &&
-        payload?.['validationErrors']
+        payload?.validationErrors
       ) {
-        const validationErrors = payload['validationErrors'];
+        const validationErrors = payload.validationErrors;
         const hasErrors = Array.isArray(validationErrors)
           ? validationErrors.length > 0
           : typeof validationErrors === 'object' && validationErrors !== null

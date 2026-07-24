@@ -537,7 +537,7 @@ describe('Settings', () => {
       const {fixture, component} = await setupComponent();
 
       mockGeminiApiKey.set('loaded-idb-key');
-      TestBed.flushEffects();
+      TestBed.tick();
       fixture.detectChanges();
 
       expect(component.settingsForm.controls.apiKey.value).toBe('loaded-idb-key');
@@ -546,7 +546,7 @@ describe('Settings', () => {
       component.settingsForm.controls.apiKey.markAsDirty();
 
       mockGeminiApiKey.set('background-sync-key');
-      TestBed.flushEffects();
+      TestBed.tick();
       fixture.detectChanges();
 
       expect(component.settingsForm.controls.apiKey.value).toBe('user-typed-key');

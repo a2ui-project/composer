@@ -73,7 +73,7 @@ export class StateSync {
     effect(() => {
       const catalog = this.catalogManagement.activeCatalog();
       if (catalog) {
-        const catalogId = (catalog['catalogId'] as string) || (catalog['$id'] as string) || '';
+        const catalogId = catalog.catalogId || catalog.$id || '';
         untracked(() => {
           const currentDraft = this._activeDraft();
           const draftCatalogId = this.getCatalogIdFromDraft(currentDraft);
@@ -122,9 +122,7 @@ export class StateSync {
    */
   flushDraft(): void {
     const catalog = this.catalogManagement.activeCatalog();
-    const catalogId = catalog
-      ? (catalog['catalogId'] as string) || (catalog['$id'] as string) || ''
-      : '';
+    const catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
     this._activeDraft.set(this.getInitialDraft(catalogId));
   }
 
@@ -135,15 +133,13 @@ export class StateSync {
     if (!catalogId) {
       return '';
     }
-    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-    // prettier-ignore
-    const draftObj = [
+    const draftObj: RenderA2uiItem[] = [
       {
-        'version': 'v0.9',
-        'createSurface': {
-          'surfaceId': 'sample-surface',
-          'catalogId': catalogId,
-          'sendDataModel': true,
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'sample-surface',
+          catalogId: catalogId,
+          sendDataModel: true,
         },
       },
     ];
@@ -159,26 +155,15 @@ export class StateSync {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
         for (const item of parsed) {
-          const createSurface =
-            item && typeof item === 'object'
-              ? (item as Record<string, unknown>)['createSurface']
-              : undefined;
-          if (
-            createSurface &&
-            typeof createSurface === 'object' &&
-            (createSurface as Record<string, unknown>)['catalogId']
-          ) {
-            return (createSurface as Record<string, unknown>)['catalogId'] as string;
+          const itemObj = item as RenderA2uiItem;
+          if (itemObj?.createSurface?.catalogId) {
+            return itemObj.createSurface.catalogId;
           }
         }
       } else if (parsed && typeof parsed === 'object') {
-        const createSurface = (parsed as Record<string, unknown>)['createSurface'];
-        if (
-          createSurface &&
-          typeof createSurface === 'object' &&
-          (createSurface as Record<string, unknown>)['catalogId']
-        ) {
-          return (createSurface as Record<string, unknown>)['catalogId'] as string;
+        const parsedObj = parsed as RenderA2uiItem;
+        if (parsedObj?.createSurface?.catalogId) {
+          return parsedObj.createSurface.catalogId;
         }
       }
     } catch (e) {

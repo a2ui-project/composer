@@ -27,6 +27,7 @@ import {
   SetThemePayload,
   DataModelChangePayload,
   CreateSurfaceCommand,
+  CatalogDetails,
   ThemePreference,
 } from './bridge-message';
 export * from './bridge-message';
@@ -55,7 +56,7 @@ export type {
  * A framework-agnostic processor interface that handles A2UI protocol payloads.
  * Exposes a single method to process raw incoming action arrays.
  */
-export interface RendererProcessor {
+export declare interface RendererProcessor {
   /**
    * Processes the incoming message payload array.
    * @param payload The array of A2UI protocol commands.
@@ -242,10 +243,8 @@ export class PreviewBridge {
     // bootstrapping and attached its active renderer. This guarantees that the
     // parent receives the ready signal when the sandbox is truly capable of mounting
     // surfaces, structurally eliminating the inter-frame timing race conditions.
-    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-    // prettier-ignore
     this.sendMessage({
-      'type': PreviewBridgeMessageType.RENDERER_READY,
+      type: PreviewBridgeMessageType.RENDERER_READY,
     });
 
     const attachConnection = {
@@ -321,13 +320,11 @@ export class PreviewBridge {
    * @param [version='v0.9'] The A2UI protocol specification version.
    */
   sendAction(action: unknown, version = 'v0.9'): void {
-    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-    // prettier-ignore
     this.sendMessage({
-      'type': PreviewBridgeMessageType.SEND_TO_SERVER,
-      'payload': {
-        'version': version,
-        'action': action,
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: version,
+        action: action,
       },
     });
   }
@@ -344,21 +341,19 @@ export class PreviewBridge {
     if (event.source !== window.parent && event.source !== window) return;
 
     const data = event.data as BridgeMessage;
-    // NOTE: Bracket notation is used to access properties on the parsed postMessage event
-    // to prevent compilers from renaming these property accesses during minification.
-    if (!data || typeof data !== 'object' || !data['type']) return;
+    if (!data || typeof data !== 'object' || !data.type) return;
 
-    switch (data['type']) {
+    switch (data.type) {
       case PreviewBridgeMessageType.SET_BLOCKING_STATE:
-        this.handleSetBlockingState(data['payload']);
+        this.handleSetBlockingState(data.payload);
         break;
 
       case PreviewBridgeMessageType.DATA_MODEL_CHANGE:
-        this.handleIncomingDataModelChange(data['payload']);
+        this.handleIncomingDataModelChange(data.payload);
         break;
 
       case PreviewBridgeMessageType.RENDER_A2UI:
-        this.dispatchRenderA2ui(data['payload'] !== undefined ? data['payload'] : data);
+        this.dispatchRenderA2ui(data.payload !== undefined ? data.payload : data);
         break;
 
       case PreviewBridgeMessageType.GET_CATALOG:
@@ -370,11 +365,11 @@ export class PreviewBridge {
         break;
 
       case PreviewBridgeMessageType.SET_THEME:
-        this.handleSetTheme(data['payload']);
+        this.handleSetTheme(data.payload);
         break;
 
       default:
-        console.warn(`PreviewBridge: Unrecognized incoming message type: ${data['type']}`);
+        console.warn(`PreviewBridge: Unrecognized incoming message type: ${data.type}`);
     }
   };
 
@@ -383,8 +378,8 @@ export class PreviewBridge {
    */
   private handleSetTheme(payload: unknown): void {
     const payloadObj = payload as SetThemePayload | undefined;
-    if (payloadObj && Object.values(ThemePreference).includes(payloadObj['theme'])) {
-      const theme = payloadObj['theme'];
+    if (payloadObj && Object.values(ThemePreference).includes(payloadObj.theme)) {
+      const theme = payloadObj.theme;
       this.applyThemeToDom(theme);
       if (this.activeRenderer?.config.onThemeChange) {
         try {
@@ -402,11 +397,9 @@ export class PreviewBridge {
    * Handles incoming blocking overlay requests.
    */
   private handleSetBlockingState(payload: unknown): void {
-    // NOTE: Bracket notation is used to access properties on cross-frame message payloads
-    // to prevent compilers from renaming these properties during production minification.
     const payloadObj = payload as SetBlockingStatePayload | undefined;
-    const blocked = !!(payloadObj && payloadObj['blocked']);
-    const messageStr = payloadObj && payloadObj['message'];
+    const blocked = !!(payloadObj && payloadObj.blocked);
+    const messageStr = payloadObj && payloadObj.message;
     this.handleBlockingOverlay(blocked, messageStr);
   }
 
@@ -414,15 +407,12 @@ export class PreviewBridge {
    * Dynamic interceptor mapping incoming state changes back into a standard render lifecycle payload.
    */
   private handleIncomingDataModelChange(payload: unknown): void {
-    // NOTE: Bracket notation is used to access properties on cross-frame message payloads
-    // to prevent compilers from renaming these properties during production minification.
     const payloadObj = payload as DataModelChangePayload | undefined;
-    if (payloadObj && payloadObj['updateDataModel']) {
-      // prettier-ignore
+    if (payloadObj && payloadObj.updateDataModel) {
       const renderPayload = [
         {
-          'version': 'v0.9',
-          'updateDataModel': payloadObj['updateDataModel'],
+          version: 'v0.9',
+          updateDataModel: payloadObj.updateDataModel,
         },
       ];
       this.dispatchRenderA2ui(renderPayload);
@@ -498,14 +488,14 @@ export class PreviewBridge {
 
       let hasCreateSurface = false;
       let surfaceId: string | undefined;
-      const createSurface = createSurfaceCommand && createSurfaceCommand['createSurface'];
+      const createSurface = createSurfaceCommand && createSurfaceCommand.createSurface;
       if (createSurface) {
         hasCreateSurface = true;
-        const catalogId = createSurface['catalogId'];
+        const catalogId = createSurface.catalogId;
         if (catalogId) {
           this.notifyCatalogResolved(catalogId);
         }
-        surfaceId = createSurface['surfaceId'];
+        surfaceId = createSurface.surfaceId;
         if (surfaceId) {
           // Track the surface BEFORE processing. If a subsequent command in
           // the payload has a typo and throws an error, we still want to
@@ -535,13 +525,11 @@ export class PreviewBridge {
     const {processor, config, activeSurfaceIds} = this.activeRenderer;
     for (const surfaceId of activeSurfaceIds) {
       try {
-        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-        // prettier-ignore
         processor.processMessages([
           {
-            'version': 'v0.9',
-            'deleteSurface': {
-              'surfaceId': surfaceId,
+            version: 'v0.9',
+            deleteSurface: {
+              surfaceId: surfaceId,
             },
           } as A2uiMessage,
         ]);
@@ -586,14 +574,12 @@ export class PreviewBridge {
 
         try {
           const modelSub = surface.dataModel.subscribe('', (newValue: unknown) => {
-            // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-            // prettier-ignore
             this.sendMessage({
-              'type': PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-              'payload': {
-                'updateDataModel': {
-                  'surfaceId': surface.id,
-                  'value': newValue,
+              type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+              payload: {
+                updateDataModel: {
+                  surfaceId: surface.id,
+                  value: newValue,
                 },
               },
             });
@@ -687,11 +673,9 @@ export class PreviewBridge {
         });
 
         button.addEventListener('click', () => {
-          // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-          // prettier-ignore
           this.sendMessage({
-            'type': PreviewBridgeMessageType.FORCE_UNBLOCK,
-            'payload': {},
+            type: PreviewBridgeMessageType.FORCE_UNBLOCK,
+            payload: {},
           });
           this.handleBlockingOverlay(false);
         });
@@ -806,30 +790,25 @@ export class PreviewBridge {
 
       const catalog = this.parseCatalogData(resolved.rawData);
 
-      const catalogId = (catalog as Record<string, unknown> | undefined)?.['catalogId'] as
-        string | undefined;
+      const catalogId = (catalog as CatalogDetails | undefined)?.catalogId;
       if (catalogId) {
         this.notifyCatalogResolved(catalogId);
       }
 
-      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-      // prettier-ignore
       this.sendMessage({
-        'type': PreviewBridgeMessageType.A2UI_CATALOG,
-        'payload': catalog,
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: catalog,
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (resolved?.isInMemory) {
         console.error('PreviewBridge: Error processing/parsing in-memory catalog:', error);
       }
-      // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-      // prettier-ignore
       this.sendMessage({
-        'type': PreviewBridgeMessageType.A2UI_CATALOG,
-        'payload': {
-          'error': {
-            'message': errorMessage,
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        payload: {
+          error: {
+            message: errorMessage,
           },
         },
       });
@@ -848,11 +827,9 @@ export class PreviewBridge {
         console.error('PreviewBridge: Error invoking getComponentUsages:', error);
       }
     }
-    // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-    // prettier-ignore
     this.sendMessage({
-      'type': PreviewBridgeMessageType.COMPONENT_USAGES,
-      'payload': usages,
+      type: PreviewBridgeMessageType.COMPONENT_USAGES,
+      payload: usages,
     });
   }
 

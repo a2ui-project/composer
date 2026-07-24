@@ -185,21 +185,22 @@ export class GalleryCatalog {
    */
   readonly componentsList = computed<CategorizedComponents[]>(() => {
     const catalog = this.catalogManagement.activeCatalog();
-    if (catalog == null || catalog['components'] == null) {
+    if (catalog == null || catalog.components == null) {
       return [];
     }
 
+    // prettier-ignore
     const grouped: Record<string, string[]> = {
-      Layout: [],
-      Content: [],
-      Input: [],
-      Feedback: [],
-      Other: [],
+      'Layout': [],
+      'Content': [],
+      'Input': [],
+      'Feedback': [],
+      'Other': [],
     };
 
-    for (const key of Object.keys(catalog['components'] || {})) {
+    for (const key of Object.keys(catalog.components || {})) {
       const cat = getCategoryForComponent(key);
-      (grouped[cat] || grouped['Other']).push(key);
+      grouped[cat].push(key);
     }
 
     return CATEGORIES_ORDER.map(category => ({
@@ -266,6 +267,7 @@ export class GalleryCatalog {
     this.destroyRef.onDestroy(() => {
       if (this.usageTimeoutId) {
         clearTimeout(this.usageTimeoutId);
+        this.usageTimeoutId = undefined;
       }
     });
 
@@ -274,29 +276,7 @@ export class GalleryCatalog {
       const isActive = this.galleryActive();
 
       if (isActive && activeCat) {
-        untracked(() => {
-          this._cachedUsages.set(null);
-          this._loadingUsages.set(true);
-        });
-
-        if (this.usageTimeoutId) {
-          clearTimeout(this.usageTimeoutId);
-        }
-
-        // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-        // prettier-ignore
-        this.hostCommunication.sendMessage({
-          'type': PreviewBridgeMessageType.GET_COMPONENT_USAGES,
-        });
-
-        this.usageTimeoutId = setTimeout(() => {
-          if (this.loadingUsages()) {
-            untracked(() => {
-              this._loadingUsages.set(false);
-              this._cachedUsages.set({});
-            });
-          }
-        }, 2000);
+        this.requestComponentUsages();
       } else {
         untracked(() => {
           this._cachedUsages.set(null);
@@ -304,7 +284,33 @@ export class GalleryCatalog {
         });
         if (this.usageTimeoutId) {
           clearTimeout(this.usageTimeoutId);
+          this.usageTimeoutId = undefined;
         }
+      }
+    });
+
+    effect(() => {
+      const active = this.galleryActive();
+      const list = this.componentsList();
+
+      if (active) {
+        if (list.length > 0) {
+          const currentKey = untracked(() => this.selectedComponentKey());
+          const allKeys = list.flatMap(group => group.components);
+          if (!currentKey || !allKeys.includes(currentKey)) {
+            untracked(() => {
+              this.selectComponent(allKeys[0]);
+            });
+          }
+        } else {
+          untracked(() => {
+            this._selectedComponentKey.set(null);
+          });
+        }
+      } else {
+        untracked(() => {
+          this._selectedComponentKey.set(null);
+        });
       }
     });
 
@@ -317,8 +323,37 @@ export class GalleryCatalog {
         const usages = envelope.payload as ComponentUsages | null;
         this._cachedUsages.set(usages || {});
         this._loadingUsages.set(false);
+      } else if (
+        envelope.type === PreviewBridgeMessageType.RENDERER_READY &&
+        this.galleryActive() &&
+        this.cachedUsages() === null
+      ) {
+        this.requestComponentUsages();
       }
     });
+  }
+
+  private requestComponentUsages(): void {
+    untracked(() => {
+      this._cachedUsages.set(null);
+      this._loadingUsages.set(true);
+    });
+
+    if (this.usageTimeoutId) {
+      clearTimeout(this.usageTimeoutId);
+      this.usageTimeoutId = undefined;
+    }
+
+    this.hostCommunication.sendMessage({
+      type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
+    });
+
+    this.usageTimeoutId = setTimeout(() => {
+      if (this.loadingUsages()) {
+        this._loadingUsages.set(false);
+        this._cachedUsages.set({});
+      }
+    }, 2000);
   }
 
   /**

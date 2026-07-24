@@ -48,6 +48,8 @@ class MockSecureCredentialsStorage {
 describe('LocalStorageAppConfigProvider', () => {
   let mockStartupService: {
     getResolvedRendererUrl: ReturnType<typeof vi.fn>;
+    setResolvedRendererUrl: ReturnType<typeof vi.fn>;
+    resolveStartupConfiguration: ReturnType<typeof vi.fn>;
     isContextLocked: ReturnType<typeof vi.fn>;
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
     isExtensionMode: ReturnType<typeof vi.fn>;
@@ -59,6 +61,8 @@ describe('LocalStorageAppConfigProvider', () => {
     mockSecureStorage = new MockSecureCredentialsStorage();
     mockStartupService = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('https://default-renderer.com'),
+      setResolvedRendererUrl: vi.fn(),
+      resolveStartupConfiguration: vi.fn().mockResolvedValue('https://default-renderer.com'),
       isContextLocked: vi.fn().mockReturnValue(false),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       isExtensionMode: vi.fn().mockReturnValue(false),
@@ -213,6 +217,18 @@ describe('LocalStorageAppConfigProvider', () => {
     provider.setRendererUrl('https://updated-renderer.com');
     expect(provider.rendererUrl()).toBe('https://updated-renderer.com');
     expect(localStorage.getItem(LocalStorageKey.RENDERER_URL)).toBe('https://updated-renderer.com');
+    expect(mockStartupService.setResolvedRendererUrl).toHaveBeenCalledWith(
+      'https://updated-renderer.com',
+    );
+  });
+
+  it('does not call startup.setResolvedRendererUrl when context is locked', () => {
+    mockStartupService.isContextLocked.mockReturnValue(true);
+    const provider = setupProvider();
+    provider.setRendererUrl('https://locked-renderer.com');
+    expect(provider.rendererUrl()).toBe('https://locked-renderer.com');
+    expect(localStorage.getItem(LocalStorageKey.RENDERER_URL)).toBe('https://locked-renderer.com');
+    expect(mockStartupService.setResolvedRendererUrl).not.toHaveBeenCalled();
   });
 
   it('persists updated API key to SecureCredentialsStorage and updates signal', async () => {
@@ -287,6 +303,7 @@ describe('LocalStorageAppConfigProvider', () => {
 
     await provider.flushConfig();
 
+    expect(mockStartupService.resolveStartupConfiguration).toHaveBeenCalled();
     expect(provider.rendererUrl()).toBe('https://base-url.com');
     expect(provider.geminiApiKey()).toBe('');
     expect(provider.authType()).toBe(AuthType.FIRST_PARTY); // Fallback 1P
@@ -414,5 +431,19 @@ describe('LocalStorageAppConfigProvider', () => {
       expect(() => provider.setThemePreference(ThemePreference.DARK)).not.toThrow();
       expect(() => provider.flushConfig()).not.toThrow();
     });
+  });
+
+  it('synchronizes renderer URL with StartupResolution when setRendererUrl is called', () => {
+    const provider = setupProvider();
+    provider.setRendererUrl('https://sync-renderer.com');
+    expect(mockStartupService.setResolvedRendererUrl).toHaveBeenCalledWith(
+      'https://sync-renderer.com',
+    );
+  });
+
+  it('invokes StartupResolution.resolveStartupConfiguration when flushConfig is called', async () => {
+    const provider = setupProvider();
+    await provider.flushConfig();
+    expect(mockStartupService.resolveStartupConfiguration).toHaveBeenCalled();
   });
 });

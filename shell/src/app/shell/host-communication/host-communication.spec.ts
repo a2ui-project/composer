@@ -634,4 +634,228 @@ describe('HostCommunication', () => {
       timestamp: expect.any(Number),
     });
   });
+
+  describe('captureScreenshot', () => {
+    let mockTrack: MediaStreamTrack;
+    let mockStream: MediaStream;
+    let originalMediaDevices: MediaDevices | undefined;
+    let originalRestrictionTarget: unknown;
+
+    beforeEach(() => {
+      originalMediaDevices = navigator.mediaDevices;
+      originalRestrictionTarget = (globalThis as Record<string, unknown>)['RestrictionTarget'];
+
+      mockTrack = {
+        stop: vi.fn(),
+        restrictTo: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MediaStreamTrack;
+
+      mockStream = {
+        getVideoTracks: vi.fn().mockReturnValue([mockTrack]),
+        getTracks: vi.fn().mockReturnValue([mockTrack]),
+      } as unknown as MediaStream;
+
+      Object.defineProperty(HTMLVideoElement.prototype, 'onloadedmetadata', {
+        set(fn: (() => void) | null) {
+          if (typeof fn === 'function') {
+            setTimeout(() => fn(), 0);
+          }
+        },
+        configurable: true,
+      });
+
+      vi.spyOn(HTMLVideoElement.prototype, 'play').mockResolvedValue(undefined);
+      vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
+        'data:image/png;base64,mock',
+      );
+    });
+
+    afterEach(() => {
+      if (originalMediaDevices) {
+        Object.defineProperty(navigator, 'mediaDevices', {
+          value: originalMediaDevices,
+          configurable: true,
+          writable: true,
+        });
+      } else {
+        // @ts-expect-error - cleanup navigator.mediaDevices
+        delete navigator.mediaDevices;
+      }
+
+      if (originalRestrictionTarget !== undefined) {
+        (globalThis as Record<string, unknown>)['RestrictionTarget'] = originalRestrictionTarget;
+      } else {
+        delete (globalThis as Record<string, unknown>)['RestrictionTarget'];
+      }
+
+      vi.restoreAllMocks();
+    });
+
+    it('throws error when no iframe element registered', async () => {
+      service.registerIframe(null);
+      await expect(service.captureScreenshot()).rejects.toThrow(
+        'No active iframe element found to capture screenshot.',
+      );
+
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+      await expect(service.captureScreenshot()).rejects.toThrow(
+        'No active iframe element found to capture screenshot.',
+      );
+    });
+
+    it('throws error when getDisplayMedia is unavailable', async () => {
+      const mockIframeElement = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+      service.registerIframe(mockIframeElement);
+
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: {},
+        configurable: true,
+        writable: true,
+      });
+
+      await expect(service.captureScreenshot()).rejects.toThrow(
+        'Screen capture API (getDisplayMedia) is not supported in this environment.',
+      );
+    });
+
+    it('throws error when stream has no video tracks', async () => {
+      const mockIframeElement = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+      service.registerIframe(mockIframeElement);
+
+      const emptyStream = {
+        getVideoTracks: vi.fn().mockReturnValue([]),
+        getTracks: vi.fn().mockReturnValue([]),
+      } as unknown as MediaStream;
+
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: {
+          getDisplayMedia: vi.fn().mockResolvedValue(emptyStream),
+        },
+        configurable: true,
+        writable: true,
+      });
+
+      await expect(service.captureScreenshot()).rejects.toThrow(
+        'No video track found in media stream.',
+      );
+    });
+
+    it('captures screenshot using element restriction when RestrictionTarget is supported', async () => {
+      const mockIframeElement = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+      service.registerIframe(mockIframeElement);
+
+      const mockTarget = {type: 'restriction-target'};
+      const mockRestrictionTarget = {
+        fromElement: vi.fn().mockResolvedValue(mockTarget),
+      };
+      (globalThis as Record<string, unknown>)['RestrictionTarget'] = mockRestrictionTarget;
+
+      const getDisplayMediaSpy = vi.fn().mockResolvedValue(mockStream);
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: {getDisplayMedia: getDisplayMediaSpy},
+        configurable: true,
+        writable: true,
+      });
+
+      const result = await service.captureScreenshot();
+
+      expect(getDisplayMediaSpy).toHaveBeenCalledWith({
+        video: {displaySurface: 'browser'},
+        preferCurrentTab: true,
+      });
+      expect(mockRestrictionTarget.fromElement).toHaveBeenCalledWith(mockIframeElement);
+      expect(mockTrack.restrictTo).toHaveBeenCalledWith(mockTarget);
+      expect(mockTrack.stop).toHaveBeenCalled();
+      expect(typeof result).toBe('string');
+    });
+
+    it('falls back gracefully to full tab capture when RestrictionTarget is undefined', async () => {
+      const mockIframeElement = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+      service.registerIframe(mockIframeElement);
+
+      delete (globalThis as Record<string, unknown>)['RestrictionTarget'];
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: {getDisplayMedia: vi.fn().mockResolvedValue(mockStream)},
+        configurable: true,
+        writable: true,
+      });
+
+      const result = await service.captureScreenshot();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'RestrictionTarget API not supported, capturing full tab.',
+      );
+      expect(mockTrack.stop).toHaveBeenCalled();
+      expect(typeof result).toBe('string');
+    });
+
+    it('falls back gracefully when RestrictionTarget.fromElement throws or rejects', async () => {
+      const mockIframeElement = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+      service.registerIframe(mockIframeElement);
+
+      const restrictionError = new Error('Failed fromElement');
+      (globalThis as Record<string, unknown>)['RestrictionTarget'] = {
+        fromElement: vi.fn().mockRejectedValue(restrictionError),
+      };
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: {getDisplayMedia: vi.fn().mockResolvedValue(mockStream)},
+        configurable: true,
+        writable: true,
+      });
+
+      const result = await service.captureScreenshot();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to restrict video track to element, falling back to full tab capture:',
+        restrictionError,
+      );
+      expect(mockTrack.stop).toHaveBeenCalled();
+      expect(typeof result).toBe('string');
+    });
+
+    it('falls back gracefully when track.restrictTo throws or rejects', async () => {
+      const mockIframeElement = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+      service.registerIframe(mockIframeElement);
+
+      const mockTarget = {type: 'restriction-target'};
+      (globalThis as Record<string, unknown>)['RestrictionTarget'] = {
+        fromElement: vi.fn().mockResolvedValue(mockTarget),
+      };
+      const restrictionError = new Error('Failed restrictTo');
+      mockTrack.restrictTo = vi.fn().mockRejectedValue(restrictionError);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: {getDisplayMedia: vi.fn().mockResolvedValue(mockStream)},
+        configurable: true,
+        writable: true,
+      });
+
+      const result = await service.captureScreenshot();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to restrict video track to element, falling back to full tab capture:',
+        restrictionError,
+      );
+      expect(mockTrack.stop).toHaveBeenCalled();
+      expect(typeof result).toBe('string');
+    });
+  });
 });

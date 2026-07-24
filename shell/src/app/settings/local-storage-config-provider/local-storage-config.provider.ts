@@ -155,6 +155,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   override setRendererUrl(url: string): void {
     this._rendererUrl.set(url);
     this.localStorageInteractions.setItem(LocalStorageKey.RENDERER_URL, url);
+    if (!this.startup.isContextLocked()) {
+      this.startup.setResolvedRendererUrl(url);
+    }
   }
 
   /**
@@ -231,6 +234,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
     this._forcedAuthOverride.set(AuthType.DEFAULT);
     this._geminiApiKey.set('');
+    await this.startup.resolveStartupConfiguration();
+    // Asynchronously re-evaluate default configuration fallbacks
+    // (query params -> local storage -> config.json).
     this._rendererUrl.set(this.startup.getResolvedRendererUrl() || '');
     this._themePreference.set(ThemePreference.LIGHT);
     this._includeScreenshot.set(false);

@@ -271,4 +271,12 @@ describe('StartupResolution Task 2.6', () => {
 
     expect(customService.isThirdPartyEnvironment()).toBe(true);
   });
+
+  it('updates resolved renderer URL via setResolvedRendererUrl', () => {
+    service.setResolvedRendererUrl('http://custom-url:3000');
+    expect(service.getResolvedRendererUrl()).toBe('http://custom-url:3000');
+
+    service.setResolvedRendererUrl(null);
+    expect(service.getResolvedRendererUrl()).toBeNull();
+  });
 });

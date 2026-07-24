@@ -136,10 +136,8 @@ export class CatalogManagement {
             this._isHandshakeInProgress.set(true);
             this._watchdogFired.set(false);
             this._catalogError.set(null);
-            // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-            // prettier-ignore
             this.hostCommunication.sendMessage({
-              'type': PreviewBridgeMessageType.GET_CATALOG,
+              type: PreviewBridgeMessageType.GET_CATALOG,
             });
 
             this.watchdogTimerId = setTimeout(() => {
@@ -172,16 +170,14 @@ export class CatalogManagement {
               return of(null);
             }
 
-            // NOTE: Bracket notation is used to access properties on cross-frame message payloads
-            // to prevent compilers from renaming these properties during production minification.
             const payload = rawPayload as {
               error?: {message?: string};
             } & Catalog;
-            const errorObj = payload['error'];
+            const errorObj = payload.error;
 
             if (errorObj) {
               const errorMsg =
-                errorObj['message'] || 'Unknown error occurred in preview bridge during handshake.';
+                errorObj.message || 'Unknown error occurred in preview bridge during handshake.';
               this._catalogError.set(errorMsg);
               console.error('Handshake failed with bridge error:', errorMsg);
               this._isHandshakeInProgress.set(false);
@@ -192,11 +188,11 @@ export class CatalogManagement {
             let catalogString: string;
             try {
               catalogObj = structuredClone(payload as Catalog);
-              if (typeof catalogObj['title'] === 'string') {
-                catalogObj['title'] = sanitizeHtml(catalogObj['title']).toString();
+              if (typeof catalogObj.title === 'string') {
+                catalogObj.title = sanitizeHtml(catalogObj.title).toString();
               }
-              if (typeof catalogObj['description'] === 'string') {
-                catalogObj['description'] = sanitizeHtml(catalogObj['description']).toString();
+              if (typeof catalogObj.description === 'string') {
+                catalogObj.description = sanitizeHtml(catalogObj.description).toString();
               }
               catalogString = stableStringify(catalogObj);
             } catch (err: unknown) {
@@ -207,7 +203,7 @@ export class CatalogManagement {
               return of(null);
             }
 
-            const catalogId = catalogObj['catalogId'] || catalogObj['$id'];
+            const catalogId = catalogObj.catalogId || catalogObj.$id;
             if (!catalogId) {
               const errorMsg = 'Catalog is missing a valid identifier (catalogId or $id).';
               this._catalogError.set(errorMsg);
@@ -258,8 +254,8 @@ export class CatalogManagement {
                   }
 
                   this._activeCatalog.set(catalogObj);
-                  this._activeCatalogTitle.set(catalogObj['title'] || '');
-                  this._activeCatalogDescription.set(catalogObj['description'] || '');
+                  this._activeCatalogTitle.set(catalogObj.title || '');
+                  this._activeCatalogDescription.set(catalogObj.description || '');
 
                   this._catalogError.set(null);
                   this._isHandshakeInProgress.set(false);

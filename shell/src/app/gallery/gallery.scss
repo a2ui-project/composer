@@ -238,7 +238,14 @@
 }
 
 .hidden-frame {
-  display: none;
+  visibility: hidden;
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .usage-loading-spinner {

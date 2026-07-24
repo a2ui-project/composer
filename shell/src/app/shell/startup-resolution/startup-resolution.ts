@@ -47,6 +47,15 @@ export class StartupResolution {
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
   readonly isLockedContext = this._isLockedContext.asReadonly();
 
+  /**
+   * Resolves the startup configuration for the application.
+   *
+   * Use for application initial bootstrapping or resetting settings to factory
+   * defaults (e.g. in `flushConfig()`). Asynchronously evaluates the fallback
+   * chain: query parameters -> local storage -> static `config.json` defaults.
+   *
+   * @return A Promise resolving to the resolved renderer URL, or null if unresolvable.
+   */
   async resolveStartupConfiguration(): Promise<string | null> {
     let staticConfig: AppConfig | null = null;
     const controller = new AbortController();
@@ -106,6 +115,20 @@ export class StartupResolution {
 
   getResolvedRendererUrl(): string | null {
     return this._resolvedUrl();
+  }
+
+  /**
+   * Updates the resolved renderer URL directly in state.
+   *
+   * Use for direct, synchronous runtime state updates (e.g. when a user
+   * explicitly changes the renderer URL in Settings via
+   * `AppConfigProvider.setRendererUrl`). Bypasses the asynchronous resolution
+   * pipeline to prevent query parameter overrides and network overhead.
+   *
+   * @param url The target renderer URL string or null.
+   */
+  setResolvedRendererUrl(url: string | null): void {
+    this._resolvedUrl.set(url);
   }
 
   isContextLocked(): boolean {
