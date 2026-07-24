@@ -32,6 +32,7 @@ import {
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
+import {WorkspaceLayout} from '../workspace-layout/workspace-layout';
 
 /**
  * The primary layout container for the A2UI Composer.
@@ -57,6 +58,8 @@ import {SessionStorageInteractions} from '../../storage/session-storage-interact
 })
 export class ComposerShell {
   readonly isCollapsed = signal(true);
+  /** Drives the header's single layout-cycle toggle over the routed workspace. */
+  readonly layout = inject(WorkspaceLayout);
   isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly indexedDbStorage = inject(IndexedDbStorage);

@@ -33,6 +33,7 @@ import {signal, WritableSignal} from '@angular/core';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
+import {WorkspaceLayout} from '../workspace-layout/workspace-layout';
 
 describe('ComposerShell Layout', () => {
   let fixture: ComponentFixture<ComposerShell>;
@@ -206,6 +207,27 @@ describe('ComposerShell Layout', () => {
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
+  });
+
+  it('shows the header layout-cycle toggle only while a workspace is active and cycles it on click', () => {
+    const layout = TestBed.inject(WorkspaceLayout);
+
+    // Hidden until a workspace registers itself.
+    expect(fixture.nativeElement.querySelector('.layout-cycle-button')).toBeNull();
+
+    layout.register(() => {});
+    layout.apply('chat-preview');
+    fixture.detectChanges();
+
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('.layout-cycle-button');
+    expect(button).toBeTruthy();
+    expect(button.textContent).toContain('Chat + Preview');
+
+    button.click();
+    fixture.detectChanges();
+
+    expect(layout.activePreset()).toBe('full');
+    expect(button.textContent).toContain('Code & Engine');
   });
 
   it('renders Material icons inside navigation list items', async () => {

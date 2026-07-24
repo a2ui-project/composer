@@ -22,39 +22,39 @@
 
 .workspace-container {
   display: flex;
+  flex-direction: column;
   height: 100%;
   box-sizing: border-box;
   overflow: hidden;
-
-  &.extension-mode {
-    flex-direction: column;
-  }
 }
 
 .dockview-root {
   width: 100%;
-  height: 100%;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
 }
 
 :host ::ng-deep .dockview-root {
-  --dv-activegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container);
-  --dv-activegroup-hiddenpanel-tab-color: var(--mat-sys-on-surface-variant);
-  --dv-activegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
-  --dv-activegroup-visiblepanel-tab-color: var(--mat-sys-primary);
-  --dv-group-view-background-color: var(--mat-sys-surface);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container);
-  --dv-inactivegroup-hiddenpanel-tab-color: var(--mat-sys-on-surface-variant);
-  --dv-inactivegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
-  --dv-inactivegroup-visiblepanel-tab-color: var(--mat-sys-on-surface-variant);
-  --dv-paneview-header-border-color: var(--mat-sys-outline-variant);
-  --dv-separator-border: var(--mat-sys-outline-variant);
-  --dv-tab-divider-color: var(--mat-sys-outline-variant);
-  --dv-tabs-and-actions-container-background-color: var(--mat-sys-surface-container);
+  // Retinted onto the CopilotKit token palette so the workspace chrome matches
+  // the shell. Panel bodies stay solid (--cpk-surface-elevated) for legibility
+  // over Monaco/preview; the tab strip takes the page tone.
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-hiddenpanel-tab-color: var(--cpk-text-secondary);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--cpk-surface-elevated);
+  --dv-activegroup-visiblepanel-tab-color: var(--cpk-accent);
+  --dv-group-view-background-color: var(--cpk-surface-elevated);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--cpk-text-faint);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--cpk-surface-elevated);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--cpk-text-secondary);
+  --dv-paneview-header-border-color: var(--cpk-border);
+  --dv-separator-border: var(--cpk-border);
+  --dv-tab-divider-color: var(--cpk-divider);
+  --dv-tabs-and-actions-container-background-color: var(--cpk-page-bg);
 
   .dv-tabs-and-actions-container {
-    border-bottom: 1px solid var(--mat-sys-outline-variant);
+    border-bottom: 1px solid var(--cpk-border);
   }
 
   .dv-default-tab-action {
@@ -68,7 +68,7 @@
   .dv-tab {
     height: var(--dv-tabs-and-actions-container-height, 48px);
     padding: 0 16px 0 26px;
-    font-family: var(--mat-sys-title-small-font, Roboto, sans-serif);
+    font-family: var(--cpk-font-body, 'Plus Jakarta Sans', sans-serif);
     font-size: var(--mat-sys-title-small-size, 14px);
     font-weight: var(--mat-sys-title-small-weight, 500);
     position: relative;
@@ -81,7 +81,7 @@
       .dv-default-tab::before {
         visibility: visible;
         opacity: 0.85;
-        color: var(--mat-sys-on-surface-variant);
+        color: var(--cpk-text-secondary);
       }
     }
 
@@ -130,7 +130,7 @@
         outline: none;
         border-top-left-radius: 3px;
         border-top-right-radius: 3px;
-        background: var(--mat-sys-primary);
+        background: var(--cpk-accent);
         z-index: 100;
         pointer-events: none;
       }
