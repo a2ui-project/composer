@@ -509,38 +509,27 @@ describe('Settings', () => {
   });
 
   describe('Reactive Form Enablement & Value Synchronization', () => {
-    it('dynamically applies validators and enables apiKeyControl when switching to 3P mode, and disables/clears validators in 1P mode without clobbering dirty user input', async () => {
+    it('disables apiKeyControl and clears validators in 1P mode upon initialization', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
-      const {fixture, component} = await setupComponent();
+      const {component} = await setupComponent();
 
       expect(component.isThirdParty()).toBe(false);
       expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
       expect(component.settingsForm.controls.apiKey.validator).toBeNull();
       expect(component.settingsForm.valid).toBe(true);
+    });
 
-      component.settingsForm.controls.apiKey.setValue('dirty-user-input');
-      component.settingsForm.controls.apiKey.markAsDirty();
+    it('enables apiKeyControl and applies non-whitespace validator in 3P mode upon initialization', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      const {component} = await setupComponent();
 
-      component.isThirdParty.set(true);
-      TestBed.flushEffects();
-      fixture.detectChanges();
-
+      expect(component.isThirdParty()).toBe(true);
       expect(component.settingsForm.controls.apiKey.enabled).toBe(true);
       expect(component.settingsForm.controls.apiKey.validator).toBeTruthy();
-      expect(component.settingsForm.controls.apiKey.value).toBe('dirty-user-input');
 
       component.settingsForm.controls.apiKey.setValue('   ');
       expect(component.settingsForm.controls.apiKey.invalid).toBe(true);
       expect(component.settingsForm.invalid).toBe(true);
-
-      component.isThirdParty.set(false);
-      TestBed.flushEffects();
-      fixture.detectChanges();
-
-      expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
-      expect(component.settingsForm.controls.apiKey.validator).toBeNull();
-      expect(component.settingsForm.valid).toBe(true);
-      expect(component.settingsForm.controls.apiKey.value).toBe('   ');
     });
 
     it('synchronizes geminiApiKey signal from config provider into apiKey control without clobbering dirty user input', async () => {

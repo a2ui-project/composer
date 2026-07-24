@@ -103,24 +103,6 @@ export class Settings implements OnInit {
 
   constructor() {
     effect(() => {
-      const is3P = this.isThirdParty();
-      const apiKeyControl = this.settingsForm.controls.apiKey;
-
-      if (is3P) {
-        apiKeyControl.setValidators([Validators.pattern(/\S/)]);
-        if (apiKeyControl.disabled) {
-          apiKeyControl.enable({emitEvent: false});
-        }
-      } else {
-        apiKeyControl.clearValidators();
-        if (apiKeyControl.enabled) {
-          apiKeyControl.disable({emitEvent: false});
-        }
-      }
-      apiKeyControl.updateValueAndValidity({emitEvent: false});
-    });
-
-    effect(() => {
       const currentKey = this.configProvider.geminiApiKey();
       const apiKeyControl = this.settingsForm.controls.apiKey;
       if (!apiKeyControl.dirty && apiKeyControl.value !== currentKey) {
@@ -135,6 +117,7 @@ export class Settings implements OnInit {
 
     const is3P = this.startupResolution.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
+    this.configureApiKeyControl(is3P);
 
     this.forceThirdPartyAuth.set(this.configProvider.authType() === AuthType.THIRD_PARTY);
 
@@ -147,6 +130,22 @@ export class Settings implements OnInit {
     if (locked) {
       this.settingsForm.controls.rendererUrl.disable();
     }
+  }
+
+  private configureApiKeyControl(is3P: boolean): void {
+    const apiKeyControl = this.settingsForm.controls.apiKey;
+    if (is3P) {
+      apiKeyControl.setValidators([Validators.pattern(/\S/)]);
+      if (apiKeyControl.disabled) {
+        apiKeyControl.enable({emitEvent: false});
+      }
+    } else {
+      apiKeyControl.clearValidators();
+      if (apiKeyControl.enabled) {
+        apiKeyControl.disable({emitEvent: false});
+      }
+    }
+    apiKeyControl.updateValueAndValidity({emitEvent: false});
   }
 
   async saveSettings(): Promise<void> {
