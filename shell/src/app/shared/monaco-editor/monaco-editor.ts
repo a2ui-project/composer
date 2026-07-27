@@ -171,11 +171,19 @@ export class MonacoEditor {
     });
 
     let destroyed = false;
+    const overflowWidgetsDomNode =
+      typeof document !== 'undefined' ? document.createElement('div') : undefined;
+    if (overflowWidgetsDomNode) {
+      overflowWidgetsDomNode.className = 'monaco-editor monaco-overflow-widgets';
+      document.body.appendChild(overflowWidgetsDomNode);
+    }
+
     this.destroyRef.onDestroy(() => {
       destroyed = true;
       if (this.editor) {
         this.editor.dispose();
       }
+      overflowWidgetsDomNode?.remove();
     });
 
     afterNextRender(() => {
@@ -197,6 +205,8 @@ export class MonacoEditor {
 
         const editor = monacoInstance.editor.create(this.editorContainer().nativeElement, {
           model,
+          fixedOverflowWidgets: true,
+          overflowWidgetsDomNode,
           theme: this.monacoTheme(),
           automaticLayout: true,
           minimap: {enabled: false},
