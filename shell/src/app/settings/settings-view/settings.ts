@@ -73,6 +73,9 @@ export class Settings implements OnInit {
 
   readonly isLocked: WritableSignal<boolean> = signal(false);
   readonly isThirdParty: WritableSignal<boolean> = signal(false);
+  readonly isApiKeyProvidedByConfig: Signal<boolean> = computed(() =>
+    this.configProvider.isApiKeyProvidedByConfig(),
+  );
   readonly hideApiKey: WritableSignal<boolean> = signal(true);
   readonly forceThirdPartyAuth: WritableSignal<boolean> = signal(false);
   readonly saveErrorMessage: WritableSignal<string | null> = signal(null);
@@ -134,7 +137,7 @@ export class Settings implements OnInit {
 
   private configureApiKeyControl(is3P: boolean): void {
     const apiKeyControl = this.settingsForm.controls.apiKey;
-    if (is3P) {
+    if (is3P && !this.isApiKeyUnmaskDisabled()) {
       apiKeyControl.setValidators([Validators.pattern(/\S/)]);
       if (apiKeyControl.disabled) {
         apiKeyControl.enable({emitEvent: false});
@@ -165,7 +168,9 @@ export class Settings implements OnInit {
         if (!this.isLocked()) {
           this.configProvider.setRendererUrl(values.rendererUrl.trim());
         }
-        await this.configProvider.setGeminiApiKey(values.apiKey.trim());
+        if (!this.isApiKeyProvidedByConfig()) {
+          await this.configProvider.setGeminiApiKey(values.apiKey.trim());
+        }
       } else {
         await this.configProvider.purgeGeminiApiKey();
         if (!this.isLocked()) {
@@ -193,6 +198,17 @@ export class Settings implements OnInit {
       const basePath = this.platformLocation.getBaseHrefFromDOM() || '/';
       locationAssign(this.document.defaultView.location, basePath);
     }
+  }
+
+  isApiKeyUnmaskDisabled(): boolean {
+    return this.isApiKeyProvidedByConfig() || this.isLocked();
+  }
+
+  toggleHideApiKey(): void {
+    if (this.isApiKeyUnmaskDisabled()) {
+      return;
+    }
+    this.hideApiKey.set(!this.hideApiKey());
   }
 
   toggleForceThirdPartyAuth(): void {

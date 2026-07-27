@@ -16,6 +16,7 @@
  */
 
 import {ComponentHarness} from '@angular/cdk/testing';
+import {MatButtonHarness} from '@angular/material/button/testing';
 import {MatInputHarness} from '@angular/material/input/testing';
 import {MatSlideToggleHarness} from '@angular/material/slide-toggle/testing';
 
@@ -35,7 +36,9 @@ export class SettingsHarness extends ComponentHarness {
   protected getErrors = this.locatorForAll('mat-error');
   protected getFormSections = this.locatorForAll('.form-section');
   protected getLogsConsole = this.locatorFor('.logs-console');
-  protected getApiKeyToggleBtn = this.locatorForOptional('button[matSuffix]');
+  protected getApiKeyToggleBtn = this.locatorForOptional(
+    MatButtonHarness.with({selector: 'button[matSuffix]'}),
+  );
 
   protected getBridgeBadge = this.locatorFor('.bridge-badge');
   protected getCatalogBadge = this.locatorFor('.catalog-badge');
@@ -103,6 +106,12 @@ export class SettingsHarness extends ComponentHarness {
     const btn = await this.getApiKeyToggleBtn();
     if (!btn) throw new Error('API Key toggle visibility button not found');
     await btn.click();
+  }
+
+  async isApiKeyToggleBtnDisabled(): Promise<boolean> {
+    const btn = await this.getApiKeyToggleBtn();
+    if (!btn) throw new Error('API Key toggle visibility button not found');
+    return btn.isDisabled();
   }
 
   async getApiKeyInputType(): Promise<string | null> {

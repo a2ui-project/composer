@@ -63,13 +63,16 @@ describe('Settings', () => {
   let mockAuthOverride: WritableSignal<AuthType>;
   let mockRendererUrl: WritableSignal<string>;
   let mockGeminiApiKey: WritableSignal<string>;
+  let mockIsApiKeyProvidedByConfig: WritableSignal<boolean>;
   let mockConfigProvider: {
     initialize: Mock<() => Promise<void>>;
     authType: Signal<AuthType>;
     rendererUrl: Signal<string>;
     geminiApiKey: Signal<string>;
+    isApiKeyProvidedByConfig: Signal<boolean>;
     setRendererUrl: Mock<(url: string) => void>;
     setGeminiApiKey: Mock<(key: string) => void>;
+    setApiKeyFromConfig: Mock<(key: string) => void>;
     setForcedAuthMode: Mock<(mode: AuthType) => void>;
     flushConfig: Mock<() => void>;
     purgeGeminiApiKey: Mock<() => void>;
@@ -95,6 +98,7 @@ describe('Settings', () => {
     mockAuthOverride = signal<AuthType>(AuthType.DEFAULT);
     mockRendererUrl = signal<string>('http://resolved-url.com');
     mockGeminiApiKey = signal<string>('');
+    mockIsApiKeyProvidedByConfig = signal<boolean>(false);
 
     const mockAuthType = computed(() => {
       const override = mockAuthOverride();
@@ -111,10 +115,15 @@ describe('Settings', () => {
       authType: mockAuthType,
       rendererUrl: mockRendererUrl.asReadonly(),
       geminiApiKey: mockGeminiApiKey.asReadonly(),
+      isApiKeyProvidedByConfig: mockIsApiKeyProvidedByConfig.asReadonly(),
       setRendererUrl: vi.fn().mockImplementation((url: string) => {
         mockRendererUrl.set(url);
       }),
       setGeminiApiKey: vi.fn().mockImplementation((key: string) => {
+        mockGeminiApiKey.set(key);
+      }),
+      setApiKeyFromConfig: vi.fn().mockImplementation((key: string) => {
+        mockIsApiKeyProvidedByConfig.set(true);
         mockGeminiApiKey.set(key);
       }),
       setForcedAuthMode: vi.fn().mockImplementation((mode: AuthType) => {
@@ -336,6 +345,7 @@ describe('Settings', () => {
     });
     override envMode = signal(EnvMode.STANDALONE);
     override geminiApiKey = signal('');
+    override isApiKeyProvidedByConfig = signal(false);
     override includeScreenshot = signal(false);
     override rendererUrl = signal('');
     override themePreference = signal<ThemePreference>(ThemePreference.LIGHT);
@@ -344,6 +354,7 @@ describe('Settings', () => {
     override purgeGeminiApiKey = vi.fn();
     override setForcedAuthMode = vi.fn();
     override setGeminiApiKey = vi.fn();
+    override setApiKeyFromConfig = vi.fn();
     override setIncludeScreenshot = vi.fn();
     override setRendererUrl = vi.fn();
     override setThemePreference = vi.fn();
@@ -583,6 +594,73 @@ describe('Settings', () => {
       expect(component.saveErrorMessage()).toBe('Simulated Storage Rejection');
       expect(await harness.hasSaveErrorBanner()).toBe(true);
       expect(await harness.getSaveErrorBannerText()).toContain('Simulated Storage Rejection');
+    });
+  });
+
+  describe('API Key View Prohibition', () => {
+    it('disables API key toggle button and prohibits unmasking when isApiKeyProvidedByConfig is true', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      mockIsApiKeyProvidedByConfig.set(true);
+
+      const {component, harness} = await setupComponent();
+
+      expect(component.isApiKeyUnmaskDisabled()).toBe(true);
+      expect(await harness.isApiKeyToggleBtnDisabled()).toBe(true);
+
+      component.toggleHideApiKey();
+      expect(component.hideApiKey()).toBe(true);
+      expect(await harness.getApiKeyInputType()).toBe('password');
+    });
+
+    it('disables apiKey form control when isApiKeyProvidedByConfig is true', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      mockIsApiKeyProvidedByConfig.set(true);
+
+      const {component} = await setupComponent();
+
+      expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
+    });
+
+    it('does not invoke setGeminiApiKey when saving settings with config-provided API key', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      mockIsApiKeyProvidedByConfig.set(true);
+      mockGeminiApiKey.set('server-key');
+
+      const {component} = await setupComponent();
+      const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+
+      await component.saveSettings();
+
+      expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
+      expect(reloadSpy).toHaveBeenCalled();
+    });
+
+    it('disables API key toggle button and prohibits unmasking when context is locked', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      mockStartupResolution.isContextLocked.mockReturnValue(true);
+
+      const {component, harness} = await setupComponent();
+
+      expect(component.isApiKeyUnmaskDisabled()).toBe(true);
+      expect(await harness.isApiKeyToggleBtnDisabled()).toBe(true);
+
+      component.toggleHideApiKey();
+      expect(component.hideApiKey()).toBe(true);
+    });
+
+    it('enables API key toggle button and permits unmasking when key is user-provided and context is unlocked', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      mockIsApiKeyProvidedByConfig.set(false);
+      mockStartupResolution.isContextLocked.mockReturnValue(false);
+
+      const {component, harness} = await setupComponent();
+
+      expect(component.isApiKeyUnmaskDisabled()).toBe(false);
+      expect(await harness.isApiKeyToggleBtnDisabled()).toBe(false);
+
+      await harness.clickApiKeyToggleBtn();
+      expect(component.hideApiKey()).toBe(false);
+      expect(await harness.getApiKeyInputType()).toBe('text');
     });
   });
 });

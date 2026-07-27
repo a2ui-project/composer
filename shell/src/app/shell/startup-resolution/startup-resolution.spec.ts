@@ -25,7 +25,12 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
 class MockAppConfigProvider {
   geminiApiKey = signal<string>('');
+  isApiKeyProvidedByConfig = signal<boolean>(false);
   purgeGeminiApiKey = vi.fn().mockResolvedValue(undefined);
+  setApiKeyFromConfig = vi.fn().mockImplementation((key: string) => {
+    this.isApiKeyProvidedByConfig.set(true);
+    this.geminiApiKey.set(key);
+  });
 }
 
 describe('StartupResolution Task 2.6', () => {
@@ -270,6 +275,47 @@ describe('StartupResolution Task 2.6', () => {
     getItemSpy.mockImplementation(key => (key === LocalStorageKey.FORCE_3P ? 'true' : null));
 
     expect(customService.isThirdPartyEnvironment()).toBe(true);
+  });
+
+  describe('server api key in config.json', () => {
+    it('sets in-memory API key in AppConfigProvider when config.json provides apiKey property', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        apiKey: 'AIzaSyCamelKey',
+      });
+
+      const url = await service.resolveStartupConfiguration();
+
+      expect(url).toBe('http://base:3000');
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyCamelKey');
+      expect(service.isContextLocked()).toBe(false);
+    });
+
+    it('ignores empty or whitespace apiKey property in config.json', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        apiKey: '   ',
+      });
+
+      await service.resolveStartupConfiguration();
+
+      expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalled();
+    });
+
+    it('locks context strictly when allowOverrides is false regardless of apiKey presence', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: false,
+        apiKey: 'AIzaSyCamelKey',
+      });
+
+      await service.resolveStartupConfiguration();
+
+      expect(service.isContextLocked()).toBe(true);
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyCamelKey');
+    });
   });
 
   it('updates resolved renderer URL via setResolvedRendererUrl', () => {

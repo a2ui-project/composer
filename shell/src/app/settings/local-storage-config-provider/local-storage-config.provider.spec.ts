@@ -408,6 +408,71 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBeNull();
   });
 
+  describe('server-provided api key from config', () => {
+    it('defaults isApiKeyProvidedByConfig to false', () => {
+      const provider = setupProvider();
+      expect(provider.isApiKeyProvidedByConfig()).toBe(false);
+    });
+
+    it('sets in-memory geminiApiKey signal and isApiKeyProvidedByConfig flag without persisting to storage', async () => {
+      const setCredentialSpy = vi.spyOn(mockSecureStorage, 'setCredential');
+      const provider = setupProvider();
+
+      provider.setApiKeyFromConfig('  server-config-key  ');
+
+      expect(provider.isApiKeyProvidedByConfig()).toBe(true);
+      expect(provider.geminiApiKey()).toBe('server-config-key');
+      expect(setCredentialSpy).not.toHaveBeenCalled();
+      expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBeNull();
+    });
+
+    it('returns early and does not write to storage or reset isApiKeyProvidedByConfig flag when setGeminiApiKey is called while config-provided', async () => {
+      const setCredentialSpy = vi.spyOn(mockSecureStorage, 'setCredential');
+      const provider = setupProvider();
+
+      provider.setApiKeyFromConfig('server-config-key');
+      expect(provider.isApiKeyProvidedByConfig()).toBe(true);
+
+      await provider.setGeminiApiKey('user-attempted-key');
+
+      expect(provider.isApiKeyProvidedByConfig()).toBe(true);
+      expect(provider.geminiApiKey()).toBe('server-config-key');
+      expect(setCredentialSpy).not.toHaveBeenCalled();
+      expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBeNull();
+    });
+
+    it('preserves config-provided API key during initializeCredentials bootstrap', async () => {
+      await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'stored-key');
+      const provider = setupProvider();
+
+      provider.setApiKeyFromConfig('server-config-key');
+      await provider.initialize();
+
+      expect(provider.isApiKeyProvidedByConfig()).toBe(true);
+      expect(provider.geminiApiKey()).toBe('server-config-key');
+    });
+
+    it('resets isApiKeyProvidedByConfig flag to false when purgeGeminiApiKey is invoked', async () => {
+      const provider = setupProvider();
+      provider.setApiKeyFromConfig('server-config-key');
+
+      await provider.purgeGeminiApiKey();
+
+      expect(provider.isApiKeyProvidedByConfig()).toBe(false);
+      expect(provider.geminiApiKey()).toBe('');
+    });
+
+    it('resets isApiKeyProvidedByConfig flag to false when flushConfig is invoked', async () => {
+      const provider = setupProvider();
+      provider.setApiKeyFromConfig('server-config-key');
+
+      await provider.flushConfig();
+
+      expect(provider.isApiKeyProvidedByConfig()).toBe(false);
+      expect(provider.geminiApiKey()).toBe('');
+    });
+  });
+
   describe('under potential Server-Side Rendering (SSR) environments', () => {
     afterEach(() => {
       vi.unstubAllGlobals();

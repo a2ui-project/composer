@@ -96,6 +96,67 @@ test.describe('Settings and Client Configuration', () => {
       expect(rendererVal).toBe('http://locked-renderer.com');
     });
 
+    test('verifies server apiKey in config.json decouples context locking, disables API key unmasking, and does not persist key on save', async ({
+      page,
+    }) => {
+      await page.route('**/config.json', async route => {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            defaultRendererUrl: 'http://unlocked-renderer.com',
+            allowOverrides: true,
+            apiKey: 'server-provided-api-key',
+          }),
+        });
+      });
+
+      await page.goto('/settings');
+      await page.evaluate(() => {
+        try {
+          localStorage.setItem('a2ui_composer_force_3p', 'true');
+        } catch (e) {}
+      });
+      await page.reload();
+
+      // Context is unlocked because allowOverrides is true
+      await expect(page.getByLabel('Target Renderer URL')).toBeEnabled();
+
+      // Toggle button is disabled because API key was provided by config
+      await expect(page.locator('.api-key-toggle-btn')).toBeDisabled();
+
+      // Click 'Save Settings' and wait for navigation
+      const saveBtn = page.getByRole('button', {name: 'Save Settings'});
+      await Promise.all([page.waitForURL(url => url.pathname === '/'), saveBtn.click()]);
+      await page.waitForLoadState('load');
+
+      // Verify localStorage and IndexedDB have no stored credential
+      const storedKey = await page.evaluate(async () => {
+        const localVal = localStorage.getItem('a2ui_gemini_api_key');
+        if (localVal) return localVal;
+
+        return new Promise<string | null>(resolve => {
+          if (typeof indexedDB === 'undefined') {
+            resolve(null);
+            return;
+          }
+          const req = indexedDB.open('a2ui_secure_credentials_db', 2);
+          req.onsuccess = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains('credentials')) {
+              resolve(null);
+              return;
+            }
+            const tx = db.transaction('credentials', 'readonly');
+            const getReq = tx.objectStore('credentials').get('a2ui_gemini_api_key');
+            getReq.onsuccess = () => resolve(getReq.result ? 'found' : null);
+            getReq.onerror = () => resolve(null);
+          };
+          req.onerror = () => resolve(null);
+        });
+      });
+      expect(storedKey).toBeNull();
+    });
+
     test('verifies 1P vs 3P environment detection and disables chat panel on missing API keys', async ({
       page,
     }) => {

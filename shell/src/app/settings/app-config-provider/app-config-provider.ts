@@ -67,6 +67,9 @@ export abstract class AppConfigProvider {
   /** Ephemeral api key token for Gemini LLM handshakes. */
   abstract readonly geminiApiKey: Signal<string>;
 
+  /** Exposes whether the active Gemini API key was supplied via config.json. */
+  abstract readonly isApiKeyProvidedByConfig: Signal<boolean>;
+
   /** Exposes the active theme preference selection, light vs dark. */
   abstract readonly themePreference: Signal<ThemePreference>;
 
@@ -96,6 +99,13 @@ export abstract class AppConfigProvider {
    * @param key The fresh Gemini developer api key credential.
    */
   abstract setGeminiApiKey(key: string): Promise<void> | void;
+
+  /**
+   * Sets in-memory Gemini API key loaded from config.json without persisting it to storage.
+   *
+   * @param key The server-configured API key token.
+   */
+  abstract setApiKeyFromConfig(key: string): void;
 
   /**
    * Erases the Gemini developer API key credential from secure persistence

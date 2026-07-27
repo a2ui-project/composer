@@ -56,6 +56,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   /** Coordinates dynamic API key state tracking. */
   private readonly _geminiApiKey = signal<string>('');
 
+  /** Tracks whether the active API key was supplied via config.json. */
+  private readonly _isApiKeyProvidedByConfig = signal<boolean>(false);
+
   /** Coordinates dynamic renderer preview frame URL endpoint. */
   private readonly _rendererUrl = signal<string>(
     this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL) ||
@@ -84,6 +87,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
   /** Asynchronously resolves the sensitive Gemini API key from SecureCredentialsStorage. */
   private async initializeCredentials(): Promise<void> {
+    if (this._isApiKeyProvidedByConfig()) {
+      return;
+    }
     try {
       const key = await this.secureCredentialsStorage.getCredential(
         SecureCredentialsKey.GEMINI_API_KEY,
@@ -132,6 +138,10 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   /** Exposes the user-provided Gemini developer API key wrapper signal. */
   override readonly geminiApiKey: Signal<string> = this._geminiApiKey.asReadonly();
 
+  /** Exposes whether the active Gemini API key was supplied via config.json. */
+  override readonly isApiKeyProvidedByConfig: Signal<boolean> =
+    this._isApiKeyProvidedByConfig.asReadonly();
+
   /** Exposes active light/dark UI style theme preference signal wrapper. */
   override readonly themePreference: Signal<ThemePreference> = this._themePreference.asReadonly();
 
@@ -166,7 +176,11 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    * @param key The fresh Gemini developer API key credential.
    */
   override async setGeminiApiKey(key: string): Promise<void> {
+    if (this._isApiKeyProvidedByConfig()) {
+      return;
+    }
     const trimmedKey = key.trim();
+    this._isApiKeyProvidedByConfig.set(false);
     this._geminiApiKey.set(trimmedKey);
     try {
       await this.secureCredentialsStorage.setCredential(
@@ -179,10 +193,24 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   }
 
   /**
+   * Sets in-memory Gemini API key loaded from config.json without persisting it to storage.
+   *
+   * @param key The server-configured API key token.
+   */
+  override setApiKeyFromConfig(key: string): void {
+    const trimmed = key.trim();
+    if (trimmed) {
+      this._isApiKeyProvidedByConfig.set(true);
+      this._geminiApiKey.set(trimmed);
+    }
+  }
+
+  /**
    * Securely erases the Gemini developer API key token from SecureCredentialsStorage
    * and resets our in-memory reactive Signal to an empty string.
    */
   override async purgeGeminiApiKey(): Promise<void> {
+    this._isApiKeyProvidedByConfig.set(false);
     this._geminiApiKey.set('');
     await this.secureCredentialsStorage
       .removeCredential(SecureCredentialsKey.GEMINI_API_KEY)
@@ -233,6 +261,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     this.localStorageInteractions.removeItem(LocalStorageKey.THEME_PREFERENCE);
 
     this._forcedAuthOverride.set(AuthType.DEFAULT);
+    this._isApiKeyProvidedByConfig.set(false);
     this._geminiApiKey.set('');
     await this.startup.resolveStartupConfiguration();
     // Asynchronously re-evaluate default configuration fallbacks

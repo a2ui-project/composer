@@ -28,6 +28,7 @@ import {IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 export interface AppConfig {
   defaultRendererUrl: string;
   allowOverrides: boolean;
+  apiKey?: string;
 }
 
 @Injectable({
@@ -62,6 +63,7 @@ export class StartupResolution {
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     try {
+      console.log('Fetching config.json configuration...');
       const response = await fetch('config.json', {signal: controller.signal});
       if (response.ok) {
         // Although we *expect* JSON, it's possible that the response includes
@@ -84,7 +86,18 @@ export class StartupResolution {
     }
 
     if (staticConfig) {
+      console.log('Using static config.');
       this._resolvedUrl.set(staticConfig.defaultRendererUrl);
+      const configApiKey = staticConfig.apiKey;
+      if (typeof configApiKey === 'string' && configApiKey.trim().length > 0) {
+        try {
+          const configProvider = this.injector.get(AppConfigProvider);
+          configProvider.setApiKeyFromConfig(configApiKey);
+        } catch (err) {
+          console.warn('Failed to apply config-provided API key to AppConfigProvider:', err);
+        }
+      }
+
       if (!staticConfig.allowOverrides) {
         console.log('Static configuration loaded with allowOverrides: false. Locking context.');
         this._isLockedContext.set(true);
@@ -95,9 +108,11 @@ export class StartupResolution {
     }
 
     if (!this._isLockedContext()) {
+      console.log('Checking for renderer query param...')
       const queryCandidate = QueryParser.parseRendererUrl(this.getWindowSearch());
       if (queryCandidate) {
         this._resolvedUrl.set(queryCandidate);
+        console.log('Using renderer query param.')
         await this.evaluateEnvironmentPurge();
         return this._resolvedUrl();
       }
@@ -105,6 +120,7 @@ export class StartupResolution {
 
     const localPrefs = this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL);
     if (localPrefs && !this._isLockedContext()) {
+      console.log('Using renderer from local storage.')
       this._resolvedUrl.set(localPrefs);
     }
 
