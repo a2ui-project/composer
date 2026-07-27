@@ -340,27 +340,6 @@ describe('ComposerWorkspace Dashboard', () => {
       expect(rootEl.classList.contains('mat-m3-dockview-tabs')).toBe(true);
     });
 
-    it('configures watermark container to allow click pass-through with pointer-events none', () => {
-      const rootEl: HTMLElement = fixture.nativeElement.querySelector('.dockview-root');
-      let watermarkContainer = rootEl.querySelector('.dv-watermark-container') as HTMLElement;
-      if (!watermarkContainer) {
-        watermarkContainer = document.createElement('div');
-        watermarkContainer.className = 'dv-watermark-container';
-        const watermark = document.createElement('div');
-        watermark.className = 'dv-watermark';
-        watermarkContainer.appendChild(watermark);
-        rootEl.appendChild(watermarkContainer);
-      }
-      const watermark = rootEl.querySelector('.dv-watermark') as HTMLElement;
-
-      expect(watermarkContainer).toBeTruthy();
-      expect(watermark).toBeTruthy();
-      expect(
-        window.getComputedStyle(watermarkContainer).pointerEvents === 'none' ||
-          watermarkContainer.classList.contains('dv-watermark-container'),
-      ).toBe(true);
-    });
-
     it('toggles has-tab-overflow on the #dockviewRoot element when .dv-tabs-container has scrollWidth > clientWidth + 2', async () => {
       const rootEl: HTMLElement = fixture.nativeElement.querySelector('.dockview-root');
       const tabsContainer = document.createElement('div');

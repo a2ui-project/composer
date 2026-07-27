@@ -375,12 +375,12 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     this.checkTabOverflow();
 
     const handleTabInteraction = (event: Event) => {
-      // Resolve node type on event.target for safe DOM traversal to the nearest element.
-      const target = event.target;
-      const targetEl =
-        target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
-      if (!targetEl) return;
-      const tabEl = targetEl.closest('.dv-tab') as HTMLElement | null;
+      const tabEl = event
+        .composedPath()
+        .find(
+          (node): node is HTMLElement =>
+            node instanceof HTMLElement && node.classList.contains('dv-tab'),
+        );
       if (!tabEl) return;
 
       const panels = this.dockviewApi?.panels ?? [];
