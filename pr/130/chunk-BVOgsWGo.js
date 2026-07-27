@@ -1,0 +1,1 @@
+function s(r){let n=r.trim();if(n.startsWith("[")&&n.endsWith("]"))try{let t=JSON.parse(n);if(Array.isArray(t))return t}catch{}return null}function i(r){return JSON.stringify(r,null,2)}export{i,s};
