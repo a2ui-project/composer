@@ -202,4 +202,34 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     });
     expect(testVal).toBeNull();
   });
+
+  test('verifies clicking debug tabs switches active panels properly without being blocked by overlays', async ({
+    page,
+  }) => {
+    const eventsTab = page.locator('.dv-tab', {hasText: /^Events/});
+    const errorsTab = page.locator('.dv-tab', {hasText: /^Errors/});
+    const rawMessagesTab = page.locator('.dv-tab', {hasText: /^Raw Messages/});
+    const dataModelTab = page.locator('.dv-tab', {hasText: /^Data Model/});
+
+    await expect(eventsTab).toBeVisible();
+    await expect(errorsTab).toBeVisible();
+    await expect(rawMessagesTab).toBeVisible();
+    await expect(dataModelTab).toBeVisible();
+
+    await eventsTab.click();
+    await expect(page.locator('.events-container')).toBeVisible();
+
+    await errorsTab.click();
+    await expect(page.locator('.errors-container')).toBeVisible();
+
+    await rawMessagesTab.click();
+    await expect(page.locator('.raw-messages-container')).toBeVisible();
+
+    await dataModelTab.click();
+    await expect(page.locator('.data-model-container')).toBeVisible();
+
+    await expect(eventsTab).toBeVisible();
+    await eventsTab.click();
+    await expect(page.locator('.events-container')).toBeVisible();
+  });
 });

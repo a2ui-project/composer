@@ -252,3 +252,18 @@ body .mat-mdc-slide-toggle .mdc-label {
   line-height: 1.4 !important;
   color: var(--mat-sys-on-surface) !important;
 }
+
+// Ensures empty dockview panel/group watermark container overlays pass through
+// background pointer/click events to underlying layers (`pointer-events: none`),
+// while selectively preserving pointer interactivity (`pointer-events: auto`)
+// on action buttons, links, and active watermark cards.
+body .dockview-root .dv-watermark-container,
+body .dv-dockview .dv-watermark-container {
+  pointer-events: none !important;
+  user-select: none;
+
+  button,
+  a {
+    pointer-events: auto !important;
+  }
+}

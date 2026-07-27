@@ -29,6 +29,7 @@ import {
   ViewContainerRef,
   ComponentRef,
   Type,
+  ChangeDetectorRef,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ChatPanel} from '../../chat/chat-panel/chat-panel';
@@ -82,6 +83,9 @@ export enum ComposerPanelId {
 })
 export class ComposerWorkspace implements OnInit, AfterViewInit {
   private readonly destroyRef = inject(DestroyRef);
+  // Injected to notify zoneless Angular change detection when active panel
+  // signals update.
+  private readonly cdr = inject(ChangeDetectorRef);
   private startupResolution = inject(StartupResolution);
   private hostComm = inject(HostCommunication);
   private viewContainerRef = inject(ViewContainerRef);
@@ -275,6 +279,8 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
         untracked(() => this.unreadErrorsCount.set(0));
       }
       this.checkTabOverflow();
+      // Notify zoneless Angular change detection when active panel signals update.
+      this.cdr.markForCheck();
     });
 
     const savedLayout = this.storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
@@ -367,6 +373,42 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     this.dockviewApi.layout(width, height);
     this.isDockviewInitialized.set(true);
     this.checkTabOverflow();
+
+    const handleTabInteraction = (event: Event) => {
+      // Resolve node type on event.target for safe DOM traversal to the nearest element.
+      const target = event.target;
+      const targetEl =
+        target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+      if (!targetEl) return;
+      const tabEl = targetEl.closest('.dv-tab') as HTMLElement | null;
+      if (!tabEl) return;
+
+      const panels = this.dockviewApi?.panels ?? [];
+      for (const panel of panels) {
+        const panelTabEl = panel.view?.tab?.element;
+        if (panelTabEl && (panelTabEl === tabEl || panelTabEl.contains(tabEl))) {
+          if (panel.api && !panel.api.isActive) {
+            panel.api.setActive();
+          }
+          break;
+        }
+      }
+    };
+
+    const rootEl = this.dockviewRoot().nativeElement;
+    // Register capture-phase pointerdown and click event delegation on
+    // #dockviewRoot to bridge Dockview's internal pointerdown contract and
+    // ensure tab panel activation via panel.api.setActive().
+    rootEl.addEventListener('pointerdown', handleTabInteraction, true);
+    rootEl.addEventListener('click', handleTabInteraction, true);
+
+    // Register automatic event listener cleanup when the component is destroyed
+    // via destroyRef.onDestroy.
+    this.destroyRef.onDestroy(() => {
+      clearTimeout(saveTimeout);
+      rootEl.removeEventListener('pointerdown', handleTabInteraction, true);
+      rootEl.removeEventListener('click', handleTabInteraction, true);
+    });
   }
 
   /**

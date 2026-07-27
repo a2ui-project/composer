@@ -53,8 +53,16 @@
   --dv-tab-divider-color: var(--mat-sys-outline-variant);
   --dv-tabs-and-actions-container-background-color: var(--mat-sys-surface-container);
 
+  // We use Dockview's `defaultRenderer: 'always'` configuration option,
+  // which keeps all the tabs always mounted. In order to ensure the tabs
+  // remain interactive, we have to apply static z-index elevation and
+  // `pointer-events: auto`, ensuring tab header hit-testing is not intercepted
+  // by dockview watermark/overlay render containers.
   .dv-tabs-and-actions-container {
     border-bottom: 1px solid var(--mat-sys-outline-variant);
+    position: relative;
+    z-index: 5;
+    pointer-events: auto;
   }
 
   .dv-default-tab-action {
@@ -65,6 +73,11 @@
     display: none;
   }
 
+  // We use Dockview's `defaultRenderer: 'always'` configuration option,
+  // which keeps all the tabs always mounted. In order to ensure the tabs
+  // remain interactive, we have to apply static z-index elevation and
+  // `pointer-events: auto`, ensuring tab header hit-testing is not intercepted
+  // by dockview watermark/overlay render containers.
   .dv-tab {
     height: var(--dv-tabs-and-actions-container-height, 48px);
     padding: 0 16px 0 26px;
@@ -74,9 +87,13 @@
     position: relative;
     display: flex;
     align-items: center;
+    z-index: 5;
+    pointer-events: auto;
+    cursor: pointer;
 
     &:hover:not(.dv-tab--dragging) {
-      z-index: 10;
+      z-index: 20;
+      pointer-events: auto;
 
       .dv-default-tab::before {
         visibility: visible;
@@ -87,24 +104,30 @@
 
     .dv-default-tab {
       position: relative;
+      overflow: visible;
 
       &::before {
-        content: '\e945';
-        font-family: 'Material Icons', 'Material Symbols Outlined', sans-serif;
-        font-size: 18px;
+        content: '';
+        display: inline-block;
         position: absolute;
         left: -20px;
         top: 50%;
         transform: translateY(-50%);
         width: 18px;
         height: 18px;
-        line-height: 18px;
+        background-color: currentColor;
+        mask-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23000000"%3E%3Cpath d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/%3E%3C/svg%3E');
+        mask-size: contain;
+        mask-repeat: no-repeat;
+        mask-position: center;
+        -webkit-mask-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23000000"%3E%3Cpath d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/%3E%3C/svg%3E');
+        -webkit-mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-position: center;
         visibility: hidden;
         opacity: 0;
         z-index: 10;
         transition: opacity 0.2s ease;
-        // Prevent intercepting pointerdown/dragstart events handled by Dockview
-        // drag-and-drop.
         pointer-events: none;
       }
     }
@@ -117,6 +140,8 @@
     &[aria-selected='true']:focus-within {
       box-sizing: border-box;
       box-shadow: none;
+      z-index: 20;
+      pointer-events: auto;
 
       &::after {
         content: '';
