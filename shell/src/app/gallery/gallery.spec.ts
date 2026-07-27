@@ -864,7 +864,7 @@ describe('Gallery Component', () => {
     });
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to send A2UI render payload on RENDERER_READY:',
+      'Failed to parse component usage JSON:',
       expect.any(Error),
     );
     expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
@@ -970,5 +970,32 @@ describe('Gallery Component', () => {
     expect(rawJson).toContain('"components":');
     expect(rawJson).toContain('"id":"root"');
     expect(rawJson).toContain('"component":"Column"');
+  });
+
+  it('catches payload dispatch errors in dispatchSelectedComponentPayload and logs them via console.error without rethrowing', () => {
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
+    fixture.detectChanges();
+    TestBed.tick();
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(
+      fixture.componentInstance as unknown as Record<string, () => unknown>,
+      'buildA2UIPayload',
+    ).mockImplementation(() => {
+      throw new Error('Test dispatch error');
+    });
+
+    expect(() => {
+      (fixture.componentInstance as unknown as Record<string, () => void>)[
+        'dispatchSelectedComponentPayload'
+      ]();
+    }).not.toThrow();
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to parse component usage JSON:',
+      expect.any(Error),
+    );
+
+    consoleErrorSpy.mockRestore();
   });
 });

@@ -74,11 +74,7 @@ export class Gallery implements OnInit, OnDestroy {
         takeUntilDestroyed(),
       )
       .subscribe(() => {
-        try {
-          this.dispatchSelectedComponentPayload();
-        } catch (e) {
-          console.error('Failed to send A2UI render payload on RENDERER_READY:', e);
-        }
+        this.dispatchSelectedComponentPayload();
       });
 
     effect(() => {
@@ -133,7 +129,6 @@ export class Gallery implements OnInit, OnDestroy {
       this.hostCommunication.sendRenderA2UI(payload);
     } catch (e) {
       console.error('Failed to parse component usage JSON:', e);
-      throw e;
     }
   }
 

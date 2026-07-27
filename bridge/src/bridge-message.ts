@@ -137,6 +137,7 @@ export declare interface RenderA2uiItem {
 /** Minimal catalog definition representation used by the Preview Bridge. */
 export declare interface CatalogDetails {
   catalogId?: string;
+  id?: string;
   $id?: string;
   [key: string]: unknown;
 }
