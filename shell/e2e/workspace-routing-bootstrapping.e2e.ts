@@ -30,8 +30,12 @@ test.describe('Startup Resolution & Redirection', () => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
-          allowOverrides: true,
-          // no defaultRendererUrl
+          profiles: {
+            default: {
+              allowOverrides: true,
+              // no rendererUrl
+            },
+          },
         }),
       });
     });
@@ -48,6 +52,31 @@ test.describe('Startup Resolution & Redirection', () => {
     await page.waitForURL(url => url.pathname === '/');
     await expect(page.locator('.workspace-container')).toBeVisible();
     await expect(page.locator('.disabled-chat-panel')).toBeVisible();
+  });
+
+  test('bootstraps workspace successfully using ?profile=<name> query parameter', async ({
+    page,
+  }) => {
+    await page.route('**/config.json', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          profiles: {
+            default: {
+              allowOverrides: true,
+            },
+            custom: {
+              rendererUrl: 'http://custom-profile-renderer.com',
+              allowOverrides: true,
+            },
+          },
+        }),
+      });
+    });
+    await page.goto('/?profile=custom');
+    await page.waitForURL(url => url.pathname === '/');
+    await expect(page).toHaveTitle(/A2UI Composer/);
+    await expect(page.locator('.workspace-container')).toBeVisible();
   });
 });
 

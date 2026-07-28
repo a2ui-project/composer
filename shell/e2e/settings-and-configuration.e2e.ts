@@ -84,8 +84,12 @@ test.describe('Settings and Client Configuration', () => {
         await route.fulfill({
           contentType: 'application/json',
           body: JSON.stringify({
-            defaultRendererUrl: 'http://locked-renderer.com',
-            allowOverrides: false,
+            profiles: {
+              default: {
+                rendererUrl: 'http://locked-renderer.com',
+                allowOverrides: false,
+              },
+            },
           }),
         });
       });
@@ -103,9 +107,13 @@ test.describe('Settings and Client Configuration', () => {
         await route.fulfill({
           contentType: 'application/json',
           body: JSON.stringify({
-            defaultRendererUrl: 'http://unlocked-renderer.com',
-            allowOverrides: true,
-            apiKey: 'server-provided-api-key',
+            profiles: {
+              default: {
+                rendererUrl: 'http://unlocked-renderer.com',
+                allowOverrides: true,
+                apiKey: 'server-provided-api-key',
+              },
+            },
           }),
         });
       });

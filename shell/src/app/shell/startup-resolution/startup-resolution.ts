@@ -31,10 +31,7 @@ export declare interface ProfileConfig {
   allowOverrides?: boolean;
 }
 
-export declare interface AppConfig extends ProfileConfig {
-  defaultRendererUrl: string;
-  apiKey?: string;
-  allowOverrides: boolean;
+export declare interface AppConfig {
   profiles?: Record<string, ProfileConfig>;
 }
 
@@ -65,6 +62,24 @@ export class StartupResolution {
    * @return A Promise resolving to the resolved renderer URL, or null if unresolvable.
    */
   async resolveStartupConfiguration(): Promise<string | null> {
+    this._isLockedContext.set(false);
+    this._resolvedUrl.set(null);
+
+    const staticConfig = await this.fetchStaticConfig();
+    if (staticConfig) {
+      const isLocked = await this.processStaticConfig(staticConfig);
+      if (isLocked) {
+        return this._resolvedUrl();
+      }
+    }
+
+    this.applyOverrides();
+    await this.evaluateEnvironmentPurge();
+
+    return this._resolvedUrl();
+  }
+
+  private async fetchStaticConfig(): Promise<AppConfig | null> {
     let staticConfig: AppConfig | null = null;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -92,78 +107,107 @@ export class StartupResolution {
       clearTimeout(timeoutId);
     }
 
-    if (staticConfig) {
-      console.log('Using static config.');
-      const requestedProfile = QueryParser.parseProfileName(this.getWindowSearch());
-      if (requestedProfile) {
-        const hasProfile =
-          staticConfig.profiles &&
-          Object.prototype.hasOwnProperty.call(staticConfig.profiles, requestedProfile);
-        if (hasProfile) {
-          const profileConfig = staticConfig.profiles![requestedProfile];
-          const allowOverrides =
-            staticConfig.allowOverrides && (profileConfig.allowOverrides ?? true);
-          const defaultRendererUrl = profileConfig.rendererUrl ?? staticConfig.defaultRendererUrl;
-          staticConfig = {
-            ...staticConfig,
-            ...profileConfig,
-            defaultRendererUrl,
-            allowOverrides,
-          };
-        } else {
-          console.warn(
-            `Requested profile '${requestedProfile}' not found in static configuration.`,
-          );
+    return staticConfig;
+  }
+
+  private selectActiveProfile(staticConfig: AppConfig): ProfileConfig {
+    const profiles = staticConfig.profiles;
+    let defaultProfile: ProfileConfig = {};
+    if (
+      profiles &&
+      typeof profiles === 'object' &&
+      Object.prototype.hasOwnProperty.call(profiles, 'default')
+    ) {
+      const dp = profiles['default'];
+      if (dp && typeof dp === 'object') {
+        defaultProfile = dp;
+      }
+    }
+
+    const requestedProfile = QueryParser.parseProfileName(this.getWindowSearch());
+    let activeProfile: ProfileConfig = defaultProfile;
+
+    if (requestedProfile) {
+      let foundProfile: ProfileConfig | null = null;
+      if (
+        profiles &&
+        typeof profiles === 'object' &&
+        Object.prototype.hasOwnProperty.call(profiles, requestedProfile)
+      ) {
+        const profileConfig = profiles[requestedProfile];
+        if (profileConfig && typeof profileConfig === 'object') {
+          foundProfile = profileConfig;
         }
       }
 
-      const apiKey = staticConfig.apiKey?.trim();
-      if (apiKey) {
+      if (foundProfile) {
+        activeProfile = foundProfile;
+      } else {
+        console.warn(`Requested profile '${requestedProfile}' not found in static configuration.`);
+      }
+    }
+
+    return activeProfile;
+  }
+
+  private applyApiKeyFromProfile(profile: ProfileConfig): void {
+    const rawApiKey = profile.apiKey;
+    const apiKey = typeof rawApiKey === 'string' ? rawApiKey.trim() : '';
+    if (apiKey) {
+      try {
         const configProvider = this.injector.get(AppConfigProvider);
-        await configProvider.setGeminiApiKey(apiKey);
+        configProvider.setApiKeyFromConfig(apiKey);
+      } catch (err) {
+        console.warn('Failed to apply config-provided API key to AppConfigProvider:', err);
       }
+    }
+  }
 
-      this._resolvedUrl.set(staticConfig.defaultRendererUrl);
-      const rawApiKey = staticConfig.apiKey;
-      const configApiKey = typeof rawApiKey === 'string' ? rawApiKey.trim() : '';
-      if (configApiKey) {
-        try {
-          const configProvider = this.injector.get(AppConfigProvider);
-          configProvider.setApiKeyFromConfig(configApiKey);
-        } catch (err) {
-          console.warn('Failed to apply config-provided API key to AppConfigProvider:', err);
-        }
-      }
+  private async processStaticConfig(staticConfig: AppConfig): Promise<boolean> {
+    console.log('Using static config.');
+    const activeProfile = this.selectActiveProfile(staticConfig);
+    this.applyApiKeyFromProfile(activeProfile);
 
-      if (!staticConfig.allowOverrides) {
+    if (activeProfile.rendererUrl) {
+      this._resolvedUrl.set(activeProfile.rendererUrl);
+    }
+
+    const allowOverrides = activeProfile.allowOverrides ?? true;
+    if (!allowOverrides) {
+      if (!activeProfile.rendererUrl) {
+        console.warn(
+          'Static profile sets allowOverrides: false but specifies no rendererUrl. Bypassing lock.',
+        );
+      } else {
         console.log('Static configuration loaded with allowOverrides: false. Locking context.');
         this._isLockedContext.set(true);
 
         await this.evaluateEnvironmentPurge();
-        return this._resolvedUrl();
+        return true;
       }
     }
 
-    if (!this._isLockedContext()) {
-      console.log('Checking for renderer query param...');
-      const queryCandidate = QueryParser.parseRendererUrl(this.getWindowSearch());
-      if (queryCandidate) {
-        this._resolvedUrl.set(queryCandidate);
-        console.log('Using renderer query param.');
-        await this.evaluateEnvironmentPurge();
-        return this._resolvedUrl();
-      }
+    return false;
+  }
+
+  private applyOverrides(): void {
+    if (this._isLockedContext()) {
+      return;
+    }
+
+    console.log('Checking for renderer query param...');
+    const queryCandidate = QueryParser.parseRendererUrl(this.getWindowSearch());
+    if (queryCandidate) {
+      this._resolvedUrl.set(queryCandidate);
+      console.log('Using renderer query param.');
+      return;
     }
 
     const localPrefs = this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL);
-    if (localPrefs && !this._isLockedContext()) {
+    if (localPrefs) {
       console.log('Using renderer from local storage.');
       this._resolvedUrl.set(localPrefs);
     }
-
-    await this.evaluateEnvironmentPurge();
-
-    return this._resolvedUrl();
   }
 
   getResolvedRendererUrl(): string | null {
@@ -239,7 +283,9 @@ export class StartupResolution {
       try {
         const configProvider = this.injector.get(AppConfigProvider);
         await configProvider.purgeGeminiApiKey();
-      } catch (e) {}
+      } catch (err) {
+        console.warn('Failed to purge Gemini API key in 1P environment:', err);
+      }
     }
   }
 }

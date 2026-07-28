@@ -73,6 +73,19 @@ test.beforeEach(async ({page}) => {
     console.error(`Unhandled page error: ${err.message}`);
   });
 
+  await page.route('**/config.json', async route => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profiles: {
+          default: {
+            allowOverrides: true,
+          },
+        },
+      }),
+    });
+  });
+
   await page.addInitScript(() => {
     try {
       localStorage.setItem('a2ui_composer_force_1p', 'true');
@@ -295,8 +308,8 @@ test.describe('Bridge Telemetry Layout Constraints', () => {
       window.parent.postMessage(msg, '*');
     }, unblockMsg);
 
-    await expect(page.getByTestId('raw-message-envelope').first()).toBeVisible();
-    const envText = await page.getByTestId('raw-message-envelope').first().textContent();
-    expect(envText).toContain(PreviewBridgeMessageType.FORCE_UNBLOCK);
+    const envelope = page.getByTestId('raw-message-envelope').first();
+    await expect(envelope).toBeVisible();
+    await expect(envelope).toContainText(PreviewBridgeMessageType.FORCE_UNBLOCK);
   });
 });

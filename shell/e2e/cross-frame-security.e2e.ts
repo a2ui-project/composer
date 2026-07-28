@@ -19,6 +19,18 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
 test.describe('Cross-Frame Security & Sandboxing', () => {
   test.beforeEach(async ({page}) => {
+    await page.route('**/config.json', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          profiles: {
+            default: {
+              allowOverrides: true,
+            },
+          },
+        }),
+      });
+    });
     await page.addInitScript(() => {
       try {
         localStorage.setItem('a2ui_composer_force_1p', 'true');
@@ -81,9 +93,9 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
     await expect(page.locator('.workspace-container')).toBeVisible();
 
     await page.getByRole('tab', {name: 'Raw Messages'}).click();
-    await expect(page.getByTestId('raw-message-envelope')).toBeVisible();
-    const envText = await page.getByTestId('raw-message-envelope').textContent();
-    expect(envText).toContain(PreviewBridgeMessageType.RENDERER_READY);
-    expect(envText).toContain('http://custom-renderer.com');
+    const envelope = page.getByTestId('raw-message-envelope');
+    await expect(envelope).toBeVisible();
+    await expect(envelope).toContainText(PreviewBridgeMessageType.RENDERER_READY);
+    await expect(envelope).toContainText('http://custom-renderer.com');
   });
 });

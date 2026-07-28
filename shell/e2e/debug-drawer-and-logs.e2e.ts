@@ -22,6 +22,19 @@ test.beforeEach(async ({page}) => {
     console.error(`Unhandled page error: ${err.message}`);
   });
 
+  await page.route('**/config.json', async route => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profiles: {
+          default: {
+            allowOverrides: true,
+          },
+        },
+      }),
+    });
+  });
+
   // Mock custom renderer response
   await page.route('http://custom-renderer.com/*', async route => {
     await route.fulfill({
@@ -30,8 +43,7 @@ test.beforeEach(async ({page}) => {
     });
   });
 
-  await page.goto('/?renderer=http://custom-renderer.com/index.html');
-  await page.evaluate(() => {
+  await page.addInitScript(() => {
     try {
       localStorage.clear();
       localStorage.setItem('a2ui_composer_force_1p', 'true');
@@ -119,10 +131,9 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     await page.locator('.dv-tab', {hasText: /^Errors/}).click();
     const errorRow = page.locator('.errors-container table tr.element-row').first();
     await expect(errorRow).toBeVisible();
-    const rowText = await errorRow.textContent();
-    expect(rowText).toContain('warn');
-    expect(rowText).toContain('console');
-    expect(rowText).toContain('Telemetry active warn');
+    await expect(errorRow).toContainText('warn');
+    await expect(errorRow).toContainText('console');
+    await expect(errorRow).toContainText('Telemetry active warn');
   });
 
   test('verifies unread tab badging animations and resets', async ({page}) => {
