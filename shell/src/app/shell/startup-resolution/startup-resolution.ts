@@ -29,7 +29,6 @@ export interface AppConfig {
   defaultRendererUrl: string;
   allowOverrides: boolean;
   apiKey?: string;
-  'api-key'?: string;
 }
 
 @Injectable({
@@ -89,7 +88,7 @@ export class StartupResolution {
     if (staticConfig) {
       console.log('Using static config.');
       this._resolvedUrl.set(staticConfig.defaultRendererUrl);
-      const rawApiKey = staticConfig.apiKey ?? staticConfig['api-key'];
+      const rawApiKey = staticConfig.apiKey;
       const configApiKey = typeof rawApiKey === 'string' ? rawApiKey.trim() : '';
       if (configApiKey) {
         try {

@@ -328,18 +328,6 @@ describe('StartupResolution Task 2.6', () => {
 
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyTrimmedKey');
     });
-
-    it('supports api-key kebab-case property with immediate trimming', async () => {
-      mockFetchConfig({
-        defaultRendererUrl: 'http://base:3000',
-        allowOverrides: true,
-        'api-key': '   AIzaSyKebabKey   ',
-      });
-
-      await service.resolveStartupConfiguration();
-
-      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyKebabKey');
-    });
   });
 
   it('updates resolved renderer URL via setResolvedRendererUrl', () => {
