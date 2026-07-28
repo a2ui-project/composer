@@ -179,6 +179,13 @@ describe('ComposerShell Layout', () => {
     },
   );
 
+  it('ensures mat-sidenav-content margin-left is 0px to eliminate whitespace gap', async () => {
+    const sidenavContent = fixture.nativeElement.querySelector('mat-sidenav-content');
+    expect(sidenavContent).toBeTruthy();
+    const computedStyle = window.getComputedStyle(sidenavContent);
+    expect(['0', '0px']).toContain(computedStyle.marginLeft);
+  });
+
   it('reads the persisted theme preference from storage on initialization', async () => {
     configProviderMock.themePreference.set(ThemePreference.DARK);
     const newFixture = TestBed.createComponent(ComposerShell);
