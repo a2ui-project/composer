@@ -1,0 +1,10 @@
+{
+  "defaultRendererUrl": "https://a2ui-project.github.io/composer/samples/ng-basic-catalog/",
+  "allowOverrides": true,
+  "profiles": {
+    "dev": {
+      "rendererUrl": "locahost:4200/samples/ng-basic-catalog",
+      "allowOverrides": true
+    }
+  }
+}
