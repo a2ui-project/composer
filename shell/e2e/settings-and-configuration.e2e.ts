@@ -134,13 +134,10 @@ test.describe('Settings and Client Configuration', () => {
         });
       });
 
-      await page.goto('/settings');
-      await page.evaluate(() => {
-        try {
-          localStorage.setItem('a2ui_composer_force_3p', 'true');
-        } catch (e) {}
+      await page.addInitScript(() => {
+        localStorage.setItem('a2ui_composer_force_3p', 'true');
       });
-      await page.reload();
+      await page.goto('/settings');
 
       // Context is unlocked because allowOverrides is true
       await expect(page.getByLabel('Target Renderer URL')).toBeEnabled();
@@ -184,13 +181,11 @@ test.describe('Settings and Client Configuration', () => {
     test('verifies 1P vs 3P environment detection and disables chat panel on missing API keys', async ({
       page,
     }) => {
-      await page.goto('/?renderer=http://localhost:3000');
-      await page.evaluate(() => {
+      await page.addInitScript(() => {
         localStorage.setItem('a2ui_composer_force_3p', 'true');
         localStorage.removeItem('a2ui_composer_force_1p');
       });
-      await page.reload();
-      await page.waitForURL(url => url.pathname === '/');
+      await page.goto('/?renderer=http://localhost:3000');
       await expect(page.locator('.disabled-chat-panel')).toBeVisible();
       await expect(page.locator('.disabled-notice-text')).toContainText(
         'This feature is only available with a valid Gemini API key.',

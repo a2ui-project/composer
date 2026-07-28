@@ -85,7 +85,7 @@ export class StartupResolution {
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     try {
-      console.log('Fetching config.json configuration...');
+      console.log(`Fetching ${this.configUrl} configuration...`);
       const response = await fetch(this.configUrl, {signal: controller.signal});
       if (response.ok) {
         // Although we *expect* JSON, it's possible that the response includes
@@ -99,10 +99,7 @@ export class StartupResolution {
         staticConfig = JSON.parse(cleanText);
       }
     } catch (err) {
-      console.warn(
-        'Watchdog timeout or failure fetching config.json. Allowing overrides fallbacks.',
-        err,
-      );
+      console.warn(`Watchdog timeout or failure fetching ${this.configUrl}`, err);
     } finally {
       clearTimeout(timeoutId);
     }

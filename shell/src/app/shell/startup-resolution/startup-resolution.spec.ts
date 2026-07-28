@@ -780,6 +780,7 @@ describe('StartupResolution Task 2.6', () => {
     });
 
     it('fetches runtime configuration from custom CONFIG_URL when overridden in injector', async () => {
+      const logSpy = vi.spyOn(console, 'log');
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(
           JSON.stringify({
@@ -791,6 +792,7 @@ describe('StartupResolution Task 2.6', () => {
 
       const url = await customService.resolveStartupConfiguration();
 
+      expect(logSpy).toHaveBeenCalledWith('Fetching /custom/config.json configuration...');
       expect(fetchSpy).toHaveBeenCalledWith(
         '/custom/config.json',
         expect.objectContaining({signal: expect.any(AbortSignal)}),
@@ -811,7 +813,7 @@ describe('StartupResolution Task 2.6', () => {
         expect.objectContaining({signal: expect.any(AbortSignal)}),
       );
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Watchdog timeout or failure fetching config.json'),
+        expect.stringContaining('Watchdog timeout or failure fetching /custom/config.json'),
         expect.any(Error),
       );
       expect(url).toBe('http://fallback-storage:3000');
