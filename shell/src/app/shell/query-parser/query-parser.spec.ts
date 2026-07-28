@@ -117,4 +117,52 @@ describe('QueryParser', () => {
       );
     });
   });
+
+  describe('isProhibitedKey', () => {
+    it('detects prohibited credential keys including uppercase, ALL-CAPS, standard, and trailing digit keys', () => {
+      const prohibitedKeys = [
+        'APIKEY',
+        'API_KEY',
+        'AUTH_TOKEN',
+        'APPSECRET',
+        'KEY',
+        'SECRET',
+        'key1',
+        'token2',
+        'apiKey',
+        'api_key',
+        'apikey',
+      ];
+      for (const key of prohibitedKeys) {
+        expect(QueryParser['isProhibitedKey'](key)).toBe(true);
+      }
+    });
+
+    it('allows benign keys ending with false-positive suffixes', () => {
+      const benignKeys = [
+        'hockey',
+        'turkey',
+        'monkey',
+        'donkey',
+        'whiskey',
+        'lackey',
+        'jockey',
+        'hockey1',
+        'turkey2',
+        'HOCKEY',
+      ];
+      for (const key of benignKeys) {
+        expect(QueryParser['isProhibitedKey'](key)).toBe(false);
+      }
+    });
+
+    it('detects prohibited keys like hockeyKey', () => {
+      expect(QueryParser['isProhibitedKey']('hockeyKey')).toBe(true);
+    });
+
+    it('allows URL parsing when benign query parameters are present', () => {
+      const url = QueryParser.parseRendererUrl('?renderer=http://localhost:3000&hockey=puck');
+      expect(url).toBe('http://localhost:3000/');
+    });
+  });
 });

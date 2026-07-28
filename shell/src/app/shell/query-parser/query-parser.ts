@@ -21,8 +21,21 @@
 export class QueryParser {
   /** @nocollapse */
   private static isProhibitedKey(key: string): boolean {
-    const lowerKey = key.toLowerCase();
-    return lowerKey.includes('key') || lowerKey.includes('token') || lowerKey.includes('secret');
+    const words = key
+      .split(/(?<=[a-z0-9])(?=[A-Z])|[^a-zA-Z0-9]+/)
+      .map(w => w.toLowerCase())
+      .filter(Boolean);
+    const exclusions = ['monkey', 'donkey', 'hockey', 'turkey', 'whiskey', 'lackey', 'jockey'];
+
+    return words.some(word => {
+      const isProhibited =
+        /key\d*$/.test(word) || /token\d*$/.test(word) || /secret\d*$/.test(word);
+      if (isProhibited) {
+        const wordBase = word.replace(/\d+$/, '');
+        return !exclusions.some(exc => wordBase.endsWith(exc));
+      }
+      return false;
+    });
   }
 
   /** @nocollapse */
