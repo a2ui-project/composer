@@ -25,10 +25,17 @@ import {IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
  * Represents the resolved runtime configuration for the application,
  * including target endpoints, mode flags, and active catalog IDs.
  */
-export interface AppConfig {
-  defaultRendererUrl: string;
-  allowOverrides: boolean;
+export declare interface ProfileConfig {
+  rendererUrl?: string;
   apiKey?: string;
+  allowOverrides?: boolean;
+}
+
+export declare interface AppConfig extends ProfileConfig {
+  defaultRendererUrl: string;
+  apiKey?: string;
+  allowOverrides: boolean;
+  profiles?: Record<string, ProfileConfig>;
 }
 
 @Injectable({
@@ -87,6 +94,29 @@ export class StartupResolution {
 
     if (staticConfig) {
       console.log('Using static config.');
+      const requestedProfile = QueryParser.parseProfileName(this.getWindowSearch());
+      if (requestedProfile) {
+        const hasProfile =
+          staticConfig.profiles &&
+          Object.prototype.hasOwnProperty.call(staticConfig.profiles, requestedProfile);
+        if (hasProfile) {
+          const profileConfig = staticConfig.profiles![requestedProfile];
+          const allowOverrides =
+            staticConfig.allowOverrides && (profileConfig.allowOverrides ?? true);
+          const defaultRendererUrl = profileConfig.rendererUrl ?? staticConfig.defaultRendererUrl;
+          staticConfig = {
+            ...staticConfig,
+            ...profileConfig,
+            defaultRendererUrl,
+            allowOverrides,
+          };
+        } else {
+          console.warn(
+            `Requested profile '${requestedProfile}' not found in static configuration.`,
+          );
+        }
+      }
+
       this._resolvedUrl.set(staticConfig.defaultRendererUrl);
       const rawApiKey = staticConfig.apiKey;
       const configApiKey = typeof rawApiKey === 'string' ? rawApiKey.trim() : '';

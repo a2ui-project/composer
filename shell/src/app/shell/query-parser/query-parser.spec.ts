@@ -80,4 +80,41 @@ describe('QueryParser', () => {
       expect.stringContaining('Malformed renderer parameter string encountered'),
     );
   });
+
+  describe('parseProfileName', () => {
+    it('parses profile name from ?profile query parameter', () => {
+      expect(QueryParser.parseProfileName('?profile=ge')).toBe('ge');
+    });
+
+    it('parses profile name from ?config query parameter as fallback', () => {
+      expect(QueryParser.parseProfileName('?config=dev')).toBe('dev');
+    });
+
+    it('prefers ?profile parameter over ?config parameter when both exist', () => {
+      expect(QueryParser.parseProfileName('?profile=ge&config=dev')).toBe('ge');
+    });
+
+    it('rejects profile names with invalid characters', () => {
+      expect(QueryParser.parseProfileName('?profile=testing/invalid')).toBeNull();
+      expect(QueryParser.parseProfileName('?profile=testing<script>')).toBeNull();
+    });
+
+    it('rejects profile name parsing when prohibited credential keys are present in query string', () => {
+      const warnSpy = vi.spyOn(console, 'warn');
+      expect(QueryParser.parseProfileName('?profile=testing&apiKey=secret')).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Security Violation: Prohibited credentials'),
+      );
+    });
+
+    it('rejects unseparated prohibited credential keys like apikey or authtoken', () => {
+      const warnSpy = vi.spyOn(console, 'warn');
+      expect(QueryParser.parseProfileName('?profile=testing&apikey=secret')).toBeNull();
+      expect(QueryParser.parseRendererUrl('?renderer=http://host:3000&authtoken=123')).toBeNull();
+      expect(QueryParser.parseRendererUrl('?renderer=http://host:3000&appsecret=abc')).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Security Violation: Prohibited credentials'),
+      );
+    });
+  });
 });

@@ -337,4 +337,126 @@ describe('StartupResolution Task 2.6', () => {
     service.setResolvedRendererUrl(null);
     expect(service.getResolvedRendererUrl()).toBeNull();
   });
+
+  describe('profile resolution', () => {
+    it('merges profile overrides when valid profile param is supplied', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        profiles: {
+          ge: {
+            rendererUrl: 'http://testing-renderer:3000',
+          },
+        },
+      });
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=ge');
+
+      const url = await service.resolveStartupConfiguration();
+      expect(url).toBe('http://testing-renderer:3000');
+    });
+
+    it('logs warning and uses root defaults when requested profile does not exist', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        profiles: {
+          ge: {
+            rendererUrl: 'http://testing-renderer:3000',
+          },
+        },
+      });
+
+      const warnSpy = vi.spyOn(console, 'warn');
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=unknown');
+
+      const url = await service.resolveStartupConfiguration();
+      expect(url).toBe('http://base:3000');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Requested profile 'unknown' not found"),
+      );
+    });
+
+    it('locks context immediately when merged profile sets allowOverrides to false', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        profiles: {
+          locked: {
+            allowOverrides: false,
+          },
+        },
+      });
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
+        '?profile=locked&renderer=http://override:3000',
+      );
+      localStorage.setItem(LocalStorageKey.RENDERER_URL, 'http://storage:3000');
+
+      const url = await service.resolveStartupConfiguration();
+      expect(url).toBe('http://base:3000');
+      expect(service.isContextLocked()).toBe(true);
+    });
+
+    it('allows renderer query override over profile defaults when merged allowOverrides is true', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        profiles: {
+          ge: {
+            rendererUrl: 'http://testing-renderer:3000',
+          },
+        },
+      });
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
+        '?profile=ge&renderer=http://custom-renderer:3000',
+      );
+
+      const url = await service.resolveStartupConfiguration();
+      expect(url).toBe('http://custom-renderer:3000/');
+    });
+
+    it('handles prototype property names in profile parameter safely', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        profiles: {
+          ge: {
+            rendererUrl: 'http://testing-renderer:3000',
+          },
+        },
+      });
+
+      const warnSpy = vi.spyOn(console, 'warn');
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=constructor');
+
+      const url = await service.resolveStartupConfiguration();
+      expect(url).toBe('http://base:3000');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Requested profile 'constructor' not found"),
+      );
+    });
+
+    it('prevents profile from enabling allowOverrides when root configuration is locked', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: false,
+        profiles: {
+          unlockAttempt: {
+            allowOverrides: true,
+            rendererUrl: 'http://unlock-renderer:3000',
+          },
+        },
+      });
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
+        '?profile=unlockAttempt&renderer=http://malicious-override:3000',
+      );
+
+      const url = await service.resolveStartupConfiguration();
+      expect(url).toBe('http://unlock-renderer:3000');
+      expect(service.isContextLocked()).toBe(true);
+    });
+  });
 });
