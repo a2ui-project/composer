@@ -20,7 +20,7 @@ import {StartupResolution} from './startup-resolution';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
+import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
 class MockAppConfigProvider {
@@ -151,6 +151,20 @@ describe('StartupResolution Task 2.6', () => {
     expect(url).toBe('http://fallback-storage:3000');
   });
 
+  it('handles malformed JSON response gracefully and falls back to local storage', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('invalid json payload'));
+    const warnSpy = vi.spyOn(console, 'warn');
+
+    localStorage.setItem(LocalStorageKey.RENDERER_URL, 'http://fallback-storage:3000');
+
+    const url = await service.resolveStartupConfiguration();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Watchdog timeout or failure fetching config.json'),
+      expect.any(SyntaxError),
+    );
+    expect(url).toBe('http://fallback-storage:3000');
+  });
+
   it('identifies 3P environment based on hostname or local overrides when 1P auth is enabled', () => {
     const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
     const hostnameSpy = vi.spyOn(service, 'getWindowHostname');
@@ -196,6 +210,10 @@ describe('StartupResolution Task 2.6', () => {
     // Scenario 2: URL resolved, and 3P has API key -> valid
     mockConfigProvider.geminiApiKey.set('AIzaSyValidKey');
     expect(await service.isEnvironmentValid()).toBe(true);
+
+    // Scenario 3: URL resolved is null -> invalid
+    service.setResolvedRendererUrl(null);
+    expect(await service.isEnvironmentValid()).toBe(false);
   });
 
   it('purges Gemini API key via AppConfigProvider when operating in 1P environments', async () => {
@@ -317,7 +335,7 @@ describe('StartupResolution Task 2.6', () => {
         StartupResolution,
         LocalStorageInteractions,
         {provide: AppConfigProvider, useValue: mockConfigProvider},
-        {provide: IS_1P_AUTH_ENABLED, useValue: true},
+        {provide: IS_1P_AUTH_ENABLED, useValue: false},
       ],
     });
     const customService = TestBed.inject(StartupResolution);
@@ -741,6 +759,78 @@ describe('StartupResolution Task 2.6', () => {
       await service.resolveStartupConfiguration();
       expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalled();
       expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('with custom CONFIG_URL provider', () => {
+    let customService: StartupResolution;
+
+    beforeEach(() => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          StartupResolution,
+          LocalStorageInteractions,
+          {provide: AppConfigProvider, useValue: mockConfigProvider},
+          {provide: IS_1P_AUTH_ENABLED, useValue: true},
+          {provide: CONFIG_URL, useValue: '/custom/config.json'},
+        ],
+      });
+      customService = TestBed.inject(StartupResolution);
+    });
+
+    it('fetches runtime configuration from custom CONFIG_URL when overridden in injector', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            defaultRendererUrl: 'http://custom-url:3000',
+            allowOverrides: true,
+          }),
+        ),
+      );
+
+      const url = await customService.resolveStartupConfiguration();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        '/custom/config.json',
+        expect.objectContaining({signal: expect.any(AbortSignal)}),
+      );
+      expect(url).toBe('http://custom-url:3000');
+    });
+
+    it('handles fetch failure gracefully when using custom CONFIG_URL', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'));
+      const warnSpy = vi.spyOn(console, 'warn');
+
+      localStorage.setItem(LocalStorageKey.RENDERER_URL, 'http://fallback-storage:3000');
+
+      const url = await customService.resolveStartupConfiguration();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        '/custom/config.json',
+        expect.objectContaining({signal: expect.any(AbortSignal)}),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Watchdog timeout or failure fetching config.json'),
+        expect.any(Error),
+      );
+      expect(url).toBe('http://fallback-storage:3000');
+    });
+
+    it('locks context when custom CONFIG_URL response has allowOverrides set to false', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            defaultRendererUrl: 'http://custom-locked-renderer:3000',
+            allowOverrides: false,
+          }),
+        ),
+      );
+
+      const url = await customService.resolveStartupConfiguration();
+
+      expect(url).toBe('http://custom-locked-renderer:3000');
+      expect(customService.isContextLocked()).toBe(true);
     });
   });
 });

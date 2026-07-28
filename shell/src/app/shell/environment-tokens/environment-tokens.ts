@@ -33,3 +33,11 @@ export const IS_1P_AUTH_ENABLED = new InjectionToken<boolean>('IS_1P_AUTH_ENABLE
   providedIn: 'root',
   factory: () => false,
 });
+
+/**
+ * Injection token specifying the URL from which static config.json is fetched.
+ */
+export const CONFIG_URL = new InjectionToken<string>('CONFIG_URL', {
+  providedIn: 'root',
+  factory: () => 'config.json',
+});
