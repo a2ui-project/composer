@@ -216,6 +216,183 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     },
   );
 
+  it('classifies turns wrapped in ```jsonl code blocks as layout snapshots and calculates component counts', async () => {
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.USER,
+        content:
+          '```jsonl\n{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id":"b1","component":"Button"}, {"id":"b2","component":"Button"}]}}\n```',
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    const bubbleTypes = await harness.getBubbleTypes();
+
+    expect(bubbles.length).toBe(1);
+    expect(bubbleTypes[0]).toBe('layout-snapshot');
+    expect(bubbles[0]).toBe('Received 2 A2UI JSON Components');
+  });
+
+  it('classifies turns containing preamble text and ```jsonl code blocks as layout snapshots', async () => {
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.USER,
+        content:
+          'Here is your layout:\n```jsonl\n{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id":"b1","component":"Button"}]}}\n```',
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    const bubbleTypes = await harness.getBubbleTypes();
+
+    expect(bubbles.length).toBe(1);
+    expect(bubbleTypes[0]).toBe('layout-snapshot');
+    expect(bubbles[0]).toBe('Received 1 A2UI JSON Components');
+  });
+
+  it('does not classify plain text messages mentioning "version" as layout snapshots', async () => {
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.USER,
+        content: 'what version of python are you using?',
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    const bubbleTypes = await harness.getBubbleTypes();
+
+    expect(bubbles.length).toBe(1);
+    expect(bubbleTypes[0]).toBe('human-text');
+    expect(bubbles[0]).toBe('what version of python are you using?');
+  });
+
+  it('does not classify non-JSON bracketed prose as layout snapshots', async () => {
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.USER,
+        content: 'user note [draft]',
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    const bubbleTypes = await harness.getBubbleTypes();
+
+    expect(bubbles.length).toBe(1);
+    expect(bubbleTypes[0]).toBe('human-text');
+    expect(bubbles[0]).toBe('user note [draft]');
+  });
+
+  it('classifies formatted multi-line JSON arrays as layout snapshots and calculates component counts', async () => {
+    const formattedArray = JSON.stringify(
+      [
+        {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 's1',
+            components: [
+              {id: 'c1', component: 'Button'},
+              {id: 'c2', component: 'Input'},
+            ],
+          },
+        },
+      ],
+      null,
+      2,
+    );
+
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.USER,
+        content: formattedArray,
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    const bubbleTypes = await harness.getBubbleTypes();
+
+    expect(bubbles.length).toBe(1);
+    expect(bubbleTypes[0]).toBe('layout-snapshot');
+    expect(bubbles[0]).toBe('Received 3 A2UI JSON Components');
+  });
+
+  it('renders snapshot badges instead of text bubbles for streaming partial JSON arrays during streaming', async () => {
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    const partialArray = '[\n  {\n    "version": "v0.9",\n    "createSurface": {"surfaceId": "s1"}';
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.USER,
+        content: partialArray,
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    const bubbleTypes = await harness.getBubbleTypes();
+
+    expect(bubbles.length).toBe(1);
+    expect(bubbleTypes[0]).toBe('layout-snapshot');
+    expect(bubbles[0]).toContain('Received');
+    expect(bubbles[0]).toContain('A2UI JSON Components');
+    expect(bubbles[0]).not.toContain(partialArray);
+  });
+
+  it('strips XML/HTML thinking tags and streaming pulse indicators when classifying layout snapshots', async () => {
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.USER,
+        content: `<thought>Thinking process...</thought>\n{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id":"b1","component":"Button"}]}} ●●●`,
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    const bubbleTypes = await harness.getBubbleTypes();
+
+    expect(bubbles.length).toBe(1);
+    expect(bubbleTypes[0]).toBe('layout-snapshot');
+    expect(bubbles[0]).toBe('Received 1 A2UI JSON Components');
+  });
+
+  it('ignores prose text brackets when extracting JSON content for snapshot classification', async () => {
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.USER,
+        content:
+          'Here is the layout [note]: {"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id":"b1","component":"Button"}]}}',
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    const bubbleTypes = await harness.getBubbleTypes();
+
+    expect(bubbles.length).toBe(1);
+    expect(bubbleTypes[0]).toBe('layout-snapshot');
+    expect(bubbles[0]).toBe('Received 1 A2UI JSON Components');
+  });
+
   it(
     'bubbles and renders connection gateway diagnostic errors inside ' +
       'standard dialogue alerts log',
@@ -666,6 +843,32 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
       expect(captureSpy).not.toHaveBeenCalled();
       expect(submitSpy).toHaveBeenCalledWith('Add button', []);
+    });
+  });
+
+  describe('getComponentCount', () => {
+    it('counts components in JSON array of commands', () => {
+      const component = fixture.componentInstance;
+      const payload = '[{"createSurface": {}}, {"updateComponents": {"components": [{}, {}]}}]';
+      expect(component.getComponentCount(payload)).toBe(3);
+    });
+
+    it('counts components in multi-line JSONL commands', () => {
+      const component = fixture.componentInstance;
+      const payload = '{"createSurface": {}}\n{"updateComponents": {"components": [{}]}}';
+      expect(component.getComponentCount(payload)).toBe(2);
+    });
+
+    it('returns 0 for non-layout text or invalid JSON', () => {
+      const component = fixture.componentInstance;
+      expect(component.getComponentCount('invalid text')).toBe(0);
+    });
+
+    it('ignores single-line parse failures in multi-line JSONL and counts valid lines', () => {
+      const component = fixture.componentInstance;
+      const payload =
+        '{"createSurface": {}}\n{corrupted\n{"updateComponents": {"components": [{}, {}]}}';
+      expect(component.getComponentCount(payload)).toBe(3);
     });
   });
 });

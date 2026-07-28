@@ -62,6 +62,7 @@ import {StartupResolution} from '../../shell/startup-resolution/startup-resoluti
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {ChatCleaner} from '../chat-service/chat-cleaner';
 
 interface AttachedFile extends Attachment {
   readonly previewUrl?: string;
@@ -92,6 +93,7 @@ interface AttachedFile extends Attachment {
 })
 export class ChatPanel {
   private readonly chatCoordinator = inject(ChatCoordinator);
+  private readonly chatCleaner = inject(ChatCleaner);
   private readonly chatState = inject(ChatState);
   private readonly dialog = inject(MatDialog);
   private readonly catalogManagement = inject(CatalogManagement);
@@ -150,7 +152,7 @@ export class ChatPanel {
       .chatHistory()
       .filter(m => m.role !== MessageRole.SYSTEM)
       .map(m => {
-        const isSnapshot = this.isLayoutSnapshot(m.content);
+        const isSnapshot = this.chatCleaner.isLayoutSnapshot(m.content);
         if (isSnapshot) {
           return {
             ...m,
@@ -251,7 +253,7 @@ export class ChatPanel {
    */
   protected getBubbleClass(message: LlmMessage): string {
     if (message.role === MessageRole.USER) {
-      return this.isLayoutSnapshot(message.content)
+      return this.chatCleaner.isLayoutSnapshot(message.content)
         ? 'bubble-user bubble-layout'
         : 'bubble-user bubble-text';
     }
@@ -265,20 +267,11 @@ export class ChatPanel {
   }
 
   /**
-   * Distinguishes user prompts from visual snap dispatch code snippets.
+   * Counts the number of A2UI components declared in the given text.
    */
-  protected isLayoutSnapshot(content: string): boolean {
-    const trimmed = content.trim();
-    return trimmed.startsWith('{"version"') || (trimmed.startsWith('[') && trimmed.endsWith(']'));
-  }
-
-  /**
-   * Dynamically parses visual turn snap contents and counts number of
-   * components declared inside.
-   */
-  protected getComponentCount(content: string): number {
+  getComponentCount(text: string): number {
     try {
-      const trimmed = content.trim();
+      const trimmed = this.chatCleaner.cleanPayload(text);
       const parsedArray = tryParseJsonArray(trimmed);
       if (parsedArray) {
         return parsedArray.reduce(
@@ -303,7 +296,7 @@ export class ChatPanel {
       }
       return count;
     } catch (e) {
-      // Swallows parse errors dynamically in visuals badge check loops
+      // Swallows parse errors dynamically
     }
     return 0;
   }

@@ -32,6 +32,17 @@ import {
   GenerateContentConfig,
 } from '@google/genai';
 
+const TAG_REGEX = /<(thought|thinking|reasoning)>([\s\S]*?)(?:<\/\1>|$)/gi;
+
+interface StreamProcessingState {
+  accumulatedText: string;
+  accumulatedRawText: string;
+  emittedContentLength: number;
+  emittedThinkingLength: number;
+  isDone: boolean;
+  streamError: unknown;
+}
+
 /**
  * Standard public endpoint authentication client utilizing user developer keys.
  * Implements a standalone third-party developer integration facade matching
@@ -133,30 +144,21 @@ export class Standalone3pLlmClient extends LlmClient {
       apiKey: apiKeyVal,
     });
 
-    const {systemInstruction, contents} = this.parseMessages(messages);
-
     const abortController = new AbortController();
-
-    const config: GenerateContentConfig = systemInstruction ? {systemInstruction} : {};
-    config.abortSignal = abortController.signal;
-    config.thinkingConfig = {
-      includeThoughts: true,
-      thinkingBudget: 1024,
-    };
-
-    const params: GenerateContentParameters = {
-      model: 'gemini-3.5-flash',
-      contents,
-      config,
-    };
+    const params = this.buildGenerateContentParams(messages, abortController.signal);
 
     // Instantiate response generator stream eagerly
     const responseStream = await ai.models.generateContentStream(params);
 
     const buffer: LlmResponse[] = [];
-    let accumulatedText = '';
-    let isDone = false;
-    let streamError: unknown = null;
+    const state: StreamProcessingState = {
+      accumulatedText: '',
+      accumulatedRawText: '',
+      emittedContentLength: 0,
+      emittedThinkingLength: 0,
+      isDone: false,
+      streamError: null,
+    };
     const listeners: (() => void)[] = [];
 
     let resolveComplete!: (val: string) => void;
@@ -175,65 +177,166 @@ export class Standalone3pLlmClient extends LlmClient {
     };
 
     // Eager background thread to pull chunks from standard SDK stream instantly
-    void (async () => {
-      try {
-        for await (const chunk of responseStream) {
-          const textVal = chunk.text || '';
-
-          let thoughtVal = '';
-          const parts = chunk.candidates?.[0]?.content?.parts;
-          if (parts) {
-            for (const part of parts) {
-              if (part.thought && part.text) {
-                thoughtVal += part.text;
-              }
-            }
-          }
-
-          accumulatedText += textVal;
-
-          buffer.push({content: textVal, thinking: thoughtVal, isComplete: false});
-          notifyListeners();
-        }
-        isDone = true;
-        resolveComplete(accumulatedText);
-        notifyListeners();
-      } catch (err: unknown) {
-        let finalErr = err;
-        if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
-          finalErr = err;
-        }
-
-        if (
-          finalErr &&
-          typeof finalErr === 'object' &&
-          'name' in finalErr &&
-          finalErr.name === CANCEL_ERROR_NAME
-        ) {
-          isDone = true;
-          streamError = finalErr;
-          rejectComplete(finalErr);
-          notifyListeners();
-          return;
-        }
-        streamError = finalErr;
-        rejectComplete(finalErr);
-        notifyListeners();
-      }
-    })();
+    void this.consumeStream(
+      responseStream,
+      state,
+      buffer,
+      notifyListeners,
+      resolveComplete,
+      rejectComplete,
+    );
 
     // Independent pointer-safe AsyncIterable reader mapping
-    const contentStream: AsyncIterable<LlmResponse> = {
+    const contentStream = this.createContentStream(buffer, state, listeners);
+
+    return {
+      contentStream,
+      complete,
+      cancel: () => {
+        const cancelErr = new Error('Cancelled');
+        cancelErr.name = CANCEL_ERROR_NAME;
+        abortController.abort(cancelErr);
+      },
+    };
+  }
+
+  private buildGenerateContentConfig(
+    systemInstruction?: string,
+    abortSignal?: AbortSignal,
+  ): GenerateContentConfig {
+    const config: GenerateContentConfig = systemInstruction ? {systemInstruction} : {};
+    if (abortSignal) {
+      config.abortSignal = abortSignal;
+    }
+    config.thinkingConfig = {
+      includeThoughts: true,
+      thinkingBudget: 1024,
+    };
+    return config;
+  }
+
+  private buildGenerateContentParams(
+    messages: LlmMessage[],
+    abortSignal: AbortSignal,
+  ): GenerateContentParameters {
+    const {systemInstruction, contents} = this.parseMessages(messages);
+    const config = this.buildGenerateContentConfig(systemInstruction, abortSignal);
+    return {
+      model: 'gemini-3.5-flash',
+      contents,
+      config,
+    };
+  }
+
+  private parseChunkParts(chunk: any): {chunkContent: string; nativeThoughtVal: string} {
+    let chunkContent = '';
+    let nativeThoughtVal = '';
+    const parts = chunk.candidates?.[0]?.content?.parts;
+    if (parts && parts.length > 0) {
+      for (const part of parts) {
+        if (part.thought === true) {
+          if (part.text) {
+            nativeThoughtVal += part.text;
+          }
+        } else {
+          if (part.text) {
+            chunkContent += part.text;
+          }
+        }
+      }
+    } else {
+      chunkContent = chunk.text || '';
+    }
+    return {chunkContent, nativeThoughtVal};
+  }
+
+  private extractXmlThoughts(
+    accumulatedRawText: string,
+    state: StreamProcessingState,
+  ): {cleanText: string; totalExtractedThinking: string} {
+    let totalExtractedThinking = '';
+    TAG_REGEX.lastIndex = 0;
+    const cleanText = accumulatedRawText.replace(TAG_REGEX, (_, _tag, innerText) => {
+      totalExtractedThinking += innerText;
+      return '';
+    });
+    return {cleanText, totalExtractedThinking};
+  }
+
+  private async consumeStream(
+    responseStream: any,
+    state: StreamProcessingState,
+    buffer: LlmResponse[],
+    notify: () => void,
+    resolveComplete: (val: string) => void,
+    rejectComplete: (err: unknown) => void,
+  ): Promise<void> {
+    try {
+      for await (const chunk of responseStream) {
+        const {chunkContent, nativeThoughtVal} = this.parseChunkParts(chunk);
+
+        state.accumulatedRawText += chunkContent;
+
+        const {cleanText, totalExtractedThinking} = this.extractXmlThoughts(
+          state.accumulatedRawText,
+          state,
+        );
+
+        const contentVal = cleanText.slice(state.emittedContentLength);
+        const tagThought = totalExtractedThinking.slice(state.emittedThinkingLength);
+        const thoughtVal = nativeThoughtVal + tagThought;
+
+        state.emittedContentLength = cleanText.length;
+        state.emittedThinkingLength = totalExtractedThinking.length;
+
+        state.accumulatedText += contentVal;
+
+        buffer.push({content: contentVal, thinking: thoughtVal, isComplete: false});
+        notify();
+      }
+      state.isDone = true;
+      resolveComplete(state.accumulatedText);
+      notify();
+    } catch (err: unknown) {
+      let finalErr = err;
+      if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
+        finalErr = err;
+      }
+
+      if (
+        finalErr &&
+        typeof finalErr === 'object' &&
+        'name' in finalErr &&
+        finalErr.name === CANCEL_ERROR_NAME
+      ) {
+        state.isDone = true;
+        state.streamError = finalErr;
+        rejectComplete(finalErr);
+        notify();
+        return;
+      }
+      state.streamError = finalErr;
+      rejectComplete(finalErr);
+      notify();
+    }
+  }
+
+  private createContentStream(
+    buffer: LlmResponse[],
+    state: StreamProcessingState,
+    listeners: (() => void)[],
+  ): AsyncIterable<LlmResponse> {
+    return {
       [Symbol.asyncIterator]() {
         let localBufferIndex = 0;
         return {
           async next(): Promise<IteratorResult<LlmResponse>> {
             // Wait in-loop while buffer is exhausted and stream is active/errored
-            while (localBufferIndex >= buffer.length && !isDone && !streamError) {
+            while (localBufferIndex >= buffer.length && !state.isDone && !state.streamError) {
               await new Promise<void>((resolve, reject) => {
                 listeners.push(() => {
-                  if (streamError) {
-                    reject(streamError);
+                  if (state.streamError) {
+                    reject(state.streamError);
                   } else {
                     resolve();
                   }
@@ -242,8 +345,8 @@ export class Standalone3pLlmClient extends LlmClient {
             }
 
             // Throw connection exceptions immediately upon exhausting successful yields
-            if (localBufferIndex >= buffer.length && streamError) {
-              throw streamError;
+            if (localBufferIndex >= buffer.length && state.streamError) {
+              throw state.streamError;
             }
 
             // Yield buffered chunks
@@ -256,16 +359,6 @@ export class Standalone3pLlmClient extends LlmClient {
             return {value: undefined, done: true};
           },
         };
-      },
-    };
-
-    return {
-      contentStream,
-      complete,
-      cancel: () => {
-        const cancelErr = new Error('Cancelled');
-        cancelErr.name = CANCEL_ERROR_NAME;
-        abortController.abort(cancelErr);
       },
     };
   }

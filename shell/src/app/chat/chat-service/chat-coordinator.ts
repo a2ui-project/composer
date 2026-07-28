@@ -15,7 +15,8 @@
  */
 
 import {Injectable, inject, computed, effect, untracked} from '@angular/core';
-import {formatJson} from '../../utils/json';
+import {formatJson, tryParseJsonArray} from '../../utils/json';
+import {ChatCleaner} from './chat-cleaner';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {
   LlmMessage,
@@ -48,6 +49,7 @@ export class ChatCoordinator {
   private readonly stateSync = inject(StateSync);
   private readonly chatState = inject(ChatState);
   private readonly llmClient = inject(LlmClient);
+  private readonly chatCleaner = inject(ChatCleaner);
 
   /** Reactively mapped rendering pipeline execution milestones. */
   readonly pipelineStatus = this.chatState.pipelineStatus;
@@ -151,7 +153,7 @@ export class ChatCoordinator {
       ...h,
       {
         role: MessageRole.MODEL,
-        content: ' ●●●',
+        content: this.chatCleaner.appendPulse(''),
       },
     ]);
 
@@ -186,7 +188,7 @@ export class ChatCoordinator {
           if (updated[lastIdx]?.role === MessageRole.MODEL) {
             updated[lastIdx] = {
               role: MessageRole.MODEL,
-              content: accumulatedRawText + ' ●●●',
+              content: this.chatCleaner.appendPulse(accumulatedRawText),
               thinking: accumulatedThinking,
             };
           }
@@ -295,6 +297,19 @@ export class ChatCoordinator {
       // editor draft
       const finalLayoutText = formatJson(parsedBlocks);
 
+      // Update latest MODEL turn message in history to normalized JSON string
+      this.chatState.updateChatHistory(history => {
+        const updated = [...history];
+        const lastIdx = updated.length - 1;
+        if (updated[lastIdx]?.role === MessageRole.MODEL) {
+          updated[lastIdx] = {
+            ...updated[lastIdx],
+            content: finalLayoutText,
+          };
+        }
+        return updated;
+      });
+
       // Commit layout synchronously to editor viewport before releasing
       // lockout
       this.stateSync.commitLayoutFromLlm(finalLayoutText);
@@ -314,14 +329,26 @@ export class ChatCoordinator {
    * repairs.
    */
   private parseAndHealJsonLines(text: string): unknown[] {
-    let content = text.trim();
-
-    // Markdown Extraction: If output has Markdown wrappers, extract content
-    const mdJsonRegex = /```json\s*([\s\S]*?)\s*```/;
-    const match = content.match(mdJsonRegex);
-    if (match && match[1]) {
+    if (this.chatCleaner.extractCodeFences(text).hasFences) {
       this.chatState.setPipelineStatus(PipelineStatus.HEALING);
-      content = match[1].trim();
+    }
+    const content = this.chatCleaner.cleanPayload(text);
+
+    // Attempt full JSON parsing before line-by-line processing
+    const parsedArray = tryParseJsonArray(content);
+    if (parsedArray) {
+      return parsedArray;
+    }
+    try {
+      const parsedSingle = JSON.parse(content);
+      if (Array.isArray(parsedSingle)) {
+        return parsedSingle;
+      }
+      if (parsedSingle && typeof parsedSingle === 'object') {
+        return [parsedSingle];
+      }
+    } catch {
+      // Continue to line-by-line healing
     }
 
     const lines = content

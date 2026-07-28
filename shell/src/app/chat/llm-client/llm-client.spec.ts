@@ -37,6 +37,7 @@ interface MockGenAiConfig {
 
 interface MockPart {
   text?: string;
+  thought?: boolean;
   inlineData?: {
     mimeType: string;
     data: string;
@@ -59,7 +60,12 @@ interface MockGenerateContentParameters {
 }
 
 interface MockGenerateContentResponse {
-  text: string;
+  text?: string;
+  candidates?: Array<{
+    content?: {
+      parts?: MockPart[];
+    };
+  }>;
 }
 
 const mockConstructor = vi.fn<(config: MockGenAiConfig) => void>();
@@ -445,6 +451,121 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
 
       const finalSynchronizerValue = await streamResponse.complete;
       expect(finalSynchronizerValue).toBe('Starting streaming handshakes.');
+    });
+
+    it('separates thought parts from content parts during stream processing', async () => {
+      const mockChunksList: MockGenerateContentResponse[] = [
+        {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {thought: true, text: 'Thinking about the user request...'},
+                  {thought: false, text: 'Hello, '},
+                ],
+              },
+            },
+          ],
+        },
+        {
+          candidates: [
+            {
+              content: {
+                parts: [{thought: false, text: 'world!'}],
+              },
+            },
+          ],
+        },
+      ];
+
+      const mockAsyncStream = {
+        async *[Symbol.asyncIterator]() {
+          for (const chunk of mockChunksList) {
+            yield chunk;
+          }
+        },
+      };
+
+      mockGenerateContentStream.mockResolvedValue(mockAsyncStream);
+
+      const streamResponse = await client.chatStream([{role: MessageRole.USER, content: 'Hi'}]);
+
+      const collectedChunks: LlmResponse[] = [];
+      for await (const chunk of streamResponse.contentStream) {
+        collectedChunks.push(chunk);
+      }
+
+      expect(collectedChunks).toEqual([
+        {content: 'Hello, ', thinking: 'Thinking about the user request...', isComplete: false},
+        {content: 'world!', thinking: '', isComplete: false},
+      ]);
+
+      const completeText = await streamResponse.complete;
+      expect(completeText).toBe('Hello, world!');
+    });
+
+    it('extracts XML/HTML thinking tags from chunk text into thinking property and strips tags from content', async () => {
+      const mockChunksList: MockGenerateContentResponse[] = [
+        {text: '<thought>Internal thought here</thought>Response text '},
+        {text: '<thinking>Another thought</thinking>more response'},
+      ];
+
+      const mockAsyncStream = {
+        async *[Symbol.asyncIterator]() {
+          for (const chunk of mockChunksList) {
+            yield chunk;
+          }
+        },
+      };
+
+      mockGenerateContentStream.mockResolvedValue(mockAsyncStream);
+
+      const streamResponse = await client.chatStream([{role: MessageRole.USER, content: 'Hi'}]);
+
+      const collectedChunks: LlmResponse[] = [];
+      for await (const chunk of streamResponse.contentStream) {
+        collectedChunks.push(chunk);
+      }
+
+      expect(collectedChunks).toEqual([
+        {content: 'Response text ', thinking: 'Internal thought here', isComplete: false},
+        {content: 'more response', thinking: 'Another thought', isComplete: false},
+      ]);
+
+      const completeText = await streamResponse.complete;
+      expect(completeText).toBe('Response text more response');
+    });
+
+    it('handles multi-chunk streaming XML thinking tags split across chunks', async () => {
+      const mockChunksList: MockGenerateContentResponse[] = [
+        {text: '<thought>thinking...'},
+        {text: 'more thoughts</thought>main content'},
+      ];
+
+      const mockAsyncStream = {
+        async *[Symbol.asyncIterator]() {
+          for (const chunk of mockChunksList) {
+            yield chunk;
+          }
+        },
+      };
+
+      mockGenerateContentStream.mockResolvedValue(mockAsyncStream);
+
+      const streamResponse = await client.chatStream([{role: MessageRole.USER, content: 'Hi'}]);
+
+      const collectedChunks: LlmResponse[] = [];
+      for await (const chunk of streamResponse.contentStream) {
+        collectedChunks.push(chunk);
+      }
+
+      expect(collectedChunks).toEqual([
+        {content: '', thinking: 'thinking...', isComplete: false},
+        {content: 'main content', thinking: 'more thoughts', isComplete: false},
+      ]);
+
+      const completeText = await streamResponse.complete;
+      expect(completeText).toBe('main content');
     });
 
     it('resolves dynamic streaming complete promise without consuming stream', async () => {

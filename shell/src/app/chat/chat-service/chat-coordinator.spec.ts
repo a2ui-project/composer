@@ -697,6 +697,211 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
       expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
     });
+
+    it('parses layout payloads wrapped in ```jsonl code blocks', async () => {
+      const jsonlOutput =
+        '```jsonl\n' +
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}\n' +
+        '```';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([jsonlOutput]);
+        return {contentStream, complete: Promise.resolve(jsonlOutput)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {},
+      });
+
+      await service.submitPrompt('test prompt');
+
+      const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
+      const parsed = JSON.parse(committedOutput);
+
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed.length).toBe(1);
+      expect(parsed[0].createSurface.surfaceId).toBe('s1');
+    });
+
+    it('parses multiple ```jsonl code blocks in a single response', async () => {
+      const jsonlOutput =
+        '```jsonl\n' +
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}\n' +
+        '```\n' +
+        'Some intermediate text\n' +
+        '```jsonl\n' +
+        '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "c1", "component": "TextField"}]}}\n' +
+        '```';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([jsonlOutput]);
+        return {contentStream, complete: Promise.resolve(jsonlOutput)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {
+          TextField: {},
+        },
+      });
+
+      await service.submitPrompt('test prompt');
+
+      const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
+      const parsed = JSON.parse(committedOutput);
+
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed.length).toBe(2);
+      expect(parsed[0].createSurface.surfaceId).toBe('s1');
+      expect(parsed[1].updateComponents.components[0].component).toBe('TextField');
+    });
+
+    it('parses layout payloads wrapped in ```jsonlines code blocks', async () => {
+      const jsonlinesOutput =
+        '```jsonlines\n' +
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}\n' +
+        '```';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([jsonlinesOutput]);
+        return {contentStream, complete: Promise.resolve(jsonlinesOutput)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {},
+      });
+
+      await service.submitPrompt('test prompt');
+
+      const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
+      const parsed = JSON.parse(committedOutput);
+
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed.length).toBe(1);
+      expect(parsed[0].createSurface.surfaceId).toBe('s1');
+    });
+
+    it('normalizes chatHistory content by stripping markdown code wrappers and preamble text after parsing', async () => {
+      const rawPayload =
+        'Here is your layout:\n' +
+        '```jsonl\n' +
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}\n' +
+        '```';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([rawPayload]);
+        return {contentStream, complete: Promise.resolve(rawPayload)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {},
+      });
+
+      await service.submitPrompt('test prompt');
+
+      const history = chatStateMock.chatHistory();
+      const modelTurn = history[history.length - 1];
+      expect(modelTurn.role).toBe(MessageRole.MODEL);
+      expect(modelTurn.content).not.toContain('Here is your layout:');
+      expect(modelTurn.content).not.toContain('```');
+      expect(modelTurn.content).toContain('"createSurface"');
+    });
+
+    it('parses formatted multi-line JSON arrays successfully', async () => {
+      const formattedJsonArrayOutput = JSON.stringify(
+        [
+          {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
+          {
+            version: 'v0.9',
+            updateComponents: {
+              surfaceId: 's1',
+              components: [{id: 'c1', component: 'TextField'}],
+            },
+          },
+        ],
+        null,
+        2,
+      );
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([formattedJsonArrayOutput]);
+        return {contentStream, complete: Promise.resolve(formattedJsonArrayOutput)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {
+          TextField: {},
+        },
+      });
+
+      await service.submitPrompt('multi-line array test prompt');
+
+      const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
+      const parsed = JSON.parse(committedOutput);
+
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed.length).toBe(2);
+      expect(parsed[0].createSurface.surfaceId).toBe('s1');
+      expect(parsed[1].updateComponents.components[0].component).toBe('TextField');
+    });
+
+    it('strips XML/HTML thinking tags and code fences before parsing JSON', async () => {
+      const payloadWithTags =
+        '<thought>Designing the surface layout...</thought>\n' +
+        '```a2ui\n' +
+        '[{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}]\n' +
+        '```';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([payloadWithTags]);
+        return {contentStream, complete: Promise.resolve(payloadWithTags)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {},
+      });
+
+      await service.submitPrompt('XML tags test prompt');
+
+      const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
+      const parsed = JSON.parse(committedOutput);
+
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed.length).toBe(1);
+      expect(parsed[0].createSurface.surfaceId).toBe('s1');
+    });
+
+    it('strips XML thinking tags containing example code fences before layout parsing', async () => {
+      const payloadWithExampleFenceInThought =
+        '<thought>Here is an example code fence:\n```json\n{"example": true}\n```\n</thought>\n' +
+        '```jsonl\n' +
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}\n' +
+        '```';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([payloadWithExampleFenceInThought]);
+        return {contentStream, complete: Promise.resolve(payloadWithExampleFenceInThought)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {},
+      });
+
+      await service.submitPrompt('Example fence in thought prompt');
+
+      const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
+      const parsed = JSON.parse(committedOutput);
+
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed.length).toBe(1);
+      expect(parsed[0].createSurface.surfaceId).toBe('s1');
+    });
   });
 
   describe('sanitizeComponentObject', () => {
