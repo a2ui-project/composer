@@ -117,6 +117,12 @@ export class StartupResolution {
         }
       }
 
+      const apiKey = staticConfig.apiKey?.trim();
+      if (apiKey) {
+        const configProvider = this.injector.get(AppConfigProvider);
+        await configProvider.setGeminiApiKey(apiKey);
+      }
+
       this._resolvedUrl.set(staticConfig.defaultRendererUrl);
       const rawApiKey = staticConfig.apiKey;
       const configApiKey = typeof rawApiKey === 'string' ? rawApiKey.trim() : '';

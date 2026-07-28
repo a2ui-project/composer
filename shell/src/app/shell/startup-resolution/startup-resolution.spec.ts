@@ -27,6 +27,7 @@ class MockAppConfigProvider {
   geminiApiKey = signal<string>('');
   isApiKeyProvidedByConfig = signal<boolean>(false);
   purgeGeminiApiKey = vi.fn().mockResolvedValue(undefined);
+  setGeminiApiKey = vi.fn().mockResolvedValue(undefined);
   setApiKeyFromConfig = vi.fn().mockImplementation((key: string) => {
     this.isApiKeyProvidedByConfig.set(true);
     this.geminiApiKey.set(key);
@@ -457,6 +458,76 @@ describe('StartupResolution Task 2.6', () => {
       const url = await service.resolveStartupConfiguration();
       expect(url).toBe('http://unlock-renderer:3000');
       expect(service.isContextLocked()).toBe(true);
+    });
+  });
+
+  describe('apiKey resolution', () => {
+    it('extracts and sets trimmed API key from static config', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        apiKey: '  test-api-key  ',
+      });
+
+      await service.resolveStartupConfiguration();
+      expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('test-api-key');
+    });
+
+    it('overrides root API key with profile API key when profile is active', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        apiKey: 'root-key',
+        profiles: {
+          dev: {
+            apiKey: 'profile-key',
+          },
+        },
+      });
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=dev');
+
+      await service.resolveStartupConfiguration();
+      expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('profile-key');
+    });
+
+    it('uses root API key when requested profile does not specify an API key', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        apiKey: 'root-key',
+        profiles: {
+          dev: {
+            rendererUrl: 'http://dev:3000',
+          },
+        },
+      });
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=dev');
+
+      await service.resolveStartupConfiguration();
+      expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('root-key');
+    });
+
+    it('does not call setGeminiApiKey when API key is empty or whitespace-only', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        apiKey: '   ',
+      });
+
+      await service.resolveStartupConfiguration();
+      expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
+    });
+
+    it('does not call setGeminiApiKey when API key is missing from config', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+      });
+
+      await service.resolveStartupConfiguration();
+      expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
     });
   });
 });

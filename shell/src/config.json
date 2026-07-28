@@ -3,7 +3,7 @@
   "allowOverrides": true,
   "profiles": {
     "dev": {
-      "rendererUrl": "locahost:4200/samples/ng-basic-catalog",
+      "rendererUrl": "http://localhost:4200/samples/ng-basic-catalog/",
       "allowOverrides": true
     }
   }
