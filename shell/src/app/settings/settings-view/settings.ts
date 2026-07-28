@@ -76,6 +76,9 @@ export class Settings implements OnInit {
   readonly isApiKeyProvidedByConfig: Signal<boolean> = computed(() =>
     this.configProvider.isApiKeyProvidedByConfig(),
   );
+  readonly isApiKeyUnmaskDisabled: Signal<boolean> = computed(
+    () => this.isApiKeyProvidedByConfig() || this.isLocked(),
+  );
   readonly hideApiKey: WritableSignal<boolean> = signal(true);
   readonly forceThirdPartyAuth: WritableSignal<boolean> = signal(false);
   readonly saveErrorMessage: WritableSignal<string | null> = signal(null);
@@ -198,10 +201,6 @@ export class Settings implements OnInit {
       const basePath = this.platformLocation.getBaseHrefFromDOM() || '/';
       locationAssign(this.document.defaultView.location, basePath);
     }
-  }
-
-  isApiKeyUnmaskDisabled(): boolean {
-    return this.isApiKeyProvidedByConfig() || this.isLocked();
   }
 
   toggleHideApiKey(): void {

@@ -316,6 +316,30 @@ describe('StartupResolution Task 2.6', () => {
       expect(service.isContextLocked()).toBe(true);
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyCamelKey');
     });
+
+    it('trims whitespace immediately when config.json provides apiKey with surrounding spaces', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        apiKey: '   AIzaSyTrimmedKey   ',
+      });
+
+      await service.resolveStartupConfiguration();
+
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyTrimmedKey');
+    });
+
+    it('supports api-key kebab-case property with immediate trimming', async () => {
+      mockFetchConfig({
+        defaultRendererUrl: 'http://base:3000',
+        allowOverrides: true,
+        'api-key': '   AIzaSyKebabKey   ',
+      });
+
+      await service.resolveStartupConfiguration();
+
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyKebabKey');
+    });
   });
 
   it('updates resolved renderer URL via setResolvedRendererUrl', () => {

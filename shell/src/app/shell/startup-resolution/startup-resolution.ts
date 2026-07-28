@@ -29,6 +29,7 @@ export interface AppConfig {
   defaultRendererUrl: string;
   allowOverrides: boolean;
   apiKey?: string;
+  'api-key'?: string;
 }
 
 @Injectable({
@@ -88,8 +89,9 @@ export class StartupResolution {
     if (staticConfig) {
       console.log('Using static config.');
       this._resolvedUrl.set(staticConfig.defaultRendererUrl);
-      const configApiKey = staticConfig.apiKey;
-      if (typeof configApiKey === 'string' && configApiKey.trim().length > 0) {
+      const rawApiKey = staticConfig.apiKey ?? staticConfig['api-key'];
+      const configApiKey = typeof rawApiKey === 'string' ? rawApiKey.trim() : '';
+      if (configApiKey) {
         try {
           const configProvider = this.injector.get(AppConfigProvider);
           configProvider.setApiKeyFromConfig(configApiKey);
@@ -108,11 +110,11 @@ export class StartupResolution {
     }
 
     if (!this._isLockedContext()) {
-      console.log('Checking for renderer query param...')
+      console.log('Checking for renderer query param...');
       const queryCandidate = QueryParser.parseRendererUrl(this.getWindowSearch());
       if (queryCandidate) {
         this._resolvedUrl.set(queryCandidate);
-        console.log('Using renderer query param.')
+        console.log('Using renderer query param.');
         await this.evaluateEnvironmentPurge();
         return this._resolvedUrl();
       }
@@ -120,7 +122,7 @@ export class StartupResolution {
 
     const localPrefs = this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL);
     if (localPrefs && !this._isLockedContext()) {
-      console.log('Using renderer from local storage.')
+      console.log('Using renderer from local storage.');
       this._resolvedUrl.set(localPrefs);
     }
 
