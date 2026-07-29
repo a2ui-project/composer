@@ -85,7 +85,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     await this.initializeCredentials();
   }
 
-  /** Asynchronously resolves the sensitive Gemini API key from SecureCredentialsStorage. */
+  /** Loads stored API credentials into state. */
   private async initializeCredentials(): Promise<void> {
     if (this._isApiKeyProvidedByConfig()) {
       return;
@@ -104,7 +104,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     }
   }
 
-  /** Synchronizes the active renderer URL with the resolved StartupResolution fallback. */
+  /** Initializes the renderer URL from configuration or persistent storage. */
   private initializeRendererUrl(): void {
     const localUrl = this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL);
     if (!localUrl) {
@@ -115,15 +115,12 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     }
   }
 
-  /**
-   * Exposes whether the host environment operates in standalone or integrated
-   * extension mode.
-   */
+  /** Environment operating mode. */
   override readonly envMode: Signal<EnvMode> = computed(() => {
     return this.startup.isExtensionMode() ? EnvMode.EXTENSION : EnvMode.STANDALONE;
   });
 
-  /** Exposes the active authentication protocol context. */
+  /** Active authentication mode. */
   override readonly authType: Signal<AuthType> = computed(() => {
     const override = this._forcedAuthOverride();
     if (override !== AuthType.DEFAULT) {
@@ -132,35 +129,35 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     return this.startup.isThirdPartyEnvironment() ? AuthType.THIRD_PARTY : AuthType.FIRST_PARTY;
   });
 
-  /** Exposes the active preview frame target URL wrapper signal. */
+  /** Active renderer endpoint URL. */
   override readonly rendererUrl: Signal<string> = this._rendererUrl.asReadonly();
 
-  /** Exposes the user-provided Gemini developer API key wrapper signal. */
+  /** Active API key for external service calls. */
   override readonly geminiApiKey: Signal<string> = this._geminiApiKey.asReadonly();
 
-  /** Exposes whether the active Gemini API key was supplied via config.json. */
+  /** Indicates whether the active API key is managed by static configuration. */
   override readonly isApiKeyProvidedByConfig: Signal<boolean> =
     this._isApiKeyProvidedByConfig.asReadonly();
 
-  /** Exposes active light/dark UI style theme preference signal wrapper. */
+  /** Visual theme preference. */
   override readonly themePreference: Signal<ThemePreference> = this._themePreference.asReadonly();
 
-  /** Exposes whether screenshots should be automatically attached to LLM prompts. */
+  /** Preference for including screenshots in user interactions. */
   override readonly includeScreenshot: Signal<boolean> = this._includeScreenshot.asReadonly();
 
   /**
-   * Mutates and persists the preferred setting for including screenshots.
+   * Updates the screenshot attachment preference.
    *
-   * @param include Boolean toggle value.
+   * @param include Whether screenshots should be included.
    */
   override setIncludeScreenshot(include: boolean): void {
     this._includeScreenshot.set(include);
   }
 
   /**
-   * Mutates and saves the active renderer URL endpoint.
+   * Updates and persists the active renderer URL endpoint.
    *
-   * @param url The target destination URL endpoint.
+   * @param url The target renderer URL.
    */
   override setRendererUrl(url: string): void {
     this._rendererUrl.set(url);
@@ -171,9 +168,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   }
 
   /**
-   * Mutates and saves the personal third-party API key.
+   * Updates and persists the API key for external service calls.
    *
-   * @param key The fresh Gemini developer API key credential.
+   * @param key The API key credential.
    */
   override async setGeminiApiKey(key: string): Promise<void> {
     if (this._isApiKeyProvidedByConfig()) {
@@ -193,9 +190,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   }
 
   /**
-   * Sets in-memory Gemini API key loaded from config.json without persisting it to storage.
+   * Sets the API key provided by static configuration.
    *
-   * @param key The server-configured API key token.
+   * @param key The configuration-provided API key.
    */
   override setApiKeyFromConfig(key: string): void {
     const trimmed = key.trim();
@@ -206,8 +203,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   }
 
   /**
-   * Securely erases the Gemini developer API key token from SecureCredentialsStorage
-   * and resets our in-memory reactive Signal to an empty string.
+   * Purges stored API key credentials and resets API key state.
    */
   override async purgeGeminiApiKey(): Promise<void> {
     this._isApiKeyProvidedByConfig.set(false);
@@ -220,9 +216,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   }
 
   /**
-   * Mutates and saves active light/dark style theme preferences context.
+   * Updates and persists the visual theme preference.
    *
-   * @param theme Preferred visual style theme mode selector.
+   * @param theme The theme preference.
    */
   override setThemePreference(theme: ThemePreference): void {
     this._themePreference.set(theme);
@@ -230,9 +226,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   }
 
   /**
-   * Overrides target authentication environments.
+   * Sets an explicit override for the authentication mode.
    *
-   * @param mode The forced authentication protocol mode.
+   * @param mode The authentication mode override.
    */
   override setForcedAuthMode(mode: AuthType): void {
     this._forcedAuthOverride.set(mode);
@@ -244,14 +240,14 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
       this.localStorageInteractions.setItem(LocalStorageKey.FORCE_3P, 'true');
       this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_1P);
     } else {
-      // AuthType.DEFAULT -> Clear all override flags in browser storage
+      // Revert to environment auto-detection when no explicit override is active.
       this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_1P);
       this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_3P);
     }
   }
 
   /**
-   * Purges runtime overrides and dynamic key markers from persistent layers.
+   * Resets all persisted configuration, credentials, and runtime overrides to default state.
    */
   override async flushConfig(): Promise<void> {
     this.localStorageInteractions.removeItem(LocalStorageKey.RENDERER_URL);
@@ -264,18 +260,15 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     this._isApiKeyProvidedByConfig.set(false);
     this._geminiApiKey.set('');
     await this.startup.resolveStartupConfiguration();
-    // Asynchronously re-evaluate default configuration fallbacks
-    // (query params -> local storage -> config.json).
     this._rendererUrl.set(this.startup.getResolvedRendererUrl() || '');
     this._themePreference.set(ThemePreference.LIGHT);
     this._includeScreenshot.set(false);
   }
 
   /**
-   * Evaluates baseline local storage and retrieves starting authentication
-   * modes.
+   * Resolves the initial authentication mode override from storage.
    *
-   * @returns Active AuthType mapping.
+   * @returns The initial authentication mode.
    */
   private getInitialForcedAuth(): AuthType {
     if (!this.is1PAuthEnabled) {

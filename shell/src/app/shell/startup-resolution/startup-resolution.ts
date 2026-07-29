@@ -22,8 +22,8 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
 import {IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 
 /**
- * Represents the resolved runtime configuration for the application,
- * including target endpoints, mode flags, and active catalog IDs.
+ * Represents the configuration options for an application profile,
+ * including target renderer endpoints, API keys, and override permissions.
  */
 export declare interface ProfileConfig {
   rendererUrl?: string;
@@ -39,8 +39,7 @@ export declare interface AppConfig {
   providedIn: 'root',
 })
 /**
- * Orchestrates the initial application startup pipeline, resolving query
- * parameters, validating environments, and initializing core state.
+ * Orchestrates application startup configuration and environment resolution.
  */
 export class StartupResolution {
   private readonly _resolvedUrl = signal<string | null>(null);
