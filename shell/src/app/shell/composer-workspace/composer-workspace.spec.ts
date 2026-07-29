@@ -23,7 +23,6 @@ import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
-import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {DockviewComponent} from 'dockview';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ChatCoordinator} from '../../chat/chat-service/chat-coordinator';
@@ -253,16 +252,6 @@ describe('ComposerWorkspace Dashboard', () => {
     });
   });
 
-  it('sets isExtensionMode correctly', async () => {
-    const resolutionService = TestBed.inject(StartupResolution);
-    vi.spyOn(resolutionService, 'isExtensionMode').mockReturnValue(true);
-
-    const newFixture = TestBed.createComponent(ComposerWorkspace);
-    newFixture.detectChanges();
-
-    expect(newFixture.componentInstance.isExtension()).toBe(true);
-  });
-
   describe('Dockview Layout and Effects', () => {
     it('updates events and errors panel titles based on unread count', async () => {
       fixture.componentInstance.applyPreset('full');
@@ -430,6 +419,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel and triggers change detection when pointerdown occurs on tab element', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -451,6 +444,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel when click occurs on tab element', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -472,6 +469,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel when pointerdown occurs on a nested child element within a tab', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -497,6 +498,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel when click occurs on a nested child element within a tab', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -522,6 +527,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('does not activate panel when click occurs on non-tab workspace elements', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -541,6 +550,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('triggers change detection via cdr.markForCheck when active panel changes', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const markForCheckSpy = vi.spyOn(component['cdr'], 'markForCheck');
 
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);

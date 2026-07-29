@@ -87,7 +87,14 @@ export class WorkspaceLayout {
   apply(preset: WorkspacePreset): void {
     this.rebuild?.(preset);
     this.activePreset.set(preset);
-    localStorage.setItem(WORKSPACE_PRESET_KEY, preset);
+    // Persisting is best-effort: localStorage access can throw a SecurityError
+    // in sandboxed/restricted contexts (e.g. cross-origin iframes, disabled
+    // storage). A failed write must not break the toggle, so swallow it.
+    try {
+      localStorage.setItem(WORKSPACE_PRESET_KEY, preset);
+    } catch (e) {
+      console.warn('Failed to persist workspace preset to localStorage', e);
+    }
   }
 
   /** Advance to the next preset (chat -> chat-preview -> full -> chat). */
@@ -96,7 +103,16 @@ export class WorkspaceLayout {
   }
 
   private readSavedPreset(): WorkspacePreset | null {
-    const saved = localStorage.getItem(WORKSPACE_PRESET_KEY);
+    // Reading is best-effort: localStorage access can throw a SecurityError in
+    // sandboxed/restricted contexts. On failure, fall back to no saved preset
+    // (the initializer then uses the render-focused default).
+    let saved: string | null;
+    try {
+      saved = localStorage.getItem(WORKSPACE_PRESET_KEY);
+    } catch (e) {
+      console.warn('Failed to read workspace preset from localStorage', e);
+      return null;
+    }
     return saved === 'chat' || saved === 'chat-preview' || saved === 'full' ? saved : null;
   }
 }

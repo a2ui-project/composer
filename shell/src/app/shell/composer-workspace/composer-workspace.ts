@@ -18,7 +18,6 @@ import {
   Component,
   effect,
   inject,
-  OnInit,
   AfterViewInit,
   DestroyRef,
   signal,
@@ -40,7 +39,6 @@ import {Events} from '../../debug/events/events';
 import {Errors} from '../../debug/errors/errors';
 import {RawMessages} from '../../debug/raw-messages/raw-messages';
 import {MockRules} from '../../debug/mock-rules/mock-rules';
-import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {HostCommunication} from '../host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {
@@ -83,12 +81,11 @@ export enum ComposerPanelId {
   templateUrl: './composer-workspace.ng.html',
   styleUrl: './composer-workspace.scss',
 })
-export class ComposerWorkspace implements OnInit, AfterViewInit {
+export class ComposerWorkspace implements AfterViewInit {
   private readonly destroyRef = inject(DestroyRef);
   // Injected to notify zoneless Angular change detection when active panel
   // signals update.
   private readonly cdr = inject(ChangeDetectorRef);
-  private startupResolution = inject(StartupResolution);
   private hostComm = inject(HostCommunication);
   private viewContainerRef = inject(ViewContainerRef);
   private configProvider = inject(AppConfigProvider);
@@ -97,7 +94,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
 
   readonly dockviewRoot = viewChild.required<ElementRef<HTMLElement>>('dockviewRoot');
 
-  isExtension = signal(false);
   showMockRules = signal(false);
   unreadEventsCount = signal(0);
   unreadErrorsCount = signal(0);
@@ -208,11 +204,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
         api.updateOptions({className: isDark ? 'dockview-theme-dark' : 'dockview-theme-light'});
       }
     });
-  }
-
-  ngOnInit(): void {
-    const isExt = this.startupResolution.isExtensionMode();
-    this.isExtension.set(isExt);
   }
 
   ngAfterViewInit() {
@@ -400,12 +391,18 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   private rebuildLayout(preset: WorkspacePreset): void {
     if (!this.isDockviewInitialized()) return;
     this.dockviewApi.clear();
-    if (preset === 'chat') {
-      this.buildChatLayout();
-    } else if (preset === 'chat-preview') {
-      this.buildChatPreviewLayout();
-    } else {
-      this.buildFullLayout();
+    switch (preset) {
+      case 'chat':
+        this.buildChatLayout();
+        break;
+      case 'full':
+        this.buildFullLayout();
+        break;
+      case 'chat-preview':
+      default:
+        // Render-focused default: chat beside the live preview.
+        this.buildChatPreviewLayout();
+        break;
     }
   }
 
