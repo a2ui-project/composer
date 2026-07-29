@@ -140,9 +140,9 @@ export class CcBarChart extends CatalogComponent<typeof BarChartApi> {
 
   protected readonly bars = computed<Bar[]>(() => {
     const data = this.data();
-    const max = data.reduce((m, d) => Math.max(m, Number(d.value) || 0), 0);
+    const max = data.reduce((m, d) => Math.max(m, Math.max(0, Number(d?.value) || 0)), 0);
     return data.map((d, i) => {
-      const value = Number(d.value) || 0;
+      const value = Math.max(0, Number(d?.value) || 0);
       const height = max > 0 ? (value / max) * PLOT_H : 0;
       const x = i * SLOT_W + (SLOT_W - BAR_W) / 2;
       const y = TOP_PAD + (PLOT_H - height);
@@ -151,7 +151,7 @@ export class CcBarChart extends CatalogComponent<typeof BarChartApi> {
         y,
         width: BAR_W,
         height,
-        label: String(d.label ?? ''),
+        label: String(d?.label ?? ''),
         labelX: x + BAR_W / 2,
         valueLabel: `${this.prefix()}${value}${this.suffix()}`,
         valueY: y - 6,

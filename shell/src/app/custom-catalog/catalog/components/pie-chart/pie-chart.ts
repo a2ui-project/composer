@@ -128,13 +128,13 @@ export class CcPieChart extends CatalogComponent<typeof PieChartApi> {
   protected readonly slices = computed<PieSlice[]>(() => {
     const data = this.data();
     const innerR = this.innerRadius();
-    const total = data.reduce((sum, d) => sum + (Number(d.value) || 0), 0);
+    const total = data.reduce((sum, d) => sum + Math.max(0, Number(d?.value) || 0), 0);
     if (total <= 0) return [];
 
     const slices: PieSlice[] = [];
     let cursor = 0;
     data.forEach((d, i) => {
-      const value = Number(d.value) || 0;
+      const value = Math.max(0, Number(d?.value) || 0);
       const start = (cursor / total) * 360;
       cursor += value;
       let end = (cursor / total) * 360;
@@ -142,8 +142,8 @@ export class CcPieChart extends CatalogComponent<typeof PieChartApi> {
       if (end - start >= 360) end = start + 359.999;
       slices.push({
         path: this.arc(start, end, innerR),
-        color: d.color ?? PALETTE[i % PALETTE.length],
-        label: String(d.label ?? ''),
+        color: d?.color ?? PALETTE[i % PALETTE.length],
+        label: String(d?.label ?? ''),
         value,
       });
     });
