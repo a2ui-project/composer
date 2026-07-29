@@ -204,6 +204,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
       this._geminiApiKey.set(trimmed);
     } else {
       this._isApiKeyProvidedByConfig.set(false);
+      this._geminiApiKey.set('');
     }
   }
 

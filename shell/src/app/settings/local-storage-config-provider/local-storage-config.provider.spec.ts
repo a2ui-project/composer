@@ -477,6 +477,18 @@ describe('LocalStorageAppConfigProvider', () => {
       expect(provider.isApiKeyProvidedByConfig()).toBe(false);
       expect(provider.geminiApiKey()).toBe('');
     });
+
+    it('resets geminiApiKey to empty string when setApiKeyFromConfig receives empty or whitespace string', () => {
+      const provider = setupProvider();
+      provider.setApiKeyFromConfig('server-config-key');
+      expect(provider.geminiApiKey()).toBe('server-config-key');
+      expect(provider.isApiKeyProvidedByConfig()).toBe(true);
+
+      provider.setApiKeyFromConfig('   ');
+
+      expect(provider.isApiKeyProvidedByConfig()).toBe(false);
+      expect(provider.geminiApiKey()).toBe('');
+    });
   });
 
   describe('under potential Server-Side Rendering (SSR) environments', () => {

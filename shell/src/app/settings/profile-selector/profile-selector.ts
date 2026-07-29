@@ -53,7 +53,7 @@ export class ProfileSelector {
 
   readonly profileOptions = computed<ProfileOption[]>(() => {
     const map = this.profiles();
-    if (!map || typeof map !== 'object') {
+    if (!map || typeof map !== 'object' || Array.isArray(map)) {
       return [];
     }
     return Object.entries(map).map(([key, config]) => ({
@@ -62,7 +62,7 @@ export class ProfileSelector {
     }));
   });
 
-  readonly isEmpty = computed<boolean>(() => Object.keys(this.profiles() ?? {}).length === 0);
+  readonly isEmpty = computed<boolean>(() => this.profileOptions().length === 0);
 
   readonly isDisabled = computed<boolean>(() => this.isEmpty());
 

@@ -120,4 +120,25 @@ describe('ProfileSelector', () => {
     expect(containerEl.getAttribute('tabindex')).toBe('0');
     expect(containerEl.getAttribute('aria-label')).toBe('No profiles available');
   });
+
+  it('returns empty profileOptions array when profiles input is an array', () => {
+    fixture.componentRef.setInput('profiles', ['invalid', 'array'] as unknown as Record<
+      string,
+      ProfileConfig
+    >);
+    fixture.detectChanges();
+
+    expect(component.profileOptions()).toEqual([]);
+  });
+
+  it('computes isEmpty as true and disables component when profiles input is an array', () => {
+    fixture.componentRef.setInput('profiles', ['invalid', 'array'] as unknown as Record<
+      string,
+      ProfileConfig
+    >);
+    fixture.detectChanges();
+
+    expect(component.isEmpty()).toBe(true);
+    expect(component.isDisabled()).toBe(true);
+  });
 });

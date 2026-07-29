@@ -71,9 +71,10 @@ test.describe('Settings and Client Configuration', () => {
       page,
     }) => {
       const apiKeyInput = page.getByLabel('Gemini API Key');
-      await apiKeyInput.fill('test-api-key');
+      await apiKeyInput.fill('new-unique-api-key');
 
       const saveBtn = page.getByRole('button', {name: 'Save Settings'});
+      await expect(saveBtn).toBeEnabled();
       await Promise.all([page.waitForURL(url => url.pathname === '/'), saveBtn.click()]);
       await page.waitForLoadState('load');
 
