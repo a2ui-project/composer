@@ -20,7 +20,7 @@
       <mat-card-title>A2UI Composer Settings</mat-card-title>
     </mat-card-header>
     <mat-card-content>
-      <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()">
+      <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()" id="settings-form">
         <div class="form-section">
           <h3>Configuration Profile</h3>
           <a2ui-composer-profile-selector
@@ -153,7 +153,13 @@
       </div>
     }
     <mat-card-actions align="end">
-      <button mat-flat-button color="primary" [disabled]="isSaving()" (click)="saveSettings()">
+      <button
+        mat-flat-button
+        color="primary"
+        type="submit"
+        form="settings-form"
+        [disabled]="isSaveDisabled()"
+      >
         {{ isSaving() ? 'Saving...' : 'Save Settings' }}
       </button>
     </mat-card-actions>

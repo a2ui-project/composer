@@ -26,8 +26,11 @@ test.describe('Settings and Client Configuration', () => {
   test.describe('Custom Config Modification & Persistence', () => {
     test.beforeEach(async ({page}) => {
       await page.addInitScript(() => {
-        localStorage.clear();
-        localStorage.setItem('a2ui_composer_force_3p', 'true');
+        if (!sessionStorage.getItem('init_cleared')) {
+          sessionStorage.setItem('init_cleared', 'true');
+          localStorage.clear();
+          localStorage.setItem('a2ui_composer_force_3p', 'true');
+        }
       });
       await page.goto('/settings');
     });
@@ -36,7 +39,8 @@ test.describe('Settings and Client Configuration', () => {
       page,
     }) => {
       const rendererInput = page.getByLabel('Target Renderer URL');
-      await rendererInput.fill('http://localhost:3000');
+      await expect(rendererInput).toBeEnabled();
+      await rendererInput.fill('http://localhost:9090');
 
       const apiKeyInput = page.getByLabel('Gemini API Key');
       await apiKeyInput.fill('test-api-key');
@@ -46,6 +50,7 @@ test.describe('Settings and Client Configuration', () => {
       });
 
       const saveBtn = page.getByRole('button', {name: 'Save Settings'});
+      await expect(saveBtn).toBeEnabled();
       await Promise.all([page.waitForURL(url => url.pathname === '/'), saveBtn.click()]);
       await page.waitForLoadState('load');
 
@@ -55,6 +60,11 @@ test.describe('Settings and Client Configuration', () => {
       expect(sentinel).toBeUndefined();
 
       await expect(page.locator('.workspace-container')).toBeVisible();
+
+      const storedRendererUrl = await page.evaluate(() =>
+        localStorage.getItem('a2ui_composer_renderer_url'),
+      );
+      expect(storedRendererUrl).toBe('http://localhost:9090');
     });
 
     test('persists configuration successfully with default relative renderer URL and loads workspace with pre-populated draft', async ({
@@ -144,13 +154,18 @@ test.describe('Settings and Client Configuration', () => {
       await page.goto('/settings');
 
       // Context is unlocked because allowOverrides is true
-      await expect(page.getByLabel('Target Renderer URL')).toBeEnabled();
+      const rendererInput = page.getByLabel('Target Renderer URL');
+      await expect(rendererInput).toBeEnabled();
 
       // Toggle button is disabled because API key was provided by config
       await expect(page.locator('.api-key-toggle-btn')).toBeDisabled();
 
+      // Modify a field to trigger unsaved changes
+      await rendererInput.fill('http://unlocked-renderer.com/modified');
+
       // Click 'Save Settings' and wait for navigation
       const saveBtn = page.getByRole('button', {name: 'Save Settings'});
+      await expect(saveBtn).toBeEnabled();
       await Promise.all([page.waitForURL(url => url.pathname === '/'), saveBtn.click()]);
       await page.waitForLoadState('load');
 

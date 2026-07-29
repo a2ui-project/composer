@@ -676,8 +676,12 @@ describe('Settings', () => {
       mockIsApiKeyProvidedByConfig.set(true);
       mockGeminiApiKey.set('server-key');
 
-      const {component} = await setupComponent();
+      const {fixture, component, harness} = await setupComponent();
       const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+
+      await harness.setRendererUrlValue('http://new-url.com');
+      await new Promise(resolve => queueMicrotask(resolve));
+      fixture.detectChanges();
 
       await component.saveSettings();
 
@@ -749,6 +753,7 @@ describe('Settings', () => {
       const selectSpy = vi.spyOn(component['settingsService'], 'selectProfile');
 
       await harness.setRendererUrlValue('http://custom-renderer-url.com');
+      await new Promise(resolve => queueMicrotask(resolve));
 
       expect(selectSpy).toHaveBeenCalledWith(null);
     });
@@ -854,6 +859,133 @@ describe('Settings', () => {
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
       expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('');
       expect(component.settingsForm.controls.apiKey.value).toBe('');
+    });
+  });
+
+  describe('isSaveDisabled()', () => {
+    it('disables Save Settings button initially when settings match loaded values', async () => {
+      const {component, harness} = await setupComponent();
+
+      expect(component.hasUnsavedChanges()).toBe(false);
+      expect(component.isSaveDisabled()).toBe(true);
+      expect(await harness.isSaveButtonDisabled()).toBe(true);
+    });
+
+    it('enables Save Settings button when profile selection changes', async () => {
+      mockProfiles.set({
+        'profile-1': {displayName: 'Profile 1', rendererUrl: 'http://p1.com'},
+      });
+      const {fixture, component, harness} = await setupComponent();
+
+      await component.onProfileSelected('profile-1');
+      fixture.detectChanges();
+
+      expect(component.hasUnsavedChanges()).toBe(true);
+      expect(component.isSaveDisabled()).toBe(false);
+      expect(await harness.isSaveButtonDisabled()).toBe(false);
+    });
+
+    it('enables Save Settings button when forceThirdPartyAuth changes', async () => {
+      const {fixture, component, harness} = await setupComponent();
+      vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+
+      await harness.toggleForceThirdPartyAuth();
+      fixture.detectChanges();
+
+      expect(component.hasUnsavedChanges()).toBe(true);
+      expect(component.isSaveDisabled()).toBe(false);
+      expect(await harness.isSaveButtonDisabled()).toBe(false);
+    });
+
+    it('enables Save Settings button when renderer URL changes', async () => {
+      const {fixture, component, harness} = await setupComponent();
+
+      await harness.setRendererUrlValue('http://updated-renderer-url.com');
+      await new Promise(resolve => queueMicrotask(resolve));
+      fixture.detectChanges();
+
+      expect(component.hasUnsavedChanges()).toBe(true);
+      expect(component.isSaveDisabled()).toBe(false);
+      expect(await harness.isSaveButtonDisabled()).toBe(false);
+    });
+
+    it('enables Save Settings button when API key changes', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      const {fixture, component, harness} = await setupComponent();
+
+      await harness.setGeminiApiKeyValue('new-api-key-value');
+      fixture.detectChanges();
+
+      expect(component.hasUnsavedChanges()).toBe(true);
+      expect(component.isSaveDisabled()).toBe(false);
+      expect(await harness.isSaveButtonDisabled()).toBe(false);
+    });
+
+    it('disables Save Settings button when form is invalid', async () => {
+      const {fixture, component, harness} = await setupComponent();
+
+      await harness.setRendererUrlValue('invalid-url-without-protocol-or-slash');
+      await new Promise(resolve => queueMicrotask(resolve));
+      fixture.detectChanges();
+
+      expect(component.settingsForm.invalid).toBe(true);
+      expect(component.hasUnsavedChanges()).toBe(true);
+      expect(component.isSaveDisabled()).toBe(true);
+      expect(await harness.isSaveButtonDisabled()).toBe(true);
+    });
+
+    it('disables Save Settings button after settings are saved', async () => {
+      const {fixture, component, harness} = await setupComponent();
+      vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+
+      await harness.setRendererUrlValue('http://updated-renderer-url.com');
+      await new Promise(resolve => queueMicrotask(resolve));
+      fixture.detectChanges();
+      expect(await harness.isSaveButtonDisabled()).toBe(false);
+
+      await component.saveSettings();
+      fixture.detectChanges();
+
+      expect(component.hasUnsavedChanges()).toBe(false);
+      expect(component.isSaveDisabled()).toBe(true);
+      expect(await harness.isSaveButtonDisabled()).toBe(true);
+    });
+
+    it('disables Save Settings button when form control value is edited back to initial snapshot value', async () => {
+      const {fixture, component, harness} = await setupComponent();
+
+      await harness.setRendererUrlValue('http://updated-renderer-url.com');
+      await new Promise(resolve => queueMicrotask(resolve));
+      fixture.detectChanges();
+      expect(await harness.isSaveButtonDisabled()).toBe(false);
+
+      await harness.setRendererUrlValue('http://resolved-url.com');
+      await new Promise(resolve => queueMicrotask(resolve));
+      fixture.detectChanges();
+
+      expect(component.hasUnsavedChanges()).toBe(false);
+      expect(component.isSaveDisabled()).toBe(true);
+      expect(await harness.isSaveButtonDisabled()).toBe(true);
+    });
+
+    it('disables Save Settings button after saving values containing leading or trailing whitespace', async () => {
+      const {fixture, component, harness} = await setupComponent();
+      vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+
+      await harness.setRendererUrlValue('http://updated-renderer-url.com  ');
+      await new Promise(resolve => queueMicrotask(resolve));
+      fixture.detectChanges();
+      expect(await harness.isSaveButtonDisabled()).toBe(false);
+
+      await component.saveSettings();
+      fixture.detectChanges();
+
+      expect(component.settingsForm.controls.rendererUrl.value).toBe(
+        'http://updated-renderer-url.com',
+      );
+      expect(component.hasUnsavedChanges()).toBe(false);
+      expect(component.isSaveDisabled()).toBe(true);
+      expect(await harness.isSaveButtonDisabled()).toBe(true);
     });
   });
 });

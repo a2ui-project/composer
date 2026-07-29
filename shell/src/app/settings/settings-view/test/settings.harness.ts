@@ -39,6 +39,9 @@ export class SettingsHarness extends ComponentHarness {
   protected getApiKeyToggleBtn = this.locatorForOptional(
     MatButtonHarness.with({selector: 'button[matSuffix]'}),
   );
+  protected getSaveButton = this.locatorFor(
+    MatButtonHarness.with({text: /Save Settings|Saving\.\.\./}),
+  );
 
   protected getBridgeBadge = this.locatorFor('.bridge-badge');
   protected getCatalogBadge = this.locatorFor('.catalog-badge');
@@ -191,5 +194,10 @@ export class SettingsHarness extends ComponentHarness {
   async getSaveErrorBannerText(): Promise<string | null> {
     const node = await this.getSaveErrorBanner();
     return node ? node.text() : null;
+  }
+
+  async isSaveButtonDisabled(): Promise<boolean> {
+    const btn = await this.getSaveButton();
+    return btn.isDisabled();
   }
 }
