@@ -599,6 +599,42 @@ describe('StartupResolution Task 2.6', () => {
         'Static profile sets allowOverrides: false but specifies no rendererUrl. Bypassing lock.',
       );
     });
+
+    it('handles array payloads for profiles or individual profile entries safely', async () => {
+      // 1. Array payload for profiles
+      mockFetchConfig({
+        profiles: [{rendererUrl: 'http://array-profile:3000'}] as unknown as object,
+      });
+
+      let url = await service.resolveStartupConfiguration();
+      expect(url).toBeNull();
+
+      // 2. Array payload for default profile entry
+      mockFetchConfig({
+        profiles: {
+          default: [{rendererUrl: 'http://array-default:3000'}] as unknown as object,
+        },
+      });
+
+      url = await service.resolveStartupConfiguration();
+      expect(url).toBeNull();
+
+      // 3. Array payload for requested named profile entry
+      mockFetchConfig({
+        profiles: {
+          default: {
+            rendererUrl: 'http://default-renderer:3000',
+            allowOverrides: true,
+          },
+          dev: [{rendererUrl: 'http://array-dev:3000'}] as unknown as object,
+        },
+      });
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=dev');
+
+      url = await service.resolveStartupConfiguration();
+      expect(url).toBe('http://default-renderer:3000');
+    });
   });
 
   describe('apiKey resolution', () => {

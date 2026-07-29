@@ -109,16 +109,19 @@ export class StartupResolution {
     return staticConfig;
   }
 
+  /**
+   * Selects the active profile configuration based on static config and query parameters.
+   */
   private selectActiveProfile(staticConfig: AppConfig): ProfileConfig {
     const profiles = staticConfig.profiles;
+    if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) {
+      return {};
+    }
+
     let defaultProfile: ProfileConfig = {};
-    if (
-      profiles &&
-      typeof profiles === 'object' &&
-      Object.prototype.hasOwnProperty.call(profiles, 'default')
-    ) {
+    if (Object.prototype.hasOwnProperty.call(profiles, 'default')) {
       const dp = profiles['default'];
-      if (dp && typeof dp === 'object') {
+      if (dp && typeof dp === 'object' && !Array.isArray(dp)) {
         defaultProfile = dp;
       }
     }
@@ -128,13 +131,9 @@ export class StartupResolution {
 
     if (requestedProfile) {
       let foundProfile: ProfileConfig | null = null;
-      if (
-        profiles &&
-        typeof profiles === 'object' &&
-        Object.prototype.hasOwnProperty.call(profiles, requestedProfile)
-      ) {
+      if (Object.prototype.hasOwnProperty.call(profiles, requestedProfile)) {
         const profileConfig = profiles[requestedProfile];
-        if (profileConfig && typeof profileConfig === 'object') {
+        if (profileConfig && typeof profileConfig === 'object' && !Array.isArray(profileConfig)) {
           foundProfile = profileConfig;
         }
       }
