@@ -38,6 +38,9 @@
   position: absolute;
   border-radius: 50%;
   filter: blur(103px);
+  // Promote to its own compositor layer so the large blur is GPU-composited
+  // instead of repainting on the main thread during resize/scroll.
+  transform: translateZ(0);
 }
 
 .blur-circle--1 {
@@ -92,13 +95,19 @@
   position: relative;
   z-index: 2;
   flex-shrink: 0;
-  background-color: var(--cpk-glass-bg);
+  // Solid fallback keeps text contrast WCAG-compliant where backdrop-filter is
+  // unsupported/disabled; the translucent glass is layered on only when supported.
+  background-color: var(--cpk-surface-elevated);
   color: var(--cpk-text-primary);
   border-bottom: 1px solid var(--cpk-glass-border);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   --mat-toolbar-container-background-color: transparent;
   --mat-toolbar-container-text-color: var(--cpk-text-primary);
+
+  @supports (backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px)) {
+    background-color: var(--cpk-glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
 }
 .spacer {
   flex: 1 1 auto;
@@ -130,15 +139,21 @@
 
 .composer-sidenav {
   width: 250px;
-  background-color: var(--cpk-glass-bg);
+  // Solid fallback for readability where backdrop-filter is unsupported.
+  background-color: var(--cpk-surface-elevated);
   border-right: 1px solid var(--cpk-glass-border);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   --mat-sidenav-container-shape: 0px;
   --mat-drawer-container-shape: 0px;
   border-radius: 0px;
-  --mat-sidenav-background-color: var(--cpk-glass-bg);
+  --mat-sidenav-background-color: var(--cpk-surface-elevated);
   transition: width 200ms ease-in-out;
+
+  @supports (backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px)) {
+    background-color: var(--cpk-glass-bg);
+    --mat-sidenav-background-color: var(--cpk-glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
 
   ::ng-deep .mat-drawer-inner-container {
     border-radius: 0;
