@@ -153,16 +153,26 @@ export class CustomCatalog {
     this.activeStateIndex.set(index);
   }
 
-  /** Live-updates the active surface's data model from edited JSON (ignores invalid JSON). */
+  /** Live-updates the active surface's data model from edited JSON (ignores invalid or non-object JSON). */
   protected onEdit(text: string): void {
-    let parsed: Record<string, unknown>;
+    let parsed: unknown;
     try {
-      parsed = JSON.parse(text) as Record<string, unknown>;
+      parsed = JSON.parse(text);
     } catch {
       return;
     }
+    // The data model root must be a plain object; a bare array/number/string
+    // (or null) would break the binder, so ignore those edits.
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
     this.renderer.processMessages([
-      {updateDataModel: {surfaceId: this.activeExampleId(), path: '/', op: 'replace', value: parsed}},
+      {
+        updateDataModel: {
+          surfaceId: this.activeExampleId(),
+          path: '/',
+          op: 'replace',
+          value: parsed as Record<string, unknown>,
+        },
+      },
     ] as never);
   }
 }
