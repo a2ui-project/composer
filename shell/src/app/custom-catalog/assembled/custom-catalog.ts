@@ -18,10 +18,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  effect,
   inject,
   signal,
-  untracked,
 } from '@angular/core';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatIconModule} from '@angular/material/icon';
@@ -108,18 +106,10 @@ export class CustomCatalog {
   protected readonly activeStates = computed(() => this.activeExample().states);
 
   constructor() {
-    // Re-render the surface whenever the selected example or data state changes,
-    // and reset the editor to that state's data model. Writes here don't feed
-    // the effect (untracked), so this runs once per selection, not per keystroke.
-    effect(() => {
-      const example = this.activeExample();
-      const index = this.activeStateIndex();
-      const data = example.states[index]?.data ?? {};
-      untracked(() => {
-        this.editorValue.set(JSON.stringify(data, null, 2));
-        this.applyData(example, data);
-      });
-    });
+    // Initialize the editor + surface for the default selection (first example,
+    // first data state). Subsequent selection changes are propagated explicitly
+    // by the selectExample / selectState handlers rather than via an effect.
+    this.loadState(this.activeExample(), this.activeStateIndex());
   }
 
   /**
@@ -141,16 +131,29 @@ export class CustomCatalog {
     ] as never);
   }
 
+  /**
+   * Resets the editor to the given state's data model and (re-)renders the
+   * surface. Shared by construction and the selection handlers so state is
+   * propagated explicitly rather than through a reactive effect.
+   */
+  private loadState(example: Example, index: number): void {
+    const data = example.states[index]?.data ?? {};
+    this.editorValue.set(JSON.stringify(data, null, 2));
+    this.applyData(example, data);
+  }
+
   /** Selects a demo tree, resetting to its first data state. */
   protected selectExample(id: string): void {
     if (id === this.activeExampleId()) return;
     this.activeStateIndex.set(0);
     this.activeExampleId.set(id);
+    this.loadState(this.activeExample(), 0);
   }
 
   /** Selects one of the active demo's preset data states. */
   protected selectState(index: number): void {
     this.activeStateIndex.set(index);
+    this.loadState(this.activeExample(), index);
   }
 
   /** Live-updates the active surface's data model from edited JSON (ignores invalid JSON). */
