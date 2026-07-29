@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-import {Injectable, Injector, inject, signal} from '@angular/core';
+import {Injectable, Injector, computed, inject, signal} from '@angular/core';
 import {QueryParser} from '../query-parser/query-parser';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
+import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
+import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
 
 /**
  * Represents the configuration options for an application profile,
@@ -29,9 +31,11 @@ export declare interface ProfileConfig {
   rendererUrl?: string;
   apiKey?: string;
   allowOverrides?: boolean;
+  displayName?: string;
 }
 
 export declare interface AppConfig {
+  initialProfile?: string;
   profiles?: Record<string, ProfileConfig>;
 }
 
@@ -49,8 +53,43 @@ export class StartupResolution {
   private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
   private readonly configUrl = inject(CONFIG_URL);
 
+  private readonly _profiles = signal<Record<string, ProfileConfig>>({});
+  private readonly _selectedProfileId = signal<string | null>(null);
+  private readonly _activeProfileKey = signal<string | null>(null);
+
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
   readonly isLockedContext = this._isLockedContext.asReadonly();
+  readonly profiles = this._profiles.asReadonly();
+  readonly selectedProfileId = this._selectedProfileId.asReadonly();
+  readonly activeProfileKey = this._activeProfileKey.asReadonly();
+  readonly activeProfile = computed<ProfileConfig | null>(() => {
+    const profiles = this._profiles();
+    const selectedId = this._selectedProfileId();
+    if (selectedId && Object.prototype.hasOwnProperty.call(profiles, selectedId)) {
+      return profiles[selectedId];
+    }
+    return null;
+  });
+
+  setSelectedProfileId(profileId: string | null): void {
+    this._selectedProfileId.set(profileId);
+    this._activeProfileKey.set(profileId);
+    if (!profileId) {
+      this._isLockedContext.set(false);
+    } else {
+      const profiles = this._profiles();
+      const profile = profiles[profileId];
+      if (profile && profile.allowOverrides === false && profile.rendererUrl) {
+        this._isLockedContext.set(true);
+      } else {
+        this._isLockedContext.set(false);
+      }
+    }
+  }
+
+  getActiveProfileKey(): string | null {
+    return this._activeProfileKey();
+  }
 
   /**
    * Resolves the startup configuration for the application.
@@ -64,6 +103,9 @@ export class StartupResolution {
   async resolveStartupConfiguration(): Promise<string | null> {
     this._isLockedContext.set(false);
     this._resolvedUrl.set(null);
+    this._selectedProfileId.set(null);
+    this._activeProfileKey.set(null);
+    this._profiles.set({});
 
     const staticConfig = await this.fetchStaticConfig();
     if (staticConfig) {
@@ -108,61 +150,107 @@ export class StartupResolution {
   }
 
   /**
-   * Selects the active profile configuration based on static config and query parameters.
+   * Selects the active profile key based on 4-tier resolution priority.
    */
-  private selectActiveProfile(staticConfig: AppConfig): ProfileConfig {
+  selectActiveProfileKey(staticConfig: AppConfig): string | null {
     const profiles = staticConfig.profiles;
     if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) {
-      return {};
+      return null;
     }
 
-    let defaultProfile: ProfileConfig = {};
-    if (Object.prototype.hasOwnProperty.call(profiles, 'default')) {
-      const dp = profiles['default'];
-      if (dp && typeof dp === 'object' && !Array.isArray(dp)) {
-        defaultProfile = dp;
+    const isValidProfile = (key: string): boolean => {
+      if (!Object.prototype.hasOwnProperty.call(profiles, key)) {
+        return false;
       }
+      const p = profiles[key];
+      return p !== null && typeof p === 'object' && !Array.isArray(p);
+    };
+
+    if (staticConfig.initialProfile) {
+      if (isValidProfile(staticConfig.initialProfile)) {
+        return staticConfig.initialProfile;
+      }
+      console.warn(
+        `Initial profile '${staticConfig.initialProfile}' not found in static configuration.`,
+      );
     }
 
     const requestedProfile = QueryParser.parseProfileName(this.getWindowSearch());
-    let activeProfile: ProfileConfig = defaultProfile;
-
     if (requestedProfile) {
-      let foundProfile: ProfileConfig | null = null;
-      if (Object.prototype.hasOwnProperty.call(profiles, requestedProfile)) {
-        const profileConfig = profiles[requestedProfile];
-        if (profileConfig && typeof profileConfig === 'object' && !Array.isArray(profileConfig)) {
-          foundProfile = profileConfig;
-        }
+      if (isValidProfile(requestedProfile)) {
+        return requestedProfile;
       }
-
-      if (foundProfile) {
-        activeProfile = foundProfile;
-      } else {
-        console.warn(`Requested profile '${requestedProfile}' not found in static configuration.`);
-      }
+      console.warn(`Requested profile '${requestedProfile}' not found in static configuration.`);
     }
 
-    return activeProfile;
+    const storedProfile = this.localStorageInteractions.getItem(LocalStorageKey.SELECTED_PROFILE);
+    if (storedProfile && isValidProfile(storedProfile)) {
+      return storedProfile;
+    }
+
+    if (isValidProfile('default')) {
+      return 'default';
+    }
+
+    return null;
   }
 
-  private applyApiKeyFromProfile(profile: ProfileConfig): void {
+  private async applyApiKeyFromProfile(profile: ProfileConfig): Promise<void> {
     const rawApiKey = profile.apiKey;
     const apiKey = typeof rawApiKey === 'string' ? rawApiKey.trim() : '';
-    if (apiKey) {
-      try {
-        const configProvider = this.injector.get(AppConfigProvider);
+
+    try {
+      const configProvider = this.injector.get(AppConfigProvider);
+      if (apiKey) {
         configProvider.setApiKeyFromConfig(apiKey);
-      } catch (err) {
-        console.warn('Failed to apply config-provided API key to AppConfigProvider:', err);
+      } else {
+        configProvider.setApiKeyFromConfig('');
+        try {
+          const secureStorage = this.injector.get(SecureCredentialsStorage, null);
+          if (secureStorage) {
+            const storedKey = await secureStorage.getCredential(
+              SecureCredentialsKey.GEMINI_API_KEY,
+            );
+            if (storedKey && storedKey.trim()) {
+              await configProvider.setGeminiApiKey(storedKey.trim());
+            }
+          }
+        } catch (err) {
+          console.warn(
+            'Failed to retrieve credential from SecureCredentialsStorage during startup resolution:',
+            err,
+          );
+        }
       }
+    } catch (err) {
+      console.warn('Failed to apply config-provided API key to AppConfigProvider:', err);
     }
   }
 
   private async processStaticConfig(staticConfig: AppConfig): Promise<boolean> {
     console.log('Using static config.');
-    const activeProfile = this.selectActiveProfile(staticConfig);
-    this.applyApiKeyFromProfile(activeProfile);
+    if (
+      staticConfig.profiles &&
+      typeof staticConfig.profiles === 'object' &&
+      !Array.isArray(staticConfig.profiles)
+    ) {
+      this._profiles.set(staticConfig.profiles);
+    }
+
+    const resolvedKey = this.selectActiveProfileKey(staticConfig);
+    this._selectedProfileId.set(resolvedKey);
+    this._activeProfileKey.set(resolvedKey);
+
+    const profiles = staticConfig.profiles;
+    let activeProfile: ProfileConfig = {};
+    if (resolvedKey && profiles && Object.prototype.hasOwnProperty.call(profiles, resolvedKey)) {
+      const p = profiles[resolvedKey];
+      if (p && typeof p === 'object' && !Array.isArray(p)) {
+        activeProfile = p;
+      }
+    }
+
+    await this.applyApiKeyFromProfile(activeProfile);
 
     if (activeProfile.rendererUrl) {
       this._resolvedUrl.set(activeProfile.rendererUrl);

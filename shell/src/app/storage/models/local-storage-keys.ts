@@ -36,4 +36,6 @@ export enum LocalStorageKey {
   DOCKVIEW_LAYOUT = 'composer_dockview_layout',
   /** Key for persisting the user's theme selection (light vs dark). */
   THEME_PREFERENCE = 'a2ui_composer_theme_preference',
+  /** Key for persisting the active profile selection. */
+  SELECTED_PROFILE = 'a2ui_composer_selected_profile',
 }

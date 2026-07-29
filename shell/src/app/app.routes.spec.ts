@@ -21,7 +21,7 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {routes} from './app.routes';
-import {StartupResolution} from './shell/startup-resolution/startup-resolution';
+import {StartupResolution, ProfileConfig} from './shell/startup-resolution/startup-resolution';
 import {ChatState} from './chat/chat-state/chat-state';
 import {ChatCoordinator} from './chat/chat-service/chat-coordinator';
 import {StateSync} from './chat/state-sync/state-sync';
@@ -40,6 +40,12 @@ import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
 class MockStartupResolution {
   readonly resolvedUrl = signal('http://localhost:4200');
   readonly isLockedContext = signal(false);
+  readonly profiles = signal<Record<string, ProfileConfig>>({});
+  readonly selectedProfileId = signal<string | null>(null);
+  readonly activeProfile = signal<ProfileConfig | null>(null);
+  readonly isLoading = signal(false);
+  readonly error = signal<string | null>(null);
+  setSelectedProfileId = vi.fn();
   isEnvironmentValid = vi.fn().mockReturnValue(true);
   isExtensionMode = vi.fn().mockReturnValue(false);
   isContextLocked = vi.fn().mockReturnValue(false);
@@ -72,10 +78,12 @@ class MockAppConfigProvider {
   readonly authType = signal(AuthType.FIRST_PARTY);
   readonly rendererUrl = signal('http://localhost:4200/renderer');
   readonly geminiApiKey = signal('');
+  readonly isApiKeyProvidedByConfig = signal(false);
   readonly themePreference = signal<ThemePreference>(ThemePreference.LIGHT);
   readonly includeScreenshot = signal<boolean>(true);
   setThemePreference = vi.fn();
   setGeminiApiKey = vi.fn();
+  setApiKeyFromConfig = vi.fn();
   setRendererUrl = vi.fn();
   setIncludeScreenshot = vi.fn((include: boolean) => {
     this.includeScreenshot.set(include);

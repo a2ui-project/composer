@@ -305,6 +305,22 @@ describe('StartupResolution Task 2.6', () => {
     expect(url).toBe('http://query:3000/');
   });
 
+  it('resets profiles signal state on resolveStartupConfiguration call', async () => {
+    mockFetchConfig({
+      profiles: {
+        dev: {rendererUrl: 'http://dev:3000'},
+      },
+    });
+    await service.resolveStartupConfiguration();
+    expect(service.profiles()).toEqual({
+      dev: {rendererUrl: 'http://dev:3000'},
+    });
+
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'));
+    await service.resolveStartupConfiguration();
+    expect(service.profiles()).toEqual({});
+  });
+
   it('returns window search and hostname safely', () => {
     expect(typeof service.getWindowSearch()).toBe('string');
     expect(typeof service.getWindowHostname()).toBe('string');
@@ -380,7 +396,7 @@ describe('StartupResolution Task 2.6', () => {
 
       await service.resolveStartupConfiguration();
 
-      expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalled();
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
     });
 
     it('locks context strictly when allowOverrides is false regardless of apiKey presence', async () => {
@@ -425,6 +441,34 @@ describe('StartupResolution Task 2.6', () => {
     expect(service.getResolvedRendererUrl()).toBeNull();
   });
 
+  it('updates activeProfileKey signal alongside selectedProfileId signal when setSelectedProfileId is called', () => {
+    service.setSelectedProfileId('custom-profile');
+    expect(service.selectedProfileId()).toBe('custom-profile');
+    expect(service.activeProfileKey()).toBe('custom-profile');
+
+    service.setSelectedProfileId(null);
+    expect(service.selectedProfileId()).toBeNull();
+    expect(service.activeProfileKey()).toBeNull();
+  });
+
+  it('resets isLockedContext to false when setSelectedProfileId(null) is called after being locked', async () => {
+    mockFetchConfig({
+      profiles: {
+        locked: {
+          rendererUrl: 'http://locked-server:3000',
+          allowOverrides: false,
+        },
+      },
+    });
+
+    vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=locked');
+    await service.resolveStartupConfiguration();
+    expect(service.isContextLocked()).toBe(true);
+
+    service.setSelectedProfileId(null);
+    expect(service.isContextLocked()).toBe(false);
+  });
+
   describe('profile resolution', () => {
     it('loads default profile when no profile query parameter is provided', async () => {
       mockFetchConfig({
@@ -438,6 +482,57 @@ describe('StartupResolution Task 2.6', () => {
 
       const url = await service.resolveStartupConfiguration();
       expect(url).toBe('http://default-renderer:3000');
+    });
+
+    it('returns null when selectedProfileId is null or not found in profiles without falling back to default', async () => {
+      mockFetchConfig({
+        profiles: {
+          default: {
+            rendererUrl: 'http://default-renderer:3000',
+          },
+          dev: {
+            rendererUrl: 'http://dev-renderer:3000',
+          },
+        },
+      });
+
+      await service.resolveStartupConfiguration();
+      service.setSelectedProfileId(null);
+      expect(service.activeProfile()).toBeNull();
+
+      service.setSelectedProfileId('nonexistent');
+      expect(service.activeProfile()).toBeNull();
+    });
+
+    it('stores and retrieves profile configs containing optional displayName', async () => {
+      mockFetchConfig({
+        profiles: {
+          default: {
+            rendererUrl: 'http://base:3000',
+            displayName: 'Default Profile',
+          },
+          dev: {
+            rendererUrl: 'http://dev:3000',
+            displayName: 'Development Environment',
+          },
+        },
+      });
+
+      await service.resolveStartupConfiguration();
+      expect(service.profiles()).toEqual({
+        default: {
+          rendererUrl: 'http://base:3000',
+          displayName: 'Default Profile',
+        },
+        dev: {
+          rendererUrl: 'http://dev:3000',
+          displayName: 'Development Environment',
+        },
+      });
+      expect(service.activeProfile()).toEqual({
+        rendererUrl: 'http://base:3000',
+        displayName: 'Default Profile',
+      });
     });
 
     it('loads named profile directly when valid profile param is supplied', async () => {
@@ -477,7 +572,7 @@ describe('StartupResolution Task 2.6', () => {
 
       const url = await service.resolveStartupConfiguration();
       expect(url).toBe('http://dev-renderer:3000');
-      expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalled();
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
       expect(service.isContextLocked()).toBe(false);
     });
 
@@ -653,6 +748,130 @@ describe('StartupResolution Task 2.6', () => {
       url = await service.resolveStartupConfiguration();
       expect(url).toBe('http://default-renderer:3000');
     });
+
+    describe('4-tier profile resolution priority chain', () => {
+      it('resolves initialProfile as tier 1 priority when present in static config profiles', async () => {
+        mockFetchConfig({
+          initialProfile: 'initProfile',
+          profiles: {
+            initProfile: {
+              rendererUrl: 'http://init-renderer:3000',
+            },
+            queryProfile: {
+              rendererUrl: 'http://query-renderer:3000',
+            },
+            default: {
+              rendererUrl: 'http://default-renderer:3000',
+            },
+          },
+        });
+
+        vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=queryProfile');
+        localStorage.setItem(LocalStorageKey.SELECTED_PROFILE, 'queryProfile');
+
+        const url = await service.resolveStartupConfiguration();
+        expect(url).toBe('http://init-renderer:3000');
+        expect(service.selectedProfileId()).toBe('initProfile');
+        expect(service.activeProfileKey()).toBe('initProfile');
+      });
+
+      it('logs warning when initialProfile is defined but not present in profiles', () => {
+        const warnSpy = vi.spyOn(console, 'warn');
+        const result = service.selectActiveProfileKey({
+          initialProfile: 'missingProfile',
+          profiles: {
+            default: {rendererUrl: 'http://default:3000'},
+          },
+        });
+
+        expect(result).toBe('default');
+        expect(warnSpy).toHaveBeenCalledWith(
+          "Initial profile 'missingProfile' not found in static configuration.",
+        );
+      });
+
+      it('resolves query profile as tier 2 priority when initialProfile is absent or invalid', async () => {
+        mockFetchConfig({
+          initialProfile: 'nonExistentProfile',
+          profiles: {
+            queryProfile: {
+              rendererUrl: 'http://query-renderer:3000',
+            },
+            storageProfile: {
+              rendererUrl: 'http://storage-renderer:3000',
+            },
+            default: {
+              rendererUrl: 'http://default-renderer:3000',
+            },
+          },
+        });
+
+        vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=queryProfile');
+        localStorage.setItem(LocalStorageKey.SELECTED_PROFILE, 'storageProfile');
+
+        const url = await service.resolveStartupConfiguration();
+        expect(url).toBe('http://query-renderer:3000');
+        expect(service.selectedProfileId()).toBe('queryProfile');
+        expect(service.activeProfileKey()).toBe('queryProfile');
+      });
+
+      it('resolves local storage selected profile as tier 3 priority when initialProfile and query profile are absent or invalid', async () => {
+        mockFetchConfig({
+          profiles: {
+            storageProfile: {
+              rendererUrl: 'http://storage-renderer:3000',
+            },
+            default: {
+              rendererUrl: 'http://default-renderer:3000',
+            },
+          },
+        });
+
+        vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=nonExistentProfile');
+        localStorage.setItem(LocalStorageKey.SELECTED_PROFILE, 'storageProfile');
+
+        const url = await service.resolveStartupConfiguration();
+        expect(url).toBe('http://storage-renderer:3000');
+        expect(service.selectedProfileId()).toBe('storageProfile');
+        expect(service.activeProfileKey()).toBe('storageProfile');
+      });
+
+      it('resolves default profile as tier 4 priority when higher priority candidates are absent or invalid', async () => {
+        mockFetchConfig({
+          profiles: {
+            default: {
+              rendererUrl: 'http://default-renderer:3000',
+            },
+          },
+        });
+
+        vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=nonExistentProfile');
+        localStorage.setItem(LocalStorageKey.SELECTED_PROFILE, 'nonExistentStorage');
+
+        const url = await service.resolveStartupConfiguration();
+        expect(url).toBe('http://default-renderer:3000');
+        expect(service.selectedProfileId()).toBe('default');
+        expect(service.activeProfileKey()).toBe('default');
+      });
+
+      it('returns null when no candidate profile key exists in static config profiles', async () => {
+        mockFetchConfig({
+          profiles: {
+            customProfile: {
+              rendererUrl: 'http://custom-renderer:3000',
+            },
+          },
+        });
+
+        vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=nonExistentProfile');
+        localStorage.setItem(LocalStorageKey.SELECTED_PROFILE, 'nonExistentStorage');
+
+        const url = await service.resolveStartupConfiguration();
+        expect(url).toBeNull();
+        expect(service.selectedProfileId()).toBeNull();
+        expect(service.activeProfileKey()).toBeNull();
+      });
+    });
   });
 
   describe('apiKey resolution', () => {
@@ -710,7 +929,7 @@ describe('StartupResolution Task 2.6', () => {
       vi.spyOn(service, 'getWindowSearch').mockReturnValue('?profile=dev');
 
       await service.resolveStartupConfiguration();
-      expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalled();
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
       expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
     });
 
@@ -726,7 +945,7 @@ describe('StartupResolution Task 2.6', () => {
       });
 
       await service.resolveStartupConfiguration();
-      expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalled();
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
       expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
     });
 
@@ -741,7 +960,7 @@ describe('StartupResolution Task 2.6', () => {
       });
 
       await service.resolveStartupConfiguration();
-      expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalled();
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
       expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
     });
 
@@ -757,7 +976,7 @@ describe('StartupResolution Task 2.6', () => {
       });
 
       await service.resolveStartupConfiguration();
-      expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalled();
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
       expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
     });
   });

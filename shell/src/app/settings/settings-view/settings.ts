@@ -38,6 +38,8 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
+import {ProfileSelector} from '../profile-selector/profile-selector';
+import {SettingsService} from '../settings-service/settings.service';
 import {locationAssign} from 'safevalues/dom';
 
 /**
@@ -56,6 +58,7 @@ import {locationAssign} from 'safevalues/dom';
     MatCardModule,
     MatChipsModule,
     MatSlideToggleModule,
+    ProfileSelector,
   ],
   templateUrl: './settings.ng.html',
   styleUrl: './settings.scss',
@@ -68,6 +71,7 @@ export class Settings implements OnInit {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
+  protected readonly settingsService = inject(SettingsService);
 
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
@@ -124,13 +128,43 @@ export class Settings implements OnInit {
       }
     });
 
+    this.settingsForm.controls.rendererUrl.valueChanges.subscribe(() => {
+      if (this.settingsForm.controls.rendererUrl.dirty) {
+        queueMicrotask(() => {
+          const selectedId = this.settingsService.selectedProfileId();
+          if (selectedId !== null) {
+            const currentVal = this.settingsForm.controls.rendererUrl.value;
+            const activeUrl = this.settingsService.activeProfile()?.rendererUrl;
+            if (currentVal !== activeUrl) {
+              this.settingsService.selectProfile(null).catch(err => {
+                console.warn('Failed to reset selected profile on renderer URL edit:', err);
+              });
+            }
+          }
+        });
+      }
+    });
+
     effect(() => {
+      const allowOverrides = this.settingsService.allowOverrides();
+      const startupLocked = this.startupResolution.isContextLocked();
+      const isUrlLocked = !allowOverrides || startupLocked;
+      this.isLocked.set(isUrlLocked);
+
+      const rendererControl = this.settingsForm.controls.rendererUrl;
+      if (isUrlLocked) {
+        rendererControl.disable({emitEvent: false});
+      } else {
+        rendererControl.enable({emitEvent: false});
+      }
+
       this.configureApiKeyControl(this.isThirdParty());
     });
   }
 
   ngOnInit(): void {
-    const locked = this.startupResolution.isContextLocked();
+    const allowOverrides = this.settingsService.allowOverrides();
+    const locked = !allowOverrides || this.startupResolution.isContextLocked();
     this.isLocked.set(locked);
 
     const is3P = this.startupResolution.isThirdPartyEnvironment();
@@ -141,10 +175,39 @@ export class Settings implements OnInit {
     if (locked) {
       this.settingsForm.controls.rendererUrl.disable();
     }
+    this.configureApiKeyControl(is3P);
+  }
+
+  async onProfileSelected(profileId: string | null): Promise<void> {
+    await this.settingsService.selectProfile(profileId);
+    if (profileId === null) {
+      this.settingsForm.controls.rendererUrl.setValue('', {emitEvent: false});
+      this.settingsForm.controls.rendererUrl.enable({emitEvent: false});
+      this.configureApiKeyControl(this.isThirdParty());
+      this.settingsForm.controls.rendererUrl.markAsPristine();
+    } else {
+      const active = this.settingsService.activeProfile();
+      if (active?.rendererUrl !== undefined) {
+        this.settingsForm.controls.rendererUrl.setValue(active.rendererUrl, {emitEvent: false});
+        this.settingsForm.controls.rendererUrl.markAsPristine();
+      }
+    }
+    this.settingsForm.controls.apiKey.markAsPristine();
   }
 
   private configureApiKeyControl(is3P: boolean): void {
     const apiKeyControl = this.settingsForm.controls.apiKey;
+    const allowOverrides = this.settingsService.allowOverrides();
+
+    if (!allowOverrides) {
+      apiKeyControl.clearValidators();
+      if (apiKeyControl.enabled) {
+        apiKeyControl.disable({emitEvent: false});
+      }
+      apiKeyControl.updateValueAndValidity({emitEvent: false});
+      return;
+    }
+
     if (is3P && !this.isApiKeyProvidedByConfig()) {
       apiKeyControl.setValidators([Validators.pattern(/\S/)]);
       if (apiKeyControl.disabled) {

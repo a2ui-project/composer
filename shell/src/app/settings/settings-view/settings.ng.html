@@ -22,6 +22,16 @@
     <mat-card-content>
       <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()">
         <div class="form-section">
+          <h3>Configuration Profile</h3>
+          <a2ui-composer-profile-selector
+            [profiles]="settingsService.profiles()"
+            [selectedProfileId]="settingsService.selectedProfileId()"
+            (profileSelected)="onProfileSelected($event)"
+          >
+          </a2ui-composer-profile-selector>
+        </div>
+
+        <div class="form-section">
           <h3>Renderer Application URL</h3>
           @if (isLocked()) {
             <div class="locked-notice">
