@@ -99,6 +99,19 @@ test.describe('Workspace Navigation & Layout Modes', () => {
   test('loads components gallery view successfully via direct URL navigation', async ({
     page,
   }, testInfo) => {
+    await page.route('**/config.json', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          profiles: {
+            default: {
+              rendererUrl: 'http://custom-renderer.com',
+              allowOverrides: true,
+            },
+          },
+        }),
+      });
+    });
     await page.goto('/gallery');
 
     const galleryContainer = page.locator('.gallery-container');

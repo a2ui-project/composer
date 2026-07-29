@@ -35,7 +35,11 @@ const CONFIGS: IntegrationConfig[] = [
     pickupLocationLocator: iframe =>
       iframe.locator('.a2ui-text-field-container:has-text("Pick-up Location") input'),
     fillDate: async (locator, value) => {
-      await locator.fill(value);
+      await locator.evaluate((el: HTMLInputElement, val) => {
+        el.value = val;
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+      }, value);
     },
   },
   {

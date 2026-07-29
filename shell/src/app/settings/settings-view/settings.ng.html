@@ -26,10 +26,7 @@
           @if (isLocked()) {
             <div class="locked-notice">
               <mat-icon color="warn" aria-hidden="true">lock</mat-icon>
-              <span
-                >Active URL configuration is locked by enterprise policy (allowOverrides:
-                false).</span
-              >
+              <span>Active URL configuration is locked.</span>
             </div>
           }
           <mat-form-field appearance="outline" class="full-width">
@@ -94,7 +91,7 @@
           @if (isLocked()) {
             <div class="locked-notice auth-locked-notice">
               <mat-icon color="warn" aria-hidden="true">lock</mat-icon>
-              <span>Authentication mode overrides are locked by enterprise policy.</span>
+              <span>Authentication mode overrides are locked.</span>
             </div>
           }
           <div class="toggle-container" style="margin-top: 12px">

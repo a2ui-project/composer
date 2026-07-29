@@ -9,7 +9,7 @@
       "allowOverrides": false
     },
     "react": {
-      "rendererUrl": "http://localhost:4200/samples/react-basic-catalog/",
+      "rendererUrl": "http://localhost:3459",
       "allowOverrides": false
     }
   }

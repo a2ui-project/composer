@@ -139,16 +139,18 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(provider.geminiApiKey()).toBe('');
   });
 
-  it('initializes rendererUrl with stored renderer URL if present', () => {
+  it('prioritizes resolved renderer URL from startup over stored renderer URL', () => {
+    mockStartupService.getResolvedRendererUrl.mockReturnValue('https://resolved-profile.com');
+    localStorage.setItem(LocalStorageKey.RENDERER_URL, 'https://stored-renderer.com');
+    const provider = setupProvider();
+    expect(provider.rendererUrl()).toBe('https://resolved-profile.com');
+  });
+
+  it('falls back to stored renderer URL if no resolved renderer URL exists', () => {
+    mockStartupService.getResolvedRendererUrl.mockReturnValue('');
     localStorage.setItem(LocalStorageKey.RENDERER_URL, 'https://stored-renderer.com');
     const provider = setupProvider();
     expect(provider.rendererUrl()).toBe('https://stored-renderer.com');
-  });
-
-  it('initializes rendererUrl with fallback resolved URL if no stored URL exists', () => {
-    mockStartupService.getResolvedRendererUrl.mockReturnValue('https://resolved-fallback.com');
-    const provider = setupProvider();
-    expect(provider.rendererUrl()).toBe('https://resolved-fallback.com');
   });
 
   it('synchronizes rendererUrl with resolved fallback when initialize is invoked', async () => {
@@ -332,14 +334,14 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(provider.geminiApiKey()).toBe('');
   });
 
-  it('attaches catch handler and logs warning when setGeminiApiKey write fails, but updates signal and resolves without throwing', async () => {
+  it('attaches catch handler, logs warning, and re-throws when setGeminiApiKey write fails, after updating signal', async () => {
     const warnSpy = vi.spyOn(console, 'warn');
     vi.spyOn(mockSecureStorage, 'setCredential').mockRejectedValue(
       new Error('Simulated Write Failure'),
     );
 
     const provider = setupProvider();
-    await expect(provider.setGeminiApiKey('failed-key')).resolves.not.toThrow();
+    await expect(provider.setGeminiApiKey('failed-key')).rejects.toThrow('Simulated Write Failure');
     expect(provider.geminiApiKey()).toBe('failed-key');
 
     expect(warnSpy).toHaveBeenCalledWith(
@@ -348,7 +350,7 @@ describe('LocalStorageAppConfigProvider', () => {
     );
   });
 
-  it('updates geminiApiKey signal even when setCredential persistence fails so runtime session works', async () => {
+  it('updates geminiApiKey signal even when setCredential persistence fails and re-throws', async () => {
     await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'initial-key');
     const provider = setupProvider();
     await provider.initialize();
@@ -358,19 +360,23 @@ describe('LocalStorageAppConfigProvider', () => {
       new Error('Simulated Write Failure'),
     );
 
-    await expect(provider.setGeminiApiKey('new-failed-key')).resolves.not.toThrow();
+    await expect(provider.setGeminiApiKey('new-failed-key')).rejects.toThrow(
+      'Simulated Write Failure',
+    );
 
     expect(provider.geminiApiKey()).toBe('new-failed-key');
   });
 
-  it('wraps setGeminiApiKey in robust error handling so it does not throw when storage rejects with SecurityError or QuotaExceededError', async () => {
+  it('logs warning and re-throws error when setGeminiApiKey encounters SecurityError or QuotaExceededError', async () => {
     const warnSpy = vi.spyOn(console, 'warn');
     vi.spyOn(mockSecureStorage, 'setCredential').mockRejectedValue(
       new DOMException('SecurityError in sandboxed iframe', 'SecurityError'),
     );
 
     const provider = setupProvider();
-    await expect(provider.setGeminiApiKey('sandboxed-key')).resolves.not.toThrow();
+    await expect(provider.setGeminiApiKey('sandboxed-key')).rejects.toThrow(
+      'SecurityError in sandboxed iframe',
+    );
     expect(provider.geminiApiKey()).toBe('sandboxed-key');
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Failed to persist Gemini API key'),

@@ -76,8 +76,8 @@ export class Settings implements OnInit {
   readonly isApiKeyProvidedByConfig: Signal<boolean> = computed(() =>
     this.configProvider.isApiKeyProvidedByConfig(),
   );
-  readonly isApiKeyUnmaskDisabled: Signal<boolean> = computed(
-    () => this.isApiKeyProvidedByConfig() || this.isLocked(),
+  readonly isApiKeyUnmaskDisabled: Signal<boolean> = computed(() =>
+    this.isApiKeyProvidedByConfig(),
   );
   readonly hideApiKey: WritableSignal<boolean> = signal(true);
   readonly forceThirdPartyAuth: WritableSignal<boolean> = signal(false);
@@ -115,6 +115,18 @@ export class Settings implements OnInit {
         apiKeyControl.setValue(currentKey, {emitEvent: false});
       }
     });
+
+    effect(() => {
+      const url = this.configProvider.rendererUrl();
+      const rendererControl = this.settingsForm.controls.rendererUrl;
+      if (!rendererControl.dirty && url !== rendererControl.value) {
+        rendererControl.setValue(url, {emitEvent: false});
+      }
+    });
+
+    effect(() => {
+      this.configureApiKeyControl(this.isThirdParty());
+    });
   }
 
   ngOnInit(): void {
@@ -123,15 +135,8 @@ export class Settings implements OnInit {
 
     const is3P = this.startupResolution.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
-    this.configureApiKeyControl(is3P);
 
     this.forceThirdPartyAuth.set(this.configProvider.authType() === AuthType.THIRD_PARTY);
-
-    const initialUrl = this.configProvider.rendererUrl();
-
-    this.settingsForm.patchValue({
-      rendererUrl: initialUrl,
-    });
 
     if (locked) {
       this.settingsForm.controls.rendererUrl.disable();
@@ -140,7 +145,7 @@ export class Settings implements OnInit {
 
   private configureApiKeyControl(is3P: boolean): void {
     const apiKeyControl = this.settingsForm.controls.apiKey;
-    if (is3P && !this.isApiKeyUnmaskDisabled()) {
+    if (is3P && !this.isApiKeyProvidedByConfig()) {
       apiKeyControl.setValidators([Validators.pattern(/\S/)]);
       if (apiKeyControl.disabled) {
         apiKeyControl.enable({emitEvent: false});

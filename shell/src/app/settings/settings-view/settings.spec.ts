@@ -241,7 +241,7 @@ describe('Settings', () => {
     expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
 
     expect(await harness.hasLockedNotice()).toBe(true);
-    expect(await harness.getLockedNoticeText()).toContain('locked by enterprise policy');
+    expect(await harness.getLockedNoticeText()).toContain('Active URL configuration is locked.');
   });
 
   it('displays default connection status badges and overlay logs console when disconnected', async () => {
@@ -435,7 +435,7 @@ describe('Settings', () => {
 
     expect(await harness.hasAuthLockedNotice()).toBe(true);
     expect(await harness.getAuthLockedNoticeText()).toContain(
-      'Authentication mode overrides are locked by enterprise policy',
+      'Authentication mode overrides are locked',
     );
 
     expect(await harness.isSlideToggleDisabled()).toBe(true);
@@ -562,6 +562,25 @@ describe('Settings', () => {
 
       expect(component.settingsForm.controls.apiKey.value).toBe('user-typed-key');
     });
+
+    it('synchronizes rendererUrl signal from config provider into rendererUrl form control without clobbering dirty user input', async () => {
+      const {fixture, component} = await setupComponent();
+
+      mockRendererUrl.set('https://profile-renderer-url.com');
+      fixture.detectChanges();
+
+      expect(component.settingsForm.controls.rendererUrl.value).toBe(
+        'https://profile-renderer-url.com',
+      );
+
+      component.settingsForm.controls.rendererUrl.setValue('https://user-typed-url.com');
+      component.settingsForm.controls.rendererUrl.markAsDirty();
+
+      mockRendererUrl.set('https://background-sync-renderer.com');
+      fixture.detectChanges();
+
+      expect(component.settingsForm.controls.rendererUrl.value).toBe('https://user-typed-url.com');
+    });
   });
 
   describe('Anti-Silent Failure UI Alert & Error Reporting (saveSettings)', () => {
@@ -635,17 +654,16 @@ describe('Settings', () => {
       expect(reloadSpy).toHaveBeenCalled();
     });
 
-    it('disables API key toggle button and prohibits unmasking when context is locked', async () => {
+    it('keeps API key control enabled and permits unmasking when context is locked but isApiKeyProvidedByConfig is false', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
       mockStartupResolution.isContextLocked.mockReturnValue(true);
+      mockIsApiKeyProvidedByConfig.set(false);
 
       const {component, harness} = await setupComponent();
 
-      expect(component.isApiKeyUnmaskDisabled()).toBe(true);
-      expect(await harness.isApiKeyToggleBtnDisabled()).toBe(true);
-
-      component.toggleHideApiKey();
-      expect(component.hideApiKey()).toBe(true);
+      expect(component.isApiKeyUnmaskDisabled()).toBe(false);
+      expect(component.settingsForm.controls.apiKey.enabled).toBe(true);
+      expect(await harness.isApiKeyToggleBtnDisabled()).toBe(false);
     });
 
     it('enables API key toggle button and permits unmasking when key is user-provided and context is unlocked', async () => {

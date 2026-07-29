@@ -61,8 +61,8 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
   /** Coordinates dynamic renderer preview frame URL endpoint. */
   private readonly _rendererUrl = signal<string>(
-    this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL) ||
-      this.startup.getResolvedRendererUrl() ||
+    this.startup.getResolvedRendererUrl() ||
+      this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL) ||
       '',
   );
 
@@ -106,11 +106,13 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
   /** Initializes the renderer URL from configuration or persistent storage. */
   private initializeRendererUrl(): void {
-    const localUrl = this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL);
-    if (!localUrl) {
-      const resolved = this.startup.getResolvedRendererUrl();
-      if (resolved) {
-        this._rendererUrl.set(resolved);
+    const resolved = this.startup.getResolvedRendererUrl();
+    if (resolved) {
+      this._rendererUrl.set(resolved);
+    } else {
+      const localUrl = this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL);
+      if (localUrl) {
+        this._rendererUrl.set(localUrl);
       }
     }
   }
@@ -186,6 +188,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
       );
     } catch (err) {
       console.warn('Failed to persist Gemini API key to SecureCredentialsStorage:', err);
+      throw err;
     }
   }
 
