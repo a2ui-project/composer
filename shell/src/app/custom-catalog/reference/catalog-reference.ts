@@ -143,19 +143,6 @@ export class CatalogReference {
       if (this.viewMode() !== 'components' || !doc) return;
       untracked(() => this.buildSurface(doc));
     });
-
-    // Default-select the first file whenever a source view is entered (or its
-    // file list changes) and nothing valid is selected.
-    effect(() => {
-      const files = this.sourceFiles();
-      if (this.viewMode() === 'components') return;
-      const hasSelection = untracked(() =>
-        files.some(file => file.path === this.selectedSourcePath()),
-      );
-      if (hasSelection) return;
-      const first = files[0];
-      if (first) untracked(() => this.selectedSourcePath.set(first.path));
-    });
   }
 
   private surfaceId(name: string): string {
@@ -179,6 +166,10 @@ export class CatalogReference {
 
   protected setViewMode(mode: ReferenceView): void {
     this.viewMode.set(mode);
+    if (mode !== 'components') {
+      const files = mode === 'renderers' ? CATALOG_SOURCE.renderers : CATALOG_SOURCE.definitions;
+      if (files[0]) this.selectedSourcePath.set(files[0].path);
+    }
   }
 
   protected selectComponent(name: string): void {

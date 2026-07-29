@@ -85,14 +85,20 @@ interface TableColumn {
   ],
 })
 export class CcDataTable extends CatalogComponent<typeof DataTableApi> {
-  protected readonly columns = computed(
-    () => (this.props()['columns']?.value() ?? []) as TableColumn[],
-  );
-  protected readonly rows = computed(
-    () => (this.props()['rows']?.value() ?? []) as Record<string, unknown>[],
-  );
+  protected readonly columns = computed<TableColumn[]>(() => {
+    const raw = this.props()['columns']?.value();
+    return Array.isArray(raw)
+      ? raw.filter((x): x is TableColumn => !!x && typeof x === 'object')
+      : [];
+  });
+  protected readonly rows = computed<Record<string, unknown>[]>(() => {
+    const raw = this.props()['rows']?.value();
+    return Array.isArray(raw)
+      ? raw.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
+      : [];
+  });
 
-  protected cell(row: Record<string, unknown>, key: string): string {
-    return String(row[key] ?? '');
+  protected cell(row: Record<string, unknown> | null | undefined, key: string): string {
+    return row ? String(row[key] ?? '') : '';
   }
 }
