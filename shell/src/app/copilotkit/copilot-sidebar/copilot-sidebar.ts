@@ -76,7 +76,7 @@ export class CopilotSidebar {
    * bring-your-own-key and runs client-side, so the chat must not mount until a
    * non-blank key exists.
    */
-  readonly hasKey = computed(() => !!this.configProvider.geminiApiKey().trim());
+  readonly hasKey = computed(() => !!this.configProvider.geminiApiKey());
 
   /**
    * Starter prompt chips offered on an empty thread. Tailored to the active

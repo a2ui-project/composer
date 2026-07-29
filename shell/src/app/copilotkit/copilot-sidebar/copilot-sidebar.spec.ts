@@ -109,8 +109,10 @@ describe('CopilotSidebar', () => {
   });
 
   it('shows the chat and hides the add-key CTA once a key is present', () => {
-    // Whitespace-only keys do not count as a real key.
-    fakeConfig.geminiApiKey.set('   ');
+    // No key -> chat hidden. AppConfigProvider trims keys at the source (a
+    // whitespace-only key surfaces here as an empty string), so the sidebar
+    // only needs to check for emptiness.
+    fakeConfig.geminiApiKey.set('');
     fixture.detectChanges();
     expect(host().querySelector('copilot-chat')).toBeNull();
 

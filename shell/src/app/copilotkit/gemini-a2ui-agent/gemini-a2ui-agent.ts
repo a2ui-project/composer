@@ -40,7 +40,6 @@ const STATUS_NARRATION = 'Generating your UI…';
 @Injectable({providedIn: 'root'})
 export class GeminiA2uiAgent extends AbstractAgent {
   private readonly generation = inject(A2uiGenerationService);
-  private cancelled = false;
 
   constructor() {
     super({agentId: 'default'});
@@ -48,13 +47,15 @@ export class GeminiA2uiAgent extends AbstractAgent {
 
   override run(input: RunAgentInput): Observable<BaseEvent> {
     return new Observable<BaseEvent>(subscriber => {
-      this.cancelled = false;
+      // Per-run cancellation flag. Scoped to this subscription (not the
+      // root-singleton instance) so concurrent runs never share the flag.
+      let cancelled = false;
       const threadId = input.threadId;
       const runId = input.runId;
       const messageId = crypto.randomUUID();
 
       const emit = (event: BaseEvent) => {
-        if (!this.cancelled) subscriber.next(event);
+        if (!cancelled) subscriber.next(event);
       };
 
       void (async () => {
@@ -72,7 +73,7 @@ export class GeminiA2uiAgent extends AbstractAgent {
           const reasoningId = crypto.randomUUID();
           let reasoningStarted = false;
           const onThinking = (delta: string) => {
-            if (!delta || this.cancelled) return;
+            if (!delta || cancelled) return;
             if (!reasoningStarted) {
               reasoningStarted = true;
               emit({
@@ -89,7 +90,7 @@ export class GeminiA2uiAgent extends AbstractAgent {
           if (reasoningStarted) {
             emit({type: EventType.REASONING_MESSAGE_END, messageId: reasoningId} as BaseEvent);
           }
-          if (this.cancelled) {
+          if (cancelled) {
             subscriber.complete();
             return;
           }
@@ -117,7 +118,7 @@ export class GeminiA2uiAgent extends AbstractAgent {
           }
           subscriber.complete();
         } catch (err) {
-          if (!this.cancelled) {
+          if (!cancelled) {
             emit({type: EventType.RUN_ERROR, message: err instanceof Error ? err.message : String(err)} as BaseEvent);
           }
           subscriber.complete();
@@ -126,7 +127,7 @@ export class GeminiA2uiAgent extends AbstractAgent {
 
       // Teardown: cancel the in-flight Gemini stream when the run is aborted.
       return () => {
-        this.cancelled = true;
+        cancelled = true;
         this.generation.cancel();
       };
     });
