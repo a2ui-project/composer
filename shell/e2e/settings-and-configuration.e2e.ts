@@ -103,8 +103,12 @@ test.describe('Settings and Client Configuration', () => {
         await route.fulfill({
           contentType: 'application/json',
           body: JSON.stringify({
-            defaultRendererUrl: 'http://intercepted-custom-config:3000',
-            allowOverrides: true,
+            profiles: {
+              default: {
+                rendererUrl: 'http://intercepted-custom-config:3000',
+                allowOverrides: true,
+              },
+            },
           }),
         });
       });

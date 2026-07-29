@@ -784,8 +784,12 @@ describe('StartupResolution Task 2.6', () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(
           JSON.stringify({
-            defaultRendererUrl: 'http://custom-url:3000',
-            allowOverrides: true,
+            profiles: {
+              default: {
+                rendererUrl: 'http://custom-url:3000',
+                allowOverrides: true,
+              },
+            },
           }),
         ),
       );
@@ -823,8 +827,12 @@ describe('StartupResolution Task 2.6', () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(
           JSON.stringify({
-            defaultRendererUrl: 'http://custom-locked-renderer:3000',
-            allowOverrides: false,
+            profiles: {
+              default: {
+                rendererUrl: 'http://custom-locked-renderer:3000',
+                allowOverrides: false,
+              },
+            },
           }),
         ),
       );
