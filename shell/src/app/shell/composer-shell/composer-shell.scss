@@ -41,12 +41,12 @@
   overflow: hidden;
   display: flex;
 
-  ::ng-deep > .mat-drawer {
+  > ::ng-deep .mat-drawer {
     position: relative !important;
     transform: none !important;
   }
 
-  ::ng-deep > .mat-drawer-content {
+  > ::ng-deep .mat-drawer-content {
     flex: 1;
     min-width: 0;
     margin-left: 0 !important;
