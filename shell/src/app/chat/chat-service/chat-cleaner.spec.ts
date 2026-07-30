@@ -111,6 +111,12 @@ describe('ChatCleaner', () => {
       expect(service.cleanPayload(input)).toBe('[{"version": "v0.9"}]');
     });
 
+    it('isolates partial JSON array start with A2UI keys when prose contains brackets', () => {
+      const input =
+        'Prose [bracket] before streaming array: [\n  {\n    "createSurface": {"surfaceId": "s1"}';
+      expect(service.cleanPayload(input)).toBe('[\n  {\n    "createSurface": {"surfaceId": "s1"}');
+    });
+
     it('returns cleaned text when content is not JSON', () => {
       expect(service.cleanPayload('hello world')).toBe('hello world');
     });

@@ -91,6 +91,11 @@ export class ChatCleaner {
           const candidate = result.substring(match.index).trim();
           if (
             (candidate.startsWith('{') && candidate.includes('"version"')) ||
+            (candidate.startsWith('[') &&
+              /^\[\s*[\{\"]/.test(candidate) &&
+              (candidate.includes('"version"') ||
+                candidate.includes('"createSurface"') ||
+                candidate.includes('"updateComponents"'))) ||
             tryParseJsonArray(candidate) !== null
           ) {
             result = candidate;

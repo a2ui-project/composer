@@ -254,10 +254,10 @@ export class Standalone3pLlmClient extends LlmClient {
     return {chunkContent, nativeThoughtVal};
   }
 
-  private extractXmlThoughts(
-    accumulatedRawText: string,
-    state: StreamProcessingState,
-  ): {cleanText: string; totalExtractedThinking: string} {
+  private extractXmlThoughts(accumulatedRawText: string): {
+    cleanText: string;
+    totalExtractedThinking: string;
+  } {
     let totalExtractedThinking = '';
     TAG_REGEX.lastIndex = 0;
     const cleanText = accumulatedRawText.replace(TAG_REGEX, (_, _tag, innerText) => {
@@ -283,7 +283,6 @@ export class Standalone3pLlmClient extends LlmClient {
 
         const {cleanText, totalExtractedThinking} = this.extractXmlThoughts(
           state.accumulatedRawText,
-          state,
         );
 
         const contentVal = cleanText.slice(state.emittedContentLength);
