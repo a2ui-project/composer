@@ -30,6 +30,7 @@ import {
   GenerateContentParameters,
   Part,
   GenerateContentConfig,
+  GenerateContentResponse,
 } from '@google/genai';
 
 const TAG_REGEX = /<(thought|thinking|reasoning)>([\s\S]*?)(?:<\/\1>|$)/gi;
@@ -228,7 +229,10 @@ export class Standalone3pLlmClient extends LlmClient {
     };
   }
 
-  private parseChunkParts(chunk: any): {chunkContent: string; nativeThoughtVal: string} {
+  private parseChunkParts(chunk: GenerateContentResponse): {
+    chunkContent: string;
+    nativeThoughtVal: string;
+  } {
     let chunkContent = '';
     let nativeThoughtVal = '';
     const parts = chunk.candidates?.[0]?.content?.parts;
@@ -264,7 +268,7 @@ export class Standalone3pLlmClient extends LlmClient {
   }
 
   private async consumeStream(
-    responseStream: any,
+    responseStream: AsyncIterable<GenerateContentResponse>,
     state: StreamProcessingState,
     buffer: LlmResponse[],
     notify: () => void,
