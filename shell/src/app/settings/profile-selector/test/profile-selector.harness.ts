@@ -33,8 +33,7 @@ export class ProfileSelectorHarness extends ComponentHarness {
 
   async openSelect(): Promise<void> {
     const select = await this.getSelect();
-    const selectHost = await select.host();
-    await selectHost.click();
+    await select.open();
   }
 
   async getOptionsText(): Promise<string[]> {

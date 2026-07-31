@@ -33,7 +33,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
-import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {ProfileConfig, StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {DOCUMENT, PlatformLocation} from '@angular/common';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
@@ -41,6 +41,8 @@ import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-pro
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
 import {ProfileSelector} from '../profile-selector/profile-selector';
 import {SettingsService} from '../settings-service/settings.service';
+import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
+import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
 import {locationAssign} from 'safevalues/dom';
 
 /**
@@ -73,6 +75,7 @@ export class Settings implements OnInit {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
   protected readonly settingsService = inject(SettingsService);
+  private readonly secureCredentialsStorage = inject(SecureCredentialsStorage);
 
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
@@ -88,6 +91,28 @@ export class Settings implements OnInit {
   readonly forceThirdPartyAuth: WritableSignal<boolean> = signal(false);
   readonly saveErrorMessage: WritableSignal<string | null> = signal(null);
   readonly isSaving: WritableSignal<boolean> = signal(false);
+
+  /**
+   * The currently selected profile ID in the draft form.
+   * Profile selection remains local to the draft form until `saveSettings()` is invoked.
+   */
+  protected readonly draftSelectedProfileId: WritableSignal<string | null> = signal<string | null>(
+    null,
+  );
+  /**
+   * The resolved profile object corresponding to the draft selection.
+   * Profile selection remains local to the draft form until `saveSettings()` is invoked.
+   */
+  private readonly draftProfile: Signal<ProfileConfig | null> = computed<ProfileConfig | null>(
+    () => {
+      const id = this.draftSelectedProfileId();
+      return id ? (this.settingsService.profiles()[id] ?? null) : null;
+    },
+  );
+  private readonly draftAllowOverrides: Signal<boolean> = computed<boolean>(() => {
+    const profile = this.draftProfile();
+    return profile ? (profile.allowOverrides ?? true) : true;
+  });
 
   private readonly initialProfileId: WritableSignal<string | null> = signal<string | null>(null);
   private readonly initialForceThirdPartyAuth: WritableSignal<boolean> = signal<boolean>(false);
@@ -121,7 +146,7 @@ export class Settings implements OnInit {
 
   readonly hasUnsavedChanges: Signal<boolean> = computed(() => {
     this.formEvents();
-    const profileChanged = this.settingsService.selectedProfileId() !== this.initialProfileId();
+    const profileChanged = this.draftSelectedProfileId() !== this.initialProfileId();
     const authChanged = this.forceThirdPartyAuth() !== this.initialForceThirdPartyAuth();
     const urlChanged = this.settingsForm.controls.rendererUrl.value !== this.initialRendererUrl();
     const apiKeyChanged = this.settingsForm.controls.apiKey.value !== this.initialApiKey();
@@ -152,23 +177,19 @@ export class Settings implements OnInit {
 
     this.settingsForm.controls.rendererUrl.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
       if (this.settingsForm.controls.rendererUrl.dirty) {
-        queueMicrotask(() => {
-          const selectedId = this.settingsService.selectedProfileId();
-          if (selectedId !== null) {
-            const currentVal = this.settingsForm.controls.rendererUrl.value;
-            const activeUrl = this.settingsService.activeProfile()?.rendererUrl;
-            if (currentVal !== activeUrl) {
-              this.settingsService.selectProfile(null).catch(err => {
-                console.warn('Failed to reset selected profile on renderer URL edit:', err);
-              });
-            }
+        const selectedId = this.draftSelectedProfileId();
+        if (selectedId !== null) {
+          const currentVal = this.settingsForm.controls.rendererUrl.value;
+          const activeUrl = this.draftProfile()?.rendererUrl;
+          if (currentVal !== activeUrl) {
+            this.draftSelectedProfileId.set(null);
           }
-        });
+        }
       }
     });
 
     effect(() => {
-      const allowOverrides = this.settingsService.allowOverrides();
+      const allowOverrides = this.draftAllowOverrides();
       const startupLocked = this.startupResolution.isContextLocked();
       const isUrlLocked = !allowOverrides || startupLocked;
       this.isLocked.set(isUrlLocked);
@@ -185,7 +206,8 @@ export class Settings implements OnInit {
   }
 
   ngOnInit(): void {
-    const allowOverrides = this.settingsService.allowOverrides();
+    this.draftSelectedProfileId.set(this.settingsService.selectedProfileId());
+    const allowOverrides = this.draftAllowOverrides();
     const locked = !allowOverrides || this.startupResolution.isContextLocked();
     this.isLocked.set(locked);
 
@@ -222,25 +244,45 @@ export class Settings implements OnInit {
   }
 
   async onProfileSelected(profileId: string | null): Promise<void> {
-    await this.settingsService.selectProfile(profileId);
+    this.draftSelectedProfileId.set(profileId);
     if (profileId === null) {
-      this.settingsForm.controls.rendererUrl.setValue('');
-      this.settingsForm.controls.rendererUrl.enable({emitEvent: false});
-      this.configureApiKeyControl(this.isThirdParty());
+      this.settingsForm.controls.rendererUrl.setValue('', {emitEvent: false});
       this.settingsForm.controls.rendererUrl.markAsPristine();
+      if (this.isThirdParty()) {
+        await this.populatePersonalApiKey();
+      }
     } else {
-      const active = this.settingsService.activeProfile();
+      const active = this.settingsService.profiles()[profileId] ?? null;
       if (active?.rendererUrl !== undefined) {
-        this.settingsForm.controls.rendererUrl.setValue(active.rendererUrl);
+        this.settingsForm.controls.rendererUrl.setValue(active.rendererUrl, {emitEvent: false});
         this.settingsForm.controls.rendererUrl.markAsPristine();
+      }
+      const apiKey = typeof active?.apiKey === 'string' ? active.apiKey.trim() : '';
+      if (apiKey) {
+        this.settingsForm.controls.apiKey.setValue(apiKey, {emitEvent: false});
+      } else if (this.isThirdParty()) {
+        await this.populatePersonalApiKey();
       }
     }
     this.settingsForm.controls.apiKey.markAsPristine();
   }
 
+  private async populatePersonalApiKey(): Promise<void> {
+    try {
+      const personalKey = await this.secureCredentialsStorage.getCredential(
+        SecureCredentialsKey.GEMINI_API_KEY,
+      );
+      const trimmedPersonalKey = personalKey ? personalKey.trim() : '';
+      this.settingsForm.controls.apiKey.setValue(trimmedPersonalKey, {emitEvent: false});
+    } catch (err) {
+      console.warn('Failed to retrieve credential from SecureCredentialsStorage:', err);
+      this.settingsForm.controls.apiKey.setValue('', {emitEvent: false});
+    }
+  }
+
   private configureApiKeyControl(is3P: boolean): void {
     const apiKeyControl = this.settingsForm.controls.apiKey;
-    const allowOverrides = this.settingsService.allowOverrides();
+    const allowOverrides = this.draftAllowOverrides();
 
     if (!allowOverrides) {
       apiKeyControl.clearValidators();
@@ -280,6 +322,9 @@ export class Settings implements OnInit {
 
     this.isSaving.set(true);
     try {
+      if (this.draftSelectedProfileId() !== this.initialProfileId()) {
+        await this.settingsService.selectProfile(this.draftSelectedProfileId());
+      }
       const values = this.settingsForm.getRawValue();
       const trimmedUrl = values.rendererUrl.trim();
       const trimmedApiKey = values.apiKey.trim();
@@ -300,6 +345,7 @@ export class Settings implements OnInit {
       this.settingsForm.controls.rendererUrl.setValue(trimmedUrl, {emitEvent: false});
       this.settingsForm.controls.apiKey.setValue(trimmedApiKey, {emitEvent: false});
       this.initialProfileId.set(this.settingsService.selectedProfileId());
+      this.draftSelectedProfileId.set(this.settingsService.selectedProfileId());
       this.initialForceThirdPartyAuth.set(this.forceThirdPartyAuth());
       this.initialRendererUrl.set(this.configProvider.rendererUrl());
       this.initialApiKey.set(this.configProvider.geminiApiKey());

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, Signal, computed, inject} from '@angular/core';
+import {computed, inject, Injectable, Signal} from '@angular/core';
 import {ProfileConfig, StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {AppConfigProvider} from '../app-config-provider/app-config-provider';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';

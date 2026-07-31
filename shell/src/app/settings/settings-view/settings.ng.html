@@ -25,7 +25,7 @@
           <h3>Configuration Profile</h3>
           <a2ui-composer-profile-selector
             [profiles]="settingsService.profiles()"
-            [selectedProfileId]="settingsService.selectedProfileId()"
+            [selectedProfileId]="draftSelectedProfileId()"
             (profileSelected)="onProfileSelected($event)"
           >
           </a2ui-composer-profile-selector>
