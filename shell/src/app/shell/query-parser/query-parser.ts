@@ -20,38 +20,8 @@
  */
 export class QueryParser {
   /** @nocollapse */
-  private static isProhibitedKey(key: string): boolean {
-    const words = key
-      .split(/(?<=[a-z0-9])(?=[A-Z])|[^a-zA-Z0-9]+/)
-      .map(w => w.toLowerCase())
-      .filter(Boolean);
-    const exclusions = ['monkey', 'donkey', 'hockey', 'turkey', 'whiskey', 'lackey', 'jockey'];
-
-    return words.some(word => {
-      const isProhibited =
-        /key\d*$/.test(word) || /token\d*$/.test(word) || /secret\d*$/.test(word);
-      if (isProhibited) {
-        const wordBase = word.replace(/\d+$/, '');
-        return !exclusions.some(exc => wordBase.endsWith(exc));
-      }
-      return false;
-    });
-  }
-
-  /** @nocollapse */
   static parseRendererUrl(searchString: string): string | null {
     const params = new URLSearchParams(searchString);
-
-    // 1. Enforce root parameters check case-insensitively
-    for (const key of params.keys()) {
-      if (QueryParser.isProhibitedKey(key)) {
-        console.warn(
-          'Security Violation: Prohibited credentials detected in root query string. Stripping parameters.',
-        );
-        return null;
-      }
-    }
-
     const renderers = params.getAll('renderer');
     if (renderers.length === 0) {
       return null;
@@ -64,15 +34,6 @@ export class QueryParser {
           ? new URL(uriCandidate, baseOrigin)
           : new URL(uriCandidate);
         if (validUrl.protocol === 'http:' || validUrl.protocol === 'https:') {
-          // 2. Prohibit keys embedded inside the inner renderer target string
-          for (const innerKey of validUrl.searchParams.keys()) {
-            if (QueryParser.isProhibitedKey(innerKey)) {
-              console.warn(
-                'Security Violation: Prohibited credentials embedded inside renderer target URL. Stripping candidate.',
-              );
-              return null;
-            }
-          }
           return validUrl.toString();
         }
       } catch (err) {
@@ -88,16 +49,6 @@ export class QueryParser {
   /** @nocollapse */
   static parseProfileName(searchString: string): string | null {
     const params = new URLSearchParams(searchString);
-
-    for (const key of params.keys()) {
-      if (QueryParser.isProhibitedKey(key)) {
-        console.warn(
-          'Security Violation: Prohibited credentials detected in root query string. Stripping parameters.',
-        );
-        return null;
-      }
-    }
-
     const profileCandidate = params.get('profile') || params.get('config');
     if (!profileCandidate) {
       return null;
