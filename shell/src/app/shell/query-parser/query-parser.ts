@@ -47,15 +47,15 @@ export class QueryParser {
   }
 
   /** @nocollapse */
-  static parseProfileName(searchString: string): string | null {
+  static parseRendererId(searchString: string): string | null {
     const params = new URLSearchParams(searchString);
-    const profileCandidate = params.get('profile') || params.get('config');
-    if (!profileCandidate) {
+    const candidate = params.get('rendererId');
+    if (!candidate) {
       return null;
     }
 
-    if (/^[a-zA-Z0-9_-]+$/.test(profileCandidate)) {
-      return profileCandidate;
+    if (/^[a-zA-Z0-9_-]+$/.test(candidate)) {
+      return candidate;
     }
 
     return null;

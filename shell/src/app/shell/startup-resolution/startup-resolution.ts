@@ -22,21 +22,25 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
 import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
+import {MatDialog} from '@angular/material/dialog';
+import {firstValueFrom} from 'rxjs';
+import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
 
 /**
- * Represents the configuration options for an application profile,
- * including target renderer endpoints, API keys, and override permissions.
+ * Represents the configuration options for an application renderer.
  */
-export declare interface ProfileConfig {
+export declare interface RendererConfig {
   rendererUrl?: string;
-  apiKey?: string;
-  allowOverrides?: boolean;
   displayName?: string;
+  id?: string;
+  name?: string;
+  allowOverrides?: boolean;
+  apiKey?: string;
 }
 
 export declare interface AppConfig {
-  initialProfile?: string;
-  profiles?: Record<string, ProfileConfig>;
+  renderers?: Record<string, RendererConfig>;
+  apiKeys?: Record<string, string>;
 }
 
 @Injectable({
@@ -49,46 +53,34 @@ export class StartupResolution {
   private readonly _resolvedUrl = signal<string | null>(null);
   private readonly _isLockedContext = signal(false);
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
-  private readonly injector = inject(Injector);
   private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
   private readonly configUrl = inject(CONFIG_URL);
+  readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
+  private get configProvider(): AppConfigProvider {
+    return this.injector.get(AppConfigProvider);
+  }
+  private readonly secureCredentialsStorage = inject(SecureCredentialsStorage, {optional: true});
 
-  private readonly _profiles = signal<Record<string, ProfileConfig>>({});
-  private readonly _selectedProfileId = signal<string | null>(null);
-  private readonly _activeProfileKey = signal<string | null>(null);
+  private readonly _renderers = signal<Record<string, RendererConfig>>({});
+  private readonly _selectedRendererId = signal<string | null>(null);
 
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
   readonly isLockedContext = this._isLockedContext.asReadonly();
-  readonly profiles = this._profiles.asReadonly();
-  readonly selectedProfileId = this._selectedProfileId.asReadonly();
-  readonly activeProfileKey = this._activeProfileKey.asReadonly();
-  readonly activeProfile = computed<ProfileConfig | null>(() => {
-    const profiles = this._profiles();
-    const selectedId = this._selectedProfileId();
-    if (selectedId && Object.prototype.hasOwnProperty.call(profiles, selectedId)) {
-      return profiles[selectedId];
+  readonly renderers = this._renderers.asReadonly();
+  readonly selectedRendererId = this._selectedRendererId.asReadonly();
+  readonly activeRenderer = computed<RendererConfig | null>(() => {
+    const renderers = this._renderers();
+    const selectedId = this._selectedRendererId();
+    if (selectedId && Object.prototype.hasOwnProperty.call(renderers, selectedId)) {
+      return renderers[selectedId];
     }
     return null;
   });
 
-  setSelectedProfileId(profileId: string | null): void {
-    this._selectedProfileId.set(profileId);
-    this._activeProfileKey.set(profileId);
-    if (!profileId) {
-      this._isLockedContext.set(false);
-    } else {
-      const profiles = this._profiles();
-      const profile = profiles[profileId];
-      if (profile && profile.allowOverrides === false && profile.rendererUrl) {
-        this._isLockedContext.set(true);
-      } else {
-        this._isLockedContext.set(false);
-      }
-    }
-  }
-
-  getActiveProfileKey(): string | null {
-    return this._activeProfileKey();
+  setSelectedRendererId(rendererId: string | null): void {
+    this._selectedRendererId.set(rendererId);
+    this._isLockedContext.set(false);
   }
 
   /**
@@ -103,22 +95,15 @@ export class StartupResolution {
   async resolveStartupConfiguration(): Promise<string | null> {
     this._isLockedContext.set(false);
     this._resolvedUrl.set(null);
-    this._selectedProfileId.set(null);
-    this._activeProfileKey.set(null);
-    this._profiles.set({});
+    this._selectedRendererId.set(null);
+    this._renderers.set({});
 
     const staticConfig = await this.fetchStaticConfig();
-    if (staticConfig) {
-      const isLocked = await this.processStaticConfig(staticConfig);
-      if (isLocked) {
-        return this._resolvedUrl();
-      }
-    }
+    const resolved = await this.resolveRenderer(staticConfig);
 
-    this.applyOverrides();
     await this.evaluateEnvironmentPurge();
 
-    return this._resolvedUrl();
+    return resolved;
   }
 
   private async fetchStaticConfig(): Promise<AppConfig | null> {
@@ -149,70 +134,37 @@ export class StartupResolution {
     return staticConfig;
   }
 
-  /**
-   * Selects the active profile key based on 4-tier resolution priority.
-   */
-  selectActiveProfileKey(staticConfig: AppConfig): string | null {
-    const profiles = staticConfig.profiles;
-    if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) {
-      return null;
-    }
-
-    const isValidProfile = (key: string): boolean => {
-      if (!Object.prototype.hasOwnProperty.call(profiles, key)) {
-        return false;
+  private async applyApiKeyFromConfig(
+    staticConfig: AppConfig,
+    selectedId: string | null,
+  ): Promise<void> {
+    let rawApiKey: string | undefined;
+    if (selectedId) {
+      if (staticConfig.apiKeys?.[selectedId]) {
+        rawApiKey = staticConfig.apiKeys[selectedId];
+      } else if (
+        staticConfig.renderers &&
+        !Array.isArray(staticConfig.renderers) &&
+        staticConfig.renderers[selectedId]?.apiKey
+      ) {
+        rawApiKey = staticConfig.renderers[selectedId].apiKey;
       }
-      const p = profiles[key];
-      return p !== null && typeof p === 'object' && !Array.isArray(p);
-    };
-
-    if (staticConfig.initialProfile) {
-      if (isValidProfile(staticConfig.initialProfile)) {
-        return staticConfig.initialProfile;
-      }
-      console.warn(
-        `Initial profile '${staticConfig.initialProfile}' not found in static configuration.`,
-      );
     }
 
-    const requestedProfile = QueryParser.parseProfileName(this.getWindowSearch());
-    if (requestedProfile) {
-      if (isValidProfile(requestedProfile)) {
-        return requestedProfile;
-      }
-      console.warn(`Requested profile '${requestedProfile}' not found in static configuration.`);
-    }
-
-    const storedProfile = this.localStorageInteractions.getItem(LocalStorageKey.SELECTED_PROFILE);
-    if (storedProfile && isValidProfile(storedProfile)) {
-      return storedProfile;
-    }
-
-    if (isValidProfile('default')) {
-      return 'default';
-    }
-
-    return null;
-  }
-
-  private async applyApiKeyFromProfile(profile: ProfileConfig): Promise<void> {
-    const rawApiKey = profile.apiKey;
     const apiKey = typeof rawApiKey === 'string' ? rawApiKey.trim() : '';
 
     try {
-      const configProvider = this.injector.get(AppConfigProvider);
       if (apiKey) {
-        configProvider.setApiKeyFromConfig(apiKey);
+        this.configProvider.setApiKeyFromConfig(apiKey);
       } else {
-        configProvider.setApiKeyFromConfig('');
+        this.configProvider.setApiKeyFromConfig('');
         try {
-          const secureStorage = this.injector.get(SecureCredentialsStorage, null);
-          if (secureStorage) {
-            const storedKey = await secureStorage.getCredential(
+          if (this.secureCredentialsStorage) {
+            const storedKey = await this.secureCredentialsStorage.getCredential(
               SecureCredentialsKey.GEMINI_API_KEY,
             );
             if (storedKey && storedKey.trim()) {
-              await configProvider.setGeminiApiKey(storedKey.trim());
+              await this.configProvider.setGeminiApiKey(storedKey.trim());
             }
           }
         } catch (err) {
@@ -227,87 +179,206 @@ export class StartupResolution {
     }
   }
 
-  private async processStaticConfig(staticConfig: AppConfig): Promise<boolean> {
-    console.log('Using static config.');
-    if (
-      staticConfig.profiles &&
-      typeof staticConfig.profiles === 'object' &&
-      !Array.isArray(staticConfig.profiles)
-    ) {
-      this._profiles.set(staticConfig.profiles);
-    }
-
-    const resolvedKey = this.selectActiveProfileKey(staticConfig);
-    this._selectedProfileId.set(resolvedKey);
-    this._activeProfileKey.set(resolvedKey);
-
-    const profiles = staticConfig.profiles;
-    let activeProfile: ProfileConfig = {};
-    if (resolvedKey && profiles && Object.prototype.hasOwnProperty.call(profiles, resolvedKey)) {
-      const p = profiles[resolvedKey];
-      if (p && typeof p === 'object' && !Array.isArray(p)) {
-        activeProfile = p;
+  private getRendererById(
+    id: string,
+    staticRenderers: Record<string, RendererConfig>,
+  ): RendererConfig | null {
+    if (Object.prototype.hasOwnProperty.call(staticRenderers, id)) {
+      const r = staticRenderers[id];
+      if (r && typeof r === 'object' && !Array.isArray(r)) {
+        return r;
       }
     }
+    const customRenderers = this.getCustomRenderers();
+    const foundCustom = customRenderers.find(
+      r => r && typeof r === 'object' && !Array.isArray(r) && r.id === id,
+    );
+    if (foundCustom) {
+      return foundCustom;
+    }
+    return null;
+  }
 
-    await this.applyApiKeyFromProfile(activeProfile);
+  getCustomRenderers(): RendererConfig[] {
+    try {
+      const raw = this.localStorageInteractions.getItem(LocalStorageKey.CUSTOM_RENDERERS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (item): item is RendererConfig =>
+              !!item && typeof item === 'object' && typeof item.id === 'string' && !!item.id.trim(),
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse custom renderers from local storage:', e);
+    }
+    return [];
+  }
 
-    if (activeProfile.rendererUrl) {
-      this._resolvedUrl.set(activeProfile.rendererUrl);
+  async resolveRenderer(staticConfig?: AppConfig | null): Promise<string | null> {
+    this._isLockedContext.set(false);
+
+    let config = staticConfig;
+    if (config === undefined) {
+      config = await this.fetchStaticConfig();
     }
 
-    const allowOverrides = activeProfile.allowOverrides ?? true;
-    if (!allowOverrides) {
-      if (!activeProfile.rendererUrl) {
-        console.warn(
-          'Static profile sets allowOverrides: false but specifies no rendererUrl. Bypassing lock.',
-        );
+    let staticRenderers: Record<string, RendererConfig> = {};
+    if (config) {
+      if (
+        config.renderers &&
+        typeof config.renderers === 'object' &&
+        !Array.isArray(config.renderers)
+      ) {
+        staticRenderers = config.renderers;
+        this._renderers.set(staticRenderers);
+      }
+    } else {
+      staticRenderers = this._renderers();
+    }
+
+    // Tier 1 & 2: ?renderer= query param (subject to origin allowlist check)
+    const queryRendererUrl = QueryParser.parseRendererUrl(this.getWindowSearch());
+    if (queryRendererUrl) {
+      const isAllowed = await this.isOriginAllowed(queryRendererUrl);
+      if (isAllowed) {
+        console.log('Using renderer query param.');
+        const requestedId = QueryParser.parseRendererId(this.getWindowSearch());
+        if (requestedId) {
+          this._selectedRendererId.set(requestedId);
+        }
+        await this.applyApiKeyFromConfig(config || {}, requestedId || 'default');
+        this._resolvedUrl.set(queryRendererUrl);
+        return queryRendererUrl;
       } else {
-        console.log('Static configuration loaded with allowOverrides: false. Locking context.');
-        this._isLockedContext.set(true);
-
-        await this.evaluateEnvironmentPurge();
-        return true;
+        console.warn('Renderer query param origin not allowed by user.');
       }
+    }
+
+    // Tier 3: ?rendererId=
+    const requestedId = QueryParser.parseRendererId(this.getWindowSearch());
+    if (requestedId) {
+      const candidate = this.getRendererById(requestedId, staticRenderers);
+      if (candidate) {
+        console.log(`Using renderer ID '${requestedId}' from query param.`);
+        this._selectedRendererId.set(requestedId);
+        if (config) {
+          await this.applyApiKeyFromConfig(config, requestedId);
+        }
+        if (candidate.rendererUrl) {
+          this._resolvedUrl.set(candidate.rendererUrl);
+          return candidate.rendererUrl;
+        }
+      } else {
+        console.warn(`Requested renderer '${requestedId}' not found in static configuration.`);
+      }
+    }
+
+    // Tier 4: Last Selected Renderer (LocalStorage)
+    const storedId = this.localStorageInteractions.getItem(LocalStorageKey.SELECTED_RENDERER);
+    if (storedId) {
+      const candidate = this.getRendererById(storedId, staticRenderers);
+      if (candidate) {
+        console.log(`Using stored selected renderer ID '${storedId}'.`);
+        this._selectedRendererId.set(storedId);
+        if (config) {
+          await this.applyApiKeyFromConfig(config, storedId);
+        }
+        if (candidate.rendererUrl) {
+          this._resolvedUrl.set(candidate.rendererUrl);
+          return candidate.rendererUrl;
+        }
+      } else {
+        console.warn(`Stored selected renderer ID '${storedId}' not found.`);
+      }
+    }
+
+    // Tier 5: 'default' renderer from config.json.renderers
+    const defaultCandidate = this.getRendererById('default', staticRenderers);
+    if (defaultCandidate?.rendererUrl) {
+      console.log("Using 'default' renderer from static config.");
+      if (!this._selectedRendererId()) {
+        this._selectedRendererId.set('default');
+        if (config) {
+          await this.applyApiKeyFromConfig(config, 'default');
+        }
+      }
+      this._resolvedUrl.set(defaultCandidate.rendererUrl);
+      return defaultCandidate.rendererUrl;
+    }
+
+    // Tier 6: null renderer -> redirects to /settings
+    this._resolvedUrl.set(null);
+    this._selectedRendererId.set(null);
+    return null;
+  }
+
+  async isOriginAllowed(url: string): Promise<boolean> {
+    let origin: string;
+    let hostname: string;
+    try {
+      const baseOrigin = globalThis.location?.origin || 'http://localhost';
+      const parsedUrl = url.startsWith('/') ? new URL(url, baseOrigin) : new URL(url);
+      origin = parsedUrl.origin;
+      hostname = parsedUrl.hostname;
+    } catch (e) {
+      return false;
+    }
+
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]' ||
+      origin === globalThis.location?.origin
+    ) {
+      return true;
+    }
+
+    let allowedOrigins: string[] = [];
+    try {
+      const stored = this.localStorageInteractions.getItem(LocalStorageKey.ALLOWED_ORIGINS);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          allowedOrigins = parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse ALLOWED_ORIGINS from local storage:', e);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return true;
+    }
+
+    const confirmed = await this.confirmOrigin(origin);
+    if (confirmed) {
+      allowedOrigins.push(origin);
+      this.localStorageInteractions.setItem(
+        LocalStorageKey.ALLOWED_ORIGINS,
+        JSON.stringify(allowedOrigins),
+      );
+      return true;
     }
 
     return false;
   }
 
-  private applyOverrides(): void {
-    if (this._isLockedContext()) {
-      return;
-    }
-
-    console.log('Checking for renderer query param...');
-    const queryCandidate = QueryParser.parseRendererUrl(this.getWindowSearch());
-    if (queryCandidate) {
-      this._resolvedUrl.set(queryCandidate);
-      console.log('Using renderer query param.');
-      return;
-    }
-
-    const localPrefs = this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL);
-    if (localPrefs) {
-      console.log('Using renderer from local storage.');
-      this._resolvedUrl.set(localPrefs);
-    }
+  async confirmOrigin(origin: string): Promise<boolean> {
+    const dialogRef = this.dialog.open(OriginConfirmationDialog, {
+      data: {origin},
+      width: '450px',
+    });
+    const result = await firstValueFrom(dialogRef.afterClosed());
+    return !!result;
   }
 
   getResolvedRendererUrl(): string | null {
     return this._resolvedUrl();
   }
 
-  /**
-   * Updates the resolved renderer URL directly in state.
-   *
-   * Use for direct, synchronous runtime state updates (e.g. when a user
-   * explicitly changes the renderer URL in Settings via
-   * `AppConfigProvider.setRendererUrl`). Bypasses the asynchronous resolution
-   * pipeline to prevent query parameter overrides and network overhead.
-   *
-   * @param url The target renderer URL string or null.
-   */
   setResolvedRendererUrl(url: string | null): void {
     this._resolvedUrl.set(url);
   }
@@ -365,8 +436,7 @@ export class StartupResolution {
   private async evaluateEnvironmentPurge(): Promise<void> {
     if (!this.isThirdPartyEnvironment()) {
       try {
-        const configProvider = this.injector.get(AppConfigProvider);
-        await configProvider.purgeGeminiApiKey();
+        await this.configProvider.purgeGeminiApiKey();
       } catch (err) {
         console.warn('Failed to purge Gemini API key in 1P environment:', err);
       }

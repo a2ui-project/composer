@@ -36,6 +36,10 @@ export enum LocalStorageKey {
   DOCKVIEW_LAYOUT = 'composer_dockview_layout',
   /** Key for persisting the user's theme selection (light vs dark). */
   THEME_PREFERENCE = 'a2ui_composer_theme_preference',
-  /** Key for persisting the active profile selection. */
-  SELECTED_PROFILE = 'a2ui_composer_selected_profile',
+  /** Key for storing allowed origins for external renderer URLs. */
+  ALLOWED_ORIGINS = 'a2ui_composer_allowed_origins',
+  /** Key for persisting the user selected renderer ID. */
+  SELECTED_RENDERER = 'a2ui_composer_selected_renderer',
+  /** Key for storing user custom renderers. */
+  CUSTOM_RENDERERS = 'a2ui_composer_custom_renderers',
 }

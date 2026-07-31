@@ -127,6 +127,14 @@ test.describe('Workspace Navigation & Layout Modes', () => {
   test('loads workspace successfully when valid custom renderer query parameter is provided', async ({
     page,
   }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem(
+          'a2ui_composer_allowed_origins',
+          JSON.stringify(['http://custom-renderer.com']),
+        );
+      } catch (e) {}
+    });
     await page.goto('/?renderer=http://custom-renderer.com');
     await expect(page).toHaveTitle(/A2UI Composer/);
     await expect(page.locator('.workspace-container')).toBeVisible();

@@ -55,22 +55,22 @@ describe('QueryParser', () => {
     );
   });
 
-  describe('parseProfileName', () => {
-    it('parses profile name from ?profile query parameter', () => {
-      expect(QueryParser.parseProfileName('?profile=ge')).toBe('ge');
+  it('returns null when no renderer parameter exists', () => {
+    expect(QueryParser.parseRendererUrl('')).toBeNull();
+  });
+
+  describe('parseRendererId', () => {
+    it('returns null when no rendererId parameter exists', () => {
+      expect(QueryParser.parseRendererId('')).toBeNull();
     });
 
-    it('parses profile name from ?config query parameter as fallback', () => {
-      expect(QueryParser.parseProfileName('?config=dev')).toBe('dev');
+    it('parses renderer ID from ?rendererId query parameter', () => {
+      expect(QueryParser.parseRendererId('?rendererId=dev')).toBe('dev');
     });
 
-    it('prefers ?profile parameter over ?config parameter when both exist', () => {
-      expect(QueryParser.parseProfileName('?profile=ge&config=dev')).toBe('ge');
-    });
-
-    it('rejects profile names with invalid characters', () => {
-      expect(QueryParser.parseProfileName('?profile=testing/invalid')).toBeNull();
-      expect(QueryParser.parseProfileName('?profile=testing<script>')).toBeNull();
+    it('rejects renderer IDs with invalid characters', () => {
+      expect(QueryParser.parseRendererId('?rendererId=testing/invalid')).toBeNull();
+      expect(QueryParser.parseRendererId('?rendererId=testing<script>')).toBeNull();
     });
   });
 });
