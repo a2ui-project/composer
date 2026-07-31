@@ -19,7 +19,7 @@ import {PlatformLocation} from '@angular/common';
 import {Settings} from './settings';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {locationAssign} from 'safevalues/dom';
-import {StartupResolution, ProfileConfig} from '../../shell/startup-resolution/startup-resolution';
+import {StartupResolution, RendererConfig} from '../../shell/startup-resolution/startup-resolution';
 import {describe, it, expect, beforeEach, afterEach, vi, Mock} from 'vitest';
 import {
   HostCommunication,
@@ -52,17 +52,18 @@ describe('Settings', () => {
   let mockPlatformLocation: {
     getBaseHrefFromDOM: Mock<() => string | null>;
   };
-  let mockProfiles: WritableSignal<Record<string, ProfileConfig>>;
+  let mockProfiles: WritableSignal<Record<string, RendererConfig>>;
   let mockSelectedProfileId: WritableSignal<string | null>;
-  let mockActiveProfile: WritableSignal<ProfileConfig | null>;
+  let mockActiveProfile: WritableSignal<RendererConfig | null>;
   let mockStartupResolution: {
     getResolvedRendererUrl: Mock<() => string | null>;
     isThirdPartyEnvironment: Mock<() => boolean>;
     isContextLocked: Mock<() => boolean>;
-    profiles: Signal<Record<string, ProfileConfig>>;
-    selectedProfileId: Signal<string | null>;
-    activeProfile: Signal<ProfileConfig | null>;
-    setSelectedProfileId: Mock<(id: string | null) => void>;
+    renderers: Signal<Record<string, RendererConfig>>;
+    selectedRendererId: Signal<string | null>;
+    activeRenderer: Signal<RendererConfig | null>;
+    apiKeys: Signal<Record<string, string>>;
+    setSelectedRendererId: Mock<(id: string | null) => void>;
   };
   let mockLatestEnvelope: WritableSignal<MessageEnvelope | null>;
   let mockIsHandshakeInProgress: WritableSignal<boolean>;
@@ -82,6 +83,7 @@ describe('Settings', () => {
     isApiKeyProvidedByConfig: Signal<boolean>;
     setRendererUrl: Mock<(url: string) => void>;
     setGeminiApiKey: Mock<(key: string) => void>;
+    setRuntimeApiKey: Mock<(key: string) => void>;
     setApiKeyFromConfig: Mock<(key: string) => void>;
     setForcedAuthMode: Mock<(mode: AuthType) => void>;
     flushConfig: Mock<() => void>;
@@ -90,6 +92,8 @@ describe('Settings', () => {
 
   let mockSecureStorage: {
     getCredential: Mock<() => Promise<string | null>>;
+    getCustomApiKeys: Mock<() => Promise<any[]>>;
+    getCustomApiKey: Mock<(id: string) => Promise<any | null>>;
   };
 
   beforeEach(() => {
@@ -97,22 +101,25 @@ describe('Settings', () => {
     TestBed.resetTestingModule();
     mockSecureStorage = {
       getCredential: vi.fn().mockResolvedValue(null),
+      getCustomApiKeys: vi.fn().mockResolvedValue([]),
+      getCustomApiKey: vi.fn().mockResolvedValue(null),
     };
     mockPlatformLocation = {
       getBaseHrefFromDOM: vi.fn().mockReturnValue('/composer/pr/44/'),
     };
-    mockProfiles = signal<Record<string, ProfileConfig>>({});
+    mockProfiles = signal<Record<string, RendererConfig>>({});
     mockSelectedProfileId = signal<string | null>(null);
-    mockActiveProfile = signal<ProfileConfig | null>(null);
+    mockActiveProfile = signal<RendererConfig | null>(null);
 
     mockStartupResolution = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       isContextLocked: vi.fn().mockReturnValue(false),
-      profiles: mockProfiles.asReadonly(),
-      selectedProfileId: mockSelectedProfileId.asReadonly(),
-      activeProfile: mockActiveProfile.asReadonly(),
-      setSelectedProfileId: vi.fn((id: string | null) => {
+      renderers: mockProfiles.asReadonly(),
+      selectedRendererId: mockSelectedProfileId.asReadonly(),
+      activeRenderer: mockActiveProfile.asReadonly(),
+      apiKeys: signal({}).asReadonly(),
+      setSelectedRendererId: vi.fn((id: string | null) => {
         mockSelectedProfileId.set(id);
         mockActiveProfile.set(id ? mockProfiles()[id] || null : null);
       }),
@@ -148,6 +155,10 @@ describe('Settings', () => {
         mockRendererUrl.set(url);
       }),
       setGeminiApiKey: vi.fn().mockImplementation((key: string) => {
+        mockGeminiApiKey.set(key);
+      }),
+      setRuntimeApiKey: vi.fn().mockImplementation((key: string) => {
+        mockIsApiKeyProvidedByConfig.set(false);
         mockGeminiApiKey.set(key);
       }),
       setApiKeyFromConfig: vi.fn().mockImplementation((key: string) => {
@@ -716,7 +727,7 @@ describe('Settings', () => {
       expect(await harness.getApiKeyInputType()).toBe('text');
     });
 
-    it('locks rendererUrl and apiKey form controls when active profile disallows overrides', async () => {
+    it('locks rendererUrl and apiKey form controls when active renderer disallows overrides', async () => {
       mockActiveProfile.set({
         displayName: 'Locked Profile',
         rendererUrl: 'http://locked-server.com',
@@ -730,18 +741,18 @@ describe('Settings', () => {
       expect(component.isLocked()).toBe(true);
     });
 
-    it('invokes selectProfile on settings service when onProfileSelected is triggered', async () => {
+    it('invokes selectRenderer on settings service when onRendererSelected is triggered', async () => {
       const {component} = await setupComponent();
-      const selectSpy = vi.spyOn(component['settingsService'], 'selectProfile').mockResolvedValue();
+      const selectSpy = vi.spyOn(component['settingsService'], 'selectRenderer').mockResolvedValue();
 
       component.settingsForm.controls.apiKey.markAsDirty();
-      await component.onProfileSelected('dev');
+      await component.onRendererSelected('dev');
 
       expect(selectSpy).toHaveBeenCalledWith('dev');
       expect(component.settingsForm.controls.apiKey.pristine).toBe(true);
     });
 
-    it('clears active profile selection when rendererUrl form control value is modified', async () => {
+    it('clears active renderer selection when rendererUrl form control value is modified', async () => {
       mockSelectedProfileId.set('dev');
       mockActiveProfile.set({
         displayName: 'Development',
@@ -750,7 +761,7 @@ describe('Settings', () => {
       });
 
       const {component, harness} = await setupComponent();
-      const selectSpy = vi.spyOn(component['settingsService'], 'selectProfile');
+      const selectSpy = vi.spyOn(component['settingsService'], 'selectRenderer');
 
       await harness.setRendererUrlValue('http://custom-renderer-url.com');
       await new Promise(resolve => queueMicrotask(resolve));
@@ -758,7 +769,7 @@ describe('Settings', () => {
       expect(selectSpy).toHaveBeenCalledWith(null);
     });
 
-    it('preserves profile selection when rendererUrl form control value matches active profile URL', async () => {
+    it('preserves renderer selection when rendererUrl form control value matches active renderer URL', async () => {
       mockSelectedProfileId.set('dev');
       mockActiveProfile.set({
         displayName: 'Development',
@@ -767,7 +778,7 @@ describe('Settings', () => {
       });
 
       const {component} = await setupComponent();
-      const selectSpy = vi.spyOn(component['settingsService'], 'selectProfile');
+      const selectSpy = vi.spyOn(component['settingsService'], 'selectRenderer');
 
       component.settingsForm.controls.rendererUrl.setValue('http://localhost:3000');
 
@@ -787,7 +798,7 @@ describe('Settings', () => {
       expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
 
       component.settingsForm.controls.apiKey.markAsDirty();
-      await component.onProfileSelected(null);
+      await component.onRendererSelected(null);
       fixture.detectChanges();
 
       expect(component.isLocked()).toBe(false);
@@ -809,7 +820,7 @@ describe('Settings', () => {
       expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
 
       component.settingsForm.controls.apiKey.markAsDirty();
-      await component.onProfileSelected(null);
+      await component.onRendererSelected(null);
       fixture.detectChanges();
 
       expect(component.isLocked()).toBe(false);
@@ -824,7 +835,7 @@ describe('Settings', () => {
 
       expect(component.settingsForm.controls.rendererUrl.value).toBe('http://locked-server.com');
 
-      await component.onProfileSelected(null);
+      await component.onRendererSelected(null);
       fixture.detectChanges();
 
       expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('');
@@ -836,14 +847,14 @@ describe('Settings', () => {
       mockSecureStorage.getCredential.mockResolvedValue('saved-personal-api-key');
       const {fixture, component} = await setupComponent();
 
-      await component.onProfileSelected(null);
+      await component.onRendererSelected(null);
       fixture.detectChanges();
 
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
       expect(mockSecureStorage.getCredential).toHaveBeenCalledWith(
         SecureCredentialsKey.GEMINI_API_KEY,
       );
-      expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('saved-personal-api-key');
+      expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('saved-personal-api-key');
       expect(component.settingsForm.controls.apiKey.value).toBe('saved-personal-api-key');
     });
 
@@ -853,11 +864,11 @@ describe('Settings', () => {
       mockGeminiApiKey.set('old-config-key');
       const {fixture, component} = await setupComponent();
 
-      await component.onProfileSelected(null);
+      await component.onRendererSelected(null);
       fixture.detectChanges();
 
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
-      expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('');
+      expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('');
       expect(component.settingsForm.controls.apiKey.value).toBe('');
     });
   });
@@ -871,13 +882,13 @@ describe('Settings', () => {
       expect(await harness.isSaveButtonDisabled()).toBe(true);
     });
 
-    it('enables Save Settings button when profile selection changes', async () => {
+    it('enables Save Settings button when renderer selection changes', async () => {
       mockProfiles.set({
         'profile-1': {displayName: 'Profile 1', rendererUrl: 'http://p1.com'},
       });
       const {fixture, component, harness} = await setupComponent();
 
-      await component.onProfileSelected('profile-1');
+      await component.onRendererSelected('profile-1');
       fixture.detectChanges();
 
       expect(component.hasUnsavedChanges()).toBe(true);

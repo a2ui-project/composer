@@ -22,4 +22,6 @@
 export enum SecureCredentialsKey {
   /** Key for storing the personal third-party Gemini developer API token in IndexedDB. */
   GEMINI_API_KEY = 'a2ui_composer_api_key',
+  /** Key for storing user custom API keys list in IndexedDB. */
+  CUSTOM_API_KEYS = 'a2ui_custom_api_keys',
 }

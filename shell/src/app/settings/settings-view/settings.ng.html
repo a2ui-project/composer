@@ -24,9 +24,9 @@
         <div class="form-section">
           <h3>Configuration Profile</h3>
           <a2ui-composer-profile-selector
-            [profiles]="settingsService.profiles()"
-            [selectedProfileId]="settingsService.selectedProfileId()"
-            (profileSelected)="onProfileSelected($event)"
+            [profiles]="settingsService.renderers()"
+            [selectedProfileId]="settingsService.selectedRendererId()"
+            (profileSelected)="onRendererSelected($event)"
           >
           </a2ui-composer-profile-selector>
         </div>

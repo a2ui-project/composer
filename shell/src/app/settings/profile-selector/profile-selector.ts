@@ -18,15 +18,15 @@ import {Component, computed, input, output} from '@angular/core';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {ProfileConfig} from '../../shell/startup-resolution/startup-resolution';
+import {RendererConfig} from '../../shell/startup-resolution/startup-resolution';
 
 /**
- * Default tooltip message displayed when profile selection is disabled due to empty profiles.
+ * Default tooltip message displayed when renderer selection is disabled due to empty profiles.
  */
 export const NO_PROFILES_TOOLTIP = 'No profiles available';
 
 /**
- * Option item model for profile selection dropdowns.
+ * Option item model for renderer selection dropdowns.
  */
 export declare interface ProfileOption {
   id: string;
@@ -46,7 +46,7 @@ export declare interface ProfileOption {
   styleUrl: './profile-selector.scss',
 })
 export class ProfileSelector {
-  readonly profiles = input<Record<string, ProfileConfig> | null | undefined>({});
+  readonly profiles = input<Record<string, RendererConfig> | null | undefined>({});
   readonly selectedProfileId = input<string | null>(null);
 
   readonly profileSelected = output<string | null>();

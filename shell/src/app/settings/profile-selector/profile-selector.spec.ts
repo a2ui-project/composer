@@ -19,7 +19,7 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {ProfileSelector} from './profile-selector';
 import {ProfileSelectorHarness} from './test/profile-selector.harness';
-import {ProfileConfig} from '../../shell/startup-resolution/startup-resolution';
+import {RendererConfig} from '../../shell/startup-resolution/startup-resolution';
 import {describe, beforeEach, it, expect, vi} from 'vitest';
 
 describe('ProfileSelector', () => {
@@ -27,7 +27,7 @@ describe('ProfileSelector', () => {
   let component: ProfileSelector;
   let harness: ProfileSelectorHarness;
 
-  const mockProfiles: Record<string, ProfileConfig> = {
+  const mockProfiles: Record<string, RendererConfig> = {
     dev: {
       displayName: 'Development Environment',
       rendererUrl: 'http://localhost:3000',
@@ -57,7 +57,7 @@ describe('ProfileSelector', () => {
     expect(options).toEqual(['Custom', 'Development Environment', 'prod']);
   });
 
-  it('emits profileSelected with selected profile ID when option is selected', async () => {
+  it('emits profileSelected with selected renderer ID when option is selected', async () => {
     fixture.componentRef.setInput('profiles', mockProfiles);
     fixture.detectChanges();
 
@@ -124,7 +124,7 @@ describe('ProfileSelector', () => {
   it('returns empty profileOptions array when profiles input is an array', () => {
     fixture.componentRef.setInput('profiles', ['invalid', 'array'] as unknown as Record<
       string,
-      ProfileConfig
+      RendererConfig
     >);
     fixture.detectChanges();
 
@@ -134,7 +134,7 @@ describe('ProfileSelector', () => {
   it('computes isEmpty as true and disables component when profiles input is an array', () => {
     fixture.componentRef.setInput('profiles', ['invalid', 'array'] as unknown as Record<
       string,
-      ProfileConfig
+      RendererConfig
     >);
     fixture.detectChanges();
 

@@ -42,4 +42,6 @@ export enum LocalStorageKey {
   SELECTED_RENDERER = 'a2ui_composer_selected_renderer',
   /** Key for storing user custom renderers. */
   CUSTOM_RENDERERS = 'a2ui_composer_custom_renderers',
+  /** Key for persisting the user selected API key ID. */
+  SELECTED_API_KEY = 'a2ui_composer_selected_api_key',
 }

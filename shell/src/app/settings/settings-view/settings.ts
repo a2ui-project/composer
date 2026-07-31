@@ -121,7 +121,7 @@ export class Settings implements OnInit {
 
   readonly hasUnsavedChanges: Signal<boolean> = computed(() => {
     this.formEvents();
-    const profileChanged = this.settingsService.selectedProfileId() !== this.initialProfileId();
+    const profileChanged = this.settingsService.selectedRendererId() !== this.initialProfileId();
     const authChanged = this.forceThirdPartyAuth() !== this.initialForceThirdPartyAuth();
     const urlChanged = this.settingsForm.controls.rendererUrl.value !== this.initialRendererUrl();
     const apiKeyChanged = this.settingsForm.controls.apiKey.value !== this.initialApiKey();
@@ -153,13 +153,13 @@ export class Settings implements OnInit {
     this.settingsForm.controls.rendererUrl.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
       if (this.settingsForm.controls.rendererUrl.dirty) {
         queueMicrotask(() => {
-          const selectedId = this.settingsService.selectedProfileId();
+          const selectedId = this.settingsService.selectedRendererId();
           if (selectedId !== null) {
             const currentVal = this.settingsForm.controls.rendererUrl.value;
-            const activeUrl = this.settingsService.activeProfile()?.rendererUrl;
+            const activeUrl = this.settingsService.activeRenderer()?.rendererUrl;
             if (currentVal !== activeUrl) {
-              this.settingsService.selectProfile(null).catch(err => {
-                console.warn('Failed to reset selected profile on renderer URL edit:', err);
+              this.settingsService.selectRenderer(null).catch(err => {
+                console.warn('Failed to reset selected renderer on renderer URL edit:', err);
               });
             }
           }
@@ -215,21 +215,21 @@ export class Settings implements OnInit {
       this.settingsForm.controls.apiKey.setValue(key, {emitEvent: false});
     }
 
-    this.initialProfileId.set(this.settingsService.selectedProfileId());
+    this.initialProfileId.set(this.settingsService.selectedRendererId());
     this.initialForceThirdPartyAuth.set(this.forceThirdPartyAuth());
     this.initialRendererUrl.set(this.configProvider.rendererUrl());
     this.initialApiKey.set(this.configProvider.geminiApiKey());
   }
 
-  async onProfileSelected(profileId: string | null): Promise<void> {
-    await this.settingsService.selectProfile(profileId);
-    if (profileId === null) {
+  async onRendererSelected(rendererId: string | null): Promise<void> {
+    await this.settingsService.selectRenderer(rendererId);
+    if (rendererId === null) {
       this.settingsForm.controls.rendererUrl.setValue('');
       this.settingsForm.controls.rendererUrl.enable({emitEvent: false});
       this.configureApiKeyControl(this.isThirdParty());
       this.settingsForm.controls.rendererUrl.markAsPristine();
     } else {
-      const active = this.settingsService.activeProfile();
+      const active = this.settingsService.activeRenderer();
       if (active?.rendererUrl !== undefined) {
         this.settingsForm.controls.rendererUrl.setValue(active.rendererUrl);
         this.settingsForm.controls.rendererUrl.markAsPristine();
@@ -299,7 +299,7 @@ export class Settings implements OnInit {
       }
       this.settingsForm.controls.rendererUrl.setValue(trimmedUrl, {emitEvent: false});
       this.settingsForm.controls.apiKey.setValue(trimmedApiKey, {emitEvent: false});
-      this.initialProfileId.set(this.settingsService.selectedProfileId());
+      this.initialProfileId.set(this.settingsService.selectedRendererId());
       this.initialForceThirdPartyAuth.set(this.forceThirdPartyAuth());
       this.initialRendererUrl.set(this.configProvider.rendererUrl());
       this.initialApiKey.set(this.configProvider.geminiApiKey());

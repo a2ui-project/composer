@@ -15,6 +15,16 @@
  */
 
 import {Injectable} from '@angular/core';
+import {SecureCredentialsKey} from '../models/secure-credentials-keys';
+
+/**
+ * Represents a custom API key entry stored within SecureCredentialsStorage.
+ */
+export declare interface CustomApiKey {
+  id: string;
+  name: string;
+  key: string;
+}
 
 /**
  * Represents a key-value record stored within the highly secure IndexedDB instance.
@@ -262,5 +272,60 @@ export class SecureCredentialsStorage {
     await this.executeTransaction<void>(this.storeName, 'readwrite', tx => {
       tx.objectStore(this.storeName).delete(key);
     });
+  }
+
+  /**
+   * Retrieves the list of stored custom API keys from IndexedDB.
+   */
+  async getCustomApiKeys(): Promise<CustomApiKey[]> {
+    try {
+      const raw = await this.getCredential(SecureCredentialsKey.CUSTOM_API_KEYS);
+      if (!raw) {
+        return [];
+      }
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (item): item is CustomApiKey =>
+            !!item && typeof item === 'object' && typeof item.id === 'string' && !!item.id.trim(),
+        );
+      }
+    } catch (err) {
+      console.warn('Failed to retrieve custom API keys from SecureCredentialsStorage', err);
+    }
+    return [];
+  }
+
+  /**
+   * Retrieves a specific custom API key by ID.
+   */
+  async getCustomApiKey(id: string): Promise<CustomApiKey | null> {
+    const keys = await this.getCustomApiKeys();
+    const found = keys.find(k => k.id === id);
+    return found || null;
+  }
+
+  /**
+   * Saves or updates a custom API key in SecureCredentialsStorage.
+   */
+  async saveCustomApiKey(id: string, name: string, key: string): Promise<void> {
+    const keys = await this.getCustomApiKeys();
+    const existingIndex = keys.findIndex(k => k.id === id);
+    const trimmedKey = key.trim();
+    if (existingIndex >= 0) {
+      keys[existingIndex] = {id, name, key: trimmedKey};
+    } else {
+      keys.push({id, name, key: trimmedKey});
+    }
+    await this.setCredential(SecureCredentialsKey.CUSTOM_API_KEYS, JSON.stringify(keys));
+  }
+
+  /**
+   * Deletes a custom API key by ID from SecureCredentialsStorage.
+   */
+  async deleteCustomApiKey(id: string): Promise<void> {
+    const keys = await this.getCustomApiKeys();
+    const filtered = keys.filter(k => k.id !== id);
+    await this.setCredential(SecureCredentialsKey.CUSTOM_API_KEYS, JSON.stringify(filtered));
   }
 }

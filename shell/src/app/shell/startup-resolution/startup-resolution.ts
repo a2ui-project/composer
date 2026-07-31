@@ -64,10 +64,12 @@ export class StartupResolution {
 
   private readonly _renderers = signal<Record<string, RendererConfig>>({});
   private readonly _selectedRendererId = signal<string | null>(null);
+  private readonly _apiKeys = signal<Record<string, string>>({});
 
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
   readonly isLockedContext = this._isLockedContext.asReadonly();
   readonly renderers = this._renderers.asReadonly();
+  readonly apiKeys = this._apiKeys.asReadonly();
   readonly selectedRendererId = this._selectedRendererId.asReadonly();
   readonly activeRenderer = computed<RendererConfig | null>(() => {
     const renderers = this._renderers();
@@ -97,6 +99,7 @@ export class StartupResolution {
     this._resolvedUrl.set(null);
     this._selectedRendererId.set(null);
     this._renderers.set({});
+    this._apiKeys.set({});
 
     const staticConfig = await this.fetchStaticConfig();
     const resolved = await this.resolveRenderer(staticConfig);
@@ -158,21 +161,6 @@ export class StartupResolution {
         this.configProvider.setApiKeyFromConfig(apiKey);
       } else {
         this.configProvider.setApiKeyFromConfig('');
-        try {
-          if (this.secureCredentialsStorage) {
-            const storedKey = await this.secureCredentialsStorage.getCredential(
-              SecureCredentialsKey.GEMINI_API_KEY,
-            );
-            if (storedKey && storedKey.trim()) {
-              await this.configProvider.setGeminiApiKey(storedKey.trim());
-            }
-          }
-        } catch (err) {
-          console.warn(
-            'Failed to retrieve credential from SecureCredentialsStorage during startup resolution:',
-            err,
-          );
-        }
       }
     } catch (err) {
       console.warn('Failed to apply config-provided API key to AppConfigProvider:', err);
@@ -223,6 +211,12 @@ export class StartupResolution {
     let config = staticConfig;
     if (config === undefined) {
       config = await this.fetchStaticConfig();
+    }
+
+    if (config?.apiKeys && typeof config.apiKeys === 'object' && !Array.isArray(config.apiKeys)) {
+      this._apiKeys.set(config.apiKeys);
+    } else {
+      this._apiKeys.set({});
     }
 
     let staticRenderers: Record<string, RendererConfig> = {};

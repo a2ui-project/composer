@@ -431,4 +431,60 @@ describe('SecureCredentialsStorage', () => {
 
     errSpy.mockRestore();
   });
+
+  it('saves, retrieves, and deletes custom API keys', async () => {
+    expect(await service.getCustomApiKeys()).toEqual([]);
+
+    await service.saveCustomApiKey('custom-1', 'Key One', 'secret-val-1');
+    await service.saveCustomApiKey('custom-2', 'Key Two', 'secret-val-2');
+
+    const keys = await service.getCustomApiKeys();
+    expect(keys).toEqual([
+      {id: 'custom-1', name: 'Key One', key: 'secret-val-1'},
+      {id: 'custom-2', name: 'Key Two', key: 'secret-val-2'},
+    ]);
+
+    expect(await service.getCustomApiKey('custom-1')).toEqual({
+      id: 'custom-1',
+      name: 'Key One',
+      key: 'secret-val-1',
+    });
+
+    await service.saveCustomApiKey('custom-1', 'Updated Key One', 'new-secret');
+    expect(await service.getCustomApiKey('custom-1')).toEqual({
+      id: 'custom-1',
+      name: 'Updated Key One',
+      key: 'new-secret',
+    });
+
+    await service.deleteCustomApiKey('custom-1');
+    expect(await service.getCustomApiKeys()).toEqual([
+      {id: 'custom-2', name: 'Key Two', key: 'secret-val-2'},
+    ]);
+  });
+
+  it('returns empty array from getCustomApiKeys() when CUSTOM_API_KEYS contains invalid or corrupted JSON string data', async () => {
+    await service.setCredential(SecureCredentialsKey.CUSTOM_API_KEYS, 'not-valid-json {[');
+    expect(await service.getCustomApiKeys()).toEqual([]);
+
+    await service.setCredential(SecureCredentialsKey.CUSTOM_API_KEYS, '"not-an-array"');
+    expect(await service.getCustomApiKeys()).toEqual([]);
+
+    await service.setCredential(SecureCredentialsKey.CUSTOM_API_KEYS, '{"foo": "bar"}');
+    expect(await service.getCustomApiKeys()).toEqual([]);
+  });
+
+  it('filters out null, non-object, missing ID, or whitespace-only ID items in getCustomApiKeys()', async () => {
+    const malformed = [
+      null,
+      123,
+      {name: 'No ID', key: 'secret'},
+      {id: '   ', name: 'Whitespace ID', key: 'secret'},
+      {id: 'valid-1', name: 'Valid One', key: 'valid-secret'},
+    ];
+    await service.setCredential(SecureCredentialsKey.CUSTOM_API_KEYS, JSON.stringify(malformed));
+    expect(await service.getCustomApiKeys()).toEqual([
+      {id: 'valid-1', name: 'Valid One', key: 'valid-secret'},
+    ]);
+  });
 });

@@ -28,6 +28,7 @@ import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tok
 
 class MockSecureCredentialsStorage {
   private storage = new Map<string, string>();
+  private customKeys: Array<{id: string; name: string; key: string}> = [];
 
   async getCredential(key: string): Promise<string | null> {
     const val = this.storage.get(key);
@@ -43,6 +44,30 @@ class MockSecureCredentialsStorage {
     this.storage.delete(key);
     return Promise.resolve();
   }
+
+  async getCustomApiKeys(): Promise<Array<{id: string; name: string; key: string}>> {
+    return Promise.resolve(this.customKeys);
+  }
+
+  async getCustomApiKey(id: string): Promise<{id: string; name: string; key: string} | null> {
+    const found = this.customKeys.find(k => k.id === id);
+    return Promise.resolve(found || null);
+  }
+
+  async saveCustomApiKey(id: string, name: string, key: string): Promise<void> {
+    const existing = this.customKeys.findIndex(k => k.id === id);
+    if (existing >= 0) {
+      this.customKeys[existing] = {id, name, key};
+    } else {
+      this.customKeys.push({id, name, key});
+    }
+    return Promise.resolve();
+  }
+
+  async deleteCustomApiKey(id: string): Promise<void> {
+    this.customKeys = this.customKeys.filter(k => k.id !== id);
+    return Promise.resolve();
+  }
 }
 
 describe('LocalStorageAppConfigProvider', () => {
@@ -53,6 +78,7 @@ describe('LocalStorageAppConfigProvider', () => {
     isContextLocked: ReturnType<typeof vi.fn>;
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
     isExtensionMode: ReturnType<typeof vi.fn>;
+    apiKeys: ReturnType<typeof vi.fn>;
   };
   let mockSecureStorage: MockSecureCredentialsStorage;
 
@@ -66,6 +92,7 @@ describe('LocalStorageAppConfigProvider', () => {
       isContextLocked: vi.fn().mockReturnValue(false),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       isExtensionMode: vi.fn().mockReturnValue(false),
+      apiKeys: vi.fn().mockReturnValue({}),
     };
   });
 
@@ -112,28 +139,7 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(provider.authType()).toBe(AuthType.FIRST_PARTY); // Fallback is 1P
   });
 
-  it('initializes geminiApiKey with the stored API key from SecureCredentialsStorage', async () => {
-    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'test-key-xyz');
-    const provider = setupProvider();
-    await provider.initialize();
-    expect(provider.geminiApiKey()).toBe('test-key-xyz');
-  });
-
-  it('initializes geminiApiKey with a trimmed stored API key', async () => {
-    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, '  test-key-xyz  ');
-    const provider = setupProvider();
-    await provider.initialize();
-    expect(provider.geminiApiKey()).toBe('test-key-xyz');
-  });
-
   it('initializes geminiApiKey with an empty string when stored API key is not present', async () => {
-    const provider = setupProvider();
-    await provider.initialize();
-    expect(provider.geminiApiKey()).toBe('');
-  });
-
-  it('initializes geminiApiKey with an empty string when stored API key is empty or whitespace', async () => {
-    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, '   ');
     const provider = setupProvider();
     await provider.initialize();
     expect(provider.geminiApiKey()).toBe('');
@@ -234,35 +240,35 @@ describe('LocalStorageAppConfigProvider', () => {
   });
 
   it('persists updated API key to SecureCredentialsStorage and updates signal', async () => {
+    await mockSecureStorage.saveCustomApiKey('my-key', 'My Key', 'old-token');
+    localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-key');
     const provider = setupProvider();
     await provider.setGeminiApiKey('fresh-token');
     expect(provider.geminiApiKey()).toBe('fresh-token');
-    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBe(
-      'fresh-token',
-    );
+    const custom = await mockSecureStorage.getCustomApiKey('my-key');
+    expect(custom?.key).toBe('fresh-token');
   });
 
   it('trims the API key before persisting and updating signal', async () => {
+    await mockSecureStorage.saveCustomApiKey('my-key', 'My Key', 'old-token');
+    localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-key');
     const provider = setupProvider();
     await provider.setGeminiApiKey('  fresh-token  ');
     expect(provider.geminiApiKey()).toBe('fresh-token');
-    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBe(
-      'fresh-token',
-    );
+    const custom = await mockSecureStorage.getCustomApiKey('my-key');
+    expect(custom?.key).toBe('fresh-token');
   });
 
   it('handles empty string in setGeminiApiKey', async () => {
     const provider = setupProvider();
     await provider.setGeminiApiKey('');
     expect(provider.geminiApiKey()).toBe('');
-    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBe('');
   });
 
   it('handles whitespace-only string in setGeminiApiKey by trimming to empty string', async () => {
     const provider = setupProvider();
     await provider.setGeminiApiKey('   ');
     expect(provider.geminiApiKey()).toBe('');
-    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBe('');
   });
 
   it('persists updated theme selection to localStorage and updates signal', () => {
@@ -311,8 +317,8 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(provider.authType()).toBe(AuthType.FIRST_PARTY); // Fallback 1P
     expect(provider.themePreference()).toBe(ThemePreference.LIGHT);
 
-    expect(localStorage.getItem(LocalStorageKey.RENDERER_URL)).toBeNull();
-    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBeNull();
+    expect(localStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
+    expect(localStorage.getItem(LocalStorageKey.SELECTED_API_KEY)).toBeNull();
     expect(localStorage.getItem(LocalStorageKey.FORCE_1P)).toBeNull();
     expect(localStorage.getItem(LocalStorageKey.FORCE_3P)).toBeNull();
     expect(localStorage.getItem(LocalStorageKey.THEME_PREFERENCE)).toBeNull();
@@ -320,7 +326,8 @@ describe('LocalStorageAppConfigProvider', () => {
 
   it('handles simulated storage rejections gracefully during initialize bootstrap', async () => {
     const warnSpy = vi.spyOn(console, 'warn');
-    vi.spyOn(mockSecureStorage, 'getCredential').mockRejectedValue(
+    localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'err-key');
+    vi.spyOn(mockSecureStorage, 'getCustomApiKey').mockRejectedValue(
       new Error('Simulated Read Failure'),
     );
 
@@ -336,7 +343,9 @@ describe('LocalStorageAppConfigProvider', () => {
 
   it('attaches catch handler, logs warning, and re-throws when setGeminiApiKey write fails, after updating signal', async () => {
     const warnSpy = vi.spyOn(console, 'warn');
-    vi.spyOn(mockSecureStorage, 'setCredential').mockRejectedValue(
+    await mockSecureStorage.saveCustomApiKey('my-key', 'My Key', 'initial-key');
+    localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-key');
+    vi.spyOn(mockSecureStorage, 'saveCustomApiKey').mockRejectedValue(
       new Error('Simulated Write Failure'),
     );
 
@@ -350,13 +359,14 @@ describe('LocalStorageAppConfigProvider', () => {
     );
   });
 
-  it('updates geminiApiKey signal even when setCredential persistence fails and re-throws', async () => {
-    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'initial-key');
+  it('updates geminiApiKey signal even when saveCustomApiKey persistence fails and re-throws', async () => {
+    await mockSecureStorage.saveCustomApiKey('my-key', 'My Key', 'initial-key');
+    localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-key');
     const provider = setupProvider();
     await provider.initialize();
     expect(provider.geminiApiKey()).toBe('initial-key');
 
-    vi.spyOn(mockSecureStorage, 'setCredential').mockRejectedValue(
+    vi.spyOn(mockSecureStorage, 'saveCustomApiKey').mockRejectedValue(
       new Error('Simulated Write Failure'),
     );
 
@@ -367,9 +377,11 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(provider.geminiApiKey()).toBe('new-failed-key');
   });
 
-  it('logs warning and re-throws error when setGeminiApiKey encounters SecurityError or QuotaExceededError', async () => {
+  it('logs warning and re-throws error when saveCustomApiKey encounters SecurityError or QuotaExceededError', async () => {
     const warnSpy = vi.spyOn(console, 'warn');
-    vi.spyOn(mockSecureStorage, 'setCredential').mockRejectedValue(
+    await mockSecureStorage.saveCustomApiKey('my-key', 'My Key', 'initial-key');
+    localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-key');
+    vi.spyOn(mockSecureStorage, 'saveCustomApiKey').mockRejectedValue(
       new DOMException('SecurityError in sandboxed iframe', 'SecurityError'),
     );
 
@@ -382,36 +394,6 @@ describe('LocalStorageAppConfigProvider', () => {
       expect.stringContaining('Failed to persist Gemini API key'),
       expect.anything(),
     );
-  });
-
-  it('attaches catch handler and logs warning when removeCredential delete fails during flushConfig', async () => {
-    const warnSpy = vi.spyOn(console, 'warn');
-    vi.spyOn(mockSecureStorage, 'removeCredential').mockRejectedValue(
-      new Error('Simulated Remove Failure'),
-    );
-
-    const provider = setupProvider();
-    await provider.flushConfig();
-
-    // Allow pending promise to reject
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      'Failed to remove Gemini API key from SecureCredentialsStorage',
-      expect.any(Error),
-    );
-  });
-
-  it('securely removes API key from SecureCredentialsStorage and updates signal on purgeGeminiApiKey', async () => {
-    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'token-to-purge');
-    const provider = setupProvider();
-    await provider.initialize();
-    expect(provider.geminiApiKey()).toBe('token-to-purge');
-
-    await provider.purgeGeminiApiKey();
-
-    expect(provider.geminiApiKey()).toBe('');
-    expect(await mockSecureStorage.getCredential(SecureCredentialsKey.GEMINI_API_KEY)).toBeNull();
   });
 
   describe('server-provided api key from config', () => {
@@ -528,5 +510,68 @@ describe('LocalStorageAppConfigProvider', () => {
     const provider = setupProvider();
     await provider.flushConfig();
     expect(mockStartupService.resolveStartupConfiguration).toHaveBeenCalled();
+  });
+
+  describe('Selected Custom API Key and Fallback Resolution', () => {
+    it('initializes geminiApiKey from selected custom API key in SecureCredentialsStorage when SELECTED_API_KEY is present', async () => {
+      await mockSecureStorage.saveCustomApiKey('my-custom', 'Custom Name', 'custom-key-xyz');
+      localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-custom');
+
+      const provider = setupProvider();
+      await provider.initialize();
+
+      expect(provider.geminiApiKey()).toBe('custom-key-xyz');
+    });
+
+    it('updates selected custom API key in SecureCredentialsStorage when setGeminiApiKey is called with SELECTED_API_KEY present', async () => {
+      await mockSecureStorage.saveCustomApiKey('my-custom', 'Custom Name', 'initial-key');
+      localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-custom');
+
+      const provider = setupProvider();
+      await provider.setGeminiApiKey('updated-custom-key');
+
+      expect(provider.geminiApiKey()).toBe('updated-custom-key');
+      const custom = await mockSecureStorage.getCustomApiKey('my-custom');
+      expect(custom?.key).toBe('updated-custom-key');
+    });
+
+    it('purges active API key state and SELECTED_API_KEY from local storage without deleting custom API keys from SecureCredentialsStorage', async () => {
+      await mockSecureStorage.saveCustomApiKey('my-custom', 'Custom Name', 'token-to-purge');
+      localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-custom');
+
+      const provider = setupProvider();
+      await provider.initialize();
+      expect(provider.geminiApiKey()).toBe('token-to-purge');
+
+      await provider.purgeGeminiApiKey();
+
+      expect(provider.geminiApiKey()).toBe('');
+      expect(localStorage.getItem(LocalStorageKey.SELECTED_API_KEY)).toBeNull();
+      const custom = await mockSecureStorage.getCustomApiKey('my-custom');
+      expect(custom).not.toBeNull();
+      expect(custom?.key).toBe('token-to-purge');
+    });
+
+    it('initializes geminiApiKey with static configuration API key when SELECTED_API_KEY matches static key ID', async () => {
+      mockStartupService.apiKeys.mockReturnValue({'static-id': 'static-secret-value'});
+      localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'static-id');
+
+      const provider = setupProvider();
+      await provider.initialize();
+
+      expect(provider.isApiKeyProvidedByConfig()).toBe(true);
+      expect(provider.geminiApiKey()).toBe('static-secret-value');
+    });
+
+    it('sets geminiApiKey signal in memory without persisting to SecureCredentialsStorage on setRuntimeApiKey', async () => {
+      const setCredentialSpy = vi.spyOn(mockSecureStorage, 'setCredential');
+      const provider = setupProvider();
+
+      provider.setRuntimeApiKey('  runtime-token-xyz  ');
+
+      expect(provider.geminiApiKey()).toBe('runtime-token-xyz');
+      expect(provider.isApiKeyProvidedByConfig()).toBe(false);
+      expect(setCredentialSpy).not.toHaveBeenCalled();
+    });
   });
 });
