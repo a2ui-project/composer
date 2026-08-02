@@ -38,12 +38,15 @@ test.describe('Settings and Client Configuration', () => {
     test('persists configuration successfully, triggers explicit window reload, and unlocks guarded routes', async ({
       page,
     }) => {
-      const rendererInput = page.getByLabel('Target Renderer URL');
-      await expect(rendererInput).toBeEnabled();
-      await rendererInput.fill('http://localhost:9090');
+      await page.locator('.add-api-key-button').click();
+      await page.locator('#api-key-name-input').fill('Test Key');
+      await page.locator('#api-key-value-input').fill('test-api-key');
+      await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
 
-      const apiKeyInput = page.getByLabel('Gemini API Key');
-      await apiKeyInput.fill('test-api-key');
+      await page.locator('.add-renderer-button').click();
+      await page.locator('#renderer-name-input').fill('Test Renderer');
+      await page.locator('#renderer-url-input').fill('http://localhost:9090');
+      await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
 
       await page.evaluate(() => {
         (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__ = true;
@@ -70,8 +73,10 @@ test.describe('Settings and Client Configuration', () => {
     test('persists configuration successfully with default relative renderer URL and loads workspace with pre-populated draft', async ({
       page,
     }) => {
-      const apiKeyInput = page.getByLabel('Gemini API Key');
-      await apiKeyInput.fill('new-unique-api-key');
+      await page.locator('.add-api-key-button').click();
+      await page.locator('#api-key-name-input').fill('Unique Key');
+      await page.locator('#api-key-value-input').fill('new-unique-api-key');
+      await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
 
       const saveBtn = page.getByRole('button', {name: 'Save Settings'});
       await expect(saveBtn).toBeEnabled();
@@ -91,7 +96,7 @@ test.describe('Settings and Client Configuration', () => {
         await route.fulfill({
           contentType: 'application/json',
           body: JSON.stringify({
-            profiles: {
+            renderers: {
               default: {
                 rendererUrl: 'http://locked-renderer.com',
                 allowOverrides: false,
@@ -102,9 +107,9 @@ test.describe('Settings and Client Configuration', () => {
       });
 
       await page.goto('/settings');
-      await expect(page.getByLabel('Target Renderer URL')).toBeDisabled();
-      const rendererVal = await page.getByLabel('Target Renderer URL').inputValue();
-      expect(rendererVal).toBe('http://locked-renderer.com');
+      const rendererSelect = page.locator('a2ui-composer-renderer-selector mat-select');
+      await expect(rendererSelect).toHaveAttribute('aria-disabled', 'true');
+      await expect(rendererSelect).toContainText('default');
     });
 
     test('fetches configuration when config.json request is intercepted by route handler', async ({
@@ -114,7 +119,7 @@ test.describe('Settings and Client Configuration', () => {
         await route.fulfill({
           contentType: 'application/json',
           body: JSON.stringify({
-            profiles: {
+            renderers: {
               default: {
                 rendererUrl: 'http://intercepted-custom-config:3000',
                 allowOverrides: true,
@@ -125,10 +130,9 @@ test.describe('Settings and Client Configuration', () => {
       });
 
       await page.goto('/settings');
-      const rendererInput = page.getByLabel('Target Renderer URL');
-      await expect(rendererInput).not.toBeDisabled();
-      const rendererVal = await rendererInput.inputValue();
-      expect(rendererVal).toBe('http://intercepted-custom-config:3000');
+      const rendererSelect = page.locator('a2ui-composer-renderer-selector mat-select');
+      await expect(rendererSelect).not.toHaveAttribute('aria-disabled', 'true');
+      await expect(rendererSelect).toContainText('default');
     });
 
     test('verifies server apiKey in config.json decouples context locking, disables API key unmasking, and does not persist key on save', async ({
@@ -138,7 +142,7 @@ test.describe('Settings and Client Configuration', () => {
         await route.fulfill({
           contentType: 'application/json',
           body: JSON.stringify({
-            profiles: {
+            renderers: {
               default: {
                 rendererUrl: 'http://unlocked-renderer.com',
                 allowOverrides: true,
@@ -155,14 +159,17 @@ test.describe('Settings and Client Configuration', () => {
       await page.goto('/settings');
 
       // Context is unlocked because allowOverrides is true
-      const rendererInput = page.getByLabel('Target Renderer URL');
-      await expect(rendererInput).toBeEnabled();
+      const rendererSelect = page.locator('a2ui-composer-renderer-selector mat-select');
+      await expect(rendererSelect).not.toHaveAttribute('aria-disabled', 'true');
 
-      // Toggle button is disabled because API key was provided by config
-      await expect(page.locator('.api-key-toggle-btn')).toBeDisabled();
+      // API key selector is visible when API key was provided by config
+      await expect(page.locator('a2ui-composer-api-key-selector')).toBeVisible();
 
-      // Modify a field to trigger unsaved changes
-      await rendererInput.fill('http://unlocked-renderer.com/modified');
+      // Add a custom renderer to trigger unsaved changes
+      await page.locator('.add-renderer-button').click();
+      await page.locator('#renderer-name-input').fill('Modified Renderer');
+      await page.locator('#renderer-url-input').fill('http://unlocked-renderer.com/modified');
+      await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
 
       // Click 'Save Settings' and wait for navigation
       const saveBtn = page.getByRole('button', {name: 'Save Settings'});

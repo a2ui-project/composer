@@ -23,7 +23,7 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
-          profiles: {
+          renderers: {
             default: {
               allowOverrides: true,
             },

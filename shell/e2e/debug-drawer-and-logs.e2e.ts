@@ -26,7 +26,7 @@ test.beforeEach(async ({page}) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
-        profiles: {
+        renderers: {
           default: {
             allowOverrides: true,
           },

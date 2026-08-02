@@ -30,7 +30,7 @@ test.describe('Startup Resolution & Redirection', () => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
-          profiles: {
+          renderers: {
             default: {
               allowOverrides: true,
               // no rendererUrl
@@ -40,7 +40,7 @@ test.describe('Startup Resolution & Redirection', () => {
       });
     });
     await page.goto('/');
-    await page.waitForURL('**/settings');
+    await page.waitForURL(url => url.pathname === '/settings');
     await expect(page.locator('.settings-container')).toBeVisible();
     await expect(page.locator('.settings-card')).toBeVisible();
   });
@@ -54,14 +54,14 @@ test.describe('Startup Resolution & Redirection', () => {
     await expect(page.locator('.disabled-chat-panel')).toBeVisible();
   });
 
-  test('bootstraps workspace successfully using ?profile=<name> query parameter', async ({
+  test('bootstraps workspace successfully using ?rendererId=<name> query parameter', async ({
     page,
   }) => {
     await page.route('**/config.json', async route => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
-          profiles: {
+          renderers: {
             default: {
               allowOverrides: true,
             },
@@ -73,7 +73,7 @@ test.describe('Startup Resolution & Redirection', () => {
         }),
       });
     });
-    await page.goto('/?profile=custom');
+    await page.goto('/?rendererId=custom');
     await page.waitForURL(url => url.pathname === '/');
     await expect(page).toHaveTitle(/A2UI Composer/);
     await expect(page.locator('.workspace-container')).toBeVisible();
@@ -91,6 +91,7 @@ test.describe('Workspace Navigation & Layout Modes', () => {
 
   test('verifies components gallery navigation link is visible by default', async ({page}) => {
     await page.goto('/');
+    await page.waitForURL(url => url.pathname === '/');
 
     const galleryLink = page.getByRole('link', {name: 'Components Gallery'});
     await expect(galleryLink).toBeVisible();
@@ -103,7 +104,7 @@ test.describe('Workspace Navigation & Layout Modes', () => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
-          profiles: {
+          renderers: {
             default: {
               rendererUrl: 'http://custom-renderer.com',
               allowOverrides: true,
