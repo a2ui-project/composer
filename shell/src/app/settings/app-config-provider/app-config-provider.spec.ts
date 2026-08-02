@@ -38,6 +38,14 @@ class TestConfigProvider extends AppConfigProvider {
   override readonly geminiApiKey: Signal<string> = this.internalGeminiApiKey.asReadonly();
   override readonly themePreference: Signal<ThemePreference> =
     this.internalThemePreference.asReadonly();
+  override readonly isApiKeyProvidedByConfig: Signal<boolean> = signal(false).asReadonly();
+  override readonly includeScreenshot: Signal<boolean> = signal(false).asReadonly();
+
+  override initialize(): void {}
+  override purgeGeminiApiKey(): void {}
+  override setApiKeyFromConfig(key: string): void {}
+  override setRuntimeApiKey(key: string): void {}
+  override setIncludeScreenshot(include: boolean): void {}
 
   override setRendererUrl(url: string): void {
     this.internalRendererUrl.set(url);

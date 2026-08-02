@@ -108,9 +108,9 @@ export abstract class AppConfigProvider {
   abstract setApiKeyFromConfig(key: string): void;
 
   /**
-   * Sets the effective runtime API key in memory without saving to storage.
+   * Sets the API key in runtime memory without persisting it.
    *
-   * @param key The effective runtime API key string.
+   * @param key The API key to set in runtime state.
    */
   abstract setRuntimeApiKey(key: string): void;
 

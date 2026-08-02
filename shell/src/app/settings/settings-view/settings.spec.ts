@@ -396,6 +396,7 @@ describe('Settings', () => {
     override setForcedAuthMode = vi.fn();
     override setGeminiApiKey = vi.fn();
     override setApiKeyFromConfig = vi.fn();
+    override setRuntimeApiKey = vi.fn();
     override setIncludeScreenshot = vi.fn();
     override setRendererUrl = vi.fn();
     override setThemePreference = vi.fn();
@@ -743,7 +744,9 @@ describe('Settings', () => {
 
     it('invokes selectRenderer on settings service when onRendererSelected is triggered', async () => {
       const {component} = await setupComponent();
-      const selectSpy = vi.spyOn(component['settingsService'], 'selectRenderer').mockResolvedValue();
+      const selectSpy = vi
+        .spyOn(component['settingsService'], 'selectRenderer')
+        .mockResolvedValue();
 
       component.settingsForm.controls.apiKey.markAsDirty();
       await component.onRendererSelected('dev');

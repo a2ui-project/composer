@@ -40,12 +40,12 @@ import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
 class MockStartupResolution {
   readonly resolvedUrl = signal('http://localhost:4200');
   readonly isLockedContext = signal(false);
-  readonly profiles = signal<Record<string, RendererConfig>>({});
-  readonly selectedProfileId = signal<string | null>(null);
-  readonly activeProfile = signal<RendererConfig | null>(null);
+  readonly renderers = signal<Record<string, RendererConfig>>({});
+  readonly selectedRendererId = signal<string | null>(null);
+  readonly activeRenderer = signal<RendererConfig | null>(null);
   readonly isLoading = signal(false);
   readonly error = signal<string | null>(null);
-  setSelectedProfileId = vi.fn();
+  setSelectedRendererId = vi.fn();
   isEnvironmentValid = vi.fn().mockReturnValue(true);
   isExtensionMode = vi.fn().mockReturnValue(false);
   isContextLocked = vi.fn().mockReturnValue(false);

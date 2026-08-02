@@ -407,4 +407,321 @@ describe('SettingsService', () => {
       expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('remaining-key');
     });
   });
+
+  describe('Custom Renderers Management', () => {
+    it('LocalStorageKey.CUSTOM_RENDERERS equals "a2ui_composer_custom_renderers" and SELECTED_RENDERER equals "a2ui_composer_selected_renderer"', () => {
+      expect(LocalStorageKey.CUSTOM_RENDERERS).toBe('a2ui_composer_custom_renderers');
+      expect(LocalStorageKey.SELECTED_RENDERER).toBe('a2ui_composer_selected_renderer');
+    });
+
+    it('getRenderers() deserializes custom renderer objects ({ id, name, rendererUrl }) from LocalStorage and handles malformed JSON gracefully', () => {
+      mockStartupResolution.renderers.set({});
+      expect(service.getRenderers()).toEqual([]);
+
+      mockLocalStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'c-1', name: 'Custom One', rendererUrl: 'http://custom-1.com'},
+          {id: 'c-2', name: 'Custom Two', rendererUrl: 'http://custom-2.com'},
+        ]),
+      );
+      expect(service.getRenderers()).toEqual([
+        {
+          id: 'c-1',
+          name: 'Custom One',
+          rendererUrl: 'http://custom-1.com',
+          readOnly: false,
+          allowOverrides: true,
+        },
+        {
+          id: 'c-2',
+          name: 'Custom Two',
+          rendererUrl: 'http://custom-2.com',
+          readOnly: false,
+          allowOverrides: true,
+        },
+      ]);
+
+      mockLocalStorage.setItem(LocalStorageKey.CUSTOM_RENDERERS, '{malformed-json');
+      expect(service.getRenderers()).toEqual([]);
+
+      mockLocalStorage.setItem(LocalStorageKey.CUSTOM_RENDERERS, '"not-an-array"');
+      expect(service.getRenderers()).toEqual([]);
+    });
+
+    it('defensively handles undefined static renderer config entries using optional chaining', () => {
+      mockStartupResolution.renderers.set({
+        invalid: undefined as unknown as RendererConfig,
+      });
+      expect(service.getRenderers()).toEqual([
+        {
+          id: 'invalid',
+          name: 'invalid',
+          rendererUrl: '',
+          readOnly: true,
+        },
+      ]);
+    });
+
+    it('getRenderers() merges static renderers from config.json.renderers with LocalStorage custom renderers', () => {
+      mockStartupResolution.renderers.set({
+        dev: {
+          displayName: 'Development',
+          rendererUrl: 'http://dev.com',
+          allowOverrides: true,
+        },
+        prod: {
+          displayName: 'Production',
+          rendererUrl: 'http://prod.com',
+          allowOverrides: false,
+        },
+      });
+      mockLocalStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'custom-1', name: 'My Custom Renderer', rendererUrl: 'http://my-custom.com'},
+        ]),
+      );
+
+      const combined = service.getRenderers();
+      expect(combined).toEqual([
+        {
+          id: 'dev',
+          name: 'Development',
+          rendererUrl: 'http://dev.com',
+          readOnly: true,
+          allowOverrides: true,
+        },
+        {
+          id: 'prod',
+          name: 'Production',
+          rendererUrl: 'http://prod.com',
+          readOnly: true,
+          allowOverrides: false,
+        },
+        {
+          id: 'custom-1',
+          name: 'My Custom Renderer',
+          rendererUrl: 'http://my-custom.com',
+          readOnly: false,
+          allowOverrides: true,
+        },
+      ]);
+    });
+
+    it('when a custom renderer has the same name as a static config.json renderer, its display label is namespaced as "[name] (local)" while preserving its unique ID', () => {
+      mockStartupResolution.renderers.set({
+        dev: {
+          displayName: 'Dev Renderer',
+          rendererUrl: 'http://dev.com',
+        },
+      });
+      mockLocalStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'custom-dev', name: 'Dev Renderer', rendererUrl: 'http://custom-dev.com'},
+          {id: 'custom-other', name: 'Unique Name', rendererUrl: 'http://unique.com'},
+        ]),
+      );
+
+      const combined = service.getRenderers();
+      expect(combined).toEqual([
+        {
+          id: 'dev',
+          name: 'Dev Renderer',
+          rendererUrl: 'http://dev.com',
+          readOnly: true,
+          allowOverrides: true,
+        },
+        {
+          id: 'custom-dev',
+          name: 'Dev Renderer (local)',
+          rendererUrl: 'http://custom-dev.com',
+          readOnly: false,
+          allowOverrides: true,
+        },
+        {
+          id: 'custom-other',
+          name: 'Unique Name',
+          rendererUrl: 'http://unique.com',
+          readOnly: false,
+          allowOverrides: true,
+        },
+      ]);
+    });
+
+    it('saveCustomRenderer(renderer) adds or updates the entry in LocalStorage under "a2ui_composer_custom_renderers", and throws an error if renderer.id collides with a static read-only renderer ID from config.json.renderers', () => {
+      mockStartupResolution.renderers.set({
+        dev: {
+          displayName: 'Development',
+          rendererUrl: 'http://dev.com',
+        },
+      });
+
+      expect(() =>
+        service.saveCustomRenderer({
+          id: 'dev',
+          name: 'Colliding Name',
+          rendererUrl: 'http://dev.com',
+        }),
+      ).toThrow(
+        'Cannot save custom renderer with ID "dev": collides with a static configuration renderer.',
+      );
+
+      service.saveCustomRenderer({
+        id: 'custom-1',
+        name: 'Custom One',
+        rendererUrl: 'http://c1.com',
+      });
+
+      expect(
+        JSON.parse(mockLocalStorage.getItem(LocalStorageKey.CUSTOM_RENDERERS) || '[]'),
+      ).toEqual([{id: 'custom-1', name: 'Custom One', rendererUrl: 'http://c1.com'}]);
+
+      service.saveCustomRenderer({
+        id: 'custom-1',
+        name: 'Custom One Updated',
+        rendererUrl: 'http://c1-updated.com',
+      });
+
+      expect(
+        JSON.parse(mockLocalStorage.getItem(LocalStorageKey.CUSTOM_RENDERERS) || '[]'),
+      ).toEqual([
+        {id: 'custom-1', name: 'Custom One Updated', rendererUrl: 'http://c1-updated.com'},
+      ]);
+    });
+
+    it('deleteCustomRenderer(id) removes the target renderer from "a2ui_composer_custom_renderers" without reloading the window', () => {
+      mockLocalStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'custom-1', name: 'Custom One', rendererUrl: 'http://c1.com'},
+          {id: 'custom-2', name: 'Custom Two', rendererUrl: 'http://c2.com'},
+        ]),
+      );
+
+      service.deleteCustomRenderer('custom-1');
+
+      expect(
+        JSON.parse(mockLocalStorage.getItem(LocalStorageKey.CUSTOM_RENDERERS) || '[]'),
+      ).toEqual([{id: 'custom-2', name: 'Custom Two', rendererUrl: 'http://c2.com'}]);
+    });
+
+    it('deduplicates custom renderers whose IDs collide with static configuration renderer IDs in getRenderers()', () => {
+      mockStartupResolution.renderers.set({
+        dev: {
+          displayName: 'Development',
+          rendererUrl: 'http://dev.com',
+        },
+      });
+      mockLocalStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'dev', name: 'Colliding Dev', rendererUrl: 'http://colliding-dev.com'},
+          {id: 'custom-1', name: 'Valid Custom', rendererUrl: 'http://valid.com'},
+        ]),
+      );
+
+      const combined = service.getRenderers();
+      expect(combined).toEqual([
+        {
+          id: 'dev',
+          name: 'Development',
+          rendererUrl: 'http://dev.com',
+          readOnly: true,
+          allowOverrides: true,
+        },
+        {
+          id: 'custom-1',
+          name: 'Valid Custom',
+          rendererUrl: 'http://valid.com',
+          readOnly: false,
+          allowOverrides: true,
+        },
+      ]);
+    });
+
+    it('getRenderers() ignores null or empty-id items in a LocalStorage array', () => {
+      mockStartupResolution.renderers.set({});
+      mockLocalStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          null,
+          {id: '', name: 'Empty ID', rendererUrl: 'http://empty.com'},
+          {id: '   ', name: 'Whitespace ID', rendererUrl: 'http://whitespace.com'},
+          {id: 'valid-1', name: 'Valid One', rendererUrl: 'http://valid.com'},
+        ]),
+      );
+
+      const renderers = service.getRenderers();
+      expect(renderers).toEqual([
+        {
+          id: 'valid-1',
+          name: 'Valid One',
+          rendererUrl: 'http://valid.com',
+          readOnly: false,
+          allowOverrides: true,
+        },
+      ]);
+    });
+
+    it('deleteCustomRenderer(id) resets selected renderer when deleting the currently active custom renderer', () => {
+      mockLocalStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'custom-1', name: 'Custom One', rendererUrl: 'http://c1.com'},
+          {id: 'custom-2', name: 'Custom Two', rendererUrl: 'http://c2.com'},
+        ]),
+      );
+      mockStartupResolution.selectedRendererId.set('custom-1');
+      mockLocalStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'custom-1');
+
+      service.deleteCustomRenderer('custom-1');
+
+      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
+      expect(mockStartupResolution.selectedRendererId()).toBeNull();
+    });
+
+    it('saveCustomRenderer() throws an error when saving an empty ID or a non-HTTP/HTTPS URL', () => {
+      expect(() =>
+        service.saveCustomRenderer({
+          id: '',
+          name: 'Empty Id',
+          rendererUrl: 'http://example.com',
+        }),
+      ).toThrow('Custom renderer id, name, and rendererUrl must not be empty.');
+
+      expect(() =>
+        service.saveCustomRenderer({
+          id: '   ',
+          name: 'Whitespace Id',
+          rendererUrl: 'http://example.com',
+        }),
+      ).toThrow('Custom renderer id, name, and rendererUrl must not be empty.');
+
+      expect(() =>
+        service.saveCustomRenderer({
+          id: 'custom-1',
+          name: '',
+          rendererUrl: 'http://example.com',
+        }),
+      ).toThrow('Custom renderer id, name, and rendererUrl must not be empty.');
+
+      expect(() =>
+        service.saveCustomRenderer({
+          id: 'custom-1',
+          name: 'Custom One',
+          rendererUrl: 'ftp://example.com',
+        }),
+      ).toThrow('Custom renderer URL must start with http:// or https://');
+
+      expect(() =>
+        service.saveCustomRenderer({
+          id: 'custom-1',
+          name: 'Custom One',
+          rendererUrl: 'example.com',
+        }),
+      ).toThrow('Custom renderer URL must start with http:// or https://');
+    });
+  });
 });

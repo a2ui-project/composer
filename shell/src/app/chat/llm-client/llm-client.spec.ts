@@ -109,6 +109,12 @@ class MockAppConfigProvider extends AppConfigProvider {
   override readonly themePreference = signal<ThemePreference>(ThemePreference.LIGHT);
   override readonly includeScreenshot = signal<boolean>(true);
 
+  override readonly isApiKeyProvidedByConfig = signal<boolean>(false);
+
+  override initialize(): void {}
+  override purgeGeminiApiKey(): void {}
+  override setApiKeyFromConfig(key: string): void {}
+  override setRuntimeApiKey(key: string): void {}
   override setRendererUrl(url: string): void {}
   override setGeminiApiKey(key: string): void {}
   override setForcedAuthMode(mode: AuthType): void {}

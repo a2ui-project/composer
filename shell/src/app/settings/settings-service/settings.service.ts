@@ -32,6 +32,22 @@ export declare interface ApiKeyOption {
   readOnly: boolean;
 }
 
+/**
+ * Represents a custom renderer entry stored in LocalStorage.
+ */
+export declare interface CustomRendererEntry {
+  id: string;
+  name: string;
+  rendererUrl: string;
+}
+
+/**
+ * Represents a combined renderer option from static config or custom storage.
+ */
+export declare interface RendererOption extends CustomRendererEntry {
+  readOnly: boolean;
+  allowOverrides?: boolean;
+}
 
 /**
  * Facade service for settings configuration profile selection and persistence.
@@ -111,12 +127,16 @@ export class SettingsService {
   readonly effectiveApiKey$: Signal<string> = this._effectiveApiKey.asReadonly();
   readonly effectiveApiKey: Signal<string> = this._effectiveApiKey.asReadonly();
 
+  private getStaticApiKeys(): Record<string, string> {
+    return this.startupResolution.apiKeys() || {};
+  }
+
   /**
    * Returns a merged list of static API keys from config.json.apiKeys (read-only)
    * and custom API keys stored in SecureCredentialsStorage (IndexedDB).
    */
   async getAvailableApiKeys(): Promise<ApiKeyOption[]> {
-    const staticKeysObj = this.startupResolution.apiKeys() || {};
+    const staticKeysObj = this.getStaticApiKeys();
     const staticKeys: ApiKeyOption[] = Object.entries(staticKeysObj).map(([id, key]) => ({
       id,
       name: id,
@@ -153,7 +173,7 @@ export class SettingsService {
    */
   async getEffectiveApiKey(): Promise<string> {
     const selectedId = this.selectedApiKeyId$();
-    const staticKeys = this.startupResolution.apiKeys() || {};
+    const staticKeys = this.getStaticApiKeys();
 
     if (selectedId) {
       if (typeof staticKeys[selectedId] === 'string') {
@@ -190,7 +210,7 @@ export class SettingsService {
    * Persists a custom API key to SecureCredentialsStorage.
    */
   async saveCustomApiKey(id: string, name: string, key: string): Promise<void> {
-    const staticKeysObj = this.startupResolution.apiKeys() || {};
+    const staticKeysObj = this.getStaticApiKeys();
     if (Object.prototype.hasOwnProperty.call(staticKeysObj, id)) {
       throw new Error(
         `Cannot save custom API key with ID "${id}": collides with a static configuration key.`,
@@ -218,7 +238,7 @@ export class SettingsService {
   private async syncEffectiveApiKeyToConfigProvider(): Promise<string> {
     const effectiveKey = await this.getEffectiveApiKey();
     const apiKeyId = this._selectedApiKeyId();
-    const staticKeys = this.startupResolution.apiKeys() || {};
+    const staticKeys = this.getStaticApiKeys();
     if (apiKeyId && typeof staticKeys[apiKeyId] === 'string') {
       this.configProvider.setApiKeyFromConfig(effectiveKey);
     } else if (!apiKeyId && typeof staticKeys['default'] === 'string') {
@@ -227,5 +247,121 @@ export class SettingsService {
       this.configProvider.setRuntimeApiKey(effectiveKey);
     }
     return effectiveKey;
+  }
+
+  private getStaticRenderersMap(): Record<string, RendererConfig> {
+    return this.startupResolution.renderers() || {};
+  }
+
+  /**
+   * Returns a list of custom renderers stored in LocalStorage.
+   * Filters out null/non-object items or items with an empty/whitespace ID,
+   * and handles malformed JSON gracefully by returning an empty array.
+   */
+  private getCustomRenderers(): CustomRendererEntry[] {
+    const raw = this.localStorageInteractions.getItem(LocalStorageKey.CUSTOM_RENDERERS);
+    if (!raw) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter(item => item && typeof item === 'object' && Boolean(String(item.id || '').trim()))
+          .map(item => ({
+            id: String(item?.id || '').trim(),
+            name: String(item?.name || ''),
+            rendererUrl: String(item?.rendererUrl || ''),
+          }));
+      }
+      return [];
+    } catch (e) {
+      console.warn('Failed to parse custom renderers from LocalStorage:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Returns a combined list of static renderers from config.json.renderers (readOnly: true)
+   * and custom renderers from LocalStorage (readOnly: false).
+   * Automatically namespaces display labels as "[name] (local)" when a custom renderer
+   * shares a name with a static configuration renderer.
+   */
+  getRenderers(): RendererOption[] {
+    const staticMap = this.getStaticRenderersMap();
+    const staticRenderers: RendererOption[] = Object.entries(staticMap).map(([id, config]) => ({
+      id,
+      name: config?.displayName || config?.name || id,
+      rendererUrl: config?.rendererUrl || '',
+      readOnly: true,
+      allowOverrides: config.allowOverrides ?? true,
+    }));
+
+    const staticNames = new Set(staticRenderers.map(r => r.name));
+    const customRenderers: RendererOption[] = this.getCustomRenderers()
+      .filter(item => !Object.prototype.hasOwnProperty.call(staticMap, item.id))
+      .map(item => ({
+        id: item.id,
+        name: staticNames.has(item.name) ? `${item.name} (local)` : item.name,
+        rendererUrl: item.rendererUrl,
+        readOnly: false,
+        allowOverrides: true,
+      }));
+
+    return [...staticRenderers, ...customRenderers];
+  }
+
+  /**
+   * Persists a custom renderer to LocalStorage under CUSTOM_RENDERERS key.
+   * Trims id, name, and rendererUrl. Throws an error if any field is empty,
+   * if rendererUrl does not start with http:// or https://, or if the ID
+   * collides with a static configuration renderer ID.
+   */
+  saveCustomRenderer(renderer: CustomRendererEntry): void {
+    const id = (renderer.id || '').trim();
+    const name = (renderer.name || '').trim();
+    const rendererUrl = (renderer.rendererUrl || '').trim();
+
+    if (!id || !name || !rendererUrl) {
+      throw new Error('Custom renderer id, name, and rendererUrl must not be empty.');
+    }
+    if (!/^https?:\/\//i.test(rendererUrl)) {
+      throw new Error('Custom renderer URL must start with http:// or https://');
+    }
+
+    const staticMap = this.getStaticRenderersMap();
+    if (Object.prototype.hasOwnProperty.call(staticMap, id)) {
+      throw new Error(
+        `Cannot save custom renderer with ID "${id}": collides with a static configuration renderer.`,
+      );
+    }
+    const list = this.getCustomRenderers();
+    const existingIdx = list.findIndex(item => item.id === id);
+    if (existingIdx >= 0) {
+      list[existingIdx] = {
+        id,
+        name,
+        rendererUrl,
+      };
+    } else {
+      list.push({
+        id,
+        name,
+        rendererUrl,
+      });
+    }
+    this.localStorageInteractions.setItem(LocalStorageKey.CUSTOM_RENDERERS, JSON.stringify(list));
+  }
+
+  /**
+   * Deletes a custom renderer by ID from LocalStorage without reloading the window.
+   * Resets active renderer selection to null if deleting the currently selected custom renderer.
+   */
+  deleteCustomRenderer(id: string): void {
+    const list = this.getCustomRenderers().filter(item => item.id !== id);
+    this.localStorageInteractions.setItem(LocalStorageKey.CUSTOM_RENDERERS, JSON.stringify(list));
+    if (this.selectedRendererId() === id) {
+      void this.selectRenderer(null);
+    }
   }
 }
