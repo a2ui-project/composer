@@ -38,8 +38,10 @@ import {
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SettingsHarness} from './test/settings.harness';
 import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
-import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
-import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
+import {
+  SecureCredentialsStorage,
+  CustomApiKey,
+} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {SettingsService} from '../settings-service/settings.service';
 
 vi.mock('safevalues/dom', () => {
@@ -52,9 +54,10 @@ describe('Settings', () => {
   let mockPlatformLocation: {
     getBaseHrefFromDOM: Mock<() => string | null>;
   };
-  let mockProfiles: WritableSignal<Record<string, RendererConfig>>;
-  let mockSelectedProfileId: WritableSignal<string | null>;
-  let mockActiveProfile: WritableSignal<RendererConfig | null>;
+  let mockRenderers: WritableSignal<Record<string, RendererConfig>>;
+  let mockSelectedRendererId: WritableSignal<string | null>;
+  let mockApiKeys: WritableSignal<Record<string, string>>;
+  let mockActiveRenderer: WritableSignal<RendererConfig | null>;
   let mockStartupResolution: {
     getResolvedRendererUrl: Mock<() => string | null>;
     isThirdPartyEnvironment: Mock<() => boolean>;
@@ -83,7 +86,6 @@ describe('Settings', () => {
     isApiKeyProvidedByConfig: Signal<boolean>;
     setRendererUrl: Mock<(url: string) => void>;
     setGeminiApiKey: Mock<(key: string) => void>;
-    setRuntimeApiKey: Mock<(key: string) => void>;
     setApiKeyFromConfig: Mock<(key: string) => void>;
     setForcedAuthMode: Mock<(mode: AuthType) => void>;
     flushConfig: Mock<() => void>;
@@ -92,8 +94,10 @@ describe('Settings', () => {
 
   let mockSecureStorage: {
     getCredential: Mock<() => Promise<string | null>>;
-    getCustomApiKeys: Mock<() => Promise<any[]>>;
-    getCustomApiKey: Mock<(id: string) => Promise<any | null>>;
+    getCustomApiKeys: Mock<() => Promise<CustomApiKey[]>>;
+    getCustomApiKey: Mock<(id: string) => Promise<CustomApiKey | null>>;
+    saveCustomApiKey: Mock<(id: string, name: string, key: string) => Promise<void>>;
+    deleteCustomApiKey: Mock<(id: string) => Promise<void>>;
   };
 
   beforeEach(() => {
@@ -103,25 +107,28 @@ describe('Settings', () => {
       getCredential: vi.fn().mockResolvedValue(null),
       getCustomApiKeys: vi.fn().mockResolvedValue([]),
       getCustomApiKey: vi.fn().mockResolvedValue(null),
+      saveCustomApiKey: vi.fn().mockResolvedValue(undefined),
+      deleteCustomApiKey: vi.fn().mockResolvedValue(undefined),
     };
     mockPlatformLocation = {
       getBaseHrefFromDOM: vi.fn().mockReturnValue('/composer/pr/44/'),
     };
-    mockProfiles = signal<Record<string, RendererConfig>>({});
-    mockSelectedProfileId = signal<string | null>(null);
-    mockActiveProfile = signal<RendererConfig | null>(null);
+    mockRenderers = signal<Record<string, RendererConfig>>({});
+    mockSelectedRendererId = signal<string | null>(null);
+    mockApiKeys = signal<Record<string, string>>({});
+    mockActiveRenderer = signal<RendererConfig | null>(null);
 
     mockStartupResolution = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       isContextLocked: vi.fn().mockReturnValue(false),
-      renderers: mockProfiles.asReadonly(),
-      selectedRendererId: mockSelectedProfileId.asReadonly(),
-      activeRenderer: mockActiveProfile.asReadonly(),
-      apiKeys: signal({}).asReadonly(),
+      renderers: mockRenderers.asReadonly(),
+      selectedRendererId: mockSelectedRendererId.asReadonly(),
+      activeRenderer: mockActiveRenderer.asReadonly(),
+      apiKeys: mockApiKeys.asReadonly(),
       setSelectedRendererId: vi.fn((id: string | null) => {
-        mockSelectedProfileId.set(id);
-        mockActiveProfile.set(id ? mockProfiles()[id] || null : null);
+        mockSelectedRendererId.set(id);
+        mockActiveRenderer.set(id ? mockRenderers()[id] || null : null);
       }),
     };
     mockLatestEnvelope = signal<MessageEnvelope | null>(null);
@@ -157,12 +164,11 @@ describe('Settings', () => {
       setGeminiApiKey: vi.fn().mockImplementation((key: string) => {
         mockGeminiApiKey.set(key);
       }),
-      setRuntimeApiKey: vi.fn().mockImplementation((key: string) => {
-        mockIsApiKeyProvidedByConfig.set(false);
-        mockGeminiApiKey.set(key);
-      }),
       setApiKeyFromConfig: vi.fn().mockImplementation((key: string) => {
         mockIsApiKeyProvidedByConfig.set(!!key);
+        mockGeminiApiKey.set(key);
+      }),
+      setRuntimeApiKey: vi.fn().mockImplementation((key: string) => {
         mockGeminiApiKey.set(key);
       }),
       setForcedAuthMode: vi.fn().mockImplementation((mode: AuthType) => {
@@ -226,60 +232,50 @@ describe('Settings', () => {
 
   it('initializes form controls cleanly in 1P mode without requiring apiKey', async () => {
     mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
-    const {component, harness} = await setupComponent();
+    const {component} = await setupComponent();
 
     expect(component.isThirdParty()).toBe(false);
-    expect(await harness.getRendererUrlValue()).toBe('http://resolved-url.com');
 
     const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
-    await harness.setRendererUrlValue('http://new-url.com');
-    await component.saveSettings();
+    component.onRendererSelected('dev');
+    await component.onSaveSettings();
 
     expect(mockConfigProvider.purgeGeminiApiKey).toHaveBeenCalled();
-    expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://new-url.com');
+    expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://resolved-url.com');
     expect(reloadSpy).toHaveBeenCalled();
-  });
-
-  it('rejects empty whitespace keys in 3P mode but permits missing keys', async () => {
-    mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-    const {component, harness} = await setupComponent();
-
-    expect(component.isThirdParty()).toBe(true);
-    expect(component.settingsForm.controls.apiKey.errors?.['required']).toBeFalsy();
-    expect(component.settingsForm.valid).toBe(true);
-
-    await harness.setRendererUrlValue('http://new-url.com');
-    await harness.setGeminiApiKeyValue('   ');
-
-    expect(component.settingsForm.controls.apiKey.errors?.['pattern']).toBeTruthy();
-    expect(component.settingsForm.invalid).toBe(true);
   });
 
   it('persists valid configurations securely in 3P environments', async () => {
     mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-    const {component, harness} = await setupComponent();
+    const {component} = await setupComponent();
 
     const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+    const commitSpy = vi.spyOn(component.settingsService, 'commitSettings').mockResolvedValue();
 
-    await harness.setRendererUrlValue('http://new-url.com');
-    await harness.setGeminiApiKeyValue('AIzaSyTestKey');
+    component.onRendererSelected('dev');
+    component.onApiKeySelected('custom-1');
 
     expect(component.settingsForm.valid).toBe(true);
 
-    await component.saveSettings();
+    await component.onSaveSettings();
 
-    expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://new-url.com');
-    expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('AIzaSyTestKey');
+    expect(commitSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedRendererId: 'dev',
+        selectedApiKeyId: 'custom-1',
+      }),
+    );
     expect(reloadSpy).toHaveBeenCalled();
   });
 
-  it('disables rendererUrl form control and displays lock warning when context is locked', async () => {
+  it('disables renderer selector and displays lock warning when context is locked', async () => {
     mockStartupResolution.isContextLocked.mockReturnValue(true);
     const {component, harness} = await setupComponent();
 
     expect(component.isLocked()).toBe(true);
-    expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
+    const rendererSelector = await harness.getRendererSelectorHarness();
+    expect(await rendererSelector?.isDisabled()).toBe(true);
 
     expect(await harness.hasLockedNotice()).toBe(true);
     expect(await harness.getLockedNoticeText()).toContain('Active URL configuration is locked.');
@@ -325,57 +321,11 @@ describe('Settings', () => {
     );
 
     // Mutate catalog to error
+    mockIsHandshakeInProgress.set(false);
     mockCatalogError.set('Malformed catalog JSON');
     fixture.detectChanges();
     expect(await harness.getCatalogBadgeText()).toContain('Catalog Handshake: Error');
     expect(await harness.getLogsConsoleText()).toContain('[Catalog Error] Malformed catalog JSON');
-  });
-
-  it('verifies static placeholder text on the renderer URL input', async () => {
-    const {harness} = await setupComponent();
-    // Harness handles input properties query securely,
-    // avoiding direct DOM selections
-    expect(await harness.getRendererUrlPlaceholder()).toBe('http://localhost:3000');
-  });
-
-  it('toggles API key input visibility between password and text via button clicks', async () => {
-    mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-    const {fixture, harness} = await setupComponent();
-
-    expect(await harness.getApiKeyInputType()).toBe('password');
-
-    await harness.clickApiKeyToggleBtn();
-    fixture.detectChanges();
-    expect(await harness.getApiKeyInputType()).toBe('text');
-
-    await harness.clickApiKeyToggleBtn();
-    fixture.detectChanges();
-    expect(await harness.getApiKeyInputType()).toBe('password');
-  });
-
-  it('renders client-side format validation errors for missing required fields and malformed URL strings upon form submission', async () => {
-    mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-    const {fixture, component, harness} = await setupComponent();
-
-    await harness.setRendererUrlValue('');
-    await harness.setGeminiApiKeyValue('');
-    await component.saveSettings();
-    fixture.detectChanges();
-
-    const errors = await harness.getErrorsText();
-    expect(errors.length).toBe(1);
-    expect(errors[0]).toContain('Renderer URL is required');
-
-    await harness.setRendererUrlValue('invalid-url');
-    await harness.setGeminiApiKeyValue('valid-key');
-    await component.saveSettings();
-    fixture.detectChanges();
-
-    const patternErrors = await harness.getErrorsText();
-    expect(patternErrors.length).toBe(1);
-    expect(patternErrors[0]).toContain(
-      'Must be a valid HTTP/HTTPS URL or relative path starting with "/"',
-    );
   });
 
   class FakeAppConfigProvider extends AppConfigProvider {
@@ -439,10 +389,10 @@ describe('Settings', () => {
       const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
 
       expect(component.isThirdParty()).toBe(true);
-      expect(await harness.getFormSectionsCount()).toBe(4);
+      expect(await harness.getFormSectionsCount()).toBe(3);
 
       const sections = await harness.getFormSectionsCount();
-      expect(sections).toBe(4);
+      expect(sections).toBe(3);
     } finally {
       localStorage.removeItem('a2ui_composer_force_3p');
     }
@@ -474,7 +424,8 @@ describe('Settings', () => {
     const {component, harness} = await setupComponent();
 
     expect(component.isLocked()).toBe(true);
-    expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
+    const rendererSelector = await harness.getRendererSelectorHarness();
+    expect(await rendererSelector?.isDisabled()).toBe(true);
 
     expect(await harness.hasAuthLockedNotice()).toBe(true);
     expect(await harness.getAuthLockedNoticeText()).toContain(
@@ -513,47 +464,10 @@ describe('Settings', () => {
     fixture.detectChanges();
 
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(3);
+    expect(hiddenAttrs.length).toBe(4);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
-  });
-
-  it.for(['/samples/ng-basic-catalog/index.html', '/renderer'])(
-    'accepts relative paths starting with "/"',
-    async relativeUrl => {
-      const {fixture, component, harness} = await setupComponent();
-
-      await harness.setRendererUrlValue(relativeUrl);
-      fixture.detectChanges();
-      expect(component.settingsForm.controls.rendererUrl.valid).toBe(true);
-    },
-  );
-
-  it.for([
-    'samples/ng-basic-catalog/index.html',
-    'renderer',
-    '//renderer',
-    '//example.com/foo/bar',
-  ])('rejects other relative paths', async relativeUrl => {
-    const {fixture, component, harness} = await setupComponent();
-
-    await harness.setRendererUrlValue(relativeUrl);
-    fixture.detectChanges();
-    expect(component.settingsForm.controls.rendererUrl.valid).toBe(false);
-    expect(component.settingsForm.controls.rendererUrl.errors?.['pattern']).toBeTruthy();
-  });
-
-  it('saves settings with valid relative rendererUrl', async () => {
-    const {component, harness} = await setupComponent();
-
-    await harness.setRendererUrlValue('/samples/ng-basic-catalog/index.html');
-    expect(component.settingsForm.valid).toBe(true);
-    await component.saveSettings();
-
-    expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith(
-      '/samples/ng-basic-catalog/index.html',
-    );
   });
 
   it('hides authentication overrides section when IS_1P_AUTH_ENABLED is false', async () => {
@@ -562,95 +476,18 @@ describe('Settings', () => {
     expect(section.hidden).toBe(true);
   });
 
-  describe('Reactive Form Enablement & Value Synchronization', () => {
-    it('disables apiKeyControl and clears validators in 1P mode upon initialization', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
-      const {component} = await setupComponent();
-
-      expect(component.isThirdParty()).toBe(false);
-      expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
-      expect(component.settingsForm.controls.apiKey.validator).toBeNull();
-      expect(component.settingsForm.valid).toBe(true);
-    });
-
-    it('enables apiKeyControl and applies non-whitespace validator in 3P mode upon initialization', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      const {component} = await setupComponent();
-
-      expect(component.isThirdParty()).toBe(true);
-      expect(component.settingsForm.controls.apiKey.enabled).toBe(true);
-      expect(component.settingsForm.controls.apiKey.validator).toBeTruthy();
-
-      component.settingsForm.controls.apiKey.setValue('   ');
-      expect(component.settingsForm.controls.apiKey.invalid).toBe(true);
-      expect(component.settingsForm.invalid).toBe(true);
-    });
-
-    it('synchronizes geminiApiKey signal from config provider into apiKey control without clobbering dirty user input', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      const {fixture, component} = await setupComponent();
-
-      mockGeminiApiKey.set('loaded-idb-key');
-      TestBed.tick();
-      fixture.detectChanges();
-
-      expect(component.settingsForm.controls.apiKey.value).toBe('loaded-idb-key');
-
-      component.settingsForm.controls.apiKey.setValue('user-typed-key');
-      component.settingsForm.controls.apiKey.markAsDirty();
-
-      mockGeminiApiKey.set('background-sync-key');
-      TestBed.tick();
-      fixture.detectChanges();
-
-      expect(component.settingsForm.controls.apiKey.value).toBe('user-typed-key');
-    });
-
-    it('synchronizes rendererUrl signal from config provider into rendererUrl form control without clobbering dirty user input', async () => {
-      const {fixture, component} = await setupComponent();
-
-      mockRendererUrl.set('https://profile-renderer-url.com');
-      fixture.detectChanges();
-
-      expect(component.settingsForm.controls.rendererUrl.value).toBe(
-        'https://profile-renderer-url.com',
-      );
-
-      component.settingsForm.controls.rendererUrl.setValue('https://user-typed-url.com');
-      component.settingsForm.controls.rendererUrl.markAsDirty();
-
-      mockRendererUrl.set('https://background-sync-renderer.com');
-      fixture.detectChanges();
-
-      expect(component.settingsForm.controls.rendererUrl.value).toBe('https://user-typed-url.com');
-    });
-  });
-
-  describe('Anti-Silent Failure UI Alert & Error Reporting (saveSettings)', () => {
-    it('sets saveErrorMessage when form validation fails upon saveSettings()', async () => {
+  describe('Anti-Silent Failure UI Alert & Error Reporting (onSaveSettings)', () => {
+    it('sets saveErrorMessage when storage persistence rejects during onSaveSettings()', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
       const {fixture, component, harness} = await setupComponent();
 
-      await harness.setRendererUrlValue('');
-      await component.saveSettings();
-      fixture.detectChanges();
+      mockConfigProvider.setRuntimeApiKey.mockImplementationOnce(() => {
+        throw new Error('Simulated Storage Rejection');
+      });
 
-      expect(component.saveErrorMessage()).toContain('Please resolve validation errors');
-      expect(await harness.hasSaveErrorBanner()).toBe(true);
-      expect(await harness.getSaveErrorBannerText()).toContain('Please resolve validation errors');
-    });
-
-    it('sets saveErrorMessage when storage persistence rejects during saveSettings()', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      const {fixture, component, harness} = await setupComponent();
-
-      mockConfigProvider.setGeminiApiKey.mockRejectedValueOnce(
-        new Error('Simulated Storage Rejection'),
-      );
-
-      await harness.setRendererUrlValue('http://valid-url.com');
-      await harness.setGeminiApiKeyValue('valid-key');
-      await component.saveSettings();
+      component.onRendererSelected('dev');
+      component.onApiKeySelected('valid-key');
+      await component.onSaveSettings();
       fixture.detectChanges();
 
       expect(component.saveErrorMessage()).toBe('Simulated Storage Rejection');
@@ -659,220 +496,59 @@ describe('Settings', () => {
     });
   });
 
-  describe('API Key View Prohibition', () => {
-    it('disables API key toggle button and prohibits unmasking when isApiKeyProvidedByConfig is true', async () => {
+  describe('Transactional Settings View Integration & UI Cleanup', () => {
+    it('renders <a2ui-composer-renderer-selector> and <a2ui-composer-api-key-selector> in place of <a2ui-composer-profile-selector>', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockIsApiKeyProvidedByConfig.set(true);
+      const {fixture, harness} = await setupComponent();
 
-      const {component, harness} = await setupComponent();
-
-      expect(component.isApiKeyUnmaskDisabled()).toBe(true);
-      expect(await harness.isApiKeyToggleBtnDisabled()).toBe(true);
-
-      component.toggleHideApiKey();
-      expect(component.hideApiKey()).toBe(true);
-      expect(await harness.getApiKeyInputType()).toBe('password');
+      expect(await harness.getRendererSelectorHarness()).not.toBeNull();
+      expect(await harness.getApiKeySelectorHarness()).not.toBeNull();
+      expect(fixture.nativeElement.querySelector('a2ui-composer-profile-selector')).toBeNull();
     });
 
-    it('disables apiKey form control when isApiKeyProvidedByConfig is true', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockIsApiKeyProvidedByConfig.set(true);
+    it('sets selectedRendererId and marks form dirty when a renderer is selected in <a2ui-composer-renderer-selector>', async () => {
+      const {fixture, component} = await setupComponent();
 
-      const {component} = await setupComponent();
+      component.onRendererSelected('dev');
+      fixture.detectChanges();
 
-      expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
+      expect(component.selectedRendererId()).toBe('dev');
+      expect(component.settingsForm.dirty).toBe(true);
     });
 
-    it('does not invoke setGeminiApiKey when saving settings with config-provided API key', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockIsApiKeyProvidedByConfig.set(true);
-      mockGeminiApiKey.set('server-key');
-
-      const {fixture, component, harness} = await setupComponent();
+    it('never writes to LocalStorage/IndexedDB active runtime state immediately and never reloads the window prematurely when modifying selections', async () => {
+      const {fixture, component} = await setupComponent();
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+      const commitSpy = vi.spyOn(component.settingsService, 'commitSettings');
       const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
-      await harness.setRendererUrlValue('http://new-url.com');
-      await new Promise(resolve => queueMicrotask(resolve));
+      component.onRendererSelected('dev');
+      component.onApiKeySelected('custom-1');
       fixture.detectChanges();
 
-      await component.saveSettings();
-
-      expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
-      expect(reloadSpy).toHaveBeenCalled();
+      expect(setItemSpy).not.toHaveBeenCalled();
+      expect(commitSpy).not.toHaveBeenCalled();
+      expect(reloadSpy).not.toHaveBeenCalled();
     });
 
-    it('keeps API key control enabled and permits unmasking when context is locked but isApiKeyProvidedByConfig is false', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockStartupResolution.isContextLocked.mockReturnValue(true);
-      mockIsApiKeyProvidedByConfig.set(false);
-
-      const {component, harness} = await setupComponent();
-
-      expect(component.isApiKeyUnmaskDisabled()).toBe(false);
-      expect(component.settingsForm.controls.apiKey.enabled).toBe(true);
-      expect(await harness.isApiKeyToggleBtnDisabled()).toBe(false);
-    });
-
-    it('enables API key toggle button and permits unmasking when key is user-provided and context is unlocked', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockIsApiKeyProvidedByConfig.set(false);
-      mockStartupResolution.isContextLocked.mockReturnValue(false);
-
-      const {component, harness} = await setupComponent();
-
-      expect(component.isApiKeyUnmaskDisabled()).toBe(false);
-      expect(await harness.isApiKeyToggleBtnDisabled()).toBe(false);
-
-      await harness.clickApiKeyToggleBtn();
-      expect(component.hideApiKey()).toBe(false);
-      expect(await harness.getApiKeyInputType()).toBe('text');
-    });
-
-    it('locks rendererUrl and apiKey form controls when active renderer disallows overrides', async () => {
-      mockActiveProfile.set({
-        displayName: 'Locked Profile',
-        rendererUrl: 'http://locked-server.com',
-        allowOverrides: false,
-      });
-
-      const {component} = await setupComponent();
-
-      expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
-      expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
-      expect(component.isLocked()).toBe(true);
-    });
-
-    it('invokes selectRenderer on settings service when onRendererSelected is triggered', async () => {
-      const {component} = await setupComponent();
-      const selectSpy = vi
-        .spyOn(component['settingsService'], 'selectRenderer')
-        .mockResolvedValue();
-
-      component.settingsForm.controls.apiKey.markAsDirty();
-      await component.onRendererSelected('dev');
-
-      expect(selectSpy).toHaveBeenCalledWith('dev');
-      expect(component.settingsForm.controls.apiKey.pristine).toBe(true);
-    });
-
-    it('clears active renderer selection when rendererUrl form control value is modified', async () => {
-      mockSelectedProfileId.set('dev');
-      mockActiveProfile.set({
-        displayName: 'Development',
-        rendererUrl: 'http://localhost:3000',
-        allowOverrides: true,
-      });
-
-      const {component, harness} = await setupComponent();
-      const selectSpy = vi.spyOn(component['settingsService'], 'selectRenderer');
-
-      await harness.setRendererUrlValue('http://custom-renderer-url.com');
-      await new Promise(resolve => queueMicrotask(resolve));
-
-      expect(selectSpy).toHaveBeenCalledWith(null);
-    });
-
-    it('preserves renderer selection when rendererUrl form control value matches active renderer URL', async () => {
-      mockSelectedProfileId.set('dev');
-      mockActiveProfile.set({
-        displayName: 'Development',
-        rendererUrl: 'http://localhost:3000',
-        allowOverrides: true,
-      });
-
-      const {component} = await setupComponent();
-      const selectSpy = vi.spyOn(component['settingsService'], 'selectRenderer');
-
-      component.settingsForm.controls.rendererUrl.setValue('http://localhost:3000');
-
-      expect(selectSpy).not.toHaveBeenCalledWith(null);
-    });
-
-    it('resets allowOverrides lock state and enables rendererUrl and apiKey form controls when selecting Custom profile in 3P mode', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockActiveProfile.set({
-        displayName: 'Locked Profile',
-        rendererUrl: 'http://locked-server.com',
-        allowOverrides: false,
-      });
+    it('invokes SettingsService.commitSettings(...), marks form pristine, and calls reloadWindow() only when user clicks "Save Settings"', async () => {
       const {fixture, component} = await setupComponent();
+      const commitSpy = vi.spyOn(component.settingsService, 'commitSettings').mockResolvedValue();
+      const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
-      expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
-      expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
-
-      component.settingsForm.controls.apiKey.markAsDirty();
-      await component.onRendererSelected(null);
+      component.onRendererSelected('dev');
+      component.onApiKeySelected('custom-1');
       fixture.detectChanges();
 
-      expect(component.isLocked()).toBe(false);
-      expect(component.settingsForm.controls.rendererUrl.enabled).toBe(true);
-      expect(component.settingsForm.controls.apiKey.enabled).toBe(true);
-      expect(component.settingsForm.controls.apiKey.pristine).toBe(true);
-    });
+      await component.onSaveSettings();
 
-    it('keeps apiKey control disabled in 1P mode when selecting Custom profile', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
-      mockActiveProfile.set({
-        displayName: 'Locked Profile',
-        rendererUrl: 'http://locked-server.com',
-        allowOverrides: false,
+      expect(commitSpy).toHaveBeenCalledWith({
+        selectedRendererId: 'dev',
+        rendererUrl: 'http://resolved-url.com',
+        selectedApiKeyId: 'custom-1',
       });
-      const {fixture, component} = await setupComponent();
-
-      expect(component.settingsForm.controls.rendererUrl.disabled).toBe(true);
-      expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
-
-      component.settingsForm.controls.apiKey.markAsDirty();
-      await component.onRendererSelected(null);
-      fixture.detectChanges();
-
-      expect(component.isLocked()).toBe(false);
-      expect(component.settingsForm.controls.rendererUrl.enabled).toBe(true);
-      expect(component.settingsForm.controls.apiKey.disabled).toBe(true);
-      expect(component.settingsForm.controls.apiKey.pristine).toBe(true);
-    });
-
-    it('clears rendererUrl form control to empty string when switching to Custom profile', async () => {
-      mockRendererUrl.set('http://locked-server.com');
-      const {fixture, component} = await setupComponent();
-
-      expect(component.settingsForm.controls.rendererUrl.value).toBe('http://locked-server.com');
-
-      await component.onRendererSelected(null);
-      fixture.detectChanges();
-
-      expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('');
-      expect(component.settingsForm.controls.rendererUrl.value).toBe('');
-    });
-
-    it('populates saved personal API key into apiKey form control when switching to Custom profile in 3P mode', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockSecureStorage.getCredential.mockResolvedValue('saved-personal-api-key');
-      const {fixture, component} = await setupComponent();
-
-      await component.onRendererSelected(null);
-      fixture.detectChanges();
-
-      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
-      expect(mockSecureStorage.getCredential).toHaveBeenCalledWith(
-        SecureCredentialsKey.GEMINI_API_KEY,
-      );
-      expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('saved-personal-api-key');
-      expect(component.settingsForm.controls.apiKey.value).toBe('saved-personal-api-key');
-    });
-
-    it('resets apiKey form control to empty string when no personal key was saved in 3P mode', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockSecureStorage.getCredential.mockResolvedValue(null);
-      mockGeminiApiKey.set('old-config-key');
-      const {fixture, component} = await setupComponent();
-
-      await component.onRendererSelected(null);
-      fixture.detectChanges();
-
-      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
-      expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('');
-      expect(component.settingsForm.controls.apiKey.value).toBe('');
+      expect(component.settingsForm.pristine).toBe(true);
+      expect(reloadSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -886,12 +562,18 @@ describe('Settings', () => {
     });
 
     it('enables Save Settings button when renderer selection changes', async () => {
-      mockProfiles.set({
-        'profile-1': {displayName: 'Profile 1', rendererUrl: 'http://p1.com'},
-      });
       const {fixture, component, harness} = await setupComponent();
+      vi.spyOn(component.settingsService, 'getRenderers').mockReturnValue([
+        {
+          id: 'dev',
+          name: 'Development',
+          rendererUrl: 'http://dev.com',
+          readOnly: true,
+          allowOverrides: true,
+        },
+      ]);
 
-      await component.onRendererSelected('profile-1');
+      component.onRendererSelected('dev');
       fixture.detectChanges();
 
       expect(component.hasUnsavedChanges()).toBe(true);
@@ -911,53 +593,27 @@ describe('Settings', () => {
       expect(await harness.isSaveButtonDisabled()).toBe(false);
     });
 
-    it('enables Save Settings button when renderer URL changes', async () => {
-      const {fixture, component, harness} = await setupComponent();
-
-      await harness.setRendererUrlValue('http://updated-renderer-url.com');
-      await new Promise(resolve => queueMicrotask(resolve));
-      fixture.detectChanges();
-
-      expect(component.hasUnsavedChanges()).toBe(true);
-      expect(component.isSaveDisabled()).toBe(false);
-      expect(await harness.isSaveButtonDisabled()).toBe(false);
-    });
-
     it('enables Save Settings button when API key changes', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
       const {fixture, component, harness} = await setupComponent();
 
-      await harness.setGeminiApiKeyValue('new-api-key-value');
+      component.onApiKeySelected('custom-1');
       fixture.detectChanges();
 
       expect(component.hasUnsavedChanges()).toBe(true);
       expect(component.isSaveDisabled()).toBe(false);
       expect(await harness.isSaveButtonDisabled()).toBe(false);
-    });
-
-    it('disables Save Settings button when form is invalid', async () => {
-      const {fixture, component, harness} = await setupComponent();
-
-      await harness.setRendererUrlValue('invalid-url-without-protocol-or-slash');
-      await new Promise(resolve => queueMicrotask(resolve));
-      fixture.detectChanges();
-
-      expect(component.settingsForm.invalid).toBe(true);
-      expect(component.hasUnsavedChanges()).toBe(true);
-      expect(component.isSaveDisabled()).toBe(true);
-      expect(await harness.isSaveButtonDisabled()).toBe(true);
     });
 
     it('disables Save Settings button after settings are saved', async () => {
       const {fixture, component, harness} = await setupComponent();
       vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
-      await harness.setRendererUrlValue('http://updated-renderer-url.com');
-      await new Promise(resolve => queueMicrotask(resolve));
+      component.onRendererSelected('dev');
       fixture.detectChanges();
       expect(await harness.isSaveButtonDisabled()).toBe(false);
 
-      await component.saveSettings();
+      await component.onSaveSettings();
       fixture.detectChanges();
 
       expect(component.hasUnsavedChanges()).toBe(false);
@@ -965,41 +621,49 @@ describe('Settings', () => {
       expect(await harness.isSaveButtonDisabled()).toBe(true);
     });
 
-    it('disables Save Settings button when form control value is edited back to initial snapshot value', async () => {
+    it('disables Save Settings button when renderer selection is changed back to initial snapshot value', async () => {
       const {fixture, component, harness} = await setupComponent();
 
-      await harness.setRendererUrlValue('http://updated-renderer-url.com');
-      await new Promise(resolve => queueMicrotask(resolve));
+      component.onRendererSelected('dev');
       fixture.detectChanges();
       expect(await harness.isSaveButtonDisabled()).toBe(false);
 
-      await harness.setRendererUrlValue('http://resolved-url.com');
-      await new Promise(resolve => queueMicrotask(resolve));
+      component.onRendererSelected('Custom');
       fixture.detectChanges();
 
       expect(component.hasUnsavedChanges()).toBe(false);
       expect(component.isSaveDisabled()).toBe(true);
       expect(await harness.isSaveButtonDisabled()).toBe(true);
     });
+  });
 
-    it('disables Save Settings button after saving values containing leading or trailing whitespace', async () => {
-      const {fixture, component, harness} = await setupComponent();
-      vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+  describe('window:beforeunload navigation guard', () => {
+    it('calls event.preventDefault() and sets event.returnValue when settingsForm.dirty is true', async () => {
+      const {fixture, component} = await setupComponent();
 
-      await harness.setRendererUrlValue('http://updated-renderer-url.com  ');
-      await new Promise(resolve => queueMicrotask(resolve));
-      fixture.detectChanges();
-      expect(await harness.isSaveButtonDisabled()).toBe(false);
-
-      await component.saveSettings();
+      component.settingsForm.markAsDirty();
       fixture.detectChanges();
 
-      expect(component.settingsForm.controls.rendererUrl.value).toBe(
-        'http://updated-renderer-url.com',
-      );
-      expect(component.hasUnsavedChanges()).toBe(false);
-      expect(component.isSaveDisabled()).toBe(true);
-      expect(await harness.isSaveButtonDisabled()).toBe(true);
+      const event = new Event('beforeunload') as BeforeUnloadEvent;
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+
+      window.dispatchEvent(event);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(['', true]).toContain(event.returnValue);
+    });
+
+    it('does not prevent unload when settingsForm.dirty is false', async () => {
+      const {component} = await setupComponent();
+
+      expect(component.settingsForm.dirty).toBe(false);
+
+      const event = new Event('beforeunload') as BeforeUnloadEvent;
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+
+      window.dispatchEvent(event);
+
+      expect(preventDefaultSpy).not.toHaveBeenCalled();
     });
   });
 });

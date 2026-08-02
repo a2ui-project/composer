@@ -34,12 +34,16 @@ describe('SettingsService', () => {
     activeRenderer: WritableSignal<RendererConfig | null>;
     apiKeys: WritableSignal<Record<string, string>>;
     setSelectedRendererId: ReturnType<typeof vi.fn>;
+    isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
+    isContextLocked: ReturnType<typeof vi.fn>;
   };
   let mockConfigProvider: {
     setRendererUrl: ReturnType<typeof vi.fn>;
     setApiKeyFromConfig: ReturnType<typeof vi.fn>;
     setRuntimeApiKey: ReturnType<typeof vi.fn>;
     setGeminiApiKey: ReturnType<typeof vi.fn>;
+    isApiKeyProvidedByConfig: ReturnType<typeof vi.fn>;
+    purgeGeminiApiKey: ReturnType<typeof vi.fn>;
   };
   let mockSecureStorage: {
     getCredential: ReturnType<typeof vi.fn>;
@@ -73,6 +77,8 @@ describe('SettingsService', () => {
       selectedRendererId: signal(null),
       activeRenderer: signal(null),
       apiKeys: signal({}),
+      isThirdPartyEnvironment: vi.fn().mockReturnValue(true),
+      isContextLocked: vi.fn().mockReturnValue(false),
       setSelectedRendererId: vi.fn((id: string | null) => {
         mockStartupResolution.selectedRendererId.set(id);
         mockStartupResolution.activeRenderer.set(id ? sampleRenderers[id] || null : null);
@@ -84,6 +90,8 @@ describe('SettingsService', () => {
       setApiKeyFromConfig: vi.fn(),
       setRuntimeApiKey: vi.fn(),
       setGeminiApiKey: vi.fn().mockResolvedValue(undefined),
+      isApiKeyProvidedByConfig: vi.fn().mockReturnValue(false),
+      purgeGeminiApiKey: vi.fn().mockResolvedValue(undefined),
     };
 
     mockSecureStorage = {
@@ -722,6 +730,57 @@ describe('SettingsService', () => {
           rendererUrl: 'example.com',
         }),
       ).toThrow('Custom renderer URL must start with http:// or https://');
+    });
+  });
+
+  describe('commitSettings', () => {
+    it('atomically persists selectedRendererId, rendererUrl, and selectedApiKeyId in 3P mode', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      mockStartupResolution.isContextLocked.mockReturnValue(false);
+      mockConfigProvider.isApiKeyProvidedByConfig.mockReturnValue(false);
+
+      await service.commitSettings({
+        selectedRendererId: 'dev',
+        rendererUrl: 'http://localhost:3000',
+        selectedApiKeyId: 'custom-1',
+        apiKey: 'secret-key-123',
+      });
+
+      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBe('dev');
+      expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev');
+      expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://localhost:3000');
+      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_API_KEY)).toBe('custom-1');
+      expect(service.selectedApiKeyId()).toBe('custom-1');
+      expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('secret-key-123');
+    });
+
+    it('removes SELECTED_RENDERER and SELECTED_API_KEY storage items when null IDs are passed', async () => {
+      mockLocalStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'dev');
+      mockLocalStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'custom-1');
+
+      await service.commitSettings({
+        selectedRendererId: null,
+        rendererUrl: 'http://custom-url.com',
+        selectedApiKeyId: null,
+      });
+
+      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
+      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_API_KEY)).toBeNull();
+      expect(service.selectedApiKeyId()).toBeNull();
+      expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://custom-url.com');
+    });
+
+    it('purges Gemini API key when in 1P mode', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
+      mockStartupResolution.isContextLocked.mockReturnValue(false);
+
+      await service.commitSettings({
+        selectedRendererId: 'dev',
+        rendererUrl: 'http://localhost:3000',
+        selectedApiKeyId: null,
+      });
+
+      expect(mockConfigProvider.purgeGeminiApiKey).toHaveBeenCalled();
     });
   });
 });

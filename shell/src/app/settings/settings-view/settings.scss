@@ -35,8 +35,12 @@
   }
 }
 
-.full-width {
+.full-width,
+a2ui-composer-renderer-selector,
+a2ui-composer-api-key-selector,
+mat-form-field {
   width: 100%;
+  box-sizing: border-box;
 }
 
 .locked-notice {

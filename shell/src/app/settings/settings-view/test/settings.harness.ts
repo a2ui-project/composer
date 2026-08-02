@@ -19,6 +19,8 @@ import {ComponentHarness} from '@angular/cdk/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
 import {MatInputHarness} from '@angular/material/input/testing';
 import {MatSlideToggleHarness} from '@angular/material/slide-toggle/testing';
+import {RendererSelectorHarness} from '../../renderer-selector/test/renderer-selector.harness';
+import {ApiKeySelectorHarness} from '../../api-key-selector/test/api-key-selector.harness';
 
 /**
  * Harness for interacting with the settings configuration drawer view.
@@ -29,6 +31,16 @@ export class SettingsHarness extends ComponentHarness {
 
   protected getInputs = this.locatorForAll(MatInputHarness);
   protected getSlideToggle = this.locatorFor(MatSlideToggleHarness);
+  protected getRendererSelector = this.locatorForOptional(RendererSelectorHarness);
+  protected getApiKeySelector = this.locatorForOptional(ApiKeySelectorHarness);
+
+  async getRendererSelectorHarness(): Promise<RendererSelectorHarness | null> {
+    return this.getRendererSelector();
+  }
+
+  async getApiKeySelectorHarness(): Promise<ApiKeySelectorHarness | null> {
+    return this.getApiKeySelector();
+  }
 
   protected getLockedNotice = this.locatorForOptional('.locked-notice');
   protected getAuthLockedNotice = this.locatorForOptional('.auth-locked-notice');
@@ -46,18 +58,6 @@ export class SettingsHarness extends ComponentHarness {
   protected getBridgeBadge = this.locatorFor('.bridge-badge');
   protected getCatalogBadge = this.locatorFor('.catalog-badge');
 
-  private async getRendererUrlInput(): Promise<MatInputHarness> {
-    const inputs = await this.getInputs();
-    for (const input of inputs) {
-      const host = await input.host();
-      const placeholder = await host.getAttribute('placeholder');
-      if (placeholder === 'http://localhost:3000') {
-        return input;
-      }
-    }
-    throw new Error('Renderer URL input field not found');
-  }
-
   private async getApiKeyInput(): Promise<MatInputHarness | null> {
     const inputs = await this.getInputs();
     for (const input of inputs) {
@@ -68,22 +68,6 @@ export class SettingsHarness extends ComponentHarness {
       }
     }
     return null;
-  }
-
-  async getRendererUrlPlaceholder(): Promise<string | null> {
-    const input = await this.getRendererUrlInput();
-    const host = await input.host();
-    return host.getAttribute('placeholder');
-  }
-
-  async getRendererUrlValue(): Promise<string> {
-    const input = await this.getRendererUrlInput();
-    return input.getValue();
-  }
-
-  async setRendererUrlValue(val: string): Promise<void> {
-    const input = await this.getRendererUrlInput();
-    await input.setValue(val);
   }
 
   async getGeminiApiKeyValue(): Promise<string> {
@@ -101,7 +85,7 @@ export class SettingsHarness extends ComponentHarness {
 
   async setGeminiApiKeyValue(val: string): Promise<void> {
     const input = await this.getApiKeyInput();
-    if (!input) throw new Error('API Key input field not found');
+    if (!input) return;
     await input.setValue(val);
   }
 

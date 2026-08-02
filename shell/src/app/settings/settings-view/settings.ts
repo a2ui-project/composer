@@ -18,6 +18,7 @@ import {
   Component,
   computed,
   effect,
+  HostListener,
   inject,
   OnInit,
   signal,
@@ -25,7 +26,7 @@ import {
   WritableSignal,
 } from '@angular/core';
 import {takeUntilDestroyed, toSignal} from '@angular/core/rxjs-interop';
-import {NonNullableFormBuilder, ReactiveFormsModule, Validators} from '@angular/forms';
+import {NonNullableFormBuilder, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatButtonModule} from '@angular/material/button';
@@ -39,8 +40,9 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
-import {ProfileSelector} from '../profile-selector/profile-selector';
-import {SettingsService} from '../settings-service/settings.service';
+import {SettingsService, RendererOption} from '../settings-service/settings.service';
+import {RendererSelectorComponent} from '../renderer-selector/renderer-selector';
+import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
 import {locationAssign} from 'safevalues/dom';
 
 /**
@@ -59,7 +61,8 @@ import {locationAssign} from 'safevalues/dom';
     MatCardModule,
     MatChipsModule,
     MatSlideToggleModule,
-    ProfileSelector,
+    RendererSelectorComponent,
+    ApiKeySelectorComponent,
   ],
   templateUrl: './settings.ng.html',
   styleUrl: './settings.scss',
@@ -76,7 +79,23 @@ export class Settings implements OnInit {
 
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
-  readonly isLocked: WritableSignal<boolean> = signal(false);
+  readonly selectedRendererId: WritableSignal<string | null> = signal<string | null>(null);
+  readonly selectedApiKeyId: WritableSignal<string | null> = signal<string | null>(null);
+
+  readonly selectedRendererOption: Signal<RendererOption | undefined> = computed(() => {
+    const id = this.selectedRendererId();
+    if (!id || id === 'Custom') return undefined;
+    return this.settingsService.getRenderers().find(r => r.id === id);
+  });
+
+  readonly allowOverrides: Signal<boolean> = computed(() => {
+    return this.selectedRendererOption()?.allowOverrides ?? true;
+  });
+
+  readonly isLocked: Signal<boolean> = computed(() => {
+    return !this.allowOverrides() || this.startupResolution.isContextLocked();
+  });
+
   readonly isThirdParty: WritableSignal<boolean> = signal(false);
   readonly isApiKeyProvidedByConfig: Signal<boolean> = computed(() =>
     this.configProvider.isApiKeyProvidedByConfig(),
@@ -89,10 +108,9 @@ export class Settings implements OnInit {
   readonly saveErrorMessage: WritableSignal<string | null> = signal(null);
   readonly isSaving: WritableSignal<boolean> = signal(false);
 
-  private readonly initialProfileId: WritableSignal<string | null> = signal<string | null>(null);
+  private readonly initialRendererId: WritableSignal<string | null> = signal<string | null>(null);
+  private readonly initialApiKeyId: WritableSignal<string | null> = signal<string | null>(null);
   private readonly initialForceThirdPartyAuth: WritableSignal<boolean> = signal<boolean>(false);
-  private readonly initialRendererUrl: WritableSignal<string> = signal<string>('');
-  private readonly initialApiKey: WritableSignal<string> = signal<string>('');
 
   readonly bridgeConnected: Signal<boolean> = computed(
     () => this.hostCommunication.latestEnvelope() !== null,
@@ -108,201 +126,76 @@ export class Settings implements OnInit {
     this.catalogManagement.catalogError(),
   );
 
-  // Matches either absolute HTTP/HTTPS URLs (starting with http:// or https://)
-  // or relative paths starting with '/'.
-  // Note that the `\/(?!/)` means Match a forward slash (\/), but only if it is
-  // not immediately followed by another forward slash ((?!/))".
-  readonly settingsForm = this.fb.group({
-    rendererUrl: ['', [Validators.required, Validators.pattern(/^(https?:\/\/|\/(?!\/)).+/i)]],
-    apiKey: [''],
-  });
+  readonly settingsForm = this.fb.group({});
 
   private readonly formEvents = toSignal(this.settingsForm.events);
 
   readonly hasUnsavedChanges: Signal<boolean> = computed(() => {
     this.formEvents();
-    const profileChanged = this.settingsService.selectedRendererId() !== this.initialProfileId();
+    const rendererChanged = this.selectedRendererId() !== this.initialRendererId();
+    const apiKeyChanged = this.selectedApiKeyId() !== this.initialApiKeyId();
     const authChanged = this.forceThirdPartyAuth() !== this.initialForceThirdPartyAuth();
-    const urlChanged = this.settingsForm.controls.rendererUrl.value !== this.initialRendererUrl();
-    const apiKeyChanged = this.settingsForm.controls.apiKey.value !== this.initialApiKey();
-    return profileChanged || authChanged || urlChanged || apiKeyChanged;
+    return rendererChanged || apiKeyChanged || authChanged;
   });
 
   readonly isSaveDisabled: Signal<boolean> = computed(() => {
     this.formEvents();
-    return this.isSaving() || this.settingsForm.invalid || !this.hasUnsavedChanges();
+    return this.isSaving() || !this.hasUnsavedChanges();
   });
 
-  constructor() {
-    effect(() => {
-      const currentKey = this.configProvider.geminiApiKey();
-      const apiKeyControl = this.settingsForm.controls.apiKey;
-      if (!apiKeyControl.dirty && apiKeyControl.value !== currentKey) {
-        apiKeyControl.setValue(currentKey, {emitEvent: false});
-      }
-    });
-
-    effect(() => {
-      const url = this.configProvider.rendererUrl();
-      const rendererControl = this.settingsForm.controls.rendererUrl;
-      if (!rendererControl.dirty && url !== rendererControl.value) {
-        rendererControl.setValue(url, {emitEvent: false});
-      }
-    });
-
-    this.settingsForm.controls.rendererUrl.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
-      if (this.settingsForm.controls.rendererUrl.dirty) {
-        queueMicrotask(() => {
-          const selectedId = this.settingsService.selectedRendererId();
-          if (selectedId !== null) {
-            const currentVal = this.settingsForm.controls.rendererUrl.value;
-            const activeUrl = this.settingsService.activeRenderer()?.rendererUrl;
-            if (currentVal !== activeUrl) {
-              this.settingsService.selectRenderer(null).catch(err => {
-                console.warn('Failed to reset selected renderer on renderer URL edit:', err);
-              });
-            }
-          }
-        });
-      }
-    });
-
-    effect(() => {
-      const allowOverrides = this.settingsService.allowOverrides();
-      const startupLocked = this.startupResolution.isContextLocked();
-      const isUrlLocked = !allowOverrides || startupLocked;
-      this.isLocked.set(isUrlLocked);
-
-      const rendererControl = this.settingsForm.controls.rendererUrl;
-      if (isUrlLocked) {
-        rendererControl.disable({emitEvent: false});
-      } else {
-        rendererControl.enable({emitEvent: false});
-      }
-
-      this.configureApiKeyControl(this.isThirdParty());
-    });
-  }
+  constructor() {}
 
   ngOnInit(): void {
-    const allowOverrides = this.settingsService.allowOverrides();
-    const locked = !allowOverrides || this.startupResolution.isContextLocked();
-    this.isLocked.set(locked);
+    const currentRendererId = this.settingsService.selectedRendererId() || 'Custom';
+    this.selectedRendererId.set(currentRendererId);
+    this.initialRendererId.set(currentRendererId);
+
+    const currentApiKeyId = this.settingsService.selectedApiKeyId() || null;
+    this.selectedApiKeyId.set(currentApiKeyId);
+    this.initialApiKeyId.set(currentApiKeyId);
 
     const is3P = this.startupResolution.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
 
     this.forceThirdPartyAuth.set(this.configProvider.authType() === AuthType.THIRD_PARTY);
-
-    if (locked) {
-      this.settingsForm.controls.rendererUrl.disable();
-    }
-    this.configureApiKeyControl(is3P);
-
-    const url = this.configProvider.rendererUrl();
-    if (
-      !this.settingsForm.controls.rendererUrl.dirty &&
-      url !== this.settingsForm.controls.rendererUrl.value
-    ) {
-      this.settingsForm.controls.rendererUrl.setValue(url, {emitEvent: false});
-    }
-
-    const key = this.configProvider.geminiApiKey();
-    if (
-      !this.settingsForm.controls.apiKey.dirty &&
-      key !== this.settingsForm.controls.apiKey.value
-    ) {
-      this.settingsForm.controls.apiKey.setValue(key, {emitEvent: false});
-    }
-
-    this.initialProfileId.set(this.settingsService.selectedRendererId());
     this.initialForceThirdPartyAuth.set(this.forceThirdPartyAuth());
-    this.initialRendererUrl.set(this.configProvider.rendererUrl());
-    this.initialApiKey.set(this.configProvider.geminiApiKey());
   }
 
-  async onRendererSelected(rendererId: string | null): Promise<void> {
-    await this.settingsService.selectRenderer(rendererId);
-    if (rendererId === null) {
-      this.settingsForm.controls.rendererUrl.setValue('');
-      this.settingsForm.controls.rendererUrl.enable({emitEvent: false});
-      this.configureApiKeyControl(this.isThirdParty());
-      this.settingsForm.controls.rendererUrl.markAsPristine();
-    } else {
-      const active = this.settingsService.activeRenderer();
-      if (active?.rendererUrl !== undefined) {
-        this.settingsForm.controls.rendererUrl.setValue(active.rendererUrl);
-        this.settingsForm.controls.rendererUrl.markAsPristine();
-      }
-    }
-    this.settingsForm.controls.apiKey.markAsPristine();
+  onRendererSelected(rendererId: string): void {
+    this.selectedRendererId.set(rendererId);
+    this.settingsForm.markAsDirty();
   }
 
-  private configureApiKeyControl(is3P: boolean): void {
-    const apiKeyControl = this.settingsForm.controls.apiKey;
-    const allowOverrides = this.settingsService.allowOverrides();
-
-    if (!allowOverrides) {
-      apiKeyControl.clearValidators();
-      if (apiKeyControl.enabled) {
-        apiKeyControl.disable({emitEvent: false});
-      }
-      apiKeyControl.updateValueAndValidity({emitEvent: false});
-      return;
-    }
-
-    if (is3P && !this.isApiKeyProvidedByConfig()) {
-      apiKeyControl.setValidators([Validators.pattern(/\S/)]);
-      if (apiKeyControl.disabled) {
-        apiKeyControl.enable({emitEvent: false});
-      }
-    } else {
-      apiKeyControl.clearValidators();
-      if (apiKeyControl.enabled) {
-        apiKeyControl.disable({emitEvent: false});
-      }
-    }
-    apiKeyControl.updateValueAndValidity({emitEvent: false});
+  onApiKeySelected(apiKeyId: string | null): void {
+    this.selectedApiKeyId.set(apiKeyId);
+    this.settingsForm.markAsDirty();
   }
 
-  async saveSettings(): Promise<void> {
+  async onSaveSettings(): Promise<void> {
     if (this.isSaving() || !this.hasUnsavedChanges()) {
       return;
     }
 
     this.saveErrorMessage.set(null);
 
-    if (this.settingsForm.invalid) {
-      this.settingsForm.markAllAsTouched();
-      this.saveErrorMessage.set('Please resolve validation errors before saving settings.');
-      return;
-    }
-
     this.isSaving.set(true);
     try {
-      const values = this.settingsForm.getRawValue();
-      const trimmedUrl = values.rendererUrl.trim();
-      const trimmedApiKey = values.apiKey.trim();
+      const selectedRenderer = this.selectedRendererOption();
+      const resolvedUrl =
+        selectedRenderer && selectedRenderer.rendererUrl !== undefined
+          ? selectedRenderer.rendererUrl
+          : this.configProvider.rendererUrl();
 
-      if (this.isThirdParty()) {
-        if (!this.isLocked()) {
-          this.configProvider.setRendererUrl(trimmedUrl);
-        }
-        if (!this.isApiKeyProvidedByConfig()) {
-          await this.configProvider.setGeminiApiKey(trimmedApiKey);
-        }
-      } else {
-        await this.configProvider.purgeGeminiApiKey();
-        if (!this.isLocked()) {
-          this.configProvider.setRendererUrl(trimmedUrl);
-        }
-      }
-      this.settingsForm.controls.rendererUrl.setValue(trimmedUrl, {emitEvent: false});
-      this.settingsForm.controls.apiKey.setValue(trimmedApiKey, {emitEvent: false});
-      this.initialProfileId.set(this.settingsService.selectedRendererId());
+      await this.settingsService.commitSettings({
+        selectedRendererId:
+          this.selectedRendererId() === 'Custom' ? null : this.selectedRendererId(),
+        rendererUrl: resolvedUrl,
+        selectedApiKeyId: this.selectedApiKeyId(),
+      });
+
+      this.initialRendererId.set(this.selectedRendererId());
+      this.initialApiKeyId.set(this.selectedApiKeyId());
       this.initialForceThirdPartyAuth.set(this.forceThirdPartyAuth());
-      this.initialRendererUrl.set(this.configProvider.rendererUrl());
-      this.initialApiKey.set(this.configProvider.geminiApiKey());
       this.settingsForm.markAsPristine();
 
       this.reloadWindow();
@@ -340,7 +233,16 @@ export class Settings implements OnInit {
     }
     const newState = !this.forceThirdPartyAuth();
     this.forceThirdPartyAuth.set(newState);
+    this.settingsForm.markAsDirty();
     this.configProvider.setForcedAuthMode(newState ? AuthType.THIRD_PARTY : AuthType.FIRST_PARTY);
     this.reloadWindow();
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.hasUnsavedChanges() || this.settingsForm.dirty) {
+      event.preventDefault();
+      event.returnValue = true;
+    }
   }
 }
