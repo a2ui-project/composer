@@ -1,0 +1,69 @@
+<!--
+  Copyright 2026 Google LLC
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<div class="renderer-selector-container">
+  <mat-form-field appearance="outline" class="renderer-selector-form-field">
+    <mat-label>Renderer</mat-label>
+    <mat-select
+      id="renderer-select"
+      [value]="selectedRendererId()"
+      [disabled]="disabled()"
+      (selectionChange)="onSelectionChange($event.value)"
+    >
+      <mat-select-trigger>
+        {{ selectedRenderer()?.name }}
+      </mat-select-trigger>
+      @if (renderers().length === 0) {
+        <mat-option [disabled]="true" class="empty-state-option"
+          >No items available — click + to add</mat-option
+        >
+      } @else {
+        @for (renderer of renderers(); track renderer.id) {
+          <mat-option [value]="renderer.id" class="renderer-option">
+            <div class="renderer-option-content">
+              <div class="renderer-option-label">{{ renderer.name }}</div>
+              <div class="renderer-url-subtext">{{ renderer.rendererUrl }}</div>
+            </div>
+            <button
+              mat-icon-button
+              class="delete-renderer-button"
+              [attr.aria-label]="'Delete ' + renderer.name"
+              [disabled]="renderer.readOnly"
+              [matTooltip]="
+                renderer.readOnly
+                  ? 'Static configuration items cannot be deleted'
+                  : 'Delete renderer'
+              "
+              (click)="onDeleteRenderer($event, renderer.id)"
+              (keydown)="$event.stopPropagation()"
+            >
+              <mat-icon aria-hidden="true">delete</mat-icon>
+            </button>
+          </mat-option>
+        }
+      }
+    </mat-select>
+  </mat-form-field>
+  <button
+    mat-icon-button
+    class="add-renderer-button"
+    aria-label="Add custom renderer"
+    [disabled]="disabled()"
+    (click)="onAddRenderer()"
+  >
+    <mat-icon>add_circle</mat-icon>
+  </button>
+</div>
