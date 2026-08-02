@@ -20,7 +20,6 @@ import {AppConfigProvider} from '../app-config-provider/app-config-provider';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
-import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
 
 /**
  * Represents an available API key option from static config or custom storage.

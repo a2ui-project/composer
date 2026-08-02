@@ -366,9 +366,7 @@ describe('StartupResolution', () => {
     vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(true);
     localStorage.setItem(
       LocalStorageKey.CUSTOM_RENDERERS,
-      JSON.stringify([
-        {id: 'storage', name: 'Storage', rendererUrl: 'http://storage:3000'},
-      ]),
+      JSON.stringify([{id: 'storage', name: 'Storage', rendererUrl: 'http://storage:3000'}]),
     );
     localStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'storage');
     const url = await service.resolveStartupConfiguration();
@@ -701,9 +699,7 @@ describe('StartupResolution', () => {
       vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(true);
       localStorage.setItem(
         LocalStorageKey.CUSTOM_RENDERERS,
-        JSON.stringify([
-          {id: 'storage', name: 'Storage', rendererUrl: 'http://storage:3000'},
-        ]),
+        JSON.stringify([{id: 'storage', name: 'Storage', rendererUrl: 'http://storage:3000'}]),
       );
       localStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'storage');
 

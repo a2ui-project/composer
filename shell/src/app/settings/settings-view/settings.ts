@@ -239,7 +239,7 @@ export class Settings implements OnInit {
 
   @HostListener('window:beforeunload', ['$event'])
   onBeforeUnload(event: BeforeUnloadEvent): void {
-    if (this.hasUnsavedChanges() || this.settingsForm.dirty) {
+    if (this.hasUnsavedChanges()) {
       event.preventDefault();
       event.returnValue = true;
     }

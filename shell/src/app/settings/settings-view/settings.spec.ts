@@ -476,7 +476,6 @@ describe('Settings', () => {
     expect(section.hidden).toBe(true);
   });
 
-
   describe('Anti-Silent Failure UI Alert & Error Reporting (onSaveSettings)', () => {
     it('sets saveErrorMessage when storage persistence rejects during onSaveSettings()', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
@@ -639,11 +638,12 @@ describe('Settings', () => {
   });
 
   describe('window:beforeunload navigation guard', () => {
-    it('calls event.preventDefault() and sets event.returnValue when settingsForm.dirty is true', async () => {
+    it('calls event.preventDefault() and sets event.returnValue when hasUnsavedChanges() signal is true', async () => {
       const {fixture, component} = await setupComponent();
 
-      component.settingsForm.markAsDirty();
+      component.onRendererSelected('dev');
       fixture.detectChanges();
+      expect(component.hasUnsavedChanges()).toBe(true);
 
       const event = new Event('beforeunload') as BeforeUnloadEvent;
       const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
@@ -654,10 +654,25 @@ describe('Settings', () => {
       expect(['', true]).toContain(event.returnValue);
     });
 
-    it('does not prevent unload when settingsForm.dirty is false', async () => {
+    it('does not prevent unload when hasUnsavedChanges() signal is false', async () => {
       const {component} = await setupComponent();
 
-      expect(component.settingsForm.dirty).toBe(false);
+      expect(component.hasUnsavedChanges()).toBe(false);
+
+      const event = new Event('beforeunload') as BeforeUnloadEvent;
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+
+      window.dispatchEvent(event);
+
+      expect(preventDefaultSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not prevent unload when settingsForm.dirty is true but hasUnsavedChanges() is false', async () => {
+      const {component} = await setupComponent();
+
+      component.settingsForm.markAsDirty();
+      expect(component.settingsForm.dirty).toBe(true);
+      expect(component.hasUnsavedChanges()).toBe(false);
 
       const event = new Event('beforeunload') as BeforeUnloadEvent;
       const preventDefaultSpy = vi.spyOn(event, 'preventDefault');

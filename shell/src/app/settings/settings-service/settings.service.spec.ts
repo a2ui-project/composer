@@ -22,7 +22,6 @@ import {AppConfigProvider} from '../app-config-provider/app-config-provider';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
-import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 
@@ -739,6 +738,11 @@ describe('SettingsService', () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
       mockStartupResolution.isContextLocked.mockReturnValue(false);
       mockConfigProvider.isApiKeyProvidedByConfig.mockReturnValue(false);
+      mockSecureStorage.getCustomApiKey.mockResolvedValue({
+        id: 'custom-1',
+        name: 'Custom One',
+        key: 'personal-indexeddb-key',
+      });
 
       await service.commitSettings({
         selectedRendererId: 'dev',

@@ -26,7 +26,6 @@ import {
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
-import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
 
 /**

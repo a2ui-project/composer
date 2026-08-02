@@ -21,7 +21,6 @@ import {LocalStorageInteractions} from '../../storage/local-storage-interactions
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
-import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
 import {MatDialog} from '@angular/material/dialog';
 import {firstValueFrom} from 'rxjs';
 import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
