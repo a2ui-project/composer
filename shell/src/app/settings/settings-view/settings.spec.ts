@@ -476,6 +476,7 @@ describe('Settings', () => {
     expect(section.hidden).toBe(true);
   });
 
+
   describe('Anti-Silent Failure UI Alert & Error Reporting (onSaveSettings)', () => {
     it('sets saveErrorMessage when storage persistence rejects during onSaveSettings()', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
