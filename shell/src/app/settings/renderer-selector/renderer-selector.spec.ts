@@ -276,6 +276,18 @@ describe('RendererSelectorComponent & AddRendererDialogComponent', () => {
     expect(mockSettingsService.deleteCustomRenderer).toHaveBeenCalledWith('custom-1');
   });
 
+  it('onAddRenderer stops event propagation and prevents default action', () => {
+    const mockEvent = {
+      stopPropagation: vi.fn(),
+      preventDefault: vi.fn(),
+    } as unknown as Event;
+
+    component.onAddRenderer(mockEvent);
+
+    expect(mockEvent.preventDefault).toHaveBeenCalled();
+    expect(mockEvent.stopPropagation).toHaveBeenCalled();
+  });
+
   it('emits rendererSelected when an option is selected from <mat-select>', async () => {
     const emitSpy = vi.fn();
     component.rendererSelected.subscribe(emitSpy);

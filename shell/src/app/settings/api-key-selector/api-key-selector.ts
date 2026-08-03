@@ -83,7 +83,9 @@ export class ApiKeySelectorComponent {
   /**
    * Opens the dialog to add a new custom API key and handles the newly saved key ID.
    */
-  onAddApiKey(): void {
+  onAddApiKey(event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
     const dialogRef = this.dialog.open(AddApiKeyDialogComponent, {
       width: '450px',
     });

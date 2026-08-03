@@ -39,6 +39,7 @@
             </div>
             <button
               mat-icon-button
+              type="button"
               class="delete-renderer-button"
               [attr.aria-label]="'Delete ' + renderer.name"
               [disabled]="renderer.readOnly"
@@ -59,10 +60,11 @@
   </mat-form-field>
   <button
     mat-icon-button
+    type="button"
     class="add-renderer-button"
     aria-label="Add custom renderer"
     [disabled]="disabled()"
-    (click)="onAddRenderer()"
+    (click)="onAddRenderer($event)"
   >
     <mat-icon>add_circle</mat-icon>
   </button>

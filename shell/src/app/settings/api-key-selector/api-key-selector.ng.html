@@ -36,6 +36,7 @@
             <span class="api-key-option-label">{{ key.name }}</span>
             <button
               mat-icon-button
+              type="button"
               class="delete-api-key-button"
               [attr.aria-label]="'Delete ' + key.name"
               [disabled]="key.readOnly"
@@ -54,10 +55,11 @@
   </mat-form-field>
   <button
     mat-icon-button
+    type="button"
     class="add-api-key-button"
     aria-label="Add Gemini API key"
     [disabled]="disabled()"
-    (click)="onAddApiKey()"
+    (click)="onAddApiKey($event)"
   >
     <mat-icon>add_circle</mat-icon>
   </button>

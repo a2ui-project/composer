@@ -16,7 +16,7 @@
 
 <h2 mat-dialog-title>Add Custom Renderer</h2>
 <mat-dialog-content>
-  <form [formGroup]="form" (ngSubmit)="onConfirm()">
+  <form [formGroup]="form" (ngSubmit)="$event.preventDefault(); onConfirm()">
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>Name</mat-label>
       <input matInput id="renderer-name-input" formControlName="name" placeholder="My Renderer" />
@@ -38,6 +38,8 @@
   </form>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
-  <button mat-button mat-dialog-close>Cancel</button>
-  <button mat-button color="primary" [disabled]="form.invalid" (click)="onConfirm()">Add</button>
+  <button mat-button type="button" mat-dialog-close>Cancel</button>
+  <button mat-button type="button" color="primary" [disabled]="form.invalid" (click)="onConfirm()">
+    Add
+  </button>
 </mat-dialog-actions>

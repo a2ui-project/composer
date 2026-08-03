@@ -263,6 +263,18 @@ describe('ApiKeySelectorComponent & AddApiKeyDialogComponent', () => {
     expect(mockSettingsService.deleteCustomApiKey).toHaveBeenCalledWith('custom-1');
   });
 
+  it('onAddApiKey stops event propagation and prevents default action', () => {
+    const mockEvent = {
+      stopPropagation: vi.fn(),
+      preventDefault: vi.fn(),
+    } as unknown as Event;
+
+    component.onAddApiKey(mockEvent);
+
+    expect(mockEvent.preventDefault).toHaveBeenCalled();
+    expect(mockEvent.stopPropagation).toHaveBeenCalled();
+  });
+
   it('emits apiKeySelected when an option is selected from <mat-select>', async () => {
     const emitSpy = vi.fn();
     component.apiKeySelected.subscribe(emitSpy);

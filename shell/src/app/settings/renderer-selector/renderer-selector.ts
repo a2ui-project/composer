@@ -83,7 +83,9 @@ export class RendererSelectorComponent {
   /**
    * Opens the dialog to add a new custom renderer and handles the newly saved renderer ID.
    */
-  onAddRenderer(): void {
+  onAddRenderer(event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
     const dialogRef = this.dialog.open(AddRendererDialogComponent, {
       width: '450px',
     });
