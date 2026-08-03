@@ -332,6 +332,12 @@ describe('urlValidator', () => {
     expect(urlValidator({value: 'https://example.com/path'} as AbstractControl<string>)).toBeNull();
   });
 
+  it('trims leading and trailing whitespace when validating URLs', () => {
+    expect(
+      urlValidator({value: '  http://localhost:3000  '} as AbstractControl<string>),
+    ).toBeNull();
+  });
+
   it('returns invalidUrl error for malformed or incomplete URLs without a host', () => {
     expect(urlValidator({value: 'http://'} as AbstractControl<string>)).toEqual({
       invalidUrl: true,

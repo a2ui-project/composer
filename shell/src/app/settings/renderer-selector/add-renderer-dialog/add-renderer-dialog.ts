@@ -37,7 +37,7 @@ export function urlValidator(control: AbstractControl<string>): ValidationErrors
     return null;
   }
   try {
-    const parsed = new URL(val);
+    const parsed = new URL(val.trim());
     return ['http:', 'https:'].includes(parsed.protocol) && parsed.host ? null : {invalidUrl: true};
   } catch {
     return {invalidUrl: true};
