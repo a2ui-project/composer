@@ -22,6 +22,7 @@ import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {RenderA2uiItem, A2uiComponentInstance, UpdateComponentsDetails} from 'a2ui-bridge';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {tryParseJsonArray, formatJson} from '../../utils/json';
 
 /**
@@ -48,6 +49,7 @@ export class StateSync {
   private readonly destroyRef = inject(DestroyRef);
   private readonly chatState = inject(ChatState);
   private readonly catalogManagement = inject(CatalogManagement);
+  private readonly startupResolution = inject(StartupResolution, {optional: true});
 
   // A "draft" represents the volatile, unsaved in-memory JSON array
   // payload containing the active surface setup, component hierarchy,
@@ -70,14 +72,19 @@ export class StateSync {
   private readonly _draftInput = signal<string>('');
 
   constructor() {
+    let prevRendererId: string | null | undefined = undefined;
     effect(() => {
+      const selectedRendererId = this.startupResolution?.selectedRendererId();
       const catalog = this.catalogManagement.activeCatalog();
-      if (catalog) {
-        const catalogId = catalog.catalogId || catalog.$id || '';
+      if (catalog || selectedRendererId !== undefined) {
+        const catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
+        const rendererChanged =
+          prevRendererId !== undefined && prevRendererId !== selectedRendererId;
+        prevRendererId = selectedRendererId;
         untracked(() => {
           const currentDraft = this._activeDraft();
           const draftCatalogId = this.getCatalogIdFromDraft(currentDraft);
-          if (currentDraft === '' || draftCatalogId !== catalogId) {
+          if (currentDraft === '' || draftCatalogId !== catalogId || rendererChanged) {
             this._activeDraft.set(this.getInitialDraft(catalogId));
           }
         });
@@ -127,6 +134,10 @@ export class StateSync {
   }
 
   private getInitialDraft(catalogId: string): string {
+    const activeRenderer = this.startupResolution?.activeRenderer();
+    if (activeRenderer?.samplePayload) {
+      return activeRenderer.samplePayload;
+    }
     if (catalogId === 'https://a2ui.org/specification/v0_9/basic_catalog.json') {
       return CAR_BOOKING;
     }

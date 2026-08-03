@@ -42,15 +42,11 @@ export class SettingsHarness extends ComponentHarness {
     return this.getApiKeySelector();
   }
 
-  protected getSaveErrorBanner = this.locatorForOptional('.save-error-banner');
   protected getErrors = this.locatorForAll('mat-error');
   protected getFormSections = this.locatorForAll('.form-section');
   protected getLogsConsole = this.locatorFor('.logs-console');
   protected getApiKeyToggleBtn = this.locatorForOptional(
     MatButtonHarness.with({selector: 'button[matSuffix]'}),
-  );
-  protected getSaveButton = this.locatorFor(
-    MatButtonHarness.with({text: /Save Settings|Saving\.\.\./}),
   );
 
   protected getBridgeBadge = this.locatorFor('.bridge-badge');
@@ -149,19 +145,5 @@ export class SettingsHarness extends ComponentHarness {
   async getIconsAriaHidden(): Promise<(string | null)[]> {
     const icons = await this.locatorForAll('mat-icon')();
     return Promise.all(icons.map(i => i.getAttribute('aria-hidden')));
-  }
-
-  async hasSaveErrorBanner(): Promise<boolean> {
-    return (await this.getSaveErrorBanner()) !== null;
-  }
-
-  async getSaveErrorBannerText(): Promise<string | null> {
-    const node = await this.getSaveErrorBanner();
-    return node ? node.text() : null;
-  }
-
-  async isSaveButtonDisabled(): Promise<boolean> {
-    const btn = await this.getSaveButton();
-    return btn.isDisabled();
   }
 }

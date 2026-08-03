@@ -77,6 +77,7 @@ describe('SettingsService', () => {
       setSelectedRendererId: vi.fn((id: string | null) => {
         mockStartupResolution.selectedRendererId.set(id);
         mockStartupResolution.activeRenderer.set(id ? sampleRenderers[id] || null : null);
+        return Promise.resolve(true);
       }),
     };
 
@@ -190,6 +191,7 @@ describe('SettingsService', () => {
     mockStartupResolution.setSelectedRendererId.mockImplementation((id: string | null) => {
       mockStartupResolution.selectedRendererId.set(id);
       mockStartupResolution.activeRenderer.set(id ? customRenderers[id] || null : null);
+      return Promise.resolve(true);
     });
 
     await service.selectRenderer('whitespaceKey');
@@ -688,73 +690,6 @@ describe('SettingsService', () => {
           rendererUrl: 'example.com',
         }),
       ).toThrow('Custom renderer URL must start with http:// or https://');
-    });
-  });
-
-  describe('commitSettings', () => {
-    it('atomically persists selectedRendererId, rendererUrl, and selectedApiKeyId in 3P mode', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockConfigProvider.isApiKeyProvidedByConfig.mockReturnValue(false);
-      mockSecureStorage.getCustomApiKey.mockResolvedValue({
-        id: 'custom-1',
-        name: 'Custom One',
-        key: 'personal-indexeddb-key',
-      });
-
-      await service.commitSettings({
-        selectedRendererId: 'dev',
-        rendererUrl: 'http://localhost:3000',
-        selectedApiKeyId: 'custom-1',
-      });
-
-      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBe('dev');
-      expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev');
-      expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://localhost:3000');
-      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_API_KEY)).toBe('custom-1');
-      expect(service.selectedApiKeyId()).toBe('custom-1');
-      expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('personal-indexeddb-key');
-    });
-
-    it('directly sets explicit free-form apiKey in 3P mode when no selectedApiKeyId is provided', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockConfigProvider.isApiKeyProvidedByConfig.mockReturnValue(false);
-
-      await service.commitSettings({
-        selectedRendererId: null,
-        rendererUrl: 'http://localhost:3000',
-        selectedApiKeyId: null,
-        apiKey: 'secret-key-123',
-      });
-
-      expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('secret-key-123');
-    });
-
-    it('removes SELECTED_RENDERER and SELECTED_API_KEY storage items when null IDs are passed', async () => {
-      mockLocalStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'dev');
-      mockLocalStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'custom-1');
-
-      await service.commitSettings({
-        selectedRendererId: null,
-        rendererUrl: 'http://custom-url.com',
-        selectedApiKeyId: null,
-      });
-
-      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
-      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_API_KEY)).toBeNull();
-      expect(service.selectedApiKeyId()).toBeNull();
-      expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://custom-url.com');
-    });
-
-    it('purges Gemini API key when in 1P mode', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
-
-      await service.commitSettings({
-        selectedRendererId: 'dev',
-        rendererUrl: 'http://localhost:3000',
-        selectedApiKeyId: null,
-      });
-
-      expect(mockConfigProvider.purgeGeminiApiKey).toHaveBeenCalled();
     });
   });
 });

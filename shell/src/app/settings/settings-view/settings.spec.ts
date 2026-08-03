@@ -18,7 +18,6 @@ import {TestBed} from '@angular/core/testing';
 import {PlatformLocation} from '@angular/common';
 import {Settings} from './settings';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {locationAssign} from 'safevalues/dom';
 import {StartupResolution, RendererConfig} from '../../shell/startup-resolution/startup-resolution';
 import {describe, it, expect, beforeEach, afterEach, vi, Mock} from 'vitest';
 import {
@@ -234,37 +233,26 @@ describe('Settings', () => {
 
     expect(component.isThirdParty()).toBe(false);
 
-    const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
+    const selectSpy = vi.spyOn(component.settingsService, 'selectRenderer').mockResolvedValue(true);
+    await component.onRendererSelected('dev');
 
-    component.onRendererSelected('dev');
-    await component.onSaveSettings();
-
-    expect(mockConfigProvider.purgeGeminiApiKey).toHaveBeenCalled();
-    expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://resolved-url.com');
-    expect(reloadSpy).toHaveBeenCalled();
+    expect(selectSpy).toHaveBeenCalledWith('dev');
   });
 
   it('persists valid configurations securely in 3P environments', async () => {
     mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
     const {component} = await setupComponent();
 
-    const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
-    const commitSpy = vi.spyOn(component.settingsService, 'commitSettings').mockResolvedValue();
+    const selectRendererSpy = vi
+      .spyOn(component.settingsService, 'selectRenderer')
+      .mockResolvedValue(true);
+    const selectApiKeySpy = vi.spyOn(component.settingsService, 'selectApiKey').mockResolvedValue();
 
-    component.onRendererSelected('dev');
-    component.onApiKeySelected('custom-1');
+    await component.onRendererSelected('dev');
+    await component.onApiKeySelected('custom-1');
 
-    expect(component.settingsForm.valid).toBe(true);
-
-    await component.onSaveSettings();
-
-    expect(commitSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        selectedRendererId: 'dev',
-        selectedApiKeyId: 'custom-1',
-      }),
-    );
-    expect(reloadSpy).toHaveBeenCalled();
+    expect(selectRendererSpy).toHaveBeenCalledWith('dev');
+    expect(selectApiKeySpy).toHaveBeenCalledWith('custom-1');
   });
 
   it('displays default connection status badges and overlay logs console when disconnected', async () => {
@@ -384,9 +372,8 @@ describe('Settings', () => {
     }
   });
 
-  it('updates dynamic forced auth overrides and reloads window when toggling forceThirdPartyAuth', async () => {
+  it('updates dynamic forced auth overrides when toggling forceThirdPartyAuth', async () => {
     const {fixture, component, harness} = await setupComponent();
-    const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
     expect(component.forceThirdPartyAuth()).toBe(false);
 
@@ -395,38 +382,17 @@ describe('Settings', () => {
 
     expect(component.forceThirdPartyAuth()).toBe(true);
     expect(mockConfigProvider.setForcedAuthMode).toHaveBeenCalledWith(AuthType.THIRD_PARTY);
-    expect(reloadSpy).toHaveBeenCalled();
 
     await harness.toggleForceThirdPartyAuth();
     fixture.detectChanges();
 
     expect(component.forceThirdPartyAuth()).toBe(false);
     expect(mockConfigProvider.setForcedAuthMode).toHaveBeenLastCalledWith(AuthType.FIRST_PARTY);
-    expect(reloadSpy).toHaveBeenCalledTimes(2);
-  });
-
-  it('reloads the application at the dynamic base path when hosted under a dynamic base href', async () => {
-    const {component} = await setupComponent();
-
-    component.reloadWindow();
-
-    expect(locationAssign).toHaveBeenCalledWith(expect.anything(), '/composer/pr/44/');
-  });
-
-  it('reloads the application at the root path "/" when base href is unavailable', async () => {
-    mockPlatformLocation.getBaseHrefFromDOM.mockReturnValue(null);
-    const {component} = await setupComponent();
-
-    component.reloadWindow();
-
-    expect(locationAssign).toHaveBeenCalledWith(expect.anything(), '/');
   });
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across settings', async () => {
     mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-    const {fixture, component, harness} = await setupComponent();
-    component.saveErrorMessage.set('Test error banner');
-    fixture.detectChanges();
+    const {harness} = await setupComponent();
 
     const hiddenAttrs = await harness.getIconsAriaHidden();
     expect(hiddenAttrs.length).toBeGreaterThan(0);
@@ -441,27 +407,7 @@ describe('Settings', () => {
     expect(section.hidden).toBe(true);
   });
 
-  describe('Anti-Silent Failure UI Alert & Error Reporting (onSaveSettings)', () => {
-    it('sets saveErrorMessage when storage persistence rejects during onSaveSettings()', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      const {fixture, component, harness} = await setupComponent();
-
-      mockConfigProvider.setRuntimeApiKey.mockImplementationOnce(() => {
-        throw new Error('Simulated Storage Rejection');
-      });
-
-      component.onRendererSelected('dev');
-      component.onApiKeySelected('valid-key');
-      await component.onSaveSettings();
-      fixture.detectChanges();
-
-      expect(component.saveErrorMessage()).toBe('Simulated Storage Rejection');
-      expect(await harness.hasSaveErrorBanner()).toBe(true);
-      expect(await harness.getSaveErrorBannerText()).toContain('Simulated Storage Rejection');
-    });
-  });
-
-  describe('Transactional Settings View Integration & UI Cleanup', () => {
+  describe('Settings View Integration', () => {
     it('renders <a2ui-composer-renderer-selector> and <a2ui-composer-api-key-selector> in place of <a2ui-composer-profile-selector>', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
       const {fixture, harness} = await setupComponent();
@@ -471,179 +417,17 @@ describe('Settings', () => {
       expect(fixture.nativeElement.querySelector('a2ui-composer-profile-selector')).toBeNull();
     });
 
-    it('sets selectedRendererId and marks form dirty when a renderer is selected in <a2ui-composer-renderer-selector>', async () => {
+    it('sets selectedRendererId when a renderer is selected in <a2ui-composer-renderer-selector>', async () => {
       const {fixture, component} = await setupComponent();
+      const selectSpy = vi
+        .spyOn(component.settingsService, 'selectRenderer')
+        .mockResolvedValue(true);
 
-      component.onRendererSelected('dev');
+      await component.onRendererSelected('dev');
       fixture.detectChanges();
 
       expect(component.selectedRendererId()).toBe('dev');
-      expect(component.settingsForm.dirty).toBe(true);
-    });
-
-    it('never writes to LocalStorage/IndexedDB active runtime state immediately and never reloads the window prematurely when modifying selections', async () => {
-      const {fixture, component} = await setupComponent();
-      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
-      const commitSpy = vi.spyOn(component.settingsService, 'commitSettings');
-      const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
-
-      component.onRendererSelected('dev');
-      component.onApiKeySelected('custom-1');
-      fixture.detectChanges();
-
-      expect(setItemSpy).not.toHaveBeenCalled();
-      expect(commitSpy).not.toHaveBeenCalled();
-      expect(reloadSpy).not.toHaveBeenCalled();
-    });
-
-    it('invokes SettingsService.commitSettings(...), marks form pristine, and calls reloadWindow() only when user clicks "Save Settings"', async () => {
-      const {fixture, component} = await setupComponent();
-      const commitSpy = vi.spyOn(component.settingsService, 'commitSettings').mockResolvedValue();
-      const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
-
-      component.onRendererSelected('dev');
-      component.onApiKeySelected('custom-1');
-      fixture.detectChanges();
-
-      await component.onSaveSettings();
-
-      expect(commitSpy).toHaveBeenCalledWith({
-        selectedRendererId: 'dev',
-        rendererUrl: 'http://resolved-url.com',
-        selectedApiKeyId: 'custom-1',
-      });
-      expect(component.settingsForm.pristine).toBe(true);
-      expect(reloadSpy).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('isSaveDisabled()', () => {
-    it('disables Save Settings button initially when settings match loaded values', async () => {
-      const {component, harness} = await setupComponent();
-
-      expect(component.hasUnsavedChanges()).toBe(false);
-      expect(component.isSaveDisabled()).toBe(true);
-      expect(await harness.isSaveButtonDisabled()).toBe(true);
-    });
-
-    it('enables Save Settings button when renderer selection changes', async () => {
-      const {fixture, component, harness} = await setupComponent();
-      vi.spyOn(component.settingsService, 'getRenderers').mockReturnValue([
-        {
-          id: 'dev',
-          name: 'Development',
-          rendererUrl: 'http://dev.com',
-          readOnly: true,
-        },
-      ]);
-
-      component.onRendererSelected('dev');
-      fixture.detectChanges();
-
-      expect(component.hasUnsavedChanges()).toBe(true);
-      expect(component.isSaveDisabled()).toBe(false);
-      expect(await harness.isSaveButtonDisabled()).toBe(false);
-    });
-
-    it('enables Save Settings button when forceThirdPartyAuth changes', async () => {
-      const {fixture, component, harness} = await setupComponent();
-      vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
-
-      await harness.toggleForceThirdPartyAuth();
-      fixture.detectChanges();
-
-      expect(component.hasUnsavedChanges()).toBe(true);
-      expect(component.isSaveDisabled()).toBe(false);
-      expect(await harness.isSaveButtonDisabled()).toBe(false);
-    });
-
-    it('enables Save Settings button when API key changes', async () => {
-      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      const {fixture, component, harness} = await setupComponent();
-
-      component.onApiKeySelected('custom-1');
-      fixture.detectChanges();
-
-      expect(component.hasUnsavedChanges()).toBe(true);
-      expect(component.isSaveDisabled()).toBe(false);
-      expect(await harness.isSaveButtonDisabled()).toBe(false);
-    });
-
-    it('disables Save Settings button after settings are saved', async () => {
-      const {fixture, component, harness} = await setupComponent();
-      vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
-
-      component.onRendererSelected('dev');
-      fixture.detectChanges();
-      expect(await harness.isSaveButtonDisabled()).toBe(false);
-
-      await component.onSaveSettings();
-      fixture.detectChanges();
-
-      expect(component.hasUnsavedChanges()).toBe(false);
-      expect(component.isSaveDisabled()).toBe(true);
-      expect(await harness.isSaveButtonDisabled()).toBe(true);
-    });
-
-    it('disables Save Settings button when renderer selection is changed back to initial snapshot value', async () => {
-      const {fixture, component, harness} = await setupComponent();
-
-      component.onRendererSelected('dev');
-      fixture.detectChanges();
-      expect(await harness.isSaveButtonDisabled()).toBe(false);
-
-      component.onRendererSelected('Custom');
-      fixture.detectChanges();
-
-      expect(component.hasUnsavedChanges()).toBe(false);
-      expect(component.isSaveDisabled()).toBe(true);
-      expect(await harness.isSaveButtonDisabled()).toBe(true);
-    });
-  });
-
-  describe('window:beforeunload navigation guard', () => {
-    it('calls event.preventDefault() and sets event.returnValue when hasUnsavedChanges() signal is true', async () => {
-      const {fixture, component} = await setupComponent();
-
-      component.onRendererSelected('dev');
-      fixture.detectChanges();
-      expect(component.hasUnsavedChanges()).toBe(true);
-
-      const event = new Event('beforeunload') as BeforeUnloadEvent;
-      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-
-      window.dispatchEvent(event);
-
-      expect(preventDefaultSpy).toHaveBeenCalled();
-      expect(['', true]).toContain(event.returnValue);
-    });
-
-    it('does not prevent unload when hasUnsavedChanges() signal is false', async () => {
-      const {component} = await setupComponent();
-
-      expect(component.hasUnsavedChanges()).toBe(false);
-
-      const event = new Event('beforeunload') as BeforeUnloadEvent;
-      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-
-      window.dispatchEvent(event);
-
-      expect(preventDefaultSpy).not.toHaveBeenCalled();
-    });
-
-    it('does not prevent unload when settingsForm.dirty is true but hasUnsavedChanges() is false', async () => {
-      const {component} = await setupComponent();
-
-      component.settingsForm.markAsDirty();
-      expect(component.settingsForm.dirty).toBe(true);
-      expect(component.hasUnsavedChanges()).toBe(false);
-
-      const event = new Event('beforeunload') as BeforeUnloadEvent;
-      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-
-      window.dispatchEvent(event);
-
-      expect(preventDefaultSpy).not.toHaveBeenCalled();
+      expect(selectSpy).toHaveBeenCalledWith('dev');
     });
   });
 
@@ -674,152 +458,71 @@ describe('Settings', () => {
   });
 
   describe('toggleForceThirdPartyAuth', () => {
-    it('toggles forceThirdPartyAuth from false to true, marks form dirty, calls setForcedAuthMode(AuthType.THIRD_PARTY), and reloads window', async () => {
+    it('toggles forceThirdPartyAuth from false to true and calls setForcedAuthMode(AuthType.THIRD_PARTY)', async () => {
       const {component} = await setupComponent();
-      const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
       component.forceThirdPartyAuth.set(false);
       component.toggleForceThirdPartyAuth();
 
       expect(component.forceThirdPartyAuth()).toBe(true);
-      expect(component.settingsForm.dirty).toBe(true);
       expect(mockConfigProvider.setForcedAuthMode).toHaveBeenCalledWith(AuthType.THIRD_PARTY);
-      expect(reloadSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('toggles forceThirdPartyAuth from true to false, marks form dirty, calls setForcedAuthMode(AuthType.FIRST_PARTY), and reloads window', async () => {
+    it('toggles forceThirdPartyAuth from true to false and calls setForcedAuthMode(AuthType.FIRST_PARTY)', async () => {
       const {component} = await setupComponent();
-      const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
 
       component.forceThirdPartyAuth.set(true);
       component.toggleForceThirdPartyAuth();
 
       expect(component.forceThirdPartyAuth()).toBe(false);
-      expect(component.settingsForm.dirty).toBe(true);
       expect(mockConfigProvider.setForcedAuthMode).toHaveBeenCalledWith(AuthType.FIRST_PARTY);
-      expect(reloadSpy).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('onRendererSelected', () => {
-    it('updates selectedRendererId signal and marks settingsForm as dirty', async () => {
+    it('updates selectedRendererId signal and invokes SettingsService.selectRenderer', async () => {
       const {component} = await setupComponent();
+      const selectSpy = vi
+        .spyOn(component.settingsService, 'selectRenderer')
+        .mockResolvedValue(true);
 
-      component.onRendererSelected('custom-renderer');
+      await component.onRendererSelected('custom-renderer');
 
       expect(component.selectedRendererId()).toBe('custom-renderer');
-      expect(component.settingsForm.dirty).toBe(true);
+      expect(selectSpy).toHaveBeenCalledWith('custom-renderer');
+    });
+
+    it('reverts selectedRendererId signal if SettingsService.selectRenderer returns false', async () => {
+      const {component} = await setupComponent();
+      component.selectedRendererId.set('initial-renderer');
+      vi.spyOn(component.settingsService, 'selectRenderer').mockResolvedValue(false);
+
+      await component.onRendererSelected('disallowed-renderer');
+
+      expect(component.selectedRendererId()).toBe('initial-renderer');
     });
   });
 
   describe('onApiKeySelected', () => {
-    it('updates selectedApiKeyId signal and marks settingsForm as dirty when API key ID is provided', async () => {
+    it('updates selectedApiKeyId signal and invokes SettingsService.selectApiKey when API key ID is provided', async () => {
       const {component} = await setupComponent();
+      const selectSpy = vi.spyOn(component.settingsService, 'selectApiKey').mockResolvedValue();
 
-      component.onApiKeySelected('api-key-1');
+      await component.onApiKeySelected('api-key-1');
 
       expect(component.selectedApiKeyId()).toBe('api-key-1');
-      expect(component.settingsForm.dirty).toBe(true);
+      expect(selectSpy).toHaveBeenCalledWith('api-key-1');
     });
 
-    it('updates selectedApiKeyId signal to null and marks settingsForm as dirty when null is provided', async () => {
+    it('updates selectedApiKeyId signal to null and invokes SettingsService.selectApiKey when null is provided', async () => {
       const {component} = await setupComponent();
-      component.onApiKeySelected('api-key-1');
+      const selectSpy = vi.spyOn(component.settingsService, 'selectApiKey').mockResolvedValue();
+      component.selectedApiKeyId.set('api-key-1');
 
-      component.onApiKeySelected(null);
+      await component.onApiKeySelected(null);
 
       expect(component.selectedApiKeyId()).toBeNull();
-      expect(component.settingsForm.dirty).toBe(true);
-    });
-  });
-
-  describe('onSaveSettings', () => {
-    it('returns early without saving if hasUnsavedChanges is false', async () => {
-      const {component} = await setupComponent();
-      const commitSpy = vi.spyOn(component.settingsService, 'commitSettings');
-
-      expect(component.hasUnsavedChanges()).toBe(false);
-      await component.onSaveSettings();
-
-      expect(commitSpy).not.toHaveBeenCalled();
-    });
-
-    it('returns early without saving if isSaving is true', async () => {
-      const {component} = await setupComponent();
-      const commitSpy = vi.spyOn(component.settingsService, 'commitSettings');
-
-      component.onRendererSelected('dev');
-      expect(component.hasUnsavedChanges()).toBe(true);
-
-      component.isSaving.set(true);
-      await component.onSaveSettings();
-
-      expect(commitSpy).not.toHaveBeenCalled();
-    });
-
-    it('commits null selectedRendererId when selectedRendererId is Custom', async () => {
-      const {component} = await setupComponent();
-      const commitSpy = vi.spyOn(component.settingsService, 'commitSettings').mockResolvedValue();
-      const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
-
-      component.onRendererSelected('dev');
-      component.onRendererSelected('Custom');
-      component.onApiKeySelected('key-1');
-
-      expect(component.hasUnsavedChanges()).toBe(true);
-      await component.onSaveSettings();
-
-      expect(commitSpy).toHaveBeenCalledWith({
-        selectedRendererId: null,
-        rendererUrl: 'http://resolved-url.com',
-        selectedApiKeyId: 'key-1',
-      });
-      expect(reloadSpy).toHaveBeenCalled();
-    });
-
-    it('commits rendererUrl from selectedRendererOption when available', async () => {
-      const {component} = await setupComponent();
-      vi.spyOn(component.settingsService, 'getRenderers').mockReturnValue([
-        {id: 'dev-r', name: 'Dev R', rendererUrl: 'http://custom-renderer.com', readOnly: false},
-      ]);
-      const commitSpy = vi.spyOn(component.settingsService, 'commitSettings').mockResolvedValue();
-      const reloadSpy = vi.spyOn(component, 'reloadWindow').mockImplementation(() => {});
-
-      component.onRendererSelected('dev-r');
-      await component.onSaveSettings();
-
-      expect(commitSpy).toHaveBeenCalledWith({
-        selectedRendererId: 'dev-r',
-        rendererUrl: 'http://custom-renderer.com',
-        selectedApiKeyId: null,
-      });
-      expect(reloadSpy).toHaveBeenCalled();
-    });
-
-    it('handles non-Error exception in catch block and sets fallback error message', async () => {
-      const {component} = await setupComponent();
-      vi.spyOn(component.settingsService, 'commitSettings').mockRejectedValue('String exception');
-
-      component.onRendererSelected('dev');
-      await component.onSaveSettings();
-
-      expect(component.saveErrorMessage()).toBe(
-        'An unexpected error occurred while saving settings.',
-      );
-      expect(component.isSaving()).toBe(false);
-    });
-
-    it('handles Error exception in catch block and sets error message', async () => {
-      const {component} = await setupComponent();
-      vi.spyOn(component.settingsService, 'commitSettings').mockRejectedValue(
-        new Error('Network failure'),
-      );
-
-      component.onRendererSelected('dev');
-      await component.onSaveSettings();
-
-      expect(component.saveErrorMessage()).toBe('Network failure');
-      expect(component.isSaving()).toBe(false);
+      expect(selectSpy).toHaveBeenCalledWith(null);
     });
   });
 

@@ -14,17 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  Component,
-  computed,
-  HostListener,
-  inject,
-  OnInit,
-  signal,
-  Signal,
-  WritableSignal,
-} from '@angular/core';
-import {toSignal} from '@angular/core/rxjs-interop';
+import {Component, computed, inject, OnInit, signal, Signal, WritableSignal} from '@angular/core';
 import {NonNullableFormBuilder, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -34,7 +24,6 @@ import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {DOCUMENT, PlatformLocation} from '@angular/common';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
@@ -42,7 +31,6 @@ import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tok
 import {SettingsService, RendererOption} from '../settings-service/settings.service';
 import {RendererSelectorComponent} from '../renderer-selector/renderer-selector';
 import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
-import {locationAssign} from 'safevalues/dom';
 
 /**
  * Renders the user settings view, allowing configuration of target URL endpoints,
@@ -69,8 +57,6 @@ import {locationAssign} from 'safevalues/dom';
 export class Settings implements OnInit {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly startupResolution = inject(StartupResolution);
-  private readonly document = inject(DOCUMENT);
-  private readonly platformLocation = inject(PlatformLocation);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
@@ -96,12 +82,6 @@ export class Settings implements OnInit {
   );
   readonly hideApiKey: WritableSignal<boolean> = signal(true);
   readonly forceThirdPartyAuth: WritableSignal<boolean> = signal(false);
-  readonly saveErrorMessage: WritableSignal<string | null> = signal(null);
-  readonly isSaving: WritableSignal<boolean> = signal(false);
-
-  private readonly initialRendererId: WritableSignal<string | null> = signal<string | null>(null);
-  private readonly initialApiKeyId: WritableSignal<string | null> = signal<string | null>(null);
-  private readonly initialForceThirdPartyAuth: WritableSignal<boolean> = signal<boolean>(false);
 
   readonly bridgeConnected: Signal<boolean> = computed(
     () => this.hostCommunication.latestEnvelope() !== null,
@@ -119,96 +99,34 @@ export class Settings implements OnInit {
 
   readonly settingsForm = this.fb.group({});
 
-  private readonly formEvents = toSignal(this.settingsForm.events);
-
-  readonly hasUnsavedChanges: Signal<boolean> = computed(() => {
-    this.formEvents();
-    const rendererChanged = this.selectedRendererId() !== this.initialRendererId();
-    const apiKeyChanged = this.selectedApiKeyId() !== this.initialApiKeyId();
-    const authChanged = this.forceThirdPartyAuth() !== this.initialForceThirdPartyAuth();
-    return rendererChanged || apiKeyChanged || authChanged;
-  });
-
-  readonly isSaveDisabled: Signal<boolean> = computed(() => {
-    this.formEvents();
-    return this.isSaving() || !this.hasUnsavedChanges();
-  });
-
   constructor() {}
 
   ngOnInit(): void {
     const currentRendererId = this.settingsService.selectedRendererId() || 'Custom';
     this.selectedRendererId.set(currentRendererId);
-    this.initialRendererId.set(currentRendererId);
 
     const currentApiKeyId = this.settingsService.selectedApiKeyId() || null;
     this.selectedApiKeyId.set(currentApiKeyId);
-    this.initialApiKeyId.set(currentApiKeyId);
 
     const is3P = this.startupResolution.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
 
     this.forceThirdPartyAuth.set(this.configProvider.authType() === AuthType.THIRD_PARTY);
-    this.initialForceThirdPartyAuth.set(this.forceThirdPartyAuth());
   }
 
-  onRendererSelected(rendererId: string): void {
+  async onRendererSelected(rendererId: string): Promise<void> {
+    const targetId = rendererId === 'Custom' ? null : rendererId;
+    const previousId = this.selectedRendererId();
     this.selectedRendererId.set(rendererId);
-    this.settingsForm.markAsDirty();
+    const success = await this.settingsService.selectRenderer(targetId);
+    if (!success) {
+      this.selectedRendererId.set(previousId);
+    }
   }
 
-  onApiKeySelected(apiKeyId: string | null): void {
+  async onApiKeySelected(apiKeyId: string | null): Promise<void> {
     this.selectedApiKeyId.set(apiKeyId);
-    this.settingsForm.markAsDirty();
-  }
-
-  async onSaveSettings(): Promise<void> {
-    if (this.isSaving() || !this.hasUnsavedChanges()) {
-      return;
-    }
-
-    this.saveErrorMessage.set(null);
-
-    this.isSaving.set(true);
-    try {
-      const selectedRenderer = this.selectedRendererOption();
-      const resolvedUrl =
-        selectedRenderer && selectedRenderer.rendererUrl !== undefined
-          ? selectedRenderer.rendererUrl
-          : this.configProvider.rendererUrl();
-
-      await this.settingsService.commitSettings({
-        selectedRendererId:
-          this.selectedRendererId() === 'Custom' ? null : this.selectedRendererId(),
-        rendererUrl: resolvedUrl,
-        selectedApiKeyId: this.selectedApiKeyId(),
-      });
-
-      this.initialRendererId.set(this.selectedRendererId());
-      this.initialApiKeyId.set(this.selectedApiKeyId());
-      this.initialForceThirdPartyAuth.set(this.forceThirdPartyAuth());
-      this.settingsForm.markAsPristine();
-
-      this.reloadWindow();
-    } catch (err) {
-      console.error('Failed to save settings:', err);
-      this.saveErrorMessage.set(
-        err instanceof Error ? err.message : 'An unexpected error occurred while saving settings.',
-      );
-    } finally {
-      this.isSaving.set(false);
-    }
-  }
-
-  /**
-   * Reloads the target application window context by navigating to the dynamic
-   * base href configured in the DOM, or falling back to the root path.
-   */
-  reloadWindow(): void {
-    if (this.document.defaultView?.location) {
-      const basePath = this.platformLocation.getBaseHrefFromDOM() || '/';
-      locationAssign(this.document.defaultView.location, basePath);
-    }
+    await this.settingsService.selectApiKey(apiKeyId);
   }
 
   toggleHideApiKey(): void {
@@ -221,16 +139,7 @@ export class Settings implements OnInit {
   toggleForceThirdPartyAuth(): void {
     const newState = !this.forceThirdPartyAuth();
     this.forceThirdPartyAuth.set(newState);
-    this.settingsForm.markAsDirty();
     this.configProvider.setForcedAuthMode(newState ? AuthType.THIRD_PARTY : AuthType.FIRST_PARTY);
-    this.reloadWindow();
-  }
-
-  @HostListener('window:beforeunload', ['$event'])
-  onBeforeUnload(event: BeforeUnloadEvent): void {
-    if (this.hasUnsavedChanges()) {
-      event.preventDefault();
-      event.returnValue = true;
-    }
+    this.isThirdParty.set(this.startupResolution.isThirdPartyEnvironment());
   }
 }

@@ -34,6 +34,7 @@ export declare interface RendererConfig {
   id?: string;
   name?: string;
   apiKey?: string;
+  samplePayload?: string;
 }
 
 export declare interface AppConfig {
@@ -76,8 +77,18 @@ export class StartupResolution {
     return null;
   });
 
-  setSelectedRendererId(rendererId: string | null): void {
+  async setSelectedRendererId(rendererId: string | null): Promise<boolean> {
     this._selectedRendererId.set(rendererId);
+    const active = this.activeRenderer();
+    if (active?.rendererUrl) {
+      const isAllowed = await this.isOriginAllowed(active.rendererUrl);
+      if (isAllowed) {
+        this._resolvedUrl.set(active.rendererUrl);
+        return true;
+      }
+      return false;
+    }
+    return true;
   }
 
   /**

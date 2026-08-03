@@ -16,7 +16,6 @@
 
 import {Routes} from '@angular/router';
 import {startupGuard} from './shell/startup-guard/startup-guard';
-import {unsavedChangesGuard} from './settings/unsaved-changes.guard';
 
 /**
  * Declarative routing table mapping URL paths to feature components
@@ -44,7 +43,6 @@ export const routes: Routes = [
         path: 'settings',
         loadComponent: () => import('./settings/settings-view/settings').then(m => m.Settings),
         title: 'A2UI Composer Settings',
-        canDeactivate: [unsavedChangesGuard],
       },
       {
         path: '**',

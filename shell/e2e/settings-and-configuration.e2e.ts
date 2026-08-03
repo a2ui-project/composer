@@ -35,7 +35,7 @@ test.describe('Settings and Client Configuration', () => {
       await page.goto('/settings');
     });
 
-    test('persists configuration successfully, triggers explicit window reload, and unlocks guarded routes', async ({
+    test('persists configuration immediately upon selection', async ({
       page,
     }) => {
       await page.locator('.add-api-key-button').click();
@@ -48,34 +48,27 @@ test.describe('Settings and Client Configuration', () => {
       await page.locator('#renderer-url-input').fill('http://localhost:9090');
       await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
 
-      await page.evaluate(() => {
-        (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__ = true;
-      });
+      await page.waitForFunction(() => !!localStorage.getItem('a2ui_composer_selected_renderer'));
+      await page.waitForFunction(() => !!localStorage.getItem('a2ui_composer_selected_api_key'));
 
-      const saveBtn = page.getByRole('button', {name: 'Save Settings'});
-      await expect(saveBtn).toBeEnabled();
-      await Promise.all([page.waitForURL(url => url.pathname === '/'), saveBtn.click()]);
-      await page.waitForLoadState('load');
-
-      const sentinel = await page.evaluate(
-        () => (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__,
+      const storedRendererId = await page.evaluate(() =>
+        localStorage.getItem('a2ui_composer_selected_renderer'),
       );
-      expect(sentinel).toBeUndefined();
-
-      await expect(page.locator('.workspace-container')).toBeVisible();
-
-      const storedRendererUrl = await page.evaluate(() =>
-        localStorage.getItem('a2ui_composer_renderer_url'),
-      );
-      expect(storedRendererUrl).toBe('http://localhost:9090');
+      expect(storedRendererId).toMatch(/^custom-\d+$/);
 
       const storedApiKeyId = await page.evaluate(() =>
         localStorage.getItem('a2ui_composer_selected_api_key'),
       );
       expect(storedApiKeyId).toMatch(/^custom-\d+$/);
+
+      await page.getByRole('link', {name: 'Composer Workspace'}).click();
+      await page.waitForURL(url => url.pathname === '/');
+      await page.waitForLoadState('load');
+
+      await expect(page.locator('.workspace-container')).toBeVisible();
     });
 
-    test('persists configuration successfully with default relative renderer URL and loads workspace with pre-populated draft', async ({
+    test('persists configuration immediately with default relative renderer URL and loads workspace with pre-populated draft', async ({
       page,
     }) => {
       await page.locator('.add-api-key-button').click();
@@ -83,17 +76,18 @@ test.describe('Settings and Client Configuration', () => {
       await page.locator('#api-key-value-input').fill('new-unique-api-key');
       await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
 
-      const saveBtn = page.getByRole('button', {name: 'Save Settings'});
-      await expect(saveBtn).toBeEnabled();
-      await Promise.all([page.waitForURL(url => url.pathname === '/'), saveBtn.click()]);
-      await page.waitForLoadState('load');
-
-      await expect(page.locator('.workspace-container')).toBeVisible();
+      await page.waitForFunction(() => !!localStorage.getItem('a2ui_composer_selected_api_key'));
 
       const storedApiKeyId = await page.evaluate(() =>
         localStorage.getItem('a2ui_composer_selected_api_key'),
       );
       expect(storedApiKeyId).toMatch(/^custom-\d+$/);
+
+      await page.getByRole('link', {name: 'Composer Workspace'}).click();
+      await page.waitForURL(url => url.pathname === '/');
+      await page.waitForLoadState('load');
+
+      await expect(page.locator('.workspace-container')).toBeVisible();
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
@@ -123,9 +117,7 @@ test.describe('Settings and Client Configuration', () => {
       await expect(rendererSelect).toContainText('default');
     });
 
-    test('verifies server apiKey in config.json disables API key unmasking, and does not persist key on save', async ({
-      page,
-    }) => {
+    test('verifies server apiKey in config.json disables API key unmasking', async ({page}) => {
       await page.route('**/config.json', async route => {
         await route.fulfill({
           contentType: 'application/json',
@@ -150,18 +142,6 @@ test.describe('Settings and Client Configuration', () => {
 
       // API key selector is visible when API key was provided by config
       await expect(page.locator('a2ui-composer-api-key-selector')).toBeVisible();
-
-      // Add a custom renderer to trigger unsaved changes
-      await page.locator('.add-renderer-button').click();
-      await page.locator('#renderer-name-input').fill('Modified Renderer');
-      await page.locator('#renderer-url-input').fill('http://unlocked-renderer.com/modified');
-      await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
-
-      // Click 'Save Settings' and wait for navigation
-      const saveBtn = page.getByRole('button', {name: 'Save Settings'});
-      await expect(saveBtn).toBeEnabled();
-      await Promise.all([page.waitForURL(url => url.pathname === '/'), saveBtn.click()]);
-      await page.waitForLoadState('load');
 
       // Verify localStorage and IndexedDB have no stored credential
       const storedKey = await page.evaluate(async () => {

@@ -20,7 +20,7 @@
       <mat-card-title>A2UI Composer Settings</mat-card-title>
     </mat-card-header>
     <mat-card-content>
-      <form [formGroup]="settingsForm" (ngSubmit)="onSaveSettings()" id="settings-form">
+      <form [formGroup]="settingsForm">
         <div class="form-section">
           <h3>Renderer</h3>
           <a2ui-composer-renderer-selector
@@ -87,23 +87,6 @@
         >. Neither Google nor anyone else has access to this key.
       </mat-card-footer>
     }
-    @if (saveErrorMessage()) {
-      <div class="save-error-banner" role="alert">
-        <mat-icon color="warn" aria-hidden="true">error</mat-icon>
-        <span>{{ saveErrorMessage() }}</span>
-      </div>
-    }
-    <mat-card-actions align="end">
-      <button
-        mat-flat-button
-        color="primary"
-        type="submit"
-        form="settings-form"
-        [disabled]="isSaveDisabled()"
-      >
-        {{ isSaving() ? 'Saving...' : 'Save Settings' }}
-      </button>
-    </mat-card-actions>
   </mat-card>
 
   <mat-card class="status-card">

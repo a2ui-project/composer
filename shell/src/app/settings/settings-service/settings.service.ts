@@ -78,14 +78,17 @@ export class SettingsService {
    *
    * @param rendererId The selected renderer ID string, or null to revert to Custom/Default.
    */
-  async selectRenderer(rendererId: string | null): Promise<void> {
+  async selectRenderer(rendererId: string | null): Promise<boolean> {
+    const isAllowed = await this.startupResolution.setSelectedRendererId(rendererId);
+    if (!isAllowed) {
+      return false;
+    }
+
     if (rendererId) {
       this.localStorageInteractions.setItem(LocalStorageKey.SELECTED_RENDERER, rendererId);
     } else {
       this.localStorageInteractions.removeItem(LocalStorageKey.SELECTED_RENDERER);
     }
-
-    this.startupResolution.setSelectedRendererId(rendererId);
 
     const active = this.activeRenderer();
 
@@ -107,6 +110,8 @@ export class SettingsService {
         console.warn('Failed to resolve effective API key during renderer selection:', err);
       }
     }
+
+    return true;
   }
 
   private readonly _selectedApiKeyId = signal<string | null>(
@@ -353,54 +358,8 @@ export class SettingsService {
     const list = this.getCustomRenderers().filter(item => item.id !== id);
     this.localStorageInteractions.setItem(LocalStorageKey.CUSTOM_RENDERERS, JSON.stringify(list));
     if (this.selectedRendererId() === id) {
-      void this.selectRenderer(null);
-    }
-  }
-
-  /**
-   * Atomically persists selected renderer, renderer URL, and selected API key
-   * without reloading the window prematurely.
-   */
-  async commitSettings(options: {
-    selectedRendererId: string | null;
-    rendererUrl: string;
-    selectedApiKeyId: string | null;
-    apiKey?: string;
-  }): Promise<void> {
-    const rendererId = options.selectedRendererId;
-    if (rendererId && rendererId !== 'Custom') {
-      this.localStorageInteractions.setItem(LocalStorageKey.SELECTED_RENDERER, rendererId);
-    } else {
       this.localStorageInteractions.removeItem(LocalStorageKey.SELECTED_RENDERER);
-    }
-    this.startupResolution.setSelectedRendererId(
-      rendererId && rendererId !== 'Custom' ? rendererId : null,
-    );
-
-    const trimmedUrl = (options.rendererUrl || '').trim();
-    this.configProvider.setRendererUrl(trimmedUrl);
-
-    const apiKeyId = options.selectedApiKeyId;
-    if (apiKeyId) {
-      this.localStorageInteractions.setItem(LocalStorageKey.SELECTED_API_KEY, apiKeyId);
-    } else {
-      this.localStorageInteractions.removeItem(LocalStorageKey.SELECTED_API_KEY);
-    }
-    this._selectedApiKeyId.set(apiKeyId);
-
-    if (this.startupResolution.isThirdPartyEnvironment()) {
-      if (
-        options.apiKey !== undefined &&
-        options.apiKey !== '' &&
-        !options.selectedApiKeyId &&
-        !this.configProvider.isApiKeyProvidedByConfig()
-      ) {
-        await this.configProvider.setGeminiApiKey(options.apiKey.trim());
-      } else {
-        await this.syncEffectiveApiKeyToConfigProvider();
-      }
-    } else {
-      await this.configProvider.purgeGeminiApiKey();
+      void this.selectRenderer(null);
     }
   }
 }
