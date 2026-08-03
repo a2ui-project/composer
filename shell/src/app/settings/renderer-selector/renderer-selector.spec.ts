@@ -45,14 +45,12 @@ describe('RendererSelectorComponent & AddRendererDialogComponent', () => {
       name: 'Default Static Renderer',
       rendererUrl: 'http://default.example.com',
       readOnly: true,
-      allowOverrides: true,
     },
     {
       id: 'custom-1',
       name: 'Custom Local Renderer',
       rendererUrl: 'http://custom.example.com',
       readOnly: false,
-      allowOverrides: true,
     },
   ];
 

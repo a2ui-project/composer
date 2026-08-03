@@ -23,15 +23,8 @@
       <form [formGroup]="settingsForm" (ngSubmit)="onSaveSettings()" id="settings-form">
         <div class="form-section">
           <h3>Renderer</h3>
-          @if (isLocked()) {
-            <div class="locked-notice" role="status">
-              <mat-icon color="warn" aria-hidden="true">lock</mat-icon>
-              <span>Active URL configuration is locked.</span>
-            </div>
-          }
           <a2ui-composer-renderer-selector
             [selectedRendererId]="selectedRendererId()"
-            [disabled]="isLocked()"
             (rendererSelected)="onRendererSelected($event)"
           >
           </a2ui-composer-renderer-selector>
@@ -53,16 +46,9 @@
           <p class="description">
             Simulate external 3P context to verify Gemini API key provisioning workflows.
           </p>
-          @if (isLocked()) {
-            <div class="locked-notice auth-locked-notice" role="status">
-              <mat-icon color="warn" aria-hidden="true">lock</mat-icon>
-              <span>Authentication mode overrides are locked.</span>
-            </div>
-          }
           <div class="toggle-container" style="margin-top: 12px">
             <mat-slide-toggle
               [checked]="forceThirdPartyAuth()"
-              [disabled]="isLocked()"
               (change)="toggleForceThirdPartyAuth()"
             >
               Force External Third-Party Authentication Mode

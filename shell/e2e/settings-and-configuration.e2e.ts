@@ -101,27 +101,6 @@ test.describe('Settings and Client Configuration', () => {
   });
 
   test.describe('Enterprise & Environment Constraints', () => {
-    test('verifies enterprise configuration locking (allowOverrides: false)', async ({page}) => {
-      await page.route('**/config.json', async route => {
-        await route.fulfill({
-          contentType: 'application/json',
-          body: JSON.stringify({
-            renderers: {
-              default: {
-                rendererUrl: 'http://locked-renderer.com',
-                allowOverrides: false,
-              },
-            },
-          }),
-        });
-      });
-
-      await page.goto('/settings');
-      const rendererSelect = page.locator('a2ui-composer-renderer-selector mat-select');
-      await expect(rendererSelect).toHaveAttribute('aria-disabled', 'true');
-      await expect(rendererSelect).toContainText('default');
-    });
-
     test('fetches configuration when config.json request is intercepted by route handler', async ({
       page,
     }) => {
@@ -132,7 +111,6 @@ test.describe('Settings and Client Configuration', () => {
             renderers: {
               default: {
                 rendererUrl: 'http://intercepted-custom-config:3000',
-                allowOverrides: true,
               },
             },
           }),
@@ -145,7 +123,7 @@ test.describe('Settings and Client Configuration', () => {
       await expect(rendererSelect).toContainText('default');
     });
 
-    test('verifies server apiKey in config.json decouples context locking, disables API key unmasking, and does not persist key on save', async ({
+    test('verifies server apiKey in config.json disables API key unmasking, and does not persist key on save', async ({
       page,
     }) => {
       await page.route('**/config.json', async route => {
@@ -155,7 +133,6 @@ test.describe('Settings and Client Configuration', () => {
             renderers: {
               default: {
                 rendererUrl: 'http://unlocked-renderer.com',
-                allowOverrides: true,
                 apiKey: 'server-provided-api-key',
               },
             },
@@ -168,7 +145,6 @@ test.describe('Settings and Client Configuration', () => {
       });
       await page.goto('/settings');
 
-      // Context is unlocked because allowOverrides is true
       const rendererSelect = page.locator('a2ui-composer-renderer-selector mat-select');
       await expect(rendererSelect).not.toHaveAttribute('aria-disabled', 'true');
 

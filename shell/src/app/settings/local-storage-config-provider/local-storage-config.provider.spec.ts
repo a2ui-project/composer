@@ -75,7 +75,6 @@ describe('LocalStorageAppConfigProvider', () => {
     getResolvedRendererUrl: ReturnType<typeof vi.fn>;
     setResolvedRendererUrl: ReturnType<typeof vi.fn>;
     resolveStartupConfiguration: ReturnType<typeof vi.fn>;
-    isContextLocked: ReturnType<typeof vi.fn>;
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
     isExtensionMode: ReturnType<typeof vi.fn>;
     apiKeys: ReturnType<typeof vi.fn>;
@@ -89,7 +88,6 @@ describe('LocalStorageAppConfigProvider', () => {
       getResolvedRendererUrl: vi.fn().mockReturnValue('https://default-renderer.com'),
       setResolvedRendererUrl: vi.fn(),
       resolveStartupConfiguration: vi.fn().mockResolvedValue('https://default-renderer.com'),
-      isContextLocked: vi.fn().mockReturnValue(false),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       isExtensionMode: vi.fn().mockReturnValue(false),
       apiKeys: vi.fn().mockReturnValue({}),
@@ -228,15 +226,6 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(mockStartupService.setResolvedRendererUrl).toHaveBeenCalledWith(
       'https://updated-renderer.com',
     );
-  });
-
-  it('does not call startup.setResolvedRendererUrl when context is locked', () => {
-    mockStartupService.isContextLocked.mockReturnValue(true);
-    const provider = setupProvider();
-    provider.setRendererUrl('https://locked-renderer.com');
-    expect(provider.rendererUrl()).toBe('https://locked-renderer.com');
-    expect(localStorage.getItem(LocalStorageKey.RENDERER_URL)).toBe('https://locked-renderer.com');
-    expect(mockStartupService.setResolvedRendererUrl).not.toHaveBeenCalled();
   });
 
   it('persists updated API key to SecureCredentialsStorage and updates signal', async () => {

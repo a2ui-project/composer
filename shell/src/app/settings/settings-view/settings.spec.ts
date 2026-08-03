@@ -61,7 +61,6 @@ describe('Settings', () => {
   let mockStartupResolution: {
     getResolvedRendererUrl: Mock<() => string | null>;
     isThirdPartyEnvironment: Mock<() => boolean>;
-    isContextLocked: Mock<() => boolean>;
     renderers: Signal<Record<string, RendererConfig>>;
     selectedRendererId: Signal<string | null>;
     activeRenderer: Signal<RendererConfig | null>;
@@ -121,7 +120,6 @@ describe('Settings', () => {
     mockStartupResolution = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
-      isContextLocked: vi.fn().mockReturnValue(false),
       renderers: mockRenderers.asReadonly(),
       selectedRendererId: mockSelectedRendererId.asReadonly(),
       activeRenderer: mockActiveRenderer.asReadonly(),
@@ -269,18 +267,6 @@ describe('Settings', () => {
     expect(reloadSpy).toHaveBeenCalled();
   });
 
-  it('disables renderer selector and displays lock warning when context is locked', async () => {
-    mockStartupResolution.isContextLocked.mockReturnValue(true);
-    const {component, harness} = await setupComponent();
-
-    expect(component.isLocked()).toBe(true);
-    const rendererSelector = await harness.getRendererSelectorHarness();
-    expect(await rendererSelector?.isDisabled()).toBe(true);
-
-    expect(await harness.hasLockedNotice()).toBe(true);
-    expect(await harness.getLockedNoticeText()).toContain('Active URL configuration is locked.');
-  });
-
   it('displays default connection status badges and overlay logs console when disconnected', async () => {
     const {harness} = await setupComponent();
     expect(await harness.getBridgeBadgeText()).toContain('Bridge: Disconnected');
@@ -419,27 +405,6 @@ describe('Settings', () => {
     expect(reloadSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('disables the slide toggle and displays the auth-locked-notice warning badge when isContextLocked returns true', async () => {
-    mockStartupResolution.isContextLocked.mockReturnValue(true);
-    const {component, harness} = await setupComponent();
-
-    expect(component.isLocked()).toBe(true);
-    const rendererSelector = await harness.getRendererSelectorHarness();
-    expect(await rendererSelector?.isDisabled()).toBe(true);
-
-    expect(await harness.hasAuthLockedNotice()).toBe(true);
-    expect(await harness.getAuthLockedNoticeText()).toContain(
-      'Authentication mode overrides are locked',
-    );
-
-    expect(await harness.isSlideToggleDisabled()).toBe(true);
-
-    const initialForcedAuth = component.forceThirdPartyAuth();
-    component.toggleForceThirdPartyAuth();
-    expect(component.forceThirdPartyAuth()).toBe(initialForcedAuth);
-    expect(mockConfigProvider.setForcedAuthMode).not.toHaveBeenCalled();
-  });
-
   it('reloads the application at the dynamic base path when hosted under a dynamic base href', async () => {
     const {component} = await setupComponent();
 
@@ -458,13 +423,13 @@ describe('Settings', () => {
   });
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across settings', async () => {
-    mockStartupResolution.isContextLocked.mockReturnValue(true);
     mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-    const {fixture, harness} = await setupComponent();
+    const {fixture, component, harness} = await setupComponent();
+    component.saveErrorMessage.set('Test error banner');
     fixture.detectChanges();
 
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(4);
+    expect(hiddenAttrs.length).toBeGreaterThan(0);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
@@ -569,7 +534,6 @@ describe('Settings', () => {
           name: 'Development',
           rendererUrl: 'http://dev.com',
           readOnly: true,
-          allowOverrides: true,
         },
       ]);
 

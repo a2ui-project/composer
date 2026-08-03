@@ -27,9 +27,7 @@ test.beforeEach(async ({page}) => {
       contentType: 'application/json',
       body: JSON.stringify({
         renderers: {
-          default: {
-            allowOverrides: true,
-          },
+          default: {},
         },
       }),
     });

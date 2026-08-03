@@ -42,8 +42,6 @@ export class SettingsHarness extends ComponentHarness {
     return this.getApiKeySelector();
   }
 
-  protected getLockedNotice = this.locatorForOptional('.locked-notice');
-  protected getAuthLockedNotice = this.locatorForOptional('.auth-locked-notice');
   protected getSaveErrorBanner = this.locatorForOptional('.save-error-banner');
   protected getErrors = this.locatorForAll('mat-error');
   protected getFormSections = this.locatorForAll('.form-section');
@@ -121,24 +119,6 @@ export class SettingsHarness extends ComponentHarness {
   async isSlideToggleChecked(): Promise<boolean> {
     const toggle = await this.getSlideToggle();
     return toggle.isChecked();
-  }
-
-  async hasLockedNotice(): Promise<boolean> {
-    return (await this.getLockedNotice()) !== null;
-  }
-
-  async getLockedNoticeText(): Promise<string | null> {
-    const node = await this.getLockedNotice();
-    return node ? node.text() : null;
-  }
-
-  async hasAuthLockedNotice(): Promise<boolean> {
-    return (await this.getAuthLockedNotice()) !== null;
-  }
-
-  async getAuthLockedNoticeText(): Promise<string | null> {
-    const node = await this.getAuthLockedNotice();
-    return node ? node.text() : null;
   }
 
   async getErrorsText(): Promise<string[]> {

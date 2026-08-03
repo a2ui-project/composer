@@ -33,7 +33,6 @@ export declare interface RendererConfig {
   displayName?: string;
   id?: string;
   name?: string;
-  allowOverrides?: boolean;
   apiKey?: string;
 }
 
@@ -50,7 +49,6 @@ export declare interface AppConfig {
  */
 export class StartupResolution {
   private readonly _resolvedUrl = signal<string | null>(null);
-  private readonly _isLockedContext = signal(false);
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
   private readonly configUrl = inject(CONFIG_URL);
@@ -66,7 +64,6 @@ export class StartupResolution {
   private readonly _apiKeys = signal<Record<string, string>>({});
 
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
-  readonly isLockedContext = this._isLockedContext.asReadonly();
   readonly renderers = this._renderers.asReadonly();
   readonly apiKeys = this._apiKeys.asReadonly();
   readonly selectedRendererId = this._selectedRendererId.asReadonly();
@@ -81,7 +78,6 @@ export class StartupResolution {
 
   setSelectedRendererId(rendererId: string | null): void {
     this._selectedRendererId.set(rendererId);
-    this._isLockedContext.set(false);
   }
 
   /**
@@ -94,7 +90,6 @@ export class StartupResolution {
    * @return A Promise resolving to the resolved renderer URL, or null if unresolvable.
    */
   async resolveStartupConfiguration(): Promise<string | null> {
-    this._isLockedContext.set(false);
     this._resolvedUrl.set(null);
     this._selectedRendererId.set(null);
     this._renderers.set({});
@@ -205,8 +200,6 @@ export class StartupResolution {
   }
 
   async resolveRenderer(staticConfig?: AppConfig | null): Promise<string | null> {
-    this._isLockedContext.set(false);
-
     let config = staticConfig;
     if (config === undefined) {
       config = await this.fetchStaticConfig();
@@ -374,10 +367,6 @@ export class StartupResolution {
 
   setResolvedRendererUrl(url: string | null): void {
     this._resolvedUrl.set(url);
-  }
-
-  isContextLocked(): boolean {
-    return this._isLockedContext();
   }
 
   isThirdPartyEnvironment(): boolean {

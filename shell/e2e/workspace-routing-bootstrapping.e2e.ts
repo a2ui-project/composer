@@ -32,7 +32,6 @@ test.describe('Startup Resolution & Redirection', () => {
         body: JSON.stringify({
           renderers: {
             default: {
-              allowOverrides: true,
               // no rendererUrl
             },
           },
@@ -62,12 +61,9 @@ test.describe('Startup Resolution & Redirection', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           renderers: {
-            default: {
-              allowOverrides: true,
-            },
+            default: {},
             custom: {
               rendererUrl: 'http://custom-profile-renderer.com',
-              allowOverrides: true,
             },
           },
         }),
@@ -107,7 +103,6 @@ test.describe('Workspace Navigation & Layout Modes', () => {
           renderers: {
             default: {
               rendererUrl: 'http://custom-renderer.com',
-              allowOverrides: true,
             },
           },
         }),

@@ -104,12 +104,11 @@ describe('StartupResolution', () => {
     expect(service).toBeTruthy();
   });
 
-  it('fetches static config and locks when overrides are prohibited', async () => {
+  it('fetches static config and resolves default renderer', async () => {
     mockFetchConfig({
       renderers: {
         default: {
           rendererUrl: 'http://enterprise:3000',
-          allowOverrides: false,
         },
       },
     });
@@ -117,7 +116,6 @@ describe('StartupResolution', () => {
     const url = await service.resolveStartupConfiguration();
 
     expect(url).toBe('http://enterprise:3000');
-    expect(service.isContextLocked()).toBe(false);
   });
 
   it('strips JSON safety prefix with LF line endings', async () => {
@@ -128,7 +126,6 @@ describe('StartupResolution', () => {
             renderers: {
               default: {
                 rendererUrl: 'http://lf:3000',
-                allowOverrides: true,
               },
             },
           }),
@@ -146,7 +143,6 @@ describe('StartupResolution', () => {
             renderers: {
               default: {
                 rendererUrl: 'http://crlf:3000',
-                allowOverrides: true,
               },
             },
           }),
@@ -161,7 +157,6 @@ describe('StartupResolution', () => {
       renderers: {
         default: {
           rendererUrl: 'http://base:3000',
-          allowOverrides: true,
         },
       },
     });
@@ -260,7 +255,6 @@ describe('StartupResolution', () => {
       renderers: {
         default: {
           rendererUrl: 'http://base:3000',
-          allowOverrides: true,
         },
       },
     });
@@ -285,7 +279,6 @@ describe('StartupResolution', () => {
       renderers: {
         default: {
           rendererUrl: 'http://base:3000',
-          allowOverrides: true,
         },
       },
     });
@@ -302,7 +295,6 @@ describe('StartupResolution', () => {
       renderers: {
         default: {
           rendererUrl: 'http://base:3000',
-          allowOverrides: true,
         },
       },
     });
@@ -353,14 +345,12 @@ describe('StartupResolution', () => {
       renderers: {
         default: {
           rendererUrl: 'http://enterprise:3000',
-          allowOverrides: false,
         },
       },
     });
-    await service.resolveStartupConfiguration(); // does not lock context
-    expect(service.isContextLocked()).toBe(false);
+    await service.resolveStartupConfiguration();
 
-    // Second run, config fetch fails, signals were reset so context is unlocked and falls back to query/storage
+    // Second run, config fetch fails, signals were reset so falls back to query/storage
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'));
     vi.spyOn(service, 'getWindowSearch').mockReturnValue('?renderer=http://query:3000');
     vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(true);
@@ -371,7 +361,6 @@ describe('StartupResolution', () => {
     localStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'storage');
     const url = await service.resolveStartupConfiguration();
 
-    expect(service.isContextLocked()).toBe(false);
     expect(url).toBe('http://query:3000/');
   });
 
@@ -440,7 +429,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
             apiKey: 'AIzaSyCamelKey',
           },
         },
@@ -450,7 +438,6 @@ describe('StartupResolution', () => {
 
       expect(url).toBe('http://base:3000');
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyCamelKey');
-      expect(service.isContextLocked()).toBe(false);
     });
 
     it('ignores empty or whitespace apiKey property in config.json', async () => {
@@ -458,7 +445,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
             apiKey: '   ',
           },
         },
@@ -469,29 +455,11 @@ describe('StartupResolution', () => {
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
     });
 
-    it('locks context strictly when allowOverrides is false regardless of apiKey presence', async () => {
-      mockFetchConfig({
-        renderers: {
-          default: {
-            rendererUrl: 'http://base:3000',
-            allowOverrides: false,
-            apiKey: 'AIzaSyCamelKey',
-          },
-        },
-      });
-
-      await service.resolveStartupConfiguration();
-
-      expect(service.isContextLocked()).toBe(false);
-      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyCamelKey');
-    });
-
     it('trims whitespace immediately when config.json provides apiKey with surrounding spaces', async () => {
       mockFetchConfig({
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
             apiKey: '   AIzaSyTrimmedKey   ',
           },
         },
@@ -521,31 +489,12 @@ describe('StartupResolution', () => {
     expect(service.selectedRendererId()).toBeNull();
   });
 
-  it('resets isLockedContext to false when setSelectedProfileId(null) is called after being locked', async () => {
-    mockFetchConfig({
-      renderers: {
-        locked: {
-          rendererUrl: 'http://locked-server:3000',
-          allowOverrides: false,
-        },
-      },
-    });
-
-    vi.spyOn(service, 'getWindowSearch').mockReturnValue('?rendererId=locked');
-    await service.resolveStartupConfiguration();
-    expect(service.isContextLocked()).toBe(false);
-
-    service.setSelectedRendererId(null);
-    expect(service.isContextLocked()).toBe(false);
-  });
-
   describe('renderer resolution', () => {
     it('loads default profile when no profile query parameter is provided', async () => {
       mockFetchConfig({
         renderers: {
           default: {
             rendererUrl: 'http://default-renderer:3000',
-            allowOverrides: true,
           },
         },
       });
@@ -610,7 +559,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
           },
           ge: {
             rendererUrl: 'http://testing-renderer:3000',
@@ -630,7 +578,6 @@ describe('StartupResolution', () => {
           default: {
             rendererUrl: 'http://default-renderer:3000',
             apiKey: 'default-key',
-            allowOverrides: false,
           },
           dev: {
             rendererUrl: 'http://dev-renderer:3000',
@@ -643,7 +590,6 @@ describe('StartupResolution', () => {
       const url = await service.resolveStartupConfiguration();
       expect(url).toBe('http://dev-renderer:3000');
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
-      expect(service.isContextLocked()).toBe(false);
     });
 
     it('logs warning and falls back to default profile when invalid profile parameter is provided', async () => {
@@ -651,7 +597,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://default-renderer:3000',
-            allowOverrides: true,
           },
           ge: {
             rendererUrl: 'http://testing-renderer:3000',
@@ -679,41 +624,11 @@ describe('StartupResolution', () => {
       expect(url).toBeNull();
     });
 
-    it('locks context immediately when active profile sets allowOverrides to false', async () => {
+    it('allows renderer query override over profile defaults', async () => {
       mockFetchConfig({
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
-          },
-          locked: {
-            rendererUrl: 'http://locked-renderer:3000',
-            allowOverrides: false,
-          },
-        },
-      });
-
-      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
-        '?rendererId=locked&renderer=http://override:3000',
-      );
-      vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(true);
-      localStorage.setItem(
-        LocalStorageKey.CUSTOM_RENDERERS,
-        JSON.stringify([{id: 'storage', name: 'Storage', rendererUrl: 'http://storage:3000'}]),
-      );
-      localStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'storage');
-
-      const url = await service.resolveStartupConfiguration();
-      expect(url).toBe('http://override:3000/');
-      expect(service.isContextLocked()).toBe(false);
-    });
-
-    it('allows renderer query override over profile defaults when allowOverrides is true', async () => {
-      mockFetchConfig({
-        renderers: {
-          default: {
-            rendererUrl: 'http://base:3000',
-            allowOverrides: true,
           },
           ge: {
             rendererUrl: 'http://testing-renderer:3000',
@@ -735,7 +650,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
           },
           ge: {
             rendererUrl: 'http://testing-renderer:3000',
@@ -767,7 +681,6 @@ describe('StartupResolution', () => {
 
       const url = await service.resolveStartupConfiguration();
       expect(url).toBeNull();
-      expect(service.isContextLocked()).toBe(false);
     });
 
     it('handles array payloads for profiles or individual profile entries safely', async () => {
@@ -794,7 +707,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://default-renderer:3000',
-            allowOverrides: true,
           },
           dev: [{rendererUrl: 'http://array-dev:3000'}] as unknown as object,
         },
@@ -921,7 +833,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
             apiKey: '  test-api-key  ',
           },
         },
@@ -937,7 +848,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
             apiKey: 'renderer-key',
           },
         },
@@ -952,7 +862,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
             apiKey: 'renderer-key',
           },
         },
@@ -970,7 +879,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
             apiKey: 'root-key',
           },
           dev: {
@@ -991,7 +899,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
             apiKey: 'root-key',
           },
           dev: {
@@ -1012,7 +919,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
             apiKey: '   ',
           },
         },
@@ -1028,7 +934,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
           },
         },
       });
@@ -1043,7 +948,6 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            allowOverrides: true,
             apiKey: 12345 as unknown as string,
           },
         },
@@ -1080,7 +984,6 @@ describe('StartupResolution', () => {
             renderers: {
               default: {
                 rendererUrl: 'http://custom-url:3000',
-                allowOverrides: true,
               },
             },
           }),
@@ -1120,26 +1023,6 @@ describe('StartupResolution', () => {
         expect.any(Error),
       );
       expect(url).toBe('http://fallback-storage:3000');
-    });
-
-    it('locks context when custom CONFIG_URL response has allowOverrides set to false', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            renderers: {
-              default: {
-                rendererUrl: 'http://custom-locked-renderer:3000',
-                allowOverrides: false,
-              },
-            },
-          }),
-        ),
-      );
-
-      const url = await customService.resolveStartupConfiguration();
-
-      expect(url).toBe('http://custom-locked-renderer:3000');
-      expect(customService.isContextLocked()).toBe(false);
     });
   });
 
@@ -1362,27 +1245,6 @@ describe('StartupResolution', () => {
 
       expect(url).toBeNull();
       expect(await service.isEnvironmentValid()).toBe(false);
-    });
-
-    it('removal of legacy allowOverrides and initialProfile properties', async () => {
-      mockFetchConfig({
-        initialProfile: 'dev',
-        renderers: {
-          default: {
-            rendererUrl: 'http://legacy-locked:3000',
-            allowOverrides: false,
-          },
-        },
-      });
-
-      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
-        '?renderer=http://custom-dev:4200/override',
-      );
-      vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(true);
-      const url = await service.resolveRenderer();
-
-      expect(url).toBe('http://custom-dev:4200/override');
-      expect(service.isContextLocked()).toBe(false);
     });
 
     it('returns false from isOriginAllowed when URL is malformed', async () => {

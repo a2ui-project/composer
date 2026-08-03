@@ -39,7 +39,6 @@ import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
 
 class MockStartupResolution {
   readonly resolvedUrl = signal('http://localhost:4200');
-  readonly isLockedContext = signal(false);
   readonly renderers = signal<Record<string, RendererConfig>>({});
   readonly selectedRendererId = signal<string | null>(null);
   readonly activeRenderer = signal<RendererConfig | null>(null);
@@ -48,7 +47,6 @@ class MockStartupResolution {
   setSelectedRendererId = vi.fn();
   isEnvironmentValid = vi.fn().mockReturnValue(true);
   isExtensionMode = vi.fn().mockReturnValue(false);
-  isContextLocked = vi.fn().mockReturnValue(false);
   getResolvedRendererUrl = vi.fn().mockReturnValue('http://localhost:4200');
   isThirdPartyEnvironment = vi.fn().mockReturnValue(false);
 }

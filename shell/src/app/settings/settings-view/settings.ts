@@ -87,14 +87,6 @@ export class Settings implements OnInit {
     return this.settingsService.getRenderers().find(r => r.id === id);
   });
 
-  readonly allowOverrides: Signal<boolean> = computed(() => {
-    return this.selectedRendererOption()?.allowOverrides ?? true;
-  });
-
-  readonly isLocked: Signal<boolean> = computed(() => {
-    return !this.allowOverrides() || this.startupResolution.isContextLocked();
-  });
-
   readonly isThirdParty: WritableSignal<boolean> = signal(false);
   readonly isApiKeyProvidedByConfig: Signal<boolean> = computed(() =>
     this.configProvider.isApiKeyProvidedByConfig(),
@@ -227,9 +219,6 @@ export class Settings implements OnInit {
   }
 
   toggleForceThirdPartyAuth(): void {
-    if (this.isLocked()) {
-      return;
-    }
     const newState = !this.forceThirdPartyAuth();
     this.forceThirdPartyAuth.set(newState);
     this.settingsForm.markAsDirty();

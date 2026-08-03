@@ -176,9 +176,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   override setRendererUrl(url: string): void {
     this._rendererUrl.set(url);
     this.localStorageInteractions.setItem(LocalStorageKey.RENDERER_URL, url);
-    if (!this.startup.isContextLocked()) {
-      this.startup.setResolvedRendererUrl(url);
-    }
+    this.startup.setResolvedRendererUrl(url);
   }
 
   /**

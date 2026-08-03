@@ -34,7 +34,6 @@ describe('SettingsService', () => {
     apiKeys: WritableSignal<Record<string, string>>;
     setSelectedRendererId: ReturnType<typeof vi.fn>;
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
-    isContextLocked: ReturnType<typeof vi.fn>;
   };
   let mockConfigProvider: {
     setRendererUrl: ReturnType<typeof vi.fn>;
@@ -59,12 +58,10 @@ describe('SettingsService', () => {
       displayName: 'Development',
       rendererUrl: 'http://localhost:3000',
       apiKey: '  dev-api-key  ',
-      allowOverrides: true,
     },
     locked: {
       displayName: 'Locked Profile',
       rendererUrl: 'http://locked-server.com',
-      allowOverrides: false,
     },
   };
 
@@ -77,7 +74,6 @@ describe('SettingsService', () => {
       activeRenderer: signal(null),
       apiKeys: signal({}),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(true),
-      isContextLocked: vi.fn().mockReturnValue(false),
       setSelectedRendererId: vi.fn((id: string | null) => {
         mockStartupResolution.selectedRendererId.set(id);
         mockStartupResolution.activeRenderer.set(id ? sampleRenderers[id] || null : null);
@@ -126,22 +122,6 @@ describe('SettingsService', () => {
     expect(service.activeRenderer()).toBeNull();
   });
 
-  it('computes allowOverrides as true when active renderer is null or allowOverrides is omitted', () => {
-    expect(service.allowOverrides()).toBe(true);
-
-    mockStartupResolution.activeRenderer.set({
-      rendererUrl: 'http://example.com',
-    });
-    expect(service.allowOverrides()).toBe(true);
-  });
-
-  it('computes allowOverrides as false when active renderer disallows overrides', () => {
-    mockStartupResolution.activeRenderer.set({
-      allowOverrides: false,
-    });
-    expect(service.allowOverrides()).toBe(false);
-  });
-
   it('persists selected renderer ID to local storage and updates startup resolution when selecting profile', async () => {
     await service.selectRenderer('dev');
 
@@ -186,15 +166,6 @@ describe('SettingsService', () => {
 
     await service.selectRenderer(null);
     expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('');
-  });
-
-  it('resets allowOverrides to true when selecting null after a locked renderer', async () => {
-    mockStartupResolution.activeRenderer.set(sampleRenderers['locked']);
-    expect(service.allowOverrides()).toBe(false);
-
-    await service.selectRenderer(null);
-
-    expect(service.allowOverrides()).toBe(true);
   });
 
   it('trims apiKey and handles whitespace-only or non-string apiKey when selecting profile', async () => {
@@ -439,14 +410,12 @@ describe('SettingsService', () => {
           name: 'Custom One',
           rendererUrl: 'http://custom-1.com',
           readOnly: false,
-          allowOverrides: true,
         },
         {
           id: 'c-2',
           name: 'Custom Two',
           rendererUrl: 'http://custom-2.com',
           readOnly: false,
-          allowOverrides: true,
         },
       ]);
 
@@ -476,12 +445,10 @@ describe('SettingsService', () => {
         dev: {
           displayName: 'Development',
           rendererUrl: 'http://dev.com',
-          allowOverrides: true,
         },
         prod: {
           displayName: 'Production',
           rendererUrl: 'http://prod.com',
-          allowOverrides: false,
         },
       });
       mockLocalStorage.setItem(
@@ -498,21 +465,18 @@ describe('SettingsService', () => {
           name: 'Development',
           rendererUrl: 'http://dev.com',
           readOnly: true,
-          allowOverrides: true,
         },
         {
           id: 'prod',
           name: 'Production',
           rendererUrl: 'http://prod.com',
           readOnly: true,
-          allowOverrides: false,
         },
         {
           id: 'custom-1',
           name: 'My Custom Renderer',
           rendererUrl: 'http://my-custom.com',
           readOnly: false,
-          allowOverrides: true,
         },
       ]);
     });
@@ -539,21 +503,18 @@ describe('SettingsService', () => {
           name: 'Dev Renderer',
           rendererUrl: 'http://dev.com',
           readOnly: true,
-          allowOverrides: true,
         },
         {
           id: 'custom-dev',
           name: 'Dev Renderer (local)',
           rendererUrl: 'http://custom-dev.com',
           readOnly: false,
-          allowOverrides: true,
         },
         {
           id: 'custom-other',
           name: 'Unique Name',
           rendererUrl: 'http://unique.com',
           readOnly: false,
-          allowOverrides: true,
         },
       ]);
     });
@@ -637,14 +598,12 @@ describe('SettingsService', () => {
           name: 'Development',
           rendererUrl: 'http://dev.com',
           readOnly: true,
-          allowOverrides: true,
         },
         {
           id: 'custom-1',
           name: 'Valid Custom',
           rendererUrl: 'http://valid.com',
           readOnly: false,
-          allowOverrides: true,
         },
       ]);
     });
@@ -668,7 +627,6 @@ describe('SettingsService', () => {
           name: 'Valid One',
           rendererUrl: 'http://valid.com',
           readOnly: false,
-          allowOverrides: true,
         },
       ]);
     });
@@ -736,7 +694,6 @@ describe('SettingsService', () => {
   describe('commitSettings', () => {
     it('atomically persists selectedRendererId, rendererUrl, and selectedApiKeyId in 3P mode', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockStartupResolution.isContextLocked.mockReturnValue(false);
       mockConfigProvider.isApiKeyProvidedByConfig.mockReturnValue(false);
       mockSecureStorage.getCustomApiKey.mockResolvedValue({
         id: 'custom-1',
@@ -760,7 +717,6 @@ describe('SettingsService', () => {
 
     it('directly sets explicit free-form apiKey in 3P mode when no selectedApiKeyId is provided', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      mockStartupResolution.isContextLocked.mockReturnValue(false);
       mockConfigProvider.isApiKeyProvidedByConfig.mockReturnValue(false);
 
       await service.commitSettings({
@@ -791,7 +747,6 @@ describe('SettingsService', () => {
 
     it('purges Gemini API key when in 1P mode', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
-      mockStartupResolution.isContextLocked.mockReturnValue(false);
 
       await service.commitSettings({
         selectedRendererId: 'dev',

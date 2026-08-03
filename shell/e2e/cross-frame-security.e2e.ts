@@ -24,9 +24,7 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           renderers: {
-            default: {
-              allowOverrides: true,
-            },
+            default: {},
           },
         }),
       });

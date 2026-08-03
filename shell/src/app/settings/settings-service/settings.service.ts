@@ -45,7 +45,6 @@ export declare interface CustomRendererEntry {
  */
 export declare interface RendererOption extends CustomRendererEntry {
   readOnly: boolean;
-  allowOverrides?: boolean;
 }
 
 /**
@@ -72,10 +71,6 @@ export class SettingsService {
 
   readonly activeRenderer: Signal<RendererConfig | null> = computed(() =>
     this.startupResolution.activeRenderer(),
-  );
-
-  readonly allowOverrides: Signal<boolean> = computed(
-    () => this.activeRenderer()?.allowOverrides ?? true,
   );
 
   /**
@@ -293,7 +288,6 @@ export class SettingsService {
       name: config?.displayName || config?.name || id,
       rendererUrl: config?.rendererUrl || '',
       readOnly: true,
-      allowOverrides: config.allowOverrides ?? true,
     }));
 
     const staticNames = new Set(staticRenderers.map(r => r.name));
@@ -304,7 +298,6 @@ export class SettingsService {
         name: staticNames.has(item.name) ? `${item.name} (local)` : item.name,
         rendererUrl: item.rendererUrl,
         readOnly: false,
-        allowOverrides: true,
       }));
 
     return [...staticRenderers, ...customRenderers];
@@ -385,9 +378,7 @@ export class SettingsService {
     );
 
     const trimmedUrl = (options.rendererUrl || '').trim();
-    if (!this.startupResolution.isContextLocked() && this.allowOverrides()) {
-      this.configProvider.setRendererUrl(trimmedUrl);
-    }
+    this.configProvider.setRendererUrl(trimmedUrl);
 
     const apiKeyId = options.selectedApiKeyId;
     if (apiKeyId) {
