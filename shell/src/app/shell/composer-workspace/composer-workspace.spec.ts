@@ -16,13 +16,13 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ComposerWorkspace, ComposerPanelId} from './composer-workspace';
+import {WorkspaceLayout} from '../workspace-layout/workspace-layout';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
-import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {DockviewComponent} from 'dockview';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ChatCoordinator} from '../../chat/chat-service/chat-coordinator';
@@ -113,6 +113,7 @@ describe('ComposerWorkspace Dashboard', () => {
   let harness: ComposerWorkspaceHarness;
 
   beforeEach(async () => {
+    localStorage.clear();
     await TestBed.configureTestingModule({
       imports: [ComposerWorkspace],
       providers: [
@@ -136,14 +137,15 @@ describe('ComposerWorkspace Dashboard', () => {
   });
 
   it('mounts all primary feature drawer placeholder components', () => {
-    // Dockview dynamically renders panels via componentRefs.
-    // In jsdom without real dimensions, dockview may not attach them all to the DOM,
-    // so we verify they were instantiated by the Angular view container.
-    const refs = (fixture.componentInstance as unknown as {componentRefs: unknown[]}).componentRefs;
-    expect(refs.length).toBe(7);
-    const types = refs.map(
-      (r: unknown) => (r as {componentType: {name: string}}).componentType.name,
-    );
+    // Default preset is chat-preview; switch to the full layout to exercise every panel type.
+    fixture.componentInstance.applyPreset('full');
+    fixture.detectChanges();
+    // Dockview dynamically renders panels via componentRefs. In jsdom without real
+    // dimensions we verify the panel types were instantiated by the view container.
+    const refs = (
+      fixture.componentInstance as unknown as {componentRefs: {componentType: {name: string}}[]}
+    ).componentRefs;
+    const types = refs.map(r => r.componentType.name);
     expect(types).toContain('ChatPanel');
     expect(types).toContain('RenderedFrame');
     expect(types).toContain('RawFrame');
@@ -152,6 +154,9 @@ describe('ComposerWorkspace Dashboard', () => {
 
   it('delegates clearLogs to all queried child components when clearAllLogs is called', () => {
     const component = fixture.componentInstance;
+    // The debug consoles (Raw Messages / Events / Errors) exist only in the full layout.
+    component.applyPreset('full');
+    fixture.detectChanges();
 
     const rawMsgSpy = vi.spyOn(component['rawMessagesInstance']!, 'clearLogs');
     const eventsSpy = vi.spyOn(component['eventsInstance']!, 'clearLogs');
@@ -247,18 +252,10 @@ describe('ComposerWorkspace Dashboard', () => {
     });
   });
 
-  it('sets isExtensionMode correctly', async () => {
-    const resolutionService = TestBed.inject(StartupResolution);
-    vi.spyOn(resolutionService, 'isExtensionMode').mockReturnValue(true);
-
-    const newFixture = TestBed.createComponent(ComposerWorkspace);
-    newFixture.detectChanges();
-
-    expect(newFixture.componentInstance.isExtension()).toBe(true);
-  });
-
   describe('Dockview Layout and Effects', () => {
     it('updates events and errors panel titles based on unread count', async () => {
+      fixture.componentInstance.applyPreset('full');
+      fixture.detectChanges();
       fixture.componentInstance.unreadEventsCount.set(5);
       fixture.componentInstance.unreadErrorsCount.set(3);
       fixture.detectChanges();
@@ -283,6 +280,8 @@ describe('ComposerWorkspace Dashboard', () => {
     });
 
     it('adds and removes the mockRules panel when showMockRules signal changes', async () => {
+      fixture.componentInstance.applyPreset('full');
+      fixture.detectChanges();
       fixture.componentInstance.showMockRules.set(true);
       fixture.detectChanges();
       await fixture.whenStable();
@@ -323,7 +322,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('restores dockview layout from localStorage on initialization', async () => {
       // Create new fixture since dockview is initialized on AfterViewInit
-      vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify({}));
+      const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify({}));
       const newFixture = TestBed.createComponent(ComposerWorkspace);
 
       const apiSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON').mockImplementation(() => {});
@@ -333,6 +332,8 @@ describe('ComposerWorkspace Dashboard', () => {
 
       expect(apiSpy).toHaveBeenCalled();
       apiSpy.mockRestore();
+      // Restore the getItem spy so its '{}' return does not leak into later tests.
+      getItemSpy.mockRestore();
     });
 
     it('applies Material M3 tab styling class hook to the Dockview root element', () => {
@@ -418,6 +419,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel and triggers change detection when pointerdown occurs on tab element', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -439,6 +444,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel when click occurs on tab element', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -460,6 +469,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel when pointerdown occurs on a nested child element within a tab', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -485,6 +498,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel when click occurs on a nested child element within a tab', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -510,6 +527,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('does not activate panel when click occurs on non-tab workspace elements', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -529,6 +550,10 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('triggers change detection via cdr.markForCheck when active panel changes', () => {
       const component = fixture.componentInstance;
+      // The default layout is now the render-focused chat-preview preset, which
+      // omits the Events panel; build the full layout so the tab is present.
+      component.applyPreset('full');
+      fixture.detectChanges();
       const markForCheckSpy = vi.spyOn(component['cdr'], 'markForCheck');
 
       const eventsPanel = component['dockviewApi']?.getGroupPanel(ComposerPanelId.Events);
@@ -556,6 +581,74 @@ describe('ComposerWorkspace Dashboard', () => {
         true,
       );
       expect(removeEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function), true);
+    });
+  });
+
+  describe('Panel-setup presets', () => {
+    it('opens on the chat-preview default when no saved layout exists', async () => {
+      localStorage.clear();
+      const newFixture = TestBed.createComponent(ComposerWorkspace);
+      newFixture.detectChanges();
+      await newFixture.whenStable();
+
+      const ids = newFixture.componentInstance['dockviewApi'].panels.map(p => p.id).sort();
+      expect(ids).toEqual([ComposerPanelId.Chat, ComposerPanelId.Rendered].sort());
+      expect(newFixture.componentInstance.activePreset()).toBe('chat-preview');
+    });
+
+    it('applyPreset("chat") leaves only the Chat panel', () => {
+      const component = fixture.componentInstance;
+      component.applyPreset('chat');
+      fixture.detectChanges();
+
+      const ids = component['dockviewApi'].panels.map(p => p.id);
+      expect(ids).toEqual([ComposerPanelId.Chat]);
+      expect(component.activePreset()).toBe('chat');
+    });
+
+    it('applyPreset("chat-preview") yields Chat + Rendered', () => {
+      const component = fixture.componentInstance;
+      component.applyPreset('chat-preview');
+      fixture.detectChanges();
+
+      const ids = component['dockviewApi'].panels.map(p => p.id).sort();
+      expect(ids).toEqual([ComposerPanelId.Chat, ComposerPanelId.Rendered].sort());
+      expect(component.activePreset()).toBe('chat-preview');
+    });
+
+    it('applyPreset("full") yields the full panel set', () => {
+      const component = fixture.componentInstance;
+      component.applyPreset('full');
+      fixture.detectChanges();
+
+      const ids = component['dockviewApi'].panels.map(p => p.id);
+      expect(ids).toContain(ComposerPanelId.Chat);
+      expect(ids).toContain(ComposerPanelId.Rendered);
+      expect(ids).toContain(ComposerPanelId.Raw);
+      expect(ids).toContain(ComposerPanelId.DataModel);
+      expect(ids).toContain(ComposerPanelId.Events);
+      expect(ids).toContain(ComposerPanelId.Errors);
+      expect(ids).toContain(ComposerPanelId.RawMessages);
+      expect(component.activePreset()).toBe('full');
+    });
+
+    it('persists the applied preset to localStorage', () => {
+      fixture.componentInstance.applyPreset('chat');
+      expect(localStorage.getItem('composer_workspace_preset')).toBe('chat');
+    });
+
+    it('registers with WorkspaceLayout so the header toggle can drive a rebuild', () => {
+      const layout = TestBed.inject(WorkspaceLayout);
+      expect(layout.isActive()).toBe(true);
+      expect(layout.activePreset()).toBe('chat-preview');
+
+      layout.cycle(); // chat-preview -> full
+      fixture.detectChanges();
+
+      expect(layout.activePreset()).toBe('full');
+      const ids = fixture.componentInstance['dockviewApi'].panels.map(p => p.id);
+      expect(ids).toContain(ComposerPanelId.Raw);
+      expect(ids).toContain(ComposerPanelId.DataModel);
     });
   });
 });
