@@ -544,4 +544,18 @@ describe('Settings', () => {
       expect(component.selectedRendererOption()).toBeUndefined();
     });
   });
+
+  describe('activeRendererUrl and diagnostic logs reactivity', () => {
+    it('computes activeRendererUrl from StartupResolution resolvedUrl', async () => {
+      const {component} = await setupComponent();
+      expect(component.activeRendererUrl()).toBe('http://resolved-url.com');
+    });
+
+    it('renders system log message when activeRendererUrl is updated', async () => {
+      const {harness} = await setupComponent();
+      expect(await harness.getLogsConsoleText()).toContain(
+        '[System] Active renderer updated to http://resolved-url.com',
+      );
+    });
+  });
 });

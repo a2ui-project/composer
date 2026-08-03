@@ -121,6 +121,9 @@
       <div class="overlay-logs">
         <h4>Overlay Logs Preview</h4>
         <div class="logs-console">
+          @if (activeRendererUrl()) {
+            <code>[System] Active renderer updated to {{ activeRendererUrl() }}</code>
+          }
           @if (catalogErrorMessage()) {
             <code class="error-log" style="color: #f44336; font-weight: bold"
               >[Catalog Error] {{ catalogErrorMessage() }}</code

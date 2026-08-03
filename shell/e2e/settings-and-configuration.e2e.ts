@@ -35,9 +35,7 @@ test.describe('Settings and Client Configuration', () => {
       await page.goto('/settings');
     });
 
-    test('persists configuration immediately upon selection', async ({
-      page,
-    }) => {
+    test('persists configuration immediately upon selection', async ({page}) => {
       await page.locator('.add-api-key-button').click();
       await page.locator('#api-key-name-input').fill('Test Key');
       await page.locator('#api-key-value-input').fill('test-api-key');

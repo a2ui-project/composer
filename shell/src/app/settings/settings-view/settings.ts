@@ -97,6 +97,10 @@ export class Settings implements OnInit {
     this.catalogManagement.catalogError(),
   );
 
+  readonly activeRendererUrl: Signal<string | null> = computed(() =>
+    this.startupResolution.resolvedUrl(),
+  );
+
   readonly settingsForm = this.fb.group({});
 
   constructor() {}

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, DestroyRef} from '@angular/core';
+import {Injectable, inject, signal, DestroyRef, effect} from '@angular/core';
 import {
   HostCommunication,
   MessageEnvelope,
@@ -113,6 +113,7 @@ export class CatalogManagement {
   readonly activeCatalogDescription = this._activeCatalogDescription.asReadonly();
 
   private watchdogTimerId: ReturnType<typeof setTimeout> | null = null;
+  private previousUrl: string | null | undefined = undefined;
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -122,6 +123,70 @@ export class CatalogManagement {
         this.watchdogTimerId = null;
       }
     });
+
+    effect(
+      () => {
+        const rendererUrl = this.startupResolution.resolvedUrl();
+        if (rendererUrl === this.previousUrl) {
+          return;
+        }
+        this.previousUrl = rendererUrl;
+
+        if (this.watchdogTimerId !== null) {
+          clearTimeout(this.watchdogTimerId);
+          this.watchdogTimerId = null;
+        }
+        this._isHandshakeInProgress.set(false);
+        this._catalogError.set(null);
+        this._activeCatalog.set(null);
+        this._activeCatalogTitle.set('');
+        this._activeCatalogDescription.set('');
+        this._lastCatalogString.set('');
+        this._lastChecksumHash.set('');
+
+        if (rendererUrl) {
+          const targetUrl = rendererUrl;
+          void this.indexedDbStorage
+            .getCatalogRecord(targetUrl)
+            .then(record => {
+              if (
+                this.startupResolution.resolvedUrl() === targetUrl &&
+                record &&
+                this._activeCatalog() === null
+              ) {
+                let catalogObj: Catalog | null = null;
+                try {
+                  catalogObj = JSON.parse(record.catalogString);
+                } catch {
+                  catalogObj = null;
+                }
+                if (catalogObj) {
+                  if (typeof catalogObj.title === 'string') {
+                    catalogObj.title = sanitizeHtml(catalogObj.title).toString();
+                  }
+                  if (typeof catalogObj.description === 'string') {
+                    catalogObj.description = sanitizeHtml(catalogObj.description).toString();
+                  }
+                  this._lastCatalogString.set(record.catalogString);
+                  this._lastChecksumHash.set(record.checksumHash);
+                  this._activeCatalog.set(catalogObj);
+                  this._activeCatalogTitle.set(catalogObj.title || '');
+                  this._activeCatalogDescription.set(catalogObj.description || '');
+                  this._catalogError.set(null);
+                }
+              }
+            })
+            .catch(err => {
+              console.warn(
+                'Failed to fetch catalog record from IndexedDB for rendererUrl:',
+                targetUrl,
+                err,
+              );
+            });
+        }
+      },
+      {allowSignalWrites: true},
+    );
 
     this.hostCommunication.messageStream$
       .pipe(

@@ -39,8 +39,10 @@ describe('CatalogManagement', () => {
     getCatalogRecord: ReturnType<typeof vi.fn>;
     saveCatalogRecord: ReturnType<typeof vi.fn>;
   };
+  let resolvedUrlSignal: WritableSignal<string | null>;
   let startupResolutionMock: {
     getResolvedRendererUrl: ReturnType<typeof vi.fn>;
+    resolvedUrl: Signal<string | null>;
   };
 
   beforeEach(() => {
@@ -59,8 +61,10 @@ describe('CatalogManagement', () => {
       saveCatalogRecord: vi.fn().mockResolvedValue(undefined),
     };
 
+    resolvedUrlSignal = signal<string | null>('http://localhost/renderer');
     startupResolutionMock = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://localhost/renderer'),
+      resolvedUrl: resolvedUrlSignal.asReadonly(),
     };
 
     TestBed.configureTestingModule({
@@ -715,5 +719,48 @@ describe('CatalogManagement', () => {
     );
     expect(service.isHandshakeInProgress()).toBe(false);
     errorSpy.mockRestore();
+  });
+
+  it('updates activeCatalog from cached record when resolvedUrl signal changes to a cached renderer URL', async () => {
+    const cachedCatalog = {catalogId: 'cached-cat', title: 'Cached Title', components: {}};
+    indexedDbStorageMock.getCatalogRecord.mockImplementation(async (url: string) => {
+      if (url === 'http://localhost/cached-renderer') {
+        return {
+          rendererUrl: 'http://localhost/cached-renderer',
+          catalogString: JSON.stringify(cachedCatalog),
+          checksumHash: 'cachedhash123',
+          lastAccessed: 1000,
+        };
+      }
+      return null;
+    });
+
+    resolvedUrlSignal.set('http://localhost/cached-renderer');
+    TestBed.tick();
+
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
+
+    expect(service.activeCatalog()).toEqual(cachedCatalog);
+    expect(service.activeCatalogTitle()).toBe('Cached Title');
+    expect(service.catalogError()).toBeNull();
+  });
+
+  it('resets activeCatalog to null when resolvedUrl signal changes to an uncached renderer URL', async () => {
+    indexedDbStorageMock.getCatalogRecord.mockResolvedValue(null);
+
+    resolvedUrlSignal.set('http://localhost/uncached-renderer');
+    TestBed.tick();
+
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
+
+    expect(service.activeCatalog()).toBeNull();
+    expect(service.activeCatalogTitle()).toBe('');
+    expect(service.catalogError()).toBeNull();
   });
 });
