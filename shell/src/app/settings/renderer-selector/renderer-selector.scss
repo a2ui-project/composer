@@ -75,8 +75,23 @@
   white-space: nowrap;
 }
 
-.delete-renderer-button {
+.edit-renderer-button {
   margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+
+  .renderer-option:hover &,
+  .renderer-option:focus-within & {
+    opacity: 1;
+  }
+
+  &[disabled] {
+    pointer-events: auto;
+  }
+}
+
+.delete-renderer-button {
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.15s ease-in-out;

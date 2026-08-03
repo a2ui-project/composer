@@ -22,11 +22,18 @@ import {
   ValidationErrors,
   Validators,
 } from '@angular/forms';
-import {MatDialogRef, MatDialogModule} from '@angular/material/dialog';
+import {MAT_DIALOG_DATA, MatDialogRef, MatDialogModule} from '@angular/material/dialog';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatButtonModule} from '@angular/material/button';
-import {SettingsService} from '../../settings-service/settings.service';
+import {SettingsService, RendererOption} from '../../settings-service/settings.service';
+
+/**
+ * Interface for data injected into AddRendererDialogComponent.
+ */
+export interface AddRendererDialogData {
+  renderer?: RendererOption;
+}
 
 /**
  * Validator function that ensures the control value is a valid HTTP or HTTPS URL with a host.
@@ -45,7 +52,7 @@ export function urlValidator(control: AbstractControl<string>): ValidationErrors
 }
 
 /**
- * Dialog component for configuring and saving a new custom renderer endpoint.
+ * Dialog component for configuring and saving a new or existing custom renderer endpoint.
  */
 @Component({
   selector: 'a2ui-composer-add-renderer-dialog',
@@ -64,12 +71,13 @@ export class AddRendererDialogComponent {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly settingsService = inject(SettingsService);
   private readonly dialogRef = inject(MatDialogRef<AddRendererDialogComponent>);
+  readonly data = inject<AddRendererDialogData | null>(MAT_DIALOG_DATA, {optional: true});
 
   readonly errorMessage = signal<string | null>(null);
 
   readonly form = this.fb.group({
-    name: ['', [Validators.required, Validators.pattern(/\S/)]],
-    rendererUrl: ['', [Validators.required, urlValidator]],
+    name: [this.data?.renderer?.name ?? '', [Validators.required, Validators.pattern(/\S/)]],
+    rendererUrl: [this.data?.renderer?.rendererUrl ?? '', [Validators.required, urlValidator]],
   });
 
   /**
@@ -84,7 +92,7 @@ export class AddRendererDialogComponent {
     this.errorMessage.set(null);
     const name = this.form.controls.name.value.trim();
     const rendererUrl = this.form.controls.rendererUrl.value.trim();
-    const id = `custom-${Date.now()}`;
+    const id = this.data?.renderer?.id || `custom-${Date.now()}`;
 
     try {
       this.settingsService.saveCustomRenderer({

@@ -16,15 +16,22 @@
 
 import {Component, inject, signal} from '@angular/core';
 import {NonNullableFormBuilder, ReactiveFormsModule, Validators} from '@angular/forms';
-import {MatDialogRef, MatDialogModule} from '@angular/material/dialog';
+import {MAT_DIALOG_DATA, MatDialogRef, MatDialogModule} from '@angular/material/dialog';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
-import {SettingsService} from '../../settings-service/settings.service';
+import {SettingsService, ApiKeyOption} from '../../settings-service/settings.service';
 
 /**
- * Dialog component for configuring and saving a new custom API key credential.
+ * Interface for data injected into AddApiKeyDialogComponent.
+ */
+export interface AddApiKeyDialogData {
+  apiKey?: ApiKeyOption;
+}
+
+/**
+ * Dialog component for configuring and saving a new or existing custom API key credential.
  */
 @Component({
   selector: 'a2ui-composer-add-api-key-dialog',
@@ -44,13 +51,14 @@ export class AddApiKeyDialogComponent {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly settingsService = inject(SettingsService);
   private readonly dialogRef = inject(MatDialogRef<AddApiKeyDialogComponent>);
+  readonly data = inject<AddApiKeyDialogData | null>(MAT_DIALOG_DATA, {optional: true});
 
   readonly errorMessage = signal<string | null>(null);
   readonly hideApiKey = signal<boolean>(true);
 
   readonly form = this.fb.group({
-    name: ['', [Validators.required, Validators.pattern(/\S/)]],
-    apiKey: ['', [Validators.required, Validators.pattern(/\S/)]],
+    name: [this.data?.apiKey?.name ?? '', [Validators.required, Validators.pattern(/\S/)]],
+    apiKey: [this.data?.apiKey?.key ?? '', [Validators.required, Validators.pattern(/\S/)]],
   });
 
   /**
@@ -72,7 +80,7 @@ export class AddApiKeyDialogComponent {
     this.errorMessage.set(null);
     const name = this.form.controls.name.value.trim();
     const apiKey = this.form.controls.apiKey.value.trim();
-    const id = `custom-${Date.now()}`;
+    const id = this.data?.apiKey?.id || `custom-${Date.now()}`;
 
     try {
       await this.settingsService.saveCustomApiKey(id, name, apiKey);

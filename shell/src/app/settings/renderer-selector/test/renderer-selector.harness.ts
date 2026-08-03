@@ -76,13 +76,36 @@ export class RendererSelectorHarness extends ComponentHarness {
     const options = await getOptions();
     for (const opt of options) {
       const fullText = (await opt.getText()).trim();
-      const cleanText = fullText.replace(/\s*delete$/, '').trim();
+      const cleanText = fullText.replace(/\s*(edit|delete)+$/g, '').trim();
       if (cleanText === text || cleanText.startsWith(text)) {
         await opt.click();
         return;
       }
     }
     throw new Error(`Option "${text}" not found in RendererSelectorComponent dropdown`);
+  }
+
+  async getEditButtonsForOptions(): Promise<MatButtonHarness[]> {
+    await this.openSelect();
+    const getButtons = this.locatorFactory
+      .documentRootLocatorFactory()
+      .locatorForAll(MatButtonHarness.with({selector: '.edit-renderer-button'}));
+    return getButtons();
+  }
+
+  async getEditButtonForOption(text: string): Promise<MatButtonHarness | null> {
+    await this.openSelect();
+    const options = await this.locatorFactory
+      .documentRootLocatorFactory()
+      .locatorForAll(MatOptionHarness)();
+    for (const opt of options) {
+      const fullText = (await opt.getText()).trim();
+      const cleanText = fullText.replace(/\s*(edit|delete)+$/g, '').trim();
+      if (cleanText === text || cleanText.startsWith(text)) {
+        return opt.getHarnessOrNull(MatButtonHarness.with({selector: '.edit-renderer-button'}));
+      }
+    }
+    return null;
   }
 
   async getDeleteButtonsForOptions(): Promise<MatButtonHarness[]> {
@@ -100,7 +123,7 @@ export class RendererSelectorHarness extends ComponentHarness {
       .locatorForAll(MatOptionHarness)();
     for (const opt of options) {
       const fullText = (await opt.getText()).trim();
-      const cleanText = fullText.replace(/\s*delete$/, '').trim();
+      const cleanText = fullText.replace(/\s*(edit|delete)+$/g, '').trim();
       if (cleanText === text || cleanText.startsWith(text)) {
         return opt.getHarnessOrNull(MatButtonHarness.with({selector: '.delete-renderer-button'}));
       }

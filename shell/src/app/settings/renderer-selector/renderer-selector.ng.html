@@ -45,6 +45,20 @@
             <button
               mat-icon-button
               type="button"
+              class="edit-renderer-button"
+              [attr.aria-label]="'Edit ' + renderer.name"
+              [disabled]="renderer.readOnly"
+              [matTooltip]="
+                renderer.readOnly ? 'Static configuration items cannot be edited' : 'Edit renderer'
+              "
+              (click)="onEditRenderer($event, renderer)"
+              (keydown)="$event.stopPropagation()"
+            >
+              <mat-icon aria-hidden="true">edit</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              type="button"
               class="delete-renderer-button"
               [attr.aria-label]="'Delete ' + renderer.name"
               [disabled]="renderer.readOnly"

@@ -99,6 +99,30 @@ export class ApiKeySelectorComponent {
   }
 
   /**
+   * Opens the dialog to edit an existing custom API key.
+   */
+  onEditApiKey(event: Event, key: ApiKeyOption): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (key.readOnly) {
+      return;
+    }
+    const dialogRef = this.dialog.open(AddApiKeyDialogComponent, {
+      width: '450px',
+      data: {apiKey: key},
+    });
+
+    dialogRef.afterClosed().subscribe(async (updatedId?: string) => {
+      if (updatedId) {
+        await this.refreshApiKeys();
+        if (this.selectedApiKeyId() === updatedId) {
+          this.apiKeySelected.emit(updatedId);
+        }
+      }
+    });
+  }
+
+  /**
    * Deletes a custom API key and emits null fallback if the deleted key was active.
    */
   async onDeleteApiKey(event: Event, id: string): Promise<void> {

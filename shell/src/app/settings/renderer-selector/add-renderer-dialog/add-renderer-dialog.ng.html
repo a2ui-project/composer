@@ -14,7 +14,7 @@
   limitations under the License.
 -->
 
-<h2 mat-dialog-title>Add Custom Renderer</h2>
+<h2 mat-dialog-title>{{ data?.renderer ? 'Edit Custom Renderer' : 'Add Custom Renderer' }}</h2>
 <mat-dialog-content>
   <form [formGroup]="form" (ngSubmit)="$event.preventDefault(); onConfirm()">
     <mat-form-field appearance="outline" class="full-width">
@@ -40,6 +40,6 @@
 <mat-dialog-actions align="end">
   <button mat-button type="button" mat-dialog-close>Cancel</button>
   <button mat-button type="submit" color="primary" [disabled]="form.invalid" (click)="onConfirm()">
-    Add
+    {{ data?.renderer ? 'Save' : 'Add' }}
   </button>
 </mat-dialog-actions>

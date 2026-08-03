@@ -194,6 +194,88 @@ describe('ApiKeySelectorComponent & AddApiKeyDialogComponent', () => {
     await customTooltip.hide();
   });
 
+  it('renders a disabled edit button with tooltip for static API keys and an enabled edit button for custom API keys', async () => {
+    const staticEditBtn = await harness.getEditButtonForOption('Default Static Key');
+    expect(staticEditBtn).not.toBeNull();
+    expect(await staticEditBtn!.isDisabled()).toBe(true);
+    const staticHost = await staticEditBtn!.host();
+    expect(await staticHost.getAttribute('aria-label')).toBe('Edit Default Static Key');
+
+    const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
+    const staticTooltip = await rootLoader.getHarness(
+      MatTooltipHarness.with({
+        selector: '.edit-api-key-button[aria-label="Edit Default Static Key"]',
+      }),
+    );
+    await staticTooltip.show();
+    expect(await staticTooltip.getTooltipText()).toBe(
+      'Static configuration items cannot be edited',
+    );
+    await staticTooltip.hide();
+
+    const customEditBtn = await harness.getEditButtonForOption('Custom Local Key');
+    expect(customEditBtn).not.toBeNull();
+    expect(await customEditBtn!.isDisabled()).toBe(false);
+    const customHost = await customEditBtn!.host();
+    expect(await customHost.getAttribute('aria-label')).toBe('Edit Custom Local Key');
+
+    const customTooltip = await rootLoader.getHarness(
+      MatTooltipHarness.with({
+        selector: '.edit-api-key-button[aria-label="Edit Custom Local Key"]',
+      }),
+    );
+    await customTooltip.show();
+    expect(await customTooltip.getTooltipText()).toBe('Edit API key');
+    await customTooltip.hide();
+  });
+
+  it('clicking inline edit opens AddApiKeyDialogComponent pre-populated with current values and updates custom API key upon saving', async () => {
+    fixture.componentRef.setInput('selectedApiKeyId', 'custom-1');
+    fixture.detectChanges();
+
+    const emitSpy = vi.fn();
+    component.apiKeySelected.subscribe(emitSpy);
+
+    const customEditBtn = await harness.getEditButtonForOption('Custom Local Key');
+    expect(customEditBtn).not.toBeNull();
+    await customEditBtn!.click();
+
+    const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
+    const dialogs = await rootLoader.getAllHarnesses(MatDialogHarness);
+    expect(dialogs.length).toBe(1);
+
+    const inputs = await rootLoader.getAllHarnesses(MatInputHarness);
+    expect(inputs.length).toBe(2);
+    expect(await inputs[0].getValue()).toBe('Custom Local Key');
+    expect(await inputs[1].getValue()).toBe('custom-secret-5678');
+
+    await inputs[0].setValue('Updated Local Key');
+    await inputs[1].setValue('updated-secret-9999');
+
+    const saveButton = await rootLoader.getHarness(MatButtonHarness.with({text: 'Save'}));
+    await saveButton.click();
+    await fixture.whenStable();
+
+    expect(mockSettingsService.saveCustomApiKey).toHaveBeenCalledWith(
+      'custom-1',
+      'Updated Local Key',
+      'updated-secret-9999',
+    );
+    expect(emitSpy).toHaveBeenCalledWith('custom-1');
+  });
+
+  it('onEditApiKey stops event propagation and prevents default action', () => {
+    const mockEvent = {
+      stopPropagation: vi.fn(),
+      preventDefault: vi.fn(),
+    } as unknown as Event;
+
+    component.onEditApiKey(mockEvent, sampleApiKeys[1]);
+
+    expect(mockEvent.preventDefault).toHaveBeenCalled();
+    expect(mockEvent.stopPropagation).toHaveBeenCalled();
+  });
+
   it('does not delete static API key or emit selection when onDeleteApiKey is invoked for static key ID', async () => {
     const emitSpy = vi.fn();
     component.apiKeySelected.subscribe(emitSpy);

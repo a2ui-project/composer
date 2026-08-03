@@ -41,8 +41,23 @@
   white-space: nowrap;
 }
 
-.delete-api-key-button {
+.edit-api-key-button {
   margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+
+  .api-key-option:hover &,
+  .api-key-option:focus-within & {
+    opacity: 1;
+  }
+
+  &[disabled] {
+    pointer-events: auto;
+  }
+}
+
+.delete-api-key-button {
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.15s ease-in-out;

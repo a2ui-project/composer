@@ -99,6 +99,30 @@ export class RendererSelectorComponent {
   }
 
   /**
+   * Opens the dialog to edit an existing custom renderer.
+   */
+  onEditRenderer(event: Event, renderer: RendererOption): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (renderer.readOnly) {
+      return;
+    }
+    const dialogRef = this.dialog.open(AddRendererDialogComponent, {
+      width: '450px',
+      data: {renderer},
+    });
+
+    dialogRef.afterClosed().subscribe((updatedId?: string) => {
+      if (updatedId) {
+        this.refreshRenderers();
+        if (this.selectedRendererId() === updatedId) {
+          this.rendererSelected.emit(updatedId);
+        }
+      }
+    });
+  }
+
+  /**
    * Deletes a custom renderer and resets selection to default if the deleted renderer was active.
    */
   onDeleteRenderer(event: Event, id: string): void {

@@ -37,6 +37,20 @@
             <button
               mat-icon-button
               type="button"
+              class="edit-api-key-button"
+              [attr.aria-label]="'Edit ' + key.name"
+              [disabled]="key.readOnly"
+              [matTooltip]="
+                key.readOnly ? 'Static configuration items cannot be edited' : 'Edit API key'
+              "
+              (keydown)="$event.stopPropagation()"
+              (click)="onEditApiKey($event, key)"
+            >
+              <mat-icon aria-hidden="true">edit</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              type="button"
               class="delete-api-key-button"
               [attr.aria-label]="'Delete ' + key.name"
               [disabled]="key.readOnly"

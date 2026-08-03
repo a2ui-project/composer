@@ -210,6 +210,87 @@ describe('RendererSelectorComponent & AddRendererDialogComponent', () => {
     await customTooltip.hide();
   });
 
+  it('renders a disabled edit button with tooltip for static renderers and an enabled edit button for custom renderers', async () => {
+    const staticEditBtn = await harness.getEditButtonForOption('Default Static Renderer');
+    expect(staticEditBtn).not.toBeNull();
+    expect(await staticEditBtn!.isDisabled()).toBe(true);
+    const staticHost = await staticEditBtn!.host();
+    expect(await staticHost.getAttribute('aria-label')).toBe('Edit Default Static Renderer');
+
+    const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
+    const staticTooltip = await rootLoader.getHarness(
+      MatTooltipHarness.with({
+        selector: '.edit-renderer-button[aria-label="Edit Default Static Renderer"]',
+      }),
+    );
+    await staticTooltip.show();
+    expect(await staticTooltip.getTooltipText()).toBe(
+      'Static configuration items cannot be edited',
+    );
+    await staticTooltip.hide();
+
+    const customEditBtn = await harness.getEditButtonForOption('Custom Local Renderer');
+    expect(customEditBtn).not.toBeNull();
+    expect(await customEditBtn!.isDisabled()).toBe(false);
+    const customHost = await customEditBtn!.host();
+    expect(await customHost.getAttribute('aria-label')).toBe('Edit Custom Local Renderer');
+
+    const customTooltip = await rootLoader.getHarness(
+      MatTooltipHarness.with({
+        selector: '.edit-renderer-button[aria-label="Edit Custom Local Renderer"]',
+      }),
+    );
+    await customTooltip.show();
+    expect(await customTooltip.getTooltipText()).toBe('Edit renderer');
+    await customTooltip.hide();
+  });
+
+  it('clicking inline edit opens AddRendererDialogComponent pre-populated with current values and updates custom renderer upon saving', async () => {
+    fixture.componentRef.setInput('selectedRendererId', 'custom-1');
+    fixture.detectChanges();
+
+    const emitSpy = vi.fn();
+    component.rendererSelected.subscribe(emitSpy);
+
+    const customEditBtn = await harness.getEditButtonForOption('Custom Local Renderer');
+    expect(customEditBtn).not.toBeNull();
+    await customEditBtn!.click();
+
+    const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
+    const dialogs = await rootLoader.getAllHarnesses(MatDialogHarness);
+    expect(dialogs.length).toBe(1);
+
+    const inputs = await rootLoader.getAllHarnesses(MatInputHarness);
+    expect(inputs.length).toBe(2);
+    expect(await inputs[0].getValue()).toBe('Custom Local Renderer');
+    expect(await inputs[1].getValue()).toBe('http://custom.example.com');
+
+    await inputs[0].setValue('Updated Local Renderer');
+    await inputs[1].setValue('http://updated.example.com');
+
+    const saveButton = await rootLoader.getHarness(MatButtonHarness.with({text: 'Save'}));
+    await saveButton.click();
+
+    expect(mockSettingsService.saveCustomRenderer).toHaveBeenCalledWith({
+      id: 'custom-1',
+      name: 'Updated Local Renderer',
+      rendererUrl: 'http://updated.example.com',
+    });
+    expect(emitSpy).toHaveBeenCalledWith('custom-1');
+  });
+
+  it('onEditRenderer stops event propagation and prevents default action', () => {
+    const mockEvent = {
+      stopPropagation: vi.fn(),
+      preventDefault: vi.fn(),
+    } as unknown as Event;
+
+    component.onEditRenderer(mockEvent, sampleRenderers[1]);
+
+    expect(mockEvent.preventDefault).toHaveBeenCalled();
+    expect(mockEvent.stopPropagation).toHaveBeenCalled();
+  });
+
   it('does not delete static renderer or emit selection when onDeleteRenderer is invoked for static renderer ID', () => {
     const emitSpy = vi.fn();
     component.rendererSelected.subscribe(emitSpy);
