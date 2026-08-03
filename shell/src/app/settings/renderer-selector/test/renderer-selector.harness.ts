@@ -26,9 +26,7 @@ export class RendererSelectorHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-renderer-selector';
 
   protected getSelect = this.locatorFor(MatSelectHarness);
-  getAddButton = this.locatorFor(
-    MatButtonHarness.with({selector: '.add-renderer-button'}),
-  );
+  getAddButton = this.locatorFor(MatButtonHarness.with({selector: '.add-renderer-button'}));
 
   async isDisabled(): Promise<boolean> {
     const select = await this.getSelect();

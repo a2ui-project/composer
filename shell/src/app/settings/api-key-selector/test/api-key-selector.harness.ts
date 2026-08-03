@@ -26,9 +26,7 @@ export class ApiKeySelectorHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-api-key-selector';
 
   protected getSelect = this.locatorFor(MatSelectHarness);
-  getAddButton = this.locatorFor(
-    MatButtonHarness.with({selector: '.add-api-key-button'}),
-  );
+  getAddButton = this.locatorFor(MatButtonHarness.with({selector: '.add-api-key-button'}));
 
   async isDisabled(): Promise<boolean> {
     const select = await this.getSelect();
