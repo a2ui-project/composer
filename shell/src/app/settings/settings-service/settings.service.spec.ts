@@ -93,7 +93,10 @@ describe('SettingsService', () => {
     mockSecureStorage = {
       getCredential: vi.fn().mockResolvedValue('personal-indexeddb-key'),
       getCustomApiKeys: vi.fn().mockResolvedValue([]),
-      getCustomApiKey: vi.fn().mockResolvedValue(null),
+      getCustomApiKey: vi.fn().mockImplementation(async (id: string) => {
+        const list = await mockSecureStorage.getCustomApiKeys();
+        return list.find((item: {id: string}) => item.id === id) || null;
+      }),
       saveCustomApiKey: vi.fn().mockResolvedValue(undefined),
       deleteCustomApiKey: vi.fn().mockResolvedValue(undefined),
       deleteCredential: vi.fn().mockResolvedValue(undefined),
@@ -288,6 +291,18 @@ describe('SettingsService', () => {
       await service.selectApiKey('custom-1');
       expect(await service.getEffectiveApiKey()).toBe('custom-key-value');
       expect(service.selectedApiKeyId$()).toBe('custom-1');
+    });
+
+    it('returns empty string and sets effectiveApiKey to empty string when explicit selectedId cannot be resolved', async () => {
+      mockStartupResolution.apiKeys.set({
+        default: 'static-default-key',
+      });
+      mockSecureStorage.getCustomApiKey.mockResolvedValue(null);
+
+      await service.selectApiKey('non-existent-key-id');
+
+      expect(await service.getEffectiveApiKey()).toBe('');
+      expect(service.effectiveApiKey()).toBe('');
     });
 
     it('if no specific API key ID is selected, getEffectiveApiKey falls back to any default custom API key stored in SecureCredentialsStorage', async () => {

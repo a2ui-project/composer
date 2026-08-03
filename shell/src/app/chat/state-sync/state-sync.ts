@@ -73,23 +73,26 @@ export class StateSync {
 
   constructor() {
     let prevRendererId: string | null | undefined = undefined;
-    effect(() => {
-      const selectedRendererId = this.startupResolution?.selectedRendererId();
-      const catalog = this.catalogManagement.activeCatalog();
-      if (catalog || selectedRendererId !== undefined) {
-        const catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
-        const rendererChanged =
-          prevRendererId !== undefined && prevRendererId !== selectedRendererId;
-        prevRendererId = selectedRendererId;
-        untracked(() => {
-          const currentDraft = this._activeDraft();
-          const draftCatalogId = this.getCatalogIdFromDraft(currentDraft);
-          if (currentDraft === '' || draftCatalogId !== catalogId || rendererChanged) {
-            this._activeDraft.set(this.getInitialDraft(catalogId));
-          }
-        });
-      }
-    });
+    effect(
+      () => {
+        const selectedRendererId = this.startupResolution?.selectedRendererId();
+        const catalog = this.catalogManagement.activeCatalog();
+        if (catalog || selectedRendererId !== undefined) {
+          const catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
+          const rendererChanged =
+            prevRendererId !== undefined && prevRendererId !== selectedRendererId;
+          prevRendererId = selectedRendererId;
+          untracked(() => {
+            const currentDraft = this._activeDraft();
+            const draftCatalogId = this.getCatalogIdFromDraft(currentDraft);
+            if (currentDraft === '' || draftCatalogId !== catalogId || rendererChanged) {
+              this._activeDraft.set(this.getInitialDraft(catalogId));
+            }
+          });
+        }
+      },
+      {allowSignalWrites: true},
+    );
 
     toObservable(this._draftInput)
       .pipe(skip(1), debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))

@@ -185,6 +185,8 @@ export class SettingsService {
         this._effectiveApiKey.set(custom.key);
         return custom.key;
       }
+      this._effectiveApiKey.set('');
+      return '';
     }
 
     if (typeof staticKeys['default'] === 'string') {

@@ -364,12 +364,17 @@ export class StartupResolution {
   }
 
   async confirmOrigin(origin: string): Promise<boolean> {
-    const dialogRef = this.dialog.open(OriginConfirmationDialog, {
-      data: {origin},
-      width: '450px',
-    });
-    const result = await firstValueFrom(dialogRef.afterClosed());
-    return !!result;
+    try {
+      const dialogRef = this.dialog.open(OriginConfirmationDialog, {
+        data: {origin},
+        width: '450px',
+      });
+      const result = await firstValueFrom(dialogRef.afterClosed());
+      return !!result;
+    } catch (err) {
+      console.warn('Failed to open origin confirmation dialog:', err);
+      return false;
+    }
   }
 
   getResolvedRendererUrl(): string | null {
