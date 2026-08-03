@@ -68,6 +68,11 @@ test.describe('Settings and Client Configuration', () => {
         localStorage.getItem('a2ui_composer_renderer_url'),
       );
       expect(storedRendererUrl).toBe('http://localhost:9090');
+
+      const storedApiKeyId = await page.evaluate(() =>
+        localStorage.getItem('a2ui_composer_selected_api_key'),
+      );
+      expect(storedApiKeyId).toMatch(/^custom-\d+$/);
     });
 
     test('persists configuration successfully with default relative renderer URL and loads workspace with pre-populated draft', async ({
@@ -84,6 +89,11 @@ test.describe('Settings and Client Configuration', () => {
       await page.waitForLoadState('load');
 
       await expect(page.locator('.workspace-container')).toBeVisible();
+
+      const storedApiKeyId = await page.evaluate(() =>
+        localStorage.getItem('a2ui_composer_selected_api_key'),
+      );
+      expect(storedApiKeyId).toMatch(/^custom-\d+$/);
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();

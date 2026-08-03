@@ -100,6 +100,7 @@ describe('SettingsService', () => {
       getCustomApiKey: vi.fn().mockResolvedValue(null),
       saveCustomApiKey: vi.fn().mockResolvedValue(undefined),
       deleteCustomApiKey: vi.fn().mockResolvedValue(undefined),
+      deleteCredential: vi.fn().mockResolvedValue(undefined),
     };
 
     TestBed.configureTestingModule({
@@ -743,7 +744,6 @@ describe('SettingsService', () => {
         selectedRendererId: 'dev',
         rendererUrl: 'http://localhost:3000',
         selectedApiKeyId: 'custom-1',
-        apiKey: 'secret-key-123',
       });
 
       expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBe('dev');
@@ -751,6 +751,21 @@ describe('SettingsService', () => {
       expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('http://localhost:3000');
       expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_API_KEY)).toBe('custom-1');
       expect(service.selectedApiKeyId()).toBe('custom-1');
+      expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('personal-indexeddb-key');
+    });
+
+    it('directly sets explicit free-form apiKey in 3P mode when no selectedApiKeyId is provided', async () => {
+      mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
+      mockStartupResolution.isContextLocked.mockReturnValue(false);
+      mockConfigProvider.isApiKeyProvidedByConfig.mockReturnValue(false);
+
+      await service.commitSettings({
+        selectedRendererId: null,
+        rendererUrl: 'http://localhost:3000',
+        selectedApiKeyId: null,
+        apiKey: 'secret-key-123',
+      });
+
       expect(mockConfigProvider.setGeminiApiKey).toHaveBeenCalledWith('secret-key-123');
     });
 

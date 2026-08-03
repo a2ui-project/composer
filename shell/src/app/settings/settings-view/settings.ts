@@ -17,7 +17,6 @@
 import {
   Component,
   computed,
-  effect,
   HostListener,
   inject,
   OnInit,
@@ -25,7 +24,7 @@ import {
   Signal,
   WritableSignal,
 } from '@angular/core';
-import {takeUntilDestroyed, toSignal} from '@angular/core/rxjs-interop';
+import {toSignal} from '@angular/core/rxjs-interop';
 import {NonNullableFormBuilder, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';

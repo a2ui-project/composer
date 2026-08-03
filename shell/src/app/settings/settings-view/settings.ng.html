@@ -24,7 +24,7 @@
         <div class="form-section">
           <h3>Renderer</h3>
           @if (isLocked()) {
-            <div class="locked-notice">
+            <div class="locked-notice" role="status">
               <mat-icon color="warn" aria-hidden="true">lock</mat-icon>
               <span>Active URL configuration is locked.</span>
             </div>
@@ -54,7 +54,7 @@
             Simulate external 3P context to verify Gemini API key provisioning workflows.
           </p>
           @if (isLocked()) {
-            <div class="locked-notice auth-locked-notice">
+            <div class="locked-notice auth-locked-notice" role="status">
               <mat-icon color="warn" aria-hidden="true">lock</mat-icon>
               <span>Authentication mode overrides are locked.</span>
             </div>

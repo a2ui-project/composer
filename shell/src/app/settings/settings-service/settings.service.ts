@@ -399,7 +399,12 @@ export class SettingsService {
     this._selectedApiKeyId.set(apiKeyId);
 
     if (this.startupResolution.isThirdPartyEnvironment()) {
-      if (options.apiKey !== undefined && !this.configProvider.isApiKeyProvidedByConfig()) {
+      if (
+        options.apiKey !== undefined &&
+        options.apiKey !== '' &&
+        !options.selectedApiKeyId &&
+        !this.configProvider.isApiKeyProvidedByConfig()
+      ) {
         await this.configProvider.setGeminiApiKey(options.apiKey.trim());
       } else {
         await this.syncEffectiveApiKeyToConfigProvider();
