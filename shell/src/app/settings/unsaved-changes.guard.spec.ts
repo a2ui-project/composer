@@ -95,4 +95,22 @@ describe('unsavedChangesGuard', () => {
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(result).toBe(true);
   });
+
+  it('returns true when component is undefined or null', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+
+    expect(runGuard(undefined as unknown as Settings)).toBe(true);
+    expect(runGuard(null as unknown as Settings)).toBe(true);
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns true when component does not implement hasUnsavedChanges', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const mockComponent = {} as unknown as Settings;
+
+    const result = runGuard(mockComponent);
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(result).toBe(true);
+  });
 });

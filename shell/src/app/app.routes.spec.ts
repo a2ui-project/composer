@@ -159,4 +159,13 @@ describe('App Routes Active Verification', () => {
     await harness.navigateByUrl('/unknown-wildcard-route');
     expect(router.url).toBe('/');
   });
+
+  it('triggers unsavedChangesGuard when navigating away from settings', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await harness.navigateByUrl('/settings');
+    expect(router.url).toBe('/settings');
+
+    await harness.navigateByUrl('/gallery');
+    expect(router.url).toBe('/gallery');
+  });
 });
