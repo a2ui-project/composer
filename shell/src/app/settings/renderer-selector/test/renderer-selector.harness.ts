@@ -63,7 +63,7 @@ export class RendererSelectorHarness extends ComponentHarness {
     await this.openSelect();
     const getSubtexts = this.locatorFactory
       .documentRootLocatorFactory()
-      .locatorForAll('.renderer-url-subtext');
+      .locatorForAll('.renderer-option .renderer-url-subtext');
     const subtextEls = await getSubtexts();
     return Promise.all(subtextEls.map(async el => (await el.text()).trim()));
   }

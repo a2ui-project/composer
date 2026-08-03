@@ -302,9 +302,10 @@ describe('RendererSelectorComponent & AddRendererDialogComponent', () => {
     expect(subtexts).toEqual(['http://default.example.com', 'http://custom.example.com']);
   });
 
-  it('displays only the name of the selected renderer in the select trigger box', async () => {
+  it('displays the name and renderer URL subtext of the selected renderer in the select trigger box', async () => {
     const triggerText = await harness.getValueText();
-    expect(triggerText).toBe('Default Static Renderer');
+    expect(triggerText).toContain('Default Static Renderer');
+    expect(triggerText).toContain('http://default.example.com');
   });
 
   it('displays a disabled empty-state option when renderers list is empty', async () => {

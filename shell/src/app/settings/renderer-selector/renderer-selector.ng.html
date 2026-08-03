@@ -24,7 +24,12 @@
       (selectionChange)="onSelectionChange($event.value)"
     >
       <mat-select-trigger>
-        {{ selectedRenderer()?.name }}
+        <div class="renderer-trigger-content">
+          <span class="renderer-name">{{ selectedRenderer()?.name }}</span>
+          @if (selectedRenderer()?.rendererUrl) {
+            <span class="renderer-url-subtext">{{ selectedRenderer()?.rendererUrl }}</span>
+          }
+        </div>
       </mat-select-trigger>
       @if (renderers().length === 0) {
         <mat-option [disabled]="true" class="empty-state-option"

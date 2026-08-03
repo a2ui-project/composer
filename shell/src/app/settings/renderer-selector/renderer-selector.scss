@@ -23,6 +23,20 @@
   flex: 1;
 }
 
+.renderer-trigger-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  line-height: normal;
+
+  .renderer-name {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 .renderer-option {
   height: auto !important;
   line-height: normal !important;
