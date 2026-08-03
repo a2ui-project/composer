@@ -20,14 +20,11 @@ import {
   inject,
   OnInit,
   AfterViewInit,
-  DestroyRef,
   signal,
   untracked,
   computed,
   ElementRef,
   viewChild,
-  ViewContainerRef,
-  ChangeDetectorRef,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
@@ -60,9 +57,6 @@ export declare interface WorkspaceMessagePayload {
   styleUrl: './composer-workspace.scss',
 })
 export class ComposerWorkspace implements OnInit, AfterViewInit {
-  private readonly destroyRef = inject(DestroyRef);
-  private readonly cdr = inject(ChangeDetectorRef);
-  private readonly viewContainerRef = inject(ViewContainerRef);
   private readonly startupResolution = inject(StartupResolution);
   private readonly hostComm = inject(HostCommunication);
   private readonly configProvider = inject(AppConfigProvider);
@@ -140,9 +134,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   ngAfterViewInit(): void {
     this.composerDockview.initialize({
       rootEl: this.dockviewRoot().nativeElement,
-      viewContainerRef: this.viewContainerRef,
-      cdr: this.cdr,
-      destroyRef: this.destroyRef,
       isDarkTheme: this.isDarkTheme(),
       showMockRules: this.showMockRules(),
       onActivePanelChange: panelId => {

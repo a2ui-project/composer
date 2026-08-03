@@ -16,6 +16,7 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ComposerPanelId, ComposerWorkspace} from './composer-workspace';
+import {ComposerDockview} from './composer-dockview.service';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
@@ -139,7 +140,7 @@ describe('ComposerWorkspace Dashboard', () => {
     // Dockview dynamically renders panels via dynamicComponentRefs.
     // In jsdom without real dimensions, dockview may not attach them all to the DOM,
     // so we verify they were instantiated by the Angular view container.
-    const manager = fixture.componentInstance['composerDockview'];
+    const manager = fixture.debugElement.injector.get(ComposerDockview);
     const refs = manager.dynamicComponentRefs;
     expect(refs.length).toBe(7);
     const types = refs.map(
@@ -152,7 +153,7 @@ describe('ComposerWorkspace Dashboard', () => {
   });
 
   it('delegates clearLogs to all queried child components when clearAllLogs is called', () => {
-    const manager = fixture.componentInstance['composerDockview'];
+    const manager = fixture.debugElement.injector.get(ComposerDockview);
 
     const rawMsgSpy = vi.spyOn(manager['rawMessagesInstance']!, 'clearLogs');
     const eventsSpy = vi.spyOn(manager['eventsInstance']!, 'clearLogs');
@@ -264,7 +265,7 @@ describe('ComposerWorkspace Dashboard', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const manager = fixture.componentInstance['composerDockview'];
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
       const eventsPanel = manager.api.getGroupPanel(ComposerPanelId.Events);
       const errorsPanel = manager.api.getGroupPanel(ComposerPanelId.Errors);
       expect(eventsPanel?.title).toBe('Events (5)');
@@ -284,7 +285,7 @@ describe('ComposerWorkspace Dashboard', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const manager = fixture.componentInstance['composerDockview'];
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
       const mockRulesPanel = manager.api.getGroupPanel(ComposerPanelId.MockRules);
       expect(mockRulesPanel).toBeDefined();
 
@@ -302,7 +303,7 @@ describe('ComposerWorkspace Dashboard', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const manager = fixture.componentInstance['composerDockview'];
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
       expect(manager.api.options.className).toBe('dockview-theme-dark');
 
       configProvider.themePreference.set(ThemePreference.LIGHT);
@@ -340,7 +341,7 @@ describe('ComposerWorkspace Dashboard', () => {
       Object.defineProperty(tabsContainer, 'scrollWidth', {value: 200, configurable: true});
       Object.defineProperty(tabsContainer, 'clientWidth', {value: 100, configurable: true});
 
-      const manager = fixture.componentInstance['composerDockview'];
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
       manager.checkTabOverflow(rootEl);
       await new Promise(resolve => requestAnimationFrame(resolve));
 
@@ -362,8 +363,8 @@ describe('ComposerWorkspace Dashboard', () => {
         .spyOn(window, 'requestAnimationFrame')
         .mockImplementation(() => ++nextId);
 
-      const manager = fixture.componentInstance['composerDockview'] as unknown as {
-        checkTabOverflow: (el: HTMLElement) => void;
+      const manager = fixture.debugElement.injector.get(ComposerDockview) as unknown as {
+        checkTabOverflow: (el?: HTMLElement) => void;
         animationFrameId?: number;
       };
       manager.animationFrameId = undefined;
@@ -381,8 +382,8 @@ describe('ComposerWorkspace Dashboard', () => {
       const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame');
       const requestSpy = vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(999);
 
-      const manager = fixture.componentInstance['composerDockview'] as unknown as {
-        checkTabOverflow: (el: HTMLElement) => void;
+      const manager = fixture.debugElement.injector.get(ComposerDockview) as unknown as {
+        checkTabOverflow: (el?: HTMLElement) => void;
         animationFrameId?: number;
       };
       const rootEl = fixture.componentInstance.dockviewRoot().nativeElement;
@@ -412,7 +413,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel and triggers change detection when pointerdown occurs on tab element', () => {
       const component = fixture.componentInstance;
-      const manager = component['composerDockview'];
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
       const eventsPanel = manager.api.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -434,7 +435,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel when click occurs on tab element', () => {
       const component = fixture.componentInstance;
-      const manager = component['composerDockview'];
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
       const eventsPanel = manager.api.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -456,7 +457,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel when pointerdown occurs on a nested child element within a tab', () => {
       const component = fixture.componentInstance;
-      const manager = component['composerDockview'];
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
       const eventsPanel = manager.api.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -482,7 +483,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('activates panel when click occurs on a nested child element within a tab', () => {
       const component = fixture.componentInstance;
-      const manager = component['composerDockview'];
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
       const eventsPanel = manager.api.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -508,7 +509,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
     it('does not activate panel when click occurs on non-tab workspace elements', () => {
       const component = fixture.componentInstance;
-      const manager = component['composerDockview'];
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
       const eventsPanel = manager.api.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;
@@ -527,10 +528,10 @@ describe('ComposerWorkspace Dashboard', () => {
     });
 
     it('triggers change detection via cdr.markForCheck when active panel changes', () => {
-      const component = fixture.componentInstance;
-      const markForCheckSpy = vi.spyOn(component['cdr'], 'markForCheck');
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
+      const cdr = manager['cdr'];
+      const markForCheckSpy = vi.spyOn(cdr, 'markForCheck');
 
-      const manager = component['composerDockview'];
       const eventsPanel = manager.api.getGroupPanel(ComposerPanelId.Events);
       expect(eventsPanel).toBeDefined();
       if (!eventsPanel) return;

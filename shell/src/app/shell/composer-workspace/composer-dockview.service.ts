@@ -40,9 +40,6 @@ import {ComposerPanelId} from './composer-panel-id';
 
 export interface DockviewManagerInitOptions {
   rootEl: HTMLElement;
-  viewContainerRef: ViewContainerRef;
-  cdr: ChangeDetectorRef;
-  destroyRef: DestroyRef;
   isDarkTheme: boolean;
   showMockRules: boolean;
   onActivePanelChange?: (panelId: string | undefined) => void;
@@ -52,12 +49,14 @@ export interface DockviewManagerInitOptions {
  * Service encapsulating Dockview initialization, dynamic component instantiation,
  * layout persistence, DOM resize/tab-overflow handling, and tab event delegation.
  */
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable()
 export class ComposerDockview {
   private readonly storage = inject(LocalStorageInteractions);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly viewContainerRef = inject(ViewContainerRef);
+  private readonly cdr = inject(ChangeDetectorRef);
 
+  private rootEl?: HTMLElement;
   private dockviewApi!: DockviewComponent;
   private componentRefs: ComponentRef<unknown>[] = [];
 
@@ -67,6 +66,7 @@ export class ComposerDockview {
 
   private resizeObserver?: ResizeObserver;
   private animationFrameId?: number;
+  private saveTimeout?: ReturnType<typeof setTimeout>;
   private isInitialized = false;
 
   /**
@@ -87,36 +87,30 @@ export class ComposerDockview {
    * Initializes Dockview, builds layout, and sets up event listeners.
    */
   initialize(options: DockviewManagerInitOptions): void {
-    const {
-      rootEl,
-      viewContainerRef,
-      cdr,
-      destroyRef,
-      isDarkTheme,
-      showMockRules,
-      onActivePanelChange,
-    } = options;
+    const {rootEl, isDarkTheme, showMockRules, onActivePanelChange} = options;
+    this.rootEl = rootEl;
 
     this.dockviewApi = new DockviewComponent(rootEl, {
       className: isDarkTheme ? 'dockview-theme-dark' : 'dockview-theme-light',
       defaultRenderer: 'always',
       createComponent: panelOptions =>
-        this.createPanelComponent(panelOptions.name as ComposerPanelId, viewContainerRef),
+        this.createPanelComponent(panelOptions.name as ComposerPanelId),
     });
 
     this.dockviewApi.onDidActivePanelChange(event => {
       onActivePanelChange?.(event.panel?.id);
-      this.checkTabOverflow(rootEl);
-      cdr.markForCheck();
+      this.checkTabOverflow();
+      this.cdr.markForCheck();
     });
 
     this.buildDockviewLayout(showMockRules);
 
-    let saveTimeout: ReturnType<typeof setTimeout>;
     this.dockviewApi.onDidLayoutChange(() => {
-      this.checkTabOverflow(rootEl);
-      clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(() => {
+      this.checkTabOverflow();
+      if (this.saveTimeout !== undefined) {
+        clearTimeout(this.saveTimeout);
+      }
+      this.saveTimeout = setTimeout(() => {
         this.storage.setItem(
           LocalStorageKey.DOCKVIEW_LAYOUT,
           JSON.stringify(this.dockviewApi.toJSON()),
@@ -124,10 +118,10 @@ export class ComposerDockview {
       }, 1000);
     });
 
-    this.dockviewApi.onDidAddPanel(() => this.checkTabOverflow(rootEl));
-    this.dockviewApi.onDidRemovePanel(() => this.checkTabOverflow(rootEl));
+    this.dockviewApi.onDidAddPanel(() => this.checkTabOverflow());
+    this.dockviewApi.onDidRemovePanel(() => this.checkTabOverflow());
 
-    this.resizeObserver = new ResizeObserver(() => this.checkTabOverflow(rootEl));
+    this.resizeObserver = new ResizeObserver(() => this.checkTabOverflow());
     this.resizeObserver.observe(rootEl);
 
     // Initial layout pass
@@ -135,18 +129,20 @@ export class ComposerDockview {
     const height = rootEl.clientHeight || 1000;
     this.dockviewApi.layout(width, height);
     this.isInitialized = true;
-    this.checkTabOverflow(rootEl);
+    this.checkTabOverflow();
 
     // Register capture-phase pointerdown and click event delegation
     const handleTabInteraction = (event: Event) => this.handleTabInteraction(event);
     rootEl.addEventListener('pointerdown', handleTabInteraction, true);
     rootEl.addEventListener('click', handleTabInteraction, true);
 
-    destroyRef.onDestroy(() => {
+    this.destroyRef.onDestroy(() => {
       if (this.animationFrameId !== undefined) {
         cancelAnimationFrame(this.animationFrameId);
       }
-      clearTimeout(saveTimeout);
+      if (this.saveTimeout !== undefined) {
+        clearTimeout(this.saveTimeout);
+      }
       this.resizeObserver?.disconnect();
       rootEl.removeEventListener('pointerdown', handleTabInteraction, true);
       rootEl.removeEventListener('click', handleTabInteraction, true);
@@ -199,25 +195,27 @@ export class ComposerDockview {
     this.errorsInstance?.clearLogs();
   }
 
-  checkTabOverflow(rootEl: HTMLElement): void {
+  checkTabOverflow(element?: HTMLElement): void {
+    const targetEl = element ?? this.rootEl;
+    if (!targetEl) return;
+
     if (this.animationFrameId !== undefined) {
       cancelAnimationFrame(this.animationFrameId);
     }
     this.animationFrameId = requestAnimationFrame(() => {
       this.animationFrameId = undefined;
-      if (!rootEl) return;
-      const tabContainers = rootEl.querySelectorAll<HTMLElement>('.dv-tabs-container');
+      const tabContainers = targetEl.querySelectorAll<HTMLElement>('.dv-tabs-container');
       let hasOverflow = false;
       tabContainers.forEach(container => {
         if (container.scrollWidth > container.clientWidth + 2) {
           hasOverflow = true;
         }
       });
-      rootEl.classList.toggle('has-tab-overflow', hasOverflow);
+      targetEl.classList.toggle('has-tab-overflow', hasOverflow);
     });
   }
 
-  private createPanelComponent(panelId: ComposerPanelId, viewContainerRef: ViewContainerRef) {
+  private createPanelComponent(panelId: ComposerPanelId) {
     let type: Type<unknown> | undefined;
     switch (panelId) {
       case ComposerPanelId.Chat:
@@ -254,7 +252,7 @@ export class ComposerDockview {
       };
     }
 
-    const componentRef = viewContainerRef.createComponent(type);
+    const componentRef = this.viewContainerRef.createComponent(type);
     this.componentRefs.push(componentRef);
 
     if (type === RawMessages) this.rawMessagesInstance = componentRef.instance as RawMessages;
