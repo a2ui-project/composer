@@ -72,10 +72,8 @@ export class StartupResolution {
   readonly activeRenderer = computed<RendererConfig | null>(() => {
     const renderers = this._renderers();
     const selectedId = this._selectedRendererId();
-    if (selectedId && Object.prototype.hasOwnProperty.call(renderers, selectedId)) {
-      return renderers[selectedId];
-    }
-    return null;
+    if (!selectedId) return null;
+    return this.getRendererById(selectedId, renderers);
   });
 
   async setSelectedRendererId(rendererId: string | null): Promise<boolean> {

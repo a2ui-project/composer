@@ -523,6 +523,21 @@ describe('StartupResolution', () => {
       expect(service.activeRenderer()).toBeNull();
     });
 
+    it('resolves custom renderers saved in LocalStorage via activeRenderer signal', () => {
+      localStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'custom-1', name: 'Custom Renderer 1', rendererUrl: 'http://custom-renderer:3000'},
+        ]),
+      );
+      service.setSelectedRendererId('custom-1');
+      expect(service.activeRenderer()).toEqual({
+        id: 'custom-1',
+        name: 'Custom Renderer 1',
+        rendererUrl: 'http://custom-renderer:3000',
+      });
+    });
+
     it('stores and retrieves profile configs containing optional displayName', async () => {
       mockFetchConfig({
         renderers: {
