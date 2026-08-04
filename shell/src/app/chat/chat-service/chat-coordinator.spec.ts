@@ -173,8 +173,9 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     catalogManagementMock.activeCatalog.set(null);
     const prompt = service.systemPrompt();
 
-    expect(prompt).toContain('You are an AI assistant designed to help');
-    expect(prompt).toContain('Status: Awaiting renderer dynamic handshake');
+    expect(prompt).toContain(
+      'You are an expert A2UI generation assistant. Your role is to translate user',
+    );
   });
 
   it('injects dynamic catalog title and registered component schemas', () => {
