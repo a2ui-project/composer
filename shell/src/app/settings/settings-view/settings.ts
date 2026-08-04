@@ -65,7 +65,9 @@ export class Settings implements OnInit {
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
   readonly selectedRendererId: WritableSignal<string | null> = signal<string | null>(null);
-  readonly selectedApiKeyId: WritableSignal<string | null> = signal<string | null>(null);
+  readonly selectedApiKeyId: Signal<string | null> = computed(() =>
+    this.settingsService.selectedApiKeyId(),
+  );
 
   readonly selectedRendererOption: Signal<RendererOption | undefined> = computed(() => {
     const id = this.selectedRendererId();
@@ -109,8 +111,7 @@ export class Settings implements OnInit {
     const currentRendererId = this.settingsService.selectedRendererId() || 'Custom';
     this.selectedRendererId.set(currentRendererId);
 
-    const currentApiKeyId = this.settingsService.selectedApiKeyId() || null;
-    this.selectedApiKeyId.set(currentApiKeyId);
+    void this.settingsService.getEffectiveApiKey();
 
     const is3P = this.startupResolution.isThirdPartyEnvironment();
     this.isThirdParty.set(is3P);
@@ -129,7 +130,6 @@ export class Settings implements OnInit {
   }
 
   async onApiKeySelected(apiKeyId: string | null): Promise<void> {
-    this.selectedApiKeyId.set(apiKeyId);
     await this.settingsService.selectApiKey(apiKeyId);
   }
 

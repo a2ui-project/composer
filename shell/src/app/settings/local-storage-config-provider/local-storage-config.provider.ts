@@ -96,8 +96,10 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
       const selectedId = this.localStorageInteractions.getItem(LocalStorageKey.SELECTED_API_KEY);
       if (selectedId) {
         const staticApiKeys = this.startup.apiKeys() || {};
-        if (typeof staticApiKeys[selectedId] === 'string') {
-          this.setApiKeyFromConfig(staticApiKeys[selectedId]);
+        const entry = staticApiKeys[selectedId];
+        const keyVal = entry?.apiKey || '';
+        if (keyVal) {
+          this.setApiKeyFromConfig(keyVal);
           return;
         }
         const custom = await this.secureCredentialsStorage.getCustomApiKey(selectedId);

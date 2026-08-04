@@ -40,6 +40,7 @@ import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
 class MockStartupResolution {
   readonly resolvedUrl = signal('http://localhost:4200');
   readonly renderers = signal<Record<string, RendererConfig>>({});
+  readonly apiKeys = signal<Record<string, ApiKeyConfig>>({});
   readonly selectedRendererId = signal<string | null>(null);
   readonly activeRenderer = signal<RendererConfig | null>(null);
   readonly isLoading = signal(false);

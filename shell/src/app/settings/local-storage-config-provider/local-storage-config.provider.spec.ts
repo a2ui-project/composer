@@ -542,7 +542,7 @@ describe('LocalStorageAppConfigProvider', () => {
     });
 
     it('initializes geminiApiKey with static configuration API key when SELECTED_API_KEY matches static key ID', async () => {
-      mockStartupService.apiKeys.mockReturnValue({'static-id': 'static-secret-value'});
+      mockStartupService.apiKeys.mockReturnValue({'static-id': {apiKey: 'static-secret-value'}});
       localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'static-id');
 
       const provider = setupProvider();

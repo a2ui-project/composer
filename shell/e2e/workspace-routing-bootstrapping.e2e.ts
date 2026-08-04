@@ -47,6 +47,19 @@ test.describe('Startup Resolution & Redirection', () => {
   test('does not redirect if default renderer URL is present but API key is missing', async ({
     page,
   }) => {
+    await page.route('**/config.json', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          renderers: {
+            default: {
+              rendererUrl: '/samples/ng-basic-catalog/',
+            },
+          },
+          apiKeys: {},
+        }),
+      });
+    });
     await page.goto('/');
     await page.waitForURL(url => url.pathname === '/');
     await expect(page.locator('.workspace-container')).toBeVisible();

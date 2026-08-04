@@ -429,6 +429,10 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
+          },
+        },
+        apiKeys: {
+          default: {
             apiKey: 'AIzaSyCamelKey',
           },
         },
@@ -445,6 +449,10 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
+          },
+        },
+        apiKeys: {
+          default: {
             apiKey: '   ',
           },
         },
@@ -460,6 +468,10 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
+          },
+        },
+        apiKeys: {
+          default: {
             apiKey: '   AIzaSyTrimmedKey   ',
           },
         },
@@ -468,6 +480,53 @@ describe('StartupResolution', () => {
       await service.resolveStartupConfiguration();
 
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyTrimmedKey');
+    });
+
+    it('supports object schema apiKeys ({ apiKey, displayName }) in config.json', async () => {
+      mockFetchConfig({
+        renderers: {
+          default: {
+            rendererUrl: 'http://base:3000',
+          },
+        },
+        apiKeys: {
+          default: {
+            apiKey: 'AIzaSyObjectKey',
+            displayName: 'Gemini Enterprise',
+          },
+        },
+      });
+
+      const url = await service.resolveStartupConfiguration();
+
+      expect(url).toBe('http://base:3000');
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyObjectKey');
+      expect(service.apiKeys()).toEqual({
+        default: {
+          apiKey: 'AIzaSyObjectKey',
+          displayName: 'Gemini Enterprise',
+        },
+      });
+    });
+
+    it('trims whitespace when object schema apiKey contains surrounding spaces', async () => {
+      mockFetchConfig({
+        renderers: {
+          default: {
+            rendererUrl: 'http://base:3000',
+          },
+        },
+        apiKeys: {
+          default: {
+            apiKey: '   AIzaSyObjectTrimmed   ',
+            displayName: 'Trimmed Key',
+          },
+        },
+      });
+
+      await service.resolveStartupConfiguration();
+
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('AIzaSyObjectTrimmed');
     });
   });
 
@@ -848,6 +907,10 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
+          },
+        },
+        apiKeys: {
+          default: {
             apiKey: '  test-api-key  ',
           },
         },
@@ -858,11 +921,15 @@ describe('StartupResolution', () => {
       expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
     });
 
-    it('uses renderer API key from renderers config when renderer is selected', async () => {
+    it('uses renderer API key from apiKeys config when renderer is selected', async () => {
       mockFetchConfig({
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
+          },
+        },
+        apiKeys: {
+          default: {
             apiKey: 'renderer-key',
           },
         },
@@ -877,11 +944,10 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            apiKey: 'renderer-key',
           },
         },
         apiKeys: {
-          default: 'map-api-key',
+          default: {apiKey: 'map-api-key'},
         },
       });
 
@@ -894,6 +960,13 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
+          },
+          dev: {
+            rendererUrl: 'http://dev:3000',
+          },
+        },
+        apiKeys: {
+          default: {
             apiKey: 'root-key',
           },
           dev: {
@@ -914,10 +987,14 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
-            apiKey: 'root-key',
           },
           dev: {
             rendererUrl: 'http://dev:3000',
+          },
+        },
+        apiKeys: {
+          default: {
+            apiKey: 'root-key',
           },
         },
       });
@@ -934,6 +1011,10 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
+          },
+        },
+        apiKeys: {
+          default: {
             apiKey: '   ',
           },
         },
@@ -963,6 +1044,10 @@ describe('StartupResolution', () => {
         renderers: {
           default: {
             rendererUrl: 'http://base:3000',
+          },
+        },
+        apiKeys: {
+          default: {
             apiKey: 12345 as unknown as string,
           },
         },
@@ -1049,7 +1134,7 @@ describe('StartupResolution', () => {
           dev: {rendererUrl: 'http://dev-renderer:3000'},
         },
         apiKeys: {
-          dev: 'dev-api-key-from-map',
+          dev: {apiKey: 'dev-api-key-from-map'},
         },
       });
 
@@ -1070,7 +1155,7 @@ describe('StartupResolution', () => {
           default: {rendererUrl: 'http://default-renderer:3000'},
         },
         apiKeys: {
-          default: 'default-api-key-from-map',
+          default: {apiKey: 'default-api-key-from-map'},
         },
       });
 
@@ -1181,7 +1266,7 @@ describe('StartupResolution', () => {
           dev: {rendererUrl: 'http://dev-renderer:3000'},
         },
         apiKeys: {
-          dev: 'dev-api-key',
+          dev: {apiKey: 'dev-api-key'},
         },
       });
 

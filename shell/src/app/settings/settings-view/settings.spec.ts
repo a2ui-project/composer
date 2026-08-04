@@ -56,7 +56,7 @@ describe('Settings', () => {
   let mockResolvedUrl: WritableSignal<string | null>;
   let mockRenderers: WritableSignal<Record<string, RendererConfig>>;
   let mockSelectedRendererId: WritableSignal<string | null>;
-  let mockApiKeys: WritableSignal<Record<string, string>>;
+  let mockApiKeys: WritableSignal<Record<string, ApiKeyConfig>>;
   let mockActiveRenderer: WritableSignal<RendererConfig | null>;
   let mockStartupResolution: {
     resolvedUrl: Signal<string | null>;
@@ -65,7 +65,7 @@ describe('Settings', () => {
     renderers: Signal<Record<string, RendererConfig>>;
     selectedRendererId: Signal<string | null>;
     activeRenderer: Signal<RendererConfig | null>;
-    apiKeys: Signal<Record<string, string>>;
+    apiKeys: Signal<Record<string, ApiKeyConfig>>;
     setSelectedRendererId: Mock<(id: string | null) => void>;
   };
   let mockLatestEnvelope: WritableSignal<MessageEnvelope | null>;
@@ -510,7 +510,7 @@ describe('Settings', () => {
   describe('onApiKeySelected', () => {
     it('updates selectedApiKeyId signal and invokes SettingsService.selectApiKey when API key ID is provided', async () => {
       const {component} = await setupComponent();
-      const selectSpy = vi.spyOn(component.settingsService, 'selectApiKey').mockResolvedValue();
+      const selectSpy = vi.spyOn(component.settingsService, 'selectApiKey');
 
       await component.onApiKeySelected('api-key-1');
 
@@ -520,8 +520,8 @@ describe('Settings', () => {
 
     it('updates selectedApiKeyId signal to null and invokes SettingsService.selectApiKey when null is provided', async () => {
       const {component} = await setupComponent();
-      const selectSpy = vi.spyOn(component.settingsService, 'selectApiKey').mockResolvedValue();
-      component.selectedApiKeyId.set('api-key-1');
+      await component.onApiKeySelected('api-key-1');
+      const selectSpy = vi.spyOn(component.settingsService, 'selectApiKey');
 
       await component.onApiKeySelected(null);
 

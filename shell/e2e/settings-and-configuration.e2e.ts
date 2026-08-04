@@ -74,7 +74,9 @@ test.describe('Settings and Client Configuration', () => {
       await page.locator('#api-key-value-input').fill('new-unique-api-key');
       await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
 
-      await page.waitForFunction(() => !!localStorage.getItem('a2ui_composer_selected_api_key'));
+      await page.waitForFunction(() =>
+        localStorage.getItem('a2ui_composer_selected_api_key')?.startsWith('custom-'),
+      );
 
       const storedApiKeyId = await page.evaluate(() =>
         localStorage.getItem('a2ui_composer_selected_api_key'),
@@ -172,6 +174,18 @@ test.describe('Settings and Client Configuration', () => {
     test('verifies 1P vs 3P environment detection and disables chat panel on missing API keys', async ({
       page,
     }) => {
+      await page.route('**/config.json', async route => {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            renderers: {
+              default: {
+                rendererUrl: 'http://localhost:3000',
+              },
+            },
+          }),
+        });
+      });
       await page.addInitScript(() => {
         localStorage.setItem('a2ui_composer_force_3p', 'true');
         localStorage.removeItem('a2ui_composer_force_1p');

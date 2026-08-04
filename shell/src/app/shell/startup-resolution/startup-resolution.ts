@@ -37,9 +37,14 @@ export declare interface RendererConfig {
   samplePayload?: string;
 }
 
+export declare interface ApiKeyConfig {
+  apiKey: string;
+  displayName?: string;
+}
+
 export declare interface AppConfig {
   renderers?: Record<string, RendererConfig>;
-  apiKeys?: Record<string, string>;
+  apiKeys?: Record<string, ApiKeyConfig>;
 }
 
 @Injectable({
@@ -62,7 +67,7 @@ export class StartupResolution {
 
   private readonly _renderers = signal<Record<string, RendererConfig>>({});
   private readonly _selectedRendererId = signal<string | null>(null);
-  private readonly _apiKeys = signal<Record<string, string>>({});
+  private readonly _apiKeys = signal<Record<string, ApiKeyConfig>>({});
 
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
   readonly renderers = this._renderers.asReadonly();
@@ -145,20 +150,11 @@ export class StartupResolution {
     staticConfig: AppConfig,
     selectedId: string | null,
   ): Promise<void> {
-    let rawApiKey: string | undefined;
-    if (selectedId) {
-      if (staticConfig.apiKeys?.[selectedId]) {
-        rawApiKey = staticConfig.apiKeys[selectedId];
-      } else if (
-        staticConfig.renderers &&
-        !Array.isArray(staticConfig.renderers) &&
-        staticConfig.renderers[selectedId]?.apiKey
-      ) {
-        rawApiKey = staticConfig.renderers[selectedId].apiKey;
-      }
+    let keyConfig: ApiKeyConfig | undefined;
+    if (selectedId && staticConfig.apiKeys?.[selectedId]) {
+      keyConfig = staticConfig.apiKeys[selectedId];
     }
-
-    const apiKey = typeof rawApiKey === 'string' ? rawApiKey.trim() : '';
+    const apiKey = typeof keyConfig?.apiKey === 'string' ? keyConfig.apiKey.trim() : '';
 
     try {
       if (apiKey) {

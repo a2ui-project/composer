@@ -15,7 +15,11 @@
  */
 
 import {Injectable, Signal, computed, inject, signal} from '@angular/core';
-import {RendererConfig, StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {
+  ApiKeyConfig,
+  RendererConfig,
+  StartupResolution,
+} from '../../shell/startup-resolution/startup-resolution';
 import {AppConfigProvider} from '../app-config-provider/app-config-provider';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
@@ -126,7 +130,7 @@ export class SettingsService {
   readonly effectiveApiKey$: Signal<string> = this._effectiveApiKey.asReadonly();
   readonly effectiveApiKey: Signal<string> = this._effectiveApiKey.asReadonly();
 
-  private getStaticApiKeys(): Record<string, string> {
+  private getStaticApiKeys(): Record<string, ApiKeyConfig> {
     return this.startupResolution.apiKeys() || {};
   }
 
@@ -136,10 +140,10 @@ export class SettingsService {
    */
   async getAvailableApiKeys(): Promise<ApiKeyOption[]> {
     const staticKeysObj = this.getStaticApiKeys();
-    const staticKeys: ApiKeyOption[] = Object.entries(staticKeysObj).map(([id, key]) => ({
+    const staticKeys: ApiKeyOption[] = Object.entries(staticKeysObj).map(([id, config]) => ({
       id,
-      name: id,
-      key,
+      name: config.displayName || id,
+      key: config.apiKey || '',
       readOnly: true,
     }));
     const customKeysRaw = await this.secureCredentialsStorage.getCustomApiKeys();
@@ -171,15 +175,20 @@ export class SettingsService {
    * Resolves the effective API key based on selected ID or fallback rules.
    */
   async getEffectiveApiKey(): Promise<string> {
-    const selectedId = this.selectedApiKeyId$();
+    let selectedId = this.selectedApiKeyId$();
     const staticKeys = this.getStaticApiKeys();
 
+    if (!selectedId && staticKeys['default'] !== undefined) {
+      await this.selectApiKey('default');
+      selectedId = 'default';
+    }
+
+    if (selectedId && staticKeys[selectedId]) {
+      const val = staticKeys[selectedId].apiKey || '';
+      this._effectiveApiKey.set(val);
+      return val;
+    }
     if (selectedId) {
-      if (typeof staticKeys[selectedId] === 'string') {
-        const val = staticKeys[selectedId];
-        this._effectiveApiKey.set(val);
-        return val;
-      }
       const custom = await this.secureCredentialsStorage.getCustomApiKey(selectedId);
       if (custom) {
         this._effectiveApiKey.set(custom.key);
@@ -187,12 +196,6 @@ export class SettingsService {
       }
       this._effectiveApiKey.set('');
       return '';
-    }
-
-    if (typeof staticKeys['default'] === 'string') {
-      const val = staticKeys['default'];
-      this._effectiveApiKey.set(val);
-      return val;
     }
 
     const customKeys = await this.secureCredentialsStorage.getCustomApiKeys();
@@ -240,9 +243,9 @@ export class SettingsService {
     const effectiveKey = await this.getEffectiveApiKey();
     const apiKeyId = this._selectedApiKeyId();
     const staticKeys = this.getStaticApiKeys();
-    if (apiKeyId && typeof staticKeys[apiKeyId] === 'string') {
+    if (apiKeyId && staticKeys[apiKeyId]) {
       this.configProvider.setApiKeyFromConfig(effectiveKey);
-    } else if (!apiKeyId && typeof staticKeys['default'] === 'string') {
+    } else if (!apiKeyId && staticKeys['default']) {
       this.configProvider.setApiKeyFromConfig(effectiveKey);
     } else {
       this.configProvider.setRuntimeApiKey(effectiveKey);

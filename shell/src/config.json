@@ -1,13 +1,22 @@
 {
   "renderers": {
     "default": {
-      "rendererUrl": "https://a2ui-project.github.io/composer/samples/ng-basic-catalog/"
+      "rendererUrl": "https://a2ui-project.github.io/composer/samples/ng-basic-catalog/",
+      "displayName": "Angular Basic (github)"
     },
     "dev": {
-      "rendererUrl": "http://localhost:4200/samples/ng-basic-catalog/"
+      "rendererUrl": "http://localhost:4200/samples/ng-basic-catalog/",
+      "displayName": "Angular Basic (local)"
     },
     "react": {
-      "rendererUrl": "http://localhost:3459"
+      "rendererUrl": "http://localhost:3459",
+      "displayName": "React (local)"
+    }
+  },
+  "apiKeys": {
+    "default": {
+      "apiKey": "this will not work",
+      "displayName": "Fake key"
     }
   }
 }
