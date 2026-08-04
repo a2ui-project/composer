@@ -80,9 +80,11 @@ test.describe('E2E Workspace User Journey', () => {
       }
     });
 
-    // 8. Assert that snackbar appears
+    // 8. Assert that snackbar appears and no empty bubbles are created in chat panel
     const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
     await expect(snackbarLocator).toContainText('Invalid JSON syntax detected.');
+    await page.waitForTimeout(400); // Allow debounce to settle
+    await expect(page.locator('.chat-history-log .chat-bubble-container')).toHaveCount(0);
 
     // 9. Correct JSON and verify snackbar disappears
     await page.evaluate(() => {
@@ -95,5 +97,33 @@ test.describe('E2E Workspace User Journey', () => {
     });
     // With dismissal logic, it should disappear immediately
     await expect(page.locator('.mat-mdc-snack-bar-label')).toHaveCount(0, {timeout: 3000});
+  });
+
+  test('prevents empty chat bubbles when invalid JSON is entered in editor', async ({page}) => {
+    // Wait for Monaco to load
+    const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
+    await expect(editorLocator).toBeVisible();
+
+    await page.waitForFunction(() => {
+      const monaco = (window as unknown as WindowWithMonaco).monaco;
+      return (monaco?.editor?.getModels()?.length ?? 0) > 0;
+    });
+
+    await page.waitForTimeout(500);
+
+    // Set invalid JSON
+    await page.evaluate(() => {
+      const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
+      if (model) {
+        model.setValue('invalid json {');
+      }
+    });
+
+    // Wait for debounce period (300ms)
+    await page.waitForTimeout(400);
+
+    // Verify no empty bubbles are created in the chat panel
+    await expect(page.locator('.chat-history-log .chat-bubble-container')).toHaveCount(0);
+    await expect(page.locator('.empty-state-notice')).toBeVisible();
   });
 });

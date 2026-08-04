@@ -150,7 +150,14 @@ export class ChatPanel {
   >(() => {
     return this.chatState
       .chatHistory()
-      .filter(m => m.role !== MessageRole.SYSTEM)
+      .filter(
+        m =>
+          m.role !== MessageRole.SYSTEM &&
+          (m.content?.trim().length > 0 ||
+            (m.attachments && m.attachments.length > 0) ||
+            !!m.thinking ||
+            m.role === MessageRole.ERROR),
+      )
       .map(m => {
         const isSnapshot = this.chatCleaner.isLayoutSnapshot(m.content);
         if (isSnapshot) {

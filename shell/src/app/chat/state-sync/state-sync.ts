@@ -188,6 +188,9 @@ export class StateSync {
    */
   private syncLayoutToHistory(layout: string): void {
     const sanitizedLayoutString = this.sanitizeLayout(layout);
+    if (!sanitizedLayoutString) {
+      return;
+    }
     const history = this.chatState.chatHistory();
 
     if (history.length === 0) {

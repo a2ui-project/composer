@@ -294,6 +294,34 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     expect(bubbles[0]).toBe('user note [draft]');
   });
 
+  it('ignores empty or whitespace-only messages without rendering empty bubbles', async () => {
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.USER,
+        content: 'valid instruction',
+      },
+      {
+        role: MessageRole.USER,
+        content: '',
+      },
+      {
+        role: MessageRole.USER,
+        content: '   ',
+      },
+      {
+        role: MessageRole.MODEL,
+        content: '',
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    expect(bubbles.length).toBe(1);
+    expect(bubbles[0]).toBe('valid instruction');
+  });
+
   it('classifies formatted multi-line JSON arrays as layout snapshots and calculates component counts', async () => {
     const formattedArray = JSON.stringify(
       [

@@ -292,7 +292,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(syncedContent).not.toContain('"mockProp"');
     });
 
-    it('discards syntax-corrupt layout, returning empty and outputting warning diagnostics', () => {
+    it('discards syntax-corrupt layout without syncing to history and outputs warning diagnostics', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const badLayout = '[ {"version": "v0.9"}, corrupt... ]';
 
@@ -301,10 +301,8 @@ describe('StateSync Autosave Draft Integrations', () => {
 
       vi.advanceTimersByTime(300);
 
-      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
-      const syncedContent = syncCall[0].content;
-
-      expect(syncedContent).toBe('');
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
       expect(warnSpy).toHaveBeenCalled();
     });
 
@@ -414,16 +412,57 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(syncedContent).not.toContain('mockProp');
     });
 
-    it('returns empty string when sanitizing empty or whitespace layout', () => {
+    it('discards empty or whitespace layout without syncing to history', () => {
       service.updateDraft('   ');
       TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
-      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
-      const syncedContent = syncCall[0].content;
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+    });
 
-      expect(syncedContent).toBe('');
+    it('does not append an empty message to history when invalid JSON is entered after a model response', () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.USER,
+          content: 'create a contact card',
+        },
+        {
+          role: MessageRole.MODEL,
+          content: '[{"version": "v0.9", "updateComponents": {"components": []}}]',
+        },
+      ]);
+      chatStateMock.setChatHistory.mockClear();
+      chatStateMock.updateChatHistory.mockClear();
+
+      service.updateDraft('[{"version": "v0.9", invalid_json');
+      TestBed.tick();
+
+      vi.advanceTimersByTime(300);
+
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+    });
+
+    it('does not overwrite existing user layout snapshot in history when invalid JSON is entered', () => {
+      const initialSnapshot = [
+        {
+          role: MessageRole.USER,
+          content: '[\n  {\n    "version": "v0.9"\n  }\n]',
+        },
+      ];
+      chatStateMock.setChatHistory(initialSnapshot);
+      chatStateMock.setChatHistory.mockClear();
+      chatStateMock.updateChatHistory.mockClear();
+
+      service.updateDraft('corrupted json');
+      TestBed.tick();
+
+      vi.advanceTimersByTime(300);
+
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
     });
 
     it('handles JSON array containing non-object primitive elements during sanitization', () => {
