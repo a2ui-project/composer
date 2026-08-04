@@ -311,11 +311,19 @@ export class StartupResolution {
     return null;
   }
 
+  private getBaseOrigin(): string {
+    return globalThis.location?.origin || 'http://localhost';
+  }
+
+  private isLocalhost(hostname: string): boolean {
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  }
+
   async isOriginAllowed(url: string): Promise<boolean> {
     let origin: string;
     let hostname: string;
     try {
-      const baseOrigin = globalThis.location?.origin || 'http://localhost';
+      const baseOrigin = this.getBaseOrigin();
       const parsedUrl = url.startsWith('/') ? new URL(url, baseOrigin) : new URL(url);
       origin = parsedUrl.origin;
       hostname = parsedUrl.hostname;
@@ -323,19 +331,14 @@ export class StartupResolution {
       return false;
     }
 
-    if (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '[::1]' ||
-      origin === globalThis.location?.origin
-    ) {
+    if (this.isLocalhost(hostname) || origin === globalThis.location?.origin) {
       return true;
     }
 
     const isStaticConfigOrigin = Object.values(this._renderers()).some(r => {
       if (!r?.rendererUrl) return false;
       try {
-        const baseOrigin = globalThis.location?.origin || 'http://localhost';
+        const baseOrigin = this.getBaseOrigin();
         const parsed = r.rendererUrl.startsWith('/')
           ? new URL(r.rendererUrl, baseOrigin)
           : new URL(r.rendererUrl);
