@@ -1,16 +1,13 @@
 {
-  "profiles": {
+  "renderers": {
     "default": {
-      "rendererUrl": "https://a2ui-project.github.io/composer/samples/ng-basic-catalog/",
-      "allowOverrides": true
+      "rendererUrl": "https://a2ui-project.github.io/composer/samples/ng-basic-catalog/"
     },
     "dev": {
-      "rendererUrl": "http://localhost:4200/samples/ng-basic-catalog/",
-      "allowOverrides": false
+      "rendererUrl": "http://localhost:4200/samples/ng-basic-catalog/"
     },
     "react": {
-      "rendererUrl": "http://localhost:3459",
-      "allowOverrides": false
+      "rendererUrl": "http://localhost:3459"
     }
   }
 }
