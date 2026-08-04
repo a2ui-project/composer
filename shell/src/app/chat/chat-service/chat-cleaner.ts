@@ -36,13 +36,16 @@ export class ChatCleaner {
    * Appends the streaming pulse indicator to the given text.
    */
   appendPulse(text: string): string {
-    return `${text} ${this.PULSE_INDICATOR}`;
+    return `${text ?? ''} ${this.PULSE_INDICATOR}`;
   }
 
   /**
    * Strips trailing streaming pulse indicators and surrounding whitespace.
    */
   stripPulse(text: string): string {
+    if (!text) {
+      return '';
+    }
     PULSE_INDICATOR_REGEX.lastIndex = 0;
     return text.replace(PULSE_INDICATOR_REGEX, '').trim();
   }
@@ -51,6 +54,9 @@ export class ChatCleaner {
    * Strips XML/HTML thinking tags from the given text.
    */
   stripThinkingTags(text: string): string {
+    if (!text) {
+      return '';
+    }
     TAG_REGEX.lastIndex = 0;
     return text.replace(TAG_REGEX, '').trim();
   }
@@ -59,6 +65,9 @@ export class ChatCleaner {
    * Extracts content from markdown code fences if present.
    */
   extractCodeFences(text: string): {extracted: string; hasFences: boolean} {
+    if (!text) {
+      return {extracted: '', hasFences: false};
+    }
     MD_FENCE_REGEX.lastIndex = 0;
     const matches = Array.from(text.matchAll(MD_FENCE_REGEX));
     if (matches.length > 0) {
@@ -79,6 +88,9 @@ export class ChatCleaner {
    * prose brackets.
    */
   cleanPayload(text: string): string {
+    if (!text) {
+      return '';
+    }
     let result = this.stripPulse(text);
     result = this.stripThinkingTags(result);
     const fenceResult = this.extractCodeFences(result);
@@ -111,7 +123,10 @@ export class ChatCleaner {
   /**
    * Determines if the given text represents an A2UI layout snapshot.
    */
-  isLayoutSnapshot(text: string): boolean {
+  isLayoutSnapshot(text?: string): boolean {
+    if (!text) {
+      return false;
+    }
     const trimmed = this.cleanPayload(text);
     return (
       trimmed.startsWith('{"version"') ||

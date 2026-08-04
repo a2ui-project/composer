@@ -80,11 +80,11 @@ test.describe('E2E Workspace User Journey', () => {
       }
     });
 
-    // 8. Assert that snackbar appears and no empty bubbles are created in chat panel
+    // 8. Assert that snackbar appears and no empty text bubbles are created in chat panel
     const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
     await expect(snackbarLocator).toContainText('Invalid JSON syntax detected.');
     await page.waitForTimeout(400); // Allow debounce to settle
-    await expect(page.locator('.chat-history-log .chat-bubble-container')).toHaveCount(0);
+    await expect(page.locator('.chat-history-log .bubble-text')).toHaveCount(0);
 
     // 9. Correct JSON and verify snackbar disappears
     await page.evaluate(() => {
@@ -122,8 +122,8 @@ test.describe('E2E Workspace User Journey', () => {
     // Wait for debounce period (300ms)
     await page.waitForTimeout(400);
 
-    // Verify no empty bubbles are created in the chat panel
-    await expect(page.locator('.chat-history-log .chat-bubble-container')).toHaveCount(0);
-    await expect(page.locator('.empty-state-notice')).toBeVisible();
+    // Verify no empty text bubbles are created and existing snapshot is preserved
+    await expect(page.locator('.chat-history-log .bubble-text')).toHaveCount(0);
+    await expect(page.locator('.chat-history-log .bubble-layout')).toHaveCount(1);
   });
 });

@@ -154,5 +154,43 @@ describe('ChatCleaner', () => {
     it('returns false for object without version string', () => {
       expect(service.isLayoutSnapshot('{"foo": "bar"}')).toBe(false);
     });
+
+    it('returns false when checking layout snapshot on empty or undefined input', () => {
+      expect(service.isLayoutSnapshot('')).toBe(false);
+      expect(service.isLayoutSnapshot(undefined)).toBe(false);
+      expect(service.isLayoutSnapshot(null as unknown as string)).toBe(false);
+    });
+  });
+
+  describe('Nullish and empty input resilience', () => {
+    it('returns safe defaults when calling stripPulse on empty or nullish values', () => {
+      expect(service.stripPulse('')).toBe('');
+      expect(service.stripPulse(undefined as unknown as string)).toBe('');
+      expect(service.stripPulse(null as unknown as string)).toBe('');
+    });
+
+    it('returns safe defaults when calling stripThinkingTags on empty or nullish values', () => {
+      expect(service.stripThinkingTags('')).toBe('');
+      expect(service.stripThinkingTags(undefined as unknown as string)).toBe('');
+      expect(service.stripThinkingTags(null as unknown as string)).toBe('');
+    });
+
+    it('returns safe defaults when calling extractCodeFences on empty or nullish values', () => {
+      expect(service.extractCodeFences('')).toEqual({extracted: '', hasFences: false});
+      expect(service.extractCodeFences(undefined as unknown as string)).toEqual({
+        extracted: '',
+        hasFences: false,
+      });
+      expect(service.extractCodeFences(null as unknown as string)).toEqual({
+        extracted: '',
+        hasFences: false,
+      });
+    });
+
+    it('returns safe defaults when calling cleanPayload on empty or nullish values', () => {
+      expect(service.cleanPayload('')).toBe('');
+      expect(service.cleanPayload(undefined as unknown as string)).toBe('');
+      expect(service.cleanPayload(null as unknown as string)).toBe('');
+    });
   });
 });
