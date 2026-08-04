@@ -53,11 +53,13 @@ describe('Settings', () => {
   let mockPlatformLocation: {
     getBaseHrefFromDOM: Mock<() => string | null>;
   };
+  let mockResolvedUrl: WritableSignal<string | null>;
   let mockRenderers: WritableSignal<Record<string, RendererConfig>>;
   let mockSelectedRendererId: WritableSignal<string | null>;
   let mockApiKeys: WritableSignal<Record<string, string>>;
   let mockActiveRenderer: WritableSignal<RendererConfig | null>;
   let mockStartupResolution: {
+    resolvedUrl: Signal<string | null>;
     getResolvedRendererUrl: Mock<() => string | null>;
     isThirdPartyEnvironment: Mock<() => boolean>;
     renderers: Signal<Record<string, RendererConfig>>;
@@ -111,12 +113,14 @@ describe('Settings', () => {
     mockPlatformLocation = {
       getBaseHrefFromDOM: vi.fn().mockReturnValue('/composer/pr/44/'),
     };
+    mockResolvedUrl = signal<string | null>('http://resolved-url.com');
     mockRenderers = signal<Record<string, RendererConfig>>({});
     mockSelectedRendererId = signal<string | null>(null);
     mockApiKeys = signal<Record<string, string>>({});
-    mockActiveRenderer = signal<RendererConfig | null>(null);
+    mockActiveRenderer = signal<Record<string, RendererConfig>[string] | null>(null);
 
     mockStartupResolution = {
+      resolvedUrl: mockResolvedUrl.asReadonly(),
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       renderers: mockRenderers.asReadonly(),
