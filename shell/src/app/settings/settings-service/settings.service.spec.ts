@@ -295,7 +295,7 @@ describe('SettingsService', () => {
       ]);
     });
 
-    it('auto-selects "default" API key on startup when no API key is saved in LocalStorage and default exists in static config', async () => {
+    it('computes "default" API key on startup when no API key is saved in LocalStorage and default exists in static config, without writing to LocalStorage', async () => {
       mockStartupResolution.apiKeys.set({});
       await service.selectApiKey(null);
 
@@ -306,8 +306,8 @@ describe('SettingsService', () => {
       const effective = await service.getEffectiveApiKey();
 
       expect(effective).toBe('AIzaSyDefault');
-      expect(service.selectedApiKeyId$()).toBe('default');
-      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_API_KEY)).toBe('default');
+      expect(service.selectedApiKeyId()).toBe('default');
+      expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_API_KEY)).toBeNull();
     });
 
     it('resolves string value from object schema static key when selectedApiKeyId is set', async () => {
@@ -329,11 +329,11 @@ describe('SettingsService', () => {
 
       await service.selectApiKey('prod');
       expect(await service.getEffectiveApiKey()).toBe('static-prod-key');
-      expect(service.selectedApiKeyId$()).toBe('prod');
+      expect(service.selectedApiKeyId()).toBe('prod');
 
       await service.selectApiKey('custom-1');
       expect(await service.getEffectiveApiKey()).toBe('custom-key-value');
-      expect(service.selectedApiKeyId$()).toBe('custom-1');
+      expect(service.selectedApiKeyId()).toBe('custom-1');
     });
 
     it('returns empty string and sets effectiveApiKey to empty string when explicit selectedId cannot be resolved', async () => {
@@ -378,18 +378,18 @@ describe('SettingsService', () => {
       });
     });
 
-    it('deleting a custom API key (deleteCustomApiKey(id)) removes it from SecureCredentialsStorage; if it was the selected key, selectedApiKeyId$ resets to null', async () => {
+    it('deleting a custom API key (deleteCustomApiKey(id)) removes it from SecureCredentialsStorage; if it was the selected key, selectedApiKeyId resets to null', async () => {
       mockStartupResolution.apiKeys.set({});
       mockSecureStorage.getCustomApiKeys.mockResolvedValue([
         {id: 'custom-to-delete', name: 'To Delete', key: 'to-delete-key'},
       ]);
       await service.selectApiKey('custom-to-delete');
-      expect(service.selectedApiKeyId$()).toBe('custom-to-delete');
+      expect(service.selectedApiKeyId()).toBe('custom-to-delete');
 
       await service.deleteCustomApiKey('custom-to-delete');
 
       expect(mockSecureStorage.deleteCustomApiKey).toHaveBeenCalledWith('custom-to-delete');
-      expect(service.selectedApiKeyId$()).toBeNull();
+      expect(service.selectedApiKeyId()).toBeNull();
     });
 
     it('deduplicates custom API keys whose IDs collide with static configuration key IDs in getAvailableApiKeys()', async () => {
@@ -424,7 +424,7 @@ describe('SettingsService', () => {
       expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('updated-key');
     });
 
-    it('synchronizes configProvider when saving a custom API key while selectedApiKeyId$ is null (fallback)', async () => {
+    it('synchronizes configProvider when saving a custom API key while selectedApiKeyId is null (fallback)', async () => {
       await service.selectApiKey(null);
       mockSecureStorage.getCustomApiKeys.mockResolvedValue([
         {id: 'custom-1', name: 'My Custom', key: 'new-fallback-key'},
@@ -435,7 +435,7 @@ describe('SettingsService', () => {
       expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('new-fallback-key');
     });
 
-    it('synchronizes configProvider when deleting a custom API key while selectedApiKeyId$ is null (fallback)', async () => {
+    it('synchronizes configProvider when deleting a custom API key while selectedApiKeyId is null (fallback)', async () => {
       await service.selectApiKey(null);
       mockSecureStorage.getCustomApiKeys.mockResolvedValue([
         {id: 'custom-2', name: 'Remaining Custom', key: 'remaining-key'},

@@ -122,12 +122,15 @@ export class SettingsService {
     this.localStorageInteractions.getItem(LocalStorageKey.SELECTED_API_KEY) || null,
   );
 
-  readonly selectedApiKeyId$: Signal<string | null> = this._selectedApiKeyId.asReadonly();
-  readonly selectedApiKeyId: Signal<string | null> = this._selectedApiKeyId.asReadonly();
+  readonly selectedApiKeyId: Signal<string | null> = computed(() => {
+    const id = this._selectedApiKeyId();
+    if (id) return id;
+    const staticKeys = this.startupResolution.apiKeys() || {};
+    return staticKeys['default'] !== undefined ? 'default' : null;
+  });
 
   private readonly _effectiveApiKey = signal<string>('');
 
-  readonly effectiveApiKey$: Signal<string> = this._effectiveApiKey.asReadonly();
   readonly effectiveApiKey: Signal<string> = this._effectiveApiKey.asReadonly();
 
   private getStaticApiKeys(): Record<string, ApiKeyConfig> {
@@ -175,13 +178,8 @@ export class SettingsService {
    * Resolves the effective API key based on selected ID or fallback rules.
    */
   async getEffectiveApiKey(): Promise<string> {
-    let selectedId = this.selectedApiKeyId$();
+    const selectedId = this.selectedApiKeyId();
     const staticKeys = this.getStaticApiKeys();
-
-    if (!selectedId && staticKeys['default'] !== undefined) {
-      await this.selectApiKey('default');
-      selectedId = 'default';
-    }
 
     if (selectedId && staticKeys[selectedId]) {
       const val = staticKeys[selectedId].apiKey || '';
