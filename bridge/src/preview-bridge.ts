@@ -165,7 +165,7 @@ export class PreviewBridge {
   }
 
   /**
-   * Applies light/dark mode theme styles and attributes to document.documentElement.
+   * Applies light/dark mode theme styles and attributes to document.documentElement and document.body.
    * Toggles the `.dark-theme` class, sets `color-scheme` CSS style, and `data-theme` attribute.
    *
    * @param theme The target theme ('light' or 'dark').
@@ -177,11 +177,17 @@ export class PreviewBridge {
     this.currentAppliedTheme = theme;
     if (theme === ThemePreference.DARK) {
       document.documentElement.classList.add('dark-theme');
+      document.body?.classList.add('dark-theme');
     } else {
       document.documentElement.classList.remove('dark-theme');
+      document.body?.classList.remove('dark-theme');
     }
     document.documentElement.style.colorScheme = theme;
+    if (document.body) {
+      document.body.style.colorScheme = theme;
+    }
     document.documentElement.setAttribute('data-theme', theme);
+    document.body?.setAttribute('data-theme', theme);
   }
 
   private initThemeFromUrl(): void {
@@ -227,14 +233,25 @@ export class PreviewBridge {
       activeSurfaceIds,
     };
 
-    if (this.currentAppliedTheme && config.onThemeChange) {
-      try {
-        config.onThemeChange(this.currentAppliedTheme);
-      } catch (error) {
-        console.error(
-          'PreviewBridge: Error inside onThemeChange callback during attachment:',
-          error,
-        );
+    if (this.currentAppliedTheme) {
+      if (typeof document !== 'undefined' && document.body) {
+        if (this.currentAppliedTheme === ThemePreference.DARK) {
+          document.body.classList.add('dark-theme');
+        } else {
+          document.body.classList.remove('dark-theme');
+        }
+        document.body.style.colorScheme = this.currentAppliedTheme;
+        document.body.setAttribute('data-theme', this.currentAppliedTheme);
+      }
+      if (config.onThemeChange) {
+        try {
+          config.onThemeChange(this.currentAppliedTheme);
+        } catch (error) {
+          console.error(
+            'PreviewBridge: Error inside onThemeChange callback during attachment:',
+            error,
+          );
+        }
       }
     }
 

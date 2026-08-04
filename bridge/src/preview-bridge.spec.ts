@@ -1942,6 +1942,9 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(document.documentElement.classList.contains('dark-theme')).toBe(true);
       expect(document.documentElement.style.colorScheme).toBe('dark');
       expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+      expect(document.body.classList.contains('dark-theme')).toBe(true);
+      expect(document.body.style.colorScheme).toBe('dark');
+      expect(document.body.getAttribute('data-theme')).toBe('dark');
 
       themeBridge.destroy();
       window.location = originalLocation;
@@ -1949,6 +1952,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     it('applies initial theme from window.location.search on instantiation when theme=light', () => {
       document.documentElement.classList.add('dark-theme');
+      document.body.classList.add('dark-theme');
       const originalLocation = window.location;
       delete (window as unknown as {location?: unknown}).location;
       window.location = new URL('http://localhost/?theme=light') as unknown as Location;
@@ -1957,6 +1961,9 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(document.documentElement.classList.contains('dark-theme')).toBe(false);
       expect(document.documentElement.style.colorScheme).toBe('light');
       expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+      expect(document.body.classList.contains('dark-theme')).toBe(false);
+      expect(document.body.style.colorScheme).toBe('light');
+      expect(document.body.getAttribute('data-theme')).toBe('light');
 
       themeBridge.destroy();
       window.location = originalLocation;
@@ -1986,6 +1993,9 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(document.documentElement.classList.contains('dark-theme')).toBe(true);
       expect(document.documentElement.style.colorScheme).toBe('dark');
       expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+      expect(document.body.classList.contains('dark-theme')).toBe(true);
+      expect(document.body.style.colorScheme).toBe('dark');
+      expect(document.body.getAttribute('data-theme')).toBe('dark');
       expect(onThemeChange).toHaveBeenCalledWith(ThemePreference.DARK);
 
       window.dispatchEvent(
@@ -2001,7 +2011,48 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(document.documentElement.classList.contains('dark-theme')).toBe(false);
       expect(document.documentElement.style.colorScheme).toBe('light');
       expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+      expect(document.body.classList.contains('dark-theme')).toBe(false);
+      expect(document.body.style.colorScheme).toBe('light');
+      expect(document.body.getAttribute('data-theme')).toBe('light');
       expect(onThemeChange).toHaveBeenCalledWith(ThemePreference.LIGHT);
+    });
+
+    it('synchronizes document.body theme styles when attachRenderer is called with active theme', () => {
+      bridge.applyThemeToDom(ThemePreference.DARK);
+      document.body.classList.remove('dark-theme');
+      document.body.style.colorScheme = 'light';
+      document.body.removeAttribute('data-theme');
+
+      const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+      const processor = {processMessages: vi.fn()};
+
+      bridge.attachRenderer(processor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+      });
+
+      expect(document.body.classList.contains('dark-theme')).toBe(true);
+      expect(document.body.style.colorScheme).toBe('dark');
+      expect(document.body.getAttribute('data-theme')).toBe('dark');
+    });
+
+    it('synchronizes document.body theme styles when attachRenderer is called with light theme', () => {
+      bridge.applyThemeToDom(ThemePreference.LIGHT);
+      document.body.classList.add('dark-theme');
+      document.body.style.colorScheme = 'dark';
+      document.body.setAttribute('data-theme', 'dark');
+
+      const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+      const processor = {processMessages: vi.fn()};
+
+      bridge.attachRenderer(processor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+      });
+
+      expect(document.body.classList.contains('dark-theme')).toBe(false);
+      expect(document.body.style.colorScheme).toBe('light');
+      expect(document.body.getAttribute('data-theme')).toBe('light');
     });
 
     it('logs warning if SET_THEME payload format is invalid', () => {
