@@ -1098,6 +1098,25 @@ describe('StartupResolution', () => {
       expect(confirmSpy).not.toHaveBeenCalled();
     });
 
+    it('2a1. auto-allows external origin defined in config.json.renderers without prompting confirmation', async () => {
+      const confirmSpy = vi.spyOn(service, 'confirmOrigin');
+      mockFetchConfig({
+        renderers: {
+          external: {
+            rendererUrl: 'https://configured-external.example.com/app',
+          },
+        },
+      });
+      await service.resolveStartupConfiguration();
+
+      const isAllowed = await service.isOriginAllowed(
+        'https://configured-external.example.com/other-path',
+      );
+
+      expect(isAllowed).toBe(true);
+      expect(confirmSpy).not.toHaveBeenCalled();
+    });
+
     it('2a2. prompts confirmation for external custom-renderer.com domain', async () => {
       const confirmSpy = vi.spyOn(service, 'confirmOrigin').mockResolvedValue(true);
       const isAllowed = await service.isOriginAllowed('http://custom-renderer.com:3000/test');

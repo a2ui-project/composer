@@ -332,6 +332,23 @@ export class StartupResolution {
       return true;
     }
 
+    const isStaticConfigOrigin = Object.values(this._renderers()).some(r => {
+      if (!r?.rendererUrl) return false;
+      try {
+        const baseOrigin = globalThis.location?.origin || 'http://localhost';
+        const parsed = r.rendererUrl.startsWith('/')
+          ? new URL(r.rendererUrl, baseOrigin)
+          : new URL(r.rendererUrl);
+        return parsed.origin === origin;
+      } catch {
+        return false;
+      }
+    });
+
+    if (isStaticConfigOrigin) {
+      return true;
+    }
+
     let allowedOrigins: string[] = [];
     try {
       const stored = this.localStorageInteractions.getItem(LocalStorageKey.ALLOWED_ORIGINS);
