@@ -68,6 +68,7 @@ export class StartupResolution {
   readonly renderers = this._renderers.asReadonly();
   readonly apiKeys = this._apiKeys.asReadonly();
   readonly selectedRendererId = this._selectedRendererId.asReadonly();
+  readonly selectedRendererId$ = this._selectedRendererId.asReadonly();
   readonly activeRenderer = computed<RendererConfig | null>(() => {
     const renderers = this._renderers();
     const selectedId = this._selectedRendererId();
@@ -364,17 +365,12 @@ export class StartupResolution {
   }
 
   async confirmOrigin(origin: string): Promise<boolean> {
-    try {
-      const dialogRef = this.dialog.open(OriginConfirmationDialog, {
-        data: {origin},
-        width: '450px',
-      });
-      const result = await firstValueFrom(dialogRef.afterClosed());
-      return !!result;
-    } catch (err) {
-      console.warn('Failed to open origin confirmation dialog:', err);
-      return false;
-    }
+    const dialogRef = this.dialog.open(OriginConfirmationDialog, {
+      data: {origin},
+      width: '450px',
+    });
+    const result = await firstValueFrom(dialogRef.afterClosed());
+    return !!result;
   }
 
   getResolvedRendererUrl(): string | null {

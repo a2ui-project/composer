@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, DestroyRef, untracked, effect} from '@angular/core';
+import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
+import {merge, of} from 'rxjs';
 import {debounceTime, distinctUntilChanged, skip} from 'rxjs/operators';
 import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
@@ -72,27 +73,22 @@ export class StateSync {
   private readonly _draftInput = signal<string>('');
 
   constructor() {
-    let prevRendererId: string | null | undefined = undefined;
-    effect(
-      () => {
-        const selectedRendererId = this.startupResolution?.selectedRendererId();
+    const selectedRendererId$ = this.startupResolution?.selectedRendererId$
+      ? toObservable(this.startupResolution.selectedRendererId$)
+      : of(null);
+    const activeCatalog$ = toObservable(this.catalogManagement.activeCatalog);
+
+    merge(selectedRendererId$, activeCatalog$)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
         const catalog = this.catalogManagement.activeCatalog();
-        if (catalog || selectedRendererId !== undefined) {
-          const catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
-          const rendererChanged =
-            prevRendererId !== undefined && prevRendererId !== selectedRendererId;
-          prevRendererId = selectedRendererId;
-          untracked(() => {
-            const currentDraft = this._activeDraft();
-            const draftCatalogId = this.getCatalogIdFromDraft(currentDraft);
-            if (currentDraft === '' || draftCatalogId !== catalogId || rendererChanged) {
-              this._activeDraft.set(this.getInitialDraft(catalogId));
-            }
-          });
+        const catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
+        const currentDraft = this._activeDraft();
+        const draftCatalogId = this.getCatalogIdFromDraft(currentDraft);
+        if (currentDraft === '' || draftCatalogId !== catalogId) {
+          this._activeDraft.set(this.getInitialDraft(catalogId));
         }
-      },
-      {allowSignalWrites: true},
-    );
+      });
 
     toObservable(this._draftInput)
       .pipe(skip(1), debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))

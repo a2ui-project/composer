@@ -1124,21 +1124,6 @@ describe('StartupResolution', () => {
       expect(storedOrigins).toContain('https://untrusted.example.com');
     });
 
-    it('returns false and logs warning when dialog.open throws during confirmOrigin', async () => {
-      vi.spyOn(service.dialog, 'open').mockImplementation(() => {
-        throw new Error('MatDialog open failure during bootstrapping');
-      });
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const result = await service.confirmOrigin('https://untrusted.example.com');
-
-      expect(result).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Failed to open origin confirmation dialog:',
-        expect.any(Error),
-      );
-    });
-
     it('2d. prompts confirmation for untrusted external origin and falls back to next tier when denied', async () => {
       vi.spyOn(service, 'confirmOrigin').mockResolvedValue(false);
       mockFetchConfig({

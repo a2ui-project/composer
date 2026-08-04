@@ -98,7 +98,9 @@ export class Settings implements OnInit {
   );
 
   readonly activeRendererUrl: Signal<string | null> = computed(() =>
-    this.startupResolution.resolvedUrl(),
+    typeof this.startupResolution.resolvedUrl === 'function'
+      ? this.startupResolution.resolvedUrl()
+      : this.startupResolution.getResolvedRendererUrl(),
   );
 
   readonly settingsForm = this.fb.group({});

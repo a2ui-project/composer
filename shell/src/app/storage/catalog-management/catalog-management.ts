@@ -113,7 +113,7 @@ export class CatalogManagement {
   readonly activeCatalogDescription = this._activeCatalogDescription.asReadonly();
 
   private watchdogTimerId: ReturnType<typeof setTimeout> | null = null;
-  private previousUrl: string | null | undefined = undefined;
+  private previousUrl: string | null | undefined = this.startupResolution.resolvedUrl();
 
   constructor() {
     const destroyRef = inject(DestroyRef);
