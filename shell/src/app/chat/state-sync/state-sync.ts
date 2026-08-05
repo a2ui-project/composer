@@ -133,6 +133,10 @@ export class StateSync {
   }
 
   private getInitialDraft(catalogId: string): string {
+    const sharedPayload = this.startupResolution?.sharedA2uiPayload();
+    if (sharedPayload) {
+      return sharedPayload;
+    }
     const activeRenderer = this.startupResolution?.activeRenderer();
     if (activeRenderer?.samplePayload) {
       return activeRenderer.samplePayload;

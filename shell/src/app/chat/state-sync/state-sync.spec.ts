@@ -23,6 +23,7 @@ import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {signal} from '@angular/core';
 
 class MockChatState {
@@ -60,20 +61,29 @@ class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
 }
 
+class MockStartupResolution {
+  readonly sharedA2uiPayload = signal<string | null>(null);
+  readonly activeRenderer = signal<{samplePayload?: string} | null>(null);
+}
+
 describe('StateSync Autosave Draft Integrations', () => {
   let service: StateSync;
   let chatStateMock: MockChatState;
   let catalogManagementMock: MockCatalogManagement;
+  let startupResolutionMock: MockStartupResolution;
 
   beforeEach(() => {
     TestBed.resetTestingModule();
     vi.useFakeTimers();
+
+    startupResolutionMock = new MockStartupResolution();
 
     TestBed.configureTestingModule({
       providers: [
         StateSync,
         {provide: ChatState, useClass: MockChatState},
         {provide: CatalogManagement, useClass: MockCatalogManagement},
+        {provide: StartupResolution, useValue: startupResolutionMock},
       ],
     });
 
@@ -97,8 +107,18 @@ describe('StateSync Autosave Draft Integrations', () => {
     vi.restoreAllMocks();
   });
 
-  it('initializes activeDraft with CAR_BOOKING constant', () => {
+  it('initializes activeDraft with CAR_BOOKING constant when sharedA2uiPayload is null', () => {
     expect(service.activeDraft()).toBe(CAR_BOOKING);
+  });
+
+  it('prepopulates activeDraft with sharedA2uiPayload when present on StartupResolution', () => {
+    const customSharedJson = '[{"version":"v0.9","createSurface":{"surfaceId":"shared-surface"}}]';
+    startupResolutionMock.sharedA2uiPayload.set(customSharedJson);
+
+    // Create fresh instance after setting shared payload
+    const sharedService = TestBed.inject(StateSync);
+    sharedService.flushDraft();
+    expect(sharedService.activeDraft()).toBe(customSharedJson);
   });
 
   it('updates draft in-memory synchronously and ignores initial setup debouncer', () => {
