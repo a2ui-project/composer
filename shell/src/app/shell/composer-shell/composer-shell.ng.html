@@ -86,6 +86,21 @@
       </a>
       <a
         mat-list-item
+        routerLink="/custom-catalog"
+        routerLinkActive="active-nav-item"
+        aria-label="Custom Catalog"
+        matTooltip="Custom Catalog"
+        matTooltipPosition="right"
+        [matTooltipDisabled]="!isCollapsed()"
+        (click)="ensureCollapsed()"
+      >
+        <mat-icon matListItemIcon aria-hidden="true">dashboard_customize</mat-icon>
+        @if (!isCollapsed()) {
+          <span class="nav-label">Custom Catalog</span>
+        }
+      </a>
+      <a
+        mat-list-item
         routerLink="/settings"
         routerLinkActive="active-nav-item"
         aria-label="Settings"
