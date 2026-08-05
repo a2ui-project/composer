@@ -73,4 +73,45 @@ describe('QueryParser', () => {
       expect(QueryParser.parseRendererId('?rendererId=testing<script>')).toBeNull();
     });
   });
+
+  describe('encodeSharedPayload and decodeSharedPayload', () => {
+    it('encodes and decodes an A2UI JSON payload round-trip using deflate-raw', async () => {
+      const originalJson = JSON.stringify([
+        {version: 'v0.9', createSurface: {surfaceId: 'test-surface'}},
+      ]);
+      const encoded = await QueryParser.encodeSharedPayload(originalJson);
+      expect(encoded.startsWith('d1.')).toBe(true);
+      const decoded = await QueryParser.decodeSharedPayload(encoded);
+      expect(decoded).toBe(originalJson);
+    });
+
+    it('returns null when decoding invalid base64url or corrupt deflate-raw payload', async () => {
+      expect(await QueryParser.decodeSharedPayload('not-d1-prefixed')).toBeNull();
+      expect(await QueryParser.decodeSharedPayload('d1.invalid_base64_content!!!')).toBeNull();
+      expect(await QueryParser.decodeSharedPayload('d1.AAAA')).toBeNull();
+    });
+  });
+
+  describe('parseSharedA2ui', () => {
+    it('parses compressed d1. payload from query string', async () => {
+      const originalJson = JSON.stringify([{version: 'v0.9'}]);
+      const encoded = await QueryParser.encodeSharedPayload(originalJson);
+      const searchString = `?a2ui=${encodeURIComponent(encoded)}`;
+      const parsed = await QueryParser.parseSharedA2ui(searchString);
+      expect(parsed).toBe(originalJson);
+    });
+
+    it('parses fallback uncompressed JSON ([...]) from query string', async () => {
+      const rawJson = '[{"version":"v0.9"}]';
+      const searchString = `?a2ui=${encodeURIComponent(rawJson)}`;
+      const parsed = await QueryParser.parseSharedA2ui(searchString);
+      expect(parsed).toBe(rawJson);
+    });
+
+    it('returns null when a2ui param is missing or invalid', async () => {
+      expect(await QueryParser.parseSharedA2ui('')).toBeNull();
+      expect(await QueryParser.parseSharedA2ui('?other=value')).toBeNull();
+      expect(await QueryParser.parseSharedA2ui('?a2ui=invalid-format')).toBeNull();
+    });
+  });
 });
