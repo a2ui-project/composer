@@ -168,6 +168,27 @@ describe('StartupResolution', () => {
     expect(url).toBe('http://query:3000/');
   });
 
+  describe('sharedA2uiPayload signal', () => {
+    it('sets sharedA2uiPayload signal when ?a2ui= parameter is present in window search', async () => {
+      mockFetchConfig({});
+      const expectedPayload = '[{"version":"v0.9","createSurface":{"surfaceId":"test"}}]';
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
+        `?a2ui=${encodeURIComponent(expectedPayload)}`,
+      );
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBe(expectedPayload);
+    });
+
+    it('leaves sharedA2uiPayload as null when ?a2ui is missing or invalid', async () => {
+      mockFetchConfig({});
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('');
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBeNull();
+    });
+  });
+
   it('falls back to storage when config fetch fails or times out', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Timeout'));
     const warnSpy = vi.spyOn(console, 'warn');
