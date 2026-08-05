@@ -64,17 +64,23 @@ export class QueryParser {
   /**
    * Compresses an A2UI JSON payload using deflate-raw and returns a URL-safe Base64 string prefixed with 'd1.'.
    */
-  static async encodeSharedPayload(jsonString: string): Promise<string> {
+  static async encodeSharedPayload(jsonString: string | null | undefined): Promise<string> {
+    if (!jsonString) {
+      return '';
+    }
     const bytes = new TextEncoder().encode(jsonString);
     const cs = new CompressionStream('deflate-raw');
     const writer = cs.writable.getWriter();
-    writer.write(bytes);
-    writer.close();
-    const buf = await new Response(cs.readable).arrayBuffer();
-    const base64Url = btoa(String.fromCharCode(...new Uint8Array(buf)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
+    const writePromise = writer.write(bytes).then(() => writer.close());
+    const responsePromise = new Response(cs.readable).arrayBuffer();
+    const [, buf] = await Promise.all([writePromise, responsePromise]);
+    const uint8 = new Uint8Array(buf);
+    const chunkSize = 8192;
+    let binaryString = '';
+    for (let i = 0; i < uint8.length; i += chunkSize) {
+      binaryString += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
+    }
+    const base64Url = btoa(binaryString).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     return `d1.${base64Url}`;
   }
 
@@ -82,8 +88,10 @@ export class QueryParser {
    * Decompresses a 'd1.'-prefixed Base64URL string back into an A2UI JSON string.
    * Returns null if the format is invalid or decompression fails.
    */
-  static async decodeSharedPayload(encodedPayload: string): Promise<string | null> {
-    if (!encodedPayload.startsWith('d1.')) {
+  static async decodeSharedPayload(
+    encodedPayload: string | null | undefined,
+  ): Promise<string | null> {
+    if (!encodedPayload || !encodedPayload.startsWith('d1.')) {
       return null;
     }
     try {
@@ -96,13 +104,9 @@ export class QueryParser {
       }
       const ds = new DecompressionStream('deflate-raw');
       const writer = ds.writable.getWriter();
-      const writePromise = writer
-        .write(bytes)
-        .then(() => writer.close())
-        .catch(() => {});
+      const writePromise = writer.write(bytes).then(() => writer.close());
       const responsePromise = new Response(ds.readable).arrayBuffer();
-      await Promise.all([writePromise, responsePromise]);
-      const buf = await responsePromise;
+      const [, buf] = await Promise.all([writePromise, responsePromise]);
       return new TextDecoder().decode(buf);
     } catch (err) {
       console.warn('Failed to decompress shared A2UI payload:', err);
@@ -114,7 +118,10 @@ export class QueryParser {
    * Parses the shared A2UI JSON payload from a query search string (?a2ui=...).
    * Supports both compressed ('d1.') and fallback uncompressed JSON strings.
    */
-  static async parseSharedA2ui(searchString: string): Promise<string | null> {
+  static async parseSharedA2ui(searchString: string | null | undefined): Promise<string | null> {
+    if (!searchString) {
+      return null;
+    }
     const params = new URLSearchParams(searchString);
     const candidate = params.get('a2ui');
     if (!candidate) {
