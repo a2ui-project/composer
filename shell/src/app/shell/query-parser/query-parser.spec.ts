@@ -85,10 +85,25 @@ describe('QueryParser', () => {
       expect(decoded).toBe(originalJson);
     });
 
-    it('returns null when decoding invalid base64url or corrupt deflate-raw payload', async () => {
+    it('returns empty string when encoding null, undefined, or empty payload', async () => {
+      expect(await QueryParser.encodeSharedPayload(null)).toBe('');
+      expect(await QueryParser.encodeSharedPayload(undefined)).toBe('');
+      expect(await QueryParser.encodeSharedPayload('')).toBe('');
+    });
+
+    it('returns null when decoding invalid, corrupt, or nullish deflate-raw payload', async () => {
       expect(await QueryParser.decodeSharedPayload('not-d1-prefixed')).toBeNull();
       expect(await QueryParser.decodeSharedPayload('d1.invalid_base64_content!!!')).toBeNull();
       expect(await QueryParser.decodeSharedPayload('d1.AAAA')).toBeNull();
+      expect(await QueryParser.decodeSharedPayload(null)).toBeNull();
+      expect(await QueryParser.decodeSharedPayload(undefined)).toBeNull();
+    });
+
+    it('correctly roundtrips a large payload (>100KB) without stack overflow', async () => {
+      const largePayload = JSON.stringify([{data: 'x'.repeat(150000)}]);
+      const encoded = await QueryParser.encodeSharedPayload(largePayload);
+      const decoded = await QueryParser.decodeSharedPayload(encoded);
+      expect(decoded).toBe(largePayload);
     });
   });
 
@@ -108,7 +123,9 @@ describe('QueryParser', () => {
       expect(parsed).toBe(rawJson);
     });
 
-    it('returns null when a2ui param is missing or invalid', async () => {
+    it('returns null when a2ui param is missing, invalid, or nullish', async () => {
+      expect(await QueryParser.parseSharedA2ui(null)).toBeNull();
+      expect(await QueryParser.parseSharedA2ui(undefined)).toBeNull();
       expect(await QueryParser.parseSharedA2ui('')).toBeNull();
       expect(await QueryParser.parseSharedA2ui('?other=value')).toBeNull();
       expect(await QueryParser.parseSharedA2ui('?a2ui=invalid-format')).toBeNull();

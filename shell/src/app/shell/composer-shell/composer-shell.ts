@@ -113,16 +113,25 @@ export class ComposerShell {
    * and copies the result directly to the user's clipboard.
    */
   async shareDesign(): Promise<void> {
+    const href = this.document.defaultView?.location.href;
+    if (!href) {
+      return;
+    }
     const rendererUrl = this.startupResolution.resolvedUrl() || '';
     const activeDraft = this.stateSync.activeDraft() || '';
     const compressed = await QueryParser.encodeSharedPayload(activeDraft);
-    const shareUrl = new URL(globalThis.location.href);
+    const shareUrl = new URL(href);
     if (rendererUrl) {
       shareUrl.searchParams.set('renderer', rendererUrl);
     }
     shareUrl.searchParams.set('a2ui', compressed);
+    const clipboard = this.document.defaultView?.navigator?.clipboard;
+    if (!clipboard) {
+      this.snackBar.open('Clipboard API unavailable', 'Close', {duration: 3000});
+      return;
+    }
     try {
-      await globalThis.navigator.clipboard.writeText(shareUrl.toString());
+      await clipboard.writeText(shareUrl.toString());
       this.snackBar.open('Shareable link copied to clipboard', 'Close', {duration: 3000});
     } catch (err) {
       console.error('Failed to copy shareable link:', err);
