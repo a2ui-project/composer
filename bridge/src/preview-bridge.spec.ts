@@ -2073,15 +2073,14 @@ describe('PreviewBridge Core API Runtime', () => {
       });
     });
 
-    it('short-circuits applyThemeToDom when setting the same theme repeatedly', () => {
-      const setAttributeSpy = vi.spyOn(document.documentElement, 'setAttribute');
+    it('re-applies theme styles to document.documentElement and document.body cleanly on repeated calls', () => {
+      bridge.applyThemeToDom(ThemePreference.DARK);
+      expect(document.documentElement.classList.contains('dark-theme')).toBe(true);
+      expect(document.body.classList.contains('dark-theme')).toBe(true);
 
       bridge.applyThemeToDom(ThemePreference.DARK);
-      expect(setAttributeSpy).toHaveBeenCalledWith('data-theme', 'dark');
-      setAttributeSpy.mockClear();
-
-      bridge.applyThemeToDom(ThemePreference.DARK);
-      expect(setAttributeSpy).not.toHaveBeenCalled();
+      expect(document.documentElement.classList.contains('dark-theme')).toBe(true);
+      expect(document.body.classList.contains('dark-theme')).toBe(true);
     });
 
     it('logs error if onThemeChange callback throws an exception', () => {

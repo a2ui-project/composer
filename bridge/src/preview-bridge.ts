@@ -172,22 +172,19 @@ export class PreviewBridge {
    */
   applyThemeToDom(theme: ThemePreference): void {
     if (typeof document === 'undefined' || !document.documentElement) return;
-    if (this.currentAppliedTheme === theme) return;
 
     this.currentAppliedTheme = theme;
-    if (theme === ThemePreference.DARK) {
-      document.documentElement.classList.add('dark-theme');
-      document.body?.classList.add('dark-theme');
-    } else {
-      document.documentElement.classList.remove('dark-theme');
-      document.body?.classList.remove('dark-theme');
-    }
+    const isDark = theme === ThemePreference.DARK;
+
+    document.documentElement.classList.toggle('dark-theme', isDark);
     document.documentElement.style.colorScheme = theme;
-    if (document.body) {
-      document.body.style.colorScheme = theme;
-    }
     document.documentElement.setAttribute('data-theme', theme);
-    document.body?.setAttribute('data-theme', theme);
+
+    if (document.body) {
+      document.body.classList.toggle('dark-theme', isDark);
+      document.body.style.colorScheme = theme;
+      document.body.setAttribute('data-theme', theme);
+    }
   }
 
   private initThemeFromUrl(): void {
@@ -234,15 +231,7 @@ export class PreviewBridge {
     };
 
     if (this.currentAppliedTheme) {
-      if (typeof document !== 'undefined' && document.body) {
-        if (this.currentAppliedTheme === ThemePreference.DARK) {
-          document.body.classList.add('dark-theme');
-        } else {
-          document.body.classList.remove('dark-theme');
-        }
-        document.body.style.colorScheme = this.currentAppliedTheme;
-        document.body.setAttribute('data-theme', this.currentAppliedTheme);
-      }
+      this.applyThemeToDom(this.currentAppliedTheme);
       if (config.onThemeChange) {
         try {
           config.onThemeChange(this.currentAppliedTheme);
