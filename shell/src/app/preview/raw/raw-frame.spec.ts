@@ -687,6 +687,19 @@ describe('RawFrame JSON Source Editor View', () => {
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
   });
 
+  it('re-dispatches layout payload when receiving A2UI_CATALOG event from messageStream$', async () => {
+    await setup(false);
+    sendRenderA2UIMock.mockClear();
+
+    messageStreamSubject.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      origin: 'http://test',
+      timestamp: Date.now(),
+    });
+
+    expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+  });
+
   it('tracks isDestroyed state on component destruction', async () => {
     const {fixture, component} = await setup(false);
     expect(component['isDestroyed']).toBe(false);

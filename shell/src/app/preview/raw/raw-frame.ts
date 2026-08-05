@@ -91,7 +91,11 @@ export class RawFrame {
 
     this.hostCommunication.messageStream$
       .pipe(
-        filter(envelope => envelope?.type === PreviewBridgeMessageType.RENDERER_READY),
+        filter(
+          envelope =>
+            envelope?.type === PreviewBridgeMessageType.RENDERER_READY ||
+            envelope?.type === PreviewBridgeMessageType.A2UI_CATALOG,
+        ),
         takeUntilDestroyed(),
       )
       .subscribe(() => {
@@ -102,9 +106,9 @@ export class RawFrame {
           }
         } catch (err) {
           if (err instanceof SyntaxError) {
-            console.warn('Syntax error on RENDERER_READY:', err);
+            console.warn(`Syntax error in JSON:`, err);
           } else {
-            console.error('Unexpected error on RENDERER_READY:', err);
+            console.error('Unexpected error sending A2UI to renderer:', err);
           }
         }
       });
