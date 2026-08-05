@@ -34,6 +34,16 @@
   </button>
   <button
     mat-icon-button
+    class="share-button"
+    color="primary"
+    (click)="shareDesign()"
+    aria-label="Share design"
+    matTooltip="Share Design"
+  >
+    <mat-icon aria-hidden="true">share</mat-icon>
+  </button>
+  <button
+    mat-icon-button
     class="theme-toggle-button"
     color="primary"
     (click)="toggleTheme()"
