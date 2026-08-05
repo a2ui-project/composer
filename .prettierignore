@@ -25,3 +25,4 @@ coverage
 **/.angular/
 **/test-results/
 **/playwright-report/**
+**/*.generated.ts

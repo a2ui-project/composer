@@ -1,0 +1,160 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="ref-page">
+  <header class="ref-header">
+    <div class="ref-intro">
+      <h1 class="ref-title">Catalog Reference</h1>
+      <p class="ref-subtitle">
+        Every component in the custom dashboard catalog — live native preview, A2UI usage, and
+        props. The Definitions and Renderers views show the catalog's own source.
+      </p>
+    </div>
+    <mat-button-toggle-group
+      class="ref-view-switch"
+      [value]="viewMode()"
+      (change)="setViewMode($event.value)"
+      aria-label="Reference view"
+      hideSingleSelectionIndicator
+    >
+      <mat-button-toggle value="components">
+        <mat-icon aria-hidden="true">widgets</mat-icon>
+        <span class="ref-view-label">Components</span>
+      </mat-button-toggle>
+      <mat-button-toggle value="definitions">
+        <mat-icon aria-hidden="true">data_object</mat-icon>
+        <span class="ref-view-label">Definitions</span>
+      </mat-button-toggle>
+      <mat-button-toggle value="renderers">
+        <mat-icon aria-hidden="true">code</mat-icon>
+        <span class="ref-view-label">Renderers</span>
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+  </header>
+
+  @if (viewMode() === 'components') {
+    <div class="ref-body">
+      <nav class="ref-sidebar" aria-label="Catalog components">
+        @for (group of groups(); track group.category) {
+          <div class="ref-group-header">{{ group.category }}</div>
+          @for (doc of group.docs; track doc.name) {
+            <button
+              type="button"
+              class="ref-nav-item"
+              [class.active]="doc.name === selectedName()"
+              [attr.aria-current]="doc.name === selectedName() ? 'true' : null"
+              (click)="selectComponent(doc.name)"
+            >
+              {{ doc.name }}
+            </button>
+          }
+        }
+      </nav>
+
+      @if (selectedDoc(); as doc) {
+        <div class="ref-detail">
+          <div class="ref-detail-header">
+            <h2 class="ref-component-name">{{ doc.name }}</h2>
+            <span class="ref-category-chip">{{ doc.category }}</span>
+          </div>
+          <p class="ref-component-desc">{{ doc.description }}</p>
+
+          <section class="ref-card">
+            <div class="ref-card-label">Preview</div>
+            <div class="ref-preview">
+              <a2ui-v09-surface [surfaceId]="activeSurfaceId()"></a2ui-v09-surface>
+            </div>
+          </section>
+
+          <section class="ref-card">
+            <div class="ref-card-label ref-card-label--row">
+              <span>Usage</span>
+              <button
+                type="button"
+                mat-icon-button
+                class="ref-copy"
+                aria-label="Copy usage snippet"
+                (click)="copyUsage()"
+              >
+                <mat-icon>content_copy</mat-icon>
+              </button>
+            </div>
+            <pre class="ref-code"><code>{{ usageJson() }}</code></pre>
+          </section>
+
+          <section class="ref-card">
+            <div class="ref-card-label">Props</div>
+            <table mat-table [dataSource]="doc.props" class="ref-props">
+              <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef>Name</th>
+                <td mat-cell *matCellDef="let prop" class="ref-prop-name">{{ prop.name }}</td>
+              </ng-container>
+              <ng-container matColumnDef="type">
+                <th mat-header-cell *matHeaderCellDef>Type</th>
+                <td mat-cell *matCellDef="let prop"><code class="ref-prop-type">{{ prop.type }}</code></td>
+              </ng-container>
+              <ng-container matColumnDef="required">
+                <th mat-header-cell *matHeaderCellDef>Required</th>
+                <td mat-cell *matCellDef="let prop">
+                  @if (prop.required) {
+                    <span class="ref-req">required</span>
+                  } @else {
+                    <span class="ref-opt">optional</span>
+                  }
+                </td>
+              </ng-container>
+              <ng-container matColumnDef="description">
+                <th mat-header-cell *matHeaderCellDef>Description</th>
+                <td mat-cell *matCellDef="let prop">{{ prop.description }}</td>
+              </ng-container>
+              <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+            </table>
+          </section>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="ref-body">
+      <nav class="ref-sidebar" aria-label="Source files">
+        <div class="ref-group-header">
+          {{ viewMode() === 'renderers' ? 'Renderers' : 'Definitions' }}
+        </div>
+        @for (file of sourceFiles(); track file.path) {
+          <button
+            type="button"
+            class="ref-nav-item"
+            [class.active]="file.path === selectedSource()?.path"
+            [attr.aria-current]="file.path === selectedSource()?.path ? 'true' : null"
+            (click)="selectSource(file.path)"
+          >
+            {{ file.label }}
+          </button>
+        }
+      </nav>
+
+      @if (selectedSource(); as file) {
+        <div class="ref-detail">
+          <div class="ref-detail-header">
+            <h2 class="ref-component-name">{{ file.label }}</h2>
+            <span class="ref-path-chip">{{ file.path }}</span>
+          </div>
+          <pre class="ref-code ref-source"><code>{{ file.code }}</code></pre>
+        </div>
+      }
+    </div>
+  }
+</div>
