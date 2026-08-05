@@ -34,6 +34,9 @@ import {LocalStorageInteractions} from '../../storage/local-storage-interactions
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
 
+import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {StateSync} from '../../chat/state-sync/state-sync';
+
 describe('ComposerShell Layout', () => {
   let fixture: ComponentFixture<ComposerShell>;
   let harness: ComposerShellHarness;
@@ -47,6 +50,12 @@ describe('ComposerShell Layout', () => {
   let configProviderMock: {
     themePreference: WritableSignal<ThemePreference>;
     setThemePreference: (theme: ThemePreference) => void;
+  };
+  let startupResolutionMock: {
+    resolvedUrl: WritableSignal<string | null>;
+  };
+  let stateSyncMock: {
+    activeDraft: WritableSignal<string>;
   };
 
   beforeEach(async () => {
@@ -74,6 +83,14 @@ describe('ComposerShell Layout', () => {
       }),
     };
 
+    startupResolutionMock = {
+      resolvedUrl: signal<string | null>(null),
+    };
+
+    stateSyncMock = {
+      activeDraft: signal(''),
+    };
+
     await TestBed.configureTestingModule({
       imports: [ComposerShell],
       providers: [
@@ -98,6 +115,14 @@ describe('ComposerShell Layout', () => {
         {
           provide: AppConfigProvider,
           useValue: configProviderMock,
+        },
+        {
+          provide: StartupResolution,
+          useValue: startupResolutionMock,
+        },
+        {
+          provide: StateSync,
+          useValue: stateSyncMock,
         },
       ],
     }).compileComponents();
@@ -212,7 +237,7 @@ describe('ComposerShell Layout', () => {
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(5);
+    expect(hiddenAttrs.length).toBe(6);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
@@ -263,5 +288,36 @@ describe('ComposerShell Layout', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect((navLinks[0] as HTMLElement).classList.contains('active-nav-item')).toBe(true);
+  });
+
+  describe('shareDesign & resetSession', () => {
+    it('shareDesign copies renderer URL and compressed payload to clipboard', async () => {
+      startupResolutionMock.resolvedUrl.set('http://my-renderer.com');
+      stateSyncMock.activeDraft.set('[{"version":"v0.9"}]');
+      const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {writeText: writeTextSpy},
+        configurable: true,
+        writable: true,
+      });
+      const component = fixture.componentInstance;
+      await component.shareDesign();
+      expect(writeTextSpy).toHaveBeenCalledWith(
+        expect.stringContaining('renderer=http%3A%2F%2Fmy-renderer.com'),
+      );
+      expect(writeTextSpy).toHaveBeenCalledWith(expect.stringContaining('a2ui=d1.'));
+    });
+
+    it('resetSession strips share parameters from location href before setting href', async () => {
+      const component = fixture.componentInstance;
+      const document = TestBed.inject(DOCUMENT);
+      const mockLocation = {href: 'http://localhost:3000/?renderer=http://test.com&a2ui=d1.123'};
+      vi.spyOn(document, 'defaultView', 'get').mockReturnValue({
+        location: mockLocation as unknown as Location,
+      } as Window & typeof globalThis);
+
+      await component.resetSession();
+      expect(mockLocation.href).toBe('http://localhost:3000/');
+    });
   });
 });
