@@ -40,6 +40,19 @@ export const routes: Routes = [
         canActivate: [startupGuard],
       },
       {
+        path: 'custom-catalog',
+        loadComponent: () =>
+          import('./custom-catalog/assembled/custom-catalog').then(m => m.CustomCatalog),
+        title: 'A2UI Custom Catalog',
+        // No startupGuard: renders natively via @a2ui/angular, not the iframe renderer.
+      },
+      {
+        path: 'theater',
+        loadComponent: () => import('./theater/theater').then(m => m.Theater),
+        title: 'A2UI Theater',
+        // No startupGuard: renders natively via @a2ui/angular, not the iframe renderer.
+      },
+      {
         path: 'settings',
         loadComponent: () => import('./settings/settings-view/settings').then(m => m.Settings),
         title: 'A2UI Composer Settings',
