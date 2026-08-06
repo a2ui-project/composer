@@ -33,6 +33,16 @@
               },
               {
                 "glob": "**/*",
+                "input": "node_modules/lit-basic-catalog/dist",
+                "output": "samples/lit-basic-catalog"
+              },
+              {
+                "glob": "**/*",
+                "input": "node_modules/react-basic-catalog/dist",
+                "output": "samples/react-basic-catalog"
+              },
+              {
+                "glob": "**/*",
                 "input": "node_modules/monaco-editor/min/vs",
                 "output": "assets/monaco/vs"
               }

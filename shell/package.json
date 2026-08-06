@@ -7,7 +7,7 @@
   },
   "type": "module",
   "scripts": {
-    "start": "yarn workspace ng-basic-catalog build && ng serve",
+    "start": "yarn workspace ng-basic-catalog build && yarn workspace lit-basic-catalog build && yarn workspace react-basic-catalog build && ng serve",
     "build": "yarn lint && ng build",
     "test": "vitest run --coverage",
     "e2e": "playwright test",
@@ -49,8 +49,10 @@
     "angular-eslint": "22.1.0",
     "eslint": "10.7.0",
     "jsdom": "29.1.1",
+    "lit-basic-catalog": "0.1.0",
     "ng-basic-catalog": "0.1.0",
     "prettier": "3.9.6",
+    "react-basic-catalog": "0.1.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.65.0",
     "vitest": "4.1.10"

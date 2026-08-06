@@ -5952,9 +5952,11 @@ __metadata:
     dockview: "npm:7.0.3"
     eslint: "npm:10.7.0"
     jsdom: "npm:29.1.1"
+    lit-basic-catalog: "npm:0.1.0"
     monaco-editor: "npm:0.56.0"
     ng-basic-catalog: "npm:0.1.0"
     prettier: "npm:3.9.6"
+    react-basic-catalog: "npm:0.1.0"
     rxjs: "npm:7.8.2"
     safevalues: "npm:1.2.0"
     tslib: "npm:2.8.1"
@@ -9361,7 +9363,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lit-basic-catalog@workspace:samples/lit-basic-catalog":
+"lit-basic-catalog@npm:0.1.0, lit-basic-catalog@workspace:samples/lit-basic-catalog":
   version: 0.0.0-use.local
   resolution: "lit-basic-catalog@workspace:samples/lit-basic-catalog"
   dependencies:
@@ -11069,7 +11071,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-basic-catalog@workspace:samples/react-basic-catalog":
+"react-basic-catalog@npm:0.1.0, react-basic-catalog@workspace:samples/react-basic-catalog":
   version: 0.0.0-use.local
   resolution: "react-basic-catalog@workspace:samples/react-basic-catalog"
   dependencies:
