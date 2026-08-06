@@ -335,4 +335,61 @@ describe('RawMessages', () => {
     expect(await harness.isMessageCollapsibleAt(3)).toBe(false);
     expect(await harness.getMessageTextAt(3)).toContain(PreviewBridgeMessageType.RENDERER_READY);
   });
+
+  it('expands and collapses collapsible message panels via harness', async () => {
+    emitMessage({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {action: 'test_click'},
+      origin: 'http://localhost',
+      timestamp: 1000,
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getLlmLogPanelsCount()).toBe(1);
+    const panel = await harness.getLlmLogPanelAt(0);
+
+    expect(await panel.isExpanded()).toBe(false);
+
+    await panel.expand();
+    expect(await panel.isExpanded()).toBe(true);
+    const content = await panel.getTextContent();
+    expect(content).toContain('test_click');
+
+    await panel.collapse();
+    expect(await panel.isExpanded()).toBe(false);
+  });
+
+  it('toggles expansion state for multiple collapsible messages independently', async () => {
+    emitMessage({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {msg: 'message-1'},
+      origin: 'http://localhost',
+      timestamp: 1000,
+    });
+    latestLlmLogSignal.set({
+      type: LlmLogType.REQUEST,
+      payload: {prompt: 'prompt-2'},
+      timestamp: 2000,
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getLlmLogPanelsCount()).toBe(2);
+    const panel0 = await harness.getLlmLogPanelAt(0);
+    const panel1 = await harness.getLlmLogPanelAt(1);
+
+    expect(await panel0.isExpanded()).toBe(false);
+    expect(await panel1.isExpanded()).toBe(false);
+
+    await panel0.expand();
+    expect(await panel0.isExpanded()).toBe(true);
+    expect(await panel1.isExpanded()).toBe(false);
+
+    await panel1.expand();
+    expect(await panel0.isExpanded()).toBe(true);
+    expect(await panel1.isExpanded()).toBe(true);
+
+    await panel0.collapse();
+    expect(await panel0.isExpanded()).toBe(false);
+    expect(await panel1.isExpanded()).toBe(true);
+  });
 });

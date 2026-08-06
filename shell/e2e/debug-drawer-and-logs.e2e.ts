@@ -245,4 +245,48 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     await eventsTab.click();
     await expect(page.locator('.events-container')).toBeVisible();
   });
+
+  test('hides expanded raw message payload when switching to another debug tab and restores visibility on return', async ({
+    page,
+  }) => {
+    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    await expect(iframeBody).toBeVisible();
+
+    const clickMsg = {
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: 'v0.9',
+        action: {
+          name: 'e2e_raw_message_tab_switch',
+          surfaceId: 'e2e_surface',
+        },
+      },
+    };
+    await iframeBody.evaluate((_, msg) => {
+      window.parent.postMessage(msg, '*');
+    }, clickMsg);
+
+    const rawMessagesTab = page.locator('.dv-tab', {hasText: /^Raw Messages/});
+    await rawMessagesTab.click();
+    await expect(page.locator('.raw-messages-container')).toBeVisible();
+
+    const logPanel = page.locator('[data-testid="llm-log-panel"]').first();
+    await expect(logPanel).toBeVisible();
+
+    await logPanel.locator('mat-expansion-panel-header').click();
+
+    const rawPayloadPre = logPanel.locator('pre');
+    await expect(rawPayloadPre).toBeVisible();
+    await expect(rawPayloadPre).toContainText('e2e_raw_message_tab_switch');
+
+    const dataModelTab = page.locator('.dv-tab', {hasText: /^Data Model/});
+    await dataModelTab.click();
+    await expect(page.locator('.data-model-container')).toBeVisible();
+
+    await expect(rawPayloadPre).not.toBeVisible();
+
+    await rawMessagesTab.click();
+    await expect(page.locator('.raw-messages-container')).toBeVisible();
+    await expect(rawPayloadPre).toBeVisible();
+  });
 });

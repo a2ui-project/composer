@@ -107,6 +107,12 @@ mat-expansion-panel.llm-log-panel {
   border-radius: 4px;
   overflow: visible !important;
 
+  &.mat-expanded {
+    ::ng-deep .mat-expansion-panel-content {
+      visibility: inherit;
+    }
+  }
+
   ::ng-deep {
     .mat-expansion-panel-content-wrapper {
       overflow: hidden;
