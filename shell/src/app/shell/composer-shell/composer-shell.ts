@@ -117,20 +117,20 @@ export class ComposerShell {
     if (!href) {
       return;
     }
-    const rendererUrl = this.startupResolution.resolvedUrl() || '';
-    const activeDraft = this.stateSync.activeDraft() || '';
-    const compressed = await QueryParser.encodeSharedPayload(activeDraft);
-    const shareUrl = new URL(href);
-    if (rendererUrl) {
-      shareUrl.searchParams.set('renderer', rendererUrl);
-    }
-    shareUrl.searchParams.set('a2ui', compressed);
     const clipboard = this.document.defaultView?.navigator?.clipboard;
     if (!clipboard) {
       this.snackBar.open('Clipboard API unavailable', 'Close', {duration: 3000});
       return;
     }
     try {
+      const rendererUrl = this.startupResolution.resolvedUrl() || '';
+      const activeDraft = this.stateSync.activeDraft() || '';
+      const compressed = await QueryParser.encodeSharedPayload(activeDraft);
+      const shareUrl = new URL(href);
+      if (rendererUrl) {
+        shareUrl.searchParams.set('renderer', rendererUrl);
+      }
+      shareUrl.searchParams.set('a2ui', compressed);
       await clipboard.writeText(shareUrl.toString());
       this.snackBar.open('Shareable link copied to clipboard', 'Close', {duration: 3000});
     } catch (err) {

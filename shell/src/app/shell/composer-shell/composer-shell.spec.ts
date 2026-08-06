@@ -352,15 +352,13 @@ describe('ComposerShell Layout', () => {
     });
 
     it('resetSession strips share parameters from location href before setting href', async () => {
-      const component = fixture.componentInstance;
+      const doc = TestBed.inject(DOCUMENT);
       const mockLocation = {href: 'http://localhost:3000/?renderer=http://test.com&a2ui=d1.123'};
+      vi.spyOn(doc, 'defaultView', 'get').mockReturnValue({
+        location: mockLocation,
+      } as unknown as Window & typeof globalThis);
 
-      (component as unknown as Record<string, unknown>)['document'] = {
-        defaultView: {
-          location: mockLocation,
-        },
-      };
-
+      const component = fixture.componentInstance;
       await component.resetSession();
       expect(mockLocation.href).toBe('http://localhost:3000/');
     });

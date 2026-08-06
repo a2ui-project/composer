@@ -22,6 +22,7 @@ import {MatButtonHarness} from '@angular/material/button/testing';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolution} from './startup-resolution';
+import {QueryParser} from '../query-parser/query-parser';
 import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
@@ -178,6 +179,16 @@ describe('StartupResolution', () => {
 
       await service.resolveStartupConfiguration();
       expect(service.sharedA2uiPayload()).toBe(expectedPayload);
+    });
+
+    it('parses compressed d1. payload and assigns decompressed JSON string to sharedA2uiPayload', async () => {
+      mockFetchConfig({});
+      const rawJson = '[{"version":"v0.9","createSurface":{"surfaceId":"test-compressed"}}]';
+      const compressed = await QueryParser.encodeSharedPayload(rawJson);
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(`?a2ui=${compressed}`);
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBe(rawJson);
     });
 
     it('leaves sharedA2uiPayload as null when ?a2ui is missing or invalid', async () => {
