@@ -19,6 +19,8 @@
  * from the window location query string, enforcing runtime constraints.
  */
 export class QueryParser {
+  private static readonly PAYLOAD_PREFIX = 'd1.';
+
   /** @nocollapse */
   static parseRendererUrl(searchString: string): string | null {
     const params = new URLSearchParams(searchString);
@@ -81,7 +83,7 @@ export class QueryParser {
       binaryString += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
     }
     const base64Url = btoa(binaryString).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    return `d1.${base64Url}`;
+    return `${QueryParser.PAYLOAD_PREFIX}${base64Url}`;
   }
 
   /**
@@ -91,11 +93,14 @@ export class QueryParser {
   static async decodeSharedPayload(
     encodedPayload: string | null | undefined,
   ): Promise<string | null> {
-    if (!encodedPayload || !encodedPayload.startsWith('d1.')) {
+    if (!encodedPayload || !encodedPayload.startsWith(QueryParser.PAYLOAD_PREFIX)) {
       return null;
     }
     try {
-      const rawBase64 = encodedPayload.slice(3).replace(/-/g, '+').replace(/_/g, '/');
+      const rawBase64 = encodedPayload
+        .slice(QueryParser.PAYLOAD_PREFIX.length)
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
       const padded = rawBase64 + '='.repeat((4 - (rawBase64.length % 4)) % 4);
       const binaryString = atob(padded);
       const bytes = new Uint8Array(binaryString.length);
@@ -127,8 +132,8 @@ export class QueryParser {
     if (!candidate) {
       return null;
     }
-    if (candidate.startsWith('d1.')) {
-      return await QueryParser.decodeSharedPayload(candidate);
+    if (candidate.startsWith(QueryParser.PAYLOAD_PREFIX)) {
+      return QueryParser.decodeSharedPayload(candidate);
     }
     if (candidate.startsWith('[') || candidate.startsWith('{')) {
       return candidate;
