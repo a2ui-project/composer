@@ -14,7 +14,7 @@
     }
   },
   "apiKeys": {
-    "default": {
+    "fake": {
       "apiKey": "this will not work",
       "displayName": "Fake key"
     }
