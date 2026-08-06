@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "start": "yarn workspace ng-basic-catalog build && yarn workspace lit-basic-catalog build && yarn workspace react-basic-catalog build && ng serve",
-    "build": "yarn lint && ng build",
+    "build": "yarn lint && yarn workspace ng-basic-catalog build && yarn workspace lit-basic-catalog build && yarn workspace react-basic-catalog build && ng build",
     "test": "vitest run --coverage",
     "e2e": "playwright test",
     "e2e-headless": "E2E_HEADLESS=true playwright test",
