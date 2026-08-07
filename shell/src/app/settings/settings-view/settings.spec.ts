@@ -37,6 +37,8 @@ import {
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SettingsHarness} from './test/settings.harness';
 import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {
   SecureCredentialsStorage,
   CustomApiKey,
@@ -220,6 +222,7 @@ describe('Settings', () => {
         },
         {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
         {provide: IS_1P_AUTH_ENABLED, useValue: enable1PAuth},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
         SettingsService,
       ],
     }).compileComponents();
@@ -358,6 +361,7 @@ describe('Settings', () => {
           },
           {provide: IS_1P_AUTH_ENABLED, useValue: true},
           {provide: CONFIG_URL, useValue: '/config.json'},
+          {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
         ],
       }).compileComponents();
 

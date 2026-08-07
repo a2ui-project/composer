@@ -27,6 +27,8 @@ import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
+import {ApiKeyAction, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 
 describe('SettingsService', () => {
@@ -113,6 +115,7 @@ describe('SettingsService', () => {
         {provide: StartupResolution, useValue: mockStartupResolution},
         {provide: AppConfigProvider, useValue: mockConfigProvider},
         {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
       ],
     });
 
@@ -236,6 +239,7 @@ describe('SettingsService', () => {
         {provide: AppConfigProvider, useValue: mockConfigProvider},
         {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
         {provide: IS_1P_AUTH_ENABLED, useValue: true},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
       ],
     });
 
@@ -748,6 +752,74 @@ describe('SettingsService', () => {
           rendererUrl: 'example.com',
         }),
       ).toThrow('Custom renderer URL must start with http:// or https://');
+    });
+  });
+
+  describe('Usage Tracking Instrumentation', () => {
+    it('tracks switching renderers', async () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const trackSpy = vi.spyOn(trackingService, 'trackRendererSwitch');
+
+      await service.selectRenderer('dev');
+
+      expect(trackSpy).toHaveBeenCalledWith({
+        fromRendererId: null,
+        toRendererId: 'dev',
+      });
+    });
+
+    it('tracks adding and editing custom renderers', () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const trackAddSpy = vi.spyOn(trackingService, 'trackRendererAdd');
+      const trackEditSpy = vi.spyOn(trackingService, 'trackRendererEdit');
+
+      service.saveCustomRenderer({
+        id: 'new-custom',
+        name: 'New Custom',
+        rendererUrl: 'http://localhost:5000',
+      });
+
+      expect(trackAddSpy).toHaveBeenCalledWith({rendererId: 'new-custom'});
+
+      service.saveCustomRenderer({
+        id: 'new-custom',
+        name: 'New Custom Updated',
+        rendererUrl: 'http://localhost:5001',
+      });
+
+      expect(trackEditSpy).toHaveBeenCalledWith({rendererId: 'new-custom'});
+    });
+
+    it('tracks deleting custom renderers', () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const trackDeleteSpy = vi.spyOn(trackingService, 'trackRendererDelete');
+
+      service.deleteCustomRenderer('new-custom');
+
+      expect(trackDeleteSpy).toHaveBeenCalledWith({rendererId: 'new-custom'});
+    });
+
+    it('tracks selecting, adding, and deleting API keys', async () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const trackApiKeySpy = vi.spyOn(trackingService, 'trackApiKeyUpdate');
+
+      await service.selectApiKey('custom-key-1');
+      expect(trackApiKeySpy).toHaveBeenCalledWith({
+        action: ApiKeyAction.SELECT,
+        keyId: 'custom-key-1',
+      });
+
+      await service.saveCustomApiKey('key-id', 'Key Name', 'AIzaKey');
+      expect(trackApiKeySpy).toHaveBeenCalledWith({
+        action: ApiKeyAction.ADD,
+        keyId: 'key-id',
+      });
+
+      await service.deleteCustomApiKey('key-id');
+      expect(trackApiKeySpy).toHaveBeenCalledWith({
+        action: ApiKeyAction.DELETE,
+        keyId: 'key-id',
+      });
     });
   });
 });
