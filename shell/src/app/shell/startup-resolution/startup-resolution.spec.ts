@@ -197,6 +197,39 @@ describe('StartupResolution', () => {
 
       await service.resolveStartupConfiguration();
       expect(service.sharedA2uiPayload()).toBeNull();
+      expect(service.sharedA2uiError()).toBeNull();
+    });
+
+    it('sets sharedA2uiError when ?a2ui= contains corrupted or truncated compressed payload', async () => {
+      mockFetchConfig({});
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
+        '?a2ui=d1.corrupted_truncated_base64!!!',
+      );
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBeNull();
+      expect(service.sharedA2uiError()).toContain('truncated or corrupted');
+    });
+
+    it('sets sharedA2uiError when ?a2ui= contains malformed uncompressed JSON', async () => {
+      mockFetchConfig({});
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('?a2ui=[{"version":"v0.9", bad_syntax');
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBeNull();
+      expect(service.sharedA2uiError()).toContain('invalid or incomplete JSON syntax');
+    });
+
+    it('resets sharedA2uiError to null on consecutive resolveStartupConfiguration calls', async () => {
+      mockFetchConfig({});
+      const getWindowSearchSpy = vi.spyOn(service, 'getWindowSearch');
+      getWindowSearchSpy.mockReturnValue('?a2ui=d1.corrupted');
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiError()).not.toBeNull();
+
+      getWindowSearchSpy.mockReturnValue('');
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiError()).toBeNull();
     });
   });
 
