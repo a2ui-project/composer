@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, computed, linkedSignal, effect, untracked} from '@angular/core';
-import {formatJson} from '../../utils/json';
-import {toObservable} from '@angular/core/rxjs-interop';
+import {Component, computed, effect, inject, linkedSignal, signal, untracked} from '@angular/core';
+import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
+import {FormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
-import {FormsModule} from '@angular/forms';
-import {debounceTime, distinctUntilChanged, filter} from 'rxjs/operators';
+import {DataModelChangePayload, PreviewBridgeMessageType} from 'a2ui-bridge';
+import {debounceTime, distinctUntilChanged} from 'rxjs/operators';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
-import {PreviewBridgeMessageType, DataModelChangePayload} from 'a2ui-bridge';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {formatJson} from '../../utils/json';
 
 /**
  * A debug drawer component presenting a reactive, nested JSON tree explorer
@@ -37,6 +38,7 @@ import {PreviewBridgeMessageType, DataModelChangePayload} from 'a2ui-bridge';
 })
 export class DataModel {
   private readonly hostComm = inject(HostCommunication);
+  private readonly usageTrackingService = inject(UsageTrackingService);
 
   private lastSurfaceId = 'sample-surface';
   private lastPath: string | undefined = undefined;
@@ -85,38 +87,33 @@ export class DataModel {
     });
 
     toObservable(this.dataModelJson)
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(),
-        filter((jsonStr: string) => {
-          try {
-            JSON.parse(jsonStr);
-            return true;
-          } catch {
-            return false;
-          }
-        }),
-      )
-      .subscribe((validJsonStr: string) => {
-        const parsed = JSON.parse(validJsonStr);
-        const currentIncoming = this.latestModelValue();
-        const incomingStr = currentIncoming ? JSON.stringify(currentIncoming) : '';
-        const localStr = JSON.stringify(parsed);
-
-        if (incomingStr !== localStr) {
-          // NOTE: Quoted keys prevent compiler minification renaming across frame boundaries.
-          // prettier-ignore
-          this.hostComm.sendMessage({
-            'type': PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-            'payload': {
-              'updateDataModel': {
-                'surfaceId': this.lastSurfaceId,
-                'path': this.lastPath,
-                'value': parsed,
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
+      .subscribe((jsonStr: string) => {
+        let isValid = false;
+        try {
+          const parsed = JSON.parse(jsonStr);
+          isValid = true;
+          const currentIncoming = this.latestModelValue();
+          const incomingStr = currentIncoming ? JSON.stringify(currentIncoming) : '';
+          const localStr = JSON.stringify(parsed);
+          if (incomingStr !== localStr) {
+            // prettier-ignore
+            this.hostComm.sendMessage({
+              'type': PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+              'payload': {
+                'updateDataModel': {
+                  'surfaceId': this.lastSurfaceId,
+                  'path': this.lastPath,
+                  'value': parsed,
+                },
               },
-            },
-          });
+            });
+          }
+        } catch {
+          isValid = false;
         }
+
+        this.usageTrackingService.trackDataModelEdit({isValidJson: isValid});
       });
   }
 }

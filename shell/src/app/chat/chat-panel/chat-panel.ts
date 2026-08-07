@@ -16,14 +16,34 @@
 
 import {
   Component,
-  inject,
-  signal,
   computed,
-  ElementRef,
   Directive,
-  input,
   effect,
+  ElementRef,
+  inject,
+  input,
+  signal,
 } from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatButtonModule} from '@angular/material/button';
+import {MatDialog, MatDialogModule} from '@angular/material/dialog';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatIconModule} from '@angular/material/icon';
+import {MatInputModule} from '@angular/material/input';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {RouterLink} from '@angular/router';
+import {RenderA2uiItem} from 'a2ui-bridge';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {tryParseJsonArray} from '../../utils/json';
+import {ChatCleaner} from '../chat-service/chat-cleaner';
+import {ChatCoordinator} from '../chat-service/chat-coordinator';
+import {ChatState} from '../chat-state/chat-state';
+import {Attachment, LlmMessage, MessageRole} from '../llm-client/llm-client';
+import {PipelineStatus} from '../pipeline-status/pipeline-status';
+import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 
 @Directive({
   // eslint-disable-next-line @angular-eslint/directive-selector
@@ -43,26 +63,6 @@ export class AutoScroll {
     });
   }
 }
-import {ChatCoordinator} from '../chat-service/chat-coordinator';
-import {ChatState} from '../chat-state/chat-state';
-import {LlmMessage, MessageRole, Attachment} from '../llm-client/llm-client';
-import {PipelineStatus} from '../pipeline-status/pipeline-status';
-import {MatFormFieldModule} from '@angular/material/form-field';
-import {MatInputModule} from '@angular/material/input';
-import {MatButtonModule} from '@angular/material/button';
-import {FormsModule} from '@angular/forms';
-import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {MatIconModule} from '@angular/material/icon';
-import {MatDialogModule, MatDialog} from '@angular/material/dialog';
-import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
-import {tryParseJsonArray} from '../../utils/json';
-import {RouterLink} from '@angular/router';
-import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {RenderA2uiItem} from 'a2ui-bridge';
-import {HostCommunication} from '../../shell/host-communication/host-communication';
-import {ChatCleaner} from '../chat-service/chat-cleaner';
 
 interface AttachedFile extends Attachment {
   readonly previewUrl?: string;
@@ -195,7 +195,11 @@ export class ChatPanel {
   /**
    * Delegates plain instructions text queries to GenAI pipeline.
    */
-  protected async submitPrompt(): Promise<void> {
+  protected async submitPrompt(options?: {
+    promptId?: string;
+    promptTurnIndex?: number;
+    retryOfPromptId?: string;
+  }): Promise<void> {
     const textVal = this.userPrompt().trim();
     const attachments = [...this.attachedFiles()];
     if ((!textVal && attachments.length === 0) || this.isLocked()) {
@@ -234,7 +238,7 @@ export class ChatPanel {
     this.attachedFiles.set([]);
 
     // Trigger vertex async pipeline stream completions
-    await this.chatCoordinator.submitPrompt(textVal, attachments);
+    await this.chatCoordinator.submitPrompt(textVal, attachments, options);
   }
 
   /**
@@ -348,10 +352,16 @@ export class ChatPanel {
    * Re-dispatches a failed dynamic Human prompt turn, bypassing standard
    * inputs validations.
    */
-  protected async retryPrompt(prompt: string, attachments: AttachedFile[] = []): Promise<void> {
+  protected async retryPrompt(
+    prompt: string,
+    attachments: AttachedFile[] = [],
+    options?: {promptId?: string},
+  ): Promise<void> {
     this.userPrompt.set(prompt);
     this.attachedFiles.set(attachments);
-    await this.submitPrompt();
+    await this.submitPrompt({
+      retryOfPromptId: options?.promptId,
+    });
   }
 
   protected parseMessage(text: string | undefined): Array<{text: string; isRedacted: boolean}> {

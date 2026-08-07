@@ -27,6 +27,8 @@ import {
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 
 describe('DataModel', () => {
   let fixture: ComponentFixture<DataModel>;
@@ -47,7 +49,11 @@ describe('DataModel', () => {
 
     await TestBed.configureTestingModule({
       imports: [DataModel],
-      providers: [provideNoopAnimations(), {provide: HostCommunication, useValue: mockHostComm}],
+      providers: [
+        provideNoopAnimations(),
+        {provide: HostCommunication, useValue: mockHostComm},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DataModel);
@@ -119,6 +125,30 @@ describe('DataModel', () => {
         },
       },
     });
+  });
+
+  it('does not dispatch redundant message when local JSON matches incoming data model', async () => {
+    const incomingData = {foo: 'bar', count: 42};
+    mockHostComm.messageStream.set({
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 'sample-surface',
+          value: incomingData,
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+    TestBed.tick();
+    fixture.detectChanges();
+
+    mockHostComm.sendMessage.mockClear();
+
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+
+    expect(mockHostComm.sendMessage).not.toHaveBeenCalled();
   });
 
   it('does not dispatch invalid JSON edits to host service', async () => {

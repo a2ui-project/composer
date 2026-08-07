@@ -38,6 +38,8 @@ import {
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {signal} from '@angular/core';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -124,6 +126,7 @@ describe('ComposerWorkspace Dashboard', () => {
         {provide: StateSync, useClass: MockStateSync},
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
         {provide: LlmClient, useClass: MockLlmClient},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
       ],
     }).compileComponents();
 
@@ -557,6 +560,24 @@ describe('ComposerWorkspace Dashboard', () => {
         true,
       );
       expect(removeEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function), true);
+    });
+
+    it('tracks debug tab view when active panel changes', () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const trackSpy = vi.spyOn(trackingService, 'trackDebugTabView');
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
+
+      const eventsPanel = manager.api.getGroupPanel(ComposerPanelId.Events);
+      expect(eventsPanel).toBeDefined();
+      if (!eventsPanel) return;
+
+      (
+        manager.api as unknown as {
+          _onDidActivePanelChange: {fire: (event: {panel: unknown}) => void};
+        }
+      )['_onDidActivePanelChange'].fire({panel: eventsPanel});
+
+      expect(trackSpy).toHaveBeenCalledWith({panelId: ComposerPanelId.Events});
     });
   });
 });

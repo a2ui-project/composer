@@ -74,6 +74,7 @@ class MockChatCoordinator {
   private readonly chatState = inject(ChatState) as unknown as MockChatState;
 
   readonly systemPrompt = signal<string>('Initial system prompt instructions block');
+  readonly currentTurnIndex = signal<number>(0);
 
   get pipelineStatus() {
     return this.chatState.pipelineStatus;
@@ -83,7 +84,13 @@ class MockChatCoordinator {
     return this.chatState.isProgrammaticStreamActive;
   }
 
-  submitPrompt = vi.fn(async (prompt: string, attachments: Attachment[] = []): Promise<void> => {});
+  submitPrompt = vi.fn(
+    async (
+      prompt: string,
+      attachments: Attachment[] = [],
+      options?: {promptId?: string; promptTurnIndex?: number; retryOfPromptId?: string},
+    ): Promise<void> => {},
+  );
   cancelActiveStream = vi.fn();
 }
 
@@ -501,7 +508,9 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     await harness.clickRetryButtonAt(0);
     fixture.detectChanges();
 
-    expect(submitSpy).toHaveBeenCalledWith('create standard button', []);
+    expect(submitSpy).toHaveBeenCalledWith('create standard button', [], {
+      retryOfPromptId: undefined,
+    });
   });
 
   it(
@@ -522,7 +531,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       fixture.detectChanges();
 
       // Verify submit service call made with sanitized, trimmed inputs
-      expect(submitSpy).toHaveBeenCalledWith('Make a pretty dashboard layout', []);
+      expect(submitSpy).toHaveBeenCalledWith('Make a pretty dashboard layout', [], undefined);
 
       // Verify textbox cleared out instantly
       expect(await harness.getPromptText()).toBe('');
@@ -539,7 +548,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       await harness.pressKeyOnPrompt('Enter', {shiftKey: false});
       fixture.detectChanges();
 
-      expect(submitSpy).toHaveBeenCalledWith('Add Column', []);
+      expect(submitSpy).toHaveBeenCalledWith('Add Column', [], undefined);
       expect(await harness.getPromptText()).toBe('');
     },
   );
@@ -833,14 +842,18 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     await harness.clickSubmit();
     fixture.detectChanges();
 
-    expect(submitSpy).toHaveBeenCalledWith('Analyze this image', [
-      {
-        name: 'test-image.png',
-        mimeType: 'image/png',
-        data: 'base64data...',
-        previewUrl: 'data:image/png;base64,base64data...',
-      },
-    ]);
+    expect(submitSpy).toHaveBeenCalledWith(
+      'Analyze this image',
+      [
+        {
+          name: 'test-image.png',
+          mimeType: 'image/png',
+          data: 'base64data...',
+          previewUrl: 'data:image/png;base64,base64data...',
+        },
+      ],
+      undefined,
+    );
     expect(component.attachedFiles().length).toBe(0);
     expect(component.userPrompt()).toBe('');
   });
@@ -875,13 +888,17 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       fixture.detectChanges();
 
       expect(captureSpy).toHaveBeenCalledTimes(1);
-      expect(submitSpy).toHaveBeenCalledWith('Add button', [
-        {
-          name: 'screenshot.png',
-          mimeType: 'image/png',
-          data: 'mockScreenshot',
-        },
-      ]);
+      expect(submitSpy).toHaveBeenCalledWith(
+        'Add button',
+        [
+          {
+            name: 'screenshot.png',
+            mimeType: 'image/png',
+            data: 'mockScreenshot',
+          },
+        ],
+        undefined,
+      );
     });
 
     it('does not capture or attach screenshot when sending prompt with includeScreenshot disabled', async () => {
@@ -897,7 +914,31 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       fixture.detectChanges();
 
       expect(captureSpy).not.toHaveBeenCalled();
-      expect(submitSpy).toHaveBeenCalledWith('Add button', []);
+      expect(submitSpy).toHaveBeenCalledWith('Add button', [], undefined);
+    });
+
+    it('correlates retryPrompt telemetry options with parent promptId', async () => {
+      const submitSpy = chatServiceMock.submitPrompt;
+      chatServiceMock.currentTurnIndex.set(2);
+
+      const historyMocks: LlmMessage[] = [
+        {
+          role: MessageRole.ERROR,
+          content: 'error',
+          isRetryable: true,
+          originalPrompt: 'Build table',
+          promptId: 'prompt-123-abc',
+        },
+      ];
+      chatStateMock.chatHistory.set(historyMocks);
+      fixture.detectChanges();
+
+      await harness.clickRetryButtonAt(0);
+      fixture.detectChanges();
+
+      expect(submitSpy).toHaveBeenCalledWith('Build table', [], {
+        retryOfPromptId: 'prompt-123-abc',
+      });
     });
   });
 

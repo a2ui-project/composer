@@ -147,7 +147,11 @@
                         color="primary"
                         class="retry-button"
                         [disabled]="isLocked()"
-                        (click)="retryPrompt(turn.originalPrompt || '', turn.attachments || [])"
+                        (click)="
+                          retryPrompt(turn.originalPrompt || '', turn.attachments || [], {
+                            promptId: turn.promptId,
+                          })
+                        "
                       >
                         <mat-icon aria-hidden="true">refresh</mat-icon>
                         Retry Request

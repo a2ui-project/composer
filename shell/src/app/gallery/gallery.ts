@@ -39,6 +39,7 @@ import {RenderedFrame} from '../preview/rendered/rendered-frame';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {formatJson} from '../utils/json';
 import {PreviewBridgeMessageType, ComponentUsage, RenderA2uiItem} from 'a2ui-bridge';
+import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 
 /**
  * Displays a split visual catalog gallery enabling search, interactive component selection,
@@ -66,6 +67,7 @@ export class Gallery implements OnInit, OnDestroy {
   private readonly catalogService = inject(GalleryCatalog);
   protected readonly catalogManagement = inject(CatalogManagement);
   private readonly hostCommunication = inject(HostCommunication);
+  private readonly usageTrackingService = inject(UsageTrackingService);
 
   constructor() {
     this.hostCommunication.messageStream$
@@ -134,6 +136,7 @@ export class Gallery implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.catalogService.setGalleryActive(true);
+    this.usageTrackingService.trackGalleryView();
   }
 
   ngOnDestroy(): void {
@@ -188,6 +191,10 @@ export class Gallery implements OnInit, OnDestroy {
    */
   protected selectComponent(key: string | null): void {
     this.catalogService.selectComponent(key);
+    if (key) {
+      const category = this.componentsList().find(c => c.components.includes(key))!.category;
+      this.usageTrackingService.trackGalleryComponentSelect({componentKey: key, category});
+    }
   }
 
   private getComponentsPayload(
@@ -243,7 +250,7 @@ export class Gallery implements OnInit, OnDestroy {
   }
 
   /**
-   * Copies the usage JSON payload to the system clipboard.
+   * Copies formatted A2UI JSON payload commands to the user's clipboard.
    */
   protected copyToClipboard(): void {
     const preset = this.catalogService.selectedComponentPreset();
@@ -265,9 +272,16 @@ export class Gallery implements OnInit, OnDestroy {
         return;
       }
 
-      navigator.clipboard.writeText(payload).catch(err => {
-        console.error('Failed to copy A2UI component usage to clipboard: ', err);
-      });
+      navigator.clipboard
+        .writeText(payload)
+        .then(() => {
+          this.usageTrackingService.trackGalleryCopyUsage({
+            componentKey: this.selectedComponentKey() || '',
+          });
+        })
+        .catch(err => {
+          console.error('Failed to copy A2UI component usage to clipboard: ', err);
+        });
     } catch (err) {
       console.error('Failed to parse or format A2UI usage payload: ', err);
     }

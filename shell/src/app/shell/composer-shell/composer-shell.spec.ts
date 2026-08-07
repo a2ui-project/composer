@@ -14,25 +14,34 @@
  * limitations under the License.
  */
 
+import {DOCUMENT} from '@angular/common';
+import {signal, WritableSignal} from '@angular/core';
+import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {ComposerShell} from './composer-shell';
-import {provideRouter, Router, RouterLinkActive} from '@angular/router';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {By} from '@angular/platform-browser';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {ComposerShellHarness} from './test/composer-shell.harness';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {DOCUMENT} from '@angular/common';
-import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
-import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {provideRouter, Router, RouterLinkActive} from '@angular/router';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {ChatCoordinator} from '../../chat/chat-service/chat-coordinator';
+import {StateSync} from '../../chat/state-sync/state-sync';
 import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
-import {signal, WritableSignal} from '@angular/core';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
+import {
+  ShareTrackingStatus,
+  UsageTrackingService,
+} from '../../usage-tracking/usage-tracking.service';
+import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {ComposerShell} from './composer-shell';
+import {ComposerShellHarness} from './test/composer-shell.harness';
 
 describe('ComposerShell Layout', () => {
   let fixture: ComponentFixture<ComposerShell>;
@@ -47,6 +56,16 @@ describe('ComposerShell Layout', () => {
   let configProviderMock: {
     themePreference: WritableSignal<ThemePreference>;
     setThemePreference: (theme: ThemePreference) => void;
+  };
+  let startupResolutionMock: {
+    resolvedUrl: WritableSignal<string | null>;
+    sharedA2uiError: WritableSignal<string | null>;
+  };
+  let stateSyncMock: {
+    activeDraft: WritableSignal<string>;
+  };
+  let chatCoordinatorMock: {
+    currentTurnIndex: WritableSignal<number>;
   };
 
   beforeEach(async () => {
@@ -74,6 +93,19 @@ describe('ComposerShell Layout', () => {
       }),
     };
 
+    startupResolutionMock = {
+      resolvedUrl: signal<string | null>(null),
+      sharedA2uiError: signal<string | null>(null),
+    };
+
+    stateSyncMock = {
+      activeDraft: signal(''),
+    };
+
+    chatCoordinatorMock = {
+      currentTurnIndex: signal(3),
+    };
+
     await TestBed.configureTestingModule({
       imports: [ComposerShell],
       providers: [
@@ -99,31 +131,58 @@ describe('ComposerShell Layout', () => {
           provide: AppConfigProvider,
           useValue: configProviderMock,
         },
+        {
+          provide: StartupResolution,
+          useValue: startupResolutionMock,
+        },
+        {
+          provide: StateSync,
+          useValue: stateSyncMock,
+        },
+        {
+          provide: ChatCoordinator,
+          useValue: chatCoordinatorMock,
+        },
+        {
+          provide: UsageTrackingService,
+          useClass: NoopUsageTrackingService,
+        },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ComposerShell);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ComposerShellHarness);
+
+    const injectedDocument = TestBed.inject(DOCUMENT);
+    const nav = injectedDocument.defaultView!.navigator;
+    const navProto = Object.getPrototypeOf(nav);
+    if (
+      !Object.getOwnPropertyDescriptor(nav, 'clipboard') &&
+      !Object.getOwnPropertyDescriptor(navProto, 'clipboard')
+    ) {
+      Object.defineProperty(navProto, 'clipboard', {
+        get: () => undefined,
+        configurable: true,
+      });
+    }
   });
 
   afterEach(() => {
     const injectedDocument = TestBed.inject(DOCUMENT);
     injectedDocument.body.classList.remove('dark-theme');
+    vi.restoreAllMocks();
   });
 
   it('creates the shell layout component via test harness', async () => {
     expect(harness).toBeTruthy();
   });
 
-  it(
-    'displays the static header title A2UI Composer via test ' + 'harness inspection',
-    async () => {
-      expect(await harness.getHeaderTitleText()).toContain('A2UI Composer');
-    },
-  );
+  it('displays the static header title A2UI Composer via test harness inspection', async () => {
+    expect(await harness.getHeaderTitleText()).toContain('A2UI Composer');
+  });
 
-  it('dynamically updates the header title when ' + 'activeCatalogTitle mutates', async () => {
+  it('dynamically updates the header title when activeCatalogTitle mutates', async () => {
     catalogManagementServiceMock.activeCatalogTitle.set('Test Catalog');
     fixture.detectChanges();
     expect(await harness.getHeaderTitleText()).toBe('A2UI Composer - Test Catalog');
@@ -135,49 +194,48 @@ describe('ComposerShell Layout', () => {
     expect(await harness.getHeaderTooltipText()).toBe('Sample description');
   });
 
-  it(
-    'flushes session cache upon clicking New Session reset button ' +
-      'via test harness interaction',
-    async () => {
-      const consoleSpy = vi.spyOn(console, 'log');
-      await harness.clickResetButton();
-      expect(storageServiceMock.flushAllRecords).toHaveBeenCalled();
-      expect(localStorageServiceMock.removeItem).toHaveBeenCalledWith(
-        LocalStorageKey.SESSION_STATE,
-      );
-      expect(localStorageServiceMock.removeItem).toHaveBeenCalledWith(LocalStorageKey.EDITOR_CACHE);
-      expect(localStorageServiceMock.removeItem).not.toHaveBeenCalledWith(
-        LocalStorageKey.DOCKVIEW_LAYOUT,
-      );
-      expect(sessionStorageServiceMock.clear).toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith('Session state cleared.');
-    },
-  );
+  it('flushes session cache and tracks reset upon clicking New Session reset button', async () => {
+    const usageTracking = TestBed.inject(UsageTrackingService);
+    const resetSpy = vi.spyOn(usageTracking, 'trackSessionReset');
+    const sessionResetSpy = vi.spyOn(usageTracking, 'resetSession');
+    const consoleSpy = vi.spyOn(console, 'log');
 
-  it(
-    'toggles the dark theme SCSS class on the document body upon ' +
-      'clicking the theme toggle button via test harness interaction',
-    async () => {
-      const injectedDocument = TestBed.inject(DOCUMENT);
-      expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
-      await harness.clickThemeToggleButton();
-      expect(injectedDocument.body.classList.contains('dark-theme')).toBe(true);
-      await harness.clickThemeToggleButton();
-      expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
-    },
-  );
+    await harness.clickResetButton();
 
-  it(
-    'toggles the left sidebar collapsed state upon clicking ' +
-      'the hamburger button via test harness interaction',
-    async () => {
-      expect(await harness.isSidenavCollapsed()).toBe(true);
-      await harness.clickHamburgerButton();
-      expect(await harness.isSidenavCollapsed()).toBe(false);
-      await harness.clickHamburgerButton();
-      expect(await harness.isSidenavCollapsed()).toBe(true);
-    },
-  );
+    expect(resetSpy).toHaveBeenCalledWith({totalPromptTurns: 3});
+    expect(sessionResetSpy).toHaveBeenCalled();
+    expect(storageServiceMock.flushAllRecords).toHaveBeenCalled();
+    expect(localStorageServiceMock.removeItem).toHaveBeenCalledWith(LocalStorageKey.SESSION_STATE);
+    expect(localStorageServiceMock.removeItem).toHaveBeenCalledWith(LocalStorageKey.EDITOR_CACHE);
+    expect(localStorageServiceMock.removeItem).not.toHaveBeenCalledWith(
+      LocalStorageKey.DOCKVIEW_LAYOUT,
+    );
+    expect(sessionStorageServiceMock.clear).toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith('Session state cleared.');
+  });
+
+  it('toggles the dark theme SCSS class and tracks theme change on toggle', async () => {
+    const usageTracking = TestBed.inject(UsageTrackingService);
+    const themeSpy = vi.spyOn(usageTracking, 'trackThemeToggle');
+    const injectedDocument = TestBed.inject(DOCUMENT);
+
+    expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
+    await harness.clickThemeToggleButton();
+    expect(injectedDocument.body.classList.contains('dark-theme')).toBe(true);
+    expect(themeSpy).toHaveBeenCalledWith({theme: ThemePreference.DARK});
+
+    await harness.clickThemeToggleButton();
+    expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
+    expect(themeSpy).toHaveBeenCalledWith({theme: ThemePreference.LIGHT});
+  });
+
+  it('toggles the left sidebar collapsed state upon clicking the hamburger button', async () => {
+    expect(await harness.isSidenavCollapsed()).toBe(true);
+    await harness.clickHamburgerButton();
+    expect(await harness.isSidenavCollapsed()).toBe(false);
+    await harness.clickHamburgerButton();
+    expect(await harness.isSidenavCollapsed()).toBe(true);
+  });
 
   it('ensures mat-sidenav-content margin-left is 0px to eliminate whitespace gap', async () => {
     const sidenavContent = fixture.nativeElement.querySelector('mat-sidenav-content');
@@ -212,7 +270,7 @@ describe('ComposerShell Layout', () => {
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(5);
+    expect(hiddenAttrs.length).toBe(6);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
@@ -232,7 +290,7 @@ describe('ComposerShell Layout', () => {
     expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(3);
   });
 
-  it('sets explicit aria-label attributes on navigation links and connects hamburger button to sidenav via aria-controls', () => {
+  it('sets explicit aria-label attributes on navigation links and connects hamburger button to sidenav', () => {
     const navLinks = Array.from(fixture.nativeElement.querySelectorAll('mat-nav-list a'));
     const ariaLabels = navLinks.map((link: unknown) =>
       (link as Element).getAttribute('aria-label'),
@@ -246,7 +304,7 @@ describe('ComposerShell Layout', () => {
     expect(hamburgerButton.getAttribute('aria-controls')).toBe('composer-sidenav');
   });
 
-  it('applies routerLinkActive="active-nav-item" to navigation links with exact matching on root so active anchor receives active-nav-item class', async () => {
+  it('applies routerLinkActive="active-nav-item" to navigation links with exact matching on root', async () => {
     const navLinks = Array.from(fixture.nativeElement.querySelectorAll('mat-nav-list a'));
     const rlaAttrs = navLinks.map((link: unknown) =>
       (link as Element).getAttribute('routerLinkActive'),
@@ -263,5 +321,96 @@ describe('ComposerShell Layout', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect((navLinks[0] as HTMLElement).classList.contains('active-nav-item')).toBe(true);
+  });
+
+  describe('shareDesign & resetSession', () => {
+    it('shareDesign copies renderer URL and compressed payload to clipboard and tracks success', async () => {
+      const usageTracking = TestBed.inject(UsageTrackingService);
+      const shareSpy = vi.spyOn(usageTracking, 'trackShareDesign');
+      startupResolutionMock.resolvedUrl.set('http://my-renderer.com');
+      stateSyncMock.activeDraft.set('[{"version":"v0.9"}]');
+      const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+      const document = TestBed.inject(DOCUMENT);
+      const nav = document.defaultView!.navigator;
+      const targetObj = Object.getOwnPropertyDescriptor(nav, 'clipboard')
+        ? nav
+        : Object.getPrototypeOf(nav);
+      const spy = vi.spyOn(targetObj, 'clipboard', 'get').mockReturnValue({
+        writeText: writeTextSpy,
+      } as unknown as Clipboard);
+
+      try {
+        const component = fixture.componentInstance;
+        await component.shareDesign();
+        expect(writeTextSpy).toHaveBeenCalledWith(
+          expect.stringContaining('renderer=http%3A%2F%2Fmy-renderer.com'),
+        );
+        expect(writeTextSpy).toHaveBeenCalledWith(expect.stringContaining('a2ui=d1.'));
+        expect(shareSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            status: ShareTrackingStatus.SUCCESS,
+            compressedLengthChars: expect.any(Number),
+          }),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('displays a snackbar warning and tracks clipboard unavailable when clipboard API is missing', async () => {
+      const usageTracking = TestBed.inject(UsageTrackingService);
+      const shareSpy = vi.spyOn(usageTracking, 'trackShareDesign');
+      const snackBar = fixture.debugElement.injector.get(MatSnackBar);
+      const snackBarSpy = vi.spyOn(snackBar, 'open');
+      const document = TestBed.inject(DOCUMENT);
+      const navProto = Object.getPrototypeOf(document.defaultView!.navigator) as Navigator;
+      const spy = vi
+        .spyOn(navProto, 'clipboard', 'get')
+        .mockReturnValue(undefined as unknown as Clipboard);
+
+      try {
+        const component = fixture.componentInstance;
+        await component.shareDesign();
+        expect(snackBarSpy).toHaveBeenCalledWith('Clipboard API unavailable', 'Close', {
+          duration: 3000,
+        });
+        expect(shareSpy).toHaveBeenCalledWith({
+          status: ShareTrackingStatus.CLIPBOARD_UNAVAILABLE,
+          compressedLengthChars: 0,
+        });
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('resetSession strips share parameters from location href before setting href', async () => {
+      const doc = TestBed.inject(DOCUMENT);
+      const mockLocation = {href: 'http://localhost:3000/?renderer=http://test.com&a2ui=d1.123'};
+      vi.spyOn(doc, 'defaultView', 'get').mockReturnValue({
+        location: mockLocation,
+      } as unknown as Window & typeof globalThis);
+
+      const component = fixture.componentInstance;
+      await component.resetSession();
+      expect(mockLocation.href).toBe('http://localhost:3000/');
+    });
+
+    it('displays a snackbar error message when sharedA2uiError signal emits an error message', () => {
+      const snackBar = fixture.debugElement.injector.get(MatSnackBar);
+      const snackBarSpy = vi.spyOn(snackBar, 'open');
+
+      startupResolutionMock.sharedA2uiError.set(
+        'The shared design link appears truncated or corrupted (it may have exceeded URL length limits).',
+      );
+      fixture.detectChanges();
+
+      expect(snackBarSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Unable to load shared design: The shared design link appears truncated or corrupted',
+        ),
+        'Dismiss',
+        {duration: 8000},
+      );
+    });
   });
 });

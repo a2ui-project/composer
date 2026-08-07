@@ -14,10 +14,15 @@
  * limitations under the License.
  */
 
-import {computed, effect, inject, Injectable, untracked} from '@angular/core';
-import {formatJson, tryParseJsonArray} from '../../utils/json';
-import {ChatCleaner} from './chat-cleaner';
+import {computed, effect, inject, Injectable, signal, untracked} from '@angular/core';
+import {A2uiComponentInstance, PreviewBridgeMessageType, RenderA2uiItem} from 'a2ui-bridge';
+import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
+import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {PromptTurnType, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {formatJson, tryParseJsonArray} from '../../utils/json';
+import {ChatState, LlmLogType} from '../chat-state/chat-state';
 import {
   Attachment,
   CANCEL_ERROR_NAME,
@@ -27,13 +32,9 @@ import {
   MessageRole,
 } from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {StateSync} from '../state-sync/state-sync';
-import {ChatState, LlmLogType} from '../chat-state/chat-state';
-import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
-import {A2uiComponentInstance, PreviewBridgeMessageType, RenderA2uiItem} from 'a2ui-bridge';
+import {ChatCleaner} from './chat-cleaner';
 import {cleanErrorMessage, redactApiKey} from './error-utils';
-import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 
 @Injectable({
   providedIn: 'root',
@@ -51,6 +52,7 @@ export class ChatCoordinator {
   private readonly chatState = inject(ChatState);
   private readonly llmClient = inject(LlmClient);
   private readonly chatCleaner = inject(ChatCleaner);
+  private readonly usageTrackingService = inject(UsageTrackingService);
 
   /** Reactively mapped rendering pipeline execution milestones. */
   readonly pipelineStatus = this.chatState.pipelineStatus;
@@ -61,6 +63,10 @@ export class ChatCoordinator {
    */
   readonly isProgrammaticStreamActive = this.chatState.isProgrammaticStreamActive;
 
+  /** Turn index counter for telemetry. */
+  readonly currentTurnIndex = signal(0);
+
+  private activePromptId: string | null = null;
   private lastSeenRendererUrl = '';
   private isFirstUrlEffectRun = true;
 
@@ -87,6 +93,8 @@ export class ChatCoordinator {
    * Resets turns logs history, overlays milestones, and locks indicators.
    */
   wipeEnvironmentCache(): void {
+    this.currentTurnIndex.set(0);
+    this.activePromptId = null;
     this.chatState.setChatHistory([]);
     this.chatState.setPipelineStatus(PipelineStatus.IDLE);
     this.chatState.setProgrammaticStreamActive(false);
@@ -115,8 +123,55 @@ export class ChatCoordinator {
    */
   cancelActiveStream(): void {
     this.isCancelRequested = true;
+    if (this.activePromptId) {
+      this.usageTrackingService.trackChatCancel({
+        promptId: this.activePromptId,
+        turnIndex: this.currentTurnIndex(),
+        pipelineStatus: this.pipelineStatus(),
+      });
+    }
     if (this.activeStreamResponse && this.activeStreamResponse.cancel) {
       this.activeStreamResponse.cancel();
+    }
+  }
+
+  private emitPromptTracking(
+    prompt: string,
+    attachments: Attachment[],
+    options?: {promptId?: string; promptTurnIndex?: number; retryOfPromptId?: string},
+  ): string {
+    const isRetry = !!options?.retryOfPromptId;
+    const promptTurnIndex = options?.promptTurnIndex ?? this.currentTurnIndex() + 1;
+    this.currentTurnIndex.set(promptTurnIndex);
+
+    const catalogObj = this.catalogManagement.activeCatalog();
+    const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
+
+    const hasScreenshot = attachments.some(
+      a => a.name === 'screenshot.png' || a.mimeType?.startsWith('image/'),
+    );
+    const nonScreenshotAttachments = attachments.filter(
+      a => a.name !== 'screenshot.png' && !a.mimeType?.startsWith('image/'),
+    );
+
+    if (isRetry) {
+      return this.usageTrackingService.trackChatRetry({
+        promptId: options?.promptId,
+        catalogId,
+        turnIndex: promptTurnIndex,
+        attemptNumber: 2,
+        retryOfPromptId: options?.retryOfPromptId,
+      });
+    } else {
+      return this.usageTrackingService.trackChatPrompt({
+        promptId: options?.promptId,
+        catalogId,
+        turnType: promptTurnIndex === 1 ? PromptTurnType.INITIAL : PromptTurnType.FOLLOWUP,
+        turnIndex: promptTurnIndex,
+        attemptNumber: 1,
+        hasScreenshot,
+        attachmentCount: nonScreenshotAttachments.length,
+      });
     }
   }
 
@@ -125,9 +180,16 @@ export class ChatCoordinator {
    * in-stream, buffers packets, runs auto-repair healing and schema
    * validation blocks.
    */
-  async submitPrompt(prompt: string, attachments: Attachment[] = []): Promise<void> {
+  async submitPrompt(
+    prompt: string,
+    attachments: Attachment[] = [],
+    options?: {promptId?: string; promptTurnIndex?: number; retryOfPromptId?: string},
+  ): Promise<void> {
     const trimmed = prompt.trim();
     if (!trimmed && attachments.length === 0) return;
+
+    const promptId = this.emitPromptTracking(trimmed, attachments, options);
+    this.activePromptId = promptId;
 
     // Lock UI controls and transition state indicators to receiving stream
     this.chatState.setProgrammaticStreamActive(true);
@@ -140,6 +202,7 @@ export class ChatCoordinator {
         role: MessageRole.USER,
         content: trimmed,
         attachments: attachments.length > 0 ? attachments : undefined,
+        promptId,
       },
     ]);
 
@@ -236,7 +299,7 @@ export class ChatCoordinator {
           return updated;
         });
       } else {
-        this.handleConnectivityError(err, trimmed, attachments);
+        this.handleConnectivityError(err, trimmed, attachments, promptId);
       }
     } finally {
       this.activeStreamResponse = undefined;
@@ -729,6 +792,7 @@ export class ChatCoordinator {
     err: unknown,
     originalPrompt?: string,
     attachments: Attachment[] = [],
+    promptId?: string,
   ): void {
     const rawError = err instanceof Error ? err.message : String(err);
     const lowerMsg = rawError.toLowerCase();
@@ -773,6 +837,7 @@ export class ChatCoordinator {
         errorMessage: redactedErrorMessage,
         errorDetails: redactedErrorDetails,
         errorTip: redactedErrorTip,
+        promptId,
         ...(parsed.isRetryable ? {isRetryable: true, originalPrompt, attachments} : {}),
       };
       if (lastIdx >= 0 && updated[lastIdx].role === MessageRole.MODEL) {

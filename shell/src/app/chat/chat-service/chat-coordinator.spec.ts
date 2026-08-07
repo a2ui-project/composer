@@ -39,6 +39,8 @@ import {
   CANCEL_ERROR_NAME,
 } from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
+import {PromptTurnType, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
@@ -149,6 +151,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
         {provide: StateSync, useClass: MockStateSync},
         {provide: LlmClient, useClass: MockLlmClient},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
       ],
     });
 
@@ -1003,6 +1006,112 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     it('prevents double redaction of already redacted keys', () => {
       const input = 'Invalid API key: redacted for your protection';
       expect(redactApiKey(input)).toBe(input);
+    });
+  });
+
+  describe('Telemetry Tracking', () => {
+    it('tracks prompt turns upon submitPrompt', async () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const promptSpy = vi.spyOn(trackingService, 'trackChatPrompt');
+
+      await service.submitPrompt('Build a landing page', [
+        {name: 'screenshot.png', mimeType: 'image/png', data: 'data'},
+        {name: 'data.json', mimeType: 'application/json', data: 'json'},
+      ]);
+
+      expect(promptSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          turnIndex: 1,
+          turnType: PromptTurnType.INITIAL,
+          hasScreenshot: true,
+          attachmentCount: 1,
+        }),
+      );
+      expect(service.currentTurnIndex()).toBe(1);
+    });
+
+    it('tracks prompt turn as retry when retryOfPromptId is specified', async () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const retrySpy = vi.spyOn(trackingService, 'trackChatRetry');
+
+      await service.submitPrompt('Try again', [], {
+        promptId: 'custom-retry-id',
+        promptTurnIndex: 5,
+        retryOfPromptId: 'parent-prompt-id',
+      });
+
+      expect(retrySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptId: 'custom-retry-id',
+          turnIndex: 5,
+          attemptNumber: 2,
+          retryOfPromptId: 'parent-prompt-id',
+        }),
+      );
+      expect(service.currentTurnIndex()).toBe(5);
+    });
+
+    it('tracks cancelled prompt when cancelActiveStream is triggered', async () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const cancelSpy = vi.spyOn(trackingService, 'trackChatCancel');
+
+      let cancelCalled = false;
+      const completePromise = new Promise<string>((_, reject) => {
+        const check = setInterval(() => {
+          if (cancelCalled) {
+            clearInterval(check);
+            const err = new Error('Cancelled');
+            err.name = CANCEL_ERROR_NAME;
+            reject(err);
+          }
+        }, 10);
+      });
+      completePromise.catch(() => {});
+
+      llmClientMock.chatStream = vi.fn(async () => {
+        const contentStream: AsyncIterable<{content: string; thinking?: string}> = {
+          [Symbol.asyncIterator]() {
+            return {
+              async next(): Promise<IteratorResult<{content: string; thinking?: string}>> {
+                if (cancelCalled) {
+                  const err = new Error('Cancelled');
+                  err.name = CANCEL_ERROR_NAME;
+                  throw err;
+                }
+                await new Promise<void>((_, reject) => {
+                  const check = setInterval(() => {
+                    if (cancelCalled) {
+                      clearInterval(check);
+                      const err = new Error('Cancelled');
+                      err.name = CANCEL_ERROR_NAME;
+                      reject(err);
+                    }
+                  }, 10);
+                });
+                return {value: undefined as unknown as {content: string}, done: true};
+              },
+            };
+          },
+        };
+        return {
+          contentStream,
+          complete: completePromise,
+          cancel: () => {
+            cancelCalled = true;
+          },
+        };
+      });
+
+      const submitPromise = service.submitPrompt('Long running prompt');
+      service.cancelActiveStream();
+      await submitPromise;
+
+      expect(cancelSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptId: expect.any(String),
+          turnIndex: 1,
+        }),
+      );
     });
   });
 });
