@@ -4,17 +4,29 @@
       "rendererUrl": "https://a2ui-project.github.io/composer/samples/ng-basic-catalog/",
       "displayName": "Angular Basic (github)"
     },
-    "dev": {
+    "angular-dev": {
       "rendererUrl": "http://localhost:4200/samples/ng-basic-catalog/",
       "displayName": "Angular Basic (local)"
     },
+    "lit": {
+      "rendererUrl": "https://a2ui-project.github.io/composer/samples/lit-basic-catalog/",
+      "displayName": "Lit Basic (github)"
+    },
+    "lit-dev": {
+      "rendererUrl": "http://localhost:4200/samples/lit-basic-catalog/",
+      "displayName": "Lit Basic (local)"
+    },
     "react": {
-      "rendererUrl": "http://localhost:3459",
-      "displayName": "React (local)"
+      "rendererUrl": "https://a2ui-project.github.io/composer/samples/react-basic-catalog/",
+      "displayName": "React Basic (github)"
+    },
+    "react-dev": {
+      "rendererUrl": "http://localhost:4200/samples/react-basic-catalog/",
+      "displayName": "React Basic (local)"
     }
   },
   "apiKeys": {
-    "default": {
+    "fake": {
       "apiKey": "this will not work",
       "displayName": "Fake key"
     }
