@@ -36,15 +36,21 @@ test.describe('Settings and Client Configuration', () => {
     });
 
     test('persists configuration immediately upon selection', async ({page}) => {
-      await page.locator('.add-api-key-button').click();
-      await page.locator('#api-key-name-input').fill('Test Key');
-      await page.locator('#api-key-value-input').fill('test-api-key');
-      await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
+      await page.getByRole('button', {name: 'Add Gemini API key'}).click();
+      const apiKeyDialog = page.getByRole('dialog', {name: 'Add Gemini API Key'});
+      await expect(apiKeyDialog).toBeVisible();
+      await apiKeyDialog.getByLabel('Name', {exact: true}).fill('Test Key');
+      await apiKeyDialog.getByLabel('API Key', {exact: true}).fill('test-api-key');
+      await apiKeyDialog.getByRole('button', {name: 'Add', exact: true}).click();
+      await expect(apiKeyDialog).toBeHidden();
 
-      await page.locator('.add-renderer-button').click();
-      await page.locator('#renderer-name-input').fill('Test Renderer');
-      await page.locator('#renderer-url-input').fill('http://localhost:9090');
-      await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
+      await page.getByRole('button', {name: 'Add custom renderer'}).click();
+      const rendererDialog = page.getByRole('dialog', {name: 'Add Custom Renderer'});
+      await expect(rendererDialog).toBeVisible();
+      await rendererDialog.getByLabel('Name', {exact: true}).fill('Test Renderer');
+      await rendererDialog.getByLabel('Renderer URL', {exact: true}).fill('http://localhost:9090');
+      await rendererDialog.getByRole('button', {name: 'Add', exact: true}).click();
+      await expect(rendererDialog).toBeHidden();
 
       await page.waitForFunction(() => !!localStorage.getItem('a2ui_composer_selected_renderer'));
       await page.waitForFunction(() => !!localStorage.getItem('a2ui_composer_selected_api_key'));
@@ -69,10 +75,13 @@ test.describe('Settings and Client Configuration', () => {
     test('persists configuration immediately with default relative renderer URL and loads workspace with pre-populated draft', async ({
       page,
     }) => {
-      await page.locator('.add-api-key-button').click();
-      await page.locator('#api-key-name-input').fill('Unique Key');
-      await page.locator('#api-key-value-input').fill('new-unique-api-key');
-      await page.getByRole('dialog').getByRole('button', {name: 'Add', exact: true}).click();
+      await page.getByRole('button', {name: 'Add Gemini API key'}).click();
+      const apiKeyDialog = page.getByRole('dialog', {name: 'Add Gemini API Key'});
+      await expect(apiKeyDialog).toBeVisible();
+      await apiKeyDialog.getByLabel('Name', {exact: true}).fill('Unique Key');
+      await apiKeyDialog.getByLabel('API Key', {exact: true}).fill('new-unique-api-key');
+      await apiKeyDialog.getByRole('button', {name: 'Add', exact: true}).click();
+      await expect(apiKeyDialog).toBeHidden();
 
       await page.waitForFunction(() =>
         localStorage.getItem('a2ui_composer_selected_api_key')?.startsWith('custom-'),
