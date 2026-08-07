@@ -55,7 +55,7 @@ jobs:
       head_sha: ${{ steps.metadata.outputs.head_sha }}
     steps:
       - name: Download PR Preview Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: pr-preview-payload
           run-id: ${{ github.event.workflow_run.id }}
@@ -95,17 +95,17 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Download PR Preview Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: pr-preview-payload
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish Preview to gh-pages Subfolder
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./deploy_dist
@@ -113,7 +113,7 @@ jobs:
           keep_files: true
 
       - name: Post PR Preview Comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           PR_NUM: ${{ needs.parse-metadata.outputs.pr_number }}
           HEAD_SHA: ${{ needs.parse-metadata.outputs.head_sha }}
@@ -163,7 +163,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Delete PR Preview Folder from gh-pages Branch
         env:
@@ -204,7 +204,7 @@ jobs:
           fi
 
       - name: Post Preview Demolition Comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           PR_NUM: ${{ needs.parse-metadata.outputs.pr_number }}
         with:
