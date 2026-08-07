@@ -24,6 +24,7 @@ import {AppConfigProvider} from '../app-config-provider/app-config-provider';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {ApiKeyAction, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 
 /**
  * Represents an available API key option from static config or custom storage.
@@ -64,6 +65,7 @@ export class SettingsService {
   private readonly configProvider = inject(AppConfigProvider);
   private readonly secureCredentialsStorage = inject(SecureCredentialsStorage);
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
+  private readonly usageTrackingService = inject(UsageTrackingService);
 
   readonly renderers: Signal<Record<string, RendererConfig>> = computed(() =>
     this.startupResolution.renderers(),
@@ -83,10 +85,16 @@ export class SettingsService {
    * @param rendererId The selected renderer ID string, or null to revert to Custom/Default.
    */
   async selectRenderer(rendererId: string | null): Promise<boolean> {
+    const fromRendererId = this.selectedRendererId();
     const isAllowed = await this.startupResolution.setSelectedRendererId(rendererId);
     if (!isAllowed) {
       return false;
     }
+
+    this.usageTrackingService.trackRendererSwitch({
+      fromRendererId,
+      toRendererId: rendererId || '',
+    });
 
     if (rendererId) {
       this.localStorageInteractions.setItem(LocalStorageKey.SELECTED_RENDERER, rendererId);
@@ -165,6 +173,11 @@ export class SettingsService {
    * Selects an API key by ID and updates persistence.
    */
   async selectApiKey(apiKeyId: string | null): Promise<void> {
+    this.usageTrackingService.trackApiKeyUpdate({
+      action: ApiKeyAction.SELECT,
+      keyId: apiKeyId || '',
+    });
+
     if (apiKeyId) {
       this.localStorageInteractions.setItem(LocalStorageKey.SELECTED_API_KEY, apiKeyId);
     } else {
@@ -218,6 +231,10 @@ export class SettingsService {
         `Cannot save custom API key with ID "${id}": collides with a static configuration key.`,
       );
     }
+    this.usageTrackingService.trackApiKeyUpdate({
+      action: ApiKeyAction.ADD,
+      keyId: id,
+    });
     await this.secureCredentialsStorage.saveCustomApiKey(id, name, key);
     await this.syncEffectiveApiKeyToConfigProvider();
   }
@@ -226,6 +243,10 @@ export class SettingsService {
    * Deletes a custom API key from SecureCredentialsStorage.
    */
   async deleteCustomApiKey(id: string): Promise<void> {
+    this.usageTrackingService.trackApiKeyUpdate({
+      action: ApiKeyAction.DELETE,
+      keyId: id,
+    });
     await this.secureCredentialsStorage.deleteCustomApiKey(id);
     if (this._selectedApiKeyId() === id) {
       await this.selectApiKey(null);
@@ -343,12 +364,14 @@ export class SettingsService {
         name,
         rendererUrl,
       };
+      this.usageTrackingService.trackRendererEdit({rendererId: id});
     } else {
       list.push({
         id,
         name,
         rendererUrl,
       });
+      this.usageTrackingService.trackRendererAdd({rendererId: id});
     }
     this.localStorageInteractions.setItem(LocalStorageKey.CUSTOM_RENDERERS, JSON.stringify(list));
   }
@@ -358,6 +381,7 @@ export class SettingsService {
    * Resets active renderer selection to null if deleting the currently selected custom renderer.
    */
   deleteCustomRenderer(id: string): void {
+    this.usageTrackingService.trackRendererDelete({rendererId: id});
     const list = this.getCustomRenderers().filter(item => item.id !== id);
     this.localStorageInteractions.setItem(LocalStorageKey.CUSTOM_RENDERERS, JSON.stringify(list));
     if (this.selectedRendererId() === id) {

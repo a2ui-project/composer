@@ -34,6 +34,8 @@ import {
   ThemePreference,
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
+import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../usage-tracking/noop-usage-tracking.service';
 
 interface TestFriendlyGallery {
   catalogId: () => string | null;
@@ -101,6 +103,7 @@ describe('Gallery Component', () => {
         {provide: StartupResolution, useClass: MockStartupResolution},
         {provide: AppConfigProvider, useValue: {themePreference: signal(ThemePreference.LIGHT)}},
         {provide: ChatState, useClass: MockChatState},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
       ],
     }).compileComponents();
 
@@ -120,7 +123,7 @@ describe('Gallery Component', () => {
       },
     });
 
-    writeTextSpy = vi.fn();
+    writeTextSpy = vi.fn().mockResolvedValue(undefined);
     originalClipboard = navigator.clipboard;
     Object.defineProperty(navigator, 'clipboard', {
       value: {writeText: writeTextSpy},
@@ -997,5 +1000,49 @@ describe('Gallery Component', () => {
     );
 
     consoleErrorSpy.mockRestore();
+  });
+
+  describe('Usage Tracking Instrumentation', () => {
+    it('tracks gallery view on init', () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const trackSpy = vi.spyOn(trackingService, 'trackGalleryView');
+
+      fixture.componentInstance.ngOnInit();
+
+      expect(trackSpy).toHaveBeenCalledWith();
+    });
+
+    it('tracks component select when item is chosen', () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const trackSpy = vi.spyOn(trackingService, 'trackGalleryComponentSelect');
+
+      catalogServiceMock.componentsList.set([{category: 'Content', components: ['Text']}]);
+
+      (fixture.componentInstance as unknown as {selectComponent: (k: string) => void})[
+        'selectComponent'
+      ]('Text');
+
+      expect(trackSpy).toHaveBeenCalledWith({
+        componentKey: 'Text',
+        category: 'Content',
+      });
+    });
+
+    it('tracks copying usage snippet to clipboard', async () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const trackSpy = vi.spyOn(trackingService, 'trackGalleryCopyUsage');
+
+      catalogServiceMock.selectedComponentPreset.set({
+        usage: [{id: 'target', component: 'Text'}],
+      });
+      catalogServiceMock.selectedComponentKey.set('Text');
+
+      (fixture.componentInstance as unknown as TestFriendlyGallery).copyToClipboard();
+      await Promise.resolve();
+
+      expect(trackSpy).toHaveBeenCalledWith({
+        componentKey: 'Text',
+      });
+    });
   });
 });
