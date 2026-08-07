@@ -34,6 +34,10 @@ name: PR Preview Deploy
 
 on:
   # zizmor: ignore[dangerous-triggers]
+  # We suppress this warning because this workflow safely implements the 2-stage isolated pattern:
+  # The untrusted PR code builds in a sandboxed stage and uploads a static artifact.
+  # This privileged stage only downloads that static artifact and never checks out or executes PR code,
+  # fully mitigating the typical vulnerabilities associated with workflow_run.
   workflow_run:
     workflows: ["PR Preview Build"]
     types: [completed]
