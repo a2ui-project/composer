@@ -20,14 +20,18 @@ import {
   provideAppInitializer,
   inject,
 } from '@angular/core';
-import {provideRouter} from '@angular/router';
+import {provideRouter, Router, NavigationEnd} from '@angular/router';
 import {provideAnimations} from '@angular/platform-browser/animations';
+import {filter} from 'rxjs/operators';
 import {routes} from './app.routes';
 import {StartupResolution} from './shell/startup-resolution/startup-resolution';
 import {AppConfigProvider} from './settings/app-config-provider/app-config-provider';
 import {LocalStorageAppConfigProvider} from './settings/local-storage-config-provider/local-storage-config.provider';
 import {LlmClient} from './chat/llm-client/llm-client';
 import {Standalone3pLlmClient} from './chat/llm-client/standalone-3p-llm-client';
+import {USAGE_TRACKING_CONFIG, UsageTrackingService} from './usage-tracking/usage-tracking.service';
+import {Ga4UsageTrackingService} from './usage-tracking/ga4-usage-tracking.service';
+import {NoopUsageTrackingService} from './usage-tracking/noop-usage-tracking.service';
 
 /**
  * Application-wide Angular configuration defining core providers,
@@ -41,9 +45,19 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => {
       const startupResolution = inject(StartupResolution);
       const configProvider = inject(AppConfigProvider);
-      return startupResolution.resolveStartupConfiguration().then(() => {
-        return configProvider.initialize();
-      });
+      const usageTrackingService = inject(UsageTrackingService);
+      const router = inject(Router);
+
+      router.events
+        .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+        .subscribe(event => {
+          usageTrackingService.trackPageView({pagePath: event.urlAfterRedirects});
+        });
+
+      return startupResolution
+        .resolveStartupConfiguration()
+        .then(() => configProvider.initialize())
+        .then(() => usageTrackingService.initialize());
     }),
     {
       provide: AppConfigProvider,
@@ -52,6 +66,16 @@ export const appConfig: ApplicationConfig = {
     {
       provide: LlmClient,
       useExisting: Standalone3pLlmClient,
+    },
+    {
+      provide: UsageTrackingService,
+      useFactory: () => {
+        const config = inject(USAGE_TRACKING_CONFIG);
+        if (config.enabled && config.measurementId) {
+          return inject(Ga4UsageTrackingService);
+        }
+        return inject(NoopUsageTrackingService);
+      },
     },
   ],
 };

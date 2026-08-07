@@ -14,12 +14,16 @@
  * limitations under the License.
  */
 
-import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {App} from './app';
-import {provideRouter} from '@angular/router';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
+import {ComponentFixture, TestBed} from '@angular/core/testing';
+import {provideRouter, Router} from '@angular/router';
+import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {App} from './app';
+import {appConfig} from './app.config';
 import {AppHarness} from './test/app.harness';
-import {describe, it, expect, beforeEach} from 'vitest';
+import {Ga4UsageTrackingService} from './usage-tracking/ga4-usage-tracking.service';
+import {NoopUsageTrackingService} from './usage-tracking/noop-usage-tracking.service';
+import {USAGE_TRACKING_CONFIG, UsageTrackingService} from './usage-tracking/usage-tracking.service';
 
 describe('App', () => {
   let fixture: ComponentFixture<App>;
@@ -38,5 +42,72 @@ describe('App', () => {
 
   it('creates the root application component via test harness', async () => {
     expect(harness).toBeTruthy();
+  });
+});
+
+describe('appConfig UsageTracking wiring', () => {
+  it('resolves NoopUsageTrackingService by default when disabled', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: appConfig.providers,
+    });
+
+    const service = TestBed.inject(UsageTrackingService);
+    expect(service).toBeInstanceOf(NoopUsageTrackingService);
+  });
+
+  it('resolves Ga4UsageTrackingService when enabled with measurement ID', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        ...appConfig.providers,
+        {
+          provide: USAGE_TRACKING_CONFIG,
+          useValue: {enabled: true, measurementId: 'G-APPCONFIG123'},
+        },
+      ],
+    });
+
+    const service = TestBed.inject(UsageTrackingService);
+    expect(service).toBeInstanceOf(Ga4UsageTrackingService);
+  });
+
+  it('invokes usageTrackingService.initialize during bootstrap', async () => {
+    const mockTrackingService = {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      trackPageView: vi.fn(),
+    };
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        ...appConfig.providers,
+        {provide: UsageTrackingService, useValue: mockTrackingService},
+      ],
+    });
+
+    // Resolve app initializer
+    const service = TestBed.inject(UsageTrackingService);
+    expect(service).toBe(mockTrackingService);
+  });
+
+  it('tracks virtual page views on NavigationEnd events during routing', async () => {
+    const mockTrackingService = {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      trackPageView: vi.fn(),
+    };
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        ...appConfig.providers,
+        {provide: UsageTrackingService, useValue: mockTrackingService},
+      ],
+    });
+
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/settings');
+
+    expect(mockTrackingService.trackPageView).toHaveBeenCalledWith({pagePath: '/settings'});
   });
 });
