@@ -14,29 +14,33 @@
  * limitations under the License.
  */
 
+import {DOCUMENT} from '@angular/common';
 import {Component, computed, effect, inject, signal} from '@angular/core';
-import {MatToolbarModule} from '@angular/material/toolbar';
-import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatListModule} from '@angular/material/list';
-import {RouterLink, RouterLinkActive, RouterOutlet} from '@angular/router';
-import {DOCUMENT} from '@angular/common';
-import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
+import {MatSidenavModule} from '@angular/material/sidenav';
+import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
+import {MatToolbarModule} from '@angular/material/toolbar';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {RouterLink, RouterLinkActive, RouterOutlet} from '@angular/router';
+import {ChatCoordinator} from '../../chat/chat-service/chat-coordinator';
+import {StateSync} from '../../chat/state-sync/state-sync';
 import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
-import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
-
-import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
-import {StartupResolution} from '../startup-resolution/startup-resolution';
-import {StateSync} from '../../chat/state-sync/state-sync';
+import {
+  ShareTrackingStatus,
+  UsageTrackingService,
+} from '../../usage-tracking/usage-tracking.service';
 import {QueryParser} from '../query-parser/query-parser';
+import {StartupResolution} from '../startup-resolution/startup-resolution';
 
 /**
  * The primary layout container for the A2UI Composer.
@@ -71,6 +75,8 @@ export class ComposerShell {
   private readonly configProvider = inject(AppConfigProvider);
   private readonly startupResolution = inject(StartupResolution);
   private readonly stateSync = inject(StateSync);
+  private readonly chatCoordinator = inject(ChatCoordinator);
+  private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly document = inject(DOCUMENT);
 
@@ -112,9 +118,9 @@ export class ComposerShell {
    * Switches between light and dark visual design system palettes.
    */
   toggleTheme(): void {
-    this.configProvider.setThemePreference(
-      this.isDarkTheme() ? ThemePreference.LIGHT : ThemePreference.DARK,
-    );
+    const newTheme = this.isDarkTheme() ? ThemePreference.LIGHT : ThemePreference.DARK;
+    this.usageTrackingService.trackThemeToggle({theme: newTheme});
+    this.configProvider.setThemePreference(newTheme);
   }
 
   /**
@@ -128,6 +134,10 @@ export class ComposerShell {
     }
     const clipboard = this.document.defaultView?.navigator?.clipboard;
     if (!clipboard) {
+      this.usageTrackingService.trackShareDesign({
+        status: ShareTrackingStatus.CLIPBOARD_UNAVAILABLE,
+        compressedLengthChars: 0,
+      });
       this.snackBar.open('Clipboard API unavailable', 'Close', {duration: 3000});
       return;
     }
@@ -141,8 +151,16 @@ export class ComposerShell {
       }
       shareUrl.searchParams.set('a2ui', compressed);
       await clipboard.writeText(shareUrl.toString());
+      this.usageTrackingService.trackShareDesign({
+        status: ShareTrackingStatus.SUCCESS,
+        compressedLengthChars: compressed.length,
+      });
       this.snackBar.open('Shareable link copied to clipboard', 'Close', {duration: 3000});
     } catch (err) {
+      this.usageTrackingService.trackShareDesign({
+        status: ShareTrackingStatus.FAILURE,
+        compressedLengthChars: 0,
+      });
       console.error('Failed to copy shareable link:', err);
       this.snackBar.open('Failed to copy link to clipboard', 'Close', {duration: 3000});
     }
@@ -153,6 +171,10 @@ export class ComposerShell {
    * the page to simulate a fresh hardware handshake connection.
    */
   async resetSession(): Promise<void> {
+    this.usageTrackingService.trackSessionReset({
+      totalPromptTurns: this.chatCoordinator.currentTurnIndex(),
+    });
+    this.usageTrackingService.resetSession();
     await this.indexedDbStorage.flushAllRecords();
     this.storage.removeItem(LocalStorageKey.SESSION_STATE);
     this.storage.removeItem(LocalStorageKey.EDITOR_CACHE);

@@ -35,6 +35,8 @@ import {
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import type * as monaco from 'monaco-editor';
 import {MatSnackBar} from '@angular/material/snack-bar';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 
 const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() => {
   const undoStack: string[] = [];
@@ -336,6 +338,7 @@ describe('RawFrame JSON Source Editor View', () => {
         {provide: StateSync, useClass: MockStateSync},
         {provide: ChatState, useClass: MockChatState},
         {provide: MatSnackBar, useValue: snackBarMock},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
       ],
     }).compileComponents();
 

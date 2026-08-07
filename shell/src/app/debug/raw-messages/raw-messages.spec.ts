@@ -27,6 +27,8 @@ import {signal, WritableSignal} from '@angular/core';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 
 describe('RawMessages', () => {
   let fixture: ComponentFixture<RawMessages>;
@@ -94,6 +96,10 @@ describe('RawMessages', () => {
         {
           provide: ChatState,
           useValue: chatStateMock,
+        },
+        {
+          provide: UsageTrackingService,
+          useClass: NoopUsageTrackingService,
         },
       ],
     }).compileComponents();
@@ -391,5 +397,20 @@ describe('RawMessages', () => {
     await panel0.collapse();
     expect(await panel0.isExpanded()).toBe(false);
     expect(await panel1.isExpanded()).toBe(true);
+  });
+
+  it('tracks raw message expanded when an accordion item is expanded', () => {
+    const trackingService = TestBed.inject(UsageTrackingService);
+    const trackSpy = vi.spyOn(trackingService, 'trackRawMessageExpanded');
+    const entry: RawLogEntry = {
+      type: LlmLogType.REQUEST,
+      payload: {prompt: 'hello'},
+      timestamp: 1000,
+      timestampStr: '12:00:00.000',
+    };
+    (component as unknown as {onExpand: (e: unknown) => void}).onExpand(entry);
+    expect(trackSpy).toHaveBeenCalledWith({
+      messageType: LlmLogType.REQUEST,
+    });
   });
 });
