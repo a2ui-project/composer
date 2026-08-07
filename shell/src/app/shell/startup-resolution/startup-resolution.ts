@@ -69,6 +69,7 @@ export class StartupResolution {
   private readonly _selectedRendererId = signal<string | null>(null);
   private readonly _apiKeys = signal<Record<string, ApiKeyConfig>>({});
   private readonly _sharedA2uiPayload = signal<string | null>(null);
+  private readonly _sharedA2uiError = signal<string | null>(null);
 
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
   readonly renderers = this._renderers.asReadonly();
@@ -76,6 +77,7 @@ export class StartupResolution {
   readonly selectedRendererId = this._selectedRendererId.asReadonly();
   readonly selectedRendererId$ = this._selectedRendererId.asReadonly();
   readonly sharedA2uiPayload = this._sharedA2uiPayload.asReadonly();
+  readonly sharedA2uiError = this._sharedA2uiError.asReadonly();
   readonly activeRenderer = computed<RendererConfig | null>(() => {
     const renderers = this._renderers();
     const selectedId = this._selectedRendererId();
@@ -110,16 +112,21 @@ export class StartupResolution {
     this._resolvedUrl.set(null);
     this._selectedRendererId.set(null);
     this._sharedA2uiPayload.set(null);
+    this._sharedA2uiError.set(null);
     this._renderers.set({});
     this._apiKeys.set({});
 
     const staticConfig = await this.fetchStaticConfig();
     const resolved = await this.resolveRenderer(staticConfig);
 
-    const sharedPayload = await QueryParser.parseSharedA2ui(this.getWindowSearch());
-    if (sharedPayload) {
+    const {payload, error} = await QueryParser.parseSharedA2ui(this.getWindowSearch());
+    if (payload) {
       console.log('Using shared A2UI payload from query param.');
-      this._sharedA2uiPayload.set(sharedPayload);
+      this._sharedA2uiPayload.set(payload);
+    }
+    if (error) {
+      console.warn('Shared A2UI payload error:', error);
+      this._sharedA2uiError.set(error);
     }
 
     await this.evaluateEnvironmentPurge();

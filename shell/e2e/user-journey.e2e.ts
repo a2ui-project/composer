@@ -120,7 +120,8 @@ test.describe('E2E Workspace User Journey', () => {
       return (monaco?.editor?.getModels()?.length ?? 0) > 0;
     });
 
-    await page.waitForTimeout(500);
+    // Wait for initial layout snapshot in chat history
+    await expect(page.locator('.chat-history-log .bubble-layout')).toHaveCount(1);
 
     // Set invalid JSON
     await page.evaluate(() => {
@@ -184,5 +185,17 @@ test.describe('E2E Workspace User Journey', () => {
       .first();
     await expect(previewIframe.locator('body')).toBeVisible({timeout: 10000});
     await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({timeout: 10000});
+  });
+
+  test('displays informative error snackbar when navigating with truncated or corrupted shared design URL', async ({
+    page,
+  }) => {
+    await page.goto('/?a2ui=d1.corrupted_truncated_payload_data!!!');
+    await page.waitForLoadState('load');
+
+    const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
+    await expect(snackbarLocator).toBeVisible({timeout: 10000});
+    await expect(snackbarLocator).toContainText('Unable to load shared design');
+    await expect(snackbarLocator).toContainText('truncated or corrupted');
   });
 });

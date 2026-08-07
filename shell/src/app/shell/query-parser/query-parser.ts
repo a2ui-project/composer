@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+export interface SharedA2uiParseResult {
+  payload: string | null;
+  error: string | null;
+}
+
 /**
  * Utility parser to securely extract and sanitize configuration parameters
  * from the window location query string, enforcing runtime constraints.
@@ -120,24 +125,53 @@ export class QueryParser {
   }
 
   /**
-   * Parses the shared A2UI JSON payload from a query search string (?a2ui=...).
-   * Supports both compressed ('d1.') and fallback uncompressed JSON strings.
+   * Parses the shared A2UI JSON payload from a query search string (?a2ui=...)
+   * with detailed status, returning the decompressed JSON string or a diagnostic error message.
    */
-  static async parseSharedA2ui(searchString: string | null | undefined): Promise<string | null> {
+  static async parseSharedA2ui(
+    searchString: string | null | undefined,
+  ): Promise<SharedA2uiParseResult> {
     if (!searchString) {
-      return null;
+      return {payload: null, error: null};
     }
     const params = new URLSearchParams(searchString);
     const candidate = params.get('a2ui');
     if (!candidate) {
-      return null;
+      return {payload: null, error: null};
     }
     if (candidate.startsWith(QueryParser.PAYLOAD_PREFIX)) {
-      return QueryParser.decodeSharedPayload(candidate);
+      const decompressed = await QueryParser.decodeSharedPayload(candidate);
+      if (decompressed === null) {
+        return {
+          payload: null,
+          error:
+            'The shared design link appears truncated or corrupted (it may have exceeded URL length limits).',
+        };
+      }
+      try {
+        JSON.parse(decompressed);
+        return {payload: decompressed, error: null};
+      } catch {
+        return {
+          payload: null,
+          error: 'The shared design contains invalid or incomplete JSON syntax.',
+        };
+      }
     }
     if (candidate.startsWith('[') || candidate.startsWith('{')) {
-      return candidate;
+      try {
+        JSON.parse(candidate);
+        return {payload: candidate, error: null};
+      } catch {
+        return {
+          payload: null,
+          error: 'The shared design contains invalid or incomplete JSON syntax.',
+        };
+      }
     }
-    return null;
+    return {
+      payload: null,
+      error: 'The shared design format is unrecognized or corrupted.',
+    };
   }
 }

@@ -85,6 +85,15 @@ export class ComposerShell {
         this.document.body.classList.remove('dark-theme');
       }
     });
+
+    effect(() => {
+      const error = this.startupResolution.sharedA2uiError();
+      if (error) {
+        this.snackBar.open(`Unable to load shared design: ${error}`, 'Dismiss', {
+          duration: 8000,
+        });
+      }
+    });
   }
 
   /**

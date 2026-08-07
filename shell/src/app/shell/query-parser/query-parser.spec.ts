@@ -108,27 +108,64 @@ describe('QueryParser', () => {
   });
 
   describe('parseSharedA2ui', () => {
-    it('parses compressed d1. payload from query string', async () => {
-      const originalJson = JSON.stringify([{version: 'v0.9'}]);
+    it('returns payload with null error for valid compressed d1. payload', async () => {
+      const originalJson = JSON.stringify([{version: 'v0.9', test: true}]);
       const encoded = await QueryParser.encodeSharedPayload(originalJson);
       const searchString = `?a2ui=${encodeURIComponent(encoded)}`;
-      const parsed = await QueryParser.parseSharedA2ui(searchString);
-      expect(parsed).toBe(originalJson);
+      const result = await QueryParser.parseSharedA2ui(searchString);
+      expect(result.payload).toBe(originalJson);
+      expect(result.error).toBeNull();
     });
 
-    it('parses fallback uncompressed JSON ([...]) from query string', async () => {
-      const rawJson = '[{"version":"v0.9"}]';
+    it('returns payload with null error for valid uncompressed JSON', async () => {
+      const rawJson = '{"version":"v0.9"}';
       const searchString = `?a2ui=${encodeURIComponent(rawJson)}`;
-      const parsed = await QueryParser.parseSharedA2ui(searchString);
-      expect(parsed).toBe(rawJson);
+      const result = await QueryParser.parseSharedA2ui(searchString);
+      expect(result.payload).toBe(rawJson);
+      expect(result.error).toBeNull();
     });
 
-    it('returns null when a2ui param is missing, invalid, or nullish', async () => {
-      expect(await QueryParser.parseSharedA2ui(null)).toBeNull();
-      expect(await QueryParser.parseSharedA2ui(undefined)).toBeNull();
-      expect(await QueryParser.parseSharedA2ui('')).toBeNull();
-      expect(await QueryParser.parseSharedA2ui('?other=value')).toBeNull();
-      expect(await QueryParser.parseSharedA2ui('?a2ui=invalid-format')).toBeNull();
+    it('returns truncation error when compressed payload is corrupted or truncated', async () => {
+      const rawJson = '{"version":"v0.9"}';
+      const encodedJson = encodeURIComponent(rawJson);
+      // Intentionally corrupt the string.
+      const corruptedJson = encodedJson.slice(0, encodedJson.length - 3);
+      const result = await QueryParser.parseSharedA2ui(`?a2ui=d1.${corruptedJson}`);
+      expect(result.payload).toBeNull();
+      expect(result.error).toContain('truncated or corrupted');
+    });
+
+    it('returns invalid JSON syntax error when decompressed payload is malformed JSON', async () => {
+      const invalidJsonText = '[{"version":"v0.9", unclosed:';
+      const encoded = await QueryParser.encodeSharedPayload(invalidJsonText);
+      const result = await QueryParser.parseSharedA2ui(`?a2ui=${encodeURIComponent(encoded)}`);
+      expect(result.payload).toBeNull();
+      expect(result.error).toContain('invalid or incomplete JSON syntax');
+    });
+
+    it('returns invalid JSON syntax error when uncompressed payload is malformed JSON', async () => {
+      const result = await QueryParser.parseSharedA2ui('?a2ui=[{"version":"v0.9", bad_syntax');
+      expect(result.payload).toBeNull();
+      expect(result.error).toContain('invalid or incomplete JSON syntax');
+    });
+
+    it('returns unrecognized format error when payload format is unrecognized', async () => {
+      const result = await QueryParser.parseSharedA2ui('?a2ui=unknown-non-json-format');
+      expect(result.payload).toBeNull();
+      expect(result.error).toContain('unrecognized or corrupted');
+    });
+
+    it('returns null payload and null error when searchString is missing or empty', async () => {
+      expect(await QueryParser.parseSharedA2ui(null)).toEqual({payload: null, error: null});
+      expect(await QueryParser.parseSharedA2ui(undefined)).toEqual({
+        payload: null,
+        error: null,
+      });
+      expect(await QueryParser.parseSharedA2ui('')).toEqual({payload: null, error: null});
+      expect(await QueryParser.parseSharedA2ui('?other=value')).toEqual({
+        payload: null,
+        error: null,
+      });
     });
   });
 });

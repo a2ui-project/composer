@@ -54,6 +54,7 @@ describe('ComposerShell Layout', () => {
   };
   let startupResolutionMock: {
     resolvedUrl: WritableSignal<string | null>;
+    sharedA2uiError: WritableSignal<string | null>;
   };
   let stateSyncMock: {
     activeDraft: WritableSignal<string>;
@@ -86,6 +87,7 @@ describe('ComposerShell Layout', () => {
 
     startupResolutionMock = {
       resolvedUrl: signal<string | null>(null),
+      sharedA2uiError: signal<string | null>(null),
     };
 
     stateSyncMock = {
@@ -361,6 +363,24 @@ describe('ComposerShell Layout', () => {
       const component = fixture.componentInstance;
       await component.resetSession();
       expect(mockLocation.href).toBe('http://localhost:3000/');
+    });
+
+    it('displays a snackbar error message when sharedA2uiError signal emits an error message', () => {
+      const snackBar = fixture.debugElement.injector.get(MatSnackBar);
+      const snackBarSpy = vi.spyOn(snackBar, 'open');
+
+      startupResolutionMock.sharedA2uiError.set(
+        'The shared design link appears truncated or corrupted (it may have exceeded URL length limits).',
+      );
+      fixture.detectChanges();
+
+      expect(snackBarSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Unable to load shared design: The shared design link appears truncated or corrupted',
+        ),
+        'Dismiss',
+        {duration: 8000},
+      );
     });
   });
 });
