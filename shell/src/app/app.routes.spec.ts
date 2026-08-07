@@ -36,6 +36,8 @@ import {CatalogManagement} from './storage/catalog-management/catalog-management
 import {IndexedDbStorage} from './storage/indexed-db-storage/indexed-db-storage';
 import {LocalStorageInteractions} from './storage/local-storage-interactions/local-storage-interactions';
 import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
+import {UsageTrackingService} from './usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from './usage-tracking/noop-usage-tracking.service';
 
 class MockStartupResolution {
   readonly resolvedUrl = signal('http://localhost:4200');
@@ -131,6 +133,7 @@ describe('App Routes Active Verification', () => {
           provide: LocalStorageInteractions,
           useValue: {removeItem: vi.fn(), getItem: vi.fn().mockReturnValue(null)},
         },
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
       ],
     }).compileComponents();
 
