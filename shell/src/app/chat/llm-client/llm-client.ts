@@ -59,6 +59,9 @@ export declare interface LlmMessage {
   /** Holds the optional model thinking or thought process. */
   readonly thinking?: string;
 
+  /** Unique identifier for correlating prompts and retries. */
+  readonly promptId?: string;
+
   /** Indicates whether a failed gateway transaction is retryable. */
   readonly isRetryable?: boolean;
 
