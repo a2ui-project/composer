@@ -36,6 +36,7 @@ import {
 } from '../../settings/app-config-provider/app-config-provider';
 import {ComposerPanelId} from './composer-panel-id';
 import {ComposerDockview} from './composer-dockview.service';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 
 export {ComposerPanelId};
 
@@ -61,6 +62,7 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   private readonly hostComm = inject(HostCommunication);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly composerDockview = inject(ComposerDockview);
+  private readonly usageTrackingService = inject(UsageTrackingService);
 
   readonly dockviewRoot = viewChild.required<ElementRef<HTMLElement>>('dockviewRoot');
 
@@ -141,6 +143,10 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
           untracked(() => this.unreadEventsCount.set(0));
         } else if (panelId === ComposerPanelId.Errors) {
           untracked(() => this.unreadErrorsCount.set(0));
+        }
+
+        if (panelId) {
+          this.usageTrackingService.trackDebugTabView({panelId: panelId as ComposerPanelId});
         }
       },
     });

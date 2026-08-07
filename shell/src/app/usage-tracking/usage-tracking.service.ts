@@ -50,6 +50,7 @@ export enum ApiKeyAction {
 export enum ShareTrackingStatus {
   SUCCESS = 'success',
   FAILURE = 'failure',
+  INVALID_JSON = 'invalid-json',
   CLIPBOARD_UNAVAILABLE = 'clipboard_unavailable',
 }
 

@@ -34,6 +34,7 @@ import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState} from '../../chat/chat-state/chat-state';
 import {MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 
 /**
  * Hosts the raw JSON view of active surface models, allowing direct source editing
@@ -59,6 +60,7 @@ export class RawFrame {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly stateSync = inject(StateSync);
   private readonly chatState = inject(ChatState);
+  private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly snackBar = inject(MatSnackBar);
   private readonly layoutInput$ = new Subject<string>();
@@ -148,12 +150,15 @@ export class RawFrame {
             const payload = this.parseLayoutString(value);
             if (payload !== null) {
               this.snackBar.dismiss();
+              this.usageTrackingService.trackJsonEditorEdit({isValidJson: true});
               return payload;
             }
             this.showJsonSyntaxError();
+            this.usageTrackingService.trackJsonEditorEdit({isValidJson: false});
             return null;
           } catch (err) {
             this.showJsonSyntaxError();
+            this.usageTrackingService.trackJsonEditorEdit({isValidJson: false});
             return null;
           }
         }),

@@ -18,7 +18,12 @@
     @if (messageHistory().length > 0) {
       @for (item of messageHistory(); track item.type + '-' + item.timestamp) {
         @if (isCollapsible(item)) {
-          <mat-expansion-panel data-testid="llm-log-panel" class="llm-log-panel" [expanded]="false">
+          <mat-expansion-panel
+            data-testid="llm-log-panel"
+            class="llm-log-panel"
+            [expanded]="false"
+            (opened)="onExpand(item)"
+          >
             <mat-expansion-panel-header>
               <mat-panel-title>
                 <span class="timestamp">{{ item.timestampStr }}</span>

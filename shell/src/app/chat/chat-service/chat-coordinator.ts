@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {computed, effect, inject, Injectable, untracked} from '@angular/core';
+import {computed, effect, inject, Injectable, signal, untracked} from '@angular/core';
 import {formatJson, tryParseJsonArray} from '../../utils/json';
 import {ChatCleaner} from './chat-cleaner';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
@@ -60,6 +60,9 @@ export class ChatCoordinator {
    * during streams.
    */
   readonly isProgrammaticStreamActive = this.chatState.isProgrammaticStreamActive;
+
+  /** Turn index counter for telemetry. */
+  readonly currentTurnIndex = signal(0);
 
   private lastSeenRendererUrl = '';
   private isFirstUrlEffectRun = true;

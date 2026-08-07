@@ -27,6 +27,8 @@ import {
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 
 describe('DataModel', () => {
   let fixture: ComponentFixture<DataModel>;
@@ -47,7 +49,11 @@ describe('DataModel', () => {
 
     await TestBed.configureTestingModule({
       imports: [DataModel],
-      providers: [provideNoopAnimations(), {provide: HostCommunication, useValue: mockHostComm}],
+      providers: [
+        provideNoopAnimations(),
+        {provide: HostCommunication, useValue: mockHostComm},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DataModel);

@@ -14,24 +14,25 @@
  * limitations under the License.
  */
 
+import {JsonPipe} from '@angular/common';
 import {
+  afterRenderEffect,
   Component,
+  effect,
+  ElementRef,
   inject,
+  OnDestroy,
   signal,
   viewChild,
-  afterRenderEffect,
-  ElementRef,
-  OnDestroy,
-  effect,
 } from '@angular/core';
 import {MatExpansionModule} from '@angular/material/expansion';
-import {JsonPipe} from '@angular/common';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {ChatState} from '../../chat/chat-state/chat-state';
 import {
   HostCommunication,
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {ChatState} from '../../chat/chat-state/chat-state';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {formatTimestamp} from '../../utils/date.utils';
 
 export interface RawLogEntry {
@@ -56,6 +57,7 @@ export interface RawLogEntry {
 export class RawMessages implements OnDestroy {
   private readonly hostComm = inject(HostCommunication);
   private readonly chatState = inject(ChatState);
+  private readonly usageTrackingService = inject(UsageTrackingService);
 
   protected readonly messageHistory = signal<RawLogEntry[]>([]);
 
@@ -151,6 +153,10 @@ export class RawMessages implements OnDestroy {
       item.type !== PreviewBridgeMessageType.FORCE_UNBLOCK &&
       item.type !== PreviewBridgeMessageType.SET_BLOCKING_STATE
     );
+  }
+
+  protected onExpand(item: RawLogEntry): void {
+    this.usageTrackingService.trackRawMessageExpanded({messageType: item.type});
   }
 
   private addLogEntry(entry: RawLogEntry): void {
