@@ -33,6 +33,10 @@ import {signal, WritableSignal} from '@angular/core';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
+import {MatSnackBar} from '@angular/material/snack-bar';
+
+import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {StateSync} from '../../chat/state-sync/state-sync';
 
 describe('ComposerShell Layout', () => {
   let fixture: ComponentFixture<ComposerShell>;
@@ -47,6 +51,13 @@ describe('ComposerShell Layout', () => {
   let configProviderMock: {
     themePreference: WritableSignal<ThemePreference>;
     setThemePreference: (theme: ThemePreference) => void;
+  };
+  let startupResolutionMock: {
+    resolvedUrl: WritableSignal<string | null>;
+    sharedA2uiError: WritableSignal<string | null>;
+  };
+  let stateSyncMock: {
+    activeDraft: WritableSignal<string>;
   };
 
   beforeEach(async () => {
@@ -74,6 +85,15 @@ describe('ComposerShell Layout', () => {
       }),
     };
 
+    startupResolutionMock = {
+      resolvedUrl: signal<string | null>(null),
+      sharedA2uiError: signal<string | null>(null),
+    };
+
+    stateSyncMock = {
+      activeDraft: signal(''),
+    };
+
     await TestBed.configureTestingModule({
       imports: [ComposerShell],
       providers: [
@@ -99,17 +119,39 @@ describe('ComposerShell Layout', () => {
           provide: AppConfigProvider,
           useValue: configProviderMock,
         },
+        {
+          provide: StartupResolution,
+          useValue: startupResolutionMock,
+        },
+        {
+          provide: StateSync,
+          useValue: stateSyncMock,
+        },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ComposerShell);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ComposerShellHarness);
+
+    const injectedDocument = TestBed.inject(DOCUMENT);
+    const nav = injectedDocument.defaultView!.navigator;
+    const navProto = Object.getPrototypeOf(nav);
+    if (
+      !Object.getOwnPropertyDescriptor(nav, 'clipboard') &&
+      !Object.getOwnPropertyDescriptor(navProto, 'clipboard')
+    ) {
+      Object.defineProperty(navProto, 'clipboard', {
+        get: () => undefined,
+        configurable: true,
+      });
+    }
   });
 
   afterEach(() => {
     const injectedDocument = TestBed.inject(DOCUMENT);
     injectedDocument.body.classList.remove('dark-theme');
+    vi.restoreAllMocks();
   });
 
   it('creates the shell layout component via test harness', async () => {
@@ -212,7 +254,7 @@ describe('ComposerShell Layout', () => {
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(5);
+    expect(hiddenAttrs.length).toBe(6);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
@@ -263,5 +305,82 @@ describe('ComposerShell Layout', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect((navLinks[0] as HTMLElement).classList.contains('active-nav-item')).toBe(true);
+  });
+
+  describe('shareDesign & resetSession', () => {
+    it('shareDesign copies renderer URL and compressed payload to clipboard', async () => {
+      startupResolutionMock.resolvedUrl.set('http://my-renderer.com');
+      stateSyncMock.activeDraft.set('[{"version":"v0.9"}]');
+      const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+      const document = TestBed.inject(DOCUMENT);
+      const nav = document.defaultView!.navigator;
+      const targetObj = Object.getOwnPropertyDescriptor(nav, 'clipboard')
+        ? nav
+        : Object.getPrototypeOf(nav);
+      const spy = vi.spyOn(targetObj, 'clipboard', 'get').mockReturnValue({
+        writeText: writeTextSpy,
+      } as unknown as Clipboard);
+
+      try {
+        const component = fixture.componentInstance;
+        await component.shareDesign();
+        expect(writeTextSpy).toHaveBeenCalledWith(
+          expect.stringContaining('renderer=http%3A%2F%2Fmy-renderer.com'),
+        );
+        expect(writeTextSpy).toHaveBeenCalledWith(expect.stringContaining('a2ui=d1.'));
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('displays a snackbar warning when clipboard API is unavailable', async () => {
+      const snackBar = fixture.debugElement.injector.get(MatSnackBar);
+      const snackBarSpy = vi.spyOn(snackBar, 'open');
+      const document = TestBed.inject(DOCUMENT);
+      const navProto = Object.getPrototypeOf(document.defaultView!.navigator) as Navigator;
+      const spy = vi
+        .spyOn(navProto, 'clipboard', 'get')
+        .mockReturnValue(undefined as unknown as Clipboard);
+
+      try {
+        const component = fixture.componentInstance;
+        await component.shareDesign();
+        expect(snackBarSpy).toHaveBeenCalledWith('Clipboard API unavailable', 'Close', {
+          duration: 3000,
+        });
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('resetSession strips share parameters from location href before setting href', async () => {
+      const doc = TestBed.inject(DOCUMENT);
+      const mockLocation = {href: 'http://localhost:3000/?renderer=http://test.com&a2ui=d1.123'};
+      vi.spyOn(doc, 'defaultView', 'get').mockReturnValue({
+        location: mockLocation,
+      } as unknown as Window & typeof globalThis);
+
+      const component = fixture.componentInstance;
+      await component.resetSession();
+      expect(mockLocation.href).toBe('http://localhost:3000/');
+    });
+
+    it('displays a snackbar error message when sharedA2uiError signal emits an error message', () => {
+      const snackBar = fixture.debugElement.injector.get(MatSnackBar);
+      const snackBarSpy = vi.spyOn(snackBar, 'open');
+
+      startupResolutionMock.sharedA2uiError.set(
+        'The shared design link appears truncated or corrupted (it may have exceeded URL length limits).',
+      );
+      fixture.detectChanges();
+
+      expect(snackBarSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Unable to load shared design: The shared design link appears truncated or corrupted',
+        ),
+        'Dismiss',
+        {duration: 8000},
+      );
+    });
   });
 });

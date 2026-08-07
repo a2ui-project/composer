@@ -22,6 +22,7 @@ import {MatButtonHarness} from '@angular/material/button/testing';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolution} from './startup-resolution';
+import {QueryParser} from '../query-parser/query-parser';
 import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
@@ -166,6 +167,70 @@ describe('StartupResolution', () => {
 
     const url = await service.resolveStartupConfiguration();
     expect(url).toBe('http://query:3000/');
+  });
+
+  describe('sharedA2uiPayload signal', () => {
+    it('sets sharedA2uiPayload signal when ?a2ui= parameter is present in window search', async () => {
+      mockFetchConfig({});
+      const expectedPayload = '[{"version":"v0.9","createSurface":{"surfaceId":"test"}}]';
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
+        `?a2ui=${encodeURIComponent(expectedPayload)}`,
+      );
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBe(expectedPayload);
+    });
+
+    it('parses compressed d1. payload and assigns decompressed JSON string to sharedA2uiPayload', async () => {
+      mockFetchConfig({});
+      const rawJson = '[{"version":"v0.9","createSurface":{"surfaceId":"test-compressed"}}]';
+      const compressed = await QueryParser.encodeSharedPayload(rawJson);
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(`?a2ui=${compressed}`);
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBe(rawJson);
+    });
+
+    it('leaves sharedA2uiPayload as null when ?a2ui is missing or invalid', async () => {
+      mockFetchConfig({});
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('');
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBeNull();
+      expect(service.sharedA2uiError()).toBeNull();
+    });
+
+    it('sets sharedA2uiError when ?a2ui= contains corrupted or truncated compressed payload', async () => {
+      mockFetchConfig({});
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
+        '?a2ui=d1.corrupted_truncated_base64!!!',
+      );
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBeNull();
+      expect(service.sharedA2uiError()).toContain('truncated or corrupted');
+    });
+
+    it('sets sharedA2uiError when ?a2ui= contains malformed uncompressed JSON', async () => {
+      mockFetchConfig({});
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('?a2ui=[{"version":"v0.9", bad_syntax');
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBeNull();
+      expect(service.sharedA2uiError()).toContain('invalid or incomplete JSON syntax');
+    });
+
+    it('resets sharedA2uiError to null on consecutive resolveStartupConfiguration calls', async () => {
+      mockFetchConfig({});
+      const getWindowSearchSpy = vi.spyOn(service, 'getWindowSearch');
+      getWindowSearchSpy.mockReturnValue('?a2ui=d1.corrupted');
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiError()).not.toBeNull();
+
+      getWindowSearchSpy.mockReturnValue('');
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiError()).toBeNull();
+    });
   });
 
   it('falls back to storage when config fetch fails or times out', async () => {

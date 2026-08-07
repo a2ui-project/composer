@@ -16,6 +16,7 @@
 
 import {test, expect} from '@playwright/test';
 import {WindowWithMonaco} from './types';
+import {ELECTRIC_CAR_CHARGING_UI, EV_CHARGE_CONTROL_A2UI} from './samples';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -119,7 +120,8 @@ test.describe('E2E Workspace User Journey', () => {
       return (monaco?.editor?.getModels()?.length ?? 0) > 0;
     });
 
-    await page.waitForTimeout(500);
+    // Wait for initial layout snapshot in chat history
+    await expect(page.locator('.chat-history-log .bubble-layout')).toHaveCount(1);
 
     // Set invalid JSON
     await page.evaluate(() => {
@@ -135,5 +137,65 @@ test.describe('E2E Workspace User Journey', () => {
     // Verify no empty text bubbles are created and existing snapshot is preserved
     await expect(page.locator('.chat-history-log .bubble-text')).toHaveCount(0);
     await expect(page.locator('.chat-history-log .bubble-layout')).toHaveCount(1);
+  });
+
+  test('verifies sharing design URL copies a2ui query param and loads payload on new page', async ({
+    context,
+    page,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+
+    await expect(page.locator('.header-title')).toContainText('A2UI Composer');
+
+    await page.waitForFunction(() => {
+      const monaco = (window as unknown as WindowWithMonaco).monaco;
+      return (monaco?.editor?.getModels()?.length ?? 0) > 0;
+    });
+
+    await page.evaluate(payload => {
+      const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
+      if (model) {
+        model.setValue(payload);
+      }
+    }, EV_CHARGE_CONTROL_A2UI);
+
+    await expect(page.locator('.header-title')).toContainText('A2UI Composer');
+    const shareButton = page.getByRole('button', {name: 'Share design'});
+    await expect(shareButton).toBeVisible();
+    await shareButton.click();
+
+    const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
+    await expect(snackbarLocator).toContainText('Shareable link copied to clipboard');
+
+    const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
+    expect(shareUrl).toContain(ELECTRIC_CAR_CHARGING_UI);
+
+    // Open recipient page with copied link
+    const recipientPage = await context.newPage();
+    await recipientPage.goto(shareUrl);
+    await recipientPage.waitForLoadState('load');
+
+    const editorLocator = recipientPage
+      .locator('a2ui-composer-monaco-editor .monaco-editor')
+      .first();
+    await expect(editorLocator).toBeVisible();
+
+    const previewIframe = recipientPage
+      .frameLocator('.preview-frame iframe, iframe.preview-iframe, iframe')
+      .first();
+    await expect(previewIframe.locator('body')).toBeVisible({timeout: 10000});
+    await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({timeout: 10000});
+  });
+
+  test('displays informative error snackbar when navigating with truncated or corrupted shared design URL', async ({
+    page,
+  }) => {
+    await page.goto('/?a2ui=d1.corrupted_truncated_payload_data!!!');
+    await page.waitForLoadState('load');
+
+    const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
+    await expect(snackbarLocator).toBeVisible({timeout: 10000});
+    await expect(snackbarLocator).toContainText('Unable to load shared design');
+    await expect(snackbarLocator).toContainText('truncated or corrupted');
   });
 });

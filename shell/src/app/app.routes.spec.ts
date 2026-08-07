@@ -43,6 +43,8 @@ class MockStartupResolution {
   readonly apiKeys = signal<Record<string, ApiKeyConfig>>({});
   readonly selectedRendererId = signal<string | null>(null);
   readonly activeRenderer = signal<RendererConfig | null>(null);
+  readonly sharedA2uiPayload = signal<string | null>(null);
+  readonly sharedA2uiError = signal<string | null>(null);
   readonly isLoading = signal(false);
   readonly error = signal<string | null>(null);
   setSelectedRendererId = vi.fn();
