@@ -24,6 +24,7 @@ import {
   ShareTrackingStatus,
   UsageTrackingService,
 } from './usage-tracking.service';
+import {generateUuid} from '../utils/uuid';
 
 /**
  * No-op implementation of UsageTrackingService used when tracking is disabled or in unit tests.
@@ -46,22 +47,27 @@ export class NoopUsageTrackingService extends UsageTrackingService {
 
   trackThemeToggle(_params: {theme: ThemePreference}): void {}
 
-  trackChatPrompt(_params: {
-    promptId: string;
+  trackChatPrompt(params: {
+    promptId?: string;
     catalogId: string;
     turnType: PromptTurnType;
     turnIndex: number;
     attemptNumber: number;
     hasScreenshot: boolean;
     attachmentCount: number;
-  }): void {}
+  }): string {
+    return params.promptId || generateUuid();
+  }
 
-  trackChatRetry(_params: {
-    promptId: string;
+  trackChatRetry(params: {
+    promptId?: string;
     catalogId: string;
     turnIndex: number;
     attemptNumber: number;
-  }): void {}
+    retryOfPromptId?: string;
+  }): string {
+    return params.promptId || generateUuid();
+  }
 
   trackChatCancel(_params: {promptId: string; turnIndex: number; pipelineStatus: string}): void {}
 

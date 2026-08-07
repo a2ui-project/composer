@@ -140,7 +140,6 @@ export class ChatCoordinator {
     attachments: Attachment[],
     options?: {promptId?: string; promptTurnIndex?: number; retryOfPromptId?: string},
   ): string {
-    const promptId = options?.promptId || crypto.randomUUID();
     const isRetry = !!options?.retryOfPromptId;
     const promptTurnIndex = options?.promptTurnIndex ?? this.currentTurnIndex() + 1;
     this.currentTurnIndex.set(promptTurnIndex);
@@ -156,15 +155,16 @@ export class ChatCoordinator {
     );
 
     if (isRetry) {
-      this.usageTrackingService.trackChatRetry({
-        promptId,
+      return this.usageTrackingService.trackChatRetry({
+        promptId: options?.promptId,
         catalogId,
         turnIndex: promptTurnIndex,
         attemptNumber: 2,
+        retryOfPromptId: options?.retryOfPromptId,
       });
     } else {
-      this.usageTrackingService.trackChatPrompt({
-        promptId,
+      return this.usageTrackingService.trackChatPrompt({
+        promptId: options?.promptId,
         catalogId,
         turnType: promptTurnIndex === 1 ? PromptTurnType.INITIAL : PromptTurnType.FOLLOWUP,
         turnIndex: promptTurnIndex,
@@ -173,8 +173,6 @@ export class ChatCoordinator {
         attachmentCount: nonScreenshotAttachments.length,
       });
     }
-
-    return promptId;
   }
 
   /**

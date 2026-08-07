@@ -95,7 +95,8 @@ export class DataModel {
           isValid = true;
           const currentIncoming = this.latestModelValue();
           const incomingStr = currentIncoming ? JSON.stringify(currentIncoming) : '';
-          if (incomingStr !== jsonStr.trim()) {
+          const localStr = JSON.stringify(parsed);
+          if (incomingStr !== localStr) {
             // prettier-ignore
             this.hostComm.sendMessage({
               'type': PreviewBridgeMessageType.DATA_MODEL_CHANGE,

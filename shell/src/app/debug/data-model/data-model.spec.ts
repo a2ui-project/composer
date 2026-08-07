@@ -127,6 +127,30 @@ describe('DataModel', () => {
     });
   });
 
+  it('does not dispatch redundant message when local JSON matches incoming data model', async () => {
+    const incomingData = {foo: 'bar', count: 42};
+    mockHostComm.messageStream.set({
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 'sample-surface',
+          value: incomingData,
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+    TestBed.tick();
+    fixture.detectChanges();
+
+    mockHostComm.sendMessage.mockClear();
+
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+
+    expect(mockHostComm.sendMessage).not.toHaveBeenCalled();
+  });
+
   it('does not dispatch invalid JSON edits to host service', async () => {
     await harness.setModelText('{ invalid-json');
     TestBed.tick();

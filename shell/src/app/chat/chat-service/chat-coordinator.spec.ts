@@ -1021,7 +1021,6 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
       expect(promptSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          promptId: expect.any(String),
           turnIndex: 1,
           turnType: PromptTurnType.INITIAL,
           hasScreenshot: true,
@@ -1046,6 +1045,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
           promptId: 'custom-retry-id',
           turnIndex: 5,
           attemptNumber: 2,
+          retryOfPromptId: 'parent-prompt-id',
         }),
       );
       expect(service.currentTurnIndex()).toBe(5);
