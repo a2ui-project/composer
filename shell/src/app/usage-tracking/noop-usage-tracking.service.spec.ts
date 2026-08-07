@@ -47,7 +47,7 @@ describe('NoopUsageTrackingService', () => {
       });
       service.trackSessionReset({totalPromptTurns: 3});
       service.trackThemeToggle({theme: ThemePreference.DARK});
-      service.trackChatPrompt({
+      const promptId = service.trackChatPrompt({
         promptId: 'p1',
         catalogId: 'cat1',
         turnType: PromptTurnType.INITIAL,
@@ -56,12 +56,14 @@ describe('NoopUsageTrackingService', () => {
         hasScreenshot: false,
         attachmentCount: 0,
       });
-      service.trackChatRetry({
+      expect(promptId).toBe('p1');
+      const retryId = service.trackChatRetry({
         promptId: 'p1',
         catalogId: 'cat1',
         turnIndex: 0,
         attemptNumber: 2,
       });
+      expect(retryId).toBe('p1');
       service.trackChatCancel({
         promptId: 'p1',
         turnIndex: 0,

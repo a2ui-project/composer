@@ -127,24 +127,25 @@ export abstract class UsageTrackingService {
    * Tracks user prompt dispatches to the LLM assistant.
    */
   abstract trackChatPrompt(params: {
-    promptId: string;
+    promptId?: string;
     catalogId: string;
     turnType: PromptTurnType;
     turnIndex: number;
     attemptNumber: number;
     hasScreenshot: boolean;
     attachmentCount: number;
-  }): void;
+  }): string;
 
   /**
    * Tracks prompt retries after failed turns.
    */
   abstract trackChatRetry(params: {
-    promptId: string;
+    promptId?: string;
     catalogId: string;
     turnIndex: number;
     attemptNumber: number;
-  }): void;
+    retryOfPromptId?: string;
+  }): string;
 
   /**
    * Tracks cancellation of in-flight LLM streams.

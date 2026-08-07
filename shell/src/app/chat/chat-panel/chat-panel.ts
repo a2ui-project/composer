@@ -360,8 +360,6 @@ export class ChatPanel {
     this.userPrompt.set(prompt);
     this.attachedFiles.set(attachments);
     await this.submitPrompt({
-      promptId: crypto.randomUUID(),
-      promptTurnIndex: this.chatCoordinator.currentTurnIndex() + 1,
       retryOfPromptId: options?.promptId,
     });
   }

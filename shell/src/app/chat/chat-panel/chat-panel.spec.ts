@@ -508,15 +508,9 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     await harness.clickRetryButtonAt(0);
     fixture.detectChanges();
 
-    expect(submitSpy).toHaveBeenCalledWith(
-      'create standard button',
-      [],
-      expect.objectContaining({
-        promptId: expect.any(String),
-        promptTurnIndex: 1,
-        retryOfPromptId: undefined,
-      }),
-    );
+    expect(submitSpy).toHaveBeenCalledWith('create standard button', [], {
+      retryOfPromptId: undefined,
+    });
   });
 
   it(
@@ -942,15 +936,9 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       await harness.clickRetryButtonAt(0);
       fixture.detectChanges();
 
-      expect(submitSpy).toHaveBeenCalledWith(
-        'Build table',
-        [],
-        expect.objectContaining({
-          promptId: expect.any(String),
-          promptTurnIndex: 3,
-          retryOfPromptId: 'prompt-123-abc',
-        }),
-      );
+      expect(submitSpy).toHaveBeenCalledWith('Build table', [], {
+        retryOfPromptId: 'prompt-123-abc',
+      });
     });
   });
 

@@ -34,6 +34,7 @@ import {
   USAGE_TRACKING_CONFIG,
   UsageTrackingService,
 } from './usage-tracking.service';
+import {generateUuid} from '../utils/uuid';
 
 declare global {
   interface Window {
@@ -56,14 +57,14 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly document = inject(DOCUMENT);
 
-  private _composerSessionId: string = crypto.randomUUID();
+  private _composerSessionId: string = generateUuid();
 
   get composerSessionId(): string {
     return this._composerSessionId;
   }
 
   resetSession(): void {
-    this._composerSessionId = crypto.randomUUID();
+    this._composerSessionId = generateUuid();
   }
 
   initialize(): void {
@@ -156,16 +157,17 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   }
 
   trackChatPrompt(params: {
-    promptId: string;
+    promptId?: string;
     catalogId: string;
     turnType: PromptTurnType;
     turnIndex: number;
     attemptNumber: number;
     hasScreenshot: boolean;
     attachmentCount: number;
-  }): void {
+  }): string {
+    const promptId = params.promptId || generateUuid();
     this.dispatchGtagEvent('chat_prompt', {
-      prompt_id: params.promptId,
+      prompt_id: promptId,
       catalog_id: params.catalogId,
       turn_type: params.turnType,
       turn_index: params.turnIndex,
@@ -173,20 +175,25 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       has_screenshot: params.hasScreenshot,
       attachment_count: params.attachmentCount,
     });
+    return promptId;
   }
 
   trackChatRetry(params: {
-    promptId: string;
+    promptId?: string;
     catalogId: string;
     turnIndex: number;
     attemptNumber: number;
-  }): void {
+    retryOfPromptId?: string;
+  }): string {
+    const promptId = params.promptId || generateUuid();
     this.dispatchGtagEvent('chat_prompt_retry', {
-      prompt_id: params.promptId,
+      prompt_id: promptId,
       catalog_id: params.catalogId,
       turn_index: params.turnIndex,
       attempt_number: params.attemptNumber,
+      ...(params.retryOfPromptId ? {retry_of_prompt_id: params.retryOfPromptId} : {}),
     });
+    return promptId;
   }
 
   trackChatCancel(params: {promptId: string; turnIndex: number; pipelineStatus: string}): void {

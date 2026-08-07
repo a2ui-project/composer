@@ -176,8 +176,8 @@ describe('Ga4UsageTrackingService', () => {
     );
   });
 
-  it('tracks chat prompt event', () => {
-    service.trackChatPrompt({
+  it('tracks chat prompt event and returns resolved promptId', () => {
+    const returnedId = service.trackChatPrompt({
       promptId: 'prompt-1',
       catalogId: 'basic-catalog',
       turnType: PromptTurnType.INITIAL,
@@ -186,6 +186,7 @@ describe('Ga4UsageTrackingService', () => {
       hasScreenshot: true,
       attachmentCount: 2,
     });
+    expect(returnedId).toBe('prompt-1');
     expect(mockWindow.gtag).toHaveBeenCalledWith(
       'event',
       'chat_prompt',
@@ -201,21 +202,61 @@ describe('Ga4UsageTrackingService', () => {
     );
   });
 
-  it('tracks chat retry event', () => {
-    service.trackChatRetry({
-      promptId: 'prompt-1',
+  it('generates promptId if omitted in trackChatPrompt', () => {
+    const returnedId = service.trackChatPrompt({
+      catalogId: 'basic-catalog',
+      turnType: PromptTurnType.FOLLOWUP,
+      turnIndex: 1,
+      attemptNumber: 1,
+      hasScreenshot: false,
+      attachmentCount: 0,
+    });
+    expect(returnedId).toBeTruthy();
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'event',
+      'chat_prompt',
+      expect.objectContaining({
+        prompt_id: returnedId,
+        turn_type: PromptTurnType.FOLLOWUP,
+      }),
+    );
+  });
+
+  it('tracks chat retry event and includes retry_of_prompt_id if provided', () => {
+    const returnedId = service.trackChatRetry({
+      promptId: 'retry-prompt-1',
       catalogId: 'basic-catalog',
       turnIndex: 0,
       attemptNumber: 2,
+      retryOfPromptId: 'parent-prompt-1',
     });
+    expect(returnedId).toBe('retry-prompt-1');
     expect(mockWindow.gtag).toHaveBeenCalledWith(
       'event',
       'chat_prompt_retry',
       expect.objectContaining({
-        prompt_id: 'prompt-1',
+        prompt_id: 'retry-prompt-1',
         catalog_id: 'basic-catalog',
         turn_index: 0,
         attempt_number: 2,
+        retry_of_prompt_id: 'parent-prompt-1',
+      }),
+    );
+  });
+
+  it('generates promptId if omitted in trackChatRetry', () => {
+    const returnedId = service.trackChatRetry({
+      catalogId: 'basic-catalog',
+      turnIndex: 1,
+      attemptNumber: 2,
+    });
+    expect(returnedId).toBeTruthy();
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'event',
+      'chat_prompt_retry',
+      expect.objectContaining({
+        prompt_id: returnedId,
+        turn_index: 1,
       }),
     );
   });
