@@ -53,6 +53,16 @@ jobs:
       - name: Build Core Bridge Dependency
         run: yarn workspace a2ui-bridge build
 
+      - name: Inject GA4 Measurement ID
+        env:
+          GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
+        run: |
+          if [ -n "$GA_MEASUREMENT_ID" ]; then
+            echo "Injecting GA4 measurement ID..."
+            sed -i "s/enabled: false,/enabled: true,/g" shell/src/app/usage-tracking/usage-tracking.service.ts
+            sed -i "s/measurementId: ''/measurementId: '$GA_MEASUREMENT_ID'/g" shell/src/app/usage-tracking/usage-tracking.service.ts
+          fi
+
       - name: Build Production Shell & Catalogs with Correct Base URLs
         run: |
           yarn workspace ng-basic-catalog run build --base-href=/composer/samples/ng-basic-catalog/
