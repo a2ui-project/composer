@@ -19,6 +19,8 @@ on:
     branches: [main]
   pull_request:
 
+permissions: read-all
+
 jobs:
   enforce-formatting:
     runs-on: ubuntu-latest

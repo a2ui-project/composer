@@ -33,6 +33,7 @@
 name: PR Preview Deploy
 
 on:
+  # zizmor: ignore[dangerous-triggers]
   workflow_run:
     workflows: ["PR Preview Build"]
     types: [completed]
