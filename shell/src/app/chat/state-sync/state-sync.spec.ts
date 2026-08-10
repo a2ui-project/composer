@@ -121,6 +121,14 @@ describe('StateSync Autosave Draft Integrations', () => {
     expect(sharedService.activeDraft()).toBe(customSharedJson);
   });
 
+  it('updates activeDraft dynamically when sharedA2uiPayload signal emits a new value', () => {
+    const newSharedJson = '[{"version":"v0.9","createSurface":{"surfaceId":"dynamic-hashchange"}}]';
+    startupResolutionMock.sharedA2uiPayload.set(newSharedJson);
+    TestBed.tick();
+
+    expect(service.activeDraft()).toBe(newSharedJson);
+  });
+
   it('updates draft in-memory synchronously and ignores initial setup debouncer', () => {
     service.updateDraft('[{"version": "v0.9"}]');
     expect(service.hydrateActiveDraft()).toBe('[{"version": "v0.9"}]');

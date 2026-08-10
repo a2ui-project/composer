@@ -27,8 +27,9 @@ export class QueryParser {
   private static readonly PAYLOAD_PREFIX = 'd1.';
 
   /** @nocollapse */
-  static parseRendererUrl(searchString: string): string | null {
-    const params = new URLSearchParams(searchString);
+  static parseRendererUrl(searchOrHashString: string): string | null {
+    const clean = searchOrHashString ? searchOrHashString.replace(/^[?#]/, '') : '';
+    const params = new URLSearchParams(clean);
     const renderers = params.getAll('renderer');
     if (renderers.length === 0) {
       return null;
@@ -54,8 +55,9 @@ export class QueryParser {
   }
 
   /** @nocollapse */
-  static parseRendererId(searchString: string): string | null {
-    const params = new URLSearchParams(searchString);
+  static parseRendererId(searchOrHashString: string): string | null {
+    const clean = searchOrHashString ? searchOrHashString.replace(/^[?#]/, '') : '';
+    const params = new URLSearchParams(clean);
     const candidate = params.get('rendererId');
     if (!candidate) {
       return null;
@@ -69,13 +71,15 @@ export class QueryParser {
   }
 
   /**
-   * Compresses an A2UI JSON payload using deflate-raw and returns a URL-safe Base64 string prefixed with 'd1.'.
+   * Minifies and compresses an A2UI JSON payload using deflate-raw and returns a URL-safe Base64 string prefixed with 'd1.'.
+   * Throws an error if jsonString is not valid JSON syntax.
    */
   static async encodeSharedPayload(jsonString: string | null | undefined): Promise<string> {
-    if (!jsonString) {
+    if (!jsonString || !jsonString.trim()) {
       return '';
     }
-    const bytes = new TextEncoder().encode(jsonString);
+    const minified = JSON.stringify(JSON.parse(jsonString));
+    const bytes = new TextEncoder().encode(minified);
     const cs = new CompressionStream('deflate-raw');
     const writer = cs.writable.getWriter();
     const writePromise = writer.write(bytes).then(() => writer.close());
@@ -125,16 +129,16 @@ export class QueryParser {
   }
 
   /**
-   * Parses the shared A2UI JSON payload from a query search string (?a2ui=...)
-   * with detailed status, returning the decompressed JSON string or a diagnostic error message.
+   * Parses the shared A2UI JSON payload from a URL hash fragment (#a2ui=...)
+   * returning the decompressed JSON string or a diagnostic error message.
    */
   static async parseSharedA2ui(
-    searchString: string | null | undefined,
+    hashString: string | null | undefined,
   ): Promise<SharedA2uiParseResult> {
-    if (!searchString) {
+    if (!hashString) {
       return {payload: null, error: null};
     }
-    const params = new URLSearchParams(searchString);
+    const params = new URLSearchParams(hashString.replace(/^#/, ''));
     const candidate = params.get('a2ui');
     if (!candidate) {
       return {payload: null, error: null};
@@ -149,19 +153,9 @@ export class QueryParser {
         };
       }
       try {
-        JSON.parse(decompressed);
-        return {payload: decompressed, error: null};
-      } catch {
-        return {
-          payload: null,
-          error: 'The shared design contains invalid or incomplete JSON syntax.',
-        };
-      }
-    }
-    if (candidate.startsWith('[') || candidate.startsWith('{')) {
-      try {
-        JSON.parse(candidate);
-        return {payload: candidate, error: null};
+        const parsed = JSON.parse(decompressed);
+        const formatted = JSON.stringify(parsed, null, 2);
+        return {payload: formatted, error: null};
       } catch {
         return {
           payload: null,

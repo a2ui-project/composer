@@ -17,7 +17,7 @@
 import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {merge, of} from 'rxjs';
-import {debounceTime, distinctUntilChanged, skip} from 'rxjs/operators';
+import {debounceTime, distinctUntilChanged, filter, skip} from 'rxjs/operators';
 import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
@@ -77,6 +77,9 @@ export class StateSync {
       ? toObservable(this.startupResolution.selectedRendererId$)
       : of(null);
     const activeCatalog$ = toObservable(this.catalogManagement.activeCatalog);
+    const sharedA2uiPayload$ = this.startupResolution?.sharedA2uiPayload
+      ? toObservable(this.startupResolution.sharedA2uiPayload)
+      : of(null);
 
     merge(selectedRendererId$, activeCatalog$)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -86,8 +89,19 @@ export class StateSync {
         const currentDraft = this._activeDraft();
         const draftCatalogId = this.getCatalogIdFromDraft(currentDraft);
         if (currentDraft === '' || draftCatalogId !== catalogId) {
-          this._activeDraft.set(this.getInitialDraft(catalogId));
+          const initial = this.getInitialDraft(catalogId);
+          this._activeDraft.set(initial);
+          this._draftInput.set(initial);
         }
+      });
+
+    sharedA2uiPayload$
+      .pipe(
+        filter((payload): payload is string => !!payload),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((payload: string) => {
+        this.updateDraft(payload);
       });
 
     toObservable(this._draftInput)

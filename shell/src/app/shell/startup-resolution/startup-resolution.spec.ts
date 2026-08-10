@@ -98,6 +98,8 @@ describe('StartupResolution', () => {
 
   afterEach(() => {
     localStorage.clear();
+    globalThis.location.hash = '';
+    globalThis.location.search = '';
     vi.restoreAllMocks();
   });
 
@@ -170,66 +172,98 @@ describe('StartupResolution', () => {
   });
 
   describe('sharedA2uiPayload signal', () => {
-    it('sets sharedA2uiPayload signal when ?a2ui= parameter is present in window search', async () => {
-      mockFetchConfig({});
-      const expectedPayload = '[{"version":"v0.9","createSurface":{"surfaceId":"test"}}]';
-      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
-        `?a2ui=${encodeURIComponent(expectedPayload)}`,
-      );
-
-      await service.resolveStartupConfiguration();
-      expect(service.sharedA2uiPayload()).toBe(expectedPayload);
-    });
-
-    it('parses compressed d1. payload and assigns decompressed JSON string to sharedA2uiPayload', async () => {
+    it('parses compressed d1. payload from window hash fragment and assigns decompressed JSON string to sharedA2uiPayload', async () => {
       mockFetchConfig({});
       const rawJson = '[{"version":"v0.9","createSurface":{"surfaceId":"test-compressed"}}]';
+      const expectedFormattedJson = JSON.stringify(JSON.parse(rawJson), null, 2);
       const compressed = await QueryParser.encodeSharedPayload(rawJson);
-      vi.spyOn(service, 'getWindowSearch').mockReturnValue(`?a2ui=${compressed}`);
+      vi.spyOn(service, 'getWindowHash').mockReturnValue(`#a2ui=${compressed}`);
+      const cleanSpy = vi.spyOn(service, 'cleanSharedA2uiUrl');
 
       await service.resolveStartupConfiguration();
-      expect(service.sharedA2uiPayload()).toBe(rawJson);
+      expect(service.sharedA2uiPayload()).toBe(expectedFormattedJson);
+      expect(cleanSpy).toHaveBeenCalled();
     });
 
-    it('leaves sharedA2uiPayload as null when ?a2ui is missing or invalid', async () => {
+    it('leaves sharedA2uiPayload as null when a2ui hash parameter is missing or empty', async () => {
       mockFetchConfig({});
-      vi.spyOn(service, 'getWindowSearch').mockReturnValue('');
+      vi.spyOn(service, 'getWindowHash').mockReturnValue('');
 
       await service.resolveStartupConfiguration();
       expect(service.sharedA2uiPayload()).toBeNull();
       expect(service.sharedA2uiError()).toBeNull();
     });
 
-    it('sets sharedA2uiError when ?a2ui= contains corrupted or truncated compressed payload', async () => {
+    it('sets sharedA2uiError when a2ui hash parameter contains corrupted or truncated compressed payload', async () => {
       mockFetchConfig({});
-      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
-        '?a2ui=d1.corrupted_truncated_base64!!!',
-      );
+      vi.spyOn(service, 'getWindowHash').mockReturnValue('#a2ui=d1.corrupted_truncated_base64!!!');
+      const cleanSpy = vi.spyOn(service, 'cleanSharedA2uiUrl');
 
       await service.resolveStartupConfiguration();
       expect(service.sharedA2uiPayload()).toBeNull();
       expect(service.sharedA2uiError()).toContain('truncated or corrupted');
+      expect(cleanSpy).toHaveBeenCalled();
     });
 
-    it('sets sharedA2uiError when ?a2ui= contains malformed uncompressed JSON', async () => {
+    it('sets sharedA2uiError when a2ui hash parameter contains unrecognized non-d1 format', async () => {
       mockFetchConfig({});
-      vi.spyOn(service, 'getWindowSearch').mockReturnValue('?a2ui=[{"version":"v0.9", bad_syntax');
+      vi.spyOn(service, 'getWindowHash').mockReturnValue('#a2ui=unrecognized-format');
 
       await service.resolveStartupConfiguration();
       expect(service.sharedA2uiPayload()).toBeNull();
-      expect(service.sharedA2uiError()).toContain('invalid or incomplete JSON syntax');
+      expect(service.sharedA2uiError()).toContain('unrecognized or corrupted');
     });
 
     it('resets sharedA2uiError to null on consecutive resolveStartupConfiguration calls', async () => {
       mockFetchConfig({});
-      const getWindowSearchSpy = vi.spyOn(service, 'getWindowSearch');
-      getWindowSearchSpy.mockReturnValue('?a2ui=d1.corrupted');
+      const getWindowHashSpy = vi.spyOn(service, 'getWindowHash');
+      getWindowHashSpy.mockReturnValue('#a2ui=d1.corrupted');
       await service.resolveStartupConfiguration();
       expect(service.sharedA2uiError()).not.toBeNull();
 
-      getWindowSearchSpy.mockReturnValue('');
+      getWindowHashSpy.mockReturnValue('');
       await service.resolveStartupConfiguration();
       expect(service.sharedA2uiError()).toBeNull();
+    });
+
+    it('parses compressed d1. payload from query search parameters when hash is empty', async () => {
+      mockFetchConfig({});
+      const rawJson = '[{"version":"v0.9","createSurface":{"surfaceId":"test-search"}}]';
+      const expectedFormattedJson = JSON.stringify(JSON.parse(rawJson), null, 2);
+      const compressed = await QueryParser.encodeSharedPayload(rawJson);
+      vi.spyOn(service, 'getWindowHash').mockReturnValue('');
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(`?a2ui=${compressed}`);
+      const cleanSpy = vi.spyOn(service, 'cleanSharedA2uiUrl');
+
+      await service.resolveStartupConfiguration();
+      expect(service.sharedA2uiPayload()).toBe(expectedFormattedJson);
+      expect(cleanSpy).toHaveBeenCalled();
+    });
+
+    it('cleans a2ui parameter from window hash via history.replaceState', () => {
+      const replaceStateSpy = vi.spyOn(globalThis.history, 'replaceState');
+      globalThis.location.hash = '#renderer=http%3A%2F%2Frenderer.com&a2ui=d1.abc';
+      try {
+        service.cleanSharedA2uiUrl();
+        expect(replaceStateSpy).toHaveBeenCalledWith(
+          {},
+          '',
+          expect.stringContaining('#renderer=http%3A%2F%2Frenderer.com'),
+        );
+        expect(replaceStateSpy).toHaveBeenCalledWith({}, '', expect.not.stringContaining('a2ui='));
+      } finally {
+        globalThis.location.hash = '';
+      }
+    });
+
+    it('processes hashchange events dynamically at runtime', async () => {
+      const rawJson = '[{"version":"v0.9","createSurface":{"surfaceId":"test-dynamic"}}]';
+      const expectedFormattedJson = JSON.stringify(JSON.parse(rawJson), null, 2);
+      const compressed = await QueryParser.encodeSharedPayload(rawJson);
+      vi.spyOn(service, 'getWindowHash').mockReturnValue(`#a2ui=${compressed}`);
+
+      await service.processSharedA2uiUrl();
+      expect(service.sharedA2uiPayload()).toBe(expectedFormattedJson);
     });
   });
 

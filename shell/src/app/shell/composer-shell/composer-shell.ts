@@ -38,6 +38,9 @@ import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {QueryParser} from '../query-parser/query-parser';
 
+/** Standard length for showing any snack bar notification. */
+const SNACK_BAR_DURATION_MS = 5000;
+
 /**
  * The primary layout container for the A2UI Composer.
  * Renders the permanent header bar, persistent navigation sidebar,
@@ -90,7 +93,7 @@ export class ComposerShell {
       const error = this.startupResolution.sharedA2uiError();
       if (error) {
         this.snackBar.open(`Unable to load shared design: ${error}`, 'Dismiss', {
-          duration: 8000,
+          duration: SNACK_BAR_DURATION_MS,
         });
       }
     });
@@ -128,23 +131,40 @@ export class ComposerShell {
     }
     const clipboard = this.document.defaultView?.navigator?.clipboard;
     if (!clipboard) {
-      this.snackBar.open('Clipboard API unavailable', 'Close', {duration: 3000});
+      this.snackBar.open('Clipboard API unavailable', 'Close', {duration: SNACK_BAR_DURATION_MS});
+      return;
+    }
+    const activeDraft = this.stateSync.activeDraft() || '';
+    try {
+      JSON.parse(activeDraft);
+    } catch {
+      this.snackBar.open('Cannot share design: invalid JSON syntax', 'Close', {
+        duration: SNACK_BAR_DURATION_MS,
+      });
       return;
     }
     try {
       const rendererUrl = this.startupResolution.resolvedUrl() || '';
-      const activeDraft = this.stateSync.activeDraft() || '';
       const compressed = await QueryParser.encodeSharedPayload(activeDraft);
       const shareUrl = new URL(href);
+      const hashParams = new URLSearchParams();
       if (rendererUrl) {
-        shareUrl.searchParams.set('renderer', rendererUrl);
+        hashParams.set('renderer', rendererUrl);
       }
-      shareUrl.searchParams.set('a2ui', compressed);
+      hashParams.set('a2ui', compressed);
+      shareUrl.hash = hashParams.toString();
+      shareUrl.search = '';
+
       await clipboard.writeText(shareUrl.toString());
-      this.snackBar.open('Shareable link copied to clipboard', 'Close', {duration: 3000});
+      const lengthKb = (shareUrl.toString().length / 1024).toFixed(1);
+      this.snackBar.open(`Shareable link copied to clipboard (${lengthKb} KB)`, 'Close', {
+        duration: SNACK_BAR_DURATION_MS,
+      });
     } catch (err) {
       console.error('Failed to copy shareable link:', err);
-      this.snackBar.open('Failed to copy link to clipboard', 'Close', {duration: 3000});
+      this.snackBar.open('Failed to copy link to clipboard', 'Close', {
+        duration: SNACK_BAR_DURATION_MS,
+      });
     }
   }
 
@@ -162,6 +182,7 @@ export class ComposerShell {
       url.searchParams.delete('a2ui');
       url.searchParams.delete('renderer');
       url.searchParams.delete('rendererId');
+      url.hash = '';
       this.document.defaultView.location.href = url.toString();
     }
     console.log('Session state cleared.');

@@ -139,7 +139,7 @@ test.describe('E2E Workspace User Journey', () => {
     await expect(page.locator('.chat-history-log .bubble-layout')).toHaveCount(1);
   });
 
-  test('verifies sharing design URL copies a2ui query param and loads payload on new page', async ({
+  test('verifies sharing design URL copies a2ui in URL hash and loads payload on new page', async ({
     context,
     page,
   }) => {
@@ -190,12 +190,32 @@ test.describe('E2E Workspace User Journey', () => {
   test('displays informative error snackbar when navigating with truncated or corrupted shared design URL', async ({
     page,
   }) => {
-    await page.goto('/?a2ui=d1.corrupted_truncated_payload_data!!!');
+    await page.goto('/#a2ui=d1.corrupted_truncated_payload_data!!!');
     await page.waitForLoadState('load');
 
     const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
     await expect(snackbarLocator).toBeVisible({timeout: 10000});
     await expect(snackbarLocator).toContainText('Unable to load shared design');
     await expect(snackbarLocator).toContainText('truncated or corrupted');
+  });
+
+  test('updates active draft and renders preview when hash URL is navigated to on the same page', async ({
+    page,
+  }) => {
+    await expect(page.locator('.header-title')).toContainText('A2UI Composer');
+
+    // Dynamically change the hash on the existing page (triggers hashchange event)
+    await page.evaluate(payload => {
+      window.location.hash = `a2ui=${payload}`;
+    }, ELECTRIC_CAR_CHARGING_UI);
+
+    const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
+    await expect(editorLocator).toBeVisible();
+
+    const previewIframe = page
+      .frameLocator('.preview-frame iframe, iframe.preview-iframe, iframe')
+      .first();
+    await expect(previewIframe.locator('body')).toBeVisible({timeout: 10000});
+    await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({timeout: 10000});
   });
 });

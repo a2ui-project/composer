@@ -23,6 +23,11 @@ describe('QueryParser', () => {
     expect(url).toBe('http://localhost:3000/');
   });
 
+  it('extracts renderer URI string from URL hash fragment', () => {
+    const url = QueryParser.parseRendererUrl('#renderer=http://localhost:3000');
+    expect(url).toBe('http://localhost:3000/');
+  });
+
   it('evaluates the first valid instance when multiple renderer parameters exist', () => {
     const url = QueryParser.parseRendererUrl(
       '?renderer=http://first:3000&renderer=http://second:3000',
@@ -68,6 +73,10 @@ describe('QueryParser', () => {
       expect(QueryParser.parseRendererId('?rendererId=dev')).toBe('dev');
     });
 
+    it('parses renderer ID from #rendererId hash fragment', () => {
+      expect(QueryParser.parseRendererId('#rendererId=dev')).toBe('dev');
+    });
+
     it('rejects renderer IDs with invalid characters', () => {
       expect(QueryParser.parseRendererId('?rendererId=testing/invalid')).toBeNull();
       expect(QueryParser.parseRendererId('?rendererId=testing<script>')).toBeNull();
@@ -85,10 +94,23 @@ describe('QueryParser', () => {
       expect(decoded).toBe(originalJson);
     });
 
+    it('minifies formatted JSON prior to compression yielding identical output to pre-minified JSON', async () => {
+      const formattedJson = '[\n  {\n    "version": "v0.9"\n  }\n]';
+      const minifiedJson = '[{"version":"v0.9"}]';
+      const encodedFormatted = await QueryParser.encodeSharedPayload(formattedJson);
+      const encodedMinified = await QueryParser.encodeSharedPayload(minifiedJson);
+      expect(encodedFormatted).toBe(encodedMinified);
+    });
+
+    it('throws an error when encoding invalid JSON syntax', async () => {
+      await expect(QueryParser.encodeSharedPayload('invalid json {')).rejects.toThrow();
+    });
+
     it('returns empty string when encoding null, undefined, or empty payload', async () => {
       expect(await QueryParser.encodeSharedPayload(null)).toBe('');
       expect(await QueryParser.encodeSharedPayload(undefined)).toBe('');
       expect(await QueryParser.encodeSharedPayload('')).toBe('');
+      expect(await QueryParser.encodeSharedPayload('   ')).toBe('');
     });
 
     it('returns null when decoding invalid, corrupt, or nullish deflate-raw payload', async () => {
@@ -108,20 +130,23 @@ describe('QueryParser', () => {
   });
 
   describe('parseSharedA2ui', () => {
-    it('returns payload with null error for valid compressed d1. payload', async () => {
+    it('returns payload with null error for valid compressed d1. payload from hash fragment', async () => {
       const originalJson = JSON.stringify([{version: 'v0.9', test: true}]);
+      const expectedFormattedJson = JSON.stringify([{version: 'v0.9', test: true}], null, 2);
       const encoded = await QueryParser.encodeSharedPayload(originalJson);
-      const searchString = `?a2ui=${encodeURIComponent(encoded)}`;
-      const result = await QueryParser.parseSharedA2ui(searchString);
-      expect(result.payload).toBe(originalJson);
+      const hashString = `#a2ui=${encodeURIComponent(encoded)}`;
+      const result = await QueryParser.parseSharedA2ui(hashString);
+      expect(result.payload).toBe(expectedFormattedJson);
       expect(result.error).toBeNull();
     });
 
-    it('returns payload with null error for valid uncompressed JSON', async () => {
-      const rawJson = '{"version":"v0.9"}';
-      const searchString = `?a2ui=${encodeURIComponent(rawJson)}`;
-      const result = await QueryParser.parseSharedA2ui(searchString);
-      expect(result.payload).toBe(rawJson);
+    it('parses hash fragment without leading # symbol', async () => {
+      const originalJson = JSON.stringify([{version: 'v0.9', test: true}]);
+      const expectedFormattedJson = JSON.stringify([{version: 'v0.9', test: true}], null, 2);
+      const encoded = await QueryParser.encodeSharedPayload(originalJson);
+      const hashString = `a2ui=${encodeURIComponent(encoded)}`;
+      const result = await QueryParser.parseSharedA2ui(hashString);
+      expect(result.payload).toBe(expectedFormattedJson);
       expect(result.error).toBeNull();
     });
 
@@ -130,39 +155,34 @@ describe('QueryParser', () => {
       const encodedJson = encodeURIComponent(rawJson);
       // Intentionally corrupt the string.
       const corruptedJson = encodedJson.slice(0, encodedJson.length - 3);
-      const result = await QueryParser.parseSharedA2ui(`?a2ui=d1.${corruptedJson}`);
+      const result = await QueryParser.parseSharedA2ui(`#a2ui=d1.${corruptedJson}`);
       expect(result.payload).toBeNull();
       expect(result.error).toContain('truncated or corrupted');
     });
 
     it('returns invalid JSON syntax error when decompressed payload is malformed JSON', async () => {
-      const invalidJsonText = '[{"version":"v0.9", unclosed:';
-      const encoded = await QueryParser.encodeSharedPayload(invalidJsonText);
-      const result = await QueryParser.parseSharedA2ui(`?a2ui=${encodeURIComponent(encoded)}`);
+      vi.spyOn(QueryParser, 'decodeSharedPayload').mockResolvedValue(
+        '[{"version":"v0.9", unclosed:',
+      );
+      const result = await QueryParser.parseSharedA2ui('#a2ui=d1.mocked_corrupted_json');
       expect(result.payload).toBeNull();
       expect(result.error).toContain('invalid or incomplete JSON syntax');
     });
 
-    it('returns invalid JSON syntax error when uncompressed payload is malformed JSON', async () => {
-      const result = await QueryParser.parseSharedA2ui('?a2ui=[{"version":"v0.9", bad_syntax');
-      expect(result.payload).toBeNull();
-      expect(result.error).toContain('invalid or incomplete JSON syntax');
-    });
-
-    it('returns unrecognized format error when payload format is unrecognized', async () => {
-      const result = await QueryParser.parseSharedA2ui('?a2ui=unknown-non-json-format');
+    it('returns unrecognized format error when payload format is unrecognized in hash fragment', async () => {
+      const result = await QueryParser.parseSharedA2ui('#a2ui=unknown-non-json-format');
       expect(result.payload).toBeNull();
       expect(result.error).toContain('unrecognized or corrupted');
     });
 
-    it('returns null payload and null error when searchString is missing or empty', async () => {
+    it('returns null payload and null error when hash fragment is missing, empty, or without a2ui param', async () => {
       expect(await QueryParser.parseSharedA2ui(null)).toEqual({payload: null, error: null});
       expect(await QueryParser.parseSharedA2ui(undefined)).toEqual({
         payload: null,
         error: null,
       });
       expect(await QueryParser.parseSharedA2ui('')).toEqual({payload: null, error: null});
-      expect(await QueryParser.parseSharedA2ui('?other=value')).toEqual({
+      expect(await QueryParser.parseSharedA2ui('#other=value')).toEqual({
         payload: null,
         error: null,
       });

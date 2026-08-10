@@ -308,7 +308,9 @@ describe('ComposerShell Layout', () => {
   });
 
   describe('shareDesign & resetSession', () => {
-    it('shareDesign copies renderer URL and compressed payload to clipboard', async () => {
+    it('copies renderer URL and compressed payload in URL hash to clipboard and reports size in snackbar', async () => {
+      const snackBar = fixture.debugElement.injector.get(MatSnackBar);
+      const snackBarSpy = vi.spyOn(snackBar, 'open');
       startupResolutionMock.resolvedUrl.set('http://my-renderer.com');
       stateSyncMock.activeDraft.set('[{"version":"v0.9"}]');
       const writeTextSpy = vi.fn().mockResolvedValue(undefined);
@@ -325,9 +327,42 @@ describe('ComposerShell Layout', () => {
         const component = fixture.componentInstance;
         await component.shareDesign();
         expect(writeTextSpy).toHaveBeenCalledWith(
-          expect.stringContaining('renderer=http%3A%2F%2Fmy-renderer.com'),
+          expect.stringContaining('#renderer=http%3A%2F%2Fmy-renderer.com'),
         );
         expect(writeTextSpy).toHaveBeenCalledWith(expect.stringContaining('a2ui=d1.'));
+        expect(snackBarSpy).toHaveBeenCalledWith(
+          expect.stringMatching(/Shareable link copied to clipboard \(\d+\.\d+ KB\)/),
+          'Close',
+          {duration: 5000},
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('displays an error snackbar and halts sharing when active draft contains invalid JSON syntax', async () => {
+      const snackBar = fixture.debugElement.injector.get(MatSnackBar);
+      const snackBarSpy = vi.spyOn(snackBar, 'open');
+      stateSyncMock.activeDraft.set('invalid json {');
+      const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+      const document = TestBed.inject(DOCUMENT);
+      const nav = document.defaultView!.navigator;
+      const targetObj = Object.getOwnPropertyDescriptor(nav, 'clipboard')
+        ? nav
+        : Object.getPrototypeOf(nav);
+      const spy = vi.spyOn(targetObj, 'clipboard', 'get').mockReturnValue({
+        writeText: writeTextSpy,
+      } as unknown as Clipboard);
+
+      try {
+        const component = fixture.componentInstance;
+        await component.shareDesign();
+        expect(writeTextSpy).not.toHaveBeenCalled();
+        expect(snackBarSpy).toHaveBeenCalledWith(
+          'Cannot share design: invalid JSON syntax',
+          'Close',
+          {duration: 5000},
+        );
       } finally {
         spy.mockRestore();
       }
@@ -346,7 +381,7 @@ describe('ComposerShell Layout', () => {
         const component = fixture.componentInstance;
         await component.shareDesign();
         expect(snackBarSpy).toHaveBeenCalledWith('Clipboard API unavailable', 'Close', {
-          duration: 3000,
+          duration: 5000,
         });
       } finally {
         spy.mockRestore();
@@ -379,7 +414,7 @@ describe('ComposerShell Layout', () => {
           'Unable to load shared design: The shared design link appears truncated or corrupted',
         ),
         'Dismiss',
-        {duration: 8000},
+        {duration: 5000},
       );
     });
   });

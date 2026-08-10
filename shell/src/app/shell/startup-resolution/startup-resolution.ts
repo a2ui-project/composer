@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, Injector, computed, inject, signal} from '@angular/core';
+import {Injectable, Injector, DestroyRef, computed, inject, signal} from '@angular/core';
 import {QueryParser} from '../query-parser/query-parser';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
@@ -85,6 +85,20 @@ export class StartupResolution {
     return this.getRendererById(selectedId, renderers);
   });
 
+  private readonly destroyRef = inject(DestroyRef);
+
+  constructor() {
+    if (typeof globalThis.window !== 'undefined' && globalThis.window.addEventListener) {
+      const onHashChange = () => {
+        this.processSharedA2uiUrl();
+      };
+      globalThis.window.addEventListener('hashchange', onHashChange);
+      this.destroyRef.onDestroy(() => {
+        globalThis.window.removeEventListener('hashchange', onHashChange);
+      });
+    }
+  }
+
   async setSelectedRendererId(rendererId: string | null): Promise<boolean> {
     this._selectedRendererId.set(rendererId);
     const active = this.activeRenderer();
@@ -119,19 +133,29 @@ export class StartupResolution {
     const staticConfig = await this.fetchStaticConfig();
     const resolved = await this.resolveRenderer(staticConfig);
 
-    const {payload, error} = await QueryParser.parseSharedA2ui(this.getWindowSearch());
-    if (payload) {
-      console.log('Using shared A2UI payload from query param.');
-      this._sharedA2uiPayload.set(payload);
-    }
-    if (error) {
-      console.warn('Shared A2UI payload error:', error);
-      this._sharedA2uiError.set(error);
-    }
+    await this.processSharedA2uiUrl();
 
     await this.evaluateEnvironmentPurge();
 
     return resolved;
+  }
+
+  async processSharedA2uiUrl(): Promise<void> {
+    const rawParam = this.getWindowHash() || this.getWindowSearch();
+    if (!rawParam) {
+      return;
+    }
+    const {payload, error} = await QueryParser.parseSharedA2ui(rawParam);
+    if (payload) {
+      console.log('Using shared A2UI payload from URL.');
+      this._sharedA2uiPayload.set(payload);
+      this.cleanSharedA2uiUrl();
+    }
+    if (error) {
+      console.warn('Shared A2UI payload error:', error);
+      this._sharedA2uiError.set(error);
+      this.cleanSharedA2uiUrl();
+    }
   }
 
   private async fetchStaticConfig(): Promise<AppConfig | null> {
@@ -247,13 +271,17 @@ export class StartupResolution {
       staticRenderers = this._renderers();
     }
 
-    // Tier 1 & 2: ?renderer= query param (subject to origin allowlist check)
-    const queryRendererUrl = QueryParser.parseRendererUrl(this.getWindowSearch());
+    // Tier 1 & 2: renderer param from hash or query (subject to origin allowlist check)
+    const queryRendererUrl =
+      QueryParser.parseRendererUrl(this.getWindowHash()) ||
+      QueryParser.parseRendererUrl(this.getWindowSearch());
     if (queryRendererUrl) {
       const isAllowed = await this.isOriginAllowed(queryRendererUrl);
       if (isAllowed) {
-        console.log('Using renderer query param.');
-        const requestedId = QueryParser.parseRendererId(this.getWindowSearch());
+        console.log('Using renderer parameter.');
+        const requestedId =
+          QueryParser.parseRendererId(this.getWindowHash()) ||
+          QueryParser.parseRendererId(this.getWindowSearch());
         if (requestedId) {
           this._selectedRendererId.set(requestedId);
         }
@@ -261,12 +289,14 @@ export class StartupResolution {
         this._resolvedUrl.set(queryRendererUrl);
         return queryRendererUrl;
       } else {
-        console.warn('Renderer query param origin not allowed by user.');
+        console.warn('Renderer parameter origin not allowed by user.');
       }
     }
 
-    // Tier 3: ?rendererId=
-    const requestedId = QueryParser.parseRendererId(this.getWindowSearch());
+    // Tier 3: rendererId from hash or query
+    const requestedId =
+      QueryParser.parseRendererId(this.getWindowHash()) ||
+      QueryParser.parseRendererId(this.getWindowSearch());
     if (requestedId) {
       const candidate = this.getRendererById(requestedId, staticRenderers);
       if (candidate) {
@@ -453,8 +483,39 @@ export class StartupResolution {
     return globalThis.location?.search || '';
   }
 
+  getWindowHash(): string {
+    return globalThis.location?.hash || '';
+  }
+
   getWindowHostname(): string {
     return globalThis.location?.hostname || '';
+  }
+
+  cleanSharedA2uiUrl(): void {
+    if (typeof globalThis.location !== 'undefined' && globalThis.history?.replaceState) {
+      try {
+        const cleanUrl = new URL(globalThis.location.href);
+        let modified = false;
+        if (cleanUrl.hash) {
+          const hashParams = new URLSearchParams(cleanUrl.hash.replace(/^#/, ''));
+          if (hashParams.has('a2ui')) {
+            hashParams.delete('a2ui');
+            const remaining = hashParams.toString();
+            cleanUrl.hash = remaining ? `#${remaining}` : '';
+            modified = true;
+          }
+        }
+        if (cleanUrl.searchParams.has('a2ui')) {
+          cleanUrl.searchParams.delete('a2ui');
+          modified = true;
+        }
+        if (modified) {
+          globalThis.history.replaceState({}, '', cleanUrl.toString());
+        }
+      } catch (err) {
+        console.warn('Failed to clean shared A2UI URL:', err);
+      }
+    }
   }
 
   private async evaluateEnvironmentPurge(): Promise<void> {
