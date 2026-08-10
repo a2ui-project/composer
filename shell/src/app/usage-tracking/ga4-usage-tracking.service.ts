@@ -30,7 +30,7 @@ import {
   ApiKeyAction,
   PromptTurnType,
   ShareTrackingStatus,
-  TrafficType,
+  UsageType,
   USAGE_TRACKING_CONFIG,
   UsageTrackingService,
 } from './usage-tracking.service';
@@ -106,7 +106,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
     return {
       composer_session_id: this._composerSessionId,
-      traffic_type: is3P ? TrafficType.THIRD_PARTY : TrafficType.FIRST_PARTY,
+      usage_type: is3P ? UsageType.THIRD_PARTY : UsageType.FIRST_PARTY,
       env_mode: this.appConfigProvider.envMode(),
       active_renderer_id: activeRendererId,
       catalog_id: catalogId,
@@ -270,10 +270,9 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     });
   }
 
-  trackApiKeyUpdate(params: {action: ApiKeyAction; keyId: string}): void {
+  trackApiKeyUpdate(params: {action: ApiKeyAction}): void {
     this.dispatchGtagEvent('api_key_update', {
       action: params.action,
-      key_id: params.keyId,
     });
   }
 }

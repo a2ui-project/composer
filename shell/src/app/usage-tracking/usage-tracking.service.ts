@@ -20,9 +20,9 @@ import {ThemePreference} from '../settings/app-config-provider/app-config-provid
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 
 /**
- * Traffic classification tag separating Google-internal usage from 3P open-source users.
+ * Classification tag separating Google-internal usage from 3P open-source users.
  */
-export enum TrafficType {
+export enum UsageType {
   FIRST_PARTY = '1P',
   THIRD_PARTY = '3P',
 }
@@ -214,5 +214,5 @@ export abstract class UsageTrackingService {
   /**
    * Tracks API key selection or management actions without logging secret key tokens.
    */
-  abstract trackApiKeyUpdate(params: {action: ApiKeyAction; keyId: string}): void;
+  abstract trackApiKeyUpdate(params: {action: ApiKeyAction}): void;
 }

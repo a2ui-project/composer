@@ -88,7 +88,7 @@ describe('NoopUsageTrackingService', () => {
       service.trackRendererAdd({rendererId: 'custom-1'});
       service.trackRendererEdit({rendererId: 'custom-1'});
       service.trackRendererDelete({rendererId: 'custom-1'});
-      service.trackApiKeyUpdate({action: ApiKeyAction.SELECT, keyId: 'k1'});
+      service.trackApiKeyUpdate({action: ApiKeyAction.SELECT});
     }).not.toThrow();
   });
 });

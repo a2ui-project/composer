@@ -806,19 +806,16 @@ describe('SettingsService', () => {
       await service.selectApiKey('custom-key-1');
       expect(trackApiKeySpy).toHaveBeenCalledWith({
         action: ApiKeyAction.SELECT,
-        keyId: 'custom-key-1',
       });
 
       await service.saveCustomApiKey('key-id', 'Key Name', 'AIzaKey');
       expect(trackApiKeySpy).toHaveBeenCalledWith({
         action: ApiKeyAction.ADD,
-        keyId: 'key-id',
       });
 
       await service.deleteCustomApiKey('key-id');
       expect(trackApiKeySpy).toHaveBeenCalledWith({
         action: ApiKeyAction.DELETE,
-        keyId: 'key-id',
       });
     });
   });

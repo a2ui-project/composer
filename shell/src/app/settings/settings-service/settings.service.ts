@@ -175,7 +175,6 @@ export class SettingsService {
   async selectApiKey(apiKeyId: string | null): Promise<void> {
     this.usageTrackingService.trackApiKeyUpdate({
       action: ApiKeyAction.SELECT,
-      keyId: apiKeyId || '',
     });
 
     if (apiKeyId) {
@@ -233,7 +232,6 @@ export class SettingsService {
     }
     this.usageTrackingService.trackApiKeyUpdate({
       action: ApiKeyAction.ADD,
-      keyId: id,
     });
     await this.secureCredentialsStorage.saveCustomApiKey(id, name, key);
     await this.syncEffectiveApiKeyToConfigProvider();
@@ -245,7 +243,6 @@ export class SettingsService {
   async deleteCustomApiKey(id: string): Promise<void> {
     this.usageTrackingService.trackApiKeyUpdate({
       action: ApiKeyAction.DELETE,
-      keyId: id,
     });
     await this.secureCredentialsStorage.deleteCustomApiKey(id);
     if (this._selectedApiKeyId() === id) {

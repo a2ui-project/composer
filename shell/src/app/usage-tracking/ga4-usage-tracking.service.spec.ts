@@ -32,7 +32,7 @@ import {
   ApiKeyAction,
   PromptTurnType,
   ShareTrackingStatus,
-  TrafficType,
+  UsageType,
   USAGE_TRACKING_CONFIG,
 } from './usage-tracking.service';
 
@@ -50,7 +50,7 @@ describe('Ga4UsageTrackingService', () => {
   };
 
   const mockAppConfigProvider = {
-    envMode: signal(EnvMode.DEVELOPMENT),
+    envMode: signal(EnvMode.STANDALONE),
   };
 
   const mockCatalogManagement = {
@@ -130,8 +130,8 @@ describe('Ga4UsageTrackingService', () => {
       'page_view',
       expect.objectContaining({
         composer_session_id: service.composerSessionId,
-        traffic_type: TrafficType.FIRST_PARTY,
-        env_mode: EnvMode.DEVELOPMENT,
+        usage_type: UsageType.FIRST_PARTY,
+        env_mode: EnvMode.STANDALONE,
         active_renderer_id: 'lit',
         catalog_id: 'basic-catalog',
         page_path: '/chat',
@@ -398,13 +398,12 @@ describe('Ga4UsageTrackingService', () => {
   });
 
   it('tracks api key update event', () => {
-    service.trackApiKeyUpdate({action: ApiKeyAction.SELECT, keyId: 'key-1'});
+    service.trackApiKeyUpdate({action: ApiKeyAction.SELECT});
     expect(mockWindow.gtag).toHaveBeenCalledWith(
       'event',
       'api_key_update',
       expect.objectContaining({
         action: ApiKeyAction.SELECT,
-        key_id: 'key-1',
       }),
     );
   });
