@@ -44,4 +44,6 @@ export enum LocalStorageKey {
   CUSTOM_RENDERERS = 'a2ui_composer_custom_renderers',
   /** Key for persisting the user selected API key ID. */
   SELECTED_API_KEY = 'a2ui_composer_selected_api_key',
+  /** Key for persisting telemetry tracking consent preference. */
+  TELEMETRY_CONSENT = 'a2ui_composer_telemetry_consent',
 }

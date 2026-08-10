@@ -41,7 +41,7 @@ test.describe('Startup Resolution & Redirection', () => {
     await page.goto('/');
     await page.waitForURL(url => url.pathname === '/settings');
     await expect(page.locator('.settings-container')).toBeVisible();
-    await expect(page.locator('.settings-card')).toBeVisible();
+    await expect(page.locator('.settings-card').first()).toBeVisible();
   });
 
   test('does not redirect if default renderer URL is present but API key is missing', async ({

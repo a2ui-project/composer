@@ -14,10 +14,18 @@
  * limitations under the License.
  */
 
-import {InjectionToken} from '@angular/core';
+import {InjectionToken, Signal} from '@angular/core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ThemePreference} from '../settings/app-config-provider/app-config-provider';
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
+
+/**
+ * User telemetry consent status.
+ */
+export enum TelemetryConsent {
+  GRANTED = 'granted',
+  DENIED = 'denied',
+}
 
 /**
  * Classification tag separating Google-internal usage from 3P open-source users.
@@ -63,10 +71,10 @@ export interface UsageTrackingConfig {
 }
 
 /**
- * Default usage tracking configuration disabling telemetry out-of-the-box.
+ * Default usage tracking configuration enabling telemetry capability out-of-the-box.
  */
 export const DEFAULT_USAGE_TRACKING_CONFIG: UsageTrackingConfig = {
-  enabled: false,
+  enabled: true,
   measurementId: '',
 };
 
@@ -85,6 +93,26 @@ export const USAGE_TRACKING_CONFIG = new InjectionToken<UsageTrackingConfig>(
  * Abstract usage tracking service defining the contract for telemetry collection.
  */
 export abstract class UsageTrackingService {
+  /**
+   * Evaluates whether telemetry tracking is enabled and configured with a measurement ID.
+   */
+  abstract readonly isConfigured: boolean;
+
+  /**
+   * The user's telemetry consent signal.
+   */
+  abstract readonly consent: Signal<TelemetryConsent | null>;
+
+  /**
+   * Sets the user's telemetry consent choice and persists it.
+   */
+  abstract setConsent(consent: TelemetryConsent): void;
+
+  /**
+   * Evaluates whether telemetry collection has active user consent.
+   */
+  abstract hasConsent(): boolean;
+
   /**
    * Initializes analytics scripts and global data layer bindings.
    */

@@ -37,6 +37,7 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
 import {
   ShareTrackingStatus,
+  TelemetryConsent,
   UsageTrackingService,
 } from '../../usage-tracking/usage-tracking.service';
 import {QueryParser} from '../query-parser/query-parser';
@@ -86,6 +87,10 @@ export class ComposerShell {
   activeCatalogTitle = this.catalogManagement.activeCatalogTitle;
   activeCatalogDescription = this.catalogManagement.activeCatalogDescription;
 
+  protected readonly showConsentBanner = computed(
+    () => this.usageTrackingService.isConfigured && this.usageTrackingService.consent() === null,
+  );
+
   constructor() {
     effect(() => {
       if (this.isDarkTheme()) {
@@ -103,6 +108,20 @@ export class ComposerShell {
         });
       }
     });
+  }
+
+  /**
+   * Accepts usage telemetry tracking.
+   */
+  protected onAllowTelemetry(): void {
+    this.usageTrackingService.setConsent(TelemetryConsent.GRANTED);
+  }
+
+  /**
+   * Declines usage telemetry tracking.
+   */
+  protected onDeclineTelemetry(): void {
+    this.usageTrackingService.setConsent(TelemetryConsent.DENIED);
   }
 
   /**

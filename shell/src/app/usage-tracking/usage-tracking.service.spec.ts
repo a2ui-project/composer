@@ -23,10 +23,10 @@ import {
 } from './usage-tracking.service';
 
 describe('USAGE_TRACKING_CONFIG', () => {
-  it('provides default configuration with telemetry disabled', () => {
+  it('provides default configuration with telemetry enabled and empty measurement id', () => {
     const config = TestBed.inject(USAGE_TRACKING_CONFIG);
     expect(config).toEqual(DEFAULT_USAGE_TRACKING_CONFIG);
-    expect(config.enabled).toBe(false);
+    expect(config.enabled).toBe(true);
     expect(config.measurementId).toBe('');
   });
 

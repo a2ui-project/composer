@@ -53,6 +53,23 @@
   </button>
 </mat-toolbar>
 
+@if (showConsentBanner()) {
+  <div class="telemetry-consent-banner" role="region" aria-label="Usage telemetry consent">
+    <div class="banner-content">
+      <mat-icon class="banner-icon" aria-hidden="true">analytics</mat-icon>
+      <span class="banner-text">
+        Help improve A2UI Composer by sharing anonymous usage telemetry and diagnostics.
+      </span>
+    </div>
+    <div class="banner-actions">
+      <button mat-button class="decline-button" (click)="onDeclineTelemetry()">Decline</button>
+      <button mat-flat-button color="primary" class="allow-button" (click)="onAllowTelemetry()">
+        Allow
+      </button>
+    </div>
+  </div>
+}
+
 <mat-sidenav-container class="composer-sidenav-container">
   <mat-sidenav
     #sidenav

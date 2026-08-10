@@ -28,6 +28,7 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
+import {TelemetryConsent, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {SettingsService, RendererOption} from '../settings-service/settings.service';
 import {RendererSelectorComponent} from '../renderer-selector/renderer-selector';
 import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
@@ -60,9 +61,15 @@ export class Settings implements OnInit {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
+  protected readonly usageTrackingService = inject(UsageTrackingService);
   protected readonly settingsService = inject(SettingsService);
 
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
+
+  readonly isTelemetryConfigured = computed(() => this.usageTrackingService.isConfigured);
+  readonly isTelemetryOptedIn = computed(
+    () => this.usageTrackingService.consent() === TelemetryConsent.GRANTED,
+  );
 
   readonly selectedRendererId: WritableSignal<string | null> = signal<string | null>(null);
   readonly selectedApiKeyId: Signal<string | null> = computed(() =>
@@ -145,5 +152,11 @@ export class Settings implements OnInit {
     this.forceThirdPartyAuth.set(newState);
     this.configProvider.setForcedAuthMode(newState ? AuthType.THIRD_PARTY : AuthType.FIRST_PARTY);
     this.isThirdParty.set(this.startupResolution.isThirdPartyEnvironment());
+  }
+
+  onTelemetryToggle(checked: boolean): void {
+    this.usageTrackingService.setConsent(
+      checked ? TelemetryConsent.GRANTED : TelemetryConsent.DENIED,
+    );
   }
 }

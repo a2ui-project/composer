@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {Injectable, signal} from '@angular/core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ThemePreference} from '../settings/app-config-provider/app-config-provider';
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
@@ -22,6 +22,7 @@ import {
   ApiKeyAction,
   PromptTurnType,
   ShareTrackingStatus,
+  TelemetryConsent,
   UsageTrackingService,
 } from './usage-tracking.service';
 import {generateUuid} from '../utils/uuid';
@@ -33,6 +34,15 @@ import {generateUuid} from '../utils/uuid';
   providedIn: 'root',
 })
 export class NoopUsageTrackingService extends UsageTrackingService {
+  readonly isConfigured = false;
+  readonly consent = signal<TelemetryConsent | null>(null);
+
+  hasConsent(): boolean {
+    return false;
+  }
+
+  setConsent(_consent: TelemetryConsent): void {}
+
   readonly composerSessionId = 'noop-session';
 
   initialize(): void {}

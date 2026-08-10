@@ -37,6 +37,7 @@ import {SessionStorageInteractions} from '../../storage/session-storage-interact
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {
   ShareTrackingStatus,
+  TelemetryConsent,
   UsageTrackingService,
 } from '../../usage-tracking/usage-tracking.service';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
@@ -446,6 +447,151 @@ describe('ComposerShell Layout', () => {
         'Dismiss',
         {duration: 5000},
       );
+    });
+  });
+
+  describe('telemetry consent banner', () => {
+    it('hides telemetry consent banner when usage tracking is not configured', async () => {
+      expect(await harness.isConsentBannerVisible()).toBe(false);
+    });
+
+    it('displays telemetry consent banner when usage tracking is configured and consent is null', async () => {
+      const consentSignal = signal<TelemetryConsent | null>(null);
+      const mockUsageTracking = {
+        isConfigured: true,
+        consent: consentSignal.asReadonly(),
+        setConsent: vi.fn(),
+        hasConsent: vi.fn().mockReturnValue(false),
+        trackThemeToggle: vi.fn(),
+        trackSessionReset: vi.fn(),
+        resetSession: vi.fn(),
+      };
+
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [ComposerShell],
+        providers: [
+          provideRouter([]),
+          provideNoopAnimations(),
+          {provide: IndexedDbStorage, useValue: storageServiceMock},
+          {provide: LocalStorageInteractions, useValue: localStorageServiceMock},
+          {provide: SessionStorageInteractions, useValue: sessionStorageServiceMock},
+          {provide: CatalogManagement, useValue: catalogManagementServiceMock},
+          {provide: AppConfigProvider, useValue: configProviderMock},
+          {provide: StartupResolution, useValue: startupResolutionMock},
+          {provide: StateSync, useValue: stateSyncMock},
+          {provide: ChatCoordinator, useValue: chatCoordinatorMock},
+          {provide: UsageTrackingService, useValue: mockUsageTracking},
+        ],
+      }).compileComponents();
+
+      const configuredFixture = TestBed.createComponent(ComposerShell);
+      configuredFixture.detectChanges();
+      const configuredHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        configuredFixture,
+        ComposerShellHarness,
+      );
+
+      expect(await configuredHarness.isConsentBannerVisible()).toBe(true);
+      expect(await configuredHarness.getConsentBannerText()).toContain(
+        'Help improve A2UI Composer',
+      );
+    });
+
+    it('grants telemetry consent and hides banner when Allow button is clicked', async () => {
+      const consentSignal = signal<TelemetryConsent | null>(null);
+      const setConsentSpy = vi.fn((choice: TelemetryConsent) => {
+        consentSignal.set(choice);
+      });
+      const mockUsageTracking = {
+        isConfigured: true,
+        consent: consentSignal.asReadonly(),
+        setConsent: setConsentSpy,
+        hasConsent: vi.fn(() => consentSignal() === TelemetryConsent.GRANTED),
+        trackThemeToggle: vi.fn(),
+        trackSessionReset: vi.fn(),
+        resetSession: vi.fn(),
+      };
+
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [ComposerShell],
+        providers: [
+          provideRouter([]),
+          provideNoopAnimations(),
+          {provide: IndexedDbStorage, useValue: storageServiceMock},
+          {provide: LocalStorageInteractions, useValue: localStorageServiceMock},
+          {provide: SessionStorageInteractions, useValue: sessionStorageServiceMock},
+          {provide: CatalogManagement, useValue: catalogManagementServiceMock},
+          {provide: AppConfigProvider, useValue: configProviderMock},
+          {provide: StartupResolution, useValue: startupResolutionMock},
+          {provide: StateSync, useValue: stateSyncMock},
+          {provide: ChatCoordinator, useValue: chatCoordinatorMock},
+          {provide: UsageTrackingService, useValue: mockUsageTracking},
+        ],
+      }).compileComponents();
+
+      const bannerFixture = TestBed.createComponent(ComposerShell);
+      bannerFixture.detectChanges();
+      const bannerHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        bannerFixture,
+        ComposerShellHarness,
+      );
+
+      expect(await bannerHarness.isConsentBannerVisible()).toBe(true);
+      await bannerHarness.clickAllowTelemetryButton();
+      bannerFixture.detectChanges();
+
+      expect(setConsentSpy).toHaveBeenCalledWith(TelemetryConsent.GRANTED);
+      expect(await bannerHarness.isConsentBannerVisible()).toBe(false);
+    });
+
+    it('denies telemetry consent and hides banner when Decline button is clicked', async () => {
+      const consentSignal = signal<TelemetryConsent | null>(null);
+      const setConsentSpy = vi.fn((choice: TelemetryConsent) => {
+        consentSignal.set(choice);
+      });
+      const mockUsageTracking = {
+        isConfigured: true,
+        consent: consentSignal.asReadonly(),
+        setConsent: setConsentSpy,
+        hasConsent: vi.fn(() => consentSignal() === TelemetryConsent.GRANTED),
+        trackThemeToggle: vi.fn(),
+        trackSessionReset: vi.fn(),
+        resetSession: vi.fn(),
+      };
+
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [ComposerShell],
+        providers: [
+          provideRouter([]),
+          provideNoopAnimations(),
+          {provide: IndexedDbStorage, useValue: storageServiceMock},
+          {provide: LocalStorageInteractions, useValue: localStorageServiceMock},
+          {provide: SessionStorageInteractions, useValue: sessionStorageServiceMock},
+          {provide: CatalogManagement, useValue: catalogManagementServiceMock},
+          {provide: AppConfigProvider, useValue: configProviderMock},
+          {provide: StartupResolution, useValue: startupResolutionMock},
+          {provide: StateSync, useValue: stateSyncMock},
+          {provide: ChatCoordinator, useValue: chatCoordinatorMock},
+          {provide: UsageTrackingService, useValue: mockUsageTracking},
+        ],
+      }).compileComponents();
+
+      const bannerFixture = TestBed.createComponent(ComposerShell);
+      bannerFixture.detectChanges();
+      const bannerHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        bannerFixture,
+        ComposerShellHarness,
+      );
+
+      expect(await bannerHarness.isConsentBannerVisible()).toBe(true);
+      await bannerHarness.clickDeclineTelemetryButton();
+      bannerFixture.detectChanges();
+
+      expect(setConsentSpy).toHaveBeenCalledWith(TelemetryConsent.DENIED);
+      expect(await bannerHarness.isConsentBannerVisible()).toBe(false);
     });
   });
 });

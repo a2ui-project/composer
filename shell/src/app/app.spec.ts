@@ -46,30 +46,30 @@ describe('App', () => {
 });
 
 describe('appConfig UsageTracking wiring', () => {
-  it('resolves NoopUsageTrackingService by default when disabled', () => {
+  it('resolves Ga4UsageTrackingService by default when enabled', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: appConfig.providers,
     });
 
     const service = TestBed.inject(UsageTrackingService);
-    expect(service).toBeInstanceOf(NoopUsageTrackingService);
+    expect(service).toBeInstanceOf(Ga4UsageTrackingService);
   });
 
-  it('resolves Ga4UsageTrackingService when enabled with measurement ID', () => {
+  it('resolves NoopUsageTrackingService when disabled in configuration', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
         ...appConfig.providers,
         {
           provide: USAGE_TRACKING_CONFIG,
-          useValue: {enabled: true, measurementId: 'G-APPCONFIG123'},
+          useValue: {enabled: false, measurementId: ''},
         },
       ],
     });
 
     const service = TestBed.inject(UsageTrackingService);
-    expect(service).toBeInstanceOf(Ga4UsageTrackingService);
+    expect(service).toBeInstanceOf(NoopUsageTrackingService);
   });
 
   it('invokes usageTrackingService.initialize during bootstrap', async () => {

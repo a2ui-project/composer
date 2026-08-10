@@ -145,4 +145,25 @@
       </div>
     </mat-card-content>
   </mat-card>
+
+  @if (isTelemetryConfigured()) {
+    <mat-card class="settings-card telemetry-card telemetry-section">
+      <mat-card-header>
+        <mat-card-title>Usage Analytics & Telemetry</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <p class="description">
+          Help improve A2UI Composer by sharing anonymous usage telemetry and diagnostics.
+        </p>
+        <div class="toggle-container" style="margin-top: 12px">
+          <mat-slide-toggle
+            [checked]="isTelemetryOptedIn()"
+            (change)="onTelemetryToggle($event.checked)"
+          >
+            Enable Anonymous Telemetry
+          </mat-slide-toggle>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  }
 </div>

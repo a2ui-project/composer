@@ -30,9 +30,15 @@ export class SettingsHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-settings';
 
   protected getInputs = this.locatorForAll(MatInputHarness);
-  protected getSlideToggle = this.locatorFor(MatSlideToggleHarness);
+  protected getSlideToggle = this.locatorFor(
+    MatSlideToggleHarness.with({ancestor: '.first-party-auth-section'}),
+  );
+  protected getTelemetrySlideToggle = this.locatorForOptional(
+    MatSlideToggleHarness.with({ancestor: '.telemetry-section'}),
+  );
   protected getRendererSelector = this.locatorForOptional(RendererSelectorHarness);
   protected getApiKeySelector = this.locatorForOptional(ApiKeySelectorHarness);
+  protected getTelemetryCard = this.locatorForOptional('.telemetry-card');
 
   async getRendererSelectorHarness(): Promise<RendererSelectorHarness | null> {
     return this.getRendererSelector();
@@ -115,6 +121,28 @@ export class SettingsHarness extends ComponentHarness {
   async isSlideToggleChecked(): Promise<boolean> {
     const toggle = await this.getSlideToggle();
     return toggle.isChecked();
+  }
+
+  async isTelemetryCardPresent(): Promise<boolean> {
+    const card = await this.getTelemetryCard();
+    return card !== null;
+  }
+
+  async isTelemetryTogglePresent(): Promise<boolean> {
+    const toggle = await this.getTelemetrySlideToggle();
+    return toggle !== null;
+  }
+
+  async isTelemetryToggleChecked(): Promise<boolean> {
+    const toggle = await this.getTelemetrySlideToggle();
+    if (!toggle) throw new Error('Telemetry slide toggle not found');
+    return toggle.isChecked();
+  }
+
+  async toggleTelemetry(): Promise<void> {
+    const toggle = await this.getTelemetrySlideToggle();
+    if (!toggle) throw new Error('Telemetry slide toggle not found');
+    await toggle.toggle();
   }
 
   async getErrorsText(): Promise<string[]> {

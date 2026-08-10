@@ -35,6 +35,39 @@
   flex: 1 1 auto;
 }
 
+.telemetry-consent-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 24px;
+  background-color: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  z-index: 3;
+  flex-shrink: 0;
+
+  .banner-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+
+    .banner-icon {
+      color: var(--mat-sys-primary);
+      flex-shrink: 0;
+    }
+  }
+
+  .banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+}
+
 .composer-sidenav-container {
   flex: 1;
   min-height: 0;

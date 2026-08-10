@@ -59,7 +59,6 @@ jobs:
         run: |
           if [ -n "$GA_MEASUREMENT_ID" ]; then
             echo "Injecting GA4 measurement ID..."
-            sed -i "s/enabled: false,/enabled: true,/g" shell/src/app/usage-tracking/usage-tracking.service.ts
             sed -i "s/measurementId: ''/measurementId: '$GA_MEASUREMENT_ID'/g" shell/src/app/usage-tracking/usage-tracking.service.ts
           fi
 

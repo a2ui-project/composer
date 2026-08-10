@@ -18,7 +18,7 @@ import {DOCUMENT} from '@angular/common';
 import {signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {beforeEach, describe, expect, it, vi, Mock} from 'vitest';
 import {
   AppConfigProvider,
   EnvMode,
@@ -27,11 +27,14 @@ import {
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
+import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../storage/models/local-storage-keys';
 import {Ga4UsageTrackingService} from './ga4-usage-tracking.service';
 import {
   ApiKeyAction,
   PromptTurnType,
   ShareTrackingStatus,
+  TelemetryConsent,
   UsageType,
   USAGE_TRACKING_CONFIG,
 } from './usage-tracking.service';
@@ -43,6 +46,11 @@ describe('Ga4UsageTrackingService', () => {
     gtag?: (...args: unknown[]) => void;
   };
   let mockDocument: Partial<Document>;
+  let mockLocalStorage: {
+    getItem: Mock<(key: LocalStorageKey) => string | null>;
+    setItem: Mock<(key: LocalStorageKey, value: string) => void>;
+    removeItem: Mock<(key: LocalStorageKey) => void>;
+  };
 
   const mockStartupResolution = {
     isThirdPartyEnvironment: signal(false),
@@ -74,6 +82,12 @@ describe('Ga4UsageTrackingService', () => {
       } as unknown as HTMLHeadElement,
     };
 
+    mockLocalStorage = {
+      getItem: vi.fn().mockReturnValue(TelemetryConsent.GRANTED),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
+
     TestBed.configureTestingModule({
       providers: [
         Ga4UsageTrackingService,
@@ -84,6 +98,7 @@ describe('Ga4UsageTrackingService', () => {
         {provide: StartupResolution, useValue: mockStartupResolution},
         {provide: AppConfigProvider, useValue: mockAppConfigProvider},
         {provide: CatalogManagement, useValue: mockCatalogManagement},
+        {provide: LocalStorageInteractions, useValue: mockLocalStorage},
         {provide: DOCUMENT, useValue: mockDocument},
       ],
     });
@@ -91,13 +106,125 @@ describe('Ga4UsageTrackingService', () => {
     service = TestBed.inject(Ga4UsageTrackingService);
   });
 
-  it('initializes gtag dataLayer and appends script tag when enabled', () => {
+  it('initializes gtag dataLayer and appends script tag when enabled and consent is granted', () => {
     service.initialize();
     expect(mockWindow.dataLayer.length).toBeGreaterThanOrEqual(1);
     expect(mockDocument.head?.appendChild).toHaveBeenCalled();
   });
 
-  it('does not dispatch events when tracking is disabled', () => {
+  it('remains dormant when consent is null and does not inject script or dispatch events', () => {
+    TestBed.resetTestingModule();
+    mockLocalStorage.getItem.mockReturnValue(null);
+    TestBed.configureTestingModule({
+      providers: [
+        Ga4UsageTrackingService,
+        {
+          provide: USAGE_TRACKING_CONFIG,
+          useValue: {enabled: true, measurementId: 'G-TEST1234'},
+        },
+        {provide: StartupResolution, useValue: mockStartupResolution},
+        {provide: AppConfigProvider, useValue: mockAppConfigProvider},
+        {provide: CatalogManagement, useValue: mockCatalogManagement},
+        {provide: LocalStorageInteractions, useValue: mockLocalStorage},
+        {provide: DOCUMENT, useValue: mockDocument},
+      ],
+    });
+    const nullConsentService = TestBed.inject(Ga4UsageTrackingService);
+    expect(nullConsentService.consent()).toBeNull();
+    expect(nullConsentService.hasConsent()).toBe(false);
+    expect(nullConsentService.isConfigured).toBe(true);
+
+    nullConsentService.initialize();
+    expect(mockDocument.head?.appendChild).not.toHaveBeenCalled();
+
+    nullConsentService.trackPageView({pagePath: '/test'});
+    expect(mockWindow.gtag).not.toHaveBeenCalled();
+  });
+
+  it('remains dormant when consent is denied and does not inject script or dispatch events', () => {
+    TestBed.resetTestingModule();
+    mockLocalStorage.getItem.mockReturnValue(TelemetryConsent.DENIED);
+    TestBed.configureTestingModule({
+      providers: [
+        Ga4UsageTrackingService,
+        {
+          provide: USAGE_TRACKING_CONFIG,
+          useValue: {enabled: true, measurementId: 'G-TEST1234'},
+        },
+        {provide: StartupResolution, useValue: mockStartupResolution},
+        {provide: AppConfigProvider, useValue: mockAppConfigProvider},
+        {provide: CatalogManagement, useValue: mockCatalogManagement},
+        {provide: LocalStorageInteractions, useValue: mockLocalStorage},
+        {provide: DOCUMENT, useValue: mockDocument},
+      ],
+    });
+    const deniedService = TestBed.inject(Ga4UsageTrackingService);
+    expect(deniedService.consent()).toBe(TelemetryConsent.DENIED);
+    expect(deniedService.hasConsent()).toBe(false);
+
+    deniedService.initialize();
+    expect(mockDocument.head?.appendChild).not.toHaveBeenCalled();
+
+    deniedService.trackPageView({pagePath: '/test'});
+    expect(mockWindow.gtag).not.toHaveBeenCalled();
+  });
+
+  it('dynamically transitions and loads gtag on setConsent(TelemetryConsent.GRANTED)', () => {
+    TestBed.resetTestingModule();
+    mockLocalStorage.getItem.mockReturnValue(null);
+    TestBed.configureTestingModule({
+      providers: [
+        Ga4UsageTrackingService,
+        {
+          provide: USAGE_TRACKING_CONFIG,
+          useValue: {enabled: true, measurementId: 'G-TEST1234'},
+        },
+        {provide: StartupResolution, useValue: mockStartupResolution},
+        {provide: AppConfigProvider, useValue: mockAppConfigProvider},
+        {provide: CatalogManagement, useValue: mockCatalogManagement},
+        {provide: LocalStorageInteractions, useValue: mockLocalStorage},
+        {provide: DOCUMENT, useValue: mockDocument},
+      ],
+    });
+    const transitioningService = TestBed.inject(Ga4UsageTrackingService);
+    transitioningService.initialize();
+    expect(mockDocument.head?.appendChild).not.toHaveBeenCalled();
+
+    transitioningService.setConsent(TelemetryConsent.GRANTED);
+
+    expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+      LocalStorageKey.TELEMETRY_CONSENT,
+      TelemetryConsent.GRANTED,
+    );
+    expect(transitioningService.consent()).toBe(TelemetryConsent.GRANTED);
+    expect(transitioningService.hasConsent()).toBe(true);
+    expect(mockDocument.head?.appendChild).toHaveBeenCalled();
+
+    transitioningService.trackPageView({pagePath: '/active'});
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'event',
+      'page_view',
+      expect.objectContaining({page_path: '/active'}),
+    );
+  });
+
+  it('stops dispatching events when setConsent(TelemetryConsent.DENIED) is called', () => {
+    service.initialize();
+    service.setConsent(TelemetryConsent.DENIED);
+
+    expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+      LocalStorageKey.TELEMETRY_CONSENT,
+      TelemetryConsent.DENIED,
+    );
+    expect(service.consent()).toBe(TelemetryConsent.DENIED);
+    expect(service.hasConsent()).toBe(false);
+
+    vi.mocked(mockWindow.gtag!).mockClear();
+    service.trackPageView({pagePath: '/denied-test'});
+    expect(mockWindow.gtag).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch events when tracking is disabled in config', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
@@ -109,10 +236,13 @@ describe('Ga4UsageTrackingService', () => {
         {provide: StartupResolution, useValue: mockStartupResolution},
         {provide: AppConfigProvider, useValue: mockAppConfigProvider},
         {provide: CatalogManagement, useValue: mockCatalogManagement},
+        {provide: LocalStorageInteractions, useValue: mockLocalStorage},
         {provide: DOCUMENT, useValue: mockDocument},
       ],
     });
     const disabledService = TestBed.inject(Ga4UsageTrackingService);
+    expect(disabledService.isConfigured).toBe(false);
+    expect(disabledService.hasConsent()).toBe(false);
     disabledService.trackPageView({pagePath: '/test'});
     expect(mockWindow.gtag).not.toHaveBeenCalled();
   });
@@ -406,5 +536,118 @@ describe('Ga4UsageTrackingService', () => {
         action: ApiKeyAction.SELECT,
       }),
     );
+  });
+
+  describe('when enabled without measurementId (local development)', () => {
+    let unconfiguredService: Ga4UsageTrackingService;
+
+    beforeEach(() => {
+      TestBed.resetTestingModule();
+      mockLocalStorage.getItem.mockReturnValue(null);
+      TestBed.configureTestingModule({
+        providers: [
+          Ga4UsageTrackingService,
+          {
+            provide: USAGE_TRACKING_CONFIG,
+            useValue: {enabled: true, measurementId: ''},
+          },
+          {provide: StartupResolution, useValue: mockStartupResolution},
+          {provide: AppConfigProvider, useValue: mockAppConfigProvider},
+          {provide: CatalogManagement, useValue: mockCatalogManagement},
+          {provide: LocalStorageInteractions, useValue: mockLocalStorage},
+          {provide: DOCUMENT, useValue: mockDocument},
+        ],
+      });
+      unconfiguredService = TestBed.inject(Ga4UsageTrackingService);
+    });
+
+    it('evaluates isConfigured as true to enable banner and settings toggle', () => {
+      expect(unconfiguredService.isConfigured).toBe(true);
+    });
+
+    it('updates and persists consent choices to localStorage', () => {
+      expect(unconfiguredService.consent()).toBeNull();
+      expect(unconfiguredService.hasConsent()).toBe(false);
+
+      unconfiguredService.setConsent(TelemetryConsent.GRANTED);
+
+      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+        LocalStorageKey.TELEMETRY_CONSENT,
+        TelemetryConsent.GRANTED,
+      );
+      expect(unconfiguredService.consent()).toBe(TelemetryConsent.GRANTED);
+      expect(unconfiguredService.hasConsent()).toBe(true);
+
+      unconfiguredService.setConsent(TelemetryConsent.DENIED);
+
+      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+        LocalStorageKey.TELEMETRY_CONSENT,
+        TelemetryConsent.DENIED,
+      );
+      expect(unconfiguredService.consent()).toBe(TelemetryConsent.DENIED);
+      expect(unconfiguredService.hasConsent()).toBe(false);
+    });
+
+    it('does not inject script into document head upon initialize or consent grant', () => {
+      unconfiguredService.initialize();
+      expect(mockDocument.head?.appendChild).not.toHaveBeenCalled();
+
+      unconfiguredService.setConsent(TelemetryConsent.GRANTED);
+      expect(mockDocument.head?.appendChild).not.toHaveBeenCalled();
+    });
+
+    it('safely no-ops on event dispatchers without throwing', () => {
+      unconfiguredService.setConsent(TelemetryConsent.GRANTED);
+
+      expect(() => {
+        unconfiguredService.trackPageView({pagePath: '/home'});
+        unconfiguredService.trackShareDesign({
+          status: ShareTrackingStatus.SUCCESS,
+          compressedLengthChars: 50,
+        });
+        unconfiguredService.trackSessionReset({totalPromptTurns: 2});
+        unconfiguredService.trackThemeToggle({theme: ThemePreference.DARK});
+        unconfiguredService.trackChatPrompt({
+          catalogId: 'basic-catalog',
+          turnType: PromptTurnType.INITIAL,
+          turnIndex: 0,
+          attemptNumber: 1,
+          hasScreenshot: false,
+          attachmentCount: 0,
+        });
+        unconfiguredService.trackChatRetry({
+          catalogId: 'basic-catalog',
+          turnIndex: 0,
+          attemptNumber: 2,
+        });
+        unconfiguredService.trackChatCancel({
+          promptId: 'prompt-1',
+          turnIndex: 0,
+          pipelineStatus: 'streaming',
+        });
+        unconfiguredService.trackDebugTabView({panelId: ComposerPanelId.RawMessages});
+        unconfiguredService.trackRawMessageExpanded({
+          messageType: PreviewBridgeMessageType.CONSOLE_LOG,
+        });
+        unconfiguredService.trackDataModelEdit({isValidJson: true});
+        unconfiguredService.trackJsonEditorEdit({isValidJson: true});
+        unconfiguredService.trackGalleryView();
+        unconfiguredService.trackGalleryComponentSelect({
+          componentKey: 'button',
+          category: 'actions',
+        });
+        unconfiguredService.trackGalleryCopyUsage({componentKey: 'button'});
+        unconfiguredService.trackRendererSwitch({
+          fromRendererId: 'lit',
+          toRendererId: 'angular',
+        });
+        unconfiguredService.trackRendererAdd({rendererId: 'custom-r'});
+        unconfiguredService.trackRendererEdit({rendererId: 'custom-r'});
+        unconfiguredService.trackRendererDelete({rendererId: 'custom-r'});
+        unconfiguredService.trackApiKeyUpdate({action: ApiKeyAction.SELECT});
+      }).not.toThrow();
+
+      expect(mockWindow.gtag).not.toHaveBeenCalled();
+    });
   });
 });

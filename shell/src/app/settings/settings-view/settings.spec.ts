@@ -37,7 +37,7 @@ import {
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SettingsHarness} from './test/settings.harness';
 import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
-import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {TelemetryConsent, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {
   SecureCredentialsStorage,
@@ -564,6 +564,168 @@ describe('Settings', () => {
       expect(await harness.getLogsConsoleText()).toContain(
         '[System] Active renderer updated to http://resolved-url.com',
       );
+    });
+  });
+
+  describe('Usage Analytics & Telemetry section', () => {
+    it('hides telemetry settings section when usage tracking is not configured', async () => {
+      const {harness, component} = await setupComponent();
+      expect(component.isTelemetryConfigured()).toBe(false);
+      expect(await harness.isTelemetryCardPresent()).toBe(false);
+      expect(await harness.isTelemetryTogglePresent()).toBe(false);
+    });
+
+    it('displays telemetry toggle and reflects opt-in state when configured', async () => {
+      const consentSignal = signal<TelemetryConsent | null>(TelemetryConsent.GRANTED);
+      const setConsentSpy = vi.fn();
+      const mockUsageTracking = {
+        isConfigured: true,
+        consent: consentSignal.asReadonly(),
+        setConsent: setConsentSpy,
+        hasConsent: vi.fn(() => consentSignal() === TelemetryConsent.GRANTED),
+      };
+
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [Settings],
+        providers: [
+          provideNoopAnimations(),
+          {provide: StartupResolution, useValue: mockStartupResolution},
+          {provide: AppConfigProvider, useValue: mockConfigProvider},
+          {provide: HostCommunication, useValue: {latestEnvelope: mockLatestEnvelope}},
+          {
+            provide: CatalogManagement,
+            useValue: {
+              isHandshakeInProgress: mockIsHandshakeInProgress,
+              activeCatalogTitle: mockActiveCatalogTitle,
+              activeCatalog: mockActiveCatalog,
+              catalogError: mockCatalogError,
+            },
+          },
+          {provide: PlatformLocation, useValue: mockPlatformLocation},
+          {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
+          {provide: IS_1P_AUTH_ENABLED, useValue: true},
+          {provide: UsageTrackingService, useValue: mockUsageTracking},
+          SettingsService,
+        ],
+      }).compileComponents();
+
+      const fixture = TestBed.createComponent(Settings);
+      const component = fixture.componentInstance;
+      fixture.detectChanges();
+      const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
+
+      expect(component.isTelemetryConfigured()).toBe(true);
+      expect(component.isTelemetryOptedIn()).toBe(true);
+      expect(await harness.isTelemetryCardPresent()).toBe(true);
+      expect(await harness.isTelemetryTogglePresent()).toBe(true);
+      expect(await harness.isTelemetryToggleChecked()).toBe(true);
+    });
+
+    it('updates consent to GRANTED when telemetry toggle is turned on', async () => {
+      const consentSignal = signal<TelemetryConsent | null>(TelemetryConsent.DENIED);
+      const setConsentSpy = vi.fn((c: TelemetryConsent) => {
+        consentSignal.set(c);
+      });
+      const mockUsageTracking = {
+        isConfigured: true,
+        consent: consentSignal.asReadonly(),
+        setConsent: setConsentSpy,
+        hasConsent: vi.fn(() => consentSignal() === TelemetryConsent.GRANTED),
+      };
+
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [Settings],
+        providers: [
+          provideNoopAnimations(),
+          {provide: StartupResolution, useValue: mockStartupResolution},
+          {provide: AppConfigProvider, useValue: mockConfigProvider},
+          {provide: HostCommunication, useValue: {latestEnvelope: mockLatestEnvelope}},
+          {
+            provide: CatalogManagement,
+            useValue: {
+              isHandshakeInProgress: mockIsHandshakeInProgress,
+              activeCatalogTitle: mockActiveCatalogTitle,
+              activeCatalog: mockActiveCatalog,
+              catalogError: mockCatalogError,
+            },
+          },
+          {provide: PlatformLocation, useValue: mockPlatformLocation},
+          {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
+          {provide: IS_1P_AUTH_ENABLED, useValue: true},
+          {provide: UsageTrackingService, useValue: mockUsageTracking},
+          SettingsService,
+        ],
+      }).compileComponents();
+
+      const fixture = TestBed.createComponent(Settings);
+      const component = fixture.componentInstance;
+      fixture.detectChanges();
+      const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
+
+      expect(component.isTelemetryOptedIn()).toBe(false);
+      expect(await harness.isTelemetryToggleChecked()).toBe(false);
+
+      await harness.toggleTelemetry();
+      fixture.detectChanges();
+
+      expect(setConsentSpy).toHaveBeenCalledWith(TelemetryConsent.GRANTED);
+      expect(component.isTelemetryOptedIn()).toBe(true);
+      expect(await harness.isTelemetryToggleChecked()).toBe(true);
+    });
+
+    it('updates consent to DENIED when telemetry toggle is turned off', async () => {
+      const consentSignal = signal<TelemetryConsent | null>(TelemetryConsent.GRANTED);
+      const setConsentSpy = vi.fn((c: TelemetryConsent) => {
+        consentSignal.set(c);
+      });
+      const mockUsageTracking = {
+        isConfigured: true,
+        consent: consentSignal.asReadonly(),
+        setConsent: setConsentSpy,
+        hasConsent: vi.fn(() => consentSignal() === TelemetryConsent.GRANTED),
+      };
+
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [Settings],
+        providers: [
+          provideNoopAnimations(),
+          {provide: StartupResolution, useValue: mockStartupResolution},
+          {provide: AppConfigProvider, useValue: mockConfigProvider},
+          {provide: HostCommunication, useValue: {latestEnvelope: mockLatestEnvelope}},
+          {
+            provide: CatalogManagement,
+            useValue: {
+              isHandshakeInProgress: mockIsHandshakeInProgress,
+              activeCatalogTitle: mockActiveCatalogTitle,
+              activeCatalog: mockActiveCatalog,
+              catalogError: mockCatalogError,
+            },
+          },
+          {provide: PlatformLocation, useValue: mockPlatformLocation},
+          {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
+          {provide: IS_1P_AUTH_ENABLED, useValue: true},
+          {provide: UsageTrackingService, useValue: mockUsageTracking},
+          SettingsService,
+        ],
+      }).compileComponents();
+
+      const fixture = TestBed.createComponent(Settings);
+      const component = fixture.componentInstance;
+      fixture.detectChanges();
+      const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
+
+      expect(component.isTelemetryOptedIn()).toBe(true);
+      expect(await harness.isTelemetryToggleChecked()).toBe(true);
+
+      await harness.toggleTelemetry();
+      fixture.detectChanges();
+
+      expect(setConsentSpy).toHaveBeenCalledWith(TelemetryConsent.DENIED);
+      expect(component.isTelemetryOptedIn()).toBe(false);
+      expect(await harness.isTelemetryToggleChecked()).toBe(false);
     });
   });
 });

@@ -71,7 +71,7 @@ export const appConfig: ApplicationConfig = {
       provide: UsageTrackingService,
       useFactory: () => {
         const config = inject(USAGE_TRACKING_CONFIG);
-        if (config.enabled && config.measurementId) {
+        if (config.enabled) {
           return inject(Ga4UsageTrackingService);
         }
         return inject(NoopUsageTrackingService);

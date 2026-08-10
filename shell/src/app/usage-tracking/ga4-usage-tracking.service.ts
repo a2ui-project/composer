@@ -15,7 +15,7 @@
  */
 
 import {DOCUMENT} from '@angular/common';
-import {Injectable, inject} from '@angular/core';
+import {Injectable, inject, signal} from '@angular/core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {trustedResourceUrl} from 'safevalues';
 import {setScriptSrc} from 'safevalues/dom';
@@ -26,10 +26,13 @@ import {
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
+import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../storage/models/local-storage-keys';
 import {
   ApiKeyAction,
   PromptTurnType,
   ShareTrackingStatus,
+  TelemetryConsent,
   UsageType,
   USAGE_TRACKING_CONFIG,
   UsageTrackingService,
@@ -55,7 +58,15 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   private readonly startupResolution = inject(StartupResolution);
   private readonly appConfigProvider = inject(AppConfigProvider);
   private readonly catalogManagement = inject(CatalogManagement);
+  private readonly storage = inject(LocalStorageInteractions);
   private readonly document = inject(DOCUMENT);
+
+  private readonly _consent = signal<TelemetryConsent | null>(this.getInitialConsent());
+  readonly consent = this._consent.asReadonly();
+
+  get isConfigured(): boolean {
+    return this.config.enabled;
+  }
 
   private _composerSessionId: string = generateUuid();
 
@@ -63,12 +74,39 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     return this._composerSessionId;
   }
 
+  private getInitialConsent(): TelemetryConsent | null {
+    const stored = this.storage.getItem(LocalStorageKey.TELEMETRY_CONSENT);
+    if (stored === TelemetryConsent.GRANTED || stored === TelemetryConsent.DENIED) {
+      return stored;
+    }
+    return null;
+  }
+
+  hasConsent(): boolean {
+    return this.isConfigured && this._consent() === TelemetryConsent.GRANTED;
+  }
+
+  setConsent(consent: TelemetryConsent): void {
+    this.storage.setItem(LocalStorageKey.TELEMETRY_CONSENT, consent);
+    this._consent.set(consent);
+    if (consent === TelemetryConsent.GRANTED && this.isConfigured) {
+      this.loadGtagScript();
+    }
+  }
+
   resetSession(): void {
     this._composerSessionId = generateUuid();
   }
 
   initialize(): void {
-    if (!this.config.enabled || !this.config.measurementId) {
+    if (!this.hasConsent()) {
+      return;
+    }
+    this.loadGtagScript();
+  }
+
+  private loadGtagScript(): void {
+    if (!this.isConfigured || !this.config.measurementId) {
       return;
     }
 
@@ -114,7 +152,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   }
 
   private dispatchGtagEvent(name: string, params?: Record<string, unknown>): void {
-    if (!this.config.enabled || !this.config.measurementId) {
+    if (!this.hasConsent() || !this.config.measurementId) {
       return;
     }
 

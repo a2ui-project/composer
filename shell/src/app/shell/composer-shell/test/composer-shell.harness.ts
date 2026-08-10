@@ -32,6 +32,32 @@ export class ComposerShellHarness extends ComponentHarness {
   private getResetButton = this.locatorFor('button.reset-session-button');
   private getHeaderTooltip = this.locatorFor(MatTooltipHarness);
   private getNavList = this.locatorFor(MatNavListHarness);
+  private getConsentBanner = this.locatorForOptional('.telemetry-consent-banner');
+  private getAllowTelemetryButton = this.locatorForOptional('button.allow-button');
+  private getDeclineTelemetryButton = this.locatorForOptional('button.decline-button');
+
+  async isConsentBannerVisible(): Promise<boolean> {
+    const banner = await this.getConsentBanner();
+    return banner !== null;
+  }
+
+  async getConsentBannerText(): Promise<string> {
+    const banner = await this.getConsentBanner();
+    if (!banner) return '';
+    return banner.text();
+  }
+
+  async clickAllowTelemetryButton(): Promise<void> {
+    const button = await this.getAllowTelemetryButton();
+    if (!button) throw new Error('Allow telemetry button not found');
+    await button.click();
+  }
+
+  async clickDeclineTelemetryButton(): Promise<void> {
+    const button = await this.getDeclineTelemetryButton();
+    if (!button) throw new Error('Decline telemetry button not found');
+    await button.click();
+  }
 
   async getHeaderTitleText(): Promise<string> {
     const title = await this.getHeaderTitle();
