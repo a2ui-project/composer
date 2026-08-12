@@ -245,7 +245,7 @@ export class MonacoEditor {
       {
         uri: 'a2ui-catalog-schema',
         fileMatch: [LAYOUT_MODEL_URI],
-        schema: layoutSchema,
+        schema: structuredClone(layoutSchema),
       },
       {
         uri: 'file:///common_types.json',
