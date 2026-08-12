@@ -159,7 +159,7 @@ describe('SettingsService', () => {
   it('resets config key state and sets runtime key when selected renderer lacks apiKey', async () => {
     await service.selectRenderer('locked');
 
-    expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
+    expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalledWith('');
     expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('');
   });
 
@@ -167,7 +167,7 @@ describe('SettingsService', () => {
     await service.selectRenderer(null);
 
     expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('');
-    expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
+    expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalledWith('');
     expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('');
   });
 
@@ -208,12 +208,12 @@ describe('SettingsService', () => {
     expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('padded-key');
 
     await service.selectRenderer('blankKey');
-    expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
+    expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalledWith('');
 
     mockConfigProvider.setApiKeyFromConfig.mockClear();
 
     await service.selectRenderer('nonStringKey');
-    expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
+    expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalledWith('');
   });
 
   it('handles error gracefully when secureCredentialsStorage throws in selectProfile', async () => {
@@ -222,7 +222,7 @@ describe('SettingsService', () => {
 
     await service.selectRenderer('locked');
 
-    expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
+    expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalledWith('');
     expect(warnSpy).toHaveBeenCalledWith(
       'Failed to resolve effective API key during renderer selection:',
       expect.any(Error),

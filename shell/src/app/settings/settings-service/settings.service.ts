@@ -115,7 +115,6 @@ export class SettingsService {
     if (apiKey) {
       this.configProvider.setApiKeyFromConfig(apiKey);
     } else {
-      this.configProvider.setApiKeyFromConfig('');
       try {
         await this.syncEffectiveApiKeyToConfigProvider();
       } catch (err) {
