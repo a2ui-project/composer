@@ -18,6 +18,8 @@
  * This is a copy synchronized from https://github.com/a2ui-project/a2ui/blob/main/specification/v0_9/json/common_types.json
  */
 export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://a2ui.org/specification/v0_9/common_types.json',
   $defs: {
     ComponentId: {
       type: 'string',
