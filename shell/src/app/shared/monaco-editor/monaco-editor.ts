@@ -31,6 +31,7 @@ import {
 import loader from '@monaco-editor/loader';
 import type * as monaco from 'monaco-editor';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {generateUuid} from '../../utils/uuid';
 import {
   AppConfigProvider,
   ThemePreference,
@@ -38,7 +39,6 @@ import {
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
 
-const LAYOUT_MODEL_URI = 'a2ui://layout.json';
 
 /**
  * A standalone Angular component that wraps the Monaco Editor.
@@ -67,6 +67,7 @@ export class MonacoEditor {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly layoutModelUri = `a2ui://layout-${generateUuid()}.json`;
 
   protected readonly isDarkTheme = computed(
     () => this.configProvider.themePreference() === ThemePreference.DARK,
@@ -181,6 +182,7 @@ export class MonacoEditor {
     this.destroyRef.onDestroy(() => {
       destroyed = true;
       if (this.editor) {
+        this.editor.getModel()?.dispose();
         this.editor.dispose();
       }
       overflowWidgetsDomNode?.remove();
@@ -195,7 +197,7 @@ export class MonacoEditor {
         }
         this.monacoInstance.set(monacoInstance);
 
-        const modelUri = monacoInstance.Uri.parse(LAYOUT_MODEL_URI);
+        const modelUri = monacoInstance.Uri.parse(this.layoutModelUri);
         let model = monacoInstance.editor.getModel(modelUri);
         if (model) {
           model.setValue(this.value());
@@ -244,7 +246,7 @@ export class MonacoEditor {
     return [
       {
         uri: 'a2ui-catalog-schema',
-        fileMatch: [LAYOUT_MODEL_URI],
+        fileMatch: [this.layoutModelUri],
         schema: layoutSchema,
       },
       {
