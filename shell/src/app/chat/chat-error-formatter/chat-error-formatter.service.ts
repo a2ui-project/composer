@@ -78,7 +78,8 @@ export class ChatErrorFormatterService {
       return {
         errorTitle: 'Validation Failure',
         errorMessage: 'The generated layout contains invalid components or structure.',
-        errorTip: 'Tip: Try rephrasing your prompt to guide the model to generate valid components.',
+        errorTip:
+          'Tip: Try rephrasing your prompt to guide the model to generate valid components.',
         isRetryable: hasOriginalPrompt,
         showDetails: true,
         errorDetails: 'Details: ' + cleanMsg,

@@ -20,7 +20,7 @@ import {ChatPanel} from './chat-panel';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ChatPanelHarness} from './test/chat-panel.harness';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {ChatCoordinator} from '../chat-service/chat-coordinator';
+import {ChatCoordinator} from '../chat-coordinator/chat-coordinator';
 import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {signal, inject} from '@angular/core';
 import {LlmMessage, MessageRole, Attachment} from '../llm-client/llm-client';

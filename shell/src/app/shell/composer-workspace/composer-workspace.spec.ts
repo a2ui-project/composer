@@ -26,7 +26,7 @@ import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {DockviewComponent} from 'dockview';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {ChatCoordinator} from '../../chat/chat-service/chat-coordinator';
+import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {LlmClient, LlmMessage} from '../../chat/llm-client/llm-client';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';

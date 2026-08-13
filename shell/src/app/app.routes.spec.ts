@@ -23,7 +23,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {routes} from './app.routes';
 import {StartupResolution, RendererConfig} from './shell/startup-resolution/startup-resolution';
 import {ChatState} from './chat/chat-state/chat-state';
-import {ChatCoordinator} from './chat/chat-service/chat-coordinator';
+import {ChatCoordinator} from './chat/chat-coordinator/chat-coordinator';
 import {StateSync} from './chat/state-sync/state-sync';
 import {
   AppConfigProvider,

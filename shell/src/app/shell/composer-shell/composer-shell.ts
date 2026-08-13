@@ -24,7 +24,7 @@ import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
 import {MatToolbarModule} from '@angular/material/toolbar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {RouterLink, RouterLinkActive, RouterOutlet} from '@angular/router';
-import {ChatCoordinator} from '../../chat/chat-service/chat-coordinator';
+import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {
   AppConfigProvider,

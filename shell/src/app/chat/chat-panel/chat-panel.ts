@@ -38,8 +38,8 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {tryParseJsonArray} from '../../utils/json';
-import {ChatCleaner} from '../chat-service/chat-cleaner';
-import {ChatCoordinator} from '../chat-service/chat-coordinator';
+import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
+import {ChatCoordinator} from '../chat-coordinator/chat-coordinator';
 import {ChatState} from '../chat-state/chat-state';
 import {Attachment, LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
