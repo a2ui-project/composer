@@ -57,7 +57,7 @@ export class AutoScroll {
   constructor() {
     effect(() => {
       this.autoScroll();
-      requestAnimationFrame(() => {
+      queueMicrotask(() => {
         this.el.nativeElement.scrollTop = this.el.nativeElement.scrollHeight;
       });
     });

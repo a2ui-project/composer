@@ -116,19 +116,22 @@ export class ChatCoordinator {
   }
 
   private activeStreamResponse?: LlmStreamResponse;
-  private isCancelRequested = false;
+  private abortController: AbortController | null = null;
 
   /**
    * Cancels the currently active streaming request if there is one.
    */
   cancelActiveStream(): void {
-    this.isCancelRequested = true;
     if (this.activePromptId) {
       this.usageTrackingService.trackChatCancel({
         promptId: this.activePromptId,
         turnIndex: this.currentTurnIndex(),
         pipelineStatus: this.pipelineStatus(),
       });
+    }
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
     }
     if (this.activeStreamResponse && this.activeStreamResponse.cancel) {
       this.activeStreamResponse.cancel();
@@ -222,12 +225,13 @@ export class ChatCoordinator {
     ]);
 
     try {
-      this.isCancelRequested = false;
+      this.abortController = new AbortController();
+      const signal = this.abortController.signal;
       // Trigger streaming GenAI completions call using client facade
       const responseStream = await this.llmClient.chatStream(fullContext);
 
       // If a cancel was requested while the stream connection was establishing
-      if (this.isCancelRequested) {
+      if (signal.aborted) {
         if (responseStream.cancel) responseStream.cancel();
         const err = new Error('Cancelled');
         err.name = CANCEL_ERROR_NAME;
@@ -240,6 +244,11 @@ export class ChatCoordinator {
       let accumulatedRawText = '';
       let accumulatedThinking = '';
       for await (const chunk of responseStream.contentStream) {
+        if (signal.aborted) {
+          const err = new Error('Cancelled');
+          err.name = CANCEL_ERROR_NAME;
+          throw err;
+        }
         accumulatedRawText += chunk.content;
         if (chunk.thinking) {
           accumulatedThinking += chunk.thinking;
