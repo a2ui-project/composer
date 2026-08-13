@@ -15,108 +15,43 @@
  */
 
 import {Injectable} from '@angular/core';
+import {AbstractIndexedDbStorage} from '../abstract-indexed-db';
 import {CachedCatalogRecord} from '../models/catalog-storage.model';
 
-@Injectable({
-  providedIn: 'root',
-})
 /**
  * Core database service providing low-level asynchronous storage access
  * to local IndexedDB instances for schema and catalog caching.
  */
-export class IndexedDbStorage {
-  private dbName = 'a2ui_composer_db';
-  private dbVersion = 1;
-  private storeName = 'catalogs';
+@Injectable({providedIn: 'root'})
+export class IndexedDbStorage extends AbstractIndexedDbStorage {
+  protected readonly dbName = 'a2ui_composer_db';
+  protected readonly dbVersion = 1;
+  protected readonly storeName = 'catalogs';
 
-  private dbPromise: Promise<IDBDatabase> | null = null;
-
-  openDatabase(): Promise<IDBDatabase> {
-    if (this.dbPromise) {
-      return this.dbPromise;
+  /**
+   * Handles database schema upgrades.
+   */
+  protected onUpgradeNeeded(db: IDBDatabase, event: IDBVersionChangeEvent): void {
+    if (event.oldVersion < 1) {
+      db.createObjectStore(this.storeName, {keyPath: 'rendererUrl'});
     }
-
-    this.dbPromise = new Promise((resolve, reject) => {
-      if (typeof globalThis.indexedDB === 'undefined') {
-        reject(new Error('IndexedDB is not supported in this environment.'));
-        return;
-      }
-
-      const request = globalThis.indexedDB.open(this.dbName, this.dbVersion);
-
-      request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains(this.storeName)) {
-          db.createObjectStore(this.storeName, {keyPath: 'rendererUrl'});
-          console.log(`Initialized object store: ${this.storeName}`);
-        }
-      };
-
-      request.onsuccess = (event: Event) => {
-        resolve((event.target as IDBOpenDBRequest).result);
-      };
-
-      request.onerror = (event: Event) => {
-        this.dbPromise = null;
-        reject((event.target as IDBOpenDBRequest).error);
-      };
-    });
-
-    return this.dbPromise;
   }
 
-  private async executeTransaction<T>(
-    mode: IDBTransactionMode,
-    operation: (store: IDBObjectStore, tx: IDBTransaction) => IDBRequest<T> | void,
-    onComplete?: () => void,
-  ): Promise<T | void> {
-    const db = await this.openDatabase();
-    return new Promise<T | void>((resolve, reject) => {
-      const tx = db.transaction(this.storeName, mode);
-      const store = tx.objectStore(this.storeName);
-
-      let requestResult: T | void = undefined;
-      let operationRequest: IDBRequest<T> | null = null;
-
-      try {
-        const res = operation(store, tx);
-        if (res && 'onsuccess' in res) {
-          operationRequest = res as IDBRequest<T>;
-        }
-      } catch (err) {
-        reject(err);
-        return;
-      }
-
-      tx.oncomplete = () => {
-        if (onComplete) {
-          onComplete();
-        }
-        resolve(requestResult);
-      };
-
-      tx.onabort = () => reject(tx.error);
-      tx.onerror = () => reject(tx.error);
-
-      if (operationRequest) {
-        operationRequest.onsuccess = () => {
-          requestResult = operationRequest!.result;
-        };
-        operationRequest.onerror = () => {
-          reject(operationRequest!.error);
-        };
-      }
-    });
-  }
-
+  /**
+   * Retrieves a cached catalog record by renderer URL.
+   */
   async getCatalogRecord(rendererUrl: string): Promise<CachedCatalogRecord | null> {
     const result = await this.executeTransaction<CachedCatalogRecord | undefined>(
+      this.storeName,
       'readonly',
-      store => store.get(rendererUrl),
+      tx => tx.objectStore(this.storeName).get(rendererUrl),
     );
     return result || null;
   }
 
+  /**
+   * Saves a catalog record, enforcing quota limits and LRU behavior.
+   */
   async saveCatalogRecord(record: CachedCatalogRecord): Promise<void> {
     record.lastAccessed = Date.now();
 
@@ -150,9 +85,9 @@ export class IndexedDbStorage {
     }
   }
 
-  private async executeAtomicWrite(record: CachedCatalogRecord): Promise<void> {
-    await this.executeTransaction<void>('readwrite', store => {
-      store.put(record);
+  protected async executeAtomicWrite(record: CachedCatalogRecord): Promise<void> {
+    await this.executeTransaction<void>(this.storeName, 'readwrite', tx => {
+      tx.objectStore(this.storeName).put(record);
     });
   }
 
@@ -166,32 +101,35 @@ export class IndexedDbStorage {
       const excessCount = allRecords.length - maxCapacity + 1;
       const recordsToEvict = allRecords.slice(0, excessCount);
 
-      await this.executeTransaction<void>('readwrite', store => {
+      await this.executeTransaction<void>(this.storeName, 'readwrite', tx => {
         for (const r of recordsToEvict) {
-          store.delete(r.rendererUrl);
+          tx.objectStore(this.storeName).delete(r.rendererUrl);
           console.log(`Evicted oldest catalog record via LRU policy: ${r.rendererUrl}`);
         }
       });
     }
   }
 
+  /**
+   * Retrieves all currently cached catalog records.
+   */
   async getAllCatalogRecords(): Promise<CachedCatalogRecord[]> {
-    const result = await this.executeTransaction<CachedCatalogRecord[]>('readonly', store =>
-      store.getAll(),
+    const result = await this.executeTransaction<CachedCatalogRecord[]>(
+      this.storeName,
+      'readonly',
+      tx => tx.objectStore(this.storeName).getAll(),
     );
     return result || [];
   }
 
+  /**
+   * Flushes all catalog records from storage.
+   */
   async flushAllRecords(): Promise<void> {
-    await this.executeTransaction<void>(
-      'readwrite',
-      store => {
-        store.clear();
-      },
-      () => {
-        console.warn('Successfully flushed all catalog records from storage.');
-      },
-    );
+    await this.executeTransaction<void>(this.storeName, 'readwrite', tx => {
+      tx.objectStore(this.storeName).clear();
+    });
+    console.warn('Successfully flushed all catalog records from storage.');
   }
 
   private isQuotaError(err: unknown): boolean {
