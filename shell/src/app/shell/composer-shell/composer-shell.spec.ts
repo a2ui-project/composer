@@ -23,7 +23,7 @@ import {By} from '@angular/platform-browser';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter, Router, RouterLinkActive} from '@angular/router';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {ChatCoordinator} from '../../chat/chat-service/chat-coordinator';
+import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {
   AppConfigProvider,

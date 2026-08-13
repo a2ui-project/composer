@@ -161,10 +161,10 @@ export function runCatalogComponentSchemaCheck(
     if (!isRenderA2uiItem(block)) {
       continue;
     }
-    
+
     const updateComponents = block.updateComponents!;
     const cleanedComponents: unknown[] = [];
-    
+
     for (const comp of updateComponents.components) {
       if (!comp || typeof comp !== 'object' || Array.isArray(comp)) {
         cleanedComponents.push(comp);
@@ -175,7 +175,7 @@ export function runCatalogComponentSchemaCheck(
       let compType = compObj.component;
 
       // legacy property "name" fallback: heal to "component" key mapping
-      if (compObj['name'] as unknown && !compObj.component) {
+      if ((compObj['name'] as unknown) && !compObj.component) {
         healed = true;
         compType = compObj['name'] as string;
         compObj.component = compType;
@@ -233,7 +233,7 @@ export function runCatalogComponentSchemaCheck(
       cleanedComp.component = targetType;
       cleanedComponents.push(cleanedComp);
     }
-    
+
     // Commit sanitized array back in-place
     updateComponents.components = cleanedComponents as A2uiComponentInstance[];
   }

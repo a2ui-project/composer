@@ -26,10 +26,7 @@ describe('ChatPromptFactoryService', () => {
   beforeEach(() => {
     catalogSpy = {activeCatalog: vi.fn(), activeCatalogSignal: vi.fn(() => null)};
     TestBed.configureTestingModule({
-      providers: [
-        ChatPromptFactoryService,
-        {provide: CatalogManagement, useValue: catalogSpy},
-      ],
+      providers: [ChatPromptFactoryService, {provide: CatalogManagement, useValue: catalogSpy}],
     });
     service = TestBed.inject(ChatPromptFactoryService);
   });
