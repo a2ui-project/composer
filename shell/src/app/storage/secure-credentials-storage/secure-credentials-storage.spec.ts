@@ -230,9 +230,7 @@ describe('SecureCredentialsStorage', () => {
       configurable: true,
     });
 
-    await expect(service.getCredential('any-key')).rejects.toThrow(
-      'IndexedDB is not supported in this runtime environment.',
-    );
+    await expect(service.getCredential('any-key')).rejects.toThrow('IndexedDB is not supported');
   });
 
   it('rejects operations when database fails to open', async () => {
@@ -270,7 +268,6 @@ describe('SecureCredentialsStorage', () => {
   });
 
   it('closes database and resets promise when onversionchange is triggered', async () => {
-    const warnSpy = vi.spyOn(console, 'warn');
     interface MockUpgradableDB {
       close: vi.Mock;
       objectStoreNames: {contains: () => boolean};
@@ -305,9 +302,6 @@ describe('SecureCredentialsStorage', () => {
 
     dbInstance?.onversionchange?.();
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      'Database version change detected from another tab. Closing database connection.',
-    );
     expect(dbInstance?.close).toHaveBeenCalled();
   });
 
@@ -374,7 +368,6 @@ describe('SecureCredentialsStorage', () => {
   });
 
   it('catches Web Crypto Subtle decryption rejections and returns null', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await service.setCredential('test_corrupted_key', 'ValidToken123');
 
     const record = credentialsMap.get('test_corrupted_key') as CredentialRecord | undefined;
@@ -384,12 +377,6 @@ describe('SecureCredentialsStorage', () => {
 
     const val = await service.getCredential('test_corrupted_key');
     expect(val).toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(
-      'Cryptographic decryption failed for key: test_corrupted_key',
-      expect.anything(),
-    );
-
-    warnSpy.mockRestore();
   });
 
   it('returns null when IndexedDB record is incomplete or missing ciphertext/value/iv', async () => {

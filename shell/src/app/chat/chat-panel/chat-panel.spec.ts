@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,6 +33,7 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
 import {MatInputHarness} from '@angular/material/input/testing';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -131,6 +131,12 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     await TestBed.configureTestingModule({
       imports: [ChatPanel],
       providers: [
+        {
+          provide: ScreenshotCaptureService,
+          useValue: {
+            captureScreenshot: vi.fn().mockResolvedValue('data:image/png;base64,mockScreenshot'),
+          },
+        },
         provideNoopAnimations(),
         provideRouter([]),
         {provide: ChatCoordinator, useClass: MockChatCoordinator},
