@@ -24,14 +24,14 @@
       (selectionChange)="onSelectionChange($event.value)"
     >
       <mat-select-trigger>
-        {{ selectedApiKey()?.name }}
+        {{ selectedItem()?.name }}
       </mat-select-trigger>
-      @if (apiKeys().length === 0) {
+      @if (items().length === 0) {
         <mat-option [disabled]="true" class="empty-state-option"
           >No items available — click + to add</mat-option
         >
       } @else {
-        @for (key of apiKeys(); track key.id) {
+        @for (key of items(); track key.id) {
           <mat-option [value]="key.id" class="api-key-option">
             <span class="api-key-option-label">{{ key.name }}</span>
             <button
