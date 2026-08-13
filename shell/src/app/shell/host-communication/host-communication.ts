@@ -79,26 +79,9 @@ export class HostCommunication implements OnDestroy {
     initialValue: null,
   });
 
-  private readonly listeners = new Set<(envelope: MessageEnvelope) => void>();
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
   private readonly earlyMessageBuffer: MessageEvent[] = [];
   private latestCatalogEnvelope: MessageEnvelope | null = null;
-
-  /**
-   * Registers a callback listener to intercept incoming message envelopes.
-   * @param listener Callback function invoked upon envelope arrival
-   */
-  addListener(listener: (envelope: MessageEnvelope) => void): void {
-    this.listeners.add(listener);
-  }
-
-  /**
-   * Removes a previously registered callback listener.
-   * @param listener Callback function to remove
-   */
-  removeListener(listener: (envelope: MessageEnvelope) => void): void {
-    this.listeners.delete(listener);
-  }
 
   /**
    * Retrieves a snapshot copy of the recent message history buffer.
@@ -195,13 +178,6 @@ export class HostCommunication implements OnDestroy {
       }
       this.latestEnvelopeSignal.set(envelope);
       this.messageStreamSubject.next(envelope);
-      this.listeners.forEach(l => {
-        try {
-          l(envelope);
-        } catch (err) {
-          console.error('Error in HostCommunication listener:', err);
-        }
-      });
     }
   };
 
