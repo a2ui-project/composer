@@ -102,7 +102,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
 
   private getBaselineDimensions(): Record<string, unknown> {
     const is3P = this.startupResolution.isThirdPartyEnvironment();
-    const activeRendererId = this.startupResolution.selectedRendererId() || 'default';
+    const activeRendererId = this.startupResolution.selectedRendererId$() || 'default';
     const catalogObj = this.catalogManagement.activeCatalog();
     const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
     return {

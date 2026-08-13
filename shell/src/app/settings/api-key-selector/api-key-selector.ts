@@ -14,22 +14,17 @@
  * limitations under the License.
  */
 
-import {Component, computed, DestroyRef, inject, input, output, signal} from '@angular/core';
+import {Component, inject, input, output} from '@angular/core';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {MatDialog, MatDialogModule} from '@angular/material/dialog';
+import {MatDialogModule} from '@angular/material/dialog';
 import {SettingsService, ApiKeyOption} from '../settings-service/settings.service';
 import {AddApiKeyDialogComponent} from './add-api-key-dialog/add-api-key-dialog';
+import {AbstractSelector} from '../abstract-selector/abstract-selector';
 
-/**
- * Component for selecting and managing API key credentials.
- * Displays combined static and custom API keys in a dropdown with masked secrets,
- * and provides controls to add new custom keys or delete existing custom keys.
- */
 @Component({
   selector: 'a2ui-composer-api-key-selector',
   standalone: true,
@@ -44,106 +39,43 @@ import {AddApiKeyDialogComponent} from './add-api-key-dialog/add-api-key-dialog'
   templateUrl: './api-key-selector.ng.html',
   styleUrl: './api-key-selector.scss',
 })
-export class ApiKeySelectorComponent {
+export class ApiKeySelectorComponent extends AbstractSelector<ApiKeyOption> {
   readonly selectedApiKeyId = input<string | null>(null);
-  readonly disabled = input<boolean>(false);
   readonly apiKeySelected = output<string | null>();
 
   private readonly settingsService = inject(SettingsService);
-  private readonly dialog = inject(MatDialog);
-  private readonly destroyRef = inject(DestroyRef);
-
-  readonly apiKeys = signal<ApiKeyOption[]>([]);
-
-  readonly selectedApiKey = computed(() => {
-    const id = this.selectedApiKeyId();
-    if (!id) return undefined;
-    return this.apiKeys().find(k => k.id === id);
-  });
 
   constructor() {
-    void this.refreshApiKeys();
+    super();
+    void this.refreshItems();
   }
 
-  /**
-   * Refreshes the list of available API keys from SettingsService.
-   */
-  async refreshApiKeys(): Promise<void> {
+  override getSelectedId(): string | null {
+    return this.selectedApiKeyId();
+  }
+
+  override async refreshItems(): Promise<void> {
     const list = await this.settingsService.getAvailableApiKeys();
-    this.apiKeys.set(list);
+    this.items.set(list);
   }
 
-  /**
-   * Emits the newly selected API key ID when the dropdown selection changes.
-   */
-  onSelectionChange(value: string | null): void {
-    if (value !== undefined) {
-      this.apiKeySelected.emit(value);
-    }
+  override emitSelection(id: string | null): void {
+    this.apiKeySelected.emit(id);
   }
 
-  /**
-   * Opens the dialog to add a new custom API key and handles the newly saved key ID.
-   */
-  onAddApiKey(event?: Event): void {
-    event?.preventDefault();
-    event?.stopPropagation();
-    const dialogRef = this.dialog.open(AddApiKeyDialogComponent, {
-      width: '450px',
-    });
-
-    dialogRef
-      .afterClosed()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(async (newId?: string) => {
-        if (newId) {
-          await this.refreshApiKeys();
-          this.apiKeySelected.emit(newId);
-        }
-      });
-  }
-
-  /**
-   * Opens the dialog to edit an existing custom API key.
-   */
-  onEditApiKey(event: Event, key: ApiKeyOption): void {
-    event.stopPropagation();
-    event.preventDefault();
-    if (key.readOnly) {
-      return;
-    }
-    const dialogRef = this.dialog.open(AddApiKeyDialogComponent, {
-      width: '450px',
-      data: {apiKey: key},
-    });
-
-    dialogRef
-      .afterClosed()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(async (updatedId?: string) => {
-        if (updatedId) {
-          await this.refreshApiKeys();
-          if (this.selectedApiKeyId() === updatedId) {
-            this.apiKeySelected.emit(updatedId);
-          }
-        }
-      });
-  }
-
-  /**
-   * Deletes a custom API key and emits null fallback if the deleted key was active.
-   */
-  async onDeleteApiKey(event: Event, id: string): Promise<void> {
-    event.stopPropagation();
-    event.preventDefault();
-    const key = this.apiKeys().find(k => k.id === id);
-    if (key?.readOnly) {
-      return;
-    }
+  override async deleteItem(id: string): Promise<void> {
     await this.settingsService.deleteCustomApiKey(id);
-    await this.refreshApiKeys();
-    if (this.selectedApiKeyId() === id) {
-      this.apiKeySelected.emit(null);
-    }
+  }
+
+  onAddApiKey(event?: Event): void {
+    void this.handleAdd(AddApiKeyDialogComponent, event);
+  }
+
+  onEditApiKey(event: Event, key: ApiKeyOption): void {
+    void this.handleEdit(AddApiKeyDialogComponent, event, key, 'apiKey');
+  }
+
+  async onDeleteApiKey(event: Event, id: string): Promise<void> {
+    void this.handleDelete(event, id, null);
   }
 }

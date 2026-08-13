@@ -64,13 +64,13 @@ export class Settings implements OnInit {
 
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
-  readonly selectedRendererId: WritableSignal<string | null> = signal<string | null>(null);
+  readonly selectedRendererId$: WritableSignal<string | null> = signal<string | null>(null);
   readonly selectedApiKeyId: Signal<string | null> = computed(() =>
     this.settingsService.selectedApiKeyId(),
   );
 
   readonly selectedRendererOption: Signal<RendererOption | undefined> = computed(() => {
-    const id = this.selectedRendererId();
+    const id = this.selectedRendererId$();
     if (!id || id === 'Custom') return undefined;
     return this.settingsService.getRenderers().find(r => r.id === id);
   });
@@ -108,8 +108,8 @@ export class Settings implements OnInit {
   constructor() {}
 
   ngOnInit(): void {
-    const currentRendererId = this.settingsService.selectedRendererId() || 'Custom';
-    this.selectedRendererId.set(currentRendererId);
+    const currentRendererId = this.settingsService.selectedRendererId$() || 'Custom';
+    this.selectedRendererId$.set(currentRendererId);
 
     void this.settingsService.getEffectiveApiKey();
 
@@ -121,11 +121,11 @@ export class Settings implements OnInit {
 
   async onRendererSelected(rendererId: string): Promise<void> {
     const targetId = rendererId === 'Custom' ? null : rendererId;
-    const previousId = this.selectedRendererId();
-    this.selectedRendererId.set(rendererId);
+    const previousId = this.selectedRendererId$();
+    this.selectedRendererId$.set(rendererId);
     const success = await this.settingsService.selectRenderer(targetId);
     if (!success) {
-      this.selectedRendererId.set(previousId);
+      this.selectedRendererId$.set(previousId);
     }
   }
 

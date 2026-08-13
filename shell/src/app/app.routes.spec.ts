@@ -43,7 +43,7 @@ class MockStartupResolution {
   readonly resolvedUrl = signal('http://localhost:4200');
   readonly renderers = signal<Record<string, RendererConfig>>({});
   readonly apiKeys = signal<Record<string, ApiKeyConfig>>({});
-  readonly selectedRendererId = signal<string | null>(null);
+  readonly selectedRendererId$ = signal<string | null>(null);
   readonly activeRenderer = signal<RendererConfig | null>(null);
   readonly sharedA2uiPayload = signal<string | null>(null);
   readonly sharedA2uiError = signal<string | null>(null);

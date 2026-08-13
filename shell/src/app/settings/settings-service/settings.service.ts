@@ -71,8 +71,8 @@ export class SettingsService {
     this.startupResolution.renderers(),
   );
 
-  readonly selectedRendererId: Signal<string | null> = computed(() =>
-    this.startupResolution.selectedRendererId(),
+  readonly selectedRendererId$: Signal<string | null> = computed(() =>
+    this.startupResolution.selectedRendererId$(),
   );
 
   readonly activeRenderer: Signal<RendererConfig | null> = computed(() =>
@@ -85,7 +85,7 @@ export class SettingsService {
    * @param rendererId The selected renderer ID string, or null to revert to Custom/Default.
    */
   async selectRenderer(rendererId: string | null): Promise<boolean> {
-    const fromRendererId = this.selectedRendererId();
+    const fromRendererId = this.selectedRendererId$();
     const isAllowed = await this.startupResolution.setSelectedRendererId(rendererId);
     if (!isAllowed) {
       return false;
@@ -380,7 +380,7 @@ export class SettingsService {
     this.usageTrackingService.trackRendererDelete({rendererId: id});
     const list = this.getCustomRenderers().filter(item => item.id !== id);
     this.localStorageInteractions.setItem(LocalStorageKey.CUSTOM_RENDERERS, JSON.stringify(list));
-    if (this.selectedRendererId() === id) {
+    if (this.selectedRendererId$() === id) {
       this.localStorageInteractions.removeItem(LocalStorageKey.SELECTED_RENDERER);
       void this.selectRenderer(null);
     }

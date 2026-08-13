@@ -65,7 +65,7 @@ describe('Settings', () => {
     getResolvedRendererUrl: Mock<() => string | null>;
     isThirdPartyEnvironment: Mock<() => boolean>;
     renderers: Signal<Record<string, RendererConfig>>;
-    selectedRendererId: Signal<string | null>;
+    selectedRendererId$: Signal<string | null>;
     activeRenderer: Signal<RendererConfig | null>;
     apiKeys: Signal<Record<string, ApiKeyConfig>>;
     setSelectedRendererId: Mock<(id: string | null) => void>;
@@ -126,7 +126,7 @@ describe('Settings', () => {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
       renderers: mockRenderers.asReadonly(),
-      selectedRendererId: mockSelectedRendererId.asReadonly(),
+      selectedRendererId$: mockSelectedRendererId.asReadonly(),
       activeRenderer: mockActiveRenderer.asReadonly(),
       apiKeys: mockApiKeys.asReadonly(),
       setSelectedRendererId: vi.fn((id: string | null) => {
@@ -425,7 +425,7 @@ describe('Settings', () => {
       expect(fixture.nativeElement.querySelector('a2ui-composer-profile-selector')).toBeNull();
     });
 
-    it('sets selectedRendererId when a renderer is selected in <a2ui-composer-renderer-selector>', async () => {
+    it('sets selectedRendererId$ when a renderer is selected in <a2ui-composer-renderer-selector>', async () => {
       const {fixture, component} = await setupComponent();
       const selectSpy = vi
         .spyOn(component.settingsService, 'selectRenderer')
@@ -434,7 +434,7 @@ describe('Settings', () => {
       await component.onRendererSelected('dev');
       fixture.detectChanges();
 
-      expect(component.selectedRendererId()).toBe('dev');
+      expect(component.selectedRendererId$()).toBe('dev');
       expect(selectSpy).toHaveBeenCalledWith('dev');
     });
   });
@@ -488,7 +488,7 @@ describe('Settings', () => {
   });
 
   describe('onRendererSelected', () => {
-    it('updates selectedRendererId signal and invokes SettingsService.selectRenderer', async () => {
+    it('updates selectedRendererId$ signal and invokes SettingsService.selectRenderer', async () => {
       const {component} = await setupComponent();
       const selectSpy = vi
         .spyOn(component.settingsService, 'selectRenderer')
@@ -496,18 +496,18 @@ describe('Settings', () => {
 
       await component.onRendererSelected('custom-renderer');
 
-      expect(component.selectedRendererId()).toBe('custom-renderer');
+      expect(component.selectedRendererId$()).toBe('custom-renderer');
       expect(selectSpy).toHaveBeenCalledWith('custom-renderer');
     });
 
-    it('reverts selectedRendererId signal if SettingsService.selectRenderer returns false', async () => {
+    it('reverts selectedRendererId$ signal if SettingsService.selectRenderer returns false', async () => {
       const {component} = await setupComponent();
-      component.selectedRendererId.set('initial-renderer');
+      component.selectedRendererId$.set('initial-renderer');
       vi.spyOn(component.settingsService, 'selectRenderer').mockResolvedValue(false);
 
       await component.onRendererSelected('disallowed-renderer');
 
-      expect(component.selectedRendererId()).toBe('initial-renderer');
+      expect(component.selectedRendererId$()).toBe('initial-renderer');
     });
   });
 
@@ -535,20 +535,20 @@ describe('Settings', () => {
   });
 
   describe('ngOnInit and computed signals initialization', () => {
-    it('initializes selectedRendererId from SettingsService when present', async () => {
+    it('initializes selectedRendererId$ from SettingsService when present', async () => {
       mockSelectedRendererId.set('preset-1');
       const {component} = await setupComponent();
 
-      expect(component.selectedRendererId()).toBe('preset-1');
+      expect(component.selectedRendererId$()).toBe('preset-1');
     });
 
-    it('returns undefined for selectedRendererOption when selectedRendererId is null or Custom', async () => {
+    it('returns undefined for selectedRendererOption when selectedRendererId$ is null or Custom', async () => {
       const {component} = await setupComponent();
 
-      component.selectedRendererId.set(null);
+      component.selectedRendererId$.set(null);
       expect(component.selectedRendererOption()).toBeUndefined();
 
-      component.selectedRendererId.set('Custom');
+      component.selectedRendererId$.set('Custom');
       expect(component.selectedRendererOption()).toBeUndefined();
     });
   });
