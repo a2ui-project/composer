@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { By } from '@angular/platform-browser';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
@@ -631,7 +632,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: []});
     catalogServiceMock.selectedComponentUsage.set('[]');
     fixture.detectChanges();
-    (fixture.componentInstance as unknown as TestFriendlyGallery).copyToClipboard();
+    await harness.clickCopyButton();
     expect(writeTextSpy).not.toHaveBeenCalled();
   });
 
@@ -932,7 +933,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentUsage.set(JSON.stringify(mockUsage));
     fixture.detectChanges();
 
-    (fixture.componentInstance as unknown as TestFriendlyGallery).copyToClipboard();
+    await harness.clickCopyButton();
 
     expect(writeTextSpy).toHaveBeenCalled();
     const copiedPayloadString = writeTextSpy.mock.calls[0][0] as string;
@@ -1018,9 +1019,9 @@ describe('Gallery Component', () => {
 
       catalogServiceMock.componentsList.set([{category: 'Content', components: ['Text']}]);
 
-      (fixture.componentInstance as unknown as {selectComponent: (k: string) => void})[
-        'selectComponent'
-      ]('Text');
+      const button = fixture.debugElement.query(By.css('.component-nav-item')).nativeElement;
+      button.click();
+      fixture.detectChanges();
 
       expect(trackSpy).toHaveBeenCalledWith({
         componentKey: 'Text',
@@ -1037,7 +1038,7 @@ describe('Gallery Component', () => {
       });
       catalogServiceMock.selectedComponentKey.set('Text');
 
-      (fixture.componentInstance as unknown as TestFriendlyGallery).copyToClipboard();
+      await harness.clickCopyButton();
       await Promise.resolve();
 
       expect(trackSpy).toHaveBeenCalledWith({

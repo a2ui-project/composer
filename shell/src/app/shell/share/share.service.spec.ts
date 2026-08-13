@@ -1,3 +1,4 @@
+
 /**
  * Copyright 2026 Google LLC
  *
@@ -14,6 +15,8 @@
  * limitations under the License.
  */
 
+import {describe, it, expect, beforeEach, vi} from "vitest";
+import {describe, it, expect, beforeEach, vi} from "vitest";
 import {Clipboard} from '@angular/cdk/clipboard';
 import {DOCUMENT} from '@angular/common';
 import {TestBed} from '@angular/core/testing';
@@ -27,15 +30,15 @@ import {signal} from '@angular/core';
 
 describe('ShareService', () => {
   let service: ShareService;
-  let mockClipboard: jasmine.SpyObj<Clipboard>;
-  let mockSnackBar: jasmine.SpyObj<MatSnackBar>;
+  let mockClipboard: {copy: ReturnType<typeof vi.fn>};
+  let mockSnackBar: {open: ReturnType<typeof vi.fn>};
   let mockStateSync: unknown;
   let mockStartupResolution: unknown;
   let mockDocument: unknown;
 
   beforeEach(() => {
-    mockClipboard = jasmine.createSpyObj('Clipboard', ['copy']);
-    mockSnackBar = jasmine.createSpyObj('MatSnackBar', ['open']);
+    mockClipboard = {copy: vi.fn()};
+    mockSnackBar = {open: vi.fn()};
     mockStateSync = {activeDraft: signal('{"a":1}')};
     mockStartupResolution = {resolvedUrl: signal('http://renderer')};
     mockDocument = {defaultView: {location: {href: 'http://localhost/'}}};
@@ -55,13 +58,13 @@ describe('ShareService', () => {
   });
 
   it('should copy to clipboard when valid', async () => {
-    mockClipboard.copy.and.returnValue(true);
+    mockClipboard.copy.mockReturnValue(true);
     await service.shareDesign();
     expect(mockClipboard.copy).toHaveBeenCalled();
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      jasmine.stringContaining('copied to clipboard'),
+      expect.stringContaining('copied to clipboard'),
       'Close',
-      jasmine.any(Object),
+      expect.any(Object),
     );
   });
 
@@ -72,7 +75,7 @@ describe('ShareService', () => {
     expect(mockSnackBar.open).toHaveBeenCalledWith(
       'Cannot share design: invalid JSON syntax',
       'Close',
-      jasmine.any(Object),
+      expect.any(Object),
     );
   });
 });

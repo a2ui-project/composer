@@ -44,6 +44,7 @@ import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
   readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  readonly currentTurnIndex = signal(0);
   readonly isProgrammaticStreamActive = signal(false);
   readonly latestLlmLog = signal<LlmLogEntry | null>(null);
   readonly llmHistory = signal<LlmLogEntry[]>([]);
@@ -79,6 +80,7 @@ class MockChatState {
 class MockChatCoordinator {
   readonly systemPrompt = signal('Initial system prompt block');
   readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  readonly currentTurnIndex = signal(0);
   readonly isProgrammaticStreamActive = signal(false);
 }
 

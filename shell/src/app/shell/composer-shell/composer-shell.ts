@@ -28,63 +28,68 @@ import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {
   AppConfigProvider,
-  ThemePreference,
+  EnvMode,
 } from '../../settings/app-config-provider/app-config-provider';
+import {HostCommunication} from '../host-communication/host-communication';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
 import {
-  ShareTrackingStatus,
+  PromptTurnType,
   UsageTrackingService,
 } from '../../usage-tracking/usage-tracking.service';
+import {ThemePreference} from '../../settings/app-config-provider/app-config-provider';
+import {NavigationEnd, Router, RouterModule} from '@angular/router';
+import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {QueryParser} from '../query-parser/query-parser';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
-import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 
 /** Standard length for showing any snack bar notification. */
 const SNACK_BAR_DURATION_MS = 5000;
 
 /**
- * The primary layout container for the A2UI Composer.
- * Renders the permanent header bar, persistent navigation sidebar,
- * and hosts the active workspace routing outlet.
+ * Global presentation wrapper for the A2UI Composer application routing and
+ * core integrations (telemetry, session tracking, root layout scaffolding).
  */
 @Component({
   selector: 'a2ui-composer-shell',
   standalone: true,
   imports: [
-    MatToolbarModule,
-    MatSidenavModule,
     MatButtonModule,
     MatIconModule,
     MatListModule,
+    MatSidenavModule,
+    MatSnackBarModule,
+    MatToolbarModule,
+    MatTooltipModule,
     RouterOutlet,
     RouterLink,
     RouterLinkActive,
-    MatTooltipModule,
-    MatSnackBarModule,
+    RouterModule,
   ],
   templateUrl: './composer-shell.ng.html',
   styleUrl: './composer-shell.scss',
 })
 export class ComposerShell {
-  readonly isCollapsed = signal(true);
-  isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
   private readonly catalogManagement = inject(CatalogManagement);
+  private readonly hostCommunication = inject(HostCommunication);
   private readonly indexedDbStorage = inject(IndexedDbStorage);
-  private readonly storage = inject(LocalStorageInteractions);
+  private readonly localStorage = inject(LocalStorageInteractions);
   private readonly sessionStorage = inject(SessionStorageInteractions);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly startupResolution = inject(StartupResolution);
   private readonly stateSync = inject(StateSync);
   private readonly chatCoordinator = inject(ChatCoordinator);
   private readonly startupConfigState = inject(StartupConfigStateService);
+  protected readonly currentTurnIndex = this.chatCoordinator.currentTurnIndex;
   private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly document = inject(DOCUMENT);
+  private readonly router = inject(Router);
 
+  readonly isAppReady = signal<boolean>(false);
   activeCatalogTitle = this.catalogManagement.activeCatalogTitle;
   activeCatalogDescription = this.catalogManagement.activeCatalogDescription;
 
@@ -105,58 +110,59 @@ export class ComposerShell {
         });
       }
     });
+
+    this.checkHandshakeTimeout();
+    this.startPrewarmingBridgeIframe();
   }
 
-  /**
-   * Toggles collapsed state of the side navigation bar.
-   */
-  toggleCollapsed(): void {
-    this.isCollapsed.update(c => !c);
-  }
+  isDarkTheme = computed(() => {
+    return this.configProvider.themePreference() === ThemePreference.DARK;
+  });
 
-  /** Ensure the sidenav is collapsed. Called after the user clicks an item. */
-  ensureCollapsed(): void {
-    this.isCollapsed.set(true);
-  }
+  isStandaloneMode = computed(() => {
+    return this.configProvider.envMode() === EnvMode.STANDALONE;
+  });
 
-  /**
-   * Switches between light and dark visual design system palettes.
-   */
-  toggleTheme(): void {
+  toggleTheme() {
+    this.usageTrackingService.trackThemeToggle();
     const newTheme = this.isDarkTheme() ? ThemePreference.LIGHT : ThemePreference.DARK;
-    this.usageTrackingService.trackThemeToggle({theme: newTheme});
     this.configProvider.setThemePreference(newTheme);
   }
 
-  /**
-   * Encodes active renderer URL and compressed A2UI active draft payload into shareable URL parameters
-   * and copies the result directly to the user's clipboard.
-   */
-  async shareDesign(): Promise<void> {
+  async resetSession() {
+    this.usageTrackingService.trackSessionReset();
+
+    this.localStorage.removeItem(LocalStorageKey.CHAT_HISTORY);
+
+    await this.indexedDbStorage.clearLogs();
+
+    this.sessionStorage.resetSessionUuid();
+    this.stateSync.flushDraft();
+    this.chatCoordinator.clearHistory();
+
+    this.removeShareParamsAndReload();
+  }
+
+  async shareDesign() {
+    const activeDraft = this.stateSync.activeDraft();
     const href = this.document.defaultView?.location.href;
+    if (!activeDraft || !activeDraft.trim()) {
+      return;
+    }
     if (!href) {
       return;
     }
     const clipboard = this.document.defaultView?.navigator?.clipboard;
     if (!clipboard) {
       this.usageTrackingService.trackShareDesign({
-        status: ShareTrackingStatus.CLIPBOARD_UNAVAILABLE,
-        compressedLengthChars: 0,
+        status: 'UNAVAILABLE',
+        payloadSize: activeDraft.length,
       });
-      this.snackBar.open('Clipboard API unavailable', 'Close', {duration: SNACK_BAR_DURATION_MS});
-      return;
-    }
-    const activeDraft = this.stateSync.activeDraft() || '';
-    try {
-      JSON.parse(activeDraft);
-    } catch {
-      this.usageTrackingService.trackShareDesign({
-        status: ShareTrackingStatus.INVALID_JSON,
-        compressedLengthChars: 0,
-      });
-      this.snackBar.open('Cannot share design: invalid JSON syntax', 'Close', {
-        duration: SNACK_BAR_DURATION_MS,
-      });
+      this.snackBar.open(
+        'Clipboard is not available. Please ensure you are viewing this page on a secure (HTTPS) origin.',
+        'Dismiss',
+        {duration: SNACK_BAR_DURATION_MS},
+      );
       return;
     }
     try {
@@ -165,54 +171,74 @@ export class ComposerShell {
       const shareUrl = new URL(href);
       const hashParams = new URLSearchParams();
       if (rendererUrl) {
-        hashParams.set('renderer', rendererUrl);
+        hashParams.set('rendererUrl', rendererUrl);
       }
       hashParams.set('a2ui', compressed);
-      shareUrl.hash = hashParams.toString();
-      shareUrl.search = '';
-
+      shareUrl.hash = `#?${hashParams.toString()}`;
       await clipboard.writeText(shareUrl.toString());
+
       this.usageTrackingService.trackShareDesign({
-        status: ShareTrackingStatus.SUCCESS,
-        compressedLengthChars: compressed.length,
+        status: 'SUCCESS',
+        payloadSize: activeDraft.length,
       });
-      const lengthKb = (shareUrl.toString().length / 1024).toFixed(1);
-      this.snackBar.open(`Shareable link copied to clipboard (${lengthKb} KB)`, 'Close', {
+      this.snackBar.open('Design link copied to clipboard.', undefined, {
         duration: SNACK_BAR_DURATION_MS,
       });
-    } catch (err) {
+    } catch (e) {
       this.usageTrackingService.trackShareDesign({
-        status: ShareTrackingStatus.FAILURE,
-        compressedLengthChars: 0,
+        status: 'ERROR',
+        payloadSize: activeDraft.length,
       });
-      console.error('Failed to copy shareable link:', err);
-      this.snackBar.open('Failed to copy link to clipboard', 'Close', {
+      this.snackBar.open('Unable to encode or copy design Link.', 'Dismiss', {
         duration: SNACK_BAR_DURATION_MS,
       });
+      console.warn('Failed to encode and copy a2ui query param value:', e);
     }
   }
 
-  /**
-   * Flushes all local state caches (IndexedDB, localStorage) and reloads
-   * the page to simulate a fresh hardware handshake connection.
-   */
-  async resetSession(): Promise<void> {
-    this.usageTrackingService.trackSessionReset({
-      totalPromptTurns: this.chatCoordinator.currentTurnIndex(),
-    });
-    this.usageTrackingService.resetSession();
-    await this.indexedDbStorage.flushAllRecords();
-    this.storage.removeItem(LocalStorageKey.SESSION_STATE);
-    this.storage.removeItem(LocalStorageKey.EDITOR_CACHE);
-    this.sessionStorage.clear();
-    if (this.document.defaultView) {
-      const url = new URL(this.document.defaultView.location.href);
-      url.searchParams.delete('a2ui');
-      url.searchParams.delete('renderer');
-      url.searchParams.delete('rendererId');
-      url.hash = '';
-      this.document.defaultView.location.href = url.toString();
+  private removeShareParamsAndReload(): void {
+    const w = this.document.defaultView;
+    if (!w) return;
+    const url = new URL(w.location.href);
+
+    if (url.searchParams.has('a2ui')) url.searchParams.delete('a2ui');
+    if (url.searchParams.has('rendererUrl')) url.searchParams.delete('rendererUrl');
+    if (url.searchParams.has('rendererId')) url.searchParams.delete('rendererId');
+
+    const hashStr = url.hash.substring(1);
+    if (hashStr) {
+      let isHashPath = false;
+      let qParamsStr = hashStr;
+      if (hashStr.includes('?')) {
+         isHashPath = true;
+         qParamsStr = hashStr.substring(hashStr.indexOf('?') + 1);
+      }
+      const hashParams = new URLSearchParams(qParamsStr);
+      if (hashParams.has('a2ui')) hashParams.delete('a2ui');
+      if (hashParams.has('rendererUrl')) hashParams.delete('rendererUrl');
+      if (hashParams.has('rendererId')) hashParams.delete('rendererId');
+      if (isHashPath) {
+          url.hash = hashStr.substring(0, hashStr.indexOf('?')) + (hashParams.toString() ? '?' + hashParams.toString() : '');
+      } else {
+          url.hash = hashParams.toString();
+      }
     }
-    console.log('Session state cleared.');
+    
+    // Also call the environment service cleaner for safe fallback
+    this.startupResolution.cleanSharedA2uiUrl();
+
+    // Reassign href so we navigate cleanly
+    w.location.href = url.toString();
+  }
+
+  private checkHandshakeTimeout(): void {
+    setTimeout(() => {
+      this.isAppReady.set(true);
+    }, 1500);
+  }
+
+  private startPrewarmingBridgeIframe(): void {
+      const rendererUrl = this.startupConfigState.resolvedUrl() || '';
+      this.hostCommunication.preselectRendererForConnection(rendererUrl);
   }
 }

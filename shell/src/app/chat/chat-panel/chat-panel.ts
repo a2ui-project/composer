@@ -24,6 +24,7 @@ import {
   input,
   signal,
 } from '@angular/core';
+import {FileIngestionService, AttachedFile} from '../file-ingestion/file-ingestion.service';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
 import {MatDialog, MatDialogModule} from '@angular/material/dialog';
@@ -42,7 +43,7 @@ import {tryParseJsonArray} from '../../utils/json';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
 import {ChatCoordinator} from '../chat-coordinator/chat-coordinator';
 import {ChatState} from '../chat-state/chat-state';
-import {Attachment, LlmMessage, MessageRole} from '../llm-client/llm-client';
+import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 
@@ -65,10 +66,6 @@ export class AutoScroll {
       });
     });
   }
-}
-
-interface AttachedFile extends Attachment {
-  readonly previewUrl?: string;
 }
 
 /**
@@ -103,6 +100,7 @@ export class ChatPanel {
   private readonly startupResolution = inject(StartupResolution);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly hostCommunication = inject(HostCommunication);
+  private readonly fileIngestionService = inject(FileIngestionService);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
 
   protected readonly includeScreenshot = signal<boolean>(false);
@@ -404,7 +402,7 @@ export class ChatPanel {
         }
 
         try {
-          const attached = await this.readFileAsAttachment(file);
+          const attached = await this.fileIngestionService.readFileAsAttachment(file);
           newFiles.push(attached);
         } catch (err) {
           console.error(`Failed to read file ${file.name}:`, err);
@@ -416,33 +414,6 @@ export class ChatPanel {
       this.isReadingFiles.set(false);
       input.value = '';
     }
-  }
-
-  private readFileAsAttachment(file: File): Promise<AttachedFile> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        const result = e.target?.result;
-        if (typeof result !== 'string') {
-          reject(new Error('Failed to read file.'));
-          return;
-        }
-        const commaIndex = result.indexOf(',');
-        if (commaIndex === -1) {
-          reject(new Error('Invalid data URL format.'));
-          return;
-        }
-        const base64Data = result.substring(commaIndex + 1);
-        resolve({
-          name: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          data: base64Data,
-          previewUrl: file.type.startsWith('image/') ? result : undefined,
-        });
-      };
-      reader.onerror = err => reject(err);
-      reader.readAsDataURL(file);
-    });
   }
 
   protected removeAttachment(index: number): void {

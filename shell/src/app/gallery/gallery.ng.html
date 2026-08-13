@@ -24,6 +24,8 @@
             mat-list-item
             [activated]="comp === selectedComponentKey()"
             (click)="selectComponent(comp)"
+            a2uiComposerTrackEvent="trackGalleryComponentSelect"
+            [a2uiComposerTrackParams]="{componentKey: comp, category: group.category}"
             class="component-nav-item"
           >
             <span matListItemTitle>{{ comp }}</span>
@@ -61,6 +63,8 @@
               <button
                 mat-icon-button
                 (click)="copyToClipboard()"
+                a2uiComposerTrackEvent="trackGalleryCopyUsage"
+                [a2uiComposerTrackParams]="{componentKey: selectedComponentKey()}"
                 aria-label="Copy to Clipboard"
                 class="copy-button"
               >
