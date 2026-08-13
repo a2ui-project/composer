@@ -29,7 +29,14 @@
     >A2UI Composer{{ activeCatalogTitle() ? ' - ' + activeCatalogTitle() : '' }}</span
   >
   <span class="spacer"></span>
-  <button mat-button class="reset-session-button" color="primary" (click)="resetSession()">
+  <button
+    mat-button
+    class="reset-session-button"
+    color="primary"
+    (click)="resetSession()"
+    a2uiComposerTrackEvent="trackSessionReset"
+    [a2uiComposerTrackParams]="{totalPromptTurns: currentTurnIndex()}"
+  >
     New Session
   </button>
   <button
@@ -47,6 +54,8 @@
     class="theme-toggle-button"
     color="primary"
     (click)="toggleTheme()"
+    a2uiComposerTrackEvent="trackThemeToggle"
+    [a2uiComposerTrackParams]="{theme: isDarkTheme() ? 'light' : 'dark'}"
     [attr.aria-label]="isDarkTheme() ? 'Switch to light theme' : 'Switch to dark theme'"
   >
     <mat-icon aria-hidden="true">{{ isDarkTheme() ? 'light_mode' : 'dark_mode' }}</mat-icon>

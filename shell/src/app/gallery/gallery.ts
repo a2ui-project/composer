@@ -1,3 +1,4 @@
+import {TrackEventDirective} from '../usage-tracking/track-event.directive';
 /**
  * Copyright 2026 Google LLC
  *
@@ -15,7 +16,6 @@
  */
 
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   effect,
@@ -49,6 +49,7 @@ import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
   selector: 'a2ui-composer-gallery',
   standalone: true,
   imports: [
+    TrackEventDirective,
     JsonPipe,
     MatSidenavModule,
     MatListModule,
@@ -61,7 +62,6 @@ import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
   ],
   templateUrl: './gallery.ng.html',
   styleUrl: './gallery.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Gallery implements OnInit, OnDestroy {
   private readonly catalogService = inject(GalleryCatalog);
@@ -198,10 +198,6 @@ export class Gallery implements OnInit, OnDestroy {
    */
   protected selectComponent(key: string | null): void {
     this.catalogService.selectComponent(key);
-    if (key) {
-      const category = this.componentsList().find(c => c.components.includes(key))!.category;
-      this.usageTrackingService.trackGalleryComponentSelect({componentKey: key, category});
-    }
   }
 
   private getComponentsPayload(
@@ -284,11 +280,6 @@ export class Gallery implements OnInit, OnDestroy {
 
       navigator.clipboard
         .writeText(payload)
-        .then(() => {
-          this.usageTrackingService.trackGalleryCopyUsage({
-            componentKey: this.selectedComponentKey() || '',
-          });
-        })
         .catch(err => {
           console.error('Failed to copy A2UI component usage to clipboard: ', err);
         });

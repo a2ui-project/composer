@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {describe, it, expect, beforeEach, vi} from "vitest";
 import {TestBed} from '@angular/core/testing';
 import {FileIngestionService} from './file-ingestion.service';
 

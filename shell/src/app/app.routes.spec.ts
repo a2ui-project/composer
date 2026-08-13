@@ -63,6 +63,7 @@ class MockStartupResolution {
 class MockChatState {
   readonly chatHistory = signal<unknown[]>([]);
   readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  readonly currentTurnIndex = signal(0);
   readonly isProgrammaticStreamActive = signal(false);
   readonly latestLlmLog = signal<unknown>(null);
   readonly llmHistory = signal<unknown[]>([]);
@@ -71,6 +72,7 @@ class MockChatState {
 class MockChatCoordinator {
   readonly systemPrompt = signal('');
   readonly pipelineStatus = signal(PipelineStatus.IDLE);
+  readonly currentTurnIndex = signal(0);
   readonly isProgrammaticStreamActive = signal(false);
 }
 

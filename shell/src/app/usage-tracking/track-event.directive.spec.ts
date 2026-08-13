@@ -1,3 +1,4 @@
+
 /**
  * Copyright 2026 Google LLC
  *
@@ -14,6 +15,8 @@
  * limitations under the License.
  */
 
+import {describe, it, expect, beforeEach, vi} from "vitest";
+import {describe, it, expect, beforeEach, vi} from "vitest";
 import {Component} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {By} from '@angular/platform-browser';
@@ -48,7 +51,7 @@ describe('TrackEventDirective', () => {
   });
 
   it('should call tracking service on click', () => {
-    spyOn(trackingService, 'trackThemeToggle');
+    vi.spyOn(trackingService, 'trackThemeToggle');
     const button = fixture.debugElement.query(By.css('button'));
     button.triggerEventHandler('click', null);
 

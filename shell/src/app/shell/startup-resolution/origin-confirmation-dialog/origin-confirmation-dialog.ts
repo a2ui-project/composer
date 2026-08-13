@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ChangeDetectionStrategy, Component, inject} from '@angular/core';
+import {Component, inject} from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
 import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
 
@@ -23,7 +23,6 @@ import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
   templateUrl: './origin-confirmation-dialog.ng.html',
   styleUrl: './origin-confirmation-dialog.scss',
   imports: [MatDialogModule, MatButtonModule],
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OriginConfirmationDialog {
   readonly data = inject<{origin: string}>(MAT_DIALOG_DATA);
