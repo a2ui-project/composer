@@ -73,12 +73,15 @@ export class RenderedFrame {
   });
 
   constructor() {
-    effect(() => {
+    effect((onCleanup) => {
       const ref = this.iframeRef();
       this.hostCommunication.registerIframe(ref?.nativeElement || null);
+      onCleanup(() => {
+        this.hostCommunication.registerIframe(null);
+      });
     });
 
-    effect(() => {
+    effect((onCleanup) => {
       const theme = this.configProvider.themePreference();
       this.hostCommunication.sendTheme(theme);
     });
