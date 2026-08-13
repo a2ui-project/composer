@@ -21,7 +21,6 @@ import {
   ComponentRef,
   Type,
   ChangeDetectorRef,
-  untracked,
   inject,
 } from '@angular/core';
 import {DockviewComponent} from 'dockview';
@@ -35,13 +34,11 @@ import {DataModel} from '../../debug/data-model/data-model';
 import {Events} from '../../debug/events/events';
 import {Errors} from '../../debug/errors/errors';
 import {RawMessages} from '../../debug/raw-messages/raw-messages';
-import {MockRules} from '../../debug/mock-rules/mock-rules';
 import {ComposerPanelId} from './composer-panel-id';
 
 export interface DockviewManagerInitOptions {
   rootEl: HTMLElement;
   isDarkTheme: boolean;
-  showMockRules: boolean;
   onActivePanelChange?: (panelId: string | undefined) => void;
 }
 
@@ -87,7 +84,7 @@ export class ComposerDockview {
    * Initializes Dockview, builds layout, and sets up event listeners.
    */
   initialize(options: DockviewManagerInitOptions): void {
-    const {rootEl, isDarkTheme, showMockRules, onActivePanelChange} = options;
+    const {rootEl, isDarkTheme, onActivePanelChange} = options;
     this.rootEl = rootEl;
 
     this.dockviewApi = new DockviewComponent(rootEl, {
@@ -103,7 +100,7 @@ export class ComposerDockview {
       this.cdr.markForCheck();
     });
 
-    this.buildDockviewLayout(showMockRules);
+    this.buildDockviewLayout();
 
     this.dockviewApi.onDidLayoutChange(() => {
       this.checkTabOverflow();
@@ -159,27 +156,6 @@ export class ComposerDockview {
     const panel = this.dockviewApi?.getGroupPanel(panelId);
     if (panel) {
       panel.api.setTitle(title);
-    }
-  }
-
-  toggleMockRules(show: boolean): void {
-    if (!this.isInitialized || !this.dockviewApi) return;
-    const existingPanel = untracked(() =>
-      this.dockviewApi.getGroupPanel(ComposerPanelId.MockRules),
-    );
-
-    if (show && !existingPanel) {
-      const dataModel = this.dockviewApi.getGroupPanel(ComposerPanelId.DataModel);
-      if (dataModel) {
-        this.dockviewApi.addPanel({
-          id: ComposerPanelId.MockRules,
-          component: ComposerPanelId.MockRules,
-          title: 'Mock Rules',
-          position: {referencePanel: ComposerPanelId.DataModel, direction: 'within'},
-        });
-      }
-    } else if (!show && existingPanel) {
-      existingPanel.api.close();
     }
   }
 
@@ -239,9 +215,6 @@ export class ComposerDockview {
       case ComposerPanelId.RawMessages:
         type = RawMessages;
         break;
-      case ComposerPanelId.MockRules:
-        type = MockRules;
-        break;
     }
 
     if (!type) {
@@ -280,7 +253,7 @@ export class ComposerDockview {
     };
   }
 
-  private buildDockviewLayout(showMockRules: boolean): void {
+  private buildDockviewLayout(): void {
     const savedLayout = this.storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
     let layoutRestored = false;
 
@@ -351,18 +324,6 @@ export class ComposerDockview {
           referencePanel: ComposerPanelId.DataModel,
         },
       });
-
-      if (showMockRules) {
-        this.dockviewApi.addPanel({
-          id: ComposerPanelId.MockRules,
-          component: ComposerPanelId.MockRules,
-          title: 'Mock Rules',
-          position: {
-            direction: 'within',
-            referencePanel: ComposerPanelId.DataModel,
-          },
-        });
-      }
     }
   }
 

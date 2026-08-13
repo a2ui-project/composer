@@ -67,7 +67,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   readonly dockviewRoot = viewChild.required<ElementRef<HTMLElement>>('dockviewRoot');
 
   isExtension = signal(false);
-  showMockRules = signal(false);
   unreadEventsCount = signal(0);
   unreadErrorsCount = signal(0);
   isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
@@ -120,10 +119,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     });
 
     effect(() => {
-      this.composerDockview.toggleMockRules(this.showMockRules());
-    });
-
-    effect(() => {
       this.composerDockview.updateTheme(this.isDarkTheme());
     });
   }
@@ -137,7 +132,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     this.composerDockview.initialize({
       rootEl: this.dockviewRoot().nativeElement,
       isDarkTheme: this.isDarkTheme(),
-      showMockRules: this.showMockRules(),
       onActivePanelChange: panelId => {
         if (panelId === ComposerPanelId.Events) {
           untracked(() => this.unreadEventsCount.set(0));

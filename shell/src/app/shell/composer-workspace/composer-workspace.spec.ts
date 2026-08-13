@@ -283,23 +283,6 @@ describe('ComposerWorkspace Dashboard', () => {
       expect(errorsPanel?.title).toBe('Errors');
     });
 
-    it('adds and removes the mockRules panel when showMockRules signal changes', async () => {
-      fixture.componentInstance.showMockRules.set(true);
-      fixture.detectChanges();
-      await fixture.whenStable();
-
-      const manager = fixture.debugElement.injector.get(ComposerDockview);
-      const mockRulesPanel = manager.api.getGroupPanel(ComposerPanelId.MockRules);
-      expect(mockRulesPanel).toBeDefined();
-
-      fixture.componentInstance.showMockRules.set(false);
-      fixture.detectChanges();
-      await fixture.whenStable();
-
-      const removedPanel = manager.api.getGroupPanel(ComposerPanelId.MockRules);
-      expect(removedPanel).toBeUndefined();
-    });
-
     it('updates dockview options with dark theme class dynamically', async () => {
       const configProvider = TestBed.inject(AppConfigProvider) as unknown as MockAppConfigProvider;
       configProvider.themePreference.set(ThemePreference.DARK);

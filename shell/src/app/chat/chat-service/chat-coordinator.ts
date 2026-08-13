@@ -330,25 +330,11 @@ export class ChatCoordinator {
         payload: parsedBlocks,
       };
 
-      // Temporary override console.error to capture validation failures
-      const originalConsoleError = console.error;
-      const validationErrors: string[] = [];
-      console.error = (...args: unknown[]) => {
-        validationErrors.push(
-          args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '),
-        );
-      };
-
-      let isValidEnvelope = false;
-      try {
-        isValidEnvelope = CrossFrameValidator.validateOutgoingMessage(mockEnvMsg);
-      } finally {
-        console.error = originalConsoleError;
-      }
+      const isValidEnvelope = CrossFrameValidator.validateOutgoingMessage(mockEnvMsg);
 
       if (!isValidEnvelope) {
         throw new Error(
-          `Outgoing message envelope validation failed:\n${validationErrors.join('\n')}`,
+          `Outgoing message envelope validation failed: Schema verification returned false.`,
         );
       }
 

@@ -25,5 +25,4 @@ export enum ComposerPanelId {
   Events = 'events',
   Errors = 'errors',
   RawMessages = 'rawMessages',
-  MockRules = 'mockRules',
 }
