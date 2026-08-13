@@ -1,0 +1,103 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {Clipboard} from '@angular/cdk/clipboard';
+import {DOCUMENT} from '@angular/common';
+import {Injectable, inject} from '@angular/core';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {StateSync} from '../../chat/state-sync/state-sync';
+import {QueryParser} from '../query-parser/query-parser';
+import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {
+  ShareTrackingStatus,
+  UsageTrackingService,
+} from '../../usage-tracking/usage-tracking.service';
+
+const SNACK_BAR_DURATION_MS = 5000;
+
+/**
+ * Service for sharing custom A2UI designs.
+ */
+@Injectable({providedIn: "root"})
+export class ShareService {
+  private readonly clipboard = inject(Clipboard);
+  private readonly document = inject(DOCUMENT);
+  private readonly snackBar = inject(MatSnackBar);
+  private readonly stateSync = inject(StateSync);
+  private readonly startupResolution = inject(StartupResolution);
+  private readonly usageTrackingService = inject(UsageTrackingService);
+
+  /**
+   * Generates a sharable link encoding the current state draft, and copies it to clipboard.
+   */
+  async shareDesign(): Promise<void> {
+    const href = this.document.defaultView?.location.href;
+    if (!href) {
+      return;
+    }
+
+    const activeDraft = this.stateSync.activeDraft() || '';
+    try {
+      JSON.parse(activeDraft);
+    } catch {
+      this.usageTrackingService.trackShareDesign({
+        status: ShareTrackingStatus.INVALID_JSON,
+        compressedLengthChars: 0,
+      });
+      this.snackBar.open('Cannot share design: invalid JSON syntax', 'Close', {
+        duration: SNACK_BAR_DURATION_MS,
+      });
+      return;
+    }
+
+    try {
+      const rendererUrl = this.startupResolution.resolvedUrl() || '';
+      const compressed = await QueryParser.encodeSharedPayload(activeDraft);
+      const shareUrl = new URL(href);
+      const hashParams = new URLSearchParams();
+      if (rendererUrl) {
+        hashParams.set('renderer', rendererUrl);
+      }
+      hashParams.set('a2ui', compressed);
+      shareUrl.hash = hashParams.toString();
+      shareUrl.search = '';
+
+      const success = this.clipboard.copy(shareUrl.toString());
+
+      if (success) {
+        this.usageTrackingService.trackShareDesign({
+          status: ShareTrackingStatus.SUCCESS,
+          compressedLengthChars: compressed.length,
+        });
+        const lengthKb = (shareUrl.toString().length / 1024).toFixed(1);
+        this.snackBar.open(`Shareable link copied to clipboard (${lengthKb} KB)`, 'Close', {
+          duration: SNACK_BAR_DURATION_MS,
+        });
+      } else {
+        throw new Error('Clipboard copy failed block.');
+      }
+    } catch (err) {
+      this.usageTrackingService.trackShareDesign({
+        status: ShareTrackingStatus.FAILURE,
+        compressedLengthChars: 0,
+      });
+      console.error('Failed to copy shareable link:', err);
+      this.snackBar.open('Failed to copy link to clipboard', 'Close', {
+        duration: SNACK_BAR_DURATION_MS,
+      });
+    }
+  }
+}
