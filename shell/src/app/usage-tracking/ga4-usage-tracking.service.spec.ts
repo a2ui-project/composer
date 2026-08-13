@@ -46,7 +46,7 @@ describe('Ga4UsageTrackingService', () => {
 
   const mockStartupResolution = {
     isThirdPartyEnvironment: signal(false),
-    selectedRendererId: signal('lit'),
+    selectedRendererId$: signal('lit'),
   };
 
   const mockAppConfigProvider = {

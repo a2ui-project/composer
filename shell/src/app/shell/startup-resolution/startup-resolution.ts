@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-import {Injectable, Injector, DestroyRef, computed, inject, signal} from '@angular/core';
+import {EnvironmentContextService} from './state/environment-context.service';
+import {StartupConfigStateService} from './state/startup-config-state.service';
+import {Injectable, Injector, DestroyRef, inject, Signal, computed} from '@angular/core';
 import {QueryParser} from '../query-parser/query-parser';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
@@ -54,35 +56,26 @@ export declare interface AppConfig {
  * Orchestrates application startup configuration and environment resolution.
  */
 export class StartupResolution {
-  private readonly _resolvedUrl = signal<string | null>(null);
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
   private readonly configUrl = inject(CONFIG_URL);
   readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
-  private get configProvider(): AppConfigProvider {
-    return this.injector.get(AppConfigProvider);
-  }
+  private readonly configProvider = inject(AppConfigProvider);
+  private readonly environmentContext = inject(EnvironmentContextService);
+  private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly secureCredentialsStorage = inject(SecureCredentialsStorage, {optional: true});
 
-  private readonly _renderers = signal<Record<string, RendererConfig>>({});
-  private readonly _selectedRendererId = signal<string | null>(null);
-  private readonly _apiKeys = signal<Record<string, ApiKeyConfig>>({});
-  private readonly _sharedA2uiPayload = signal<string | null>(null);
-  private readonly _sharedA2uiError = signal<string | null>(null);
-
-  readonly resolvedUrl = this._resolvedUrl.asReadonly();
-  readonly renderers = this._renderers.asReadonly();
-  readonly apiKeys = this._apiKeys.asReadonly();
-  readonly selectedRendererId = this._selectedRendererId.asReadonly();
-  readonly selectedRendererId$ = this._selectedRendererId.asReadonly();
-  readonly sharedA2uiPayload = this._sharedA2uiPayload.asReadonly();
-  readonly sharedA2uiError = this._sharedA2uiError.asReadonly();
-  readonly activeRenderer = computed<RendererConfig | null>(() => {
-    const renderers = this._renderers();
-    const selectedId = this._selectedRendererId();
+  readonly resolvedUrl = this.startupConfigState.resolvedUrl;
+  readonly renderers = this.startupConfigState.renderers;
+  readonly apiKeys = this.startupConfigState.apiKeys;
+  readonly selectedRendererId$ = this.startupConfigState.selectedRendererId$;
+  readonly sharedA2uiPayload = this.startupConfigState.sharedA2uiPayload;
+  readonly sharedA2uiError = this.startupConfigState.sharedA2uiError;
+  readonly activeRenderer: Signal<RendererConfig | null> = computed(() => {
+    const selectedId = this.startupConfigState.selectedRendererId$();
     if (!selectedId) return null;
-    return this.getRendererById(selectedId, renderers);
+    return this.getRendererById(selectedId, this.startupConfigState.renderers());
   });
 
   private readonly destroyRef = inject(DestroyRef);
@@ -100,12 +93,14 @@ export class StartupResolution {
   }
 
   async setSelectedRendererId(rendererId: string | null): Promise<boolean> {
-    this._selectedRendererId.set(rendererId);
-    const active = this.activeRenderer();
+    this.startupConfigState.setSelectedRendererId(rendererId);
+    const active = rendererId
+      ? this.getRendererById(rendererId, this.startupConfigState.renderers())
+      : null;
     if (active?.rendererUrl) {
       const isAllowed = await this.isOriginAllowed(active.rendererUrl);
       if (isAllowed) {
-        this._resolvedUrl.set(active.rendererUrl);
+        this.startupConfigState.setResolvedUrl(active.rendererUrl);
         return true;
       }
       return false;
@@ -123,12 +118,12 @@ export class StartupResolution {
    * @return A Promise resolving to the resolved renderer URL, or null if unresolvable.
    */
   async resolveStartupConfiguration(): Promise<string | null> {
-    this._resolvedUrl.set(null);
-    this._selectedRendererId.set(null);
-    this._sharedA2uiPayload.set(null);
-    this._sharedA2uiError.set(null);
-    this._renderers.set({});
-    this._apiKeys.set({});
+    this.startupConfigState.setResolvedUrl(null);
+    this.startupConfigState.setSelectedRendererId(null);
+    this.startupConfigState.setSharedA2uiPayload(null);
+    this.startupConfigState.setSharedA2uiError(null);
+    this.startupConfigState.setRenderers({});
+    this.startupConfigState.setApiKeys({});
 
     const staticConfig = await this.fetchStaticConfig();
     const resolved = await this.resolveRenderer(staticConfig);
@@ -148,12 +143,12 @@ export class StartupResolution {
     const {payload, error} = await QueryParser.parseSharedA2ui(rawParam);
     if (payload) {
       console.log('Using shared A2UI payload from URL.');
-      this._sharedA2uiPayload.set(payload);
+      this.startupConfigState.setSharedA2uiPayload(payload);
       this.cleanSharedA2uiUrl();
     }
     if (error) {
       console.warn('Shared A2UI payload error:', error);
-      this._sharedA2uiError.set(error);
+      this.startupConfigState.setSharedA2uiError(error);
       this.cleanSharedA2uiUrl();
     }
   }
@@ -207,7 +202,7 @@ export class StartupResolution {
     }
   }
 
-  private getRendererById(
+  getRendererById(
     id: string,
     staticRenderers: Record<string, RendererConfig>,
   ): RendererConfig | null {
@@ -252,9 +247,9 @@ export class StartupResolution {
     }
 
     if (config?.apiKeys && typeof config.apiKeys === 'object' && !Array.isArray(config.apiKeys)) {
-      this._apiKeys.set(config.apiKeys);
+      this.startupConfigState.setApiKeys(config.apiKeys);
     } else {
-      this._apiKeys.set({});
+      this.startupConfigState.setApiKeys({});
     }
 
     let staticRenderers: Record<string, RendererConfig> = {};
@@ -265,10 +260,10 @@ export class StartupResolution {
         !Array.isArray(config.renderers)
       ) {
         staticRenderers = config.renderers;
-        this._renderers.set(staticRenderers);
+        this.startupConfigState.setRenderers(staticRenderers);
       }
     } else {
-      staticRenderers = this._renderers();
+      staticRenderers = this.startupConfigState.renderers();
     }
 
     // Tier 1 & 2: renderer param from hash or query (subject to origin allowlist check)
@@ -283,10 +278,10 @@ export class StartupResolution {
           QueryParser.parseRendererId(this.getWindowHash()) ||
           QueryParser.parseRendererId(this.getWindowSearch());
         if (requestedId) {
-          this._selectedRendererId.set(requestedId);
+          this.startupConfigState.setSelectedRendererId(requestedId);
         }
         await this.applyApiKeyFromConfig(config || {}, requestedId || 'default');
-        this._resolvedUrl.set(queryRendererUrl);
+        this.startupConfigState.setResolvedUrl(queryRendererUrl);
         return queryRendererUrl;
       } else {
         console.warn('Renderer parameter origin not allowed by user.');
@@ -301,12 +296,12 @@ export class StartupResolution {
       const candidate = this.getRendererById(requestedId, staticRenderers);
       if (candidate) {
         console.log(`Using renderer ID '${requestedId}' from query param.`);
-        this._selectedRendererId.set(requestedId);
+        this.startupConfigState.setSelectedRendererId(requestedId);
         if (config) {
           await this.applyApiKeyFromConfig(config, requestedId);
         }
         if (candidate.rendererUrl) {
-          this._resolvedUrl.set(candidate.rendererUrl);
+          this.startupConfigState.setResolvedUrl(candidate.rendererUrl);
           return candidate.rendererUrl;
         }
       } else {
@@ -320,12 +315,12 @@ export class StartupResolution {
       const candidate = this.getRendererById(storedId, staticRenderers);
       if (candidate) {
         console.log(`Using stored selected renderer ID '${storedId}'.`);
-        this._selectedRendererId.set(storedId);
+        this.startupConfigState.setSelectedRendererId(storedId);
         if (config) {
           await this.applyApiKeyFromConfig(config, storedId);
         }
         if (candidate.rendererUrl) {
-          this._resolvedUrl.set(candidate.rendererUrl);
+          this.startupConfigState.setResolvedUrl(candidate.rendererUrl);
           return candidate.rendererUrl;
         }
       } else {
@@ -337,35 +332,27 @@ export class StartupResolution {
     const defaultCandidate = this.getRendererById('default', staticRenderers);
     if (defaultCandidate?.rendererUrl) {
       console.log("Using 'default' renderer from static config.");
-      if (!this._selectedRendererId()) {
-        this._selectedRendererId.set('default');
+      if (!this.startupConfigState.selectedRendererId$()) {
+        this.startupConfigState.setSelectedRendererId('default');
         if (config) {
           await this.applyApiKeyFromConfig(config, 'default');
         }
       }
-      this._resolvedUrl.set(defaultCandidate.rendererUrl);
+      this.startupConfigState.setResolvedUrl(defaultCandidate.rendererUrl);
       return defaultCandidate.rendererUrl;
     }
 
     // Tier 6: null renderer -> redirects to /settings
-    this._resolvedUrl.set(null);
-    this._selectedRendererId.set(null);
+    this.startupConfigState.setResolvedUrl(null);
+    this.startupConfigState.setSelectedRendererId(null);
     return null;
-  }
-
-  private getBaseOrigin(): string {
-    return globalThis.location?.origin || 'http://localhost';
-  }
-
-  private isLocalhost(hostname: string): boolean {
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
   }
 
   async isOriginAllowed(url: string): Promise<boolean> {
     let origin: string;
     let hostname: string;
     try {
-      const baseOrigin = this.getBaseOrigin();
+      const baseOrigin = this.environmentContext.getBaseOrigin();
       const parsedUrl = url.startsWith('/') ? new URL(url, baseOrigin) : new URL(url);
       origin = parsedUrl.origin;
       hostname = parsedUrl.hostname;
@@ -373,14 +360,14 @@ export class StartupResolution {
       return false;
     }
 
-    if (this.isLocalhost(hostname) || origin === globalThis.location?.origin) {
+    if (this.environmentContext.isLocalhost(hostname) || origin === globalThis.location?.origin) {
       return true;
     }
 
-    const isStaticConfigOrigin = Object.values(this._renderers()).some(r => {
+    const isStaticConfigOrigin = Object.values(this.startupConfigState.renderers()).some(r => {
       if (!r?.rendererUrl) return false;
       try {
-        const baseOrigin = this.getBaseOrigin();
+        const baseOrigin = this.environmentContext.getBaseOrigin();
         const parsed = r.rendererUrl.startsWith('/')
           ? new URL(r.rendererUrl, baseOrigin)
           : new URL(r.rendererUrl);
@@ -434,36 +421,15 @@ export class StartupResolution {
   }
 
   getResolvedRendererUrl(): string | null {
-    return this._resolvedUrl();
+    return this.startupConfigState.resolvedUrl();
   }
 
   setResolvedRendererUrl(url: string | null): void {
-    this._resolvedUrl.set(url);
+    this.startupConfigState.setResolvedUrl(url);
   }
 
   isThirdPartyEnvironment(): boolean {
-    if (!this.is1PAuthEnabled) {
-      return true;
-    }
-
-    const force1P = this.localStorageInteractions.getItem(LocalStorageKey.FORCE_1P) === 'true';
-    if (force1P) {
-      return false;
-    }
-
-    const force3P = this.localStorageInteractions.getItem(LocalStorageKey.FORCE_3P) === 'true';
-    if (force3P) {
-      return true;
-    }
-
-    const hostname = this.getWindowHostname();
-    const is1P =
-      hostname === 'google.com' ||
-      hostname.endsWith('.google.com') ||
-      hostname === 'googleplex.com' ||
-      hostname.endsWith('.googleplex.com');
-
-    return !is1P;
+    return this.environmentContext.isThirdPartyEnvironment();
   }
 
   async isEnvironmentValid(): Promise<boolean> {
@@ -472,50 +438,23 @@ export class StartupResolution {
   }
 
   isExtensionMode(): boolean {
-    const urlParams = new URLSearchParams(this.getWindowSearch());
-    const urlExtension = urlParams.get('extension') === 'true';
-    const hasExtensionStorage =
-      this.localStorageInteractions.getItem(LocalStorageKey.EXTENSION_MODE) === 'true';
-    return urlExtension || hasExtensionStorage;
+    return this.environmentContext.isExtensionMode();
   }
 
   getWindowSearch(): string {
-    return globalThis.location?.search || '';
+    return this.environmentContext.getWindowSearch();
   }
 
   getWindowHash(): string {
-    return globalThis.location?.hash || '';
+    return this.environmentContext.getWindowHash();
   }
 
   getWindowHostname(): string {
-    return globalThis.location?.hostname || '';
+    return this.environmentContext.getWindowHostname();
   }
 
   cleanSharedA2uiUrl(): void {
-    if (typeof globalThis.location !== 'undefined' && globalThis.history?.replaceState) {
-      try {
-        const cleanUrl = new URL(globalThis.location.href);
-        let modified = false;
-        if (cleanUrl.hash) {
-          const hashParams = new URLSearchParams(cleanUrl.hash.replace(/^#/, ''));
-          if (hashParams.has('a2ui')) {
-            hashParams.delete('a2ui');
-            const remaining = hashParams.toString();
-            cleanUrl.hash = remaining ? `#${remaining}` : '';
-            modified = true;
-          }
-        }
-        if (cleanUrl.searchParams.has('a2ui')) {
-          cleanUrl.searchParams.delete('a2ui');
-          modified = true;
-        }
-        if (modified) {
-          globalThis.history.replaceState({}, '', cleanUrl.toString());
-        }
-      } catch (err) {
-        console.warn('Failed to clean shared A2UI URL:', err);
-      }
-    }
+    return this.environmentContext.cleanSharedA2uiUrl();
   }
 
   private async evaluateEnvironmentPurge(): Promise<void> {

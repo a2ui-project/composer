@@ -35,7 +35,7 @@ describe('SettingsService', () => {
   let service: SettingsService;
   let mockStartupResolution: {
     renderers: WritableSignal<Record<string, RendererConfig>>;
-    selectedRendererId: WritableSignal<string | null>;
+    selectedRendererId$: WritableSignal<string | null>;
     activeRenderer: WritableSignal<RendererConfig | null>;
     apiKeys: WritableSignal<Record<string, ApiKeyConfig>>;
     setSelectedRendererId: ReturnType<typeof vi.fn>;
@@ -76,12 +76,12 @@ describe('SettingsService', () => {
 
     mockStartupResolution = {
       renderers: signal(sampleRenderers),
-      selectedRendererId: signal(null),
+      selectedRendererId$: signal(null),
       activeRenderer: signal(null),
       apiKeys: signal({}),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(true),
       setSelectedRendererId: vi.fn((id: string | null) => {
-        mockStartupResolution.selectedRendererId.set(id);
+        mockStartupResolution.selectedRendererId$.set(id);
         mockStartupResolution.activeRenderer.set(id ? sampleRenderers[id] || null : null);
         return Promise.resolve(true);
       }),
@@ -129,7 +129,7 @@ describe('SettingsService', () => {
 
   it('exposes signals delegating to startup resolution', () => {
     expect(service.renderers()).toEqual(sampleRenderers);
-    expect(service.selectedRendererId()).toBeNull();
+    expect(service.selectedRendererId$()).toBeNull();
     expect(service.activeRenderer()).toBeNull();
   });
 
@@ -199,7 +199,7 @@ describe('SettingsService', () => {
     };
     mockStartupResolution.renderers.set(customRenderers);
     mockStartupResolution.setSelectedRendererId.mockImplementation((id: string | null) => {
-      mockStartupResolution.selectedRendererId.set(id);
+      mockStartupResolution.selectedRendererId$.set(id);
       mockStartupResolution.activeRenderer.set(id ? customRenderers[id] || null : null);
       return Promise.resolve(true);
     });
@@ -262,7 +262,7 @@ describe('SettingsService', () => {
 
     await startupRes.resolveStartupConfiguration();
 
-    expect(localService.selectedRendererId()).toBe('dev');
+    expect(localService.selectedRendererId$()).toBe('dev');
   });
 
   describe('API Key Management and Fallback', () => {
@@ -703,13 +703,13 @@ describe('SettingsService', () => {
           {id: 'custom-2', name: 'Custom Two', rendererUrl: 'http://c2.com'},
         ]),
       );
-      mockStartupResolution.selectedRendererId.set('custom-1');
+      mockStartupResolution.selectedRendererId$.set('custom-1');
       mockLocalStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'custom-1');
 
       service.deleteCustomRenderer('custom-1');
 
       expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
-      expect(mockStartupResolution.selectedRendererId()).toBeNull();
+      expect(mockStartupResolution.selectedRendererId$()).toBeNull();
     });
 
     it('saveCustomRenderer() throws an error when saving an empty ID or a non-HTTP/HTTPS URL', () => {

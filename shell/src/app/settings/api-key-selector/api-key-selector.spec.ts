@@ -403,7 +403,7 @@ describe('ApiKeySelectorComponent & AddApiKeyDialogComponent', () => {
 
   it('displays a disabled empty-state option when apiKeys list is empty', async () => {
     mockSettingsService.getAvailableApiKeys.mockResolvedValue([]);
-    await component.refreshApiKeys();
+    await component.refreshItems();
     fixture.detectChanges();
 
     const optionTexts = await harness.getOptionsText();

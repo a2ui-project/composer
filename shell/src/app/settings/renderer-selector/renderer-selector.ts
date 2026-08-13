@@ -14,22 +14,17 @@
  * limitations under the License.
  */
 
-import {Component, computed, DestroyRef, inject, input, output, signal} from '@angular/core';
+import {Component, inject, input, output} from '@angular/core';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {MatDialog, MatDialogModule} from '@angular/material/dialog';
+import {MatDialogModule} from '@angular/material/dialog';
 import {SettingsService, RendererOption} from '../settings-service/settings.service';
 import {AddRendererDialogComponent} from './add-renderer-dialog/add-renderer-dialog';
+import {AbstractSelector} from '../abstract-selector/abstract-selector';
 
-/**
- * Component for selecting and managing rendering targets.
- * Displays combined static and custom renderers in a dropdown, and provides
- * controls to add new custom renderers or delete existing custom renderers.
- */
 @Component({
   selector: 'a2ui-composer-renderer-selector',
   standalone: true,
@@ -44,106 +39,45 @@ import {AddRendererDialogComponent} from './add-renderer-dialog/add-renderer-dia
   templateUrl: './renderer-selector.ng.html',
   styleUrl: './renderer-selector.scss',
 })
-export class RendererSelectorComponent {
-  readonly selectedRendererId = input<string | null>('default');
-  readonly disabled = input<boolean>(false);
+export class RendererSelectorComponent extends AbstractSelector<RendererOption> {
+  readonly selectedRendererId$ = input<string | null>('default');
   readonly rendererSelected = output<string>();
 
   private readonly settingsService = inject(SettingsService);
-  private readonly dialog = inject(MatDialog);
-  private readonly destroyRef = inject(DestroyRef);
-
-  readonly renderers = signal<RendererOption[]>([]);
-
-  readonly selectedRenderer = computed(() => {
-    const id = this.selectedRendererId();
-    if (!id) return undefined;
-    return this.renderers().find(r => r.id === id);
-  });
 
   constructor() {
-    this.refreshRenderers();
+    super();
+    this.refreshItems();
   }
 
-  /**
-   * Refreshes the list of available renderers from SettingsService.
-   */
-  refreshRenderers(): void {
+  override getSelectedId(): string | null {
+    return this.selectedRendererId$();
+  }
+
+  override refreshItems(): void {
     const list = this.settingsService.getRenderers();
-    this.renderers.set(list);
+    this.items.set(list);
   }
 
-  /**
-   * Emits the newly selected renderer ID when the dropdown selection changes.
-   */
-  onSelectionChange(value: string): void {
-    if (value) {
-      this.rendererSelected.emit(value);
+  override emitSelection(id: string | null): void {
+    if (id) {
+      this.rendererSelected.emit(id);
     }
   }
 
-  /**
-   * Opens the dialog to add a new custom renderer and handles the newly saved renderer ID.
-   */
-  onAddRenderer(event?: Event): void {
-    event?.preventDefault();
-    event?.stopPropagation();
-    const dialogRef = this.dialog.open(AddRendererDialogComponent, {
-      width: '450px',
-    });
-
-    dialogRef
-      .afterClosed()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((newId?: string) => {
-        if (newId) {
-          this.refreshRenderers();
-          this.rendererSelected.emit(newId);
-        }
-      });
-  }
-
-  /**
-   * Opens the dialog to edit an existing custom renderer.
-   */
-  onEditRenderer(event: Event, renderer: RendererOption): void {
-    event.stopPropagation();
-    event.preventDefault();
-    if (renderer.readOnly) {
-      return;
-    }
-    const dialogRef = this.dialog.open(AddRendererDialogComponent, {
-      width: '450px',
-      data: {renderer},
-    });
-
-    dialogRef
-      .afterClosed()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((updatedId?: string) => {
-        if (updatedId) {
-          this.refreshRenderers();
-          if (this.selectedRendererId() === updatedId) {
-            this.rendererSelected.emit(updatedId);
-          }
-        }
-      });
-  }
-
-  /**
-   * Deletes a custom renderer and resets selection to default if the deleted renderer was active.
-   */
-  onDeleteRenderer(event: Event, id: string): void {
-    event.stopPropagation();
-    event.preventDefault();
-    const renderer = this.renderers().find(r => r.id === id);
-    if (renderer?.readOnly) {
-      return;
-    }
+  override deleteItem(id: string): void {
     this.settingsService.deleteCustomRenderer(id);
-    this.refreshRenderers();
-    if (this.selectedRendererId() === id) {
-      this.rendererSelected.emit('default');
-    }
+  }
+
+  onAddRenderer(event?: Event): void {
+    void this.handleAdd(AddRendererDialogComponent, event);
+  }
+
+  onEditRenderer(event: Event, renderer: RendererOption): void {
+    void this.handleEdit(AddRendererDialogComponent, event, renderer, 'renderer');
+  }
+
+  onDeleteRenderer(event: Event, id: string): void {
+    void this.handleDelete(event, id, 'default');
   }
 }

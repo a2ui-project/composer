@@ -21,7 +21,9 @@ import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys
 
 import {EnvMode, AuthType, ThemePreference} from '../app-config-provider/app-config-provider';
 import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
-import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
+import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
+import {signal} from '@angular/core';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
@@ -71,26 +73,23 @@ class MockSecureCredentialsStorage {
 }
 
 describe('LocalStorageAppConfigProvider', () => {
-  let mockStartupService: {
-    getResolvedRendererUrl: ReturnType<typeof vi.fn>;
-    setResolvedRendererUrl: ReturnType<typeof vi.fn>;
-    resolveStartupConfiguration: ReturnType<typeof vi.fn>;
-    isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
-    isExtensionMode: ReturnType<typeof vi.fn>;
-    apiKeys: ReturnType<typeof vi.fn>;
-  };
+  let mockEnvironmentContext: unknown;
+  let mockStartupConfigState: unknown;
   let mockSecureStorage: MockSecureCredentialsStorage;
 
   beforeEach(() => {
     localStorage.clear();
     mockSecureStorage = new MockSecureCredentialsStorage();
-    mockStartupService = {
-      getResolvedRendererUrl: vi.fn().mockReturnValue('https://default-renderer.com'),
-      setResolvedRendererUrl: vi.fn(),
-      resolveStartupConfiguration: vi.fn().mockResolvedValue('https://default-renderer.com'),
+    mockEnvironmentContext = {
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
+      getWindowHostname: vi.fn().mockReturnValue('localhost'),
       isExtensionMode: vi.fn().mockReturnValue(false),
-      apiKeys: vi.fn().mockReturnValue({}),
+    };
+    mockStartupConfigState = {
+      apiKeys: signal({}),
+      renderers: signal({}),
+      resolvedUrl: signal('https://default-renderer.com'),
+      setResolvedUrl: vi.fn(),
     };
   });
 
@@ -106,7 +105,8 @@ describe('LocalStorageAppConfigProvider', () => {
         LocalStorageAppConfigProvider,
         LocalStorageInteractions,
         {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
-        {provide: StartupResolution, useValue: mockStartupService},
+        {provide: EnvironmentContextService, useValue: mockEnvironmentContext},
+        {provide: StartupConfigStateService, useValue: mockStartupConfigState},
         {provide: IS_1P_AUTH_ENABLED, useValue: enable1PAuth},
       ],
     });
@@ -114,7 +114,7 @@ describe('LocalStorageAppConfigProvider', () => {
   }
 
   it('ignores FORCE_1P when IS_1P_AUTH_ENABLED is false', () => {
-    mockStartupService.isThirdPartyEnvironment.mockReturnValue(true);
+    mockEnvironmentContext.isThirdPartyEnvironment.mockReturnValue(true);
     localStorage.setItem(LocalStorageKey.FORCE_1P, 'true');
     const provider = setupProvider();
     expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
@@ -144,21 +144,21 @@ describe('LocalStorageAppConfigProvider', () => {
   });
 
   it('prioritizes resolved renderer URL from startup over stored renderer URL', () => {
-    mockStartupService.getResolvedRendererUrl.mockReturnValue('https://resolved-profile.com');
+    mockStartupConfigState.resolvedUrl.set('https://resolved-profile.com');
     localStorage.setItem(LocalStorageKey.RENDERER_URL, 'https://stored-renderer.com');
     const provider = setupProvider();
     expect(provider.rendererUrl()).toBe('https://resolved-profile.com');
   });
 
   it('falls back to stored renderer URL if no resolved renderer URL exists', () => {
-    mockStartupService.getResolvedRendererUrl.mockReturnValue('');
+    mockStartupConfigState.resolvedUrl.set('');
     localStorage.setItem(LocalStorageKey.RENDERER_URL, 'https://stored-renderer.com');
     const provider = setupProvider();
     expect(provider.rendererUrl()).toBe('https://stored-renderer.com');
   });
 
   it('synchronizes rendererUrl with resolved fallback when initialize is invoked', async () => {
-    mockStartupService.getResolvedRendererUrl.mockReturnValue('https://fallback-init.com');
+    mockStartupConfigState.resolvedUrl.set('https://fallback-init.com');
     const provider = setupProvider();
     await provider.initialize();
     expect(provider.rendererUrl()).toBe('https://fallback-init.com');
@@ -176,13 +176,13 @@ describe('LocalStorageAppConfigProvider', () => {
   });
 
   it('defines envMode as EXTENSION when startup is in extension mode', () => {
-    mockStartupService.isExtensionMode.mockReturnValue(true);
+    mockEnvironmentContext.isExtensionMode.mockReturnValue(true);
     const provider = setupProvider();
     expect(provider.envMode()).toBe(EnvMode.EXTENSION);
   });
 
   it('defines envMode as STANDALONE when startup is in standalone mode', () => {
-    mockStartupService.isExtensionMode.mockReturnValue(false);
+    mockEnvironmentContext.isExtensionMode.mockReturnValue(false);
     const provider = setupProvider();
     expect(provider.envMode()).toBe(EnvMode.STANDALONE);
   });
@@ -197,7 +197,7 @@ describe('LocalStorageAppConfigProvider', () => {
   });
 
   it('defines authType based on storage override keys if forcedAuth is DEFAULT', () => {
-    mockStartupService.isThirdPartyEnvironment.mockReturnValue(true);
+    mockEnvironmentContext.isThirdPartyEnvironment.mockReturnValue(true);
     const provider = setupProvider();
     // No local storage override yet, so uses fallback: 3P
     expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
@@ -209,11 +209,11 @@ describe('LocalStorageAppConfigProvider', () => {
   });
 
   it('defines authType based on fallback environment if no overrides exist', () => {
-    mockStartupService.isThirdPartyEnvironment.mockReturnValue(true);
+    mockEnvironmentContext.isThirdPartyEnvironment.mockReturnValue(true);
     const provider = setupProvider();
     expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
 
-    mockStartupService.isThirdPartyEnvironment.mockReturnValue(false);
+    mockEnvironmentContext.isThirdPartyEnvironment.mockReturnValue(false);
     const provider2 = setupProvider();
     expect(provider2.authType()).toBe(AuthType.FIRST_PARTY);
   });
@@ -223,7 +223,7 @@ describe('LocalStorageAppConfigProvider', () => {
     provider.setRendererUrl('https://updated-renderer.com');
     expect(provider.rendererUrl()).toBe('https://updated-renderer.com');
     expect(localStorage.getItem(LocalStorageKey.RENDERER_URL)).toBe('https://updated-renderer.com');
-    expect(mockStartupService.setResolvedRendererUrl).toHaveBeenCalledWith(
+    expect(mockStartupConfigState.setResolvedUrl).toHaveBeenCalledWith(
       'https://updated-renderer.com',
     );
   });
@@ -286,31 +286,6 @@ describe('LocalStorageAppConfigProvider', () => {
     provider.setForcedAuthMode(AuthType.DEFAULT);
     expect(localStorage.getItem(LocalStorageKey.FORCE_1P)).toBeNull();
     expect(localStorage.getItem(LocalStorageKey.FORCE_3P)).toBeNull();
-  });
-
-  it('purges all storage keys and resets signals on flushConfig', async () => {
-    mockStartupService.getResolvedRendererUrl.mockReturnValue('https://base-url.com');
-    await mockSecureStorage.setCredential(SecureCredentialsKey.GEMINI_API_KEY, 'dirty-token');
-    const provider = setupProvider();
-
-    provider.setRendererUrl('https://dirty-renderer.com');
-    await provider.setGeminiApiKey('dirty-token');
-    provider.setForcedAuthMode(AuthType.THIRD_PARTY);
-    provider.setThemePreference(ThemePreference.DARK);
-
-    await provider.flushConfig();
-
-    expect(mockStartupService.resolveStartupConfiguration).toHaveBeenCalled();
-    expect(provider.rendererUrl()).toBe('https://base-url.com');
-    expect(provider.geminiApiKey()).toBe('');
-    expect(provider.authType()).toBe(AuthType.FIRST_PARTY); // Fallback 1P
-    expect(provider.themePreference()).toBe(ThemePreference.LIGHT);
-
-    expect(localStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
-    expect(localStorage.getItem(LocalStorageKey.SELECTED_API_KEY)).toBeNull();
-    expect(localStorage.getItem(LocalStorageKey.FORCE_1P)).toBeNull();
-    expect(localStorage.getItem(LocalStorageKey.FORCE_3P)).toBeNull();
-    expect(localStorage.getItem(LocalStorageKey.THEME_PREFERENCE)).toBeNull();
   });
 
   it('handles simulated storage rejections gracefully during initialize bootstrap', async () => {
@@ -490,15 +465,7 @@ describe('LocalStorageAppConfigProvider', () => {
   it('synchronizes renderer URL with StartupResolution when setRendererUrl is called', () => {
     const provider = setupProvider();
     provider.setRendererUrl('https://sync-renderer.com');
-    expect(mockStartupService.setResolvedRendererUrl).toHaveBeenCalledWith(
-      'https://sync-renderer.com',
-    );
-  });
-
-  it('invokes StartupResolution.resolveStartupConfiguration when flushConfig is called', async () => {
-    const provider = setupProvider();
-    await provider.flushConfig();
-    expect(mockStartupService.resolveStartupConfiguration).toHaveBeenCalled();
+    expect(mockStartupConfigState.setResolvedUrl).toHaveBeenCalledWith('https://sync-renderer.com');
   });
 
   describe('Selected Custom API Key and Fallback Resolution', () => {
@@ -542,7 +509,7 @@ describe('LocalStorageAppConfigProvider', () => {
     });
 
     it('initializes geminiApiKey with static configuration API key when SELECTED_API_KEY matches static key ID', async () => {
-      mockStartupService.apiKeys.mockReturnValue({'static-id': {apiKey: 'static-secret-value'}});
+      mockStartupConfigState.apiKeys.set({'static-id': {apiKey: 'static-secret-value'}});
       localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'static-id');
 
       const provider = setupProvider();
