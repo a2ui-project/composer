@@ -50,11 +50,13 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
       endColumn: 1,
     })),
     setValue: vi.fn(),
+    dispose: vi.fn(),
   };
 
   const mockEditor = {
     getValue: vi.fn(() => ''),
     setValue: vi.fn(),
+    dispose: vi.fn(),
     executeEdits: vi.fn(),
     pushUndoStop: vi.fn(),
     trigger: vi.fn(),
@@ -63,6 +65,7 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     dispose: vi.fn(),
     getModel: vi.fn(() => ({
       getFullModelRange: vi.fn(() => ({})),
+      dispose: vi.fn(),
     })),
     pushUndoStop: vi.fn(),
     executeEdits: vi.fn(),
@@ -145,7 +148,13 @@ vi.mock('@monaco-editor/loader', () => {
         editor: {
           create: createMock,
           getModel: vi.fn(() => null),
-          createModel: vi.fn((value, language, uri) => ({value, language, uri, setValue: vi.fn()})),
+          createModel: vi.fn((value, language, uri) => ({
+            value,
+            language,
+            uri,
+            setValue: vi.fn(),
+            dispose: vi.fn(),
+          })),
         },
         languages: {
           json: {

@@ -46,7 +46,6 @@ import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 
 @Directive({
-  // eslint-disable-next-line @angular-eslint/directive-selector
   selector: '[a2uiComposerAutoScroll]',
   standalone: true,
 })
