@@ -357,10 +357,6 @@ export class StartupResolution {
     return globalThis.location?.origin || 'http://localhost';
   }
 
-  private isLocalhost(hostname: string): boolean {
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
-  }
-
   async isOriginAllowed(url: string): Promise<boolean> {
     let origin: string;
     let hostname: string;
@@ -373,7 +369,7 @@ export class StartupResolution {
       return false;
     }
 
-    if (this.isLocalhost(hostname) || origin === globalThis.location?.origin) {
+    if (origin === globalThis.location?.origin) {
       return true;
     }
 

@@ -23,6 +23,7 @@ import {
   inject,
   input,
   signal,
+  Renderer2,
 } from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
@@ -53,12 +54,13 @@ import {SystemInstructionsDialog} from '../system-instructions-dialog/system-ins
 export class AutoScroll {
   autoScroll = input<string | undefined>('', {alias: 'a2uiComposerAutoScroll'});
   private readonly el = inject(ElementRef);
+  private readonly renderer = inject(Renderer2);
 
   constructor() {
     effect(() => {
       this.autoScroll();
       queueMicrotask(() => {
-        this.el.nativeElement.scrollTop = this.el.nativeElement.scrollHeight;
+        this.renderer.setProperty(this.el.nativeElement, 'scrollTop', this.el.nativeElement.scrollHeight);
       });
     });
   }

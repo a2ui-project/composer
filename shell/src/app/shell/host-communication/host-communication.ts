@@ -139,6 +139,20 @@ export class HostCommunication implements OnDestroy {
   };
 
   private readonly messageListener = (event: MessageEvent) => {
+    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
+    if (!expectedUrl) {
+      return;
+    }
+
+    try {
+      const expectedOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
+      if (event.origin !== expectedOrigin) {
+        return;
+      }
+    } catch (err) {
+      return;
+    }
+
     const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
     if (!activeWindow) {
       const isBridgeMessage =
@@ -155,20 +169,6 @@ export class HostCommunication implements OnDestroy {
       return;
     }
     if (event.source !== activeWindow) {
-      return;
-    }
-
-    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-    if (!expectedUrl) {
-      return;
-    }
-
-    try {
-      const expectedOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
-      if (event.origin !== expectedOrigin) {
-        return;
-      }
-    } catch (err) {
       return;
     }
 

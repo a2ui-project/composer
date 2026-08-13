@@ -1237,17 +1237,6 @@ describe('StartupResolution', () => {
       );
     });
 
-    it('2a. auto-allows localhost, 127.0.0.1, and [::1] origins in ?renderer= without prompting confirmation', async () => {
-      const confirmSpy = vi.spyOn(service, 'confirmOrigin');
-      const allowedLocalhost = await service.isOriginAllowed('http://localhost:3000/test');
-      const allowed127 = await service.isOriginAllowed('http://127.0.0.1:8080/test');
-      const allowedIpv6 = await service.isOriginAllowed('http://[::1]:8080/test');
-
-      expect(allowedLocalhost).toBe(true);
-      expect(allowed127).toBe(true);
-      expect(allowedIpv6).toBe(true);
-      expect(confirmSpy).not.toHaveBeenCalled();
-    });
 
     it('2a1. auto-allows external origin defined in config.json.renderers without prompting confirmation', async () => {
       const confirmSpy = vi.spyOn(service, 'confirmOrigin');
