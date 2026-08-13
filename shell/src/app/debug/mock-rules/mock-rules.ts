@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-import {Component} from '@angular/core';
+import {Component, ChangeDetectionStrategy} from '@angular/core';
 
 /**
  * A debug drawer component allowing developers to view, inspect,
  * and configure mock business logic rules for the active catalog.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-mock-rules',
   standalone: true,
   imports: [],

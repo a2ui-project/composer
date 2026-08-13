@@ -168,7 +168,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
   /* Pre-existing baseline specs mapped to dynamic settings mocks */
   it('initializes successfully with dynamic computed signal properties', () => {
-    expect(service).toBeTruthy();
+    expect(service).toBeDefined();
     expect(service.systemPrompt).toBeDefined();
   });
 

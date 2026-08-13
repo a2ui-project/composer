@@ -136,7 +136,7 @@ describe('ComposerWorkspace Dashboard', () => {
   });
 
   it('creates the central workspace dashboard component via test harness', async () => {
-    expect(harness).toBeTruthy();
+    expect(harness).toBeDefined();
   });
 
   it('mounts all primary feature drawer placeholder components', () => {

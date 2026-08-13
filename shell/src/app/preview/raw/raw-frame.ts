@@ -22,7 +22,7 @@ import {
   effect,
   untracked,
   WritableSignal,
-} from '@angular/core';
+  ChangeDetectionStrategy} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Subject} from 'rxjs';
 import {debounceTime, filter, map} from 'rxjs/operators';
@@ -41,6 +41,7 @@ import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service'
  * and displaying real-time parsing error indicators.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-raw-frame',
   standalone: true,
   imports: [MonacoEditor],

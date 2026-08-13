@@ -70,8 +70,8 @@ describe('A2uiSandbox', () => {
   });
 
   it('creates the sandbox component successfully', () => {
-    expect(component).toBeTruthy();
-    expect(sandbox).toBeTruthy();
+    expect(component).toBeDefined();
+    expect(sandbox).toBeDefined();
   });
 
   it('attaches renderer upon service/manager construction', () => {

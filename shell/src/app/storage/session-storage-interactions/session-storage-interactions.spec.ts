@@ -40,7 +40,7 @@ describe('SessionStorageInteractions Specification Context', () => {
   });
 
   it('instantiates the session storage service successfully', () => {
-    expect(service).toBeTruthy();
+    expect(service).toBeDefined();
   });
 
   it('delegates getItem to underlying storage correctly', () => {

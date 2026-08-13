@@ -24,7 +24,7 @@ import {
   input,
   signal,
   Renderer2,
-} from '@angular/core';
+  ChangeDetectionStrategy} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
 import {MatDialog, MatDialogModule} from '@angular/material/dialog';
@@ -77,6 +77,7 @@ interface AttachedFile extends Attachment {
  * controls.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-chat-panel',
   standalone: true,
   imports: [

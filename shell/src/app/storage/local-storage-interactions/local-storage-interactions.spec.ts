@@ -43,7 +43,7 @@ describe('LocalStorageInteractions Safety Boundaries', () => {
     });
 
     it('creates the service successfully and maps availability as true', () => {
-      expect(service).toBeTruthy();
+      expect(service).toBeDefined();
       expect(service.isStorageAvailable).toBe(true);
     });
 
@@ -87,7 +87,7 @@ describe('LocalStorageInteractions Safety Boundaries', () => {
     });
 
     it('creates successfully without throwing and maps availability as false', () => {
-      expect(service).toBeTruthy();
+      expect(service).toBeDefined();
       expect(service.isStorageAvailable).toBe(false);
     });
 

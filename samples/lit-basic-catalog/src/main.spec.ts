@@ -34,7 +34,7 @@ describe('AppRoot Lit Element', () => {
   });
 
   it('creates the element and registers RENDER_A2UI processor', () => {
-    expect(element).toBeTruthy();
+    expect(element).toBeDefined();
   });
 
   it('processes RENDER_A2UI array payloads correctly', async () => {

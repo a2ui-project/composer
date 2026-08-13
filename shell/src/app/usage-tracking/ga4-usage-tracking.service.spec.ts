@@ -211,7 +211,7 @@ describe('Ga4UsageTrackingService', () => {
       hasScreenshot: false,
       attachmentCount: 0,
     });
-    expect(returnedId).toBeTruthy();
+    expect(returnedId).toBeDefined();
     expect(mockWindow.gtag).toHaveBeenCalledWith(
       'event',
       'chat_prompt',
@@ -250,7 +250,7 @@ describe('Ga4UsageTrackingService', () => {
       turnIndex: 1,
       attemptNumber: 2,
     });
-    expect(returnedId).toBeTruthy();
+    expect(returnedId).toBeDefined();
     expect(mockWindow.gtag).toHaveBeenCalledWith(
       'event',
       'chat_prompt_retry',

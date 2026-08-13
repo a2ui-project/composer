@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, computed, effect, inject, linkedSignal, signal, untracked} from '@angular/core';
+import {Component, ChangeDetectionStrategy, computed, effect, inject, linkedSignal, signal, untracked} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -30,6 +30,7 @@ import {formatJson} from '../../utils/json';
  * of the active surface's underlying state data model.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-data-model',
   standalone: true,
   imports: [MatFormFieldModule, MatInputModule, FormsModule],

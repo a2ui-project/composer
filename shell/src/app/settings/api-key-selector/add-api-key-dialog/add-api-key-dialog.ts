@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal} from '@angular/core';
+import {Component, ChangeDetectionStrategy, inject, signal} from '@angular/core';
 import {NonNullableFormBuilder, ReactiveFormsModule, Validators} from '@angular/forms';
 import {MAT_DIALOG_DATA, MatDialogRef, MatDialogModule} from '@angular/material/dialog';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -34,6 +34,7 @@ export interface AddApiKeyDialogData {
  * Dialog component for configuring and saving a new or existing custom API key credential.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-add-api-key-dialog',
   standalone: true,
   imports: [

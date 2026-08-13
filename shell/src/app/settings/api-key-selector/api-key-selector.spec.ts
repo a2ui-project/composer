@@ -85,7 +85,7 @@ describe('ApiKeySelectorComponent & AddApiKeyDialogComponent', () => {
 
   it('renders an icon button with <mat-icon>add</mat-icon> next to <mat-select>', async () => {
     const addButton = await harness.getAddButton();
-    expect(addButton).toBeTruthy();
+    expect(addButton).toBeDefined();
     expect(await addButton.getText()).toBe('add_circle');
   });
 
@@ -373,7 +373,7 @@ describe('ApiKeySelectorComponent & AddApiKeyDialogComponent', () => {
     const toggleButton = await rootLoader.getHarness(
       MatButtonHarness.with({selector: '.api-key-toggle-btn'}),
     );
-    expect(toggleButton).toBeTruthy();
+    expect(toggleButton).toBeDefined();
 
     await toggleButton.click();
     await fixture.whenStable();

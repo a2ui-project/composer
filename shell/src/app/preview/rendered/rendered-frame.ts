@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, viewChild, ElementRef, effect, computed, untracked} from '@angular/core';
+import {Component, ChangeDetectionStrategy, inject, viewChild, ElementRef, effect, computed, untracked} from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -26,6 +26,7 @@ import {ChatState} from '../../chat/chat-state/chat-state';
  * synchronizing layouts, data models, and diagnostic telemetry.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-rendered-frame',
   standalone: true,
   imports: [],

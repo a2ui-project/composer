@@ -164,7 +164,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   it(
     'renders the chat panel shell along with empty history welcome ' + 'text correctly',
     async () => {
-      expect(harness).toBeTruthy();
+      expect(harness).toBeDefined();
 
       // Verify welcome card renders on empty histories
       const bubbles = await harness.getBubblesText();

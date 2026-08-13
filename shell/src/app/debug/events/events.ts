@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, effect, untracked} from '@angular/core';
+import {Component, ChangeDetectionStrategy, inject, signal, effect, untracked} from '@angular/core';
 import {MatTableModule} from '@angular/material/table';
 import {JsonPipe} from '@angular/common';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -54,6 +54,7 @@ export interface MappedEventLogItem {
  * event transmissions triggered by layout elements.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-events',
   standalone: true,
   imports: [MatTableModule, JsonPipe],

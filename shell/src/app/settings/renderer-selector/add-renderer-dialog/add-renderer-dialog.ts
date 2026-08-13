@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal} from '@angular/core';
+import {Component, ChangeDetectionStrategy, inject, signal} from '@angular/core';
 import {
   AbstractControl,
   NonNullableFormBuilder,
@@ -55,6 +55,7 @@ export function urlValidator(control: AbstractControl<string>): ValidationErrors
  * Dialog component for configuring and saving a new or existing custom renderer endpoint.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-add-renderer-dialog',
   standalone: true,
   imports: [

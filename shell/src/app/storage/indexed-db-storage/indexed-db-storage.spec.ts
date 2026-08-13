@@ -184,7 +184,7 @@ describe('IndexedDbStorage Storage Resilience', () => {
   });
 
   it('creates the resilient storage service', () => {
-    expect(service).toBeTruthy();
+    expect(service).toBeDefined();
   });
 
   it('evicts oldest records exceeding ten distinct origins via LRU tracking', async () => {
@@ -392,7 +392,7 @@ describe('IndexedDbStorage Storage Resilience', () => {
 
     // Second attempt recovers and succeeds, confirming dbPromise cache was cleared!
     const db = await service.openDatabase();
-    expect(db).toBeTruthy();
+    expect(db).toBeDefined();
     expect(openCount).toBe(2);
   });
 

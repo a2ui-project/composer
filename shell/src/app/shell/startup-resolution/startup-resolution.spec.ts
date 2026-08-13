@@ -14,13 +14,8 @@
  * limitations under the License.
  */
 
-import {ComponentFixture, TestBed} from '@angular/core/testing';
+import {TestBed} from '@angular/core/testing';
 import {signal} from '@angular/core';
-import {ComponentHarness} from '@angular/cdk/testing';
-import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {MatButtonHarness} from '@angular/material/button/testing';
-import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolution} from './startup-resolution';
 import {QueryParser} from '../query-parser/query-parser';
 
@@ -71,7 +66,7 @@ describe('StartupResolution', () => {
   });
 
   it('creates the startup resolution service', () => {
-    expect(service).toBeTruthy();
+    expect(service).toBeDefined();
   });
 
   it('fetches static config and resolves default renderer', async () => {

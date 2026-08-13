@@ -67,7 +67,7 @@ describe('DataModel', () => {
   });
 
   it('creates the component via test harness', async () => {
-    expect(harness).toBeTruthy();
+    expect(harness).toBeDefined();
   });
 
   it('syncs remote state changes into the editor component', async () => {

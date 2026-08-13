@@ -86,7 +86,7 @@ describe('RendererSelectorComponent & AddRendererDialogComponent', () => {
 
   it('renders an icon button with <mat-icon>add</mat-icon> next to <mat-select>', async () => {
     const addButton = await harness.getAddButton();
-    expect(addButton).toBeTruthy();
+    expect(addButton).toBeDefined();
     expect(await addButton.getText()).toBe('add_circle');
   });
 

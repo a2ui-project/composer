@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, OnDestroy} from '@angular/core';
+import {Component, ChangeDetectionStrategy, inject, signal, OnDestroy} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatSnackBar} from '@angular/material/snack-bar';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-system-instructions-dialog',
   standalone: true,
   imports: [MatDialogModule, MatButtonModule, MatIconModule],

@@ -182,7 +182,7 @@ describe('SecureCredentialsStorage', () => {
   });
 
   it('creates the service', () => {
-    expect(service).toBeTruthy();
+    expect(service).toBeDefined();
   });
 
   it('sets and retrieves credentials from IndexedDB', async () => {
@@ -205,14 +205,14 @@ describe('SecureCredentialsStorage', () => {
 
     // Assert that the stored record in 'credentials' is encrypted
     const record = credentialsMap.get('test_crypto_key') as CredentialRecord | undefined;
-    expect(record).toBeTruthy();
+    expect(record).toBeDefined();
     expect((record as Record<string, unknown>)?.['value']).toBeUndefined(); // Plaintext value should be replaced
     expect(record?.ciphertext?.byteLength).toBeGreaterThan(0);
     expect(record?.iv).toBeInstanceOf(Uint8Array);
 
     // Assert that a persistent CryptoKey marked extractable: false exists in 'keys'
     const masterKeyRecord = keysMap.get('a2ui_master_key') as MasterKeyRecord | undefined;
-    expect(masterKeyRecord).toBeTruthy();
+    expect(masterKeyRecord).toBeDefined();
     expect(masterKeyRecord?.value?.type).toBe('secret');
     expect(masterKeyRecord?.value?.algorithm?.name).toBe('AES-GCM');
     expect(masterKeyRecord?.value?.extractable).toBe(false);
@@ -300,8 +300,8 @@ describe('SecureCredentialsStorage', () => {
     });
 
     await service.openDatabase();
-    expect(dbInstance).toBeTruthy();
-    expect(dbInstance?.onversionchange).toBeTruthy();
+    expect(dbInstance).toBeDefined();
+    expect(dbInstance?.onversionchange).toBeDefined();
 
     dbInstance?.onversionchange?.();
 
@@ -327,7 +327,7 @@ describe('SecureCredentialsStorage', () => {
     globalThis.crypto.subtle.generateKey = origGenerateKey;
     await service.setCredential('any-key', 'any-val');
     const record = credentialsMap.get('any-key') as CredentialRecord | undefined;
-    expect(record).toBeTruthy();
+    expect(record).toBeDefined();
     expect(record?.ciphertext?.byteLength).toBeGreaterThan(0);
 
     errSpy.mockRestore();
@@ -367,7 +367,7 @@ describe('SecureCredentialsStorage', () => {
 
     expect(generateKeySpy).not.toHaveBeenCalled();
     const credRecord = credentialsMap.get('fresh-key') as CredentialRecord | undefined;
-    expect(credRecord).toBeTruthy();
+    expect(credRecord).toBeDefined();
     expect(credRecord?.ciphertext?.byteLength).toBeGreaterThan(0);
 
     generateKeySpy.mockRestore();
@@ -426,7 +426,7 @@ describe('SecureCredentialsStorage', () => {
 
     await freshService.setCredential('any-key', 'any-val');
     const record = credentialsMap.get('any-key') as CredentialRecord | undefined;
-    expect(record).toBeTruthy();
+    expect(record).toBeDefined();
     expect(record?.ciphertext?.byteLength).toBeGreaterThan(0);
 
     errSpy.mockRestore();

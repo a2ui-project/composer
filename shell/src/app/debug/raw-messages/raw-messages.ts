@@ -24,7 +24,7 @@ import {
   OnDestroy,
   signal,
   viewChild,
-} from '@angular/core';
+  ChangeDetectionStrategy} from '@angular/core';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ChatState} from '../../chat/chat-state/chat-state';
@@ -48,6 +48,7 @@ export interface RawLogEntry {
  * of raw postMessage traffic across the iframe boundary.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-raw-messages',
   standalone: true,
   imports: [MatExpansionModule, JsonPipe],

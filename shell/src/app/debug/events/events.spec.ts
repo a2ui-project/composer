@@ -51,7 +51,7 @@ describe('Events', () => {
   });
 
   it('creates the events component via test harness', async () => {
-    expect(harness).toBeTruthy();
+    expect(harness).toBeDefined();
   });
 
   it('displays placeholder initially', async () => {

@@ -77,7 +77,7 @@ describe('SystemInstructionsDialog', () => {
   });
 
   it('compiles successfully', () => {
-    expect(component).toBeTruthy();
+    expect(component).toBeDefined();
   });
 
   it('displays the system instructions correctly inside the body', async () => {

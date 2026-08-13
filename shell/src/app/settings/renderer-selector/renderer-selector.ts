@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, computed, inject, input, output, signal} from '@angular/core';
+import {Component, ChangeDetectionStrategy, computed, inject, input, output, signal} from '@angular/core';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
 import {MatButtonModule} from '@angular/material/button';
@@ -30,6 +30,7 @@ import {AddRendererDialogComponent} from './add-renderer-dialog/add-renderer-dia
  * controls to add new custom renderers or delete existing custom renderers.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-renderer-selector',
   standalone: true,
   imports: [

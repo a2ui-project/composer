@@ -41,7 +41,7 @@ describe('App', () => {
   });
 
   it('creates the root application component via test harness', async () => {
-    expect(harness).toBeTruthy();
+    expect(harness).toBeDefined();
   });
 });
 

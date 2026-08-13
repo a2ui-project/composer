@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, effect, untracked} from '@angular/core';
+import {Component, ChangeDetectionStrategy, inject, signal, effect, untracked} from '@angular/core';
 import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -47,6 +47,7 @@ interface RawTelemetryPayload {
  * and connection failures piped from the renderer application.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-errors',
   standalone: true,
   imports: [MatTableModule, MatButtonModule, MatIconModule],

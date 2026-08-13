@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, computed, inject, input, output, signal} from '@angular/core';
+import {Component, ChangeDetectionStrategy, computed, inject, input, output, signal} from '@angular/core';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
 import {MatButtonModule} from '@angular/material/button';
@@ -30,6 +30,7 @@ import {AddApiKeyDialogComponent} from './add-api-key-dialog/add-api-key-dialog'
  * and provides controls to add new custom keys or delete existing custom keys.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-api-key-selector',
   standalone: true,
   imports: [

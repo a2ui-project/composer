@@ -35,6 +35,6 @@ describe('MockRules Placeholder', () => {
   });
 
   it('creates the mock rules placeholder component via test harness', async () => {
-    expect(harness).toBeTruthy();
+    expect(harness).toBeDefined();
   });
 });

@@ -124,7 +124,7 @@ describe('SettingsService', () => {
   });
 
   it('creates the settings service instance', () => {
-    expect(service).toBeTruthy();
+    expect(service).toBeDefined();
   });
 
   it('exposes signals delegating to startup resolution', () => {

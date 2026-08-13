@@ -22,7 +22,7 @@ import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {RenderA2uiItem, A2uiComponentInstance, UpdateComponentsDetails} from 'a2ui-bridge';
+import {RenderA2uiItem, UpdateComponentsDetails} from 'a2ui-bridge';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {tryParseJsonArray, formatJson} from '../../utils/json';
 
@@ -296,7 +296,7 @@ export class StateSync {
         // Actively filter out component with ID 'mock_rules_container'
         const filtered = updateComponents[COMPONENTS].filter(comp => {
           if (comp !== null && typeof comp === 'object' && !Array.isArray(comp)) {
-            const compObj = comp as A2uiComponentInstance;
+            const compObj = comp as Record<string, unknown>;
             return compObj[ID] !== MOCK_RULES_CONTAINER;
           }
           return true;

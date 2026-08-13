@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, computed, inject, OnInit, signal, Signal, WritableSignal} from '@angular/core';
+import {Component, ChangeDetectionStrategy, computed, inject, OnInit, signal, Signal, WritableSignal} from '@angular/core';
 import {NonNullableFormBuilder, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -37,6 +37,7 @@ import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
  * connection handshakes, and developer toggle overrides.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-settings',
   standalone: true,
   imports: [

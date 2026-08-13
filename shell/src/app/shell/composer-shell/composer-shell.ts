@@ -15,7 +15,7 @@
  */
 
 import {DOCUMENT} from '@angular/common';
-import {Component, computed, effect, inject, signal} from '@angular/core';
+import {Component, ChangeDetectionStrategy, computed, effect, inject, signal} from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatListModule} from '@angular/material/list';
@@ -51,6 +51,7 @@ const SNACK_BAR_DURATION_MS = 5000;
  * and hosts the active workspace routing outlet.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-shell',
   standalone: true,
   imports: [

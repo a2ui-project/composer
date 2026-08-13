@@ -25,7 +25,7 @@ import {
   computed,
   ElementRef,
   viewChild,
-} from '@angular/core';
+  ChangeDetectionStrategy} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {HostCommunication} from '../host-communication/host-communication';
@@ -51,6 +51,7 @@ export declare interface WorkspaceMessagePayload {
  * the layout editors, active preview frame, and debug consoles.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-workspace',
   standalone: true,
   providers: [ComposerDockview],

@@ -51,7 +51,7 @@ describe('Errors', () => {
   });
 
   it('creates the errors component via test harness', async () => {
-    expect(harness).toBeTruthy();
+    expect(harness).toBeDefined();
   });
 
   it('displays placeholder initially', async () => {

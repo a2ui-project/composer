@@ -543,14 +543,14 @@ export class ChatCoordinator {
           continue;
         }
 
-        const compObj = comp as A2uiComponentInstance;
-        let compType = compObj.component;
+        const compObj = comp as Record<string, unknown>;
+        let compType = compObj['component'];
 
         // legacy property "name" fallback: heal to "component" key mapping
         if (compObj['name'] && !compObj.component) {
           this.chatState.setPipelineStatus(PipelineStatus.HEALING);
           compType = compObj['name'] as string;
-          compObj.component = compType;
+          compObj['component'] = compType;
           delete compObj['name'];
         }
 
@@ -644,7 +644,7 @@ export class ChatCoordinator {
    * Strips out dynamic rules configs matching /rules/ or prefix /^mock/i.
    */
   private sanitizeComponentObject(obj: A2uiComponentInstance): A2uiComponentInstance {
-    return this.sanitizeValue(obj) as A2uiComponentInstance;
+    return this.sanitizeValue(obj as unknown as Record<string, unknown>) as A2uiComponentInstance;
   }
 
   readonly TEST_ONLY = {

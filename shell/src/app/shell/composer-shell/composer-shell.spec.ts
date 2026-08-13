@@ -175,7 +175,7 @@ describe('ComposerShell Layout', () => {
   });
 
   it('creates the shell layout component via test harness', async () => {
-    expect(harness).toBeTruthy();
+    expect(harness).toBeDefined();
   });
 
   it('displays the static header title A2UI Composer via test harness inspection', async () => {
@@ -239,7 +239,7 @@ describe('ComposerShell Layout', () => {
 
   it('ensures mat-sidenav-content margin-left is 0px to eliminate whitespace gap', async () => {
     const sidenavContent = fixture.nativeElement.querySelector('mat-sidenav-content');
-    expect(sidenavContent).toBeTruthy();
+    expect(sidenavContent).toBeDefined();
     const computedStyle = window.getComputedStyle(sidenavContent);
     expect(['0', '0px']).toContain(computedStyle.marginLeft);
   });

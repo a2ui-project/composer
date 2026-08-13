@@ -97,7 +97,7 @@ describe('CatalogManagement', () => {
   });
 
   it('initializes successfully with handshake not in progress', () => {
-    expect(service).toBeTruthy();
+    expect(service).toBeDefined();
     expect(service.isHandshakeInProgress()).toBe(false);
     expect(service.catalogError()).toBeNull();
     expect(service.activeCatalog()).toBeNull();
@@ -350,7 +350,7 @@ describe('CatalogManagement', () => {
     expect(service.activeCatalogDescription()).toBe('Catalog Description <img src="x" />');
 
     const expectedHash = service.lastChecksumHash();
-    expect(expectedHash).toBeTruthy();
+    expect(expectedHash).toBeDefined();
     expect(expectedHash.length).toBe(64);
 
     // Verify deterministic hashing for identical catalog structures

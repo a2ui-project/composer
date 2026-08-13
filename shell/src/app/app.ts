@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component} from '@angular/core';
+import {Component, ChangeDetectionStrategy} from '@angular/core';
 import {RouterOutlet} from '@angular/router';
 
 /**
@@ -22,6 +22,7 @@ import {RouterOutlet} from '@angular/router';
  * Serves as the main entry point rendering the router outlet.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-root',
   standalone: true,
   imports: [RouterOutlet],

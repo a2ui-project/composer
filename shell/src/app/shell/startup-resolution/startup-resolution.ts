@@ -22,7 +22,6 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
 import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 
-import {firstValueFrom} from 'rxjs';
 
 
 /**
@@ -359,12 +358,10 @@ export class StartupResolution {
 
   async isOriginAllowed(url: string): Promise<boolean> {
     let origin: string;
-    let hostname: string;
     try {
       const baseOrigin = this.getBaseOrigin();
       const parsedUrl = url.startsWith('/') ? new URL(url, baseOrigin) : new URL(url);
       origin = parsedUrl.origin;
-      hostname = parsedUrl.hostname;
     } catch (e) {
       return false;
     }

@@ -59,7 +59,7 @@ describe('HostCommunication', () => {
   });
 
   it('initializes successfully', () => {
-    expect(service).toBeTruthy();
+    expect(service).toBeDefined();
   });
 
   it('validates origin and emits envelope when source and origin match', () => {

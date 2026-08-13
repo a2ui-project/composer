@@ -858,7 +858,7 @@ describe('GalleryCatalog', () => {
       TestBed.tick();
 
       const preset = service.selectedComponentPreset();
-      expect(preset).toBeTruthy();
+      expect(preset).toBeDefined();
       expect(preset!.usage[1]['component']).toBe(123);
       expect(preset!.usage[2]['component']).toBeUndefined();
     } finally {

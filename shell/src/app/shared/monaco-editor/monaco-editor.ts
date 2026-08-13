@@ -27,7 +27,7 @@ import {
   viewChild,
   afterNextRender,
   DestroyRef,
-} from '@angular/core';
+  ChangeDetectionStrategy} from '@angular/core';
 import loader from '@monaco-editor/loader';
 import type * as monaco from 'monaco-editor';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
@@ -49,6 +49,7 @@ import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
  * real-time schema validation and autocompletion for component properties.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'a2ui-composer-monaco-editor',
   standalone: true,
   templateUrl: './monaco-editor.ng.html',
