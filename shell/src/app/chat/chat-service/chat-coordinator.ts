@@ -547,7 +547,7 @@ export class ChatCoordinator {
         let compType = compObj['component'];
 
         // legacy property "name" fallback: heal to "component" key mapping
-        if (compObj['name'] && !compObj.component) {
+        if (compObj['name'] && !compObj['component']) {
           this.chatState.setPipelineStatus(PipelineStatus.HEALING);
           compType = compObj['name'] as string;
           compObj['component'] = compType;
@@ -602,7 +602,7 @@ export class ChatCoordinator {
         }
 
         // Recursively strip out dynamic mock setups configuration fields
-        const cleanedComp = this.sanitizeComponentObject(compObj);
+        const cleanedComp = this.sanitizeComponentObject(compObj as unknown as A2uiComponentInstance);
         // Restore corrected element name
         cleanedComp.component = targetType;
         cleanedComponents.push(cleanedComp);
