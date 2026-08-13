@@ -146,4 +146,18 @@ export class SettingsHarness extends ComponentHarness {
     const icons = await this.locatorForAll('mat-icon')();
     return Promise.all(icons.map(i => i.getAttribute('aria-hidden')));
   }
+
+  protected getFirstPartyAuthSection = this.locatorForOptional('.first-party-auth-section');
+  protected getProfileSelector = this.locatorForOptional('a2ui-composer-profile-selector');
+
+  async isFirstPartyAuthSectionHidden(): Promise<boolean> {
+    const section = await this.getFirstPartyAuthSection();
+    if (!section) return true;
+    const isHidden = await section.getProperty('hidden');
+    return !!isHidden;
+  }
+
+  async hasProfileSelector(): Promise<boolean> {
+    return !!(await this.getProfileSelector());
+  }
 }

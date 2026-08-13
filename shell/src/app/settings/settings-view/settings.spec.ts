@@ -410,19 +410,18 @@ describe('Settings', () => {
   });
 
   it('hides authentication overrides section when IS_1P_AUTH_ENABLED is false', async () => {
-    const {fixture} = await setupComponent(false);
-    const section = fixture.nativeElement.querySelector('.first-party-auth-section');
-    expect(section.hidden).toBe(true);
+    const {harness} = await setupComponent(false);
+    expect(await harness.isFirstPartyAuthSectionHidden()).toBe(true);
   });
 
   describe('Settings View Integration', () => {
     it('renders <a2ui-composer-renderer-selector> and <a2ui-composer-api-key-selector> in place of <a2ui-composer-profile-selector>', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);
-      const {fixture, harness} = await setupComponent();
+      const {harness} = await setupComponent();
 
       expect(await harness.getRendererSelectorHarness()).not.toBeNull();
       expect(await harness.getApiKeySelectorHarness()).not.toBeNull();
-      expect(fixture.nativeElement.querySelector('a2ui-composer-profile-selector')).toBeNull();
+      expect(await harness.hasProfileSelector()).toBe(false);
     });
 
     it('sets selectedRendererId$ when a renderer is selected in <a2ui-composer-renderer-selector>', async () => {
