@@ -294,7 +294,7 @@ export class StateSync {
       const updateComponents = parsed[UPDATE_COMPONENTS] as UpdateComponentsDetails;
       if (Array.isArray(updateComponents[COMPONENTS])) {
         // Actively filter out component with ID 'mock_rules_container'
-        const filtered = updateComponents[COMPONENTS].filter(comp => {
+        const filtered = updateComponents[COMPONENTS].filter((comp: unknown) => {
           if (comp !== null && typeof comp === 'object' && !Array.isArray(comp)) {
             const compObj = comp as A2uiComponentInstance;
             return compObj[ID] !== MOCK_RULES_CONTAINER;
@@ -302,7 +302,7 @@ export class StateSync {
           return true;
         });
 
-        updateComponents[COMPONENTS] = filtered.map(component => {
+        updateComponents[COMPONENTS] = filtered.map((component: unknown) => {
           if (component !== null && typeof component === 'object' && !Array.isArray(component)) {
             return this.sanitizeComponentObject(component as Record<string, unknown>);
           }
