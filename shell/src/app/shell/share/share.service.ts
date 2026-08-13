@@ -29,9 +29,9 @@ import {
 const SNACK_BAR_DURATION_MS = 5000;
 
 /**
- * Service for sharing custom A2UI designs.
+ * Encapsulates clipboard access to provide a streamlined dependency-injected utility for copying JSON structures and emitting success snackbars.
  */
-@Injectable({providedIn: "root"})
+@Injectable({providedIn: 'root'})
 export class ShareService {
   private readonly clipboard = inject(Clipboard);
   private readonly document = inject(DOCUMENT);

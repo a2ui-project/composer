@@ -1,4 +1,3 @@
-
 /**
  * Copyright 2026 Google LLC
  *
@@ -15,10 +14,9 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, beforeEach, vi} from "vitest";
-import {describe, it, expect, beforeEach, vi} from "vitest";
 import {Component} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {By} from '@angular/platform-browser';
 import {TrackEventDirective} from './track-event.directive';
 import {UsageTrackingService} from './usage-tracking.service';

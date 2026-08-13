@@ -1,4 +1,3 @@
-import {TrackEventDirective} from '../usage-tracking/track-event.directive';
 /**
  * Copyright 2026 Google LLC
  *
@@ -15,14 +14,8 @@ import {TrackEventDirective} from '../usage-tracking/track-event.directive';
  * limitations under the License.
  */
 
-import {
-  Component,
-  computed,
-  effect,
-  inject,
-  OnInit,
-  OnDestroy,
-} from '@angular/core';
+import {TrackEventDirective} from '../usage-tracking/track-event.directive';
+import {Component, computed, effect, inject, OnInit, OnDestroy} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {filter} from 'rxjs/operators';
 import {JsonPipe} from '@angular/common';
@@ -278,11 +271,9 @@ export class Gallery implements OnInit, OnDestroy {
         return;
       }
 
-      navigator.clipboard
-        .writeText(payload)
-        .catch(err => {
-          console.error('Failed to copy A2UI component usage to clipboard: ', err);
-        });
+      navigator.clipboard.writeText(payload).catch(err => {
+        console.error('Failed to copy A2UI component usage to clipboard: ', err);
+      });
     } catch (err) {
       console.error('Failed to parse or format A2UI usage payload: ', err);
     }

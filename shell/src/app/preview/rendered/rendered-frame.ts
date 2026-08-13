@@ -14,15 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  Component,
-  inject,
-  viewChild,
-  ElementRef,
-  effect,
-  computed,
-  untracked,
-} from '@angular/core';
+import {Component, inject, viewChild, ElementRef, effect, computed, untracked} from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
 import {SafeUrlValidatorService} from '../../shared/security/safe-url-validator.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
