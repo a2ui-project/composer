@@ -86,7 +86,7 @@ export class Events {
             // NOTE: Bracket notation prevents compiler minification renaming of keys that
             // originate from external cross-frame events.
             const actionObj = action as RawActionDetails;
-            const timestamp = actionObj['timestamp'] || envelope.timestamp;
+            const timestamp = actionObj['timestamp'] || envelope?.timestamp || 0;
             const mappedItem = {
               time: formatTimestamp(timestamp),
               action: actionObj['name'] || '',
