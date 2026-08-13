@@ -25,18 +25,18 @@
     >
       <mat-select-trigger>
         <div class="renderer-trigger-content">
-          <span class="renderer-name">{{ selectedRenderer()?.name }}</span>
-          @if (selectedRenderer()?.rendererUrl) {
-            <span class="renderer-url-subtext">{{ selectedRenderer()?.rendererUrl }}</span>
+          <span class="renderer-name">{{ selectedItem()?.name }}</span>
+          @if (selectedItem()?.rendererUrl) {
+            <span class="renderer-url-subtext">{{ selectedItem()?.rendererUrl }}</span>
           }
         </div>
       </mat-select-trigger>
-      @if (renderers().length === 0) {
+      @if (items().length === 0) {
         <mat-option [disabled]="true" class="empty-state-option"
           >No items available — click + to add</mat-option
         >
       } @else {
-        @for (renderer of renderers(); track renderer.id) {
+        @for (renderer of items(); track renderer.id) {
           <mat-option [value]="renderer.id" class="renderer-option">
             <div class="renderer-option-content">
               <div class="renderer-option-label">{{ renderer.name }}</div>

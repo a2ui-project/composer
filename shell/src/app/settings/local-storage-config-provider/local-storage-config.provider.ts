@@ -16,7 +16,8 @@
  */
 
 import {Injectable, Injector, Signal, computed, inject, signal} from '@angular/core';
-import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
+import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {
   AppConfigProvider,
   AuthType,
@@ -40,9 +41,6 @@ import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tok
 export class LocalStorageAppConfigProvider extends AppConfigProvider {
   /** Core dynamic singleton startup state resolution bridge. */
   private readonly injector = inject(Injector);
-  private get startup(): StartupResolution {
-    return this.injector.get(StartupResolution);
-  }
 
   /** Central type-safe browser persistent storage service provider. */
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
@@ -51,6 +49,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   private readonly secureCredentialsStorage = inject(SecureCredentialsStorage);
 
   private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
+
+  private readonly environmentContext = inject(EnvironmentContextService);
+  private readonly startupConfigState = inject(StartupConfigStateService);
 
   /** Tracks local overrides for authentication modes at runtime. */
   private readonly _forcedAuthOverride = signal<AuthType>(this.getInitialForcedAuth());
@@ -63,7 +64,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
   /** Coordinates dynamic renderer preview frame URL endpoint. */
   private readonly _rendererUrl = signal<string>(
-    this.startup.getResolvedRendererUrl() ||
+    this.startupConfigState.resolvedUrl() ||
       this.localStorageInteractions.getItem(LocalStorageKey.RENDERER_URL) ||
       '',
   );
@@ -95,7 +96,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     try {
       const selectedId = this.localStorageInteractions.getItem(LocalStorageKey.SELECTED_API_KEY);
       if (selectedId) {
-        const staticApiKeys = this.startup.apiKeys() || {};
+        const staticApiKeys = this.startupConfigState.apiKeys() || {};
         const entry = staticApiKeys[selectedId];
         const keyVal = entry?.apiKey || '';
         if (keyVal) {
@@ -120,7 +121,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
   /** Initializes the renderer URL from configuration or persistent storage. */
   private initializeRendererUrl(): void {
-    const resolved = this.startup.getResolvedRendererUrl();
+    const resolved = this.startupConfigState.resolvedUrl();
     if (resolved) {
       this._rendererUrl.set(resolved);
     } else {
@@ -133,7 +134,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
   /** Environment operating mode. */
   override readonly envMode: Signal<EnvMode> = computed(() => {
-    return this.startup.isExtensionMode() ? EnvMode.EXTENSION : EnvMode.STANDALONE;
+    return this.environmentContext.isExtensionMode() ? EnvMode.EXTENSION : EnvMode.STANDALONE;
   });
 
   /** Active authentication mode. */
@@ -142,7 +143,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     if (override !== AuthType.DEFAULT) {
       return override;
     }
-    return this.startup.isThirdPartyEnvironment() ? AuthType.THIRD_PARTY : AuthType.FIRST_PARTY;
+    return this.environmentContext.isThirdPartyEnvironment()
+      ? AuthType.THIRD_PARTY
+      : AuthType.FIRST_PARTY;
   });
 
   /** Active renderer endpoint URL. */
@@ -178,7 +181,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   override setRendererUrl(url: string): void {
     this._rendererUrl.set(url);
     this.localStorageInteractions.setItem(LocalStorageKey.RENDERER_URL, url);
-    this.startup.setResolvedRendererUrl(url);
+    this.startupConfigState.setResolvedUrl(url);
   }
 
   /**
@@ -289,8 +292,8 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     this._forcedAuthOverride.set(AuthType.DEFAULT);
     this._isApiKeyProvidedByConfig.set(false);
     this._geminiApiKey.set('');
-    await this.startup.resolveStartupConfiguration();
-    this._rendererUrl.set(this.startup.getResolvedRendererUrl() || '');
+
+    this._rendererUrl.set(this.startupConfigState.resolvedUrl() || '');
     this._themePreference.set(ThemePreference.LIGHT);
     this._includeScreenshot.set(false);
   }
