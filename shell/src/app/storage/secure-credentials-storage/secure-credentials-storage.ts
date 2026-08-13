@@ -15,6 +15,7 @@
  */
 
 import {Injectable} from '@angular/core';
+import {AbstractIndexedDbStorage} from '../abstract-indexed-db';
 import {SecureCredentialsKey} from '../models/secure-credentials-keys';
 
 /**
@@ -54,105 +55,27 @@ export type StorageRecord = CredentialRecord | MasterKeyRecord;
  * IndexedDB persistence specifically tailored for sensitive application tokens
  * utilizing Web Crypto AES-GCM binary encryption.
  */
-@Injectable({
-  providedIn: 'root',
-})
-export class SecureCredentialsStorage {
-  private readonly dbName = 'a2ui_secure_credentials_db';
-  private readonly dbVersion = 2;
+@Injectable({providedIn: 'root'})
+export class SecureCredentialsStorage extends AbstractIndexedDbStorage {
+  protected readonly dbName = 'a2ui_secure_credentials_db';
+  protected readonly dbVersion = 2;
   private readonly storeName = 'credentials';
   private readonly keysStoreName = 'keys';
   private readonly masterKeyId = 'a2ui_master_key';
-  private dbPromise: Promise<IDBDatabase> | null = null;
   private masterKeyPromise: Promise<CryptoKey> | null = null;
 
   /**
-   * Initializes and opens the IndexedDB database instance.
+   * Handles database schema upgrades for credentials.
    */
-  openDatabase(): Promise<IDBDatabase> {
-    if (this.dbPromise) {
-      return this.dbPromise;
+  protected onUpgradeNeeded(db: IDBDatabase, event: IDBVersionChangeEvent): void {
+    if (!db.objectStoreNames.contains(this.storeName)) {
+      db.createObjectStore(this.storeName, {keyPath: 'key'});
+      console.log(`Initialized secure credentials object store: ${this.storeName}`);
     }
-
-    this.dbPromise = new Promise((resolve, reject) => {
-      if (typeof globalThis.indexedDB === 'undefined') {
-        reject(new Error('IndexedDB is not supported in this runtime environment.'));
-        return;
-      }
-
-      const request = globalThis.indexedDB.open(this.dbName, this.dbVersion);
-
-      request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains(this.storeName)) {
-          db.createObjectStore(this.storeName, {keyPath: 'key'});
-          console.log(`Initialized secure credentials object store: ${this.storeName}`);
-        }
-        if (!db.objectStoreNames.contains(this.keysStoreName)) {
-          db.createObjectStore(this.keysStoreName, {keyPath: 'key'});
-          console.log(`Initialized master keys object store: ${this.keysStoreName}`);
-        }
-      };
-
-      request.onsuccess = (event: Event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        db.onversionchange = () => {
-          console.warn(
-            'Database version change detected from another tab. Closing database connection.',
-          );
-          db.close();
-          this.dbPromise = null;
-        };
-        resolve(db);
-      };
-
-      request.onerror = (event: Event) => {
-        this.dbPromise = null;
-        reject((event.target as IDBOpenDBRequest).error || new Error('Failed to open IndexedDB'));
-      };
-    });
-
-    return this.dbPromise;
-  }
-
-  private async executeTransaction<T>(
-    storeNames: string | string[],
-    mode: IDBTransactionMode,
-    operation: (tx: IDBTransaction) => IDBRequest<T> | void,
-  ): Promise<T | void> {
-    const db = await this.openDatabase();
-    return new Promise<T | void>((resolve, reject) => {
-      const tx = db.transaction(storeNames, mode);
-
-      let requestResult: T | void = undefined;
-      let operationRequest: IDBRequest<T> | null = null;
-
-      try {
-        const res = operation(tx);
-        if (res && 'onsuccess' in res) {
-          operationRequest = res as IDBRequest<T>;
-        }
-      } catch (err) {
-        reject(err);
-        return;
-      }
-
-      tx.oncomplete = () => {
-        resolve(requestResult);
-      };
-
-      tx.onabort = () => reject(tx.error || new Error('Storage transaction aborted'));
-      tx.onerror = () => reject(tx.error || new Error('Storage transaction failed'));
-
-      if (operationRequest) {
-        operationRequest.onsuccess = () => {
-          requestResult = operationRequest!.result;
-        };
-        operationRequest.onerror = () => {
-          reject(operationRequest!.error || new Error('Storage operation failed'));
-        };
-      }
-    });
+    if (!db.objectStoreNames.contains(this.keysStoreName)) {
+      db.createObjectStore(this.keysStoreName, {keyPath: 'key'});
+      console.log(`Initialized master keys object store: ${this.keysStoreName}`);
+    }
   }
 
   /**
