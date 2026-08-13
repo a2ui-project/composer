@@ -15,13 +15,14 @@
  */
 
 import {JsonPipe} from '@angular/common';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
+import {DestroyRef} from '@angular/core';
 import {
   afterRenderEffect,
   Component,
   effect,
   ElementRef,
   inject,
-  OnDestroy,
   signal,
   viewChild,
 } from '@angular/core';
@@ -35,6 +36,10 @@ import {
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {formatTimestamp} from '../../utils/date.utils';
 
+/**
+ * Represents a single unified chronological log entry
+ * wrapping either host/guest envelopes or LLM telemetry payloads.
+ */
 export interface RawLogEntry {
   readonly type: string;
   readonly payload: unknown;
@@ -54,10 +59,11 @@ export interface RawLogEntry {
   templateUrl: './raw-messages.ng.html',
   styleUrl: './raw-messages.scss',
 })
-export class RawMessages implements OnDestroy {
+export class RawMessages {
   private readonly hostComm = inject(HostCommunication);
   private readonly chatState = inject(ChatState);
   private readonly usageTrackingService = inject(UsageTrackingService);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly messageHistory = signal<RawLogEntry[]>([]);
 
@@ -112,7 +118,9 @@ export class RawMessages implements OnDestroy {
     deduped.sort((a, b) => b.timestamp - a.timestamp);
     this.messageHistory.set(deduped.slice(0, 100));
 
-    this.hostComm.addListener(this.postMessageListener);
+    this.hostComm.messageStream$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(this.postMessageListener);
 
     effect(() => {
       const log = this.chatState.latestLlmLog();
@@ -141,10 +149,6 @@ export class RawMessages implements OnDestroy {
     this.messageHistory.set([]);
     this.chatState.clearRawLlmHistory();
     this.hostComm.clearHistoryBuffer();
-  }
-
-  ngOnDestroy(): void {
-    this.hostComm.removeListener(this.postMessageListener);
   }
 
   protected isCollapsible(item: RawLogEntry): boolean {

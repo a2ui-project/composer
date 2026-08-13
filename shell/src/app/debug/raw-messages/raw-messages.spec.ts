@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {Subject} from 'rxjs';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {RawMessages} from './raw-messages';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
@@ -36,7 +37,7 @@ describe('RawMessages', () => {
   let harness: RawMessagesHarness;
   let messageStreamSignal: WritableSignal<MessageEnvelope | null>;
   let hostCommMock: Partial<HostCommunication>;
-  let listeners: Set<(env: MessageEnvelope) => void>;
+  let mockMessageStreamSubject: Subject<unknown>;
   let emitMessage: (env: MessageEnvelope) => void;
 
   let latestLlmLogSignal: WritableSignal<LlmLogEntry | null>;
@@ -45,16 +46,15 @@ describe('RawMessages', () => {
 
   beforeEach(async () => {
     messageStreamSignal = signal<MessageEnvelope | null>(null);
-    listeners = new Set();
     emitMessage = (env: MessageEnvelope) => {
-      listeners.forEach(l => l(env));
+      mockMessageStreamSubject.next(env);
       messageStreamSignal.set(env);
     };
 
+    mockMessageStreamSubject = new Subject();
     hostCommMock = {
+      messageStream$: mockMessageStreamSubject,
       messageStream: messageStreamSignal,
-      addListener: vi.fn(l => listeners.add(l)),
-      removeListener: vi.fn(l => listeners.delete(l)),
       getHistoryBuffer: vi.fn(() => []),
       getLatestCatalog: vi.fn(() => null),
       clearHistoryBuffer: vi.fn(),

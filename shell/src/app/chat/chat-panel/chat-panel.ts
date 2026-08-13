@@ -35,6 +35,7 @@ import {RouterLink} from '@angular/router';
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {tryParseJsonArray} from '../../utils/json';
@@ -45,6 +46,9 @@ import {Attachment, LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 
+/**
+ * Directive responsible for automatically scrolling a container to the bottom whenever its inputs change.
+ */
 @Directive({
   selector: '[a2uiComposerAutoScroll]',
   standalone: true,
@@ -99,6 +103,7 @@ export class ChatPanel {
   private readonly startupResolution = inject(StartupResolution);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly hostCommunication = inject(HostCommunication);
+  private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
 
   protected readonly includeScreenshot = this.configProvider.includeScreenshot;
 
