@@ -16,6 +16,7 @@
 
 import {Component, inject, viewChild, ElementRef, effect, computed, untracked} from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
+import {SafeUrlValidatorService} from '../../shared/security/safe-url-validator.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
@@ -34,6 +35,7 @@ import {ChatState} from '../../chat/chat-state/chat-state';
 })
 export class RenderedFrame {
   private sanitizer = inject(DomSanitizer);
+  private urlValidator = inject(SafeUrlValidatorService);
   private startupResolution = inject(StartupResolution);
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
@@ -65,7 +67,13 @@ export class RenderedFrame {
       const initialTheme = untracked(() => this.configProvider.themePreference());
       url.searchParams.set('theme', initialTheme);
 
-      return this.sanitizer.bypassSecurityTrustResourceUrl(url.toString());
+      const urlString = url.toString();
+      if (!this.urlValidator.isValidHttpUrl(urlString)) {
+        console.error('Renderer URL failed safe validation:', urlString);
+        return null;
+      }
+
+      return this.sanitizer.bypassSecurityTrustResourceUrl(urlString);
     } catch (e) {
       console.error('Failed to parse renderer URL:', e);
       return null;

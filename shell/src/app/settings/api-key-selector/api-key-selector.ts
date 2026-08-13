@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import {Component, computed, inject, input, output, signal} from '@angular/core';
+import {Component, computed, DestroyRef, inject, input, output, signal} from '@angular/core';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 import {SettingsService, ApiKeyOption} from '../settings-service/settings.service';
 import {AddApiKeyDialogComponent} from './add-api-key-dialog/add-api-key-dialog';
@@ -50,6 +51,7 @@ export class ApiKeySelectorComponent {
 
   private readonly settingsService = inject(SettingsService);
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly apiKeys = signal<ApiKeyOption[]>([]);
 
@@ -90,12 +92,15 @@ export class ApiKeySelectorComponent {
       width: '450px',
     });
 
-    dialogRef.afterClosed().subscribe(async (newId?: string) => {
-      if (newId) {
-        await this.refreshApiKeys();
-        this.apiKeySelected.emit(newId);
-      }
-    });
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(async (newId?: string) => {
+        if (newId) {
+          await this.refreshApiKeys();
+          this.apiKeySelected.emit(newId);
+        }
+      });
   }
 
   /**
@@ -112,14 +117,17 @@ export class ApiKeySelectorComponent {
       data: {apiKey: key},
     });
 
-    dialogRef.afterClosed().subscribe(async (updatedId?: string) => {
-      if (updatedId) {
-        await this.refreshApiKeys();
-        if (this.selectedApiKeyId() === updatedId) {
-          this.apiKeySelected.emit(updatedId);
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(async (updatedId?: string) => {
+        if (updatedId) {
+          await this.refreshApiKeys();
+          if (this.selectedApiKeyId() === updatedId) {
+            this.apiKeySelected.emit(updatedId);
+          }
         }
-      }
-    });
+      });
   }
 
   /**

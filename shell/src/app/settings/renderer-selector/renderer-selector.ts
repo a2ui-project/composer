@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import {Component, computed, inject, input, output, signal} from '@angular/core';
+import {Component, computed, DestroyRef, inject, input, output, signal} from '@angular/core';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 import {SettingsService, RendererOption} from '../settings-service/settings.service';
 import {AddRendererDialogComponent} from './add-renderer-dialog/add-renderer-dialog';
@@ -50,6 +51,7 @@ export class RendererSelectorComponent {
 
   private readonly settingsService = inject(SettingsService);
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly renderers = signal<RendererOption[]>([]);
 
@@ -90,12 +92,15 @@ export class RendererSelectorComponent {
       width: '450px',
     });
 
-    dialogRef.afterClosed().subscribe((newId?: string) => {
-      if (newId) {
-        this.refreshRenderers();
-        this.rendererSelected.emit(newId);
-      }
-    });
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((newId?: string) => {
+        if (newId) {
+          this.refreshRenderers();
+          this.rendererSelected.emit(newId);
+        }
+      });
   }
 
   /**
@@ -112,14 +117,17 @@ export class RendererSelectorComponent {
       data: {renderer},
     });
 
-    dialogRef.afterClosed().subscribe((updatedId?: string) => {
-      if (updatedId) {
-        this.refreshRenderers();
-        if (this.selectedRendererId() === updatedId) {
-          this.rendererSelected.emit(updatedId);
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((updatedId?: string) => {
+        if (updatedId) {
+          this.refreshRenderers();
+          if (this.selectedRendererId() === updatedId) {
+            this.rendererSelected.emit(updatedId);
+          }
         }
-      }
-    });
+      });
   }
 
   /**

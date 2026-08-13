@@ -68,7 +68,7 @@ export default tseslint.config(
         'error',
         {
           type: 'attribute',
-          prefix: 'a2ui-composer',
+          prefix: ['a2ui-composer', 'a2uiComposer'],
           style: 'camelCase',
         },
       ],

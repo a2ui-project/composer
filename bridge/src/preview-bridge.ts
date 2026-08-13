@@ -21,6 +21,8 @@ import {
 
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
+import {DomainOriginVerificationService} from './domain-origin-verification';
+
 import {
   PreviewBridgeMessageType,
   BridgeMessage,
@@ -345,7 +347,10 @@ export class PreviewBridge {
    * @param event The raw window message event.
    */
   private readonly messageListener = (event: MessageEvent) => {
-    if (event.source !== window.parent && event.source !== window) return;
+    if (
+      !DomainOriginVerificationService.verifyStrictOrigin(event.origin, event.source, window.parent)
+    )
+      return;
 
     const data = event.data as BridgeMessage;
     if (!data || typeof data !== 'object' || !data.type) return;

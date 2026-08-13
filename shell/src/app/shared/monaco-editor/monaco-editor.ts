@@ -38,8 +38,6 @@ import {
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
 
-const LAYOUT_MODEL_URI = 'a2ui://layout.json';
-
 /**
  * A standalone Angular component that wraps the Monaco Editor.
  *
@@ -55,6 +53,7 @@ const LAYOUT_MODEL_URI = 'a2ui://layout.json';
   styleUrl: './monaco-editor.scss',
 })
 export class MonacoEditor {
+  private readonly layoutModelUriStr = `a2ui://layout-${Math.random().toString(36).substr(2, 9)}.json`;
   readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
 
   readonly value = input<string>('');
@@ -181,7 +180,13 @@ export class MonacoEditor {
     this.destroyRef.onDestroy(() => {
       destroyed = true;
       if (this.editor) {
-        this.editor.dispose();
+        const model = this.editor.getModel();
+        if (model && typeof model.dispose === 'function') {
+          model.dispose();
+        }
+        if (typeof this.editor.dispose === 'function') {
+          this.editor.dispose();
+        }
       }
       overflowWidgetsDomNode?.remove();
     });
@@ -195,7 +200,7 @@ export class MonacoEditor {
         }
         this.monacoInstance.set(monacoInstance);
 
-        const modelUri = monacoInstance.Uri.parse(LAYOUT_MODEL_URI);
+        const modelUri = monacoInstance.Uri.parse(this.layoutModelUriStr);
         let model = monacoInstance.editor.getModel(modelUri);
         if (model) {
           model.setValue(this.value());
@@ -244,7 +249,7 @@ export class MonacoEditor {
     return [
       {
         uri: 'a2ui-catalog-schema',
-        fileMatch: [LAYOUT_MODEL_URI],
+        fileMatch: [this.layoutModelUriStr],
         schema: structuredClone(layoutSchema),
       },
       {

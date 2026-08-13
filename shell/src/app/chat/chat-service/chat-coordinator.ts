@@ -185,6 +185,7 @@ export class ChatCoordinator {
     attachments: Attachment[] = [],
     options?: {promptId?: string; promptTurnIndex?: number; retryOfPromptId?: string},
   ): Promise<void> {
+    if (this.chatState.isProgrammaticStreamActive()) return;
     const trimmed = prompt.trim();
     if (!trimmed && attachments.length === 0) return;
 
