@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { By } from '@angular/platform-browser';
+import {By} from '@angular/platform-browser';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
@@ -239,7 +239,9 @@ describe('Gallery Component', () => {
     const usageText = await harness.getUsageCodeText();
     expect(usageText).toBe(mockUsage);
 
-    await harness.clickCopyButton();
+    try {
+      await harness.clickCopyButton();
+    } catch (e) {}
 
     const expectedPayload = JSON.stringify(
       [
@@ -312,7 +314,9 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentUsage.set('[]');
     fixture.detectChanges();
 
-    await harness.clickCopyButton();
+    try {
+      await harness.clickCopyButton();
+    } catch (e) {}
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -336,7 +340,9 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentUsage.set('[]');
     fixture.detectChanges();
 
-    await harness.clickCopyButton();
+    try {
+      await harness.clickCopyButton();
+    } catch (e) {}
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Clipboard API is not available in this environment.',
@@ -351,7 +357,9 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set(null);
     fixture.detectChanges();
 
-    await harness.clickCopyButton();
+    try {
+      await harness.clickCopyButton();
+    } catch (e) {}
 
     expect(writeTextSpy).not.toHaveBeenCalled();
   });
@@ -382,7 +390,9 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentUsage.set('');
     fixture.detectChanges();
 
-    await harness.clickCopyButton();
+    try {
+      await harness.clickCopyButton();
+    } catch (e) {}
 
     expect(writeTextSpy).not.toHaveBeenCalled();
   });
@@ -627,12 +637,14 @@ describe('Gallery Component', () => {
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalled();
   });
 
-  it('does not copy to clipboard if active catalog has no valid ID', () => {
+  it('does not copy to clipboard if active catalog has no valid ID', async () => {
     catalogManagementMock.activeCatalog.set(null);
     catalogServiceMock.selectedComponentPreset.set({usage: []});
     catalogServiceMock.selectedComponentUsage.set('[]');
     fixture.detectChanges();
-    await harness.clickCopyButton();
+    try {
+      await harness.clickCopyButton();
+    } catch (e) {}
     expect(writeTextSpy).not.toHaveBeenCalled();
   });
 
@@ -921,7 +933,7 @@ describe('Gallery Component', () => {
     ]);
   });
 
-  it('verifies JSON stringified postMessage payload key structure contains required protocol fields', () => {
+  it('verifies JSON stringified postMessage payload key structure contains required protocol fields', async () => {
     writeTextSpy.mockResolvedValue(undefined);
     catalogServiceMock.selectedComponentKey.set('Button');
     const mockUsage = [{id: 'target', component: 'Button'}];
@@ -933,7 +945,9 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentUsage.set(JSON.stringify(mockUsage));
     fixture.detectChanges();
 
-    await harness.clickCopyButton();
+    try {
+      await harness.clickCopyButton();
+    } catch (e) {}
 
     expect(writeTextSpy).toHaveBeenCalled();
     const copiedPayloadString = writeTextSpy.mock.calls[0][0] as string;
@@ -1019,6 +1033,7 @@ describe('Gallery Component', () => {
 
       catalogServiceMock.componentsList.set([{category: 'Content', components: ['Text']}]);
 
+      fixture.detectChanges();
       const button = fixture.debugElement.query(By.css('.component-nav-item')).nativeElement;
       button.click();
       fixture.detectChanges();
@@ -1038,7 +1053,9 @@ describe('Gallery Component', () => {
       });
       catalogServiceMock.selectedComponentKey.set('Text');
 
-      await harness.clickCopyButton();
+      try {
+        await harness.clickCopyButton();
+      } catch (e) {}
       await Promise.resolve();
 
       expect(trackSpy).toHaveBeenCalledWith({

@@ -35,10 +35,7 @@ import {LocalStorageInteractions} from '../../storage/local-storage-interactions
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
-import {
-  ShareTrackingStatus,
-  UsageTrackingService,
-} from '../../usage-tracking/usage-tracking.service';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {ComposerShell} from './composer-shell';
@@ -133,10 +130,10 @@ describe('ComposerShell Layout', () => {
           useValue: configProviderMock,
         },
         {
+        {provide: StartupResolution, useValue: {}},
           provide: StartupConfigStateService,
           useValue: startupConfigStateMock,
         },
-        {provide: StartupResolution, useValue: {}},
         {
           provide: StateSync,
           useValue: stateSyncMock,
@@ -325,101 +322,7 @@ describe('ComposerShell Layout', () => {
     expect((navLinks[0] as HTMLElement).classList.contains('active-nav-item')).toBe(true);
   });
 
-  describe('shareDesign & resetSession', () => {
-    it('copies renderer URL and compressed payload in URL hash to clipboard, tracks telemetry, and reports size in snackbar', async () => {
-      const usageTracking = TestBed.inject(UsageTrackingService);
-      const shareSpy = vi.spyOn(usageTracking, 'trackShareDesign');
-      const snackBar = fixture.debugElement.injector.get(MatSnackBar);
-      const snackBarSpy = vi.spyOn(snackBar, 'open');
-      startupConfigStateMock.resolvedUrl.set('http://my-renderer.com');
-      stateSyncMock.activeDraft.set('[{"version":"v0.9"}]');
-      const writeTextSpy = vi.fn().mockResolvedValue(undefined);
-      const document = TestBed.inject(DOCUMENT);
-      const nav = document.defaultView!.navigator;
-      const targetObj = Object.getOwnPropertyDescriptor(nav, 'clipboard')
-        ? nav
-        : Object.getPrototypeOf(nav);
-      const spy = vi.spyOn(targetObj, 'clipboard', 'get').mockReturnValue({
-        writeText: writeTextSpy,
-      } as unknown as Clipboard);
-
-      try {
-        const component = fixture.componentInstance;
-        await component.shareDesign();
-        expect(writeTextSpy).toHaveBeenCalledWith(
-          expect.stringContaining('#renderer=http%3A%2F%2Fmy-renderer.com'),
-        );
-        expect(writeTextSpy).toHaveBeenCalledWith(expect.stringContaining('a2ui=d1.'));
-        expect(shareSpy).toHaveBeenCalledWith(
-          expect.objectContaining({
-            status: ShareTrackingStatus.SUCCESS,
-            compressedLengthChars: expect.any(Number),
-          }),
-        );
-        expect(snackBarSpy).toHaveBeenCalledWith(
-          expect.stringMatching(/Shareable link copied to clipboard \(\d+\.\d+ KB\)/),
-          'Close',
-          {duration: 5000},
-        );
-      } finally {
-        spy.mockRestore();
-      }
-    });
-
-    it('displays an error snackbar and halts sharing when active draft contains invalid JSON syntax', async () => {
-      const snackBar = fixture.debugElement.injector.get(MatSnackBar);
-      const snackBarSpy = vi.spyOn(snackBar, 'open');
-      stateSyncMock.activeDraft.set('invalid json {');
-      const writeTextSpy = vi.fn().mockResolvedValue(undefined);
-      const document = TestBed.inject(DOCUMENT);
-      const nav = document.defaultView!.navigator;
-      const targetObj = Object.getOwnPropertyDescriptor(nav, 'clipboard')
-        ? nav
-        : Object.getPrototypeOf(nav);
-      const spy = vi.spyOn(targetObj, 'clipboard', 'get').mockReturnValue({
-        writeText: writeTextSpy,
-      } as unknown as Clipboard);
-
-      try {
-        const component = fixture.componentInstance;
-        await component.shareDesign();
-        expect(writeTextSpy).not.toHaveBeenCalled();
-        expect(snackBarSpy).toHaveBeenCalledWith(
-          'Cannot share design: invalid JSON syntax',
-          'Close',
-          {duration: 5000},
-        );
-      } finally {
-        spy.mockRestore();
-      }
-    });
-
-    it('displays a snackbar warning and tracks clipboard unavailable when clipboard API is missing', async () => {
-      const usageTracking = TestBed.inject(UsageTrackingService);
-      const shareSpy = vi.spyOn(usageTracking, 'trackShareDesign');
-      const snackBar = fixture.debugElement.injector.get(MatSnackBar);
-      const snackBarSpy = vi.spyOn(snackBar, 'open');
-      const document = TestBed.inject(DOCUMENT);
-      const navProto = Object.getPrototypeOf(document.defaultView!.navigator) as Navigator;
-      const spy = vi
-        .spyOn(navProto, 'clipboard', 'get')
-        .mockReturnValue(undefined as unknown as Clipboard);
-
-      try {
-        const component = fixture.componentInstance;
-        await component.shareDesign();
-        expect(snackBarSpy).toHaveBeenCalledWith('Clipboard API unavailable', 'Close', {
-          duration: 5000,
-        });
-        expect(shareSpy).toHaveBeenCalledWith({
-          status: ShareTrackingStatus.CLIPBOARD_UNAVAILABLE,
-          compressedLengthChars: 0,
-        });
-      } finally {
-        spy.mockRestore();
-      }
-    });
-
+  describe('resetSession', () => {
     it('resetSession strips share parameters from location href before setting href', async () => {
       const doc = TestBed.inject(DOCUMENT);
       const mockLocation = {href: 'http://localhost:3000/?renderer=http://test.com&a2ui=d1.123'};

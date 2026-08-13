@@ -26,8 +26,7 @@ export interface AttachedFile extends Attachment {
 }
 
 /**
- * A service handling file ingestion for sending to models, such as parsing
- * blob data and reading to base64.
+ * Manages the lifecycle of user-provided attachments by reading files from the browser into memory and parsing their contents into base64 structures suitable for large language model prompts.
  */
 @Injectable({providedIn: 'root'})
 export class FileIngestionService {

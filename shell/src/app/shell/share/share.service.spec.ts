@@ -1,4 +1,3 @@
-
 /**
  * Copyright 2026 Google LLC
  *
@@ -15,8 +14,7 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, beforeEach, vi} from "vitest";
-import {describe, it, expect, beforeEach, vi} from "vitest";
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {Clipboard} from '@angular/cdk/clipboard';
 import {DOCUMENT} from '@angular/common';
 import {TestBed} from '@angular/core/testing';
