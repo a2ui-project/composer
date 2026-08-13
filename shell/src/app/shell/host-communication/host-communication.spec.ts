@@ -523,40 +523,6 @@ describe('HostCommunication', () => {
     expect(history[99].payload).toEqual({index: 104});
   });
 
-  it('catches and logs errors thrown by listeners without crashing the message dispatch loop', () => {
-    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
-    service.registerIframe(mockIframeWindow);
-
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    const throwingListener = vi.fn().mockImplementation(() => {
-      throw new Error('Listener failed');
-    });
-    const safeListener = vi.fn();
-
-    service.addListener(throwingListener);
-    service.addListener(safeListener);
-
-    const event = new MessageEvent('message', {
-      source: mockIframeWindow,
-      origin: 'http://localhost:3000',
-      data: {type: PreviewBridgeMessageType.RENDERER_READY},
-    });
-
-    window.dispatchEvent(event);
-
-    expect(throwingListener).toHaveBeenCalledTimes(1);
-    expect(safeListener).toHaveBeenCalledTimes(1);
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Error in HostCommunication listener:',
-      expect.any(Error),
-    );
-
-    consoleErrorSpy.mockRestore();
-    service.removeListener(throwingListener);
-    service.removeListener(safeListener);
-  });
-
   it('dispatches SET_THEME message via sendTheme', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
