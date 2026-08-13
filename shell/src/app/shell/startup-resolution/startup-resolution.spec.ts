@@ -23,45 +23,12 @@ import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolution} from './startup-resolution';
 import {QueryParser} from '../query-parser/query-parser';
-import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
+
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-
-class OriginConfirmationDialogHarness extends ComponentHarness {
-  static hostSelector = 'a2ui-composer-origin-confirmation-dialog';
-
-  private readonly getTitle = this.locatorFor('h2');
-  private readonly getContent = this.locatorFor('mat-dialog-content');
-  private readonly getAllowButton = this.locatorFor(
-    MatButtonHarness.with({selector: '#allow-origin-btn'}),
-  );
-  private readonly getDenyButton = this.locatorFor(
-    MatButtonHarness.with({selector: '#deny-origin-btn'}),
-  );
-
-  async getTitleText(): Promise<string> {
-    const el = await this.getTitle();
-    return await el.text();
-  }
-
-  async getContentText(): Promise<string> {
-    const el = await this.getContent();
-    return await el.text();
-  }
-
-  async clickAllow(): Promise<void> {
-    const btn = await this.getAllowButton();
-    await btn.click();
-  }
-
-  async clickDeny(): Promise<void> {
-    const btn = await this.getDenyButton();
-    await btn.click();
-  }
-}
 
 class MockAppConfigProvider {
   geminiApiKey = signal<string>('');
@@ -1497,44 +1464,3 @@ describe('StartupResolution', () => {
   });
 });
 
-describe('OriginConfirmationDialog', () => {
-  let fixture: ComponentFixture<OriginConfirmationDialog>;
-  let dialogRef: {close: ReturnType<typeof vi.fn>};
-  let harness: OriginConfirmationDialogHarness;
-
-  beforeEach(async () => {
-    dialogRef = {close: vi.fn()};
-    await TestBed.configureTestingModule({
-      imports: [OriginConfirmationDialog],
-      providers: [
-        provideNoopAnimations(),
-        {provide: MAT_DIALOG_DATA, useValue: {origin: 'https://external.example.com'}},
-        {provide: MatDialogRef, useValue: dialogRef},
-      ],
-    }).compileComponents();
-
-    fixture = TestBed.createComponent(OriginConfirmationDialog);
-    fixture.detectChanges();
-    harness = await TestbedHarnessEnvironment.harnessForFixture(
-      fixture,
-      OriginConfirmationDialogHarness,
-    );
-  });
-
-  it('displays dialog title and external origin content', async () => {
-    const titleText = await harness.getTitleText();
-    const contentText = await harness.getContentText();
-    expect(titleText).toBe('Confirm External Renderer Origin');
-    expect(contentText).toContain('https://external.example.com');
-  });
-
-  it('resolves dialog with true when clicking Allow button', async () => {
-    await harness.clickAllow();
-    expect(dialogRef.close).toHaveBeenCalledWith(true);
-  });
-
-  it('resolves dialog with false when clicking Deny button', async () => {
-    await harness.clickDeny();
-    expect(dialogRef.close).toHaveBeenCalledWith(false);
-  });
-});

@@ -21,9 +21,9 @@ import {LocalStorageInteractions} from '../../storage/local-storage-interactions
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
-import {MatDialog} from '@angular/material/dialog';
+
 import {firstValueFrom} from 'rxjs';
-import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
+
 
 /**
  * Represents the configuration options for an application renderer.
@@ -58,7 +58,7 @@ export class StartupResolution {
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
   private readonly configUrl = inject(CONFIG_URL);
-  readonly dialog = inject(MatDialog);
+  // Removed dialog inject
   private readonly injector = inject(Injector);
   private get configProvider(): AppConfigProvider {
     return this.injector.get(AppConfigProvider);
@@ -424,13 +424,8 @@ export class StartupResolution {
     return false;
   }
 
-  async confirmOrigin(origin: string): Promise<boolean> {
-    const dialogRef = this.dialog.open(OriginConfirmationDialog, {
-      data: {origin},
-      width: '450px',
-    });
-    const result = await firstValueFrom(dialogRef.afterClosed());
-    return !!result;
+    async confirmOrigin(origin: string): Promise<boolean> {
+    return Promise.resolve(globalThis.confirm(`The renderer URL uses an external origin: ${origin}. Do you want to allow loading this renderer?`));
   }
 
   getResolvedRendererUrl(): string | null {
