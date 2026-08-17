@@ -79,8 +79,9 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
 
     windowObj.dataLayer = windowObj.dataLayer || [];
     if (!windowObj.gtag) {
-      windowObj.gtag = function (...args: unknown[]) {
-        windowObj.dataLayer?.push(args);
+      windowObj.gtag = function () {
+        // eslint-disable-next-line prefer-rest-params
+        windowObj.dataLayer?.push(arguments);
       };
     }
 
