@@ -87,17 +87,17 @@ export class Gallery implements OnInit, OnDestroy {
   private buildA2UIPayload(preset: ComponentUsage, catalogId: string): RenderA2uiItem[] {
     const payload: RenderA2uiItem[] = [
       {
-        version: 'v0.9',
-        createSurface: {
-          surfaceId: 'gallery-preview',
-          catalogId: catalogId,
+        ['version']: 'v0.9',
+        ['createSurface']: {
+          ['surfaceId']: 'gallery-preview',
+          ['catalogId']: catalogId,
         },
       },
       {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: 'gallery-preview',
-          components: this.getComponentsPayload(preset.usage),
+        ['version']: 'v0.9',
+        ['updateComponents']: {
+          ['surfaceId']: 'gallery-preview',
+          ['components']: this.getComponentsPayload(preset.usage),
         },
       },
     ];
@@ -105,10 +105,10 @@ export class Gallery implements OnInit, OnDestroy {
     const dataObj = preset.data;
     if (dataObj !== undefined) {
       const cmd3: RenderA2uiItem = {
-        version: 'v0.9',
-        updateDataModel: {
-          surfaceId: 'gallery-preview',
-          value: dataObj,
+        ['version']: 'v0.9',
+        ['updateDataModel']: {
+          ['surfaceId']: 'gallery-preview',
+          ['value']: dataObj,
         },
       };
       payload.push(cmd3);
@@ -220,7 +220,7 @@ export class Gallery implements OnInit, OnDestroy {
         if (comp && typeof comp === 'object') {
           const obj = comp as Record<string, unknown>;
           if (obj['id'] === 'root' || obj['id'] === 'target') {
-            return {...obj, id: 'target'};
+            return {...obj, ['id']: 'target'};
           }
         }
         return comp;
@@ -228,11 +228,11 @@ export class Gallery implements OnInit, OnDestroy {
 
       return [
         {
-          id: 'root',
-          component: columnKey,
-          align: 'center',
-          justify: 'center',
-          children: ['target'],
+          ['id']: 'root',
+          ['component']: columnKey,
+          ['align']: 'center',
+          ['justify']: 'center',
+          ['children']: ['target'],
         },
         ...normalizedComponents,
       ];
@@ -242,7 +242,7 @@ export class Gallery implements OnInit, OnDestroy {
       if (comp && typeof comp === 'object') {
         const obj = comp as Record<string, unknown>;
         if (obj['id'] === 'target') {
-          return {...obj, id: 'root'};
+          return {...obj, ['id']: 'root'};
         }
       }
       return comp;
