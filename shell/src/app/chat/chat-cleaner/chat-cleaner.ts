@@ -21,6 +21,25 @@ const MD_FENCE_REGEX = /```(?:jsonl?|jsonlines|a2ui|html|xml)?\s*([\s\S]*?)\s*``
 const TAG_REGEX = /<(thought|thinking|reasoning)>([\s\S]*?)(?:<\/\1>|$)/gi;
 const PULSE_INDICATOR_REGEX = /\s*●●●\s*$/g;
 
+function isLayoutArray(arr: unknown[]): boolean {
+  return (
+    arr.length > 0 &&
+    arr.some(item => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const keys = Object.keys(item);
+        return (
+          keys.includes('version') ||
+          keys.includes('createSurface') ||
+          keys.includes('updateComponents') ||
+          keys.includes('updateDataModel') ||
+          keys.includes('deleteSurface')
+        );
+      }
+      return false;
+    })
+  );
+}
+
 /**
  * Service for cleaning and processing raw LLM chat messages, including
  * pulse indicator handling, thinking tag stripping, markdown fence extraction,
@@ -107,9 +126,13 @@ export class ChatCleaner {
               /^\[\s*[\{\"]/.test(candidate) &&
               (candidate.includes('"version"') ||
                 candidate.includes('"createSurface"') ||
-                candidate.includes('"updateComponents"'))) ||
-            tryParseJsonArray(candidate) !== null
+                candidate.includes('"updateComponents"')))
           ) {
+            result = candidate;
+            break;
+          }
+          const parsed = tryParseJsonArray(candidate);
+          if (parsed !== null && isLayoutArray(parsed)) {
             result = candidate;
             break;
           }
@@ -128,14 +151,17 @@ export class ChatCleaner {
       return false;
     }
     const trimmed = this.cleanPayload(text);
-    return (
+    if (
       trimmed.startsWith('{"version"') ||
       (trimmed.startsWith('{') && trimmed.includes('"version"')) ||
       (trimmed.startsWith('[') &&
         (trimmed.includes('"version"') ||
           trimmed.includes('"createSurface"') ||
-          trimmed.includes('"updateComponents"'))) ||
-      tryParseJsonArray(trimmed) !== null
-    );
+          trimmed.includes('"updateComponents"')))
+    ) {
+      return true;
+    }
+    const parsedArray = tryParseJsonArray(trimmed);
+    return parsedArray !== null && isLayoutArray(parsedArray);
   }
 }

@@ -24,12 +24,29 @@ describe('JSON Array Parser Utilities', () => {
     expect(tryParseJsonArray('[]')).toEqual([]);
   });
 
-  it('returns null safely without throwing on malformed JSON or non-array primitives', () => {
+  it('returns null safely for invalid JSON Lines or primitive values', () => {
+    expect(tryParseJsonArray('')).toBeNull();
+    expect(tryParseJsonArray('   ')).toBeNull();
     expect(tryParseJsonArray('  [1, 2, ')).toBeNull();
     expect(tryParseJsonArray('invalid json')).toBeNull();
-    expect(tryParseJsonArray('{"not": "an array"}')).toBeNull();
     expect(tryParseJsonArray('"string primitive"')).toBeNull();
     expect(tryParseJsonArray('123')).toBeNull();
+    expect(tryParseJsonArray('{"a": 1}\n{"b": 2}\ninvalid\n{"c": 3}')).toBeNull();
+    expect(tryParseJsonArray('{"a": 1\n{"b": 2}')).toBeNull();
+    expect(tryParseJsonArray('{"a": 1}\n{ "syntax_error": }')).toBeNull();
+  });
+
+  it('parses a single JSON object as a single-element array', () => {
+    expect(tryParseJsonArray('{"not": "an array"}')).toEqual([{not: 'an array'}]);
+    expect(tryParseJsonArray('  {"foo": "bar"}  ')).toEqual([{foo: 'bar'}]);
+  });
+
+  it('parses multiline JSON Lines (JSONL) string into an array of objects', () => {
+    expect(tryParseJsonArray('{"a": 1}\n{"b": 2}\n{"c": 3}')).toEqual([{a: 1}, {b: 2}, {c: 3}]);
+  });
+
+  it('parses JSON Lines with leading, trailing, and intermediate blank lines', () => {
+    expect(tryParseJsonArray('\n  \n{"a": 1}\n\n  {"b": 2} \n ')).toEqual([{a: 1}, {b: 2}]);
   });
 });
 
