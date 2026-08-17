@@ -84,20 +84,27 @@ export class Gallery implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Constructs the A2UI layout and data model command payload.
+   *
+   * Note: Properties explicitly declared in `declare interface` definitions (like `RenderA2uiItem`,
+   * `CreateSurfaceDetails`, `UpdateComponentsDetails`, `UpdateDataModelDetails`) are emitted in externs
+   * by tsickle, so JSCompiler (Closure Compiler) preserves their names without needing bracket notation.
+   */
   private buildA2UIPayload(preset: ComponentUsage, catalogId: string): RenderA2uiItem[] {
     const payload: RenderA2uiItem[] = [
       {
-        ['version']: 'v0.9',
-        ['createSurface']: {
-          ['surfaceId']: 'gallery-preview',
-          ['catalogId']: catalogId,
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'gallery-preview',
+          catalogId: catalogId,
         },
       },
       {
-        ['version']: 'v0.9',
-        ['updateComponents']: {
-          ['surfaceId']: 'gallery-preview',
-          ['components']: this.getComponentsPayload(preset.usage),
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'gallery-preview',
+          components: this.getComponentsPayload(preset.usage),
         },
       },
     ];
@@ -105,10 +112,10 @@ export class Gallery implements OnInit, OnDestroy {
     const dataObj = preset.data;
     if (dataObj !== undefined) {
       const cmd3: RenderA2uiItem = {
-        ['version']: 'v0.9',
-        ['updateDataModel']: {
-          ['surfaceId']: 'gallery-preview',
-          ['value']: dataObj,
+        version: 'v0.9',
+        updateDataModel: {
+          surfaceId: 'gallery-preview',
+          value: dataObj,
         },
       };
       payload.push(cmd3);
@@ -220,7 +227,7 @@ export class Gallery implements OnInit, OnDestroy {
         if (comp && typeof comp === 'object') {
           const obj = comp as Record<string, unknown>;
           if (obj['id'] === 'root' || obj['id'] === 'target') {
-            return {...obj, ['id']: 'target'};
+            return {...obj, id: 'target'};
           }
         }
         return comp;
@@ -228,8 +235,11 @@ export class Gallery implements OnInit, OnDestroy {
 
       return [
         {
-          ['id']: 'root',
-          ['component']: columnKey,
+          id: 'root',
+          component: columnKey,
+          // Custom/dynamic component schema properties not declared on externed interfaces
+          // (such as A2uiComponentInstance) must use quoted keys to prevent Closure Compiler
+          // from renaming them during optimization.
           ['align']: 'center',
           ['justify']: 'center',
           ['children']: ['target'],
@@ -242,7 +252,7 @@ export class Gallery implements OnInit, OnDestroy {
       if (comp && typeof comp === 'object') {
         const obj = comp as Record<string, unknown>;
         if (obj['id'] === 'target') {
-          return {...obj, ['id']: 'root'};
+          return {...obj, id: 'root'};
         }
       }
       return comp;
