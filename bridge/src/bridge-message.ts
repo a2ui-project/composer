@@ -46,7 +46,7 @@ export declare interface SetThemePayload {
 /**
  * Represents a message structure transmitted across the Preview Bridge iframe boundary.
  *
- * NOTE: Declared as a `declare interface` so `tsickle` generates compiler `@externs`
+ * NOTE: Declared as a `declare interface` so `tsickle` generates compiler externs
  * definitions for JSCompiler (Closure Compiler), preventing property renaming across frame boundaries.
  */
 export declare interface BridgeMessage {
@@ -127,7 +127,7 @@ export type DeleteSurfaceDetails = BaseSurfaceDetails;
 /**
  * Represents a single layout command item inside the RENDER_A2UI array.
  *
- * NOTE: Declared with `declare interface` so `tsickle` generates compiler `@externs` for
+ * NOTE: Declared with `declare interface` so `tsickle` generates compiler externs for
  * JSCompiler (Closure Compiler), preserving explicitly declared property names without requiring
  * quoted property keys.
  */
@@ -151,7 +151,7 @@ export declare interface CatalogDetails {
 /**
  * Represents a component instance definition in the A2UI layout tree.
  *
- * NOTE: Declared with `declare interface` so `tsickle` generates compiler `@externs`.
+ * NOTE: Declared with `declare interface` so `tsickle` generates compiler externs.
  * Explicitly declared properties (`component`, `id`) are preserved without quoting, while
  * dynamic/custom component schema properties not declared here must use quoted keys
  * to prevent property renaming during JS optimization.
