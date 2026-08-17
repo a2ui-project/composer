@@ -49,19 +49,37 @@ export class RenderedFrame {
     if (!currentUrl) return null;
 
     try {
-      // Fallback to empty string if globalThis.location is undefined (e.g., in Server-Side Rendering).
-      const baseOrigin = globalThis.location?.origin || '';
+      // Fallback to undefined if globalThis.location is undefined
+      // (e.g., in Server-Side Rendering).
+      const baseOrigin = globalThis.location?.origin || undefined;
 
       // Construct a URL object. Passing baseOrigin as the second argument ensures that
       // relative URLs (e.g., "/renderer") are parsed correctly relative to the current
       // domain. Absolute URLs will ignore this base parameter.
       const url = new URL(currentUrl, baseOrigin);
 
-      // Append the parent origin as the 'origin' query parameter. The Boq backend is annotated
-      // with @OriginCheckRequired(param = "origin"), which strictly validates this parameter
-      // against a list of allowed internal domains (such as localhost.corp.google.com) to prevent
-      // unauthorized cross-site framing.
-      url.searchParams.set('origin', baseOrigin);
+      // Prevent unauthorized cross-site framing by appending parent and
+      // ancestor origins.
+      url.searchParams.delete('origin');
+
+      const origins = new Set<string>();
+      if (baseOrigin) {
+        origins.add(baseOrigin);
+      }
+
+      const ancestorOrigins = globalThis.location?.ancestorOrigins;
+      if (ancestorOrigins) {
+        for (let i = 0; i < ancestorOrigins.length; i++) {
+          if (ancestorOrigins[i]) {
+            origins.add(ancestorOrigins[i]);
+          }
+        }
+      }
+
+      for (const origin of origins) {
+        url.searchParams.append('origin', origin);
+      }
+
       const initialTheme = untracked(() => this.configProvider.themePreference());
       url.searchParams.set('theme', initialTheme);
 
