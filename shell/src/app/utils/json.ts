@@ -23,6 +23,10 @@
  */
 export function tryParseJsonArray(content: string): unknown[] | null {
   const trimmed = content.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
   if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
     try {
       const parsed = JSON.parse(trimmed);
@@ -30,9 +34,50 @@ export function tryParseJsonArray(content: string): unknown[] | null {
         return parsed;
       }
     } catch (e) {
-      // Ignore and return null
+      // Ignore array parse errors
+    }
+  } else if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return [parsed];
+      }
+    } catch (e) {
+      // Ignore object parse errors
     }
   }
+
+  // Try parsing as JSON Lines
+  const lines = trimmed
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+  if (lines.length > 0) {
+    const parsedLines: unknown[] = [];
+    let validJSONL = true;
+    for (const line of lines) {
+      if (!line.startsWith('{') || !line.endsWith('}')) {
+        validJSONL = false;
+        break;
+      }
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          parsedLines.push(parsed);
+        } else {
+          validJSONL = false;
+          break;
+        }
+      } catch (e) {
+        validJSONL = false;
+        break;
+      }
+    }
+    if (validJSONL) {
+      return parsedLines;
+    }
+  }
+
   return null;
 }
 

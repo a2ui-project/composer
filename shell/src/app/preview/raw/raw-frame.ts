@@ -35,6 +35,7 @@ import {ChatState} from '../../chat/chat-state/chat-state';
 import {MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {tryParseJsonArray} from '../../utils/json';
 
 /**
  * Hosts the raw JSON view of active surface models, allowing direct source editing
@@ -192,12 +193,11 @@ export class RawFrame {
     if (!trimmed) {
       return [];
     }
-    try {
-      const parsed = JSON.parse(trimmed);
-      return Array.isArray(parsed) ? parsed : [parsed];
-    } catch (err) {
-      throw new SyntaxError('Invalid JSON');
+    const parsed = tryParseJsonArray(trimmed);
+    if (parsed !== null) {
+      return parsed;
     }
+    throw new SyntaxError('Invalid JSON');
   }
 
   private showJsonSyntaxError(): void {

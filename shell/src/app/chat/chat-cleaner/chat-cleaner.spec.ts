@@ -117,6 +117,21 @@ describe('ChatCleaner', () => {
       expect(service.cleanPayload(input)).toBe('[\n  {\n    "createSurface": {"surfaceId": "s1"}');
     });
 
+    it('isolates JSON Lines layout stream without truncating prose brackets', () => {
+      const input = 'Prose [bracket] before JSONL:\n{"version": "v0.9"}\n{"createSurface": {}}';
+      expect(service.cleanPayload(input)).toBe('{"version": "v0.9"}\n{"createSurface": {}}');
+    });
+
+    it('does not isolate non-layout JSON array from prose', () => {
+      const input = 'Prose before: [{"foo": "bar"}]';
+      expect(service.cleanPayload(input)).toBe('Prose before: [{"foo": "bar"}]');
+    });
+
+    it('does not isolate non-layout JSON Lines stream from prose', () => {
+      const input = 'Prose before:\n{"foo": "bar"}\n{"baz": "qux"}';
+      expect(service.cleanPayload(input)).toBe('Prose before:\n{"foo": "bar"}\n{"baz": "qux"}');
+    });
+
     it('returns cleaned text when content is not JSON', () => {
       expect(service.cleanPayload('hello world')).toBe('hello world');
     });
@@ -145,6 +160,26 @@ describe('ChatCleaner', () => {
       expect(service.isLayoutSnapshot('[\n  {\n    "updateComponents": {"surfaceId": "s1"}')).toBe(
         true,
       );
+    });
+
+    it('returns true for JSON Lines layout stream with version string', () => {
+      expect(service.isLayoutSnapshot('{"version": "v0.9"}\n{"createSurface": {}}')).toBe(true);
+    });
+
+    it('returns true for JSON Lines layout stream without version but with layout commands', () => {
+      expect(
+        service.isLayoutSnapshot(
+          '{"createSurface": {"surfaceId": "s1"}}\n{"updateComponents": {"surfaceId": "s1"}}',
+        ),
+      ).toBe(true);
+    });
+
+    it('returns false for non-layout JSON array', () => {
+      expect(service.isLayoutSnapshot('[{"foo": "bar"}]')).toBe(false);
+    });
+
+    it('returns false for non-layout JSON Lines stream', () => {
+      expect(service.isLayoutSnapshot('{"foo": "bar"}\n{"baz": "qux"}')).toBe(false);
     });
 
     it('returns false for arbitrary non-layout text', () => {
