@@ -33,7 +33,10 @@ export declare interface ParseResult {
  * @returns ParseResult containing parsed payload blocks and whether syntax healing occurred.
  * @throws Error if corrupted JSON Lines cannot be recovered or no valid blocks are parsed.
  */
-export function parseAndHealJsonLines(content: string): ParseResult {
+export function parseAndHealJsonLines(content?: string | null): ParseResult {
+  if (content == null || content.trim().length === 0) {
+    return {blocks: [], wasHealed: false};
+  }
   let wasHealed = false;
 
   // Attempt full JSON parsing before line-by-line processing
@@ -95,7 +98,10 @@ export function parseAndHealJsonLines(content: string): ParseResult {
 /**
  * Attempts simple token-healing heuristics on a malformed JSON string.
  */
-export function attemptSyntaxHealing(line: string): unknown | null {
+export function attemptSyntaxHealing(line?: string | null): unknown | null {
+  if (line == null || line.trim().length === 0) {
+    return null;
+  }
   let patched = line.trim();
 
   // Repair 1: Strip trailing commas inside properties arrays
