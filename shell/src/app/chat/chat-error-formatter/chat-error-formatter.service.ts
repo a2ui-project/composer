@@ -36,7 +36,13 @@ export interface ParsedChatError {
   providedIn: 'root',
 })
 export class ChatErrorFormatterService {
-  isConnectivityError(lowerMsg: string): boolean {
+  /**
+   * Determines whether the given lowercased message indicates a connectivity or backend error.
+   */
+  isConnectivityError(lowerMsg: string | null | undefined): boolean {
+    if (!lowerMsg) {
+      return false;
+    }
     return (
       lowerMsg.includes('failed to fetch') ||
       lowerMsg.includes('fetch') ||
@@ -57,22 +63,32 @@ export class ChatErrorFormatterService {
     );
   }
 
-  parseError(lowerMsg: string, cleanMsg: string, hasOriginalPrompt: boolean): ParsedChatError {
+  /**
+   * Parses error messages into a structured ParsedChatError object.
+   */
+  parseError(
+    lowerMsg: string | null | undefined,
+    cleanMsg: string | null | undefined,
+    hasOriginalPrompt = false,
+  ): ParsedChatError {
+    const safeLowerMsg = lowerMsg ?? '';
+    const safeCleanMsg = cleanMsg ?? '';
+
     // Default values (Connectivity Failure)
     const errorTitle = 'Connectivity Failure';
-    const isJson = cleanMsg.trim().startsWith('{');
-    const errorMessage = isJson ? 'A connectivity error occurred.' : cleanMsg;
-    const errorDetails = isJson ? 'Details: ' + cleanMsg : undefined;
+    const isJson = safeCleanMsg.trim().startsWith('{');
+    const errorMessage = isJson ? 'A connectivity error occurred.' : safeCleanMsg;
+    const errorDetails = isJson ? 'Details: ' + safeCleanMsg : undefined;
     const errorTip =
       'Tip: Please check your network proxy configurations or verify your settings to restore connections.';
     const isRetryable = hasOriginalPrompt;
     const showDetails = true;
-    const isConnectivityFailure = this.isConnectivityError(lowerMsg);
+    const isConnectivityFailure = this.isConnectivityError(safeLowerMsg);
 
     const isValidationError =
-      lowerMsg.includes('validation') ||
-      lowerMsg.includes('syntax recovery') ||
-      lowerMsg.includes('validation failure');
+      safeLowerMsg.includes('validation') ||
+      safeLowerMsg.includes('syntax recovery') ||
+      safeLowerMsg.includes('validation failure');
 
     if (isValidationError) {
       return {
@@ -82,12 +98,12 @@ export class ChatErrorFormatterService {
           'Tip: Try rephrasing your prompt to guide the model to generate valid components.',
         isRetryable: hasOriginalPrompt,
         showDetails: true,
-        errorDetails: 'Details: ' + cleanMsg,
+        errorDetails: 'Details: ' + safeCleanMsg,
         isConnectivityFailure,
       };
     }
 
-    if (lowerMsg.includes('503') || lowerMsg.includes('unavailable')) {
+    if (safeLowerMsg.includes('503') || safeLowerMsg.includes('unavailable')) {
       return {
         errorTitle: 'Service Unavailable',
         errorMessage: 'The generative service is temporarily unavailable. Please try again later.',
@@ -98,7 +114,7 @@ export class ChatErrorFormatterService {
       };
     }
 
-    if (lowerMsg.includes('high demand')) {
+    if (safeLowerMsg.includes('high demand')) {
       return {
         errorTitle: 'Model High Demand',
         errorMessage:
@@ -110,11 +126,11 @@ export class ChatErrorFormatterService {
       };
     }
 
-    if (lowerMsg.includes('timeout') || lowerMsg.includes('504')) {
+    if (safeLowerMsg.includes('timeout') || safeLowerMsg.includes('504')) {
       return {
         errorTitle: 'REST Gateway Timeout',
         errorMessage: 'Remote generation service did not respond.',
-        errorDetails: 'Details: ' + cleanMsg,
+        errorDetails: 'Details: ' + safeCleanMsg,
         errorTip,
         isRetryable,
         showDetails: true,
@@ -122,11 +138,11 @@ export class ChatErrorFormatterService {
       };
     }
 
-    if (lowerMsg.includes('api key') || lowerMsg.includes('apikey')) {
+    if (safeLowerMsg.includes('api key') || safeLowerMsg.includes('apikey')) {
       return {
         errorTitle: 'Invalid API Key',
         errorMessage: 'The provided Gemini API key is invalid or missing.',
-        errorDetails: 'Details: ' + cleanMsg,
+        errorDetails: 'Details: ' + safeCleanMsg,
         errorTip:
           'Tip: Please update your third-party Gemini developer API key on the settings page to restore connections.',
         isRetryable,
@@ -136,15 +152,15 @@ export class ChatErrorFormatterService {
     }
 
     if (
-      lowerMsg.includes('auth') ||
-      lowerMsg.includes('401') ||
-      lowerMsg.includes('403') ||
-      lowerMsg.includes('credential')
+      safeLowerMsg.includes('auth') ||
+      safeLowerMsg.includes('401') ||
+      safeLowerMsg.includes('403') ||
+      safeLowerMsg.includes('credential')
     ) {
       return {
         errorTitle: 'Authentication Refused',
         errorMessage: 'Authentication failed. Please verify your credentials in Settings.',
-        errorDetails: 'Details: ' + cleanMsg,
+        errorDetails: 'Details: ' + safeCleanMsg,
         errorTip,
         isRetryable,
         showDetails: true,
@@ -152,11 +168,15 @@ export class ChatErrorFormatterService {
       };
     }
 
-    if (lowerMsg.includes('quota') || lowerMsg.includes('blocked') || lowerMsg.includes('429')) {
+    if (
+      safeLowerMsg.includes('quota') ||
+      safeLowerMsg.includes('blocked') ||
+      safeLowerMsg.includes('429')
+    ) {
       return {
         errorTitle: 'GenAI Service Blocked',
         errorMessage: 'Resource quota depleted or content safety limits triggered.',
-        errorDetails: 'Details: ' + cleanMsg,
+        errorDetails: 'Details: ' + safeCleanMsg,
         errorTip,
         isRetryable,
         showDetails: true,
