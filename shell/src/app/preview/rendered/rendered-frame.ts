@@ -67,8 +67,9 @@ export class RenderedFrame {
         origins.add(baseOrigin);
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ancestorOrigins = (globalThis.location as any)?.['ancestorOrigins'];
+      const ancestorOrigins = (
+        globalThis.location as Location & {['ancestorOrigins']?: DOMStringList}
+      )?.['ancestorOrigins'];
       if (ancestorOrigins) {
         for (let i = 0; i < ancestorOrigins.length; i++) {
           if (ancestorOrigins[i]) {
