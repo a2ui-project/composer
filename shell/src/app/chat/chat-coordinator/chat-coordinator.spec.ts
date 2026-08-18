@@ -16,7 +16,7 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {signal} from '@angular/core';
+import {createEnvironmentInjector, EnvironmentInjector, signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ChatCoordinator} from './chat-coordinator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
@@ -555,6 +555,36 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
     expect(service.isProgrammaticStreamActive()).toBe(false);
     expect(stateSyncMock.flushDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('unsubscribes from rendererUrl changes upon destruction', async () => {
+    const parentInjector = TestBed.inject(EnvironmentInjector);
+    const childInjector = createEnvironmentInjector([ChatCoordinator], parentInjector);
+    const childService = childInjector.get(ChatCoordinator);
+    const wipeSpy = vi.spyOn(childService, 'wipeEnvironmentCache');
+
+    // Drain initial signal emission from constructor
+    TestBed.tick();
+
+    // Trigger mutation while active
+    configProviderMock.rendererUrl.set('http://localhost:9999/preview-active');
+    TestBed.tick();
+    await Promise.resolve();
+    await new Promise<void>(resolve => queueMicrotask(() => resolve()));
+    expect(wipeSpy).toHaveBeenCalledTimes(1);
+
+    wipeSpy.mockClear();
+
+    // Destroy child injector
+    childInjector.destroy();
+
+    // Trigger mutation after destruction
+    configProviderMock.rendererUrl.set('http://localhost:9999/preview-destroyed');
+    TestBed.tick();
+    await Promise.resolve();
+    await new Promise<void>(resolve => queueMicrotask(() => resolve()));
+
+    expect(wipeSpy).not.toHaveBeenCalled();
   });
 
   it('handles active stream cancellation cleanly', async () => {
