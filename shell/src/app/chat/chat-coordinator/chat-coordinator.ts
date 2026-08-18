@@ -15,7 +15,7 @@
  */
 
 import {DestroyRef, inject, Injectable, signal} from '@angular/core';
-import {toObservable} from '@angular/core/rxjs-interop';
+import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {skip} from 'rxjs/operators';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
@@ -83,7 +83,7 @@ export class ChatCoordinator {
     // resets
     toObservable(this.configProvider.rendererUrl)
       // skip(1) prevents wiping the cache on the initial startup signal emission
-      .pipe(skip(1))
+      .pipe(skip(1), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         queueMicrotask(() => this.wipeEnvironmentCache());
       });
