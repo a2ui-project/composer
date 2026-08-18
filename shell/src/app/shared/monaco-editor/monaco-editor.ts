@@ -53,7 +53,7 @@ import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
   styleUrl: './monaco-editor.scss',
 })
 export class MonacoEditor {
-  private readonly layoutModelUriStr = `a2ui://layout-${Math.random().toString(36).substr(2, 9)}.json`;
+  private readonly layoutModelUriStr = `a2ui://layout-${Math.random().toString(36).slice(2, 11)}.json`;
   readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
 
   readonly value = input<string>('');

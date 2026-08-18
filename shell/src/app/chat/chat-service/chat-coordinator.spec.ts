@@ -702,6 +702,35 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
     });
 
+    it('handles schema validation failures with detailed error messages', async () => {
+      const invalidEnvelopeJsonl =
+        '{"version": "v0.8", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([invalidEnvelopeJsonl]);
+        return {contentStream, complete: Promise.resolve(invalidEnvelopeJsonl)};
+      });
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'test',
+        components: {},
+      });
+
+      await service.submitPrompt('Invalid version envelope prompt');
+
+      expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+      expect(service.isProgrammaticStreamActive()).toBe(false);
+
+      const history = chatStateMock.chatHistory();
+      expect(history.length).toBe(2);
+      expect(history[1].role).toBe(MessageRole.ERROR);
+      expect(history[1].errorTitle).toBe('Validation Failure');
+      expect(history[1].errorDetails).toContain('Outgoing message envelope validation failed');
+      expect(history[1].errorDetails).toContain(
+        'Malformed payload for RENDER_A2UI: array items must specify version "v0.9".',
+      );
+    });
+
     it('parses layout payloads wrapped in ```jsonl code blocks', async () => {
       const jsonlOutput =
         '```jsonl\n' +

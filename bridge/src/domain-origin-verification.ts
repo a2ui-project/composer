@@ -27,11 +27,6 @@ export class DomainOriginVerificationService {
       return false;
     }
 
-    // Allow 'null' origin for strict sandboxed iframes without allow-same-origin
-    if (!eventOrigin || eventOrigin === 'null') {
-      return true;
-    }
-
     if (typeof window !== 'undefined') {
       if (eventOrigin === window.location.origin) {
         return true;

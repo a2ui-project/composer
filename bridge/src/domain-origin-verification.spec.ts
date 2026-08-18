@@ -55,10 +55,10 @@ describe('DomainOriginVerificationService', () => {
     ).toBe(false);
   });
 
-  it('allows sandboxed null origin', () => {
+  it('rejects sandboxed null origin', () => {
     const parentWin = {} as Window;
     expect(DomainOriginVerificationService.verifyStrictOrigin('null', parentWin, parentWin)).toBe(
-      true,
+      false,
     );
   });
 

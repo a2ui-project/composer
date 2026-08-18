@@ -138,6 +138,71 @@ describe('CrossFrameValidator', () => {
     });
   });
 
+  describe('GET_COMPONENT_USAGES', () => {
+    it('accepts valid GET_COMPONENT_USAGES with no payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid GET_COMPONENT_USAGES with undefined payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
+          payload: undefined,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid GET_COMPONENT_USAGES with null payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
+          payload: null,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid GET_COMPONENT_USAGES with object payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
+          payload: {},
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects GET_COMPONENT_USAGES with non-object payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
+          payload: 'invalid',
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Malformed payload for GET_COMPONENT_USAGES: must be an object, null, or undefined.',
+      );
+    });
+
+    it('rejects GET_COMPONENT_USAGES with array payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,
+          payload: [],
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Malformed payload for GET_COMPONENT_USAGES: must be an object, null, or undefined.',
+      );
+    });
+  });
+
   describe('RENDER_A2UI', () => {
     it('rejects RENDER_A2UI with missing payload', () => {
       expect(
@@ -490,6 +555,17 @@ describe('CrossFrameValidator', () => {
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
+    it('accepts valid SET_BLOCKING_STATE payload without optional message', () => {
+      const payload = {blocked: false};
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
+          payload,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
     it('rejects SET_BLOCKING_STATE with missing payload', () => {
       expect(
         CrossFrameValidator.validateOutgoingMessage({
@@ -655,6 +731,48 @@ describe('CrossFrameValidator', () => {
         CrossFrameValidator.validateOutgoingMessage({type: 'UNKNOWN_EVENT', payload: 123}),
       ).toBe(true);
       expect(warnSpy).toHaveBeenCalledWith('Unrecognized message type: UNKNOWN_EVENT');
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Error Accumulator', () => {
+    it('populates the errors array when provided upon validation failure', () => {
+      const errors: string[] = [];
+      const result = CrossFrameValidator.validateOutgoingMessage(
+        {
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload: [{version: 'v0.8'}],
+        },
+        errors,
+      );
+
+      expect(result).toBe(false);
+      expect(errors.length).toBe(1);
+      expect(errors[0]).toBe(
+        'Malformed payload for RENDER_A2UI: array items must specify version "v0.9".',
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Malformed payload for RENDER_A2UI: array items must specify version "v0.9".',
+      );
+    });
+
+    it('leaves errors array empty when validation succeeds', () => {
+      const errors: string[] = [];
+      const result = CrossFrameValidator.validateOutgoingMessage(
+        {
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload: [
+            {
+              version: 'v0.9',
+              createSurface: {surfaceId: 'surface-1', catalogId: 'catalog-1'},
+            },
+          ],
+        },
+        errors,
+      );
+
+      expect(result).toBe(true);
+      expect(errors).toEqual([]);
       expect(errorSpy).not.toHaveBeenCalled();
     });
   });

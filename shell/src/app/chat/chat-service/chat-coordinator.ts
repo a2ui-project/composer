@@ -330,11 +330,15 @@ export class ChatCoordinator {
         payload: parsedBlocks,
       };
 
-      const isValidEnvelope = CrossFrameValidator.validateOutgoingMessage(mockEnvMsg);
+      const validationErrors: string[] = [];
+      const isValidEnvelope = CrossFrameValidator.validateOutgoingMessage(
+        mockEnvMsg,
+        validationErrors,
+      );
 
       if (!isValidEnvelope) {
         throw new Error(
-          `Outgoing message envelope validation failed: Schema verification returned false.`,
+          `Outgoing message envelope validation failed: Schema verification returned false.\n${validationErrors.join('\n')}`,
         );
       }
 

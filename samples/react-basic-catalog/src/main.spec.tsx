@@ -125,6 +125,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           source: window,
+          origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
             payload,
@@ -187,6 +188,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           source: window,
+          origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
             payload,
@@ -248,6 +250,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           source: window,
+          origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.GET_CATALOG,
           },
@@ -302,6 +305,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           source: window,
+          origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.GET_CATALOG,
           },
