@@ -97,6 +97,22 @@ describe('Ga4UsageTrackingService', () => {
     expect(mockDocument.head?.appendChild).toHaveBeenCalled();
   });
 
+  it('creates fallback gtag function when undefined', () => {
+    delete mockWindow.gtag;
+    mockWindow.dataLayer = [];
+    service.initialize();
+    expect(mockWindow.gtag).toBeDefined();
+
+    // Call the newly created fallback function
+    mockWindow.gtag!('event', 'test_event', {key: 'value'});
+
+    // Convert arguments to array for easy assertion
+    const lastPushed = Array.from(
+      mockWindow.dataLayer[mockWindow.dataLayer.length - 1] as ArrayLike<unknown>,
+    );
+    expect(lastPushed).toEqual(['event', 'test_event', {key: 'value'}]);
+  });
+
   it('does not dispatch events when tracking is disabled', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
