@@ -44,14 +44,6 @@ declare global {
   interface Window {
     a2uiHostCommunication?: HostCommunication;
   }
-
-  class RestrictionTarget {
-    static fromElement(element: Element): Promise<RestrictionTarget>;
-  }
-
-  interface MediaStreamTrack {
-    restrictTo(target: RestrictionTarget | null): Promise<void>;
-  }
 }
 
 /**
@@ -276,87 +268,11 @@ export class HostCommunication implements OnDestroy {
   }
 
   /**
-   * Triggers a self-screenshot capture within the guest preview iframe.
-   * Dispatches a CAPTURE_SCREENSHOT message and returns a Promise resolving to
-   * the base64 PNG data URL string once the guest frame responds.
-   *
-   * @returns A promise resolving to the base64 PNG data URL.
+   * Retrieves the currently registered iframe element, if any.
+   * @returns HTMLIFrameElement or null
    */
-  async captureScreenshot(): Promise<string> {
-    if (!this.iframeElement) {
-      throw new Error('No active iframe element found to capture screenshot.');
-    }
-
-    if (!navigator?.mediaDevices?.getDisplayMedia) {
-      throw new Error('Screen capture API (getDisplayMedia) is not supported in this environment.');
-    }
-
-    let stream: MediaStream | null = null;
-    try {
-      // prettier-ignore
-      stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {displaySurface: 'browser'},
-        // @ts-expect-error - preferCurrentTab is a recent/experimental API not yet in TS types
-        'preferCurrentTab': true,
-      });
-
-      const [track] = stream.getVideoTracks();
-      if (!track) {
-        throw new Error('No video track found in media stream.');
-      }
-
-      const restrictionTargetClass = (globalThis as Record<string, unknown>)[
-        'RestrictionTarget'
-      ] as {fromElement?: (element: Element) => Promise<RestrictionTarget>} | undefined;
-
-      if (
-        typeof restrictionTargetClass?.fromElement === 'function' &&
-        typeof track?.restrictTo === 'function'
-      ) {
-        try {
-          const target = await restrictionTargetClass.fromElement(this.iframeElement);
-          await track.restrictTo(target);
-        } catch (restrictionError) {
-          console.warn(
-            'Failed to restrict video track to element, falling back to full tab capture:',
-            restrictionError,
-          );
-        }
-      } else {
-        console.warn('RestrictionTarget API not supported, capturing full tab.');
-      }
-
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      video.muted = true;
-
-      await new Promise<void>(resolve => {
-        video.onloadedmetadata = () => {
-          video.play().catch(() => {});
-          resolve();
-        };
-      });
-
-      // Give the browser a tiny buffer to apply the restriction crop visually
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0);
-      }
-
-      return canvas.toDataURL('image/png');
-    } catch (error) {
-      console.warn('Capture canceled or failed:', error);
-      throw error;
-    } finally {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    }
+  getIframeElement(): HTMLIFrameElement | null {
+    return this.iframeElement;
   }
 
   ngOnDestroy(): void {

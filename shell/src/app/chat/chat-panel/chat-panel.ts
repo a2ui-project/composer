@@ -105,10 +105,10 @@ export class ChatPanel {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
 
-  protected readonly includeScreenshot = this.configProvider.includeScreenshot;
+  protected readonly includeScreenshot = signal<boolean>(false);
 
   protected onIncludeScreenshotChange(checked: boolean): void {
-    this.configProvider.setIncludeScreenshot(checked);
+    this.includeScreenshot.set(checked);
   }
 
   /**
@@ -214,7 +214,9 @@ export class ChatPanel {
     if (this.includeScreenshot()) {
       this.isReadingFiles.set(true);
       try {
-        const screenshotDataUrl = await this.hostCommunication.captureScreenshot();
+        const screenshotDataUrl = await this.screenshotCaptureService.captureScreenshot(
+          this.hostCommunication.getIframeElement(),
+        );
         if (screenshotDataUrl) {
           const commaIndex = screenshotDataUrl.indexOf(',');
           const base64Data =

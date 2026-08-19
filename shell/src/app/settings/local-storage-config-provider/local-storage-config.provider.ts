@@ -75,9 +75,6 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     ) as ThemePreference | null) || ThemePreference.LIGHT,
   );
 
-  /** Coordinates dynamic inclusion of screenshots context preferences state. */
-  private readonly _includeScreenshot = signal<boolean>(false);
-
   /**
    * Orchestrates overall subsystem bootstrapping, sequentially resolving
    * active renderer fallback URLs and secure cryptographic API credentials.
@@ -159,18 +156,6 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
   /** Visual theme preference. */
   override readonly themePreference: Signal<ThemePreference> = this._themePreference.asReadonly();
-
-  /** Preference for including screenshots in user interactions. */
-  override readonly includeScreenshot: Signal<boolean> = this._includeScreenshot.asReadonly();
-
-  /**
-   * Updates the screenshot attachment preference.
-   *
-   * @param include Whether screenshots should be included.
-   */
-  override setIncludeScreenshot(include: boolean): void {
-    this._includeScreenshot.set(include);
-  }
 
   /**
    * Updates and persists the active renderer URL endpoint.
@@ -294,7 +279,6 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
     this._rendererUrl.set(this.startupConfigState.resolvedUrl() || '');
     this._themePreference.set(ThemePreference.LIGHT);
-    this._includeScreenshot.set(false);
   }
 
   /**

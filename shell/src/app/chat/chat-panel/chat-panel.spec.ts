@@ -107,14 +107,10 @@ class MockStartupResolution {
 
 class MockAppConfigProvider {
   geminiApiKey = signal<string>('AIzaSyValidKey');
-  includeScreenshot = signal<boolean>(false);
-  setIncludeScreenshot = vi.fn((include: boolean) => {
-    this.includeScreenshot.set(include);
-  });
 }
 
 class MockHostCommunication {
-  captureScreenshot = vi.fn().mockResolvedValue('data:image/png;base64,mockScreenshot');
+  getIframeElement = vi.fn().mockReturnValue(null);
 }
 
 describe('ChatPanel Gemini Dialogue Panel Integration', () => {
@@ -126,6 +122,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   let startupResolutionMock: MockStartupResolution;
   let configProviderMock: MockAppConfigProvider;
   let hostCommunicationMock: MockHostCommunication;
+  let screenshotServiceMock: ScreenshotCaptureService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -156,6 +153,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     startupResolutionMock = TestBed.inject(StartupResolution) as unknown as MockStartupResolution;
     configProviderMock = TestBed.inject(AppConfigProvider) as unknown as MockAppConfigProvider;
     hostCommunicationMock = TestBed.inject(HostCommunication) as unknown as MockHostCommunication;
+    screenshotServiceMock = TestBed.inject(ScreenshotCaptureService);
     fixture = TestBed.createComponent(ChatPanel);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ChatPanelHarness);
@@ -871,29 +869,30 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     });
 
     it('toggles setting when checkbox is clicked', async () => {
+      const component = fixture.componentInstance;
       expect(await harness.isScreenshotChecked()).toBe(false);
-      const setScreenshotSpy = vi.spyOn(configProviderMock, 'setIncludeScreenshot');
+      expect(component.includeScreenshot()).toBe(false);
 
       await harness.toggleScreenshot();
       fixture.detectChanges();
 
-      expect(setScreenshotSpy).toHaveBeenCalledWith(true);
+      expect(component.includeScreenshot()).toBe(true);
       expect(await harness.isScreenshotChecked()).toBe(true);
     });
 
     it('captures screenshot and attaches it when sending prompt with includeScreenshot enabled', async () => {
       const component = fixture.componentInstance;
       const submitSpy = chatServiceMock.submitPrompt;
-      const captureSpy = vi.spyOn(hostCommunicationMock, 'captureScreenshot');
+      const captureSpy = vi.spyOn(screenshotServiceMock, 'captureScreenshot');
 
-      configProviderMock.includeScreenshot.set(true);
+      component.includeScreenshot.set(true);
       component.userPrompt.set('Add button');
       fixture.detectChanges();
 
       await harness.clickSubmit();
       fixture.detectChanges();
 
-      expect(captureSpy).toHaveBeenCalledTimes(1);
+      expect(captureSpy).toHaveBeenCalledWith(hostCommunicationMock.getIframeElement());
       expect(submitSpy).toHaveBeenCalledWith(
         'Add button',
         [
@@ -910,9 +909,9 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     it('does not capture or attach screenshot when sending prompt with includeScreenshot disabled', async () => {
       const component = fixture.componentInstance;
       const submitSpy = chatServiceMock.submitPrompt;
-      const captureSpy = vi.spyOn(hostCommunicationMock, 'captureScreenshot');
+      const captureSpy = vi.spyOn(screenshotServiceMock, 'captureScreenshot');
 
-      configProviderMock.includeScreenshot.set(false);
+      component.includeScreenshot.set(false);
       component.userPrompt.set('Add button');
       fixture.detectChanges();
 
