@@ -17,6 +17,7 @@
 import {TrackEventDirective} from '../usage-tracking/track-event.directive';
 import {Component, computed, effect, inject, OnInit, OnDestroy} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
+import {Clipboard} from '@angular/cdk/clipboard';
 import {filter} from 'rxjs/operators';
 import {JsonPipe} from '@angular/common';
 import {MatSidenavModule} from '@angular/material/sidenav';
@@ -61,6 +62,7 @@ export class Gallery implements OnInit, OnDestroy {
   protected readonly catalogManagement = inject(CatalogManagement);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly usageTrackingService = inject(UsageTrackingService);
+  private readonly clipboard = inject(Clipboard);
 
   constructor() {
     this.hostCommunication.messageStream$
@@ -266,14 +268,10 @@ export class Gallery implements OnInit, OnDestroy {
       const commands = this.buildA2UIPayload(preset, catalogId);
       const payload = formatJson(commands);
 
-      if (!navigator.clipboard) {
-        console.error('Clipboard API is not available in this environment.');
-        return;
+      const successful = this.clipboard.copy(payload);
+      if (!successful) {
+        console.error('Failed to copy A2UI component usage to clipboard.');
       }
-
-      navigator.clipboard.writeText(payload).catch(err => {
-        console.error('Failed to copy A2UI component usage to clipboard: ', err);
-      });
     } catch (err) {
       console.error('Failed to parse or format A2UI usage payload: ', err);
     }

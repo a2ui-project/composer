@@ -419,19 +419,35 @@ describe('HostCommunication', () => {
     sub.unsubscribe();
   });
 
-  it('purges early message buffer when iframe is unregistered or service is destroyed', () => {
-    const mockGuest = {} as Window;
+  it('purges early message buffer when iframe is unregistered', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: mockGuest,
+        source: mockIframeWindow,
         origin: 'http://localhost:3000',
-        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {status: 'buffered'}},
       }),
     );
 
     service.registerIframe(null);
 
+    service.registerIframe(mockIframeWindow);
+
+    expect(service.latestEnvelope()).toBeNull();
+  });
+
+  it('purges early message buffer when service is destroyed', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {status: 'buffered'}},
+      }),
+    );
+
+    service.ngOnDestroy();
+
     service.registerIframe(mockIframeWindow);
 
     expect(service.latestEnvelope()).toBeNull();

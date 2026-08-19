@@ -200,6 +200,7 @@ export class HostCommunication implements OnDestroy {
     if (!target) {
       this.iframeElement = null;
       this.iframeWindow = null;
+      this.earlyMessageBuffer.length = 0;
       return;
     }
 
