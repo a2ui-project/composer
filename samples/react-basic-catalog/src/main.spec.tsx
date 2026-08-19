@@ -26,8 +26,16 @@ import {basicCatalog} from '@a2ui/react/v0_9';
 describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
   let container: HTMLDivElement | null = null;
   let root: Root | null = null;
+  let originalParent: Window;
 
   beforeEach(() => {
+    originalParent = window.parent;
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: {
+        postMessage: vi.fn(),
+      },
+    });
     container = document.createElement('div');
     container.id = 'app-root';
     document.body.appendChild(container);
@@ -40,6 +48,10 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     container?.remove();
     container = null;
     root = null;
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: originalParent,
+    });
     vi.restoreAllMocks();
   });
 
@@ -58,7 +70,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
       expect.objectContaining({
         type: PreviewBridgeMessageType.RENDERER_READY,
       }),
-      '*',
+      window.location.origin,
     );
   });
 
@@ -124,7 +136,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     await act(async () => {
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -187,7 +199,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     await act(async () => {
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -220,7 +232,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
           }),
         }),
       }),
-      '*',
+      window.location.origin,
     );
   });
 
@@ -249,7 +261,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     await act(async () => {
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.GET_CATALOG,
@@ -272,7 +284,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: expect.objectContaining(mockCatalogPayload),
       }),
-      '*',
+      window.location.origin,
     );
   });
 
@@ -304,7 +316,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     await act(async () => {
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.GET_CATALOG,
@@ -327,7 +339,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: expect.objectContaining(mockPreloadedCatalog),
       }),
-      '*',
+      window.location.origin,
     );
   });
 });
