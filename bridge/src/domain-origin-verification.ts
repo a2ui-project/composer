@@ -17,6 +17,14 @@
 export class DomainOriginVerificationService {
   /**
    * Verifies if a given message event comes from an explicitly trusted origin.
+   *
+   * @OriginCheckRequired
+   * Depends on the `?origin=` URL parameter pairing contract to dynamically authenticate
+   * cross-origin communication with the parent Shell context.
+   *
+   * Note: This Javascript-level origin validation assumes the presence of a strict
+   * outgoing HTTP CSP `frame-ancestors` policy configured on the hosting server
+   * to protect against raw clickjacking and malicious iframe embedding prior to bridging.
    */
   static verifyStrictOrigin(
     eventOrigin: string,

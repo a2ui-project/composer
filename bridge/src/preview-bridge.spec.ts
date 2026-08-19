@@ -25,16 +25,31 @@ import {
 import {PreviewBridgeMessageType, ThemePreference} from './bridge-message';
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
-declare const process: {
-  env: {
-    NODE_ENV: string;
-  };
-};
+
 
 describe('PreviewBridge Core API Runtime', () => {
   let bridge: PreviewBridge;
+  let originalParent: Window;
+  let originalLocation: Location;
 
   beforeEach(() => {
+    originalParent = window.parent;
+    originalLocation = window.location;
+
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: {
+        postMessage: vi.fn(),
+      }
+    });
+
+    // Make window.location mutable for tests if needed
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, search: '' },
+      writable: true,
+    });
+
     a2uiBridge.destroy(); // Cleanly disable and destroy module-level global instance
     bridge = new PreviewBridge();
     const existing = document.getElementById('a2ui-blocking-overlay');
@@ -51,6 +66,17 @@ describe('PreviewBridge Core API Runtime', () => {
       existing.parentNode.removeChild(existing);
     }
 
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: originalParent,
+    });
+
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: originalLocation,
+      writable: true,
+    });
+
     vi.restoreAllMocks();
     vi.clearAllMocks();
     vi.useRealTimers();
@@ -59,7 +85,7 @@ describe('PreviewBridge Core API Runtime', () => {
   it('routes SET_BLOCKING_STATE events correctly and handles overlays', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {
           type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
@@ -136,14 +162,14 @@ describe('PreviewBridge Core API Runtime', () => {
 
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({type: PreviewBridgeMessageType.RENDERER_READY}),
-      '*',
+      window.location.origin,
     );
   });
 
   it('mounts full-viewport overlay DOM element dynamically upon SET_BLOCKING_STATE true', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {
           type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
@@ -161,7 +187,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.SET_BLOCKING_STATE, payload: {blocked: false}},
       }),
@@ -173,7 +199,7 @@ describe('PreviewBridge Core API Runtime', () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.SET_BLOCKING_STATE, payload: {blocked: true}},
       }),
@@ -185,7 +211,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     expect(spy).toHaveBeenCalledWith(
       {type: PreviewBridgeMessageType.FORCE_UNBLOCK, payload: {}},
-      '*',
+      window.location.origin,
     );
   });
 
@@ -199,7 +225,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -213,7 +239,7 @@ describe('PreviewBridge Core API Runtime', () => {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: mockCatalog,
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -234,7 +260,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -249,7 +275,7 @@ describe('PreviewBridge Core API Runtime', () => {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: mockCatalog,
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -269,7 +295,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -289,7 +315,7 @@ describe('PreviewBridge Core API Runtime', () => {
           },
         },
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -310,7 +336,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -325,7 +351,7 @@ describe('PreviewBridge Core API Runtime', () => {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: mockCatalog,
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -338,7 +364,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -353,7 +379,7 @@ describe('PreviewBridge Core API Runtime', () => {
           error: {message: 'Catalog fetch failed with status: 500'},
         },
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -373,7 +399,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -387,7 +413,7 @@ describe('PreviewBridge Core API Runtime', () => {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: mockCatalog,
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -407,7 +433,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_COMPONENT_USAGES},
       }),
@@ -420,7 +446,7 @@ describe('PreviewBridge Core API Runtime', () => {
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
         payload: mockUsages,
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -436,7 +462,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_COMPONENT_USAGES},
       }),
@@ -449,7 +475,7 @@ describe('PreviewBridge Core API Runtime', () => {
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
         payload: {},
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -469,7 +495,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_COMPONENT_USAGES},
       }),
@@ -482,7 +508,7 @@ describe('PreviewBridge Core API Runtime', () => {
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
         payload: {},
       },
-      '*',
+      window.location.origin,
     );
     expect(errorSpy).toHaveBeenCalledWith(
       'PreviewBridge: Error invoking getComponentUsages:',
@@ -504,7 +530,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {
           type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -541,7 +567,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -568,7 +594,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -585,7 +611,7 @@ describe('PreviewBridge Core API Runtime', () => {
           error: {message: expect.any(String)},
         },
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -608,7 +634,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -622,7 +648,7 @@ describe('PreviewBridge Core API Runtime', () => {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: mockCatalog,
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -643,7 +669,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -658,7 +684,7 @@ describe('PreviewBridge Core API Runtime', () => {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: mockCatalog,
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -678,7 +704,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -692,7 +718,7 @@ describe('PreviewBridge Core API Runtime', () => {
         type: PreviewBridgeMessageType.A2UI_CATALOG,
         payload: mockCatalog,
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -704,7 +730,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -719,7 +745,7 @@ describe('PreviewBridge Core API Runtime', () => {
           error: {message: expect.stringContaining('The user aborted a request.')},
         },
       },
-      '*',
+      window.location.origin,
     );
   });
 
@@ -735,7 +761,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: PreviewBridgeMessageType.GET_CATALOG},
       }),
@@ -760,14 +786,61 @@ describe('PreviewBridge Core API Runtime', () => {
     vi.useRealTimers();
   });
 
-  it('ignores sendMessage when window.parent is null or equal to window in non-test env', () => {
-    const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
-    const spy = vi.spyOn(window.parent, 'postMessage');
-    spy.mockClear();
+  it('ignores sendMessage when window.parent is null or equal to window', () => {
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: window,
+    });
+    const spy = vi.spyOn(window, 'postMessage');
     bridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG});
     expect(spy).not.toHaveBeenCalled();
-    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('targets expected ?origin= when sending messages', () => {
+    window.location.search = '?origin=https://trusted-parent.com';
+    const newBridge = new PreviewBridge();
+    
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    newBridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG});
+    expect(spy).toHaveBeenCalledWith(
+      {type: PreviewBridgeMessageType.A2UI_CATALOG},
+      'https://trusted-parent.com'
+    );
+    newBridge.destroy();
+  });
+
+  it('targets local origin fallback if ?origin= is absent', () => {
+    window.location.search = '';
+    const newBridge = new PreviewBridge();
+    
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    newBridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG});
+    expect(spy).toHaveBeenCalledWith(
+      {type: PreviewBridgeMessageType.A2UI_CATALOG},
+      window.location.origin
+    );
+    newBridge.destroy();
+  });
+
+  it('catches and shields DOMExceptions during cross-origin postMessage', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {
+      throw new DOMException('Blocked a frame with origin from accessing a cross-origin frame.');
+    });
+    
+    bridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG});
+    
+    expect(errorSpy).toHaveBeenCalledWith('[PreviewBridge] Blocked cross-origin postMessage:', expect.any(DOMException));
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('re-throws non-DOMExceptions during postMessage', () => {
+    const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {
+      throw new TypeError('Something else entirely');
+    });
+    
+    expect(() => bridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG})).toThrowError(TypeError);
+    expect(spy).toHaveBeenCalled();
   });
 
   it('ignores malformed incoming message payloads without throwing', () => {
@@ -784,7 +857,7 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(() => {
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: null,
         }),
@@ -792,7 +865,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: 'malformed string data',
         }),
@@ -822,7 +895,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {
           type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -854,7 +927,7 @@ describe('PreviewBridge Core API Runtime', () => {
           type: PreviewBridgeMessageType.SEND_TO_SERVER,
           payload: {version: 'v0.9', action: {click: 'button'}},
         },
-        '*',
+        window.location.origin,
       );
     });
 
@@ -900,7 +973,7 @@ describe('PreviewBridge Core API Runtime', () => {
             },
           },
         },
-        '*',
+        window.location.origin,
       );
     });
 
@@ -1021,7 +1094,7 @@ describe('PreviewBridge Core API Runtime', () => {
       // Dispatch layout setup message (which schedules deferred rendering)
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -1101,7 +1174,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload},
         }),
@@ -1150,7 +1223,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload},
         }),
@@ -1194,7 +1267,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
@@ -1217,7 +1290,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: 'UNRECOGNIZED_TEST_MESSAGE_TYPE',
@@ -1256,7 +1329,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -1298,7 +1371,7 @@ describe('PreviewBridge Core API Runtime', () => {
       // Dispatch 1st message triggering deferred mount
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -1313,7 +1386,7 @@ describe('PreviewBridge Core API Runtime', () => {
       // Dispatch 2nd message rapidly
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -1358,7 +1431,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -1395,7 +1468,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -1429,7 +1502,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -1512,7 +1585,7 @@ describe('PreviewBridge Core API Runtime', () => {
     it('updates blocking overlay message text dynamically upon receiving subsequent SET_BLOCKING_STATE messages', () => {
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
@@ -1527,7 +1600,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
@@ -1541,7 +1614,7 @@ describe('PreviewBridge Core API Runtime', () => {
       // Update blocking state again with omitted/falsy message to test default fallback path on update (line 551 branch)
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
@@ -1571,7 +1644,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {type: PreviewBridgeMessageType.GET_CATALOG},
         }),
@@ -1591,7 +1664,7 @@ describe('PreviewBridge Core API Runtime', () => {
             },
           },
         },
-        '*',
+        window.location.origin,
       );
     });
 
@@ -1600,7 +1673,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -1618,7 +1691,7 @@ describe('PreviewBridge Core API Runtime', () => {
       // 1. Show the overlay
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
@@ -1637,7 +1710,7 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(() => {
         window.dispatchEvent(
           new MessageEvent('message', {
-            source: window,
+            source: window.parent,
             origin: window.location.origin,
             data: {
               type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
@@ -1664,7 +1737,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {type: PreviewBridgeMessageType.GET_CATALOG},
         }),
@@ -1678,7 +1751,7 @@ describe('PreviewBridge Core API Runtime', () => {
           type: PreviewBridgeMessageType.A2UI_CATALOG,
           payload: mockCatalog,
         },
-        '*',
+        window.location.origin,
       );
     });
 
@@ -1692,7 +1765,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {type: PreviewBridgeMessageType.GET_CATALOG},
         }),
@@ -1707,7 +1780,7 @@ describe('PreviewBridge Core API Runtime', () => {
             error: {message: 'Network target unreachable (generic)'},
           },
         },
-        '*',
+        window.location.origin,
       );
     });
 
@@ -1729,7 +1802,7 @@ describe('PreviewBridge Core API Runtime', () => {
       // 1. Dispatch layout (schedules macro-task)
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -1806,7 +1879,7 @@ describe('PreviewBridge Core API Runtime', () => {
       // Dispatch RENDER_A2UI but omitting the payload field
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -1839,7 +1912,7 @@ describe('PreviewBridge Core API Runtime', () => {
       // 1. Send DATA_MODEL_CHANGE but with undefined payload
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
@@ -1851,7 +1924,7 @@ describe('PreviewBridge Core API Runtime', () => {
       // 2. Send DATA_MODEL_CHANGE but with empty payload object (missing updateDataModel)
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
@@ -1871,7 +1944,7 @@ describe('PreviewBridge Core API Runtime', () => {
       expect(() => {
         window.dispatchEvent(
           new MessageEvent('message', {
-            source: window,
+            source: window.parent,
             origin: window.location.origin,
             data: {
               type: PreviewBridgeMessageType.SET_BLOCKING_STATE,
@@ -1888,7 +1961,7 @@ describe('PreviewBridge Core API Runtime', () => {
   it('resets overlayElement pointer reference to null upon unblocking even if DOM node is already detached independently', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: 'SET_BLOCKING_STATE', payload: {blocked: true}},
       }),
@@ -1907,7 +1980,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     window.dispatchEvent(
       new MessageEvent('message', {
-        source: window,
+        source: window.parent,
         origin: window.location.origin,
         data: {type: 'SET_BLOCKING_STATE', payload: {blocked: false}},
       }),
@@ -2033,7 +2106,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.SET_THEME,
@@ -2052,7 +2125,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.SET_THEME,
@@ -2113,7 +2186,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.SET_THEME,
@@ -2152,7 +2225,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
       window.dispatchEvent(
         new MessageEvent('message', {
-          source: window,
+          source: window.parent,
           origin: window.location.origin,
           data: {
             type: PreviewBridgeMessageType.SET_THEME,
