@@ -142,6 +142,19 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(await malformedHarness.hasIframe()).toBe(false);
   });
 
+  it('fails closed when the resolved URL is unsafe', async () => {
+    fixture.destroy();
+    resolvedUrlSignal.set('javascript:alert(1)');
+    const unsafeFixture = TestBed.createComponent(RenderedFrame);
+    unsafeFixture.detectChanges();
+    const unsafeHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      unsafeFixture,
+      RenderedFrameHarness,
+    );
+
+    expect(await unsafeHarness.hasIframe()).toBe(false);
+  });
+
   it('correctly handles relative renderer URLs and appends the origin', async () => {
     fixture.destroy();
     resolvedUrlSignal.set('/renderer');

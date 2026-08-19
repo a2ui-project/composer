@@ -313,6 +313,30 @@ describe('ComposerWorkspace Dashboard', () => {
       apiSpy.mockRestore();
     });
 
+    it('sanitizes dockview layout from localStorage to prevent ghost panels', async () => {
+      const mockLayout = {
+        grid: {root: {type: 'branch'}},
+        panels: {
+          [ComposerPanelId.Chat]: {id: ComposerPanelId.Chat, component: ComposerPanelId.Chat},
+          mockRules: {id: 'mockRules', component: 'mockRules'},
+          invalidPanel: {id: 'invalidPanel', component: ComposerPanelId.Chat},
+        },
+      };
+      vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify(mockLayout));
+      const apiSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON').mockImplementation(() => {});
+
+      const newFixture = TestBed.createComponent(ComposerWorkspace);
+      newFixture.detectChanges();
+      await newFixture.whenStable();
+
+      expect(apiSpy).toHaveBeenCalled();
+      const passedLayout = apiSpy.mock.calls[0][0];
+      expect(passedLayout.panels[ComposerPanelId.Chat]).toBeDefined();
+      expect(passedLayout.panels['mockRules']).toBeUndefined();
+      expect(passedLayout.panels['invalidPanel']).toBeUndefined();
+      apiSpy.mockRestore();
+    });
+
     it('applies Material M3 tab styling class hook to the Dockview root element', () => {
       const rootEl = fixture.nativeElement.querySelector('.dockview-root');
       expect(rootEl.classList.contains('mat-m3-dockview-tabs')).toBe(true);

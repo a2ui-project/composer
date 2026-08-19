@@ -46,6 +46,8 @@ import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
  * (dark/light mode) and integrates with the active A2UI catalog to provide
  * real-time schema validation and autocompletion for component properties.
  */
+const LAYOUT_MODEL_URI = 'a2ui://layout.json';
+
 @Component({
   selector: 'a2ui-composer-monaco-editor',
   standalone: true,
@@ -53,7 +55,6 @@ import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
   styleUrl: './monaco-editor.scss',
 })
 export class MonacoEditor {
-  private readonly layoutModelUriStr = `a2ui://layout-${Math.random().toString(36).slice(2, 11)}.json`;
   readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
 
   readonly value = input<string>('');
@@ -181,12 +182,10 @@ export class MonacoEditor {
       destroyed = true;
       if (this.editor) {
         const model = this.editor.getModel();
-        if (model && typeof model.dispose === 'function') {
+        if (model) {
           model.dispose();
         }
-        if (typeof this.editor.dispose === 'function') {
-          this.editor.dispose();
-        }
+        this.editor.dispose();
       }
       overflowWidgetsDomNode?.remove();
     });
@@ -200,7 +199,7 @@ export class MonacoEditor {
         }
         this.monacoInstance.set(monacoInstance);
 
-        const modelUri = monacoInstance.Uri.parse(this.layoutModelUriStr);
+        const modelUri = monacoInstance.Uri.parse(LAYOUT_MODEL_URI);
         let model = monacoInstance.editor.getModel(modelUri);
         if (model) {
           model.setValue(this.value());
@@ -249,7 +248,7 @@ export class MonacoEditor {
     return [
       {
         uri: 'a2ui-catalog-schema',
-        fileMatch: [this.layoutModelUriStr],
+        fileMatch: [LAYOUT_MODEL_URI],
         schema: structuredClone(layoutSchema),
       },
       {

@@ -254,12 +254,26 @@ export class ComposerDockview {
   }
 
   private buildDockviewLayout(): void {
+    localStorage.removeItem('a2ui_composer_active_draft');
+
     const savedLayout = this.storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
     let layoutRestored = false;
 
     if (savedLayout) {
       try {
-        this.dockviewApi.fromJSON(JSON.parse(savedLayout));
+        const parsedLayout = JSON.parse(savedLayout);
+
+        if (parsedLayout && typeof parsedLayout === 'object' && parsedLayout.panels) {
+          const validIds = Object.values(ComposerPanelId) as string[];
+          for (const key of Object.keys(parsedLayout.panels)) {
+            const panel = parsedLayout.panels[key];
+            if (panel && (!validIds.includes(panel.id) || !validIds.includes(panel.component))) {
+              delete parsedLayout.panels[key];
+            }
+          }
+        }
+
+        this.dockviewApi.fromJSON(parsedLayout);
         layoutRestored = true;
       } catch (e) {
         console.error('Failed to restore dockview layout');

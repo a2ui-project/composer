@@ -28,7 +28,6 @@ export enum LocalStorageKey {
   FORCE_3P = 'a2ui_composer_force_3p',
   /** Key tracking active runtime environment configuration modes. */
   EXTENSION_MODE = 'a2ui_composer_extension_mode',
-  /** Key for retrieving the active workspace prompt in-progress draft content. */
   SESSION_STATE = 'a2ui_composer_session_state',
   EDITOR_CACHE = 'a2ui_composer_editor_cache',
   /** Key for persisting dockview window split layout state. */

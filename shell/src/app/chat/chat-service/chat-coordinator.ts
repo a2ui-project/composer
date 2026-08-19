@@ -185,7 +185,10 @@ export class ChatCoordinator {
     attachments: Attachment[] = [],
     options?: {promptId?: string; promptTurnIndex?: number; retryOfPromptId?: string},
   ): Promise<void> {
-    if (this.chatState.isProgrammaticStreamActive()) return;
+    if (this.chatState.isProgrammaticStreamActive()) {
+      console.warn('[ChatCoordinator] Blocked submitPrompt: programmatic stream is active.');
+      return;
+    }
     const trimmed = prompt.trim();
     if (!trimmed && attachments.length === 0) return;
 
@@ -338,7 +341,7 @@ export class ChatCoordinator {
 
       if (!isValidEnvelope) {
         throw new Error(
-          `Outgoing message envelope validation failed: Schema verification returned false.\n${validationErrors.join('\n')}`,
+          `Outgoing message envelope validation failed:\n${validationErrors.join('\n')}`,
         );
       }
 

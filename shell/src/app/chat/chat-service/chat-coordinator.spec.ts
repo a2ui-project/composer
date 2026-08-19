@@ -222,6 +222,13 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
   });
 
   /* Pipeline submit and Lockout assertions */
+  it('ignores submitPrompt when programmatic stream is actively locked', async () => {
+    chatStateMock.setProgrammaticStreamActive(true);
+    await service.submitPrompt('Test locked');
+    expect(llmClientMock.chatStream).not.toHaveBeenCalled();
+    expect(chatStateMock.chatHistory().length).toBe(0);
+  });
+
   it('triggers prompt stream turns locking panel and commits', async () => {
     expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
     expect(service.isProgrammaticStreamActive()).toBe(false);
