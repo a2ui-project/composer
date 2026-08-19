@@ -328,7 +328,6 @@ describe('Settings', () => {
     override envMode = signal(EnvMode.STANDALONE);
     override geminiApiKey = signal('');
     override isApiKeyProvidedByConfig = signal(false);
-    override includeScreenshot = signal(false);
     override rendererUrl = signal('');
     override themePreference = signal<ThemePreference>(ThemePreference.LIGHT);
     override flushConfig = vi.fn();
@@ -338,7 +337,6 @@ describe('Settings', () => {
     override setGeminiApiKey = vi.fn();
     override setApiKeyFromConfig = vi.fn();
     override setRuntimeApiKey = vi.fn();
-    override setIncludeScreenshot = vi.fn();
     override setRendererUrl = vi.fn();
     override setThemePreference = vi.fn();
   }

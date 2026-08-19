@@ -87,14 +87,10 @@ class MockAppConfigProvider {
   readonly geminiApiKey = signal('');
   readonly isApiKeyProvidedByConfig = signal(false);
   readonly themePreference = signal<ThemePreference>(ThemePreference.LIGHT);
-  readonly includeScreenshot = signal<boolean>(true);
   setThemePreference = vi.fn();
   setGeminiApiKey = vi.fn();
   setApiKeyFromConfig = vi.fn();
   setRendererUrl = vi.fn();
-  setIncludeScreenshot = vi.fn((include: boolean) => {
-    this.includeScreenshot.set(include);
-  });
 }
 
 describe('App Routes Active Verification', () => {
