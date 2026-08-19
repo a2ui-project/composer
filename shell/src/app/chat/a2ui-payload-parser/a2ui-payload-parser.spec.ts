@@ -40,9 +40,12 @@ describe('a2ui-payload-parser', () => {
       expect(attemptSyntaxHealing('unhealable {')).toBeNull();
     });
 
-    it('returns null for nullish or empty line', () => {
+    it('returns null when input is null or undefined', () => {
       expect(attemptSyntaxHealing(null)).toBeNull();
       expect(attemptSyntaxHealing(undefined)).toBeNull();
+    });
+
+    it('returns null for empty line', () => {
       expect(attemptSyntaxHealing('')).toBeNull();
       expect(attemptSyntaxHealing('   ')).toBeNull();
       expect(attemptSyntaxHealing('\t\n ')).toBeNull();
@@ -50,11 +53,14 @@ describe('a2ui-payload-parser', () => {
   });
 
   describe('parseAndHealJsonLines', () => {
-    it('returns empty blocks and wasHealed false for nullish or empty content', () => {
+    it('returns empty blocks and wasHealed false when input is null or undefined', () => {
       // @ts-expect-error - testing nullish input
       expect(parseAndHealJsonLines(null)).toEqual({blocks: [], wasHealed: false});
       // @ts-expect-error - testing undefined input
       expect(parseAndHealJsonLines(undefined)).toEqual({blocks: [], wasHealed: false});
+    });
+
+    it('returns empty blocks and wasHealed false for empty content', () => {
       expect(parseAndHealJsonLines('')).toEqual({blocks: [], wasHealed: false});
       expect(parseAndHealJsonLines('   ')).toEqual({blocks: [], wasHealed: false});
       expect(parseAndHealJsonLines('\n\t\n')).toEqual({blocks: [], wasHealed: false});

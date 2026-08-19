@@ -21,7 +21,10 @@
  * @param content The string content to parse.
  * @returns The parsed array, or null if parsing fails or the content is not an array.
  */
-export function tryParseJsonArray(content: string): unknown[] | null {
+export function tryParseJsonArray(content?: string | null): unknown[] | null {
+  if (content == null) {
+    return null;
+  }
   const trimmed = content.trim();
   if (trimmed.length === 0) {
     return null;

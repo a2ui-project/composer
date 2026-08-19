@@ -24,6 +24,11 @@ describe('JSON Array Parser Utilities', () => {
     expect(tryParseJsonArray('[]')).toEqual([]);
   });
 
+  it('returns null safely when input is null or undefined', () => {
+    expect(tryParseJsonArray(null)).toBeNull();
+    expect(tryParseJsonArray(undefined)).toBeNull();
+  });
+
   it('returns null safely for invalid JSON Lines or primitive values', () => {
     expect(tryParseJsonArray('')).toBeNull();
     expect(tryParseJsonArray('   ')).toBeNull();
