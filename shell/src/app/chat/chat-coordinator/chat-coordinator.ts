@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {DestroyRef, inject, Injectable, signal} from '@angular/core';
+import {inject, Injectable, signal} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {skip} from 'rxjs/operators';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
@@ -62,7 +62,6 @@ export class ChatCoordinator {
   private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly promptFactory = inject(ChatPromptFactoryService);
   private readonly errorPresenter = inject(ChatErrorFormatterService);
-  private readonly destroyRef = inject(DestroyRef);
 
   /** Reactively mapped rendering pipeline execution milestones. */
   readonly pipelineStatus = this.chatState.pipelineStatus;
@@ -83,7 +82,7 @@ export class ChatCoordinator {
     // resets
     toObservable(this.configProvider.rendererUrl)
       // skip(1) prevents wiping the cache on the initial startup signal emission
-      .pipe(skip(1), takeUntilDestroyed(this.destroyRef))
+      .pipe(skip(1), takeUntilDestroyed())
       .subscribe(() => {
         queueMicrotask(() => this.wipeEnvironmentCache());
       });
