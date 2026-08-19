@@ -19,8 +19,9 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal} from '@angular/core';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ReplaySubject} from 'rxjs';
+import {Clipboard} from '@angular/cdk/clipboard';
 import {Gallery} from './gallery';
 import {GalleryHarness} from './test/gallery.harness';
 import {GalleryCatalog, CategorizedComponents} from './services/gallery-catalog';
@@ -90,10 +91,11 @@ describe('Gallery Component', () => {
   let catalogServiceMock: MockGalleryCatalogService;
   let catalogManagementMock: MockCatalogManagement;
   let hostCommunicationMock: MockHostCommunication;
-  let writeTextSpy: ReturnType<typeof vi.fn>;
-  let originalClipboard: typeof navigator.clipboard;
+  let mockClipboard: {copy: ReturnType<typeof vi.fn>};
 
   beforeEach(async () => {
+    mockClipboard = {copy: vi.fn().mockReturnValue(true)};
+
     await TestBed.configureTestingModule({
       imports: [Gallery],
       providers: [
@@ -105,6 +107,7 @@ describe('Gallery Component', () => {
         {provide: AppConfigProvider, useValue: {themePreference: signal(ThemePreference.LIGHT)}},
         {provide: ChatState, useClass: MockChatState},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
+        {provide: Clipboard, useValue: mockClipboard},
       ],
     }).compileComponents();
 
@@ -123,20 +126,6 @@ describe('Gallery Component', () => {
         Column: {type: 'object'},
       },
     });
-
-    writeTextSpy = vi.fn().mockResolvedValue(undefined);
-    originalClipboard = navigator.clipboard;
-    Object.defineProperty(navigator, 'clipboard', {
-      value: {writeText: writeTextSpy},
-      configurable: true,
-      writable: true,
-    });
-  });
-
-  afterEach(() => {
-    if (originalClipboard) {
-      Object.defineProperty(navigator, 'clipboard', {value: originalClipboard});
-    }
   });
 
   it('renders components list grouped by categories and sorted alphabetically by default', async () => {
@@ -220,9 +209,7 @@ describe('Gallery Component', () => {
     });
   });
 
-  it('renders the usage JSON envelope and copies the formatted A2UI JSON array payload to the clipboard', async () => {
-    writeTextSpy.mockResolvedValue(undefined);
-
+  it('renders the usage JSON envelope and copies the formatted A2UI JSON array payload to the clipboard via CDK Clipboard', async () => {
     const mockCatalog: Catalog = {
       catalogId: 'https://a2ui.org/custom_catalog.json',
       components: {},
@@ -264,7 +251,7 @@ describe('Gallery Component', () => {
       2,
     );
 
-    expect(writeTextSpy).toHaveBeenCalledWith(expectedPayload);
+    expect(mockClipboard.copy).toHaveBeenCalledWith(expectedPayload);
   });
 
   it('displays empty state illustration when no component is selected', async () => {
@@ -305,9 +292,9 @@ describe('Gallery Component', () => {
     expect(description).toBeNull();
   });
 
-  it('logs an error to the console when copying to the clipboard fails', async () => {
+  it('logs an error when CDK Clipboard copy returns false', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    writeTextSpy.mockRejectedValue(new Error('Clipboard error'));
+    mockClipboard.copy.mockReturnValue(false);
 
     catalogServiceMock.selectedComponentKey.set('Text');
     catalogServiceMock.selectedComponentPreset.set({usage: []});
@@ -317,22 +304,21 @@ describe('Gallery Component', () => {
     try {
       await harness.clickCopyButton();
     } catch (e) {}
-    await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to copy A2UI component usage to clipboard: ',
-      expect.any(Error),
+      'Failed to copy A2UI component usage to clipboard.',
     );
 
     consoleErrorSpy.mockRestore();
   });
 
-  it('logs an error and returns gracefully when clipboard API is completely unavailable', async () => {
+  it('logs an error when building A2UI payload throws an error', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    Object.defineProperty(navigator, 'clipboard', {
-      value: undefined,
-      configurable: true,
-      writable: true,
+    vi.spyOn(
+      fixture.componentInstance as unknown as Record<string, () => unknown>,
+      'buildA2UIPayload',
+    ).mockImplementation(() => {
+      throw new Error('Formatting error');
     });
 
     catalogServiceMock.selectedComponentKey.set('Text');
@@ -345,14 +331,14 @@ describe('Gallery Component', () => {
     } catch (e) {}
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Clipboard API is not available in this environment.',
+      'Failed to parse or format A2UI usage payload: ',
+      expect.any(Error),
     );
-    expect(writeTextSpy).not.toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
   });
 
-  it('returns gracefully when selectedComponentPreset is null or has no usage array', async () => {
+  it('returns gracefully when selectedComponentPreset is null or missing usage array', async () => {
     catalogServiceMock.selectedComponentKey.set('Text');
     catalogServiceMock.selectedComponentPreset.set(null);
     fixture.detectChanges();
@@ -361,7 +347,7 @@ describe('Gallery Component', () => {
       await harness.clickCopyButton();
     } catch (e) {}
 
-    expect(writeTextSpy).not.toHaveBeenCalled();
+    expect(mockClipboard.copy).not.toHaveBeenCalled();
   });
 
   it('throws an error in the harness when trying to click a non-existent navigation link', async () => {
@@ -394,7 +380,7 @@ describe('Gallery Component', () => {
       await harness.clickCopyButton();
     } catch (e) {}
 
-    expect(writeTextSpy).not.toHaveBeenCalled();
+    expect(mockClipboard.copy).not.toHaveBeenCalled();
   });
 
   it('returns null for empty state subtitle when a component is selected', async () => {
@@ -645,7 +631,7 @@ describe('Gallery Component', () => {
     try {
       await harness.clickCopyButton();
     } catch (e) {}
-    expect(writeTextSpy).not.toHaveBeenCalled();
+    expect(mockClipboard.copy).not.toHaveBeenCalled();
   });
 
   it('does not dispatch render command if active catalog is null', () => {
@@ -934,7 +920,7 @@ describe('Gallery Component', () => {
   });
 
   it('verifies JSON stringified postMessage payload key structure contains required protocol fields', async () => {
-    writeTextSpy.mockResolvedValue(undefined);
+    mockClipboard.copy.mockReturnValue(true);
     catalogServiceMock.selectedComponentKey.set('Button');
     const mockUsage = [{id: 'target', component: 'Button'}];
     const mockData = {count: 1};
@@ -949,8 +935,8 @@ describe('Gallery Component', () => {
       await harness.clickCopyButton();
     } catch (e) {}
 
-    expect(writeTextSpy).toHaveBeenCalled();
-    const copiedPayloadString = writeTextSpy.mock.calls[0][0] as string;
+    expect(mockClipboard.copy).toHaveBeenCalled();
+    const copiedPayloadString = mockClipboard.copy.mock.calls[0][0] as string;
     const parsedPayload = JSON.parse(copiedPayloadString);
 
     expect(parsedPayload[0]).toHaveProperty('version');
