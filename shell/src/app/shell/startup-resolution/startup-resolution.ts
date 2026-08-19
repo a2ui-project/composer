@@ -422,7 +422,11 @@ export class StartupResolution {
     return null;
   }
 
-  private normalizeUrl(urlStr: string): string {
+  private normalizeUrl(urlStr?: string | null): string {
+    if (!urlStr) {
+      return '';
+    }
+
     try {
       const baseOrigin = this.environmentContext.getBaseOrigin();
       const u = urlStr.startsWith('/') ? new URL(urlStr, baseOrigin) : new URL(urlStr);

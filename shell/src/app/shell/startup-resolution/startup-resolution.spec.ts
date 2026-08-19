@@ -1550,6 +1550,13 @@ describe('StartupResolution', () => {
         expect.any(Error),
       );
     });
+
+    it('returns empty string safely from normalizeUrl when passed null or undefined without throwing TypeError', () => {
+      const callNormalize = (val?: string | null) =>
+        (service as unknown as {normalizeUrl(urlStr?: string | null): string}).normalizeUrl(val);
+      expect(callNormalize(null)).toBe('');
+      expect(callNormalize(undefined)).toBe('');
+    });
   });
 });
 
