@@ -70,7 +70,7 @@ export class SettingsService {
   private readonly usageTrackingService = inject(UsageTrackingService);
 
   readonly renderers: Signal<Record<string, RendererConfig>> = computed(() =>
-    this.startupResolution.renderers(),
+    this.startupConfigState.renderers(),
   );
 
   readonly selectedRendererId: Signal<string | null> = computed(() =>
