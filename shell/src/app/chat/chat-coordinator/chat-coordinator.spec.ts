@@ -19,7 +19,6 @@ import {TestBed} from '@angular/core/testing';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ChatCoordinator} from './chat-coordinator';
-import {} from '../chat-service/error-utils';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';

@@ -256,6 +256,9 @@ export function sanitizeValue(val: unknown): unknown {
   const cleaned: Record<string, unknown> = {};
 
   for (const [key, propVal] of Object.entries(obj)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
     cleaned[key] = sanitizeValue(propVal);
   }
 
