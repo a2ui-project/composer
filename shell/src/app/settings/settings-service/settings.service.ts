@@ -16,7 +16,11 @@
 
 import {Injectable, Signal, computed, inject, signal} from '@angular/core';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {StartupConfigStateService, ApiKeyConfig, RendererConfig} from '../../shell/startup-resolution/state/startup-config-state.service';
+import {
+  StartupConfigStateService,
+  ApiKeyConfig,
+  RendererConfig,
+} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {AppConfigProvider} from '../app-config-provider/app-config-provider';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
@@ -69,7 +73,7 @@ export class SettingsService {
     this.startupResolution.renderers(),
   );
 
-  readonly selectedRendererId$: Signal<string | null> = computed(() =>
+  readonly selectedRendererId: Signal<string | null> = computed(() =>
     this.startupConfigState.selectedRendererId(),
   );
 
@@ -83,7 +87,7 @@ export class SettingsService {
    * @param rendererId The selected renderer ID string, or null to revert to Custom/Default.
    */
   async selectRenderer(rendererId: string | null): Promise<boolean> {
-    const fromRendererId = this.selectedRendererId$();
+    const fromRendererId = this.selectedRendererId();
     const isAllowed = await this.startupResolution.setSelectedRendererId(rendererId);
     if (!isAllowed) {
       return false;
@@ -388,7 +392,7 @@ export class SettingsService {
     delete updatedRenderers[id];
     this.startupConfigState.setRenderers(updatedRenderers);
 
-    if (this.selectedRendererId$() === id) {
+    if (this.selectedRendererId() === id) {
       this.localStorageInteractions.removeItem(LocalStorageKey.SELECTED_RENDERER);
       void this.selectRenderer(null);
     }

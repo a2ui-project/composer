@@ -73,7 +73,7 @@ export class StateSync {
   private readonly _draftInput = signal<string>('');
 
   constructor() {
-    const selectedRendererId$ = this.startupConfigState.selectedRendererId
+    const selectedRendererId = this.startupConfigState.selectedRendererId
       ? toObservable(this.startupConfigState.selectedRendererId)
       : of(null);
     const activeCatalog$ = toObservable(this.catalogManagement.activeCatalog);
@@ -81,7 +81,7 @@ export class StateSync {
       ? toObservable(this.startupConfigState.sharedA2uiPayload)
       : of(null);
 
-    merge(selectedRendererId$, activeCatalog$)
+    merge(selectedRendererId, activeCatalog$)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         const catalog = this.catalogManagement.activeCatalog();

@@ -40,7 +40,7 @@ import {AbstractSelector} from '../abstract-selector/abstract-selector';
   styleUrl: './renderer-selector.scss',
 })
 export class RendererSelectorComponent extends AbstractSelector<RendererOption> {
-  readonly selectedRendererId$ = input<string | null>('default');
+  readonly selectedRendererId = input<string | null>('default');
   readonly rendererSelected = output<string>();
 
   private readonly settingsService = inject(SettingsService);
@@ -51,7 +51,7 @@ export class RendererSelectorComponent extends AbstractSelector<RendererOption> 
   }
 
   override getSelectedId(): string | null {
-    return this.selectedRendererId$();
+    return this.selectedRendererId();
   }
 
   override refreshItems(): void {

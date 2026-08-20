@@ -19,7 +19,7 @@
     <mat-label>Renderer</mat-label>
     <mat-select
       id="renderer-select"
-      [value]="selectedRendererId$()"
+      [value]="selectedRendererId()"
       [disabled]="disabled()"
       (selectionChange)="onSelectionChange($event.value)"
     >
