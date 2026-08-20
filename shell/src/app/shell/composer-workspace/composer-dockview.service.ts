@@ -46,10 +46,6 @@ export interface DockviewManagerInitOptions {
  * Service encapsulating Dockview initialization, dynamic component instantiation,
  * layout persistence, DOM resize/tab-overflow handling, and tab event delegation.
  */
-/**
- * Service responsible for orchestrating the Dockview layout widget, providing persistent
- * split-pane workspace configurations and reactive panel lifecycle hooks.
- */
 @Injectable()
 export class ComposerDockview {
   private readonly storage = inject(LocalStorageInteractions);
