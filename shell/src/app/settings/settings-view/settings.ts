@@ -130,7 +130,6 @@ export class Settings implements OnInit {
     const currentRendererId = this.settingsService.selectedRendererId() || 'default';
     this.selectedRendererId.set(currentRendererId);
 
-
     void this.settingsService.getEffectiveApiKey();
 
     const is3P = this.startupResolution.isThirdPartyEnvironment();

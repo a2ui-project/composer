@@ -38,7 +38,10 @@ describe('ShareService', () => {
     mockClipboard = {copy: vi.fn()};
     mockSnackBar = {open: vi.fn()};
     mockStateSync = {activeDraft: signal('{"a":1}')};
-    mockStartupConfigState = {resolvedUrl: signal('http://renderer'), selectedRendererId: signal('default')};
+    mockStartupConfigState = {
+      resolvedUrl: signal('http://renderer'),
+      selectedRendererId: signal('default'),
+    };
     mockDocument = {defaultView: {location: {href: 'http://localhost/'}}};
 
     TestBed.configureTestingModule({
