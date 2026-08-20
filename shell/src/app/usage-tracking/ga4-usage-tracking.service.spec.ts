@@ -50,6 +50,10 @@ describe('Ga4UsageTrackingService', () => {
     selectedRendererId$: signal('lit'),
   };
 
+  const mockStartupConfigState = {
+    selectedRendererId: signal('lit'),
+  };
+
   const mockAppConfigProvider = {
     envMode: signal(EnvMode.STANDALONE),
   };

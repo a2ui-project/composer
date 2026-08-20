@@ -66,7 +66,7 @@ describe('Settings', () => {
     isThirdPartyEnvironment: Mock<() => boolean>;
     setSelectedRendererId: Mock<(id: string | null) => void>;
   };
-  let mockStartupResolution: {
+  let mockStartupConfigStateService: {
     resolvedUrl: Signal<string | null>;
     renderers: Signal<Record<string, RendererConfig>>;
     selectedRendererId: Signal<string | null>;
@@ -132,7 +132,7 @@ describe('Settings', () => {
         mockActiveRenderer.set(id ? mockRenderers()[id] || null : null);
       }),
     };
-    mockStartupResolution = {
+    mockStartupConfigStateService = {
       resolvedUrl: mockResolvedUrl.asReadonly(),
       renderers: mockRenderers.asReadonly(),
       selectedRendererId: mockSelectedRendererId.asReadonly(),
@@ -207,7 +207,7 @@ describe('Settings', () => {
           provide: StartupResolution,
           useValue: mockStartupResolution,
         },
-        {provide: StartupConfigStateService, useValue: mockStartupResolution,
+        {provide: StartupConfigStateService, useValue: mockStartupConfigStateService,
         },
         {provide: AppConfigProvider, useValue: mockConfigProvider},
         {
