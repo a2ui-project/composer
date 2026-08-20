@@ -119,9 +119,9 @@ export class Settings implements OnInit {
 
   constructor() {
     effect(() => {
-      const activeId = this.settingsService.selectedRendererId$() || 'default';
+      const activeId = this.settingsService.selectedRendererId() || 'default';
       untracked(() => {
-        this.selectedRendererId$.set(activeId);
+        this.selectedRendererId.set(activeId);
       });
     });
   }

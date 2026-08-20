@@ -20,7 +20,7 @@ import {DOCUMENT} from '@angular/common';
 import {TestBed} from '@angular/core/testing';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {StateSync} from '../../chat/state-sync/state-sync';
-import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {ShareService} from './share.service';
@@ -31,14 +31,14 @@ describe('ShareService', () => {
   let mockClipboard: {copy: ReturnType<typeof vi.fn>};
   let mockSnackBar: {open: ReturnType<typeof vi.fn>};
   let mockStateSync: unknown;
-  let mockStartupResolution: unknown;
+  let mockStartupConfigState: unknown;
   let mockDocument: unknown;
 
   beforeEach(() => {
     mockClipboard = {copy: vi.fn()};
     mockSnackBar = {open: vi.fn()};
     mockStateSync = {activeDraft: signal('{"a":1}')};
-    mockStartupResolution = {resolvedUrl: signal('http://renderer')};
+    mockStartupConfigState = {resolvedUrl: signal('http://renderer'), selectedRendererId: signal('default')};
     mockDocument = {defaultView: {location: {href: 'http://localhost/'}}};
 
     TestBed.configureTestingModule({
@@ -46,7 +46,7 @@ describe('ShareService', () => {
         {provide: Clipboard, useValue: mockClipboard},
         {provide: MatSnackBar, useValue: mockSnackBar},
         {provide: StateSync, useValue: mockStateSync},
-        {provide: StartupResolution, useValue: mockStartupResolution},
+        {provide: StartupConfigStateService, useValue: mockStartupConfigState},
         {provide: DOCUMENT, useValue: mockDocument},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
       ],
@@ -66,9 +66,9 @@ describe('ShareService', () => {
     );
   });
 
-  it('includes rendererId in share URL hash when selectedRendererId$ is present', async () => {
+  it('includes rendererId in share URL hash when selectedRendererId is present', async () => {
     mockClipboard.copy.mockReturnValue(true);
-    (mockStartupResolution as {selectedRendererId$: unknown}).selectedRendererId$ =
+    (mockStartupConfigState as {selectedRendererId: unknown}).selectedRendererId =
       signal('angular-dev');
     await service.shareDesign();
     expect(mockClipboard.copy).toHaveBeenCalledWith(
