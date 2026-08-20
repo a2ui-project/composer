@@ -15,7 +15,6 @@
  */
 
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {Clipboard} from '@angular/cdk/clipboard';
 import {DOCUMENT} from '@angular/common';
 import {TestBed} from '@angular/core/testing';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -31,7 +30,6 @@ import {signal} from '@angular/core';
 
 describe('ShareService', () => {
   let service: ShareService;
-  let mockClipboard: {copy: ReturnType<typeof vi.fn>};
   let mockSnackBar: {open: ReturnType<typeof vi.fn>};
   let mockStateSync: unknown;
   let mockStartupResolution: unknown;
@@ -39,7 +37,11 @@ describe('ShareService', () => {
   let mockUsageTracking: {trackShareDesign: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
-    mockClipboard = {copy: vi.fn()};
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn(),
+      },
+    });
     mockSnackBar = {open: vi.fn()};
     mockStateSync = {activeDraft: signal('{"a":1}')};
     mockStartupResolution = {resolvedUrl: signal('http://renderer')};
@@ -48,7 +50,6 @@ describe('ShareService', () => {
 
     TestBed.configureTestingModule({
       providers: [
-        {provide: Clipboard, useValue: mockClipboard},
         {provide: MatSnackBar, useValue: mockSnackBar},
         {provide: StateSync, useValue: mockStateSync},
         {provide: StartupResolution, useValue: mockStartupResolution},
@@ -60,17 +61,17 @@ describe('ShareService', () => {
     service = TestBed.inject(ShareService);
   });
 
-  it('copies to clipboard space tracks success with size and updates url correctly', async () => {
-    mockClipboard.copy.mockReturnValue(true);
+  it('copies to clipboard, tracks success with size, and updates url correctly', async () => {
+    vi.mocked(navigator.clipboard.writeText).mockResolvedValue(undefined);
     await service.shareDesign();
 
-    expect(mockClipboard.copy).toHaveBeenCalled();
-    const copiedUrl = mockClipboard.copy.mock.calls[0][0];
+    expect(navigator.clipboard.writeText).toHaveBeenCalled();
+    const copiedUrl = vi.mocked(navigator.clipboard.writeText).mock.calls[0][0];
     expect(copiedUrl).toContain('renderer=http%3A%2F%2Frenderer');
     expect(copiedUrl).toContain('a2ui=');
     expect(copiedUrl).not.toContain('search=');
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      expect.stringMatching(/copied to clipboard \(.* KB\)/),
+      expect.stringMatching(/.* KB copied to clipboard/),
       'Close',
       expect.any(Object),
     );
@@ -80,10 +81,10 @@ describe('ShareService', () => {
     });
   });
 
-  it('handles clipboard copy failure and tracks failure status throwing error', async () => {
-    mockClipboard.copy.mockReturnValue(false);
+  it('handles clipboard copy failure, tracks failure status, and throws error', async () => {
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValue(new Error('Copy failed'));
 
-    await service.shareDesign();
+    await expect(service.shareDesign()).rejects.toThrow('Copy failed');
 
     expect(mockUsageTracking.trackShareDesign).toHaveBeenCalledWith(
       expect.objectContaining({status: ShareTrackingStatus.FAILURE}),
@@ -95,10 +96,11 @@ describe('ShareService', () => {
     );
   });
 
-  it('gives invalid json error', async () => {
+  it('emits invalid json error', async () => {
     (mockStateSync as {activeDraft: ReturnType<typeof signal>}).activeDraft.set('invalid');
     await service.shareDesign();
-    expect(mockClipboard.copy).not.toHaveBeenCalled();
+
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
     expect(mockSnackBar.open).toHaveBeenCalledWith(
       'Cannot share design: invalid JSON syntax',
       'Close',

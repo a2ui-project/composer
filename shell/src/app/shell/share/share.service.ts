@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {Clipboard} from '@angular/cdk/clipboard';
 import {DOCUMENT} from '@angular/common';
 import {Injectable, inject} from '@angular/core';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -33,7 +32,6 @@ const SNACK_BAR_DURATION_MS = 5000;
  */
 @Injectable({providedIn: 'root'})
 export class ShareService {
-  private readonly clipboard = inject(Clipboard);
   private readonly document = inject(DOCUMENT);
   private readonly snackBar = inject(MatSnackBar);
   private readonly stateSync = inject(StateSync);
@@ -63,6 +61,7 @@ export class ShareService {
       return;
     }
 
+    let compressedLengthChars = 0;
     try {
       const rendererUrl = this.startupResolution.resolvedUrl() || '';
       const compressed = await QueryParser.encodeSharedPayload(activeDraft);
@@ -75,29 +74,27 @@ export class ShareService {
       shareUrl.hash = hashParams.toString();
       shareUrl.search = '';
 
-      const success = this.clipboard.copy(shareUrl.toString());
+      compressedLengthChars = compressed.length;
+      const sizeKb = (shareUrl.toString().length / 1024).toFixed(1);
 
-      if (success) {
-        this.usageTrackingService.trackShareDesign({
-          status: ShareTrackingStatus.SUCCESS,
-          compressedLengthChars: compressed.length,
-        });
-        const lengthKb = (shareUrl.toString().length / 1024).toFixed(1);
-        this.snackBar.open(`Shareable link copied to clipboard (${lengthKb} KB)`, 'Close', {
-          duration: SNACK_BAR_DURATION_MS,
-        });
-      } else {
-        throw new Error('Clipboard copy failed.');
-      }
+      await navigator.clipboard.writeText(shareUrl.toString());
+      this.usageTrackingService.trackShareDesign({
+        status: ShareTrackingStatus.SUCCESS,
+        compressedLengthChars,
+      });
+      this.snackBar.open(`${sizeKb} KB copied to clipboard`, 'Close', {
+        duration: SNACK_BAR_DURATION_MS,
+      });
     } catch (err) {
       this.usageTrackingService.trackShareDesign({
         status: ShareTrackingStatus.FAILURE,
-        compressedLengthChars: 0,
+        compressedLengthChars,
       });
       console.error('Failed to copy shareable link:', err);
       this.snackBar.open('Failed to copy link to clipboard', 'Close', {
         duration: SNACK_BAR_DURATION_MS,
       });
+      throw err;
     }
   }
 }
