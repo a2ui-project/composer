@@ -17,7 +17,7 @@
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {signal, WritableSignal} from '@angular/core';
+import {Subject} from 'rxjs';
 import {describe, it, expect, beforeEach, vi, afterEach} from 'vitest';
 import {DataModel} from './data-model';
 import {DataModelHarness} from './test/data-model.harness';
@@ -35,7 +35,7 @@ describe('DataModel', () => {
   let component: DataModel;
   let harness: DataModelHarness;
   let mockHostComm: {
-    messageStream: WritableSignal<MessageEnvelope | null>;
+    messageStream$: Subject<MessageEnvelope>;
     sendMessage: ReturnType<typeof vi.fn>;
   };
 
@@ -43,7 +43,7 @@ describe('DataModel', () => {
     vi.useFakeTimers();
 
     mockHostComm = {
-      messageStream: signal<MessageEnvelope | null>(null),
+      messageStream$: new Subject<MessageEnvelope>(),
       sendMessage: vi.fn(),
     };
 
@@ -78,7 +78,7 @@ describe('DataModel', () => {
         value: {foo: 'bar'},
       },
     };
-    mockHostComm.messageStream.set({
+    mockHostComm.messageStream$.next({
       type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload,
       origin: 'http://localhost',
@@ -129,7 +129,7 @@ describe('DataModel', () => {
 
   it('does not dispatch redundant message when local JSON matches incoming data model', async () => {
     const incomingData = {foo: 'bar', count: 42};
-    mockHostComm.messageStream.set({
+    mockHostComm.messageStream$.next({
       type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload: {
         updateDataModel: {
@@ -167,7 +167,7 @@ describe('DataModel', () => {
     TestBed.tick();
     fixture.detectChanges();
 
-    mockHostComm.messageStream.set({
+    mockHostComm.messageStream$.next({
       type: 'IRRELEVANT_MESSAGE_TYPE',
       payload: {foo: 'bar'},
       origin: 'http://localhost',
@@ -182,7 +182,7 @@ describe('DataModel', () => {
   });
 
   it('resets the editor text to empty when remote state resets to null', async () => {
-    mockHostComm.messageStream.set({
+    mockHostComm.messageStream$.next({
       type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload: {
         updateDataModel: {
@@ -222,7 +222,7 @@ describe('DataModel', () => {
   });
 
   it('retains last known surfaceId and clears path when updateDataModel message is missing them', async () => {
-    mockHostComm.messageStream.set({
+    mockHostComm.messageStream$.next({
       type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload: {
         updateDataModel: {
@@ -237,7 +237,7 @@ describe('DataModel', () => {
     TestBed.tick();
     fixture.detectChanges();
 
-    mockHostComm.messageStream.set({
+    mockHostComm.messageStream$.next({
       type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       payload: {
         updateDataModel: {

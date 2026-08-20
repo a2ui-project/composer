@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, computed, effect, inject, linkedSignal, signal, untracked} from '@angular/core';
+import {Component, computed, inject, linkedSignal, signal} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -65,8 +65,7 @@ export class DataModel {
   });
 
   constructor() {
-    effect(() => {
-      const streamValue = this.hostComm.messageStream();
+    this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(streamValue => {
       if (streamValue?.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
         const payload = streamValue?.payload as DataModelChangePayload | undefined;
         const updateObj = payload?.['updateDataModel'];
@@ -81,7 +80,7 @@ export class DataModel {
           }
 
           const cleanValue = updateObj['value'];
-          untracked(() => this.latestModelValue.set(cleanValue));
+          this.latestModelValue.set(cleanValue);
         }
       }
     });
