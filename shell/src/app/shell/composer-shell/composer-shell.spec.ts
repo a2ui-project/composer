@@ -40,6 +40,7 @@ import {
   UsageTrackingService,
 } from '../../usage-tracking/usage-tracking.service';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {ComposerShell} from './composer-shell';
 import {ComposerShellHarness} from './test/composer-shell.harness';
 
@@ -57,7 +58,7 @@ describe('ComposerShell Layout', () => {
     themePreference: WritableSignal<ThemePreference>;
     setThemePreference: (theme: ThemePreference) => void;
   };
-  let startupResolutionMock: {
+  let startupConfigStateMock: {
     resolvedUrl: WritableSignal<string | null>;
     sharedA2uiError: WritableSignal<string | null>;
   };
@@ -93,7 +94,7 @@ describe('ComposerShell Layout', () => {
       }),
     };
 
-    startupResolutionMock = {
+    startupConfigStateMock = {
       resolvedUrl: signal<string | null>(null),
       sharedA2uiError: signal<string | null>(null),
     };
@@ -132,9 +133,10 @@ describe('ComposerShell Layout', () => {
           useValue: configProviderMock,
         },
         {
-          provide: StartupResolution,
-          useValue: startupResolutionMock,
+          provide: StartupConfigStateService,
+          useValue: startupConfigStateMock,
         },
+        {provide: StartupResolution, useValue: {}},
         {
           provide: StateSync,
           useValue: stateSyncMock,
@@ -329,7 +331,7 @@ describe('ComposerShell Layout', () => {
       const shareSpy = vi.spyOn(usageTracking, 'trackShareDesign');
       const snackBar = fixture.debugElement.injector.get(MatSnackBar);
       const snackBarSpy = vi.spyOn(snackBar, 'open');
-      startupResolutionMock.resolvedUrl.set('http://my-renderer.com');
+      startupConfigStateMock.resolvedUrl.set('http://my-renderer.com');
       stateSyncMock.activeDraft.set('[{"version":"v0.9"}]');
       const writeTextSpy = vi.fn().mockResolvedValue(undefined);
       const document = TestBed.inject(DOCUMENT);
@@ -434,7 +436,7 @@ describe('ComposerShell Layout', () => {
       const snackBar = fixture.debugElement.injector.get(MatSnackBar);
       const snackBarSpy = vi.spyOn(snackBar, 'open');
 
-      startupResolutionMock.sharedA2uiError.set(
+      startupConfigStateMock.sharedA2uiError.set(
         'The shared design link appears truncated or corrupted (it may have exceeded URL length limits).',
       );
       fixture.detectChanges();

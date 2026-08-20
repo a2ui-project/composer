@@ -41,6 +41,7 @@ import {
 } from '../../usage-tracking/usage-tracking.service';
 import {QueryParser} from '../query-parser/query-parser';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 
 /** Standard length for showing any snack bar notification. */
 const SNACK_BAR_DURATION_MS = 5000;
@@ -79,6 +80,7 @@ export class ComposerShell {
   private readonly startupResolution = inject(StartupResolution);
   private readonly stateSync = inject(StateSync);
   private readonly chatCoordinator = inject(ChatCoordinator);
+  private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly document = inject(DOCUMENT);
@@ -96,7 +98,7 @@ export class ComposerShell {
     });
 
     effect(() => {
-      const error = this.startupResolution.sharedA2uiError();
+      const error = this.startupConfigState.sharedA2uiError();
       if (error) {
         this.snackBar.open(`Unable to load shared design: ${error}`, 'Dismiss', {
           duration: SNACK_BAR_DURATION_MS,
@@ -158,7 +160,7 @@ export class ComposerShell {
       return;
     }
     try {
-      const rendererUrl = this.startupResolution.resolvedUrl() || '';
+      const rendererUrl = this.startupConfigState.resolvedUrl() || '';
       const compressed = await QueryParser.encodeSharedPayload(activeDraft);
       const shareUrl = new URL(href);
       const hashParams = new URLSearchParams();
