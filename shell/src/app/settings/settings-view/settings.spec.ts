@@ -557,7 +557,6 @@ describe('Settings', () => {
     });
 
     it('returns undefined for selectedRendererOption when selectedRendererId is null or Custom', async () => {
-
       const {component} = await setupComponent();
 
       component.selectedRendererId.set(null);
