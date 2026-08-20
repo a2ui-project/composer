@@ -25,6 +25,7 @@ import {
 } from '../settings/app-config-provider/app-config-provider';
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
+import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {
   ApiKeyAction,
@@ -53,6 +54,7 @@ declare global {
 export class Ga4UsageTrackingService extends UsageTrackingService {
   private readonly config = inject(USAGE_TRACKING_CONFIG);
   private readonly startupResolution = inject(StartupResolution);
+  private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly appConfigProvider = inject(AppConfigProvider);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly document = inject(DOCUMENT);
@@ -101,7 +103,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
 
   private getBaselineDimensions(): Record<string, unknown> {
     const is3P = this.startupResolution.isThirdPartyEnvironment();
-    const activeRendererId = this.startupResolution.selectedRendererId$() || 'default';
+    const activeRendererId = this.startupConfigState.selectedRendererId() || 'default';
     const catalogObj = this.catalogManagement.activeCatalog();
     const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
     return {

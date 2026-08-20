@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {Injectable, Injector, Signal, computed, inject, signal} from '@angular/core';
+import {Injectable, Signal, computed, inject, signal} from '@angular/core';
 import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {
@@ -40,7 +40,6 @@ import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tok
 })
 export class LocalStorageAppConfigProvider extends AppConfigProvider {
   /** Core dynamic singleton startup state resolution bridge. */
-  private readonly injector = inject(Injector);
 
   /** Central type-safe browser persistent storage service provider. */
   private readonly localStorageInteractions = inject(LocalStorageInteractions);

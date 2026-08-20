@@ -307,7 +307,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     // Assert that the commited layout is fully healed and sanitized:
     // - Markdown stripped
     // - missing bracket appended to array
-    // - trailing comma removed, mock property 'rules' stripped!
+    // - trailing comma removed
     const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
     const parsed = JSON.parse(committedOutput);
     expect(parsed.length).toBe(2);
@@ -315,7 +315,6 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(parsed[0].createSurface.surfaceId).toBe('s1');
 
     expect(parsed[1].updateComponents.components[0].id).toBe('c1');
-    // mock fields stripped!
   });
 
   /* Legacy Widget Fallback healing check */

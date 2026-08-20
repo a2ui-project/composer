@@ -26,6 +26,7 @@ import {
 } from '../settings/app-config-provider/app-config-provider';
 import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
+import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {Ga4UsageTrackingService} from './ga4-usage-tracking.service';
 import {
@@ -82,6 +83,7 @@ describe('Ga4UsageTrackingService', () => {
           useValue: {enabled: true, measurementId: 'G-TEST1234'},
         },
         {provide: StartupResolution, useValue: mockStartupResolution},
+        {provide: StartupConfigStateService, useValue: mockStartupConfigState},
         {provide: AppConfigProvider, useValue: mockAppConfigProvider},
         {provide: CatalogManagement, useValue: mockCatalogManagement},
         {provide: DOCUMENT, useValue: mockDocument},
@@ -107,6 +109,7 @@ describe('Ga4UsageTrackingService', () => {
           useValue: {enabled: false, measurementId: ''},
         },
         {provide: StartupResolution, useValue: mockStartupResolution},
+        {provide: StartupConfigStateService, useValue: mockStartupConfigState},
         {provide: AppConfigProvider, useValue: mockAppConfigProvider},
         {provide: CatalogManagement, useValue: mockCatalogManagement},
         {provide: DOCUMENT, useValue: mockDocument},
