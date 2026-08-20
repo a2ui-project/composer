@@ -246,7 +246,7 @@ describe('RendererSelectorComponent & AddRendererDialogComponent', () => {
   });
 
   it('clicking inline edit opens AddRendererDialogComponent pre-populated with current values and updates custom renderer upon saving', async () => {
-    fixture.componentRef.setInput('selectedRendererId$', 'custom-1');
+    fixture.componentRef.setInput('selectedRendererId', 'custom-1');
     fixture.detectChanges();
 
     const emitSpy = vi.fn();
@@ -308,7 +308,7 @@ describe('RendererSelectorComponent & AddRendererDialogComponent', () => {
   });
 
   it('clicking inline delete stops propagation, calls SettingsService.deleteCustomRenderer(id), and if the deleted item was currently selected, emits rendererSelected with fallback ID "default"', async () => {
-    fixture.componentRef.setInput('selectedRendererId$', 'custom-1');
+    fixture.componentRef.setInput('selectedRendererId', 'custom-1');
     fixture.detectChanges();
 
     const emitSpy = vi.fn();
@@ -327,7 +327,7 @@ describe('RendererSelectorComponent & AddRendererDialogComponent', () => {
   });
 
   it('clicking inline delete stops propagation and calls deleteCustomRenderer(id) without emitting fallback ID when deleting a non-selected renderer', async () => {
-    fixture.componentRef.setInput('selectedRendererId$', 'default');
+    fixture.componentRef.setInput('selectedRendererId', 'default');
     fixture.detectChanges();
 
     const emitSpy = vi.fn();

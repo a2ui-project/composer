@@ -132,7 +132,7 @@ describe('SettingsService', () => {
 
   it('exposes signals delegating to startup resolution', () => {
     expect(service.renderers()).toEqual(sampleRenderers);
-    expect(service.selectedRendererId$()).toBeNull();
+    expect(service.selectedRendererId()).toBeNull();
     expect(service.activeRenderer()).toBeNull();
   });
 
@@ -265,7 +265,7 @@ describe('SettingsService', () => {
 
     await startupRes.resolveStartupConfiguration();
 
-    expect(localService.selectedRendererId$()).toBe('dev');
+    expect(localService.selectedRendererId()).toBe('dev');
   });
 
   describe('API Key Management and Fallback', () => {
