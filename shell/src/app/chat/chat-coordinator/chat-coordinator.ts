@@ -324,6 +324,9 @@ export class ChatCoordinator {
       const parseResult = parseAndHealJsonLines(cleanedText);
       parsedBlocks = parseResult.blocks;
       if (parseResult.wasHealed) this.chatState.setPipelineStatus(PipelineStatus.HEALING);
+      if (parsedBlocks.length === 0) {
+        throw new Error('No valid A2UI JSON layout command block could be parsed or recovered.');
+      }
     } catch (err: unknown) {
       this.chatState.setPipelineStatus(PipelineStatus.FAILED);
       this.chatState.setProgrammaticStreamActive(false);

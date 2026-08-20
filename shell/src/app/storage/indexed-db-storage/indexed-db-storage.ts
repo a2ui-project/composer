@@ -31,8 +31,8 @@ export class IndexedDbStorage extends AbstractIndexedDbStorage {
   /**
    * Handles database schema upgrades.
    */
-  protected onUpgradeNeeded(db: IDBDatabase, event: IDBVersionChangeEvent): void {
-    if (event.oldVersion < 1) {
+  protected onUpgradeNeeded(db: IDBDatabase, _event: IDBVersionChangeEvent): void {
+    if (!db.objectStoreNames.contains(this.storeName)) {
       db.createObjectStore(this.storeName, {keyPath: 'rendererUrl'});
     }
   }

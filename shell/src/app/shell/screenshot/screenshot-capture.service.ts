@@ -36,8 +36,8 @@ export class ScreenshotCaptureService {
    * @param targetElement Optional DOM element to restrict the screenshot to.
    * @returns A base64-encoded PNG image string.
    */
-  async captureScreenshot(targetElement?: Element | null): Promise<string> {
-    if (targetElement === null) {
+  async captureScreenshot(targetElement: Element | null | undefined): Promise<string> {
+    if (!targetElement || !targetElement.isConnected) {
       throw new Error('No active target element found to capture screenshot.');
     }
     if (!navigator?.mediaDevices?.getDisplayMedia) {

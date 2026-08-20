@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Subject} from 'rxjs';
+import {Subject, ReplaySubject} from 'rxjs';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {RawMessages} from './raw-messages';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
@@ -51,7 +51,7 @@ describe('RawMessages', () => {
       messageStreamSignal.set(env);
     };
 
-    mockMessageStreamSubject = new Subject();
+    mockMessageStreamSubject = new ReplaySubject(1);
     hostCommMock = {
       messageStream$: mockMessageStreamSubject,
       messageStream: messageStreamSignal,
