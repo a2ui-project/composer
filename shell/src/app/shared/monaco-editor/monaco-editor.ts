@@ -200,12 +200,7 @@ export class MonacoEditor {
         this.monacoInstance.set(monacoInstance);
 
         const modelUri = monacoInstance.Uri.parse(LAYOUT_MODEL_URI);
-        let model = monacoInstance.editor.getModel(modelUri);
-        if (model) {
-          model.setValue(this.value());
-        } else {
-          model = monacoInstance.editor.createModel(this.value(), 'json', modelUri);
-        }
+        const model = monacoInstance.editor.createModel(this.value(), 'json', modelUri);
 
         const editor = monacoInstance.editor.create(this.editorContainer().nativeElement, {
           model,

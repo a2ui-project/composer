@@ -25,8 +25,6 @@ import {
 import {PreviewBridgeMessageType, ThemePreference} from './bridge-message';
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
-
-
 describe('PreviewBridge Core API Runtime', () => {
   let bridge: PreviewBridge;
   let originalParent: Window;
@@ -40,13 +38,13 @@ describe('PreviewBridge Core API Runtime', () => {
       configurable: true,
       value: {
         postMessage: vi.fn(),
-      }
+      },
     });
 
     // Make window.location mutable for tests if needed
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { ...originalLocation, search: '' },
+      value: {...originalLocation, search: ''},
       writable: true,
     });
 
@@ -799,12 +797,12 @@ describe('PreviewBridge Core API Runtime', () => {
   it('targets expected ?origin= when sending messages', () => {
     window.location.search = '?origin=https://trusted-parent.com';
     const newBridge = new PreviewBridge();
-    
+
     const spy = vi.spyOn(window.parent, 'postMessage');
     newBridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG});
     expect(spy).toHaveBeenCalledWith(
       {type: PreviewBridgeMessageType.A2UI_CATALOG},
-      'https://trusted-parent.com'
+      'https://trusted-parent.com',
     );
     newBridge.destroy();
   });
@@ -812,12 +810,12 @@ describe('PreviewBridge Core API Runtime', () => {
   it('targets local origin fallback if ?origin= is absent', () => {
     window.location.search = '';
     const newBridge = new PreviewBridge();
-    
+
     const spy = vi.spyOn(window.parent, 'postMessage');
     newBridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG});
     expect(spy).toHaveBeenCalledWith(
       {type: PreviewBridgeMessageType.A2UI_CATALOG},
-      window.location.origin
+      window.location.origin,
     );
     newBridge.destroy();
   });
@@ -827,10 +825,13 @@ describe('PreviewBridge Core API Runtime', () => {
     const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {
       throw new DOMException('Blocked a frame with origin from accessing a cross-origin frame.');
     });
-    
+
     bridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG});
-    
-    expect(errorSpy).toHaveBeenCalledWith('[PreviewBridge] Blocked cross-origin postMessage:', expect.any(DOMException));
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[PreviewBridge] Blocked cross-origin postMessage:',
+      expect.any(DOMException),
+    );
     expect(spy).toHaveBeenCalled();
   });
 
@@ -838,8 +839,10 @@ describe('PreviewBridge Core API Runtime', () => {
     const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {
       throw new TypeError('Something else entirely');
     });
-    
-    expect(() => bridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG})).toThrowError(TypeError);
+
+    expect(() => bridge.sendMessage({type: PreviewBridgeMessageType.A2UI_CATALOG})).toThrowError(
+      TypeError,
+    );
     expect(spy).toHaveBeenCalled();
   });
 

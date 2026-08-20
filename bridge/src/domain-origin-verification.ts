@@ -18,7 +18,6 @@ export class DomainOriginVerificationService {
   /**
    * Verifies if a given message event comes from an explicitly trusted origin.
    *
-   * @OriginCheckRequired
    * Depends on the `?origin=` URL parameter pairing contract to dynamically authenticate
    * cross-origin communication with the parent Shell context.
    *
