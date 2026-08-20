@@ -134,7 +134,7 @@ export class SettingsService {
   readonly selectedApiKeyId: Signal<string | null> = computed(() => {
     const id = this._selectedApiKeyId();
     if (id) return id;
-    const staticKeys = this.startupResolution.apiKeys() || {};
+    const staticKeys = this.startupConfigState.apiKeys() || {};
     return staticKeys['default'] !== undefined ? 'default' : null;
   });
 
@@ -143,7 +143,7 @@ export class SettingsService {
   readonly effectiveApiKey: Signal<string> = this._effectiveApiKey.asReadonly();
 
   private getStaticApiKeys(): Record<string, ApiKeyConfig> {
-    return this.startupResolution.apiKeys() || {};
+    return this.startupConfigState.apiKeys() || {};
   }
 
   /**
@@ -271,7 +271,7 @@ export class SettingsService {
   }
 
   private getStaticRenderersMap(): Record<string, RendererConfig> {
-    return this.startupResolution.renderers() || {};
+    return this.startupConfigState.renderers() || {};
   }
 
   /**
