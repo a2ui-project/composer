@@ -58,6 +58,7 @@ describe('ComposerShell Layout', () => {
   };
   let startupConfigStateMock: {
     resolvedUrl: WritableSignal<string | null>;
+    selectedRendererId: WritableSignal<string | null>;
     sharedA2uiError: WritableSignal<string | null>;
   };
   let stateSyncMock: {
@@ -94,6 +95,7 @@ describe('ComposerShell Layout', () => {
 
     startupConfigStateMock = {
       resolvedUrl: signal<string | null>(null),
+      selectedRendererId: signal<string | null>(null),
       sharedA2uiError: signal<string | null>(null),
     };
 

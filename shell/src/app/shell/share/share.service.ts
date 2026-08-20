@@ -64,11 +64,15 @@ export class ShareService {
     let compressedLengthChars = 0;
     try {
       const rendererUrl = this.startupResolution.resolvedUrl() || '';
+      const selectedId = this.startupResolution.selectedRendererId$?.() ?? null;
       const compressed = await QueryParser.encodeSharedPayload(activeDraft);
       const shareUrl = new URL(href);
       const hashParams = new URLSearchParams();
       if (rendererUrl) {
         hashParams.set('renderer', rendererUrl);
+      }
+      if (selectedId) {
+        hashParams.set('rendererId', selectedId);
       }
       hashParams.set('a2ui', compressed);
       shareUrl.hash = hashParams.toString();

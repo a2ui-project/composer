@@ -107,4 +107,14 @@ describe('ShareService', () => {
       expect.any(Object),
     );
   });
+
+  it('includes rendererId in share URL hash when selectedRendererId$ is present', async () => {
+    mockClipboard.copy.mockReturnValue(true);
+    (mockStartupResolution as {selectedRendererId$: unknown}).selectedRendererId$ =
+      signal('angular-dev');
+    await service.shareDesign();
+    expect(mockClipboard.copy).toHaveBeenCalledWith(
+      expect.stringContaining('rendererId=angular-dev'),
+    );
+  });
 });

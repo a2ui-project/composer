@@ -86,15 +86,27 @@ export class EnvironmentContextService {
         let modified = false;
         if (cleanUrl.hash) {
           const hashParams = new URLSearchParams(cleanUrl.hash.replace(/^#/, ''));
-          if (hashParams.has('a2ui')) {
+          if (
+            hashParams.has('a2ui') ||
+            hashParams.has('renderer') ||
+            hashParams.has('rendererId')
+          ) {
             hashParams.delete('a2ui');
+            hashParams.delete('renderer');
+            hashParams.delete('rendererId');
             const remaining = hashParams.toString();
             cleanUrl.hash = remaining ? `#${remaining}` : '';
             modified = true;
           }
         }
-        if (cleanUrl.searchParams.has('a2ui')) {
+        if (
+          cleanUrl.searchParams.has('a2ui') ||
+          cleanUrl.searchParams.has('renderer') ||
+          cleanUrl.searchParams.has('rendererId')
+        ) {
           cleanUrl.searchParams.delete('a2ui');
+          cleanUrl.searchParams.delete('renderer');
+          cleanUrl.searchParams.delete('rendererId');
           modified = true;
         }
         if (modified) {

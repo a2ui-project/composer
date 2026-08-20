@@ -14,7 +14,17 @@
  * limitations under the License.
  */
 
-import {Component, computed, inject, OnInit, signal, Signal, WritableSignal} from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  OnInit,
+  signal,
+  Signal,
+  untracked,
+  WritableSignal,
+} from '@angular/core';
 import {NonNullableFormBuilder, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -107,11 +117,19 @@ export class Settings implements OnInit {
 
   readonly settingsForm = this.fb.group({});
 
-  constructor() {}
+  constructor() {
+    effect(() => {
+      const activeId = this.settingsService.selectedRendererId$() || 'default';
+      untracked(() => {
+        this.selectedRendererId$.set(activeId);
+      });
+    });
+  }
 
   ngOnInit(): void {
-    const currentRendererId = this.settingsService.selectedRendererId() || 'Custom';
+    const currentRendererId = this.settingsService.selectedRendererId() || 'default';
     this.selectedRendererId.set(currentRendererId);
+
 
     void this.settingsService.getEffectiveApiKey();
 
@@ -122,10 +140,10 @@ export class Settings implements OnInit {
   }
 
   async onRendererSelected(rendererId: string): Promise<void> {
-    const targetId = rendererId === 'Custom' ? null : rendererId;
     const previousId = this.selectedRendererId();
     this.selectedRendererId.set(rendererId);
-    const success = await this.settingsService.selectRenderer(targetId);
+    const success = await this.settingsService.selectRenderer(rendererId);
+
     if (!success) {
       this.selectedRendererId.set(previousId);
     }
