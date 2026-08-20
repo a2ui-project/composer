@@ -27,6 +27,11 @@ export declare interface ParseResult {
 
 /**
  * Parses and attempts to syntax-heal a string of suspected A2UI JSON Lines.
+ *
+ * @param content Pre-cleaned JSON or JSON Lines string (e.g., stripped of pulse indicators,
+ *                thinking tags, and markdown code fences via ChatCleaner.cleanPayload).
+ * @returns ParseResult containing parsed payload blocks and whether syntax healing occurred.
+ * @throws Error if corrupted JSON Lines cannot be recovered or no valid blocks are parsed.
  */
 export function parseAndHealJsonLines(content: string): ParseResult {
   let wasHealed = false;

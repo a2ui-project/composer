@@ -42,13 +42,25 @@ describe('a2ui-payload-parser', () => {
   });
 
   describe('parseAndHealJsonLines', () => {
-    it('parses valid json array', () => {
-      const result = parseAndHealJsonLines('[{"a": 1}]');
+    it('parses single-line JSON arrays', () => {
+      const result = parseAndHealJsonLines('[{"a": 1}, {"b": 2}]');
+      expect(result.blocks).toEqual([{a: 1}, {b: 2}]);
+      expect(result.wasHealed).toBe(false);
+    });
+
+    it('parses valid multi-line JSON', () => {
+      const payload = `
+      {
+        "a": 1
+      }
+      `;
+      const result = parseAndHealJsonLines(payload);
+      // Depending on implementation, it might parse as single large block or error out if not JSONLines
       expect(result.blocks).toEqual([{a: 1}]);
       expect(result.wasHealed).toBe(false);
     });
 
-    it('parses invalid multi-line json that can be healed', () => {
+    it('heals truncated or malformed JSON lines', () => {
       // Missing braces and such
       const result = parseAndHealJsonLines('{"a": 1\n{"b": 2');
       expect(result.blocks).toEqual([{a: 1}, {b: 2}]);
@@ -111,7 +123,10 @@ describe('a2ui-payload-parser', () => {
       const payloadString =
         '{"component":"TextField","__proto__":{"polluted":"yes"},"constructor":{"name":"Function"},"prototype":{"test":true},"valid":"baz","nested":{"__proto__":{"evil":true},"nestedValid":"qux"}}';
       const obj = JSON.parse(payloadString);
-      const sanitized = sanitizeComponentObject(obj as A2uiComponentInstance) as Record<string, unknown>;
+      const sanitized = sanitizeComponentObject(obj as A2uiComponentInstance) as Record<
+        string,
+        unknown
+      >;
 
       expect(sanitized['valid']).toBe('baz');
       expect(Object.keys(sanitized)).not.toContain('__proto__');
