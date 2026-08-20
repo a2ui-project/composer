@@ -59,9 +59,13 @@ export class HostCommunication implements OnDestroy {
   private iframeWindow: Window | null = null;
   private iframeElement: HTMLIFrameElement | null = null;
   private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
+  private readonly isRendererReadySignal = signal<boolean>(false);
 
   /** Readonly signal tracking the most recent message envelope */
   readonly latestEnvelope: Signal<MessageEnvelope | null> = this.latestEnvelopeSignal.asReadonly();
+
+  /** Readonly signal tracking if the guest renderer is ready */
+  readonly isRendererReady = this.isRendererReadySignal.asReadonly();
 
   private readonly messageStreamSubject = new ReplaySubject<MessageEnvelope>(1);
   /** Uncoalesced hot event stream broadcasting all incoming message envelopes */
@@ -160,6 +164,7 @@ export class HostCommunication implements OnDestroy {
         this.latestCatalogEnvelope = envelope;
       }
       if (type === PreviewBridgeMessageType.RENDERER_READY) {
+        this.isRendererReadySignal.set(true);
         this.sendTheme(this.configProvider.themePreference());
       }
       if (type !== PreviewBridgeMessageType.CONSOLE_LOG) {
@@ -201,6 +206,7 @@ export class HostCommunication implements OnDestroy {
       this.iframeElement = null;
       this.iframeWindow = null;
       this.earlyMessageBuffer.length = 0;
+      this.isRendererReadySignal.set(false);
       return;
     }
 
@@ -214,9 +220,9 @@ export class HostCommunication implements OnDestroy {
     }
 
     this.iframeWindow = windowTarget;
+    this.isRendererReadySignal.set(false);
     if (windowTarget) {
       this.flushEarlyMessages();
-      this.sendTheme(this.configProvider.themePreference());
     }
   }
 
@@ -227,6 +233,11 @@ export class HostCommunication implements OnDestroy {
   sendMessage(message: {type: PreviewBridgeMessageType; payload?: unknown}): void {
     if (!CrossFrameValidator.validateOutgoingMessage(message)) {
       console.error('Blocked dispatch of malformed message type...', message);
+      return;
+    }
+
+    if (!this.isRendererReady()) {
+      console.debug('Dropping outbound message; renderer is not yet ready.', message);
       return;
     }
 
@@ -277,7 +288,9 @@ export class HostCommunication implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.isRendererReadySignal.set(false);
     this.earlyMessageBuffer.length = 0;
+    this.messageStreamSubject.complete();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
       delete window.a2uiHostCommunication;
