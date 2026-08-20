@@ -82,7 +82,7 @@ export class ShareService {
         status: ShareTrackingStatus.SUCCESS,
         compressedLengthChars,
       });
-      this.snackBar.open(`${sizeKb} KB copied to clipboard`, 'Close', {
+      this.snackBar.open(`Shareable link copied to clipboard (${sizeKb} KB)`, 'Close', {
         duration: SNACK_BAR_DURATION_MS,
       });
     } catch (err) {

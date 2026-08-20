@@ -165,7 +165,7 @@ test.describe('E2E Workspace User Journey', () => {
     await shareButton.click();
 
     const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
-    await expect(snackbarLocator).toContainText('KB copied to clipboard');
+    await expect(snackbarLocator).toContainText('Shareable link copied to clipboard');
 
     const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
     expect(shareUrl).toContain(ELECTRIC_CAR_CHARGING_UI);

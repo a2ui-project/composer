@@ -71,7 +71,7 @@ describe('ShareService', () => {
     expect(copiedUrl).toContain('a2ui=');
     expect(copiedUrl).not.toContain('search=');
     expect(mockSnackBar.open).toHaveBeenCalledWith(
-      expect.stringMatching(/.* KB copied to clipboard/),
+      expect.stringMatching(/Shareable link copied to clipboard \(.* KB\)/),
       'Close',
       expect.any(Object),
     );
