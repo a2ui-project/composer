@@ -37,58 +37,66 @@
 .blur-circle {
   position: absolute;
   border-radius: 50%;
-  filter: blur(103px);
-  // Promote to its own compositor layer so the large blur is GPU-composited
-  // instead of repainting on the main thread during resize/scroll.
-  transform: translateZ(0);
+  // A 103px gaussian on six 450-600px elements is extremely expensive to paint,
+  // and promoting them with translateZ(0) makes it worse on software-rendered
+  // (GPU-less) machines such as CI runners -- six large blurred compositor
+  // layers instead of one. A radial-gradient reproduces the same soft wash at
+  // effectively zero paint cost. Each element is grown by the old blur radius
+  // on every side so the visual extent and centre are unchanged.
+  background: radial-gradient(
+    circle closest-side,
+    var(--circle-color) 0%,
+    var(--circle-color) 30%,
+    transparent 85%
+  );
 }
 
 .blur-circle--1 {
-  width: 446px;
-  height: 446px;
-  left: 1040px;
-  top: 11px;
-  background: var(--cpk-blur-warm);
+  width: 652px;
+  height: 652px;
+  left: 937px;
+  top: -92px;
+  --circle-color: var(--cpk-blur-warm);
 }
 
 .blur-circle--2 {
-  width: 609px;
-  height: 609px;
-  left: 1339px;
-  top: 625px;
-  background: var(--cpk-blur-cool);
+  width: 815px;
+  height: 815px;
+  left: 1236px;
+  top: 522px;
+  --circle-color: var(--cpk-blur-cool);
 }
 
 .blur-circle--3 {
-  width: 609px;
-  height: 609px;
-  left: 670px;
-  top: -365px;
-  background: var(--cpk-blur-cool);
+  width: 815px;
+  height: 815px;
+  left: 567px;
+  top: -468px;
+  --circle-color: var(--cpk-blur-cool);
 }
 
 .blur-circle--4 {
-  width: 609px;
-  height: 609px;
-  left: 508px;
-  top: 702px;
-  background: var(--cpk-blur-bright);
+  width: 815px;
+  height: 815px;
+  left: 405px;
+  top: 599px;
+  --circle-color: var(--cpk-blur-bright);
 }
 
 .blur-circle--5 {
-  width: 446px;
-  height: 446px;
-  left: 128px;
-  top: 331px;
-  background: var(--cpk-blur-gold);
+  width: 652px;
+  height: 652px;
+  left: 25px;
+  top: 228px;
+  --circle-color: var(--cpk-blur-gold);
 }
 
 .blur-circle--6 {
-  width: 446px;
-  height: 446px;
-  left: -205px;
-  top: 803px;
-  background: var(--cpk-blur-warm);
+  width: 652px;
+  height: 652px;
+  left: -308px;
+  top: 700px;
+  --circle-color: var(--cpk-blur-warm);
 }
 
 .composer-header {
