@@ -19,7 +19,7 @@ import {Injectable, inject} from '@angular/core';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {QueryParser} from '../query-parser/query-parser';
-import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {
   ShareTrackingStatus,
   UsageTrackingService,
@@ -35,7 +35,7 @@ export class ShareService {
   private readonly document = inject(DOCUMENT);
   private readonly snackBar = inject(MatSnackBar);
   private readonly stateSync = inject(StateSync);
-  private readonly startupResolution = inject(StartupResolution);
+  private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly usageTrackingService = inject(UsageTrackingService);
 
   /**
@@ -63,8 +63,8 @@ export class ShareService {
 
     let compressedLengthChars = 0;
     try {
-      const rendererUrl = this.startupResolution.resolvedUrl() || '';
-      const selectedId = this.startupResolution.selectedRendererId$?.() ?? null;
+      const rendererUrl = this.startupConfigState.resolvedUrl() || '';
+      const selectedId = this.startupConfigState.selectedRendererId() ?? null;
       const compressed = await QueryParser.encodeSharedPayload(activeDraft);
       const shareUrl = new URL(href);
       const hashParams = new URLSearchParams();

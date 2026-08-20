@@ -280,7 +280,7 @@ describe('StartupResolution', () => {
       expect(service.sharedA2uiPayload()).toBe(expectedFormattedJson);
     });
 
-    it('switches active renderer and updates selectedRendererId$ when hash contains renderer and rendererId', async () => {
+    it('switches active renderer and updates selectedRendererId when hash contains renderer and rendererId', async () => {
       mockFetchConfig({
         renderers: {
           default: {rendererUrl: 'http://default-renderer:3000'},
@@ -305,7 +305,7 @@ describe('StartupResolution', () => {
       await service.processSharedA2uiUrl();
 
       expect(service.sharedA2uiPayload()).toBe(expectedFormattedJson);
-      expect(service.selectedRendererId$()).toBe('react-dev');
+      expect(stateService.selectedRendererId()).toBe('react-dev');
       expect(service.resolvedUrl()).toBe('http://localhost:4200/samples/react-basic-catalog/');
       expect(localStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBe('react-dev');
       expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith(
@@ -1256,7 +1256,7 @@ describe('StartupResolution', () => {
 
       const url = await service.resolveRenderer();
       expect(url).toBe('http://localhost:4200/samples/ng-basic-catalog/');
-      expect(service.selectedRendererId$()).toBe('angular-dev');
+      expect(stateService.selectedRendererId()).toBe('angular-dev');
     });
 
     it('1d. matches custom renderer ID when query contains matching custom renderer URL', async () => {
@@ -1279,7 +1279,7 @@ describe('StartupResolution', () => {
 
       const url = await service.resolveRenderer();
       expect(url).toBe('http://localhost:5000/renderer');
-      expect(service.selectedRendererId$()).toBe('my-custom-1');
+      expect(stateService.selectedRendererId()).toBe('my-custom-1');
     });
 
     it('1e. registers unknown allowed URL as custom renderer in LocalStorage and selects it', async () => {
@@ -1296,7 +1296,7 @@ describe('StartupResolution', () => {
 
       const url = await service.resolveRenderer();
       expect(url).toBe('http://localhost:9999/preview');
-      expect(service.selectedRendererId$()).toMatch(/^custom-\d+$/);
+      expect(stateService.selectedRendererId()).toMatch(/^custom-\d+$/);
 
       const customList = JSON.parse(localStorage.getItem(LocalStorageKey.CUSTOM_RENDERERS) || '[]');
       expect(customList).toEqual(
@@ -1323,7 +1323,7 @@ describe('StartupResolution', () => {
 
       const url = await service.resolveRenderer();
       expect(url).toBe('http://localhost:8888/preview');
-      expect(service.selectedRendererId$()).toMatch(/^custom-\d+$/);
+      expect(stateService.selectedRendererId()).toMatch(/^custom-\d+$/);
     });
 
     it('2a. auto-allows localhost, 127.0.0.1, and [::1] origins in ?renderer= without prompting confirmation', async () => {

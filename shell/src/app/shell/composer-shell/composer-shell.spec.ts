@@ -132,11 +132,11 @@ describe('ComposerShell Layout', () => {
           provide: AppConfigProvider,
           useValue: configProviderMock,
         },
-        {provide: StartupResolution, useValue: {}},
         {
           provide: StartupConfigStateService,
           useValue: startupConfigStateMock,
         },
+        {provide: StartupResolution, useValue: {}},
         {
           provide: StateSync,
           useValue: stateSyncMock,
