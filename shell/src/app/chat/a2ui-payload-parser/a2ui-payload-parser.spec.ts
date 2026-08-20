@@ -107,20 +107,19 @@ describe('a2ui-payload-parser', () => {
   });
 
   describe('sanitizeComponentObject', () => {
-    it('removes mock* and rules properties', () => {
-      const obj = {
-        component: 'TextField',
-        mockData: 'foo',
-        rules: 'bar',
-        valid: 'baz',
-        nested: {
-          mocking: true,
-          nestedValid: 'qux',
-        },
-      } as unknown;
-      const sanitized = sanitizeComponentObject(obj);
+    it('strips prototype pollution keys from payload', () => {
+      const payloadString =
+        '{"component":"TextField","__proto__":{"polluted":"yes"},"constructor":{"name":"Function"},"prototype":{"test":true},"valid":"baz","nested":{"__proto__":{"evil":true},"nestedValid":"qux"}}';
+      const obj = JSON.parse(payloadString);
+      const sanitized = sanitizeComponentObject(obj as A2uiComponentInstance) as Record<string, unknown>;
+
       expect(sanitized['valid']).toBe('baz');
-      expect(sanitized['nested']['nestedValid']).toBe('qux');
+      expect(Object.keys(sanitized)).not.toContain('__proto__');
+      expect(Object.keys(sanitized)).not.toContain('constructor');
+      expect(Object.keys(sanitized)).not.toContain('prototype');
+      const nestedObj = sanitized['nested'] as Record<string, unknown>;
+      expect(nestedObj['nestedValid']).toBe('qux');
+      expect(Object.keys(nestedObj)).not.toContain('__proto__');
     });
   });
 });
