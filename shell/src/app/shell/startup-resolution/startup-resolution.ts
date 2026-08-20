@@ -15,8 +15,13 @@
  */
 
 import {EnvironmentContextService} from './state/environment-context.service';
-import {StartupConfigStateService} from './state/startup-config-state.service';
-import {Injectable, Injector, DestroyRef, inject, Signal, computed} from '@angular/core';
+import {
+  StartupConfigStateService,
+  RendererConfig,
+  ApiKeyConfig,
+  AppConfig,
+} from './state/startup-config-state.service';
+import {Injectable, Injector, DestroyRef, inject} from '@angular/core';
 import {QueryParser} from '../query-parser/query-parser';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
@@ -26,28 +31,6 @@ import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage
 import {MatDialog} from '@angular/material/dialog';
 import {firstValueFrom} from 'rxjs';
 import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
-
-/**
- * Represents the configuration options for an application renderer.
- */
-export declare interface RendererConfig {
-  rendererUrl?: string;
-  displayName?: string;
-  id?: string;
-  name?: string;
-  apiKey?: string;
-  samplePayload?: string;
-}
-
-export declare interface ApiKeyConfig {
-  apiKey: string;
-  displayName?: string;
-}
-
-export declare interface AppConfig {
-  renderers?: Record<string, RendererConfig>;
-  apiKeys?: Record<string, ApiKeyConfig>;
-}
 
 @Injectable({
   providedIn: 'root',
@@ -69,14 +52,8 @@ export class StartupResolution {
   readonly resolvedUrl = this.startupConfigState.resolvedUrl;
   readonly renderers = this.startupConfigState.renderers;
   readonly apiKeys = this.startupConfigState.apiKeys;
-  readonly selectedRendererId$ = this.startupConfigState.selectedRendererId$;
   readonly sharedA2uiPayload = this.startupConfigState.sharedA2uiPayload;
   readonly sharedA2uiError = this.startupConfigState.sharedA2uiError;
-  readonly activeRenderer: Signal<RendererConfig | null> = computed(() => {
-    const selectedId = this.startupConfigState.selectedRendererId$();
-    if (!selectedId) return null;
-    return this.getRendererById(selectedId, this.startupConfigState.renderers());
-  });
 
   private readonly destroyRef = inject(DestroyRef);
 
@@ -260,11 +237,19 @@ export class StartupResolution {
         !Array.isArray(config.renderers)
       ) {
         staticRenderers = config.renderers;
-        this.startupConfigState.setRenderers(staticRenderers);
       }
     } else {
       staticRenderers = this.startupConfigState.renderers();
     }
+
+    const mergedRenderers = {...staticRenderers};
+    const customRenderers = this.getCustomRenderers();
+    for (const cr of customRenderers) {
+      if (cr.id) {
+        mergedRenderers[cr.id] = cr;
+      }
+    }
+    this.startupConfigState.setRenderers(mergedRenderers);
 
     // Tier 1 & 2: renderer param from hash or query (subject to origin allowlist check)
     const queryRendererUrl =
@@ -332,7 +317,7 @@ export class StartupResolution {
     const defaultCandidate = this.getRendererById('default', staticRenderers);
     if (defaultCandidate?.rendererUrl) {
       console.log("Using 'default' renderer from static config.");
-      if (!this.startupConfigState.selectedRendererId$()) {
+      if (!this.startupConfigState.selectedRendererId()) {
         this.startupConfigState.setSelectedRendererId('default');
         if (config) {
           await this.applyApiKeyFromConfig(config, 'default');

@@ -17,11 +17,12 @@
 import {TestBed} from '@angular/core/testing';
 import {signal, WritableSignal} from '@angular/core';
 import {SettingsService} from './settings.service';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {
+  StartupConfigStateService,
   ApiKeyConfig,
   RendererConfig,
-  StartupResolution,
-} from '../../shell/startup-resolution/startup-resolution';
+} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {AppConfigProvider} from '../app-config-provider/app-config-provider';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
@@ -35,7 +36,7 @@ describe('SettingsService', () => {
   let service: SettingsService;
   let mockStartupResolution: {
     renderers: WritableSignal<Record<string, RendererConfig>>;
-    selectedRendererId$: WritableSignal<string | null>;
+    selectedRendererId: WritableSignal<string | null>;
     activeRenderer: WritableSignal<RendererConfig | null>;
     apiKeys: WritableSignal<Record<string, ApiKeyConfig>>;
     setSelectedRendererId: ReturnType<typeof vi.fn>;
@@ -76,12 +77,13 @@ describe('SettingsService', () => {
 
     mockStartupResolution = {
       renderers: signal(sampleRenderers),
-      selectedRendererId$: signal(null),
+      selectedRendererId: signal(null),
       activeRenderer: signal(null),
+      setRenderers: vi.fn(),
       apiKeys: signal({}),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(true),
       setSelectedRendererId: vi.fn((id: string | null) => {
-        mockStartupResolution.selectedRendererId$.set(id);
+        mockStartupResolution.selectedRendererId.set(id);
         mockStartupResolution.activeRenderer.set(id ? sampleRenderers[id] || null : null);
         return Promise.resolve(true);
       }),
@@ -113,6 +115,7 @@ describe('SettingsService', () => {
         SettingsService,
         LocalStorageInteractions,
         {provide: StartupResolution, useValue: mockStartupResolution},
+        {provide: StartupConfigStateService, useValue: mockStartupResolution},
         {provide: AppConfigProvider, useValue: mockConfigProvider},
         {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
@@ -199,7 +202,7 @@ describe('SettingsService', () => {
     };
     mockStartupResolution.renderers.set(customRenderers);
     mockStartupResolution.setSelectedRendererId.mockImplementation((id: string | null) => {
-      mockStartupResolution.selectedRendererId$.set(id);
+      mockStartupResolution.selectedRendererId.set(id);
       mockStartupResolution.activeRenderer.set(id ? customRenderers[id] || null : null);
       return Promise.resolve(true);
     });
@@ -703,13 +706,13 @@ describe('SettingsService', () => {
           {id: 'custom-2', name: 'Custom Two', rendererUrl: 'http://c2.com'},
         ]),
       );
-      mockStartupResolution.selectedRendererId$.set('custom-1');
+      mockStartupResolution.selectedRendererId.set('custom-1');
       mockLocalStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'custom-1');
 
       service.deleteCustomRenderer('custom-1');
 
       expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
-      expect(mockStartupResolution.selectedRendererId$()).toBeNull();
+      expect(mockStartupResolution.selectedRendererId()).toBeNull();
     });
 
     it('saveCustomRenderer() throws an error when saving an empty ID or a non-HTTP/HTTPS URL', () => {

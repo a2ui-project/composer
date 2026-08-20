@@ -53,7 +53,7 @@ export declare interface AppConfig {
 export class StartupConfigStateService {
   private readonly _resolvedUrl = signal<string | null>(null);
   private readonly _renderers = signal<Record<string, RendererConfig>>({});
-  private readonly _selectedRendererId$ = signal<string | null>(null);
+  private readonly _selectedRendererId = signal<string | null>(null);
   private readonly _apiKeys = signal<Record<string, ApiKeyConfig>>({});
   private readonly _sharedA2uiPayload = signal<string | null>(null);
   private readonly _sharedA2uiError = signal<string | null>(null);
@@ -61,17 +61,18 @@ export class StartupConfigStateService {
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
   readonly renderers = this._renderers.asReadonly();
   readonly apiKeys = this._apiKeys.asReadonly();
-  readonly selectedRendererId$ = this._selectedRendererId$.asReadonly();
+  readonly selectedRendererId = this._selectedRendererId.asReadonly();
   readonly sharedA2uiPayload = this._sharedA2uiPayload.asReadonly();
   readonly sharedA2uiError = this._sharedA2uiError.asReadonly();
 
   readonly activeRenderer = computed<RendererConfig | null>(() => {
     const renderers = this._renderers();
-    const selectedId = this._selectedRendererId$();
+    const selectedId = this._selectedRendererId();
     if (!selectedId) return null;
-    return (
-      renderers[selectedId] || Object.values(renderers).find(r => r.name === selectedId) || null
-    );
+    if (Object.hasOwn(renderers, selectedId)) {
+      return renderers[selectedId];
+    }
+    return Object.values(renderers).find(r => r.name === selectedId) || null;
   });
 
   setResolvedUrl(url: string | null): void {
@@ -83,7 +84,7 @@ export class StartupConfigStateService {
   }
 
   setSelectedRendererId(id: string | null): void {
-    this._selectedRendererId$.set(id);
+    this._selectedRendererId.set(id);
   }
 
   setApiKeys(apiKeys: Record<string, ApiKeyConfig>): void {

@@ -23,6 +23,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
+import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
@@ -57,6 +58,7 @@ import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
 export class Settings implements OnInit {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly startupResolution = inject(StartupResolution);
+  private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
@@ -100,7 +102,7 @@ export class Settings implements OnInit {
   );
 
   readonly activeRendererUrl: Signal<string | null> = computed(() =>
-    this.startupResolution.resolvedUrl(),
+    this.startupConfigState.resolvedUrl(),
   );
 
   readonly settingsForm = this.fb.group({});

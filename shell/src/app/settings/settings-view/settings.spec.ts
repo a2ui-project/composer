@@ -18,7 +18,8 @@ import {TestBed} from '@angular/core/testing';
 import {PlatformLocation} from '@angular/common';
 import {Settings} from './settings';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {StartupResolution, RendererConfig} from '../../shell/startup-resolution/startup-resolution';
+import {StartupConfigStateService, RendererConfig, ApiKeyConfig} from '../../shell/startup-resolution/state/startup-config-state.service';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {describe, it, expect, beforeEach, afterEach, vi, Mock} from 'vitest';
 import {
   HostCommunication,
@@ -61,14 +62,16 @@ describe('Settings', () => {
   let mockApiKeys: WritableSignal<Record<string, ApiKeyConfig>>;
   let mockActiveRenderer: WritableSignal<RendererConfig | null>;
   let mockStartupResolution: {
-    resolvedUrl: Signal<string | null>;
     getResolvedRendererUrl: Mock<() => string | null>;
     isThirdPartyEnvironment: Mock<() => boolean>;
+    setSelectedRendererId: Mock<(id: string | null) => void>;
+  };
+  let mockStartupResolution: {
+    resolvedUrl: Signal<string | null>;
     renderers: Signal<Record<string, RendererConfig>>;
-    selectedRendererId$: Signal<string | null>;
+    selectedRendererId: Signal<string | null>;
     activeRenderer: Signal<RendererConfig | null>;
     apiKeys: Signal<Record<string, ApiKeyConfig>>;
-    setSelectedRendererId: Mock<(id: string | null) => void>;
   };
   let mockLatestEnvelope: WritableSignal<MessageEnvelope | null>;
   let mockIsHandshakeInProgress: WritableSignal<boolean>;
@@ -122,17 +125,19 @@ describe('Settings', () => {
     mockActiveRenderer = signal<Record<string, RendererConfig>[string] | null>(null);
 
     mockStartupResolution = {
-      resolvedUrl: mockResolvedUrl.asReadonly(),
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://resolved-url.com'),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(false),
-      renderers: mockRenderers.asReadonly(),
-      selectedRendererId$: mockSelectedRendererId.asReadonly(),
-      activeRenderer: mockActiveRenderer.asReadonly(),
-      apiKeys: mockApiKeys.asReadonly(),
       setSelectedRendererId: vi.fn((id: string | null) => {
         mockSelectedRendererId.set(id);
         mockActiveRenderer.set(id ? mockRenderers()[id] || null : null);
       }),
+    };
+    mockStartupResolution = {
+      resolvedUrl: mockResolvedUrl.asReadonly(),
+      renderers: mockRenderers.asReadonly(),
+      selectedRendererId: mockSelectedRendererId.asReadonly(),
+      activeRenderer: mockActiveRenderer.asReadonly(),
+      apiKeys: mockApiKeys.asReadonly(),
     };
     mockLatestEnvelope = signal<MessageEnvelope | null>(null);
     mockIsHandshakeInProgress = signal<boolean>(false);
@@ -201,6 +206,8 @@ describe('Settings', () => {
         {
           provide: StartupResolution,
           useValue: mockStartupResolution,
+        },
+        {provide: StartupConfigStateService, useValue: mockStartupResolution,
         },
         {provide: AppConfigProvider, useValue: mockConfigProvider},
         {

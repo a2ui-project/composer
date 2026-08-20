@@ -23,7 +23,7 @@ import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {RenderA2uiItem, A2uiComponentInstance, UpdateComponentsDetails} from 'a2ui-bridge';
-import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {tryParseJsonArray, formatJson} from '../../utils/json';
 
 /**
@@ -50,7 +50,7 @@ export class StateSync {
   private readonly destroyRef = inject(DestroyRef);
   private readonly chatState = inject(ChatState);
   private readonly catalogManagement = inject(CatalogManagement);
-  private readonly startupResolution = inject(StartupResolution, {optional: true});
+  private readonly startupConfigState = inject(StartupConfigStateService);
 
   // A "draft" represents the volatile, unsaved in-memory JSON array
   // payload containing the active surface setup, component hierarchy,
@@ -73,12 +73,12 @@ export class StateSync {
   private readonly _draftInput = signal<string>('');
 
   constructor() {
-    const selectedRendererId$ = this.startupResolution?.selectedRendererId$
-      ? toObservable(this.startupResolution.selectedRendererId$)
+    const selectedRendererId$ = this.startupConfigState.selectedRendererId
+      ? toObservable(this.startupConfigState.selectedRendererId)
       : of(null);
     const activeCatalog$ = toObservable(this.catalogManagement.activeCatalog);
-    const sharedA2uiPayload$ = this.startupResolution?.sharedA2uiPayload
-      ? toObservable(this.startupResolution.sharedA2uiPayload)
+    const sharedA2uiPayload$ = this.startupConfigState.sharedA2uiPayload
+      ? toObservable(this.startupConfigState.sharedA2uiPayload)
       : of(null);
 
     merge(selectedRendererId$, activeCatalog$)
@@ -147,11 +147,11 @@ export class StateSync {
   }
 
   private getInitialDraft(catalogId: string): string {
-    const sharedPayload = this.startupResolution?.sharedA2uiPayload();
+    const sharedPayload = this.startupConfigState.sharedA2uiPayload();
     if (sharedPayload) {
       return sharedPayload;
     }
-    const activeRenderer = this.startupResolution?.activeRenderer();
+    const activeRenderer = this.startupConfigState.activeRenderer();
     if (activeRenderer?.samplePayload) {
       return activeRenderer.samplePayload;
     }

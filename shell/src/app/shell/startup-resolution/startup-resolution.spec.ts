@@ -22,6 +22,7 @@ import {MatButtonHarness} from '@angular/material/button/testing';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolution} from './startup-resolution';
+import {StartupConfigStateService} from './state/startup-config-state.service';
 import {QueryParser} from '../query-parser/query-parser';
 import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
@@ -76,6 +77,7 @@ class MockAppConfigProvider {
 
 describe('StartupResolution', () => {
   let service: StartupResolution;
+  let stateService: StartupConfigStateService;
   let mockConfigProvider: MockAppConfigProvider;
 
   function mockFetchConfig(config: object) {
@@ -94,6 +96,7 @@ describe('StartupResolution', () => {
       ],
     });
     service = TestBed.inject(StartupResolution);
+    stateService = TestBed.inject(StartupConfigStateService);
   });
 
   afterEach(() => {
@@ -555,12 +558,12 @@ describe('StartupResolution', () => {
 
   it('updates activeProfileKey signal alongside selectedProfileId signal when setSelectedProfileId is called', () => {
     service.setSelectedRendererId('custom-profile');
-    expect(service.selectedRendererId$()).toBe('custom-profile');
-    expect(service.selectedRendererId$()).toBe('custom-profile');
+    expect(stateService.selectedRendererId()).toBe('custom-profile');
+    expect(stateService.selectedRendererId()).toBe('custom-profile');
 
     service.setSelectedRendererId(null);
-    expect(service.selectedRendererId$()).toBeNull();
-    expect(service.selectedRendererId$()).toBeNull();
+    expect(stateService.selectedRendererId()).toBeNull();
+    expect(stateService.selectedRendererId()).toBeNull();
   });
 
   describe('renderer resolution', () => {
@@ -591,10 +594,10 @@ describe('StartupResolution', () => {
 
       await service.resolveStartupConfiguration();
       service.setSelectedRendererId(null);
-      expect(service.activeRenderer()).toBeNull();
+      expect(stateService.activeRenderer()).toBeNull();
 
       service.setSelectedRendererId('nonexistent');
-      expect(service.activeRenderer()).toBeNull();
+      expect(stateService.activeRenderer()).toBeNull();
     });
 
     it('stores and retrieves profile configs containing optional displayName', async () => {
@@ -622,7 +625,7 @@ describe('StartupResolution', () => {
           displayName: 'Development Environment',
         },
       });
-      expect(service.activeRenderer()).toEqual({
+      expect(stateService.activeRenderer()).toEqual({
         rendererUrl: 'http://base:3000',
         displayName: 'Default Profile',
       });
@@ -814,7 +817,7 @@ describe('StartupResolution', () => {
 
         const url = await service.resolveStartupConfiguration();
         expect(url).toBe('http://query-renderer:3000');
-        expect(service.selectedRendererId$()).toBe('queryProfile');
+        expect(stateService.selectedRendererId()).toBe('queryProfile');
       });
 
       it('resolves query profile as tier 2 priority when initialProfile is absent or invalid', async () => {
@@ -838,8 +841,8 @@ describe('StartupResolution', () => {
 
         const url = await service.resolveStartupConfiguration();
         expect(url).toBe('http://query-renderer:3000');
-        expect(service.selectedRendererId$()).toBe('queryProfile');
-        expect(service.selectedRendererId$()).toBe('queryProfile');
+        expect(stateService.selectedRendererId()).toBe('queryProfile');
+        expect(stateService.selectedRendererId()).toBe('queryProfile');
       });
 
       it('resolves local storage selected profile as tier 3 priority when initialProfile and query profile are absent or invalid', async () => {
@@ -859,8 +862,8 @@ describe('StartupResolution', () => {
 
         const url = await service.resolveStartupConfiguration();
         expect(url).toBe('http://storage-renderer:3000');
-        expect(service.selectedRendererId$()).toBe('storageProfile');
-        expect(service.selectedRendererId$()).toBe('storageProfile');
+        expect(stateService.selectedRendererId()).toBe('storageProfile');
+        expect(stateService.selectedRendererId()).toBe('storageProfile');
       });
 
       it('resolves default profile as tier 4 priority when higher priority candidates are absent or invalid', async () => {
@@ -877,8 +880,8 @@ describe('StartupResolution', () => {
 
         const url = await service.resolveStartupConfiguration();
         expect(url).toBe('http://default-renderer:3000');
-        expect(service.selectedRendererId$()).toBe('default');
-        expect(service.selectedRendererId$()).toBe('default');
+        expect(stateService.selectedRendererId()).toBe('default');
+        expect(stateService.selectedRendererId()).toBe('default');
       });
 
       it('returns null when no candidate profile key exists in static config profiles', async () => {
@@ -895,8 +898,8 @@ describe('StartupResolution', () => {
 
         const url = await service.resolveStartupConfiguration();
         expect(url).toBeNull();
-        expect(service.selectedRendererId$()).toBeNull();
-        expect(service.selectedRendererId$()).toBeNull();
+        expect(stateService.selectedRendererId()).toBeNull();
+        expect(stateService.selectedRendererId()).toBeNull();
       });
     });
   });
@@ -1274,7 +1277,7 @@ describe('StartupResolution', () => {
       const url = await service.resolveRenderer();
 
       expect(url).toBe('http://dev-renderer:3000');
-      expect(service.selectedRendererId$()).toBe('dev');
+      expect(stateService.selectedRendererId()).toBe('dev');
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('dev-api-key');
     });
 
@@ -1296,7 +1299,7 @@ describe('StartupResolution', () => {
       const url = await service.resolveRenderer();
 
       expect(url).toBe('http://custom-renderer:4000');
-      expect(service.selectedRendererId$()).toBe('custom');
+      expect(stateService.selectedRendererId()).toBe('custom');
     });
 
     it('3d. ignores malformed entries in CUSTOM_RENDERERS LocalStorage when resolving custom renderer by ID', async () => {
@@ -1321,7 +1324,7 @@ describe('StartupResolution', () => {
       const url = await service.resolveRenderer();
 
       expect(url).toBe('http://custom-renderer:4000');
-      expect(service.selectedRendererId$()).toBe('custom');
+      expect(stateService.selectedRendererId()).toBe('custom');
     });
 
     it('4. resolves last selected renderer from LocalStorage when no query parameters are present', async () => {
@@ -1337,7 +1340,7 @@ describe('StartupResolution', () => {
 
       const url = await service.resolveRenderer();
       expect(url).toBe('http://staging-renderer:3000');
-      expect(service.selectedRendererId$()).toBe('staging');
+      expect(stateService.selectedRendererId()).toBe('staging');
     });
 
     it('5. resolves default renderer from config.json.renderers when LocalStorage is empty', async () => {
@@ -1351,7 +1354,7 @@ describe('StartupResolution', () => {
       const url = await service.resolveRenderer();
 
       expect(url).toBe('http://default-renderer:3000');
-      expect(service.selectedRendererId$()).toBe('default');
+      expect(stateService.selectedRendererId()).toBe('default');
     });
 
     it('6. null renderer -> returns null and causes isEnvironmentValid to return false for redirect to /settings', async () => {

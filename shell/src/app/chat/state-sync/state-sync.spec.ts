@@ -24,6 +24,7 @@ import {CAR_BOOKING} from '../chat-service/initial-draft';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {signal} from '@angular/core';
 
 class MockChatState {
@@ -63,7 +64,11 @@ class MockCatalogManagement {
 
 class MockStartupResolution {
   readonly sharedA2uiPayload = signal<string | null>(null);
+}
+
+class MockStartupConfigState {
   readonly activeRenderer = signal<{samplePayload?: string} | null>(null);
+  readonly sharedA2uiPayload = signal<string | null>(null);
 }
 
 describe('StateSync Autosave Draft Integrations', () => {
@@ -71,12 +76,14 @@ describe('StateSync Autosave Draft Integrations', () => {
   let chatStateMock: MockChatState;
   let catalogManagementMock: MockCatalogManagement;
   let startupResolutionMock: MockStartupResolution;
+  let startupConfigStateMock: MockStartupConfigState;
 
   beforeEach(() => {
     TestBed.resetTestingModule();
     vi.useFakeTimers();
 
     startupResolutionMock = new MockStartupResolution();
+    startupConfigStateMock = new MockStartupConfigState();
 
     TestBed.configureTestingModule({
       providers: [
@@ -84,6 +91,7 @@ describe('StateSync Autosave Draft Integrations', () => {
         {provide: ChatState, useClass: MockChatState},
         {provide: CatalogManagement, useClass: MockCatalogManagement},
         {provide: StartupResolution, useValue: startupResolutionMock},
+        {provide: StartupConfigStateService, useValue: startupConfigStateMock},
       ],
     });
 
@@ -113,7 +121,7 @@ describe('StateSync Autosave Draft Integrations', () => {
 
   it('prepopulates activeDraft with sharedA2uiPayload when present on StartupResolution', () => {
     const customSharedJson = '[{"version":"v0.9","createSurface":{"surfaceId":"shared-surface"}}]';
-    startupResolutionMock.sharedA2uiPayload.set(customSharedJson);
+    startupConfigStateMock.sharedA2uiPayload.set(customSharedJson);
 
     // Create fresh instance after setting shared payload
     const sharedService = TestBed.inject(StateSync);
@@ -123,7 +131,7 @@ describe('StateSync Autosave Draft Integrations', () => {
 
   it('updates activeDraft dynamically when sharedA2uiPayload signal emits a new value', () => {
     const newSharedJson = '[{"version":"v0.9","createSurface":{"surfaceId":"dynamic-hashchange"}}]';
-    startupResolutionMock.sharedA2uiPayload.set(newSharedJson);
+    startupConfigStateMock.sharedA2uiPayload.set(newSharedJson);
     TestBed.tick();
 
     expect(service.activeDraft()).toBe(newSharedJson);

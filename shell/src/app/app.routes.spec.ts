@@ -21,7 +21,11 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {routes} from './app.routes';
-import {StartupResolution, RendererConfig} from './shell/startup-resolution/startup-resolution';
+import {StartupResolution} from './shell/startup-resolution/startup-resolution';
+import {
+  RendererConfig,
+  ApiKeyConfig,
+} from './shell/startup-resolution/state/startup-config-state.service';
 import {ChatState} from './chat/chat-state/chat-state';
 import {ChatCoordinator} from './chat/chat-coordinator/chat-coordinator';
 import {StateSync} from './chat/state-sync/state-sync';

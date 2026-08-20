@@ -75,7 +75,7 @@ export class ApiKeySelectorComponent extends AbstractSelector<ApiKeyOption> {
     void this.handleEdit(AddApiKeyDialogComponent, event, key, 'apiKey');
   }
 
-  async onDeleteApiKey(event: Event, id: string): Promise<void> {
+  onDeleteApiKey(event: Event, id: string): void {
     void this.handleDelete(event, id, null);
   }
 }
