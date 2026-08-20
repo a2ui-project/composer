@@ -47,6 +47,12 @@ describe('EnvironmentContextService', () => {
     expect(service).toBeTruthy();
   });
 
+  it('returns localhost fallback from getBaseOrigin when location origin is undefined', () => {
+    vi.stubGlobal('location', {origin: undefined});
+    expect(service.getBaseOrigin()).toBe('http://localhost');
+    vi.unstubAllGlobals();
+  });
+
   it('determines if environment is localhost', () => {
     expect(service.isLocalhost('localhost')).toBe(true);
     expect(service.isLocalhost('127.0.0.1')).toBe(true);
@@ -57,6 +63,19 @@ describe('EnvironmentContextService', () => {
     vi.spyOn(service, 'getWindowHostname').mockReturnValue('google.com');
     mockLocalStorage.getItem.mockReturnValue(null);
     expect(service.isThirdPartyEnvironment()).toBe(false);
+  });
+
+  it('reports third party environment as true when 1P auth is disabled', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        EnvironmentContextService,
+        {provide: IS_1P_AUTH_ENABLED, useValue: false},
+        {provide: LocalStorageInteractions, useValue: mockLocalStorage},
+      ],
+    });
+    const localService = TestBed.inject(EnvironmentContextService);
+    expect(localService.isThirdPartyEnvironment()).toBe(true);
   });
 
   it('identifies 3P environment based on hostname or local overrides when 1P auth is enabled', () => {
@@ -103,5 +122,19 @@ describe('EnvironmentContextService', () => {
       key === LocalStorageKey.EXTENSION_MODE ? 'true' : null,
     );
     expect(service.isExtensionMode()).toBe(true);
+  });
+
+  it('cleans a2ui parameters from shared URL via history.replaceState', () => {
+    vi.stubGlobal('location', {
+      href: 'http://localhost/?a2ui=123&other=456#a2ui=789&hash=abc',
+    });
+    const historySpy = vi.spyOn(globalThis.history, 'replaceState');
+
+    service.cleanSharedA2uiUrl();
+
+    expect(historySpy).toHaveBeenCalledWith({}, '', 'http://localhost/?other=456#hash=abc');
+
+    vi.unstubAllGlobals();
+    historySpy.mockRestore();
   });
 });
