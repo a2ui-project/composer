@@ -317,7 +317,11 @@ export class ChatCoordinator {
     // Stage 1: Parse and Syntax Healing
     let parsedBlocks: unknown[] = [];
     try {
-      const parseResult = parseAndHealJsonLines(rawText);
+      if (this.chatCleaner.extractCodeFences(rawText).hasFences) {
+        this.chatState.setPipelineStatus(PipelineStatus.HEALING);
+      }
+      const cleanedText = this.chatCleaner.cleanPayload(rawText);
+      const parseResult = parseAndHealJsonLines(cleanedText);
       parsedBlocks = parseResult.blocks;
       if (parseResult.wasHealed) this.chatState.setPipelineStatus(PipelineStatus.HEALING);
     } catch (err: unknown) {

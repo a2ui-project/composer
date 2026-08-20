@@ -658,10 +658,51 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     );
   });
 
-  describe('Parsing Smoke Test', () => {
-    it('parses correctly using payload-parser proxy', async () => {
-      // Using minimal behavioral smoke test instead of verbose unit assert
-      expect(1).toBe(1);
+  describe('Parsing and Cleanup', () => {
+    it('cleans raw LLM text (markdown fences, thought tags) and sets HEALING status', async () => {
+      catalogManagementMock.activeCatalog.set({catalogId: 'test', components: {TextField: {}}});
+
+      const rawText = `
+<thinking>
+I should generate a text field.
+</thinking>
+\`\`\`jsonlines
+{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "test"}}
+{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"component": "TextField", "name": "input1"}]}}
+\`\`\`
+      `;
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream = createMockStream([rawText]);
+        return {contentStream, complete: Promise.resolve(rawText), cancel: vi.fn()};
+      });
+
+      // Spy on pipeline status updates to verify HEALING is set
+      const pipelineSpy = vi.spyOn(chatStateMock, 'setPipelineStatus');
+
+      await service.submitPrompt('Build a layout');
+
+      // Check that HEALING status was correctly set due to markdown code fences
+      expect(pipelineSpy).toHaveBeenCalledWith(PipelineStatus.HEALING);
+
+      // Verify the final pipeline status is READY
+      expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
+      expect(service.isProgrammaticStreamActive()).toBe(false);
+
+      const history = chatStateMock.chatHistory();
+      const lastMessage = history[history.length - 1];
+
+      // Extract the updated content - it should be cleanly parsed JSON text structure
+      // that is successfully parsed from the payload.
+      expect(lastMessage.content).toContain('"version": "v0.9"');
+      expect(lastMessage.content).toContain('"createSurface"');
+      expect(lastMessage.content).toContain('"TextField"');
+
+      // The `<thinking>` tags should have been stripped out from the layout output
+      expect(lastMessage.content).not.toContain('<thinking>');
+      expect(lastMessage.content).not.toContain('```jsonlines');
+
+      expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalled();
     });
   });
 

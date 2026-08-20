@@ -31,13 +31,13 @@ describe('ChatPromptFactoryService', () => {
     service = TestBed.inject(ChatPromptFactoryService);
   });
 
-  it('should generate default prompt when no active catalog', () => {
+  it('generate default prompt when no active catalog', () => {
     catalogSpy.activeCatalog.mockReturnValue(null);
     expect(service.systemPrompt()).toContain('A2UI Generation Expert');
     expect(service.systemPrompt()).not.toContain('Active Catalog Schema');
   });
 
-  it('should generate catalog specific prompt', () => {
+  it('generate catalog specific prompt', () => {
     catalogSpy.activeCatalog.mockReturnValue({components: {}});
     expect(service.systemPrompt()).toContain('Active Catalog Schema');
     expect(service.systemPrompt()).toContain('A2UI Generation Expert');
