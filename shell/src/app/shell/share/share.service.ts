@@ -87,7 +87,7 @@ export class ShareService {
           duration: SNACK_BAR_DURATION_MS,
         });
       } else {
-        throw new Error('Clipboard copy failed block.');
+        throw new Error('Clipboard copy failed.');
       }
     } catch (err) {
       this.usageTrackingService.trackShareDesign({

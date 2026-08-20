@@ -1030,7 +1030,7 @@ describe('Gallery Component', () => {
       });
     });
 
-    it('tracks copying usage snippet to clipboard', async () => {
+    it('tracks copying usage snippet to clipboard successfully', async () => {
       const trackingService = TestBed.inject(UsageTrackingService);
       const trackSpy = vi.spyOn(trackingService, 'trackGalleryCopyUsage');
 
@@ -1038,6 +1038,7 @@ describe('Gallery Component', () => {
         usage: [{id: 'target', component: 'Text'}],
       });
       catalogServiceMock.selectedComponentKey.set('Text');
+      mockClipboard.copy.mockReturnValueOnce(true);
 
       try {
         await harness.clickCopyButton();
@@ -1047,6 +1048,30 @@ describe('Gallery Component', () => {
       expect(trackSpy).toHaveBeenCalledWith({
         componentKey: 'Text',
       });
+    });
+
+    it('does not track copying usage snippet to clipboard on failure', async () => {
+      const trackingService = TestBed.inject(UsageTrackingService);
+      const trackSpy = vi.spyOn(trackingService, 'trackGalleryCopyUsage');
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      catalogServiceMock.selectedComponentPreset.set({
+        usage: [{id: 'target', component: 'Text'}],
+      });
+      catalogServiceMock.selectedComponentKey.set('Text');
+      mockClipboard.copy.mockReturnValueOnce(false);
+
+      try {
+        await harness.clickCopyButton();
+      } catch (e) {}
+      await Promise.resolve();
+
+      expect(trackSpy).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Failed to copy A2UI component usage to clipboard.',
+      );
+
+      consoleErrorSpy.mockRestore();
     });
   });
 });

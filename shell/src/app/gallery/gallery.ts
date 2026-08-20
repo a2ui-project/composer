@@ -269,7 +269,11 @@ export class Gallery implements OnInit, OnDestroy {
       const payload = formatJson(commands);
 
       const successful = this.clipboard.copy(payload);
-      if (!successful) {
+      if (successful) {
+        this.usageTrackingService.trackGalleryCopyUsage({
+          componentKey: this.selectedComponentKey() || '',
+        });
+      } else {
         console.error('Failed to copy A2UI component usage to clipboard.');
       }
     } catch (err) {

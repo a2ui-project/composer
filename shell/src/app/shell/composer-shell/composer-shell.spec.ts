@@ -36,6 +36,7 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {ShareService} from '../share/share.service';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {ComposerShell} from './composer-shell';
@@ -129,8 +130,8 @@ describe('ComposerShell Layout', () => {
           provide: AppConfigProvider,
           useValue: configProviderMock,
         },
-        {
         {provide: StartupResolution, useValue: {}},
+        {
           provide: StartupConfigStateService,
           useValue: startupConfigStateMock,
         },
@@ -145,6 +146,10 @@ describe('ComposerShell Layout', () => {
         {
           provide: UsageTrackingService,
           useClass: NoopUsageTrackingService,
+        },
+        {
+          provide: ShareService,
+          useValue: {shareDesign: vi.fn()},
         },
       ],
     }).compileComponents();
@@ -320,6 +325,13 @@ describe('ComposerShell Layout', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect((navLinks[0] as HTMLElement).classList.contains('active-nav-item')).toBe(true);
+  });
+
+  it('delegates to ShareService when Share button is clicked', () => {
+    const shareService = TestBed.inject(ShareService);
+    const shareButton = fixture.debugElement.query(By.css('.share-button'));
+    shareButton.triggerEventHandler('click', null);
+    expect(shareService.shareDesign).toHaveBeenCalled();
   });
 
   describe('resetSession', () => {

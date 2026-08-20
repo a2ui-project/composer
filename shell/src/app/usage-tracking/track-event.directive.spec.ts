@@ -24,15 +24,18 @@ import {NoopUsageTrackingService} from './noop-usage-tracking.service';
 
 @Component({
   template: `<button
-    [a2uiComposerTrackEvent]="'trackThemeToggle'"
-    [a2uiComposerTrackParams]="{theme: 'dark'}"
+    [a2uiComposerTrackEvent]="trackEventName"
+    [a2uiComposerTrackParams]="trackParams"
   >
     Click Me
   </button>`,
   standalone: true,
   imports: [TrackEventDirective],
 })
-class TestComponent {}
+class TestComponent {
+  trackEventName: keyof UsageTrackingService = 'trackThemeToggle';
+  trackParams: unknown = {theme: 'dark'};
+}
 
 describe('TrackEventDirective', () => {
   let fixture: ComponentFixture<TestComponent>;
@@ -48,11 +51,31 @@ describe('TrackEventDirective', () => {
     fixture.detectChanges();
   });
 
-  it('should call tracking service on click', () => {
+  it('calls tracking service on click', () => {
     vi.spyOn(trackingService, 'trackThemeToggle');
     const button = fixture.debugElement.query(By.css('button'));
     button.triggerEventHandler('click', null);
 
     expect(trackingService.trackThemeToggle).toHaveBeenCalledWith({theme: 'dark'});
+  });
+
+  it('safely ignores unknown method names without throwing', () => {
+    fixture.componentInstance.trackEventName = 'unknownMethod' as keyof UsageTrackingService;
+    fixture.detectChanges();
+    const button = fixture.debugElement.query(By.css('button'));
+    expect(() => button.triggerEventHandler('click', null)).not.toThrow();
+  });
+
+  it('calls tracking method with undefined when params are omitted', () => {
+    const fixture3 = TestBed.createComponent(TestComponent);
+    fixture3.componentInstance.trackEventName = 'trackThemeToggle';
+    fixture3.componentInstance.trackParams = undefined;
+    fixture3.detectChanges();
+
+    vi.spyOn(trackingService, 'trackThemeToggle');
+    const button = fixture3.debugElement.query(By.css('button'));
+    button.triggerEventHandler('click', null);
+
+    expect(trackingService.trackThemeToggle).toHaveBeenCalledWith(undefined);
   });
 });

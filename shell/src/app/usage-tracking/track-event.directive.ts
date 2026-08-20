@@ -30,7 +30,10 @@ export class TrackEventDirective {
   /** The name of the event to track on UsageTrackingService. */
   readonly a2uiComposerTrackEvent = input.required<keyof UsageTrackingService>();
 
-  /** Parameters to pass to the tracking event function. */
+  /**
+   * Parameters to pass to the tracking event function.
+   * Note: This reflects the pre-click state (evaluated at the prior CD pass).
+   */
   readonly a2uiComposerTrackParams = input<unknown>();
 
   /** Listens to click events and fires analytics */
