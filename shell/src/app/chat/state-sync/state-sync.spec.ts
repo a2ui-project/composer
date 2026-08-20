@@ -68,6 +68,7 @@ class MockStartupResolution {
 
 class MockStartupConfigState {
   readonly activeRenderer = signal<{samplePayload?: string} | null>(null);
+  readonly selectedRendererId = signal<string | null>(null);
   readonly sharedA2uiPayload = signal<string | null>(null);
 }
 
