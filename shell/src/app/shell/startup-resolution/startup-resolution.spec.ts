@@ -27,6 +27,7 @@ import {QueryParser} from '../query-parser/query-parser';
 import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
@@ -69,6 +70,11 @@ class MockAppConfigProvider {
   isApiKeyProvidedByConfig = signal<boolean>(false);
   purgeGeminiApiKey = vi.fn().mockResolvedValue(undefined);
   setGeminiApiKey = vi.fn().mockResolvedValue(undefined);
+  setRendererUrl = vi.fn();
+  setRuntimeApiKey = vi.fn().mockImplementation((key: string) => {
+    this.isApiKeyProvidedByConfig.set(false);
+    this.geminiApiKey.set(key);
+  });
   setApiKeyFromConfig = vi.fn().mockImplementation((key: string) => {
     this.isApiKeyProvidedByConfig.set(true);
     this.geminiApiKey.set(key);
@@ -243,17 +249,22 @@ describe('StartupResolution', () => {
       expect(cleanSpy).toHaveBeenCalled();
     });
 
-    it('cleans a2ui parameter from window hash via history.replaceState', () => {
+    it('cleans shared parameters from window hash via history.replaceState', () => {
       const replaceStateSpy = vi.spyOn(globalThis.history, 'replaceState');
-      globalThis.location.hash = '#renderer=http%3A%2F%2Frenderer.com&a2ui=d1.abc';
+      globalThis.location.hash = '#renderer=http%3A%2F%2Frenderer.com&rendererId=dev&a2ui=d1.abc';
       try {
         service.cleanSharedA2uiUrl();
+        expect(replaceStateSpy).toHaveBeenCalledWith({}, '', expect.not.stringContaining('a2ui='));
         expect(replaceStateSpy).toHaveBeenCalledWith(
           {},
           '',
-          expect.stringContaining('#renderer=http%3A%2F%2Frenderer.com'),
+          expect.not.stringContaining('renderer='),
         );
-        expect(replaceStateSpy).toHaveBeenCalledWith({}, '', expect.not.stringContaining('a2ui='));
+        expect(replaceStateSpy).toHaveBeenCalledWith(
+          {},
+          '',
+          expect.not.stringContaining('rendererId='),
+        );
       } finally {
         globalThis.location.hash = '';
       }
@@ -267,6 +278,39 @@ describe('StartupResolution', () => {
 
       await service.processSharedA2uiUrl();
       expect(service.sharedA2uiPayload()).toBe(expectedFormattedJson);
+    });
+
+    it('switches active renderer and updates selectedRendererId$ when hash contains renderer and rendererId', async () => {
+      mockFetchConfig({
+        renderers: {
+          default: {rendererUrl: 'http://default-renderer:3000'},
+          'angular-dev': {rendererUrl: 'http://localhost:4200/samples/ng-basic-catalog/'},
+          'react-dev': {rendererUrl: 'http://localhost:4200/samples/react-basic-catalog/'},
+        },
+      });
+
+      service.startupConfigState.setSelectedRendererId('angular-dev');
+      service.startupConfigState.setResolvedUrl('http://localhost:4200/samples/ng-basic-catalog/');
+      localStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'angular-dev');
+
+      const rawJson = '[{"version":"v0.9","createSurface":{"surfaceId":"react-card"}}]';
+      const expectedFormattedJson = JSON.stringify(JSON.parse(rawJson), null, 2);
+      const compressed = await QueryParser.encodeSharedPayload(rawJson);
+
+      vi.spyOn(service, 'getWindowHash').mockReturnValue(
+        `#renderer=http%3A%2F%2Flocalhost%3A4200%2Fsamples%2Freact-basic-catalog%2F&rendererId=react-dev&a2ui=${compressed}`,
+      );
+      vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(true);
+
+      await service.processSharedA2uiUrl();
+
+      expect(service.sharedA2uiPayload()).toBe(expectedFormattedJson);
+      expect(service.selectedRendererId$()).toBe('react-dev');
+      expect(service.resolvedUrl()).toBe('http://localhost:4200/samples/react-basic-catalog/');
+      expect(localStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBe('react-dev');
+      expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith(
+        'http://localhost:4200/samples/react-basic-catalog/',
+      );
     });
   });
 
@@ -1060,6 +1104,29 @@ describe('StartupResolution', () => {
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
       expect(mockConfigProvider.setGeminiApiKey).not.toHaveBeenCalled();
     });
+
+    it('restores custom API key from SecureCredentialsStorage when renderer has no static API key', async () => {
+      mockFetchConfig({
+        renderers: {
+          default: {rendererUrl: 'http://base:3000'},
+          'react-dev': {rendererUrl: 'http://localhost:4200/samples/react-basic-catalog/'},
+        },
+      });
+
+      localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-custom-key-id');
+      const storage = TestBed.inject(SecureCredentialsStorage);
+      vi.spyOn(storage, 'getCustomApiKey').mockResolvedValue({
+        id: 'my-custom-key-id',
+        name: 'My Gemini Key',
+        key: 'custom-secret-key-123',
+      });
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue('?rendererId=react-dev');
+
+      await service.resolveStartupConfiguration();
+      expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith('');
+      expect(mockConfigProvider.setRuntimeApiKey).toHaveBeenCalledWith('custom-secret-key-123');
+    });
   });
 
   describe('with custom CONFIG_URL provider', () => {
@@ -1172,6 +1239,91 @@ describe('StartupResolution', () => {
       expect(mockConfigProvider.setApiKeyFromConfig).toHaveBeenCalledWith(
         'default-api-key-from-map',
       );
+    });
+
+    it('1c. matches static renderer ID when query or hash contains matching renderer URL without explicit rendererId', async () => {
+      mockFetchConfig({
+        renderers: {
+          default: {rendererUrl: 'https://default.example.com'},
+          'angular-dev': {rendererUrl: 'http://localhost:4200/samples/ng-basic-catalog/'},
+        },
+      });
+
+      vi.spyOn(service, 'getWindowHash').mockReturnValue(
+        '#renderer=http://localhost:4200/samples/ng-basic-catalog/',
+      );
+      vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(true);
+
+      const url = await service.resolveRenderer();
+      expect(url).toBe('http://localhost:4200/samples/ng-basic-catalog/');
+      expect(service.selectedRendererId$()).toBe('angular-dev');
+    });
+
+    it('1d. matches custom renderer ID when query contains matching custom renderer URL', async () => {
+      mockFetchConfig({
+        renderers: {
+          default: {rendererUrl: 'https://default.example.com'},
+        },
+      });
+      localStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'my-custom-1', name: 'My Custom', rendererUrl: 'http://localhost:5000/renderer'},
+        ]),
+      );
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
+        '?renderer=http://localhost:5000/renderer',
+      );
+      vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(true);
+
+      const url = await service.resolveRenderer();
+      expect(url).toBe('http://localhost:5000/renderer');
+      expect(service.selectedRendererId$()).toBe('my-custom-1');
+    });
+
+    it('1e. registers unknown allowed URL as custom renderer in LocalStorage and selects it', async () => {
+      mockFetchConfig({
+        renderers: {
+          default: {rendererUrl: 'https://default.example.com'},
+        },
+      });
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
+        '?renderer=http://localhost:9999/preview',
+      );
+      vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(true);
+
+      const url = await service.resolveRenderer();
+      expect(url).toBe('http://localhost:9999/preview');
+      expect(service.selectedRendererId$()).toMatch(/^custom-\d+$/);
+
+      const customList = JSON.parse(localStorage.getItem(LocalStorageKey.CUSTOM_RENDERERS) || '[]');
+      expect(customList).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            rendererUrl: 'http://localhost:9999/preview',
+            name: expect.stringContaining('Custom (localhost:9999)'),
+          }),
+        ]),
+      );
+    });
+
+    it('1f. registers new custom renderer when ?renderer= is provided with an unrecognized ?rendererId=', async () => {
+      mockFetchConfig({
+        renderers: {
+          default: {rendererUrl: 'https://default.example.com'},
+        },
+      });
+
+      vi.spyOn(service, 'getWindowSearch').mockReturnValue(
+        '?renderer=http://localhost:8888/preview&rendererId=sender-custom-id',
+      );
+      vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(true);
+
+      const url = await service.resolveRenderer();
+      expect(url).toBe('http://localhost:8888/preview');
+      expect(service.selectedRendererId$()).toMatch(/^custom-\d+$/);
     });
 
     it('2a. auto-allows localhost, 127.0.0.1, and [::1] origins in ?renderer= without prompting confirmation', async () => {

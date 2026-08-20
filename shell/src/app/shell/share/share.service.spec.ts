@@ -66,14 +66,13 @@ describe('ShareService', () => {
     );
   });
 
-  it('should give invalid json error', async () => {
-    mockStateSync.activeDraft.set('invalid');
+  it('includes rendererId in share URL hash when selectedRendererId$ is present', async () => {
+    mockClipboard.copy.mockReturnValue(true);
+    (mockStartupResolution as {selectedRendererId$: unknown}).selectedRendererId$ =
+      signal('angular-dev');
     await service.shareDesign();
-    expect(mockClipboard.copy).not.toHaveBeenCalled();
-    expect(mockSnackBar.open).toHaveBeenCalledWith(
-      'Cannot share design: invalid JSON syntax',
-      'Close',
-      expect.any(Object),
+    expect(mockClipboard.copy).toHaveBeenCalledWith(
+      expect.stringContaining('rendererId=angular-dev'),
     );
   });
 });

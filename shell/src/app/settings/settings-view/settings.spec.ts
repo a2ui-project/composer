@@ -549,7 +549,15 @@ describe('Settings', () => {
       expect(component.selectedRendererId()).toBe('preset-1');
     });
 
+    it('defaults selectedRendererId to default when SettingsService returns null', async () => {
+      mockSelectedRendererId.set(null);
+      const {component} = await setupComponent();
+
+      expect(component.selectedRendererId()).toBe('default');
+    });
+
     it('returns undefined for selectedRendererOption when selectedRendererId is null or Custom', async () => {
+
       const {component} = await setupComponent();
 
       component.selectedRendererId.set(null);

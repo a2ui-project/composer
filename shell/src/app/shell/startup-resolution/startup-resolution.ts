@@ -117,15 +117,21 @@ export class StartupResolution {
     if (!rawParam) {
       return;
     }
+    const queryRendererUrl = QueryParser.parseRendererUrl(rawParam);
+    const queryRendererId = QueryParser.parseRendererId(rawParam);
+    if (queryRendererUrl || queryRendererId) {
+      await this.resolveRenderer();
+    }
     const {payload, error} = await QueryParser.parseSharedA2ui(rawParam);
     if (payload) {
       console.log('Using shared A2UI payload from URL.');
       this.startupConfigState.setSharedA2uiPayload(payload);
       this.cleanSharedA2uiUrl();
-    }
-    if (error) {
+    } else if (error) {
       console.warn('Shared A2UI payload error:', error);
       this.startupConfigState.setSharedA2uiError(error);
+      this.cleanSharedA2uiUrl();
+    } else if (queryRendererUrl || queryRendererId) {
       this.cleanSharedA2uiUrl();
     }
   }
@@ -173,9 +179,42 @@ export class StartupResolution {
         this.configProvider.setApiKeyFromConfig(apiKey);
       } else {
         this.configProvider.setApiKeyFromConfig('');
+        await this.syncStoredCredentialsToConfigProvider(staticConfig);
       }
     } catch (err) {
       console.warn('Failed to apply config-provided API key to AppConfigProvider:', err);
+    }
+  }
+
+  private async syncStoredCredentialsToConfigProvider(staticConfig?: AppConfig): Promise<void> {
+    try {
+      const selectedId = this.localStorageInteractions.getItem(LocalStorageKey.SELECTED_API_KEY);
+      if (selectedId) {
+        const staticApiKeys = staticConfig?.apiKeys || this.startupConfigState.apiKeys() || {};
+        const entry = staticApiKeys[selectedId];
+        const keyVal = entry?.apiKey?.trim() || '';
+        if (keyVal) {
+          this.configProvider.setApiKeyFromConfig(keyVal);
+          return;
+        }
+        if (this.secureCredentialsStorage) {
+          const custom = await this.secureCredentialsStorage.getCustomApiKey(selectedId);
+          if (custom?.key) {
+            this.configProvider.setRuntimeApiKey(custom.key.trim());
+            return;
+          }
+        }
+      }
+      if (this.secureCredentialsStorage) {
+        const customKeys = await this.secureCredentialsStorage.getCustomApiKeys();
+        const defaultCustom = customKeys.find(k => k.id === 'default') || customKeys[0];
+        if (defaultCustom?.key) {
+          this.configProvider.setRuntimeApiKey(defaultCustom.key.trim());
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to restore stored credentials in StartupResolution:', err);
     }
   }
 
@@ -262,11 +301,59 @@ export class StartupResolution {
         const requestedId =
           QueryParser.parseRendererId(this.getWindowHash()) ||
           QueryParser.parseRendererId(this.getWindowSearch());
-        if (requestedId) {
-          this.startupConfigState.setSelectedRendererId(requestedId);
+        const existingRenderer = requestedId
+          ? this.getRendererById(requestedId, staticRenderers)
+          : null;
+        let targetId = existingRenderer ? requestedId : null;
+        if (!targetId) {
+          const staticMatch = Object.entries(staticRenderers).find(
+            ([_, r]) =>
+              r?.rendererUrl &&
+              this.normalizeUrl(r.rendererUrl) === this.normalizeUrl(queryRendererUrl),
+          );
+          if (staticMatch) {
+            targetId = staticMatch[0];
+          } else {
+            const customMatch = this.getCustomRenderers().find(
+              r =>
+                r?.rendererUrl &&
+                this.normalizeUrl(r.rendererUrl) === this.normalizeUrl(queryRendererUrl),
+            );
+            if (customMatch) {
+              targetId = customMatch.id ?? null;
+            } else {
+              try {
+                const urlObj = new URL(queryRendererUrl, this.environmentContext.getBaseOrigin());
+                const hostname = urlObj.hostname || 'custom';
+                const port = urlObj.port ? `:${urlObj.port}` : '';
+                const newId = `custom-${Date.now()}`;
+                const customEntry: RendererConfig = {
+                  id: newId,
+                  name: `Custom (${hostname}${port})`,
+                  rendererUrl: queryRendererUrl,
+                };
+                const customList = this.getCustomRenderers();
+                customList.push(customEntry);
+                this.localStorageInteractions.setItem(
+                  LocalStorageKey.CUSTOM_RENDERERS,
+                  JSON.stringify(customList),
+                );
+                targetId = newId;
+              } catch {
+                // Ignore parse errors
+              }
+            }
+          }
         }
-        await this.applyApiKeyFromConfig(config || {}, requestedId || 'default');
+        if (targetId) {
+          this.startupConfigState.setSelectedRendererId(targetId);
+          this.localStorageInteractions.setItem(LocalStorageKey.SELECTED_RENDERER, targetId);
+        }
+        const effectiveApiKeyId =
+          requestedId ?? (targetId && config?.apiKeys?.[targetId] ? targetId : 'default');
+        await this.applyApiKeyFromConfig(config || {}, effectiveApiKeyId);
         this.startupConfigState.setResolvedUrl(queryRendererUrl);
+        this.configProvider?.setRendererUrl?.(queryRendererUrl);
         return queryRendererUrl;
       } else {
         console.warn('Renderer parameter origin not allowed by user.');
@@ -282,11 +369,13 @@ export class StartupResolution {
       if (candidate) {
         console.log(`Using renderer ID '${requestedId}' from query param.`);
         this.startupConfigState.setSelectedRendererId(requestedId);
+        this.localStorageInteractions.setItem(LocalStorageKey.SELECTED_RENDERER, requestedId);
         if (config) {
           await this.applyApiKeyFromConfig(config, requestedId);
         }
         if (candidate.rendererUrl) {
           this.startupConfigState.setResolvedUrl(candidate.rendererUrl);
+          this.configProvider?.setRendererUrl?.(candidate.rendererUrl);
           return candidate.rendererUrl;
         }
       } else {
@@ -331,6 +420,16 @@ export class StartupResolution {
     this.startupConfigState.setResolvedUrl(null);
     this.startupConfigState.setSelectedRendererId(null);
     return null;
+  }
+
+  private normalizeUrl(urlStr: string): string {
+    try {
+      const baseOrigin = this.environmentContext.getBaseOrigin();
+      const u = urlStr.startsWith('/') ? new URL(urlStr, baseOrigin) : new URL(urlStr);
+      return u.origin + u.pathname.replace(/\/+$/, '') + u.search;
+    } catch {
+      return urlStr.replace(/\/+$/, '');
+    }
   }
 
   async isOriginAllowed(url: string): Promise<boolean> {
