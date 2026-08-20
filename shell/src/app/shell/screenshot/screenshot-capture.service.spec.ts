@@ -282,7 +282,9 @@ describe('ScreenshotCaptureService', () => {
     });
 
     let caughtError: Error | undefined;
-    const promise = service.captureScreenshot(sharedMockElement).catch(e => { caughtError = e; });
+    const promise = service.captureScreenshot(sharedMockElement).catch(e => {
+      caughtError = e;
+    });
     await vi.advanceTimersByTimeAsync(150);
     await promise;
     expect(caughtError?.message).toContain('Play error');

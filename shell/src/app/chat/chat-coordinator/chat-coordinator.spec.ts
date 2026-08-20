@@ -752,14 +752,19 @@ I have no idea what to do, I'll output nothing.
 
       expect(commitSpy).not.toHaveBeenCalled();
       expect(pipelineSpy).toHaveBeenCalledWith(PipelineStatus.FAILED);
-      
+
       // Verify an ERROR bubble was pushed
-      const historyUpdateArg = updateHistorySpy.mock.calls[updateHistorySpy.mock.calls.length - 1][0];
-      const resultHistory = historyUpdateArg([{ role: MessageRole.MODEL, content: '' } as unknown as LlmMessage]);
+      const historyUpdateArg =
+        updateHistorySpy.mock.calls[updateHistorySpy.mock.calls.length - 1][0];
+      const resultHistory = historyUpdateArg([
+        {role: MessageRole.MODEL, content: ''} as unknown as LlmMessage,
+      ]);
       const lastMsg = resultHistory[resultHistory.length - 1];
-      
+
       expect(lastMsg.role).toBe(MessageRole.ERROR);
-      expect(lastMsg.content).toContain('No valid A2UI JSON layout command block could be parsed or recovered');
+      expect(lastMsg.content).toContain(
+        'No valid A2UI JSON layout command block could be parsed or recovered',
+      );
     });
   });
 
