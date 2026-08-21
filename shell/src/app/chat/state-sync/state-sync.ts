@@ -16,7 +16,7 @@
 
 import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
-import {merge, of} from 'rxjs';
+import {of} from 'rxjs';
 import {debounceTime, distinctUntilChanged, filter, skip} from 'rxjs/operators';
 import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
@@ -63,6 +63,8 @@ export class StateSync {
   // - `_draftInput` is an event trigger used to debounce and sync
   //   user edits back to the history. LLM-initiated edits update
   //   `_activeDraft` directly, bypassing history sync.
+  private previousCatalogId: string | null = null;
+  private isDraftModified = false;
   private readonly _activeDraft = signal<string>('');
   /**
    * Volatile, read-only reactive Signal exposing the currently buffered
@@ -73,27 +75,35 @@ export class StateSync {
   private readonly _draftInput = signal<string>('');
 
   constructor() {
-    const selectedRendererId = this.startupConfigState.selectedRendererId
-      ? toObservable(this.startupConfigState.selectedRendererId)
-      : of(null);
-    const activeCatalog$ = toObservable(this.catalogManagement.activeCatalog);
-    const sharedA2uiPayload$ = this.startupConfigState.sharedA2uiPayload
-      ? toObservable(this.startupConfigState.sharedA2uiPayload)
-      : of(null);
-
-    merge(selectedRendererId, activeCatalog$)
-      .pipe(takeUntilDestroyed(this.destroyRef))
+    toObservable(this.startupConfigState.selectedRendererId)
+      .pipe(skip(1), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
-        const catalog = this.catalogManagement.activeCatalog();
-        const catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
-        const currentDraft = this._activeDraft();
-        const draftCatalogId = this.getCatalogIdFromDraft(currentDraft);
-        if (currentDraft === '' || draftCatalogId !== catalogId) {
+        this.flushDraft();
+      });
+
+    toObservable(this.catalogManagement.activeCatalog)
+      .pipe(
+        filter(catalog => !!catalog),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(catalog => {
+        const catalogId = (catalog!.catalogId || catalog!.$id || '') as string;
+        const isInitialHandshake = this.previousCatalogId === null;
+        const isCatalogChange =
+          this.previousCatalogId !== null && this.previousCatalogId !== catalogId;
+
+        if ((isInitialHandshake || isCatalogChange) && !this.isDraftModified) {
           const initial = this.getInitialDraft(catalogId);
           this._activeDraft.set(initial);
           this._draftInput.set(initial);
         }
+
+        this.previousCatalogId = catalogId;
       });
+
+    const sharedA2uiPayload$ = this.startupConfigState.sharedA2uiPayload
+      ? toObservable(this.startupConfigState.sharedA2uiPayload)
+      : of(null);
 
     sharedA2uiPayload$
       .pipe(
@@ -101,7 +111,7 @@ export class StateSync {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((payload: string) => {
-        this.updateDraft(payload);
+        this.injectExternalDraft(payload);
       });
 
     toObservable(this._draftInput)
@@ -116,6 +126,16 @@ export class StateSync {
    * queueing synchronization.
    */
   updateDraft(value: string): void {
+    this.isDraftModified = true;
+    this._activeDraft.set(value);
+    this._draftInput.set(value);
+  }
+
+  /**
+   * Injects an external layout draft (e.g. from deep link shared payload).
+   */
+  injectExternalDraft(value: string): void {
+    this.isDraftModified = true;
     this._activeDraft.set(value);
     this._draftInput.set(value);
   }
@@ -133,6 +153,7 @@ export class StateSync {
    * bypassing standard debounces and context history synchronization.
    */
   commitLayoutFromLlm(value: string): void {
+    this.isDraftModified = true;
     this._activeDraft.set(value);
   }
 
@@ -141,16 +162,15 @@ export class StateSync {
    * memory to default.
    */
   flushDraft(): void {
+    this.isDraftModified = false;
     const catalog = this.catalogManagement.activeCatalog();
     const catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
-    this._activeDraft.set(this.getInitialDraft(catalogId));
+    const initial = this.getInitialDraft(catalogId);
+    this._activeDraft.set(initial);
+    this._draftInput.set(initial);
   }
 
   private getInitialDraft(catalogId: string): string {
-    const sharedPayload = this.startupConfigState.sharedA2uiPayload();
-    if (sharedPayload) {
-      return sharedPayload;
-    }
     const activeRenderer = this.startupConfigState.activeRenderer();
     if (activeRenderer?.samplePayload) {
       return activeRenderer.samplePayload;
@@ -172,32 +192,6 @@ export class StateSync {
       },
     ];
     return formatJson(draftObj);
-  }
-
-  private getCatalogIdFromDraft(draft: string): string | null {
-    const trimmed = draft.trim();
-    if (!trimmed) {
-      return null;
-    }
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) {
-        for (const item of parsed) {
-          const itemObj = item as RenderA2uiItem;
-          if (itemObj?.createSurface?.catalogId) {
-            return itemObj.createSurface.catalogId;
-          }
-        }
-      } else if (parsed && typeof parsed === 'object') {
-        const parsedObj = parsed as RenderA2uiItem;
-        if (parsedObj?.createSurface?.catalogId) {
-          return parsedObj.createSurface.catalogId;
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-    return null;
   }
 
   /**
