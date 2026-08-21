@@ -75,17 +75,8 @@ export class StateSync {
   private readonly _draftInput = signal<string>('');
 
   constructor() {
-    const selectedRendererId = this.startupConfigState.selectedRendererId
-      ? toObservable(this.startupConfigState.selectedRendererId)
-      : of(null);
-    const activeCatalog$ = toObservable(this.catalogManagement.activeCatalog);
-    const sharedA2uiPayload$ = this.startupConfigState.sharedA2uiPayload
-      ? toObservable(this.startupConfigState.sharedA2uiPayload)
-      : of(null);
-
     toObservable(this.startupConfigState.selectedRendererId)
       .pipe(skip(1), takeUntilDestroyed(this.destroyRef))
-
       .subscribe(() => {
         this.flushDraft();
       });
@@ -110,8 +101,8 @@ export class StateSync {
         this.previousCatalogId = catalogId;
       });
 
-    const sharedA2uiPayload$ = this.startupResolution?.sharedA2uiPayload
-      ? toObservable(this.startupResolution.sharedA2uiPayload)
+    const sharedA2uiPayload$ = this.startupConfigState.sharedA2uiPayload
+      ? toObservable(this.startupConfigState.sharedA2uiPayload)
       : of(null);
 
     sharedA2uiPayload$
@@ -180,10 +171,6 @@ export class StateSync {
   }
 
   private getInitialDraft(catalogId: string): string {
-    const sharedPayload = this.startupConfigState.sharedA2uiPayload();
-    if (sharedPayload) {
-      return sharedPayload;
-    }
     const activeRenderer = this.startupConfigState.activeRenderer();
     if (activeRenderer?.samplePayload) {
       return activeRenderer.samplePayload;
