@@ -26,7 +26,7 @@ describe('FileIngestionService', () => {
     service = TestBed.inject(FileIngestionService);
   });
 
-  it('should read file as attachment', async () => {
+  it('reads file as attachment', async () => {
     const file = new File(['hello world'], 'test.txt', {type: 'text/plain'});
     const result = await service.readFileAsAttachment(file);
 
@@ -36,7 +36,7 @@ describe('FileIngestionService', () => {
     expect(result.previewUrl).toBeUndefined();
   });
 
-  it('should read image and return preview url', async () => {
+  it('reads image and returns preview url', async () => {
     const file = new File(['blobdata'], 'test.png', {type: 'image/png'});
     const result = await service.readFileAsAttachment(file);
 

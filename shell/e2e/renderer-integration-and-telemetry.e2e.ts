@@ -49,8 +49,10 @@ const CONFIGS: IntegrationConfig[] = [
     pickupLocationLocator: iframe => iframe.locator('label:has-text("Pick-up Location") + input'),
     fillDate: async (locator, value) => {
       await locator.evaluate((el: HTMLInputElement, val) => {
-        const prototype = Object.getPrototypeOf(el);
-        const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          'value',
+        )?.set;
         if (setter) {
           setter.call(el, val);
           el.dispatchEvent(new Event('input', {bubbles: true}));

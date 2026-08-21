@@ -111,11 +111,12 @@ describe('ShareService', () => {
   });
 
   it('includes rendererId in share URL hash when selectedRendererId is present', async () => {
-    mockClipboard.copy.mockReturnValue(true);
-    (mockStartupConfigState as {selectedRendererId: unknown}).selectedRendererId =
-      signal('angular-dev');
+    vi.mocked(navigator.clipboard.writeText).mockResolvedValue(undefined);
+    (
+      mockStartupConfigState as {selectedRendererId: ReturnType<typeof signal>}
+    ).selectedRendererId.set('angular-dev');
     await service.shareDesign();
-    expect(mockClipboard.copy).toHaveBeenCalledWith(
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining('rendererId=angular-dev'),
     );
   });

@@ -26,7 +26,7 @@ describe('SafeUrlValidatorService', () => {
     service = TestBed.inject(SafeUrlValidatorService);
   });
 
-  it('should be created', () => {
+  it('is created', () => {
     expect(service).toBeTruthy();
   });
 
