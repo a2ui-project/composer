@@ -1,0 +1,194 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chat-history-container {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+
+  .connecting-showcase {
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 40px 20px;
+
+    .purple-spinner {
+      --mdc-circular-progress-active-indicator-color: #6750a4;
+      margin-bottom: 20px;
+    }
+
+    .connecting-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #1f1f1f;
+      margin: 0 0 8px 0;
+    }
+
+    .connecting-subtitle {
+      font-size: 0.85rem;
+      color: #5f6368;
+      margin: 0;
+
+      .endpoint-code {
+        background: #f1f3f4;
+        border: 1px solid #dadce0;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.82rem;
+        color: #3c4043;
+      }
+    }
+  }
+
+  .showcase-wrapper {
+    margin: auto;
+    max-width: 540px;
+    width: 100%;
+    padding: 24px 16px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+
+    .welcome-card {
+      background: #ffffff;
+      border: 1px solid #dadce0;
+      border-radius: 16px;
+      padding: 20px 24px;
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+
+      .welcome-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+
+        .welcome-avatar {
+          width: 44px;
+          height: 44px;
+          border-radius: 10px;
+          background: #e8f0fe;
+          color: #1a73e8;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+
+          .avatar-icon {
+            font-size: 26px;
+            width: 26px;
+            height: 26px;
+          }
+        }
+
+        .welcome-meta {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+
+          .welcome-title {
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #1f1f1f;
+          }
+
+          .welcome-desc {
+            margin: 0;
+            font-size: 0.82rem;
+            color: #5f6368;
+            line-height: 1.4;
+          }
+        }
+      }
+
+      .capability-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+
+        .cap-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 0.75rem;
+          font-weight: 500;
+          padding: 4px 10px;
+          border-radius: 12px;
+
+          .chip-icon {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+          }
+
+          &.streaming-chip {
+            background: #f1f3f4;
+            color: #3c4043;
+          }
+
+          &.extension-chip {
+            background: #e6f4ea;
+            color: #137333;
+            border: 1px solid #ceead6;
+          }
+        }
+      }
+
+      .ready-banner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #f1f3f4;
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 0.82rem;
+        color: #444746;
+
+        .banner-icon {
+          font-size: 18px;
+          width: 18px;
+          height: 18px;
+          color: #1a73e8;
+        }
+
+        .banner-text {
+          font-weight: 500;
+        }
+      }
+    }
+  }
+
+  .messages-list {
+    padding: 16px 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-sizing: border-box;
+  }
+}

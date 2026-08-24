@@ -1,0 +1,215 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+}
+
+.agent-config-panel-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(3px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+
+  .agent-config-panel-card {
+    background: var(--mat-sys-surface, #ffffff);
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    width: 100%;
+    max-width: 480px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    box-sizing: border-box;
+    animation: fadeInScale 0.2s ease-out;
+
+    .config-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 20px;
+
+      .header-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: var(--mat-sys-surface, #ffffff);
+        border: 1px solid var(--mat-sys-outline-variant, #e2e8f0);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        overflow: hidden;
+
+        .avatar-image {
+          width: 44px;
+          height: 44px;
+          object-fit: cover;
+          object-position: center;
+          transform: scale(1.15);
+          display: block;
+        }
+
+        .avatar-icon {
+          font-size: 26px;
+          width: 26px;
+          height: 26px;
+        }
+      }
+
+      .header-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        .config-title {
+          margin: 0;
+          font-size: 1.05rem;
+          font-weight: 600;
+          color: var(--mat-sys-on-surface, #1f1f1f);
+        }
+
+        .config-subtitle {
+          margin: 0;
+          font-size: 0.8rem;
+          color: var(--mat-sys-on-surface-variant, #5f6368);
+          line-height: 1.35;
+
+          .mono-code {
+            font-family: monospace;
+            background: var(--mat-sys-surface-container-high, #f1f3f4);
+            padding: 1px 4px;
+            border-radius: 3px;
+            color: var(--mat-sys-on-surface-variant, #3c4043);
+          }
+        }
+      }
+    }
+
+    .config-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+
+      .form-field {
+        width: 100%;
+
+        mat-hint {
+          font-size: 0.75rem;
+          color: var(--mat-sys-on-surface-variant, #757575);
+        }
+      }
+
+      .connection-error-box {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        background: var(--mat-sys-error-container, #fdf2f2);
+        color: var(--mat-sys-on-error-container, #b3261e);
+        border: 1px solid var(--mat-sys-error-outline, #f9d2d2);
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        line-height: 1.35;
+
+        mat-icon {
+          font-size: 18px;
+          width: 18px;
+          height: 18px;
+          flex-shrink: 0;
+        }
+
+        .error-msg {
+          flex: 1;
+          word-break: break-word;
+        }
+      }
+
+      .config-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+
+        .clear-address-btn {
+          color: #5f6368;
+          font-size: 0.82rem;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+
+          mat-icon {
+            font-size: 18px;
+            width: 18px;
+            height: 18px;
+          }
+        }
+
+        .spacer {
+          flex: 1;
+        }
+
+        .cancel-btn {
+          color: #5f6368;
+          font-size: 0.85rem;
+        }
+
+        .save-btn {
+          background: #6750a4;
+          color: #ffffff;
+          border-radius: 20px;
+          padding: 0 20px;
+          height: 38px;
+          font-size: 0.85rem;
+          font-weight: 500;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+
+          .btn-spinner {
+            --mdc-circular-progress-active-indicator-color: #ffffff;
+          }
+
+          &:disabled {
+            background: #e0e0e0;
+            color: #9e9e9e;
+          }
+        }
+      }
+    }
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

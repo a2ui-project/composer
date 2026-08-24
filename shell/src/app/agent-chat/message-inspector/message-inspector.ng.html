@@ -1,0 +1,178 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<aside class="inspector-drawer">
+  <div class="inspector-header">
+    <div class="header-title">
+      <mat-icon class="header-icon">article</mat-icon>
+      <h3>A2A Message Inspector</h3>
+      @if (events().length > 0) {
+        <span class="event-counter-badge">{{ events().length }}</span>
+      }
+    </div>
+    <div class="header-controls">
+      @if (events().length > 0) {
+        <button
+          mat-button
+          type="button"
+          class="clear-all-btn"
+          (click)="clearEvents.emit()"
+          matTooltip="Clear recorded events"
+          aria-label="Clear recorded events"
+        >
+          <mat-icon>delete_sweep</mat-icon>
+          <span>Clear</span>
+        </button>
+      }
+      <button
+        mat-icon-button
+        type="button"
+        (click)="closeDrawer.emit()"
+        matTooltip="Close Inspector"
+        aria-label="Close Inspector"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <div class="inspector-toolbar">
+    <div class="search-box">
+      <mat-icon class="search-icon">search</mat-icon>
+      <input
+        type="text"
+        class="search-input"
+        placeholder="Filter payloads or methods..."
+        [value]="searchQuery()"
+        (input)="handleSearchInput($event)"
+        aria-label="Filter payloads or methods"
+      />
+      @if (searchQuery()) {
+        <button
+          mat-icon-button
+          type="button"
+          class="clear-search-btn"
+          (click)="searchQuery.set('')"
+          aria-label="Clear search query"
+        >
+          <mat-icon>clear</mat-icon>
+        </button>
+      }
+    </div>
+
+    <div class="filter-chips" role="group" aria-label="Filter events by direction">
+      <button
+        type="button"
+        class="chip-btn"
+        [class.selected]="filterDirection() === 'all'"
+        (click)="applyFilterDirection('all')"
+      >
+        All
+      </button>
+      <button
+        type="button"
+        class="chip-btn"
+        [class.selected]="filterDirection() === 'sent'"
+        (click)="applyFilterDirection('sent')"
+      >
+        Sent
+      </button>
+      <button
+        type="button"
+        class="chip-btn"
+        [class.selected]="filterDirection() === 'received'"
+        (click)="applyFilterDirection('received')"
+      >
+        Received
+      </button>
+      <button
+        type="button"
+        class="chip-btn"
+        [class.selected]="filterDirection() === 'error'"
+        (click)="applyFilterDirection('error')"
+      >
+        Error
+      </button>
+    </div>
+  </div>
+
+  <div class="inspector-content">
+    @if (filteredEvents().length === 0) {
+      <div class="empty-state">
+        <mat-icon class="empty-icon">history</mat-icon>
+        <p>No matching A2A protocol events recorded.</p>
+      </div>
+    } @else {
+      <mat-accordion multi="true" class="events-accordion">
+        @for (event of filteredEvents(); track event.id) {
+          <mat-expansion-panel class="event-panel" [class]="event.direction" [expanded]="true">
+            <mat-expansion-panel-header>
+              <mat-panel-title class="event-title">
+                @if (event.direction === 'sent') {
+                  <span class="dir-badge sent-badge">
+                    <mat-icon class="dir-icon">arrow_upward</mat-icon>
+                    <span>SENT</span>
+                  </span>
+                  <span class="type-tag">message</span>
+                } @else if (event.direction === 'received') {
+                  <span class="dir-badge received-badge">
+                    <mat-icon class="dir-icon">arrow_downward</mat-icon>
+                    <span>RECEIVED</span>
+                  </span>
+                  <span class="type-tag">event</span>
+                } @else {
+                  <span class="dir-badge error-badge">
+                    <mat-icon class="dir-icon">error</mat-icon>
+                    <span>ERROR</span>
+                  </span>
+                  <span class="type-tag">error</span>
+                }
+              </mat-panel-title>
+              <mat-panel-description class="event-meta">
+                <span class="event-time">{{ formatEventTimestamp(event.timestamp) }}</span>
+                <button
+                  mat-icon-button
+                  type="button"
+                  class="copy-btn"
+                  (click)="$event.stopPropagation(); copyEventJsonToClipboard(event)"
+                  [matTooltip]="copiedEventId() === event.id ? 'Copied!' : 'Copy raw JSON'"
+                  [attr.aria-label]="
+                    copiedEventId() === event.id ? 'JSON Copied' : 'Copy JSON payload'
+                  "
+                >
+                  <mat-icon class="copy-icon">{{
+                    copiedEventId() === event.id ? 'check' : 'content_copy'
+                  }}</mat-icon>
+                </button>
+              </mat-panel-description>
+            </mat-expansion-panel-header>
+
+            <div class="event-body">
+              <div class="json-code-table">
+                @for (line of getFormattedJsonLines(event.payload); track line.lineNum) {
+                  <div class="code-line">
+                    <span class="line-num">{{ line.lineNum }}</span>
+                    <span class="line-text">{{ line.text }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          </mat-expansion-panel>
+        }
+      </mat-accordion>
+    }
+  </div>
+</aside>

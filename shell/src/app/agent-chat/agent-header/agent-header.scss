@@ -1,0 +1,189 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+}
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: var(--mat-sys-surface, #ffffff);
+  border-bottom: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  min-height: 60px;
+  box-sizing: border-box;
+
+  .agent-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+
+    .agent-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: #e8f0fe;
+      color: #1967d2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+
+      .avatar-icon {
+        font-size: 22px;
+        width: 22px;
+        height: 22px;
+      }
+
+      .avatar-image {
+        width: 22px;
+        height: 22px;
+        object-fit: contain;
+      }
+    }
+
+    .agent-meta {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+
+      .agent-title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .agent-title {
+          margin: 0;
+          font-size: 0.95rem;
+          font-weight: 600;
+          color: var(--mat-sys-on-surface, #1f1f1f);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .agent-version-chip {
+          font-size: 0.72rem;
+          padding: 1px 6px;
+          border-radius: 10px;
+          background: var(--mat-sys-secondary-container, #e8def8);
+          color: var(--mat-sys-on-secondary-container, #1d192b);
+          font-weight: 500;
+        }
+      }
+
+      .agent-endpoint-row {
+        font-family: monospace;
+        font-size: 0.75rem;
+        color: var(--mat-sys-on-surface-variant, #757575);
+
+        .endpoint-text {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 400px;
+        }
+      }
+    }
+
+    .inline-config-btn {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--mat-sys-on-surface-variant, #49454f);
+      border-radius: 50%;
+      border: 1px solid #cac4d0;
+      background: #ffffff;
+      cursor: pointer;
+      transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease;
+
+      mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+      }
+
+      &:hover {
+        color: var(--mat-sys-primary, #6750a4);
+        border-color: #6750a4;
+        background: #f3edf7;
+      }
+    }
+  }
+
+  .agent-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+
+    .session-chip {
+      background: #f3edf7;
+      color: #49454f;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 0.78rem;
+      font-family: monospace;
+      max-width: 180px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      padding: 0 14px;
+      height: 34px;
+
+      mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+      }
+
+      &.inspector-toggle-btn {
+        border-color: #6750a4;
+        color: #6750a4;
+
+        &.active {
+          background: #f3edf7;
+          border-color: #6750a4;
+          color: #6750a4;
+        }
+      }
+
+      &.new-session-btn {
+        border-color: #6750a4;
+        color: #6750a4;
+      }
+    }
+  }
+}

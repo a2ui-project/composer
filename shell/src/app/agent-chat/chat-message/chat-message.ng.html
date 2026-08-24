@@ -1,0 +1,126 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="message-row" [class]="message().sender">
+  @if (message().sender === 'user') {
+    <div class="user-message-bubble">
+      @if (message().images && message().images!.length > 0) {
+        <div class="msg-images-tray">
+          @for (img of message().images; track $index) {
+            <img [src]="img.previewUrl || img.data" [alt]="img.name" class="msg-image-thumb" />
+          }
+        </div>
+      }
+      {{ message().text }}
+    </div>
+  } @else {
+    <div class="agent-message-container">
+      <div class="agent-header-badge">
+        <div class="mini-avatar">
+          <mat-icon class="mini-avatar-icon">smart_toy</mat-icon>
+        </div>
+        <span class="agent-badge-name">{{ agentName() }}</span>
+      </div>
+
+      <div class="agent-message-body">
+        @if (message().images && message().images!.length > 0) {
+          <div class="msg-images-tray">
+            @for (img of message().images; track $index) {
+              <img [src]="img.previewUrl || img.data" [alt]="img.name" class="msg-image-thumb" />
+            }
+          </div>
+        }
+
+        @if (message().thinking) {
+          <div class="thinking-accordion">
+            <div
+              class="thinking-header"
+              role="button"
+              tabindex="0"
+              [attr.aria-expanded]="isThinkingExpanded()"
+              aria-label="Toggle thinking reasoning process"
+              (click)="toggleThinkingExpansion()"
+              (keydown.enter)="toggleThinkingExpansion()"
+              (keydown.space)="toggleThinkingExpansion()"
+            >
+              <mat-icon class="thinking-icon">psychology</mat-icon>
+              <span class="thinking-label">
+                {{ message().isStreaming ? 'Thinking...' : 'Reasoning Process' }}
+              </span>
+              <mat-icon class="expand-arrow">
+                {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
+              </mat-icon>
+            </div>
+            @if (isThinkingExpanded()) {
+              <div class="thinking-content" [innerHTML]="formattedThinking()"></div>
+            }
+          </div>
+        }
+
+        @if (message().text) {
+          <div class="agent-text-content" [class.error]="message().sender === 'error'">
+            <div class="markdown-body" [innerHTML]="formattedContent()"></div>
+            @if (message().isStreaming) {
+              <span class="streaming-cursor"></span>
+            }
+          </div>
+        }
+
+        @if (message().a2uiPayload && message().a2uiPayload!.length > 0) {
+          <div class="canvas-artifact-card">
+            <button
+              mat-flat-button
+              type="button"
+              class="view-canvas-btn"
+              (click)="openCanvasArtifact()"
+              aria-label="View workspace artifact in Canvas"
+            >
+              <mat-icon class="grid-icon">dashboard_customize</mat-icon>
+              <div class="btn-text-col">
+                <span class="btn-main-title">View in Canvas</span>
+                <span class="btn-sub-title">Workspace artifact ready on Canvas</span>
+              </div>
+            </button>
+
+            @if (isCanvasOpen()) {
+              <button
+                mat-flat-button
+                type="button"
+                class="close-canvas-btn"
+                (click)="closeCanvas.emit()"
+                matTooltip="Close Canvas Preview"
+                aria-label="Close Canvas Preview"
+              >
+                <mat-icon>close</mat-icon>
+                <span>Close</span>
+              </button>
+            }
+          </div>
+        }
+
+        @if (isPending()) {
+          <div class="pending-response-indicator">
+            <div class="typing-dots">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>

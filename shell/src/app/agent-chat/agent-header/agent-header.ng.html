@@ -1,0 +1,86 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<header class="agent-header">
+  <div class="agent-profile">
+    <div class="agent-avatar">
+      <img
+        [src]="displayIconUrl()"
+        alt="Agent Avatar"
+        class="avatar-image"
+        (error)="onAvatarError($event)"
+      />
+    </div>
+    <div class="agent-meta">
+      <div class="agent-title-row">
+        <h2 class="agent-title">{{ displayTitle() }}</h2>
+        @if (displayVersion()) {
+          <span class="agent-version-chip">{{ displayVersion() }}</span>
+        }
+      </div>
+      <div class="agent-endpoint-row">
+        <span class="endpoint-text" [matTooltip]="displayEndpoint()">{{ displayEndpoint() }}</span>
+      </div>
+    </div>
+
+    <button
+      mat-icon-button
+      type="button"
+      class="inline-config-btn settings-btn"
+      (click)="openSettings.emit()"
+      matTooltip="Configure Agent Endpoint & Options"
+      aria-label="Configure Agent Endpoint & Options"
+    >
+      <mat-icon>build</mat-icon>
+    </button>
+  </div>
+
+  <div class="agent-actions">
+    @if (sessionId()) {
+      <span class="session-chip" [matTooltip]="'Active Context / Session: ' + sessionId()">
+        Session: {{ sessionId() }}
+      </span>
+    }
+
+    <button
+      mat-stroked-button
+      type="button"
+      class="action-btn inspector-toggle-btn"
+      [class.active]="isInspectorOpen()"
+      [attr.aria-expanded]="isInspectorOpen()"
+      aria-label="Toggle A2A protocol message inspector"
+      (click)="toggleInspector.emit()"
+      matTooltip="Toggle A2A protocol message inspector"
+    >
+      <mat-icon>terminal</mat-icon>
+      <span class="btn-label">{{
+        isInspectorOpen() ? 'Hide A2A Messages' : 'Inspect A2A Messages'
+      }}</span>
+    </button>
+
+    <button
+      mat-stroked-button
+      type="button"
+      class="action-btn new-session-btn"
+      (click)="resetSession.emit()"
+      matTooltip="Start new conversation"
+      aria-label="Start new conversation"
+    >
+      <mat-icon>add</mat-icon>
+      <span class="btn-label">New conversation</span>
+    </button>
+  </div>
+</header>

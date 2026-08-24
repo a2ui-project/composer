@@ -1,0 +1,95 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div
+  #scrollContainer
+  class="chat-history-container"
+  role="log"
+  aria-live="polite"
+  (scroll)="handleViewportScroll()"
+>
+  @if (isConnecting()) {
+    <div class="connecting-showcase">
+      <mat-progress-spinner
+        mode="indeterminate"
+        diameter="44"
+        class="purple-spinner"
+      ></mat-progress-spinner>
+      <h3 class="connecting-title">Connecting to A2A Agent...</h3>
+      <p class="connecting-subtitle">
+        Fetching AgentCard and verifying capabilities from
+        <code class="endpoint-code">{{ endpoint() }}</code>
+      </p>
+    </div>
+  } @else if (messages().length === 0) {
+    <div class="showcase-wrapper">
+      <div class="welcome-card">
+        <div class="welcome-header">
+          <div class="welcome-avatar">
+            <mat-icon class="avatar-icon">smart_toy</mat-icon>
+          </div>
+          <div class="welcome-meta">
+            <h2 class="welcome-title">{{ getAgentDisplayName() }}</h2>
+            <p class="welcome-desc">
+              {{
+                agentInfo()?.description ||
+                  'An agent that responds with text and/or A2UI components.'
+              }}
+            </p>
+          </div>
+        </div>
+
+        <div class="capability-chips">
+          <span class="cap-chip streaming-chip">
+            <mat-icon class="chip-icon">bolt</mat-icon>
+            <span>Streaming</span>
+          </span>
+          <span class="cap-chip extension-chip">
+            <mat-icon class="chip-icon">shield</mat-icon>
+            <span>A2UI Protocol Extension</span>
+          </span>
+          @if (agentInfo()?.skills && agentInfo()!.skills!.length > 0) {
+            @for (skill of agentInfo()!.skills; track skill.id || skill.name) {
+              <span class="cap-chip extension-chip">
+                <mat-icon class="chip-icon">shield</mat-icon>
+                <span>{{ skill.name }}</span>
+              </span>
+            }
+          }
+        </div>
+
+        <div class="ready-banner">
+          <mat-icon class="banner-icon">chat_bubble</mat-icon>
+          <span class="banner-text">Agent is connected and ready. Send a prompt to begin.</span>
+        </div>
+      </div>
+    </div>
+  } @else {
+    <div class="messages-list">
+      @for (msg of messages(); track msg.id) {
+        <a2ui-composer-chat-message
+          [message]="msg"
+          [agentIconUrl]="getAgentIconUrl()"
+          [agentName]="getAgentDisplayName()"
+          [isCanvasOpen]="isCanvasOpen()"
+          (openCanvas)="openCanvas.emit($event)"
+          (closeCanvas)="closeCanvas.emit()"
+          (openInspector)="openInspector.emit()"
+        ></a2ui-composer-chat-message>
+      }
+    </div>
+  }
+</div>
