@@ -43,6 +43,13 @@ export enum AuthType {
   THIRD_PARTY = '3p',
 }
 
+/**
+ * Supported A2A transport protocol backend modes.
+ */
+export enum A2aBackendMode {
+  HTTP_JSONRPC = 'http_jsonrpc',
+}
+
 export {ThemePreference};
 
 /**
@@ -60,6 +67,15 @@ export abstract class AppConfigProvider {
 
   /** The active authentication protocol context. */
   abstract readonly authType: Signal<AuthType>;
+
+  /** The active A2A backend transport mode. */
+  abstract readonly a2aBackendMode: Signal<A2aBackendMode>;
+
+  /** Target URL endpoint for A2A agent testing. */
+  abstract readonly a2aAgentUrl: Signal<string>;
+
+  /** Target tenant ID for A2A agent connections. */
+  abstract readonly a2aTenantId: Signal<string>;
 
   /** Target URL path targeting preview iframe controllers. */
   abstract readonly rendererUrl: Signal<string>;
@@ -125,6 +141,27 @@ export abstract class AppConfigProvider {
    * @param theme Preferred visual palette theme option.
    */
   abstract setThemePreference(theme: ThemePreference): void;
+
+  /**
+   * Mutates and saves the active A2A backend transport mode.
+   *
+   * @param mode The selected transport mode.
+   */
+  abstract setA2aBackendMode(mode: A2aBackendMode): void;
+
+  /**
+   * Mutates and saves the active A2A agent URL endpoint.
+   *
+   * @param url The target destination URL endpoint.
+   */
+  abstract setA2aAgentUrl(url: string): void;
+
+  /**
+   * Mutates and saves the active A2A tenant ID.
+   *
+   * @param tenantId The target tenant ID.
+   */
+  abstract setA2aTenantId(tenantId: string): void;
 
   /**
    * Purges dynamic runtime variables instantly.

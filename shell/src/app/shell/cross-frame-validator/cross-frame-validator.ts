@@ -195,6 +195,72 @@ export class CrossFrameValidator {
   }
 
   /**
+   * Validates an incoming message envelope dispatched from an embedded iframe.
+   * Logs validation failures to console.error and appends error messages to errors array if provided.
+   *
+   * @param message The incoming message object to validate.
+   * @param errors An optional array to collect validation error messages.
+   * @returns `true` if the message is valid, `false` otherwise.
+   */
+  static validateIncomingMessage(message: unknown, errors?: string[]): boolean {
+    if (!message || typeof message !== 'object' || Array.isArray(message)) {
+      CrossFrameValidator.recordError('Malformed message: message must be an object.', errors);
+      return false;
+    }
+
+    const msgObj = message as {type?: unknown; payload?: unknown};
+    const msgType = msgObj.type;
+    const msgPayload = msgObj.payload;
+
+    if (typeof msgType !== 'string' || !msgType.trim()) {
+      CrossFrameValidator.recordError(
+        'Malformed message: type must be a non-empty string.',
+        errors,
+      );
+      return false;
+    }
+
+    switch (msgType) {
+      // Validates dimensional updates dispatched by the embedded preview iframe
+      // to ensure height and optional width are safe numerical values before updating host layout.
+      case PreviewBridgeMessageType.SURFACE_RESIZE: {
+        if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
+          CrossFrameValidator.recordError(
+            'Malformed payload for SURFACE_RESIZE: must be an object.',
+            errors,
+          );
+          return false;
+        }
+
+        const MAX_SURFACE_DIMENSION = 20_000;
+        const isValidDimension = (v: unknown): v is number =>
+          typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= MAX_SURFACE_DIMENSION;
+
+        const resizePayload = msgPayload as {height?: unknown; width?: unknown};
+        if (!isValidDimension(resizePayload.height)) {
+          CrossFrameValidator.recordError(
+            'Malformed payload for SURFACE_RESIZE: must contain number property height.',
+            errors,
+          );
+          return false;
+        }
+        if (resizePayload.width !== undefined && !isValidDimension(resizePayload.width)) {
+          CrossFrameValidator.recordError(
+            'Malformed payload for SURFACE_RESIZE: width property must be a number if present.',
+            errors,
+          );
+          return false;
+        }
+        return true;
+      }
+
+      default: {
+        return true;
+      }
+    }
+  }
+
+  /**
    * Validates a single render message item structure.
    */
   private static validateSingleRenderMessage(item: unknown, errors?: string[]): boolean {

@@ -21,6 +21,7 @@ import {StartupConfigStateService} from '../../shell/startup-resolution/state/st
 import {
   AppConfigProvider,
   AuthType,
+  A2aBackendMode,
   EnvMode,
   ThemePreference,
 } from '../app-config-provider/app-config-provider';
@@ -28,6 +29,7 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
+import {SafeUrlValidatorService} from '../../shared/security/safe-url-validator.service';
 
 /**
  * Concrete implementation of the AppConfigProvider that integrates with
@@ -48,6 +50,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   private readonly secureCredentialsStorage = inject(SecureCredentialsStorage);
 
   private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
+  private readonly safeUrlValidator = inject(SafeUrlValidatorService);
 
   private readonly environmentContext = inject(EnvironmentContextService);
   private readonly startupConfigState = inject(StartupConfigStateService);
@@ -73,6 +76,27 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     (this.localStorageInteractions.getItem(
       LocalStorageKey.THEME_PREFERENCE,
     ) as ThemePreference | null) || ThemePreference.LIGHT,
+  );
+
+  /** Coordinates dynamic A2A transport protocol backend mode state. */
+  private readonly _a2aBackendMode = signal<A2aBackendMode>(
+    (() => {
+      const stored = this.localStorageInteractions.getItem(LocalStorageKey.A2A_BACKEND_MODE);
+      if (stored && Object.values(A2aBackendMode).includes(stored as A2aBackendMode)) {
+        return stored as A2aBackendMode;
+      }
+      return A2aBackendMode.HTTP_JSONRPC;
+    })(),
+  );
+
+  /** Coordinates dynamic A2A agent URL endpoint state. */
+  private readonly _a2aAgentUrl = signal<string>(
+    (this.localStorageInteractions.getItem(LocalStorageKey.A2A_AGENT_URL) || '').trim(),
+  );
+
+  /** Coordinates dynamic A2A tenant ID state. */
+  private readonly _a2aTenantId = signal<string>(
+    (this.localStorageInteractions.getItem(LocalStorageKey.A2A_TENANT_ID) || '').trim(),
   );
 
   /**
@@ -157,6 +181,15 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   /** Visual theme preference. */
   override readonly themePreference: Signal<ThemePreference> = this._themePreference.asReadonly();
 
+  /** Active A2A backend mode. */
+  override readonly a2aBackendMode: Signal<A2aBackendMode> = this._a2aBackendMode.asReadonly();
+
+  /** Active A2A agent URL endpoint. */
+  override readonly a2aAgentUrl: Signal<string> = this._a2aAgentUrl.asReadonly();
+
+  /** Active A2A tenant ID. */
+  override readonly a2aTenantId: Signal<string> = this._a2aTenantId.asReadonly();
+
   /**
    * Updates and persists the active renderer URL endpoint.
    *
@@ -166,6 +199,51 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     this._rendererUrl.set(url);
     this.localStorageInteractions.setItem(LocalStorageKey.RENDERER_URL, url);
     this.startupConfigState.setResolvedUrl(url);
+  }
+
+  /**
+   * Mutates and saves the active A2A backend transport mode.
+   *
+   * @param mode The selected backend mode.
+   */
+  override setA2aBackendMode(mode: A2aBackendMode): void {
+    this._a2aBackendMode.set(mode);
+    this.localStorageInteractions.setItem(LocalStorageKey.A2A_BACKEND_MODE, mode);
+  }
+
+  /**
+   * Mutates and saves the active A2A agent URL endpoint.
+   *
+   * @param url The target destination URL endpoint.
+   */
+  override setA2aAgentUrl(url: string): void {
+    const trimmed = (url || '').trim();
+    if (!trimmed) {
+      this._a2aAgentUrl.set('');
+      this.localStorageInteractions.removeItem(LocalStorageKey.A2A_AGENT_URL);
+      return;
+    }
+    if (!this.safeUrlValidator.isValidHttpUrl(trimmed)) {
+      console.warn(`Refusing to persist invalid or non-HTTP A2A agent URL: ${trimmed}`);
+      return;
+    }
+    this._a2aAgentUrl.set(trimmed);
+    this.localStorageInteractions.setItem(LocalStorageKey.A2A_AGENT_URL, trimmed);
+  }
+
+  /**
+   * Mutates and saves the active A2A tenant ID.
+   *
+   * @param tenantId The target tenant ID.
+   */
+  override setA2aTenantId(tenantId: string): void {
+    const trimmed = (tenantId || '').trim();
+    this._a2aTenantId.set(trimmed);
+    if (trimmed) {
+      this.localStorageInteractions.setItem(LocalStorageKey.A2A_TENANT_ID, trimmed);
+    } else {
+      this.localStorageInteractions.removeItem(LocalStorageKey.A2A_TENANT_ID);
+    }
   }
 
   /**
@@ -272,10 +350,16 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_1P);
     this.localStorageInteractions.removeItem(LocalStorageKey.FORCE_3P);
     this.localStorageInteractions.removeItem(LocalStorageKey.THEME_PREFERENCE);
+    this.localStorageInteractions.removeItem(LocalStorageKey.A2A_AGENT_URL);
+    this.localStorageInteractions.removeItem(LocalStorageKey.A2A_TENANT_ID);
+    this.localStorageInteractions.removeItem(LocalStorageKey.A2A_BACKEND_MODE);
 
     this._forcedAuthOverride.set(AuthType.DEFAULT);
     this._isApiKeyProvidedByConfig.set(false);
     this._geminiApiKey.set('');
+    this._a2aBackendMode.set(A2aBackendMode.HTTP_JSONRPC);
+    this._a2aAgentUrl.set('');
+    this._a2aTenantId.set('');
 
     this._rendererUrl.set(this.startupConfigState.resolvedUrl() || '');
     this._themePreference.set(ThemePreference.LIGHT);

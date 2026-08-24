@@ -725,6 +725,107 @@ describe('CrossFrameValidator', () => {
     });
   });
 
+  describe('SURFACE_RESIZE (Incoming)', () => {
+    it('accepts valid SURFACE_RESIZE payload with height and width', () => {
+      const payload = {height: 400, width: 600};
+      expect(
+        CrossFrameValidator.validateIncomingMessage({
+          type: PreviewBridgeMessageType.SURFACE_RESIZE,
+          payload,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid SURFACE_RESIZE payload without width', () => {
+      const payload = {height: 350};
+      expect(
+        CrossFrameValidator.validateIncomingMessage({
+          type: PreviewBridgeMessageType.SURFACE_RESIZE,
+          payload,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects SURFACE_RESIZE with missing payload', () => {
+      expect(
+        CrossFrameValidator.validateIncomingMessage({
+          type: PreviewBridgeMessageType.SURFACE_RESIZE,
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Malformed payload for SURFACE_RESIZE: must be an object.',
+      );
+    });
+
+    it('rejects SURFACE_RESIZE when payload is an array', () => {
+      expect(
+        CrossFrameValidator.validateIncomingMessage({
+          type: PreviewBridgeMessageType.SURFACE_RESIZE,
+          payload: [],
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Malformed payload for SURFACE_RESIZE: must be an object.',
+      );
+    });
+
+    it('rejects SURFACE_RESIZE when height is not a number', () => {
+      const payload = {height: '400px'};
+      expect(
+        CrossFrameValidator.validateIncomingMessage({
+          type: PreviewBridgeMessageType.SURFACE_RESIZE,
+          payload,
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Malformed payload for SURFACE_RESIZE: must contain number property height.',
+      );
+    });
+
+    it('rejects SURFACE_RESIZE when height is NaN, Infinity, negative, or exceeds maximum', () => {
+      for (const invalidVal of [NaN, Infinity, -1, 20001]) {
+        expect(
+          CrossFrameValidator.validateIncomingMessage({
+            type: PreviewBridgeMessageType.SURFACE_RESIZE,
+            payload: {height: invalidVal},
+          }),
+        ).toBe(false);
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Malformed payload for SURFACE_RESIZE: must contain number property height.',
+        );
+      }
+    });
+
+    it('rejects SURFACE_RESIZE when width is not a number', () => {
+      const payload = {height: 400, width: '100%'};
+      expect(
+        CrossFrameValidator.validateIncomingMessage({
+          type: PreviewBridgeMessageType.SURFACE_RESIZE,
+          payload,
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Malformed payload for SURFACE_RESIZE: width property must be a number if present.',
+      );
+    });
+
+    it('rejects SURFACE_RESIZE when width is NaN, Infinity, negative, or exceeds maximum', () => {
+      for (const invalidVal of [NaN, Infinity, -1, 20001]) {
+        expect(
+          CrossFrameValidator.validateIncomingMessage({
+            type: PreviewBridgeMessageType.SURFACE_RESIZE,
+            payload: {height: 400, width: invalidVal},
+          }),
+        ).toBe(false);
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Malformed payload for SURFACE_RESIZE: width property must be a number if present.',
+        );
+      }
+    });
+  });
+
   describe('Unrecognized Message Types', () => {
     it('logs warning and returns true for unrecognized message type', () => {
       expect(

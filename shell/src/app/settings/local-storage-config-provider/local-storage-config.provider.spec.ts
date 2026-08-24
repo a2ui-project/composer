@@ -19,7 +19,12 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
 
-import {EnvMode, AuthType, ThemePreference} from '../app-config-provider/app-config-provider';
+import {
+  EnvMode,
+  AuthType,
+  A2aBackendMode,
+  ThemePreference,
+} from '../app-config-provider/app-config-provider';
 import {LocalStorageAppConfigProvider} from './local-storage-config.provider';
 import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
@@ -528,6 +533,92 @@ describe('LocalStorageAppConfigProvider', () => {
       expect(provider.geminiApiKey()).toBe('runtime-token-xyz');
       expect(provider.isApiKeyProvidedByConfig()).toBe(false);
       expect(setCredentialSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('A2A Agent Configuration and Backend Mode', () => {
+    it('persists and mutates a2aBackendMode', () => {
+      const provider = setupProvider();
+      expect(provider.a2aBackendMode()).toBe(A2aBackendMode.HTTP_JSONRPC);
+
+      provider.setA2aBackendMode(A2aBackendMode.HTTP_JSONRPC);
+      expect(provider.a2aBackendMode()).toBe(A2aBackendMode.HTTP_JSONRPC);
+      expect(localStorage.getItem(LocalStorageKey.A2A_BACKEND_MODE)).toBe(
+        A2aBackendMode.HTTP_JSONRPC,
+      );
+    });
+
+    it('persists and mutates a2aAgentUrl and a2aTenantId', () => {
+      const provider = setupProvider();
+      expect(provider.a2aAgentUrl()).toBe('');
+      expect(provider.a2aTenantId()).toBe('');
+
+      provider.setA2aAgentUrl('  http://localhost:8088  ');
+      provider.setA2aTenantId('  tenant-alpha  ');
+
+      expect(provider.a2aAgentUrl()).toBe('http://localhost:8088');
+      expect(provider.a2aTenantId()).toBe('tenant-alpha');
+      expect(localStorage.getItem(LocalStorageKey.A2A_AGENT_URL)).toBe('http://localhost:8088');
+      expect(localStorage.getItem(LocalStorageKey.A2A_TENANT_ID)).toBe('tenant-alpha');
+
+      provider.setA2aAgentUrl('');
+      provider.setA2aTenantId('');
+      expect(provider.a2aAgentUrl()).toBe('');
+      expect(provider.a2aTenantId()).toBe('');
+      expect(localStorage.getItem(LocalStorageKey.A2A_AGENT_URL)).toBeNull();
+      expect(localStorage.getItem(LocalStorageKey.A2A_TENANT_ID)).toBeNull();
+    });
+
+    it('initializes A2A configurations from localStorage if present', () => {
+      localStorage.setItem(LocalStorageKey.A2A_AGENT_URL, 'http://custom-agent:8080');
+      localStorage.setItem(LocalStorageKey.A2A_TENANT_ID, 'custom-tenant');
+      localStorage.setItem(LocalStorageKey.A2A_BACKEND_MODE, A2aBackendMode.HTTP_JSONRPC);
+
+      const provider = setupProvider();
+      expect(provider.a2aAgentUrl()).toBe('http://custom-agent:8080');
+      expect(provider.a2aTenantId()).toBe('custom-tenant');
+      expect(provider.a2aBackendMode()).toBe(A2aBackendMode.HTTP_JSONRPC);
+    });
+
+    it('falls back to HTTP_JSONRPC when stored backend mode is unrecognized', () => {
+      localStorage.setItem(LocalStorageKey.A2A_BACKEND_MODE, 'INVALID_PROTOCOL_MODE');
+
+      const provider = setupProvider();
+      expect(provider.a2aBackendMode()).toBe(A2aBackendMode.HTTP_JSONRPC);
+    });
+
+    it('rejects invalid or non-HTTP URLs in setA2aAgentUrl', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const provider = setupProvider();
+
+      for (const dangerousUrl of [
+        'javascript:alert(1)',
+        'file:///etc/passwd',
+        'data:text/html,test',
+      ]) {
+        provider.setA2aAgentUrl(dangerousUrl);
+        expect(provider.a2aAgentUrl()).toBe('');
+        expect(localStorage.getItem(LocalStorageKey.A2A_AGENT_URL)).toBeNull();
+        expect(warnSpy).toHaveBeenCalledWith(
+          `Refusing to persist invalid or non-HTTP A2A agent URL: ${dangerousUrl}`,
+        );
+      }
+    });
+
+    it('flushes A2A configurations on flushConfig()', async () => {
+      const provider = setupProvider();
+      provider.setA2aBackendMode(A2aBackendMode.HTTP_JSONRPC);
+      provider.setA2aAgentUrl('http://localhost:8088');
+      provider.setA2aTenantId('tenant-1');
+
+      await provider.flushConfig();
+
+      expect(provider.a2aBackendMode()).toBe(A2aBackendMode.HTTP_JSONRPC);
+      expect(provider.a2aAgentUrl()).toBe('');
+      expect(provider.a2aTenantId()).toBe('');
+      expect(localStorage.getItem(LocalStorageKey.A2A_AGENT_URL)).toBeNull();
+      expect(localStorage.getItem(LocalStorageKey.A2A_TENANT_ID)).toBeNull();
+      expect(localStorage.getItem(LocalStorageKey.A2A_BACKEND_MODE)).toBeNull();
     });
   });
 });

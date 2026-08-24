@@ -42,4 +42,10 @@ export enum LocalStorageKey {
   CUSTOM_RENDERERS = 'a2ui_composer_custom_renderers',
   /** Key for persisting the user selected API key ID. */
   SELECTED_API_KEY = 'a2ui_composer_selected_api_key',
+  /** Key for storing active A2A agent endpoint URL. */
+  A2A_AGENT_URL = 'a2ui_composer_a2a_agent_url',
+  /** Key for storing active A2A tenant ID. */
+  A2A_TENANT_ID = 'a2ui_composer_a2a_tenant_id',
+  /** Key for storing active A2A transport protocol backend mode. */
+  A2A_BACKEND_MODE = 'a2ui_composer_a2a_backend_mode',
 }
