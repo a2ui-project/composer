@@ -88,7 +88,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     }
 
     windowObj.gtag('js', new Date());
-    windowObj.gtag('config', this.config.measurementId, {send_page_view: false});
+    windowObj.gtag('config', this.config.measurementId, this.getConfigOptions());
 
     const existingScript = this.document.querySelector(
       `script[src*="${this.config.measurementId}"]`,
@@ -102,12 +102,19 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     }
   }
 
-  private getBaselineDimensions(): Record<string, unknown> {
+  protected getConfigOptions(): Record<string, unknown> {
+    return {
+      send_page_view: false,
+    };
+  }
+
+  protected getBaselineDimensions(): Record<string, unknown> {
     const is3P = this.startupResolution.isThirdPartyEnvironment();
     const activeRendererId = this.startupConfigState.selectedRendererId() || 'default';
     const catalogObj = this.catalogManagement.activeCatalog();
     const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
     return {
+      send_to: this.config.measurementId,
       composer_session_id: this._composerSessionId,
       usage_type: is3P ? UsageType.THIRD_PARTY : UsageType.FIRST_PARTY,
       env_mode: this.appConfigProvider.envMode(),
@@ -276,6 +283,17 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   trackApiKeyUpdate(params: {action: ApiKeyAction}): void {
     this.dispatchGtagEvent('api_key_update', {
       action: params.action,
+    });
+  }
+
+  trackConversationView(): void {
+    this.dispatchGtagEvent('conversation_view');
+  }
+
+  trackConversationSessionEnd(params: {durationSeconds: number; interfaceCount: number}): void {
+    this.dispatchGtagEvent('conversation_session_end', {
+      duration_seconds: params.durationSeconds,
+      interface_count: params.interfaceCount,
     });
   }
 }

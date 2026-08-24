@@ -94,4 +94,8 @@ export class NoopUsageTrackingService extends UsageTrackingService {
   trackRendererDelete(_params: {rendererId: string}): void {}
 
   trackApiKeyUpdate(_params: {action: ApiKeyAction}): void {}
+
+  trackConversationView(): void {}
+
+  trackConversationSessionEnd(_params: {durationSeconds: number; interfaceCount: number}): void {}
 }

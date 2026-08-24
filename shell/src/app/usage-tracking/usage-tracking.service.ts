@@ -215,4 +215,17 @@ export abstract class UsageTrackingService {
    * Tracks API key selection or management actions without logging secret key tokens.
    */
   abstract trackApiKeyUpdate(params: {action: ApiKeyAction}): void;
+
+  /**
+   * Tracks when the active conversation window view changes for UI extensions.
+   */
+  abstract trackConversationView(): void;
+
+  /**
+   * Tracks when a conversation window closes or changes session contexts.
+   */
+  abstract trackConversationSessionEnd(params: {
+    durationSeconds: number;
+    interfaceCount: number;
+  }): void;
 }

@@ -430,4 +430,30 @@ describe('Ga4UsageTrackingService', () => {
       }),
     );
   });
+
+  it('dispatches conversation_view event', () => {
+    service.trackConversationView();
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'event',
+      'conversation_view',
+      expect.objectContaining({
+        catalog_id: 'basic-catalog',
+      }),
+    );
+  });
+
+  it('dispatches conversation_session_end event with expected variables', () => {
+    service.trackConversationSessionEnd({
+      durationSeconds: 15.5,
+      interfaceCount: 3,
+    });
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'event',
+      'conversation_session_end',
+      expect.objectContaining({
+        duration_seconds: 15.5,
+        interface_count: 3,
+      }),
+    );
+  });
 });
