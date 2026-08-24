@@ -704,15 +704,86 @@ describe('HostCommunication', () => {
       );
     });
 
-    it('suppresses outbound messages in sendMessage when renderer is not ready', () => {
+    it('queues outbound messages when renderer is not ready', () => {
       const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
       service.registerIframe(mockIframeWindow);
       expect(service.isRendererReady()).toBe(false);
 
       service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
       expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
+
+      // Checking that outboundMessageBuffer buffered the message.
+      // We can assert via internal state if possible, but the best way is to send RENDERER_READY and check if it's flushed.
+      // But wait, the flush spec will cover flushing. To prove queueing, we can check mock postMessage count before and after RENDERER_READY.
     });
 
+    it('flushes queued outbound messages in order when RENDERER_READY is received', () => {
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      service.sendMessage({type: PreviewBridgeMessageType.CONSOLE_LOG});
+      expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      // It should have sent SET_THEME plus the 2 queued messages
+      expect(mockIframeWindow.postMessage).toHaveBeenNthCalledWith(
+        1,
+        {
+          type: PreviewBridgeMessageType.SET_THEME,
+          payload: {theme: ThemePreference.LIGHT},
+        },
+        'http://localhost:3000',
+      );
+      expect(mockIframeWindow.postMessage).toHaveBeenNthCalledWith(
+        2,
+        {type: PreviewBridgeMessageType.GET_CATALOG},
+        'http://localhost:3000',
+      );
+      expect(mockIframeWindow.postMessage).toHaveBeenNthCalledWith(
+        3,
+        {type: PreviewBridgeMessageType.CONSOLE_LOG},
+        'http://localhost:3000',
+      );
+      expect(mockIframeWindow.postMessage).toHaveBeenCalledTimes(3);
+    });
+
+    it('clears the outbound buffer on registerTarget, unregisterTarget, and ngOnDestroy', () => {
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+
+      // Seed buffer
+      service.registerIframe(mockIframeWindow);
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+
+      // Clears on unregisterTarget (registerIframe(null))
+      service.registerIframe(null);
+      expect(service['outboundMessageBuffer'].length).toBe(0);
+
+      // Seed buffer again
+      service.registerIframe(mockIframeWindow);
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+
+      // Clears on registerTarget (registerIframe with target)
+      service.registerIframe(mockIframeWindow);
+      expect(service['outboundMessageBuffer'].length).toBe(0);
+
+      // Seed buffer again
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+
+      // Clears on ngOnDestroy
+      service.ngOnDestroy();
+      expect(service['outboundMessageBuffer'].length).toBe(0);
+    });
     it('allows outbound messages in sendMessage when renderer is ready', () => {
       const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
       service.registerIframe(mockIframeWindow);

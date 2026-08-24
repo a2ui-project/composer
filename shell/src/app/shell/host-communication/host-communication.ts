@@ -77,6 +77,10 @@ export class HostCommunication implements OnDestroy {
 
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
   private readonly earlyMessageBuffer: MessageEvent[] = [];
+  private readonly outboundMessageBuffer: Array<{
+    type: PreviewBridgeMessageType;
+    payload?: unknown;
+  }> = [];
   private latestCatalogEnvelope: MessageEnvelope | null = null;
 
   /**
@@ -166,6 +170,11 @@ export class HostCommunication implements OnDestroy {
       if (type === PreviewBridgeMessageType.RENDERER_READY) {
         this.isRendererReadySignal.set(true);
         this.sendTheme(this.configProvider.themePreference());
+        const pending = [...this.outboundMessageBuffer];
+        this.outboundMessageBuffer.length = 0;
+        for (const msg of pending) {
+          this.sendMessage(msg);
+        }
       }
       if (type !== PreviewBridgeMessageType.CONSOLE_LOG) {
         this.messageHistoryBuffer.push(envelope);
@@ -202,6 +211,7 @@ export class HostCommunication implements OnDestroy {
    * @param target Target iframe element, window reference, or null to unregister
    */
   registerIframe(target: HTMLIFrameElement | Window | null): void {
+    this.outboundMessageBuffer.length = 0;
     if (!target) {
       this.iframeElement = null;
       this.iframeWindow = null;
@@ -237,7 +247,8 @@ export class HostCommunication implements OnDestroy {
     }
 
     if (!this.isRendererReady()) {
-      console.debug('Dropping outbound message; renderer is not yet ready.', message);
+      console.debug('Queueing outbound message; renderer is not yet ready.', message);
+      this.outboundMessageBuffer.push(message);
       return;
     }
 
@@ -288,6 +299,7 @@ export class HostCommunication implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.outboundMessageBuffer.length = 0;
     this.isRendererReadySignal.set(false);
     this.earlyMessageBuffer.length = 0;
     this.messageStreamSubject.complete();
