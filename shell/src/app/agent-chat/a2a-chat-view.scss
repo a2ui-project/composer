@@ -1,0 +1,116 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.a2a-chat-view-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #ffffff;
+  overflow: hidden;
+  position: relative;
+
+  .chat-main-layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    position: relative;
+
+    .chat-viewport-column {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 320px;
+      height: 100%;
+
+      .history-wrapper {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .input-wrapper {
+        flex-shrink: 0;
+      }
+    }
+
+    .side-canvas-column {
+      flex: 1.1;
+      min-width: 360px;
+      border-left: 1px solid #e0e0e0;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+
+      .side-canvas-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+        background: #ffffff;
+        border-bottom: 1px solid #e0e0e0;
+        min-height: 48px;
+        box-sizing: border-box;
+
+        .canvas-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+
+          .canvas-icon {
+            color: #1a73e8;
+            font-size: 20px;
+            width: 20px;
+            height: 20px;
+          }
+
+          h3 {
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #1f1f1f;
+          }
+        }
+
+        button {
+          color: #5f6368;
+        }
+      }
+
+      .side-canvas-viewport {
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        overflow-y: auto;
+      }
+    }
+
+    .inspector-column {
+      width: 380px;
+      flex-shrink: 0;
+      height: 100%;
+      z-index: 10;
+    }
+  }
+}

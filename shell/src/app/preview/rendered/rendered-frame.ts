@@ -14,13 +14,26 @@
  * limitations under the License.
  */
 
-import {Component, inject, viewChild, ElementRef, effect, computed, untracked} from '@angular/core';
+import {
+  Component,
+  inject,
+  viewChild,
+  ElementRef,
+  effect,
+  computed,
+  untracked,
+  input,
+  signal,
+} from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
+import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {SafeUrlValidatorService} from '../../shared/security/safe-url-validator.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../../chat/chat-state/chat-state';
+
+import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 
 /**
  * Orchestrates the secure, sandboxed iframe rendering the active preview target,
@@ -40,6 +53,12 @@ export class RenderedFrame {
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
+
+  /** Optional layout payload to render immediately into the guest iframe. */
+  readonly payload = input<unknown[] | null | undefined>(null);
+
+  /** Tracks dynamic surface height reported by the guest renderer frame. */
+  readonly dynamicHeight = signal<number | null>(null);
 
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
@@ -110,5 +129,54 @@ export class RenderedFrame {
       const theme = this.configProvider.themePreference();
       this.hostCommunication.sendTheme(theme);
     });
+
+    // Outbound payload dispatch: forwards updated A2UI declarative JSON payloads
+    // from the host/parent component to the renderer iframe over postMessage whenever
+    // the payload input signal emits a non-empty array.
+    effect(() => {
+      const payload = this.payload();
+      if (payload !== null && Array.isArray(payload) && payload.length > 0) {
+        this.hostCommunication.sendRenderA2UI(payload);
+      }
+    });
+
+    // Inbound bridge listener: handles lifecycle signals and dynamic layout updates
+    // received from the renderer iframe:
+    // 1. RENDERER_READY / A2UI_CATALOG: Resolves startup race conditions by flushing
+    //    the current untracked payload as soon as the iframe finishes booting and catalog loading.
+    // 2. SURFACE_RESIZE: Automatically adjusts the iframe container height to fit the rendered
+    //    A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
+    effect(() => {
+      const msgStream = this.hostCommunication?.messageStream;
+      if (typeof msgStream === 'function') {
+        const envelope = msgStream();
+        if (envelope) {
+          if (
+            envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
+            envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
+          ) {
+            const payload = untracked(() => this.payload());
+            if (payload !== null && Array.isArray(payload) && payload.length > 0) {
+              this.hostCommunication.sendRenderA2UI(payload);
+            }
+          } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
+            if (CrossFrameValidator.validateIncomingMessage(envelope)) {
+              const resizePayload = envelope.payload as {height: number; width?: number};
+              this.dynamicHeight.set(resizePayload.height);
+            }
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Dispatches the active A2UI payload to the renderer iframe once the DOM iframe element finishes loading.
+   */
+  protected syncPayloadOnIframeLoad(): void {
+    const payload = this.payload();
+    if (payload !== null && Array.isArray(payload) && payload.length > 0) {
+      this.hostCommunication.sendRenderA2UI(payload);
+    }
   }
 }

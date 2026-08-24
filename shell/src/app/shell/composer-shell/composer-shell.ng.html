@@ -105,6 +105,21 @@
       </a>
       <a
         mat-list-item
+        routerLink="/a2a"
+        routerLinkActive="active-nav-item"
+        aria-label="A2A Agent Testing"
+        matTooltip="A2A Agent Testing"
+        matTooltipPosition="right"
+        [matTooltipDisabled]="!isCollapsed()"
+        (click)="ensureCollapsed()"
+      >
+        <mat-icon matListItemIcon aria-hidden="true">smart_toy</mat-icon>
+        @if (!isCollapsed()) {
+          <span class="nav-label">A2A Agent Testing</span>
+        }
+      </a>
+      <a
+        mat-list-item
         routerLink="/settings"
         routerLinkActive="active-nav-item"
         aria-label="Settings"

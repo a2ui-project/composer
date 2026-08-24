@@ -40,6 +40,12 @@ export const routes: Routes = [
         canActivate: [startupGuard],
       },
       {
+        path: 'a2a',
+        loadComponent: () => import('./agent-chat/a2a-chat-view').then(m => m.A2aChatView),
+        title: 'A2A Agent Testing - A2UI Composer',
+        canActivate: [startupGuard],
+      },
+      {
         path: 'settings',
         loadComponent: () => import('./settings/settings-view/settings').then(m => m.Settings),
         title: 'A2UI Composer Settings',

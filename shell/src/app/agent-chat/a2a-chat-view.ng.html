@@ -1,0 +1,113 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="a2a-chat-view-root">
+  <a2ui-composer-agent-header
+    [agentInfo]="agentInfo()"
+    [agentCard]="agentCard()"
+    [activeTaskId]="activeTaskId()"
+    [sessionId]="activeContextId()"
+    [isInspectorOpen]="isInspectorOpen()"
+    (toggleInspector)="toggleInspectorDrawer()"
+    (resetSession)="resetActiveSession()"
+    (openSettings)="openConfigPanel()"
+  ></a2ui-composer-agent-header>
+
+  <main
+    class="chat-main-layout"
+    [class.with-inspector]="isInspectorOpen()"
+    [class.with-canvas]="isCanvasOpen()"
+  >
+    <!-- Left Conversation Stream Area -->
+    <div class="chat-viewport-column">
+      <div class="history-wrapper">
+        <a2ui-composer-chat-history
+          [messages]="messages()"
+          [agentInfo]="agentInfo()"
+          [isStreaming]="isStreaming()"
+          [isConnecting]="isConnecting()"
+          [endpoint]="configProvider.a2aAgentUrl() || ''"
+          [isCanvasOpen]="isCanvasOpen()"
+          (samplePromptClicked)="submitSamplePrompt($event)"
+          (openCanvas)="openCanvasSurface($event)"
+          (closeCanvas)="closeCanvasSurface()"
+          (openInspector)="toggleInspectorDrawer()"
+        ></a2ui-composer-chat-history>
+      </div>
+
+      <div class="input-wrapper">
+        <a2ui-composer-input-area
+          [isStreaming]="isStreaming()"
+          [disabled]="isConnecting()"
+          (sendMessage)="sendUserMessage($event)"
+          (stopGeneration)="cancelActiveGeneration()"
+        ></a2ui-composer-input-area>
+      </div>
+    </div>
+
+    <!-- Center Canvas Viewport (Opened only when View in Canvas is clicked) -->
+    @if (isCanvasOpen()) {
+      <div class="side-canvas-column">
+        <div class="side-canvas-header">
+          <div class="canvas-title">
+            <mat-icon class="canvas-icon">dashboard_customize</mat-icon>
+            <h3>A2UI Surface Canvas</h3>
+          </div>
+          <button
+            mat-icon-button
+            type="button"
+            (click)="closeCanvasSurface()"
+            matTooltip="Close Canvas Preview"
+            aria-label="Close Canvas Preview"
+          >
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+        <div class="side-canvas-viewport">
+          <a2ui-composer-rendered-frame
+            [payload]="activeCanvasPayload()"
+          ></a2ui-composer-rendered-frame>
+        </div>
+      </div>
+    }
+
+    <!-- Right Inspector Side Drawer -->
+    @if (isInspectorOpen()) {
+      <div class="inspector-column">
+        <a2ui-composer-message-inspector
+          [events]="inspectorEvents()"
+          (closeDrawer)="toggleInspectorDrawer()"
+          (clearEvents)="clearInspectorEvents()"
+        ></a2ui-composer-message-inspector>
+      </div>
+    }
+  </main>
+
+  <!-- Agent Configuration Modal Dialog -->
+  @if (isConfigPanelOpen()) {
+    <a2ui-composer-agent-config-panel
+      [initialEndpoint]="configProvider.a2aAgentUrl()"
+      [initialTenantId]="configProvider.a2aTenantId()"
+      [initialBackendMode]="configProvider.a2aBackendMode()"
+      [isConnecting]="isConnecting()"
+      [connectionError]="connectionError()"
+      [canCancel]="!!agentCard()"
+      (saveAndConnect)="saveAgentConfiguration($event)"
+      (clearConfig)="clearAgentConfiguration()"
+      (dismissPanel)="isConfigPanelOpen.set(false)"
+    ></a2ui-composer-agent-config-panel>
+  }
+</div>

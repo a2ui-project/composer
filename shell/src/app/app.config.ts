@@ -29,6 +29,8 @@ import {AppConfigProvider} from './settings/app-config-provider/app-config-provi
 import {LocalStorageAppConfigProvider} from './settings/local-storage-config-provider/local-storage-config.provider';
 import {LlmClient} from './chat/llm-client/llm-client';
 import {Standalone3pLlmClient} from './chat/llm-client/standalone-3p-llm-client';
+import {A2A_TRANSPORT} from './chat/a2a/a2a-transport.token';
+import {Standard3pA2aTransport} from './chat/a2a/standard-3p-a2a-transport';
 import {USAGE_TRACKING_CONFIG, UsageTrackingService} from './usage-tracking/usage-tracking.service';
 import {Ga4UsageTrackingService} from './usage-tracking/ga4-usage-tracking.service';
 import {NoopUsageTrackingService} from './usage-tracking/noop-usage-tracking.service';
@@ -62,6 +64,11 @@ export const appConfig: ApplicationConfig = {
     {
       provide: AppConfigProvider,
       useExisting: LocalStorageAppConfigProvider,
+    },
+    Standard3pA2aTransport,
+    {
+      provide: A2A_TRANSPORT,
+      useExisting: Standard3pA2aTransport,
     },
     {
       provide: LlmClient,
