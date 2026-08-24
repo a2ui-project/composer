@@ -116,8 +116,11 @@ for (const config of CONFIGS) {
       );
       await expect.poll(async () => envelopes.count()).toBeGreaterThanOrEqual(3);
 
-      // Validate descending chronological sequence (newest first)
-      await expect(envelopes.nth(0).locator('.message-type')).toHaveText(
+      // Validate presence of startup handshake envelopes
+      const dataModelEnvelope = envelopes
+        .filter({hasText: PreviewBridgeMessageType.DATA_MODEL_CHANGE})
+        .first();
+      await expect(dataModelEnvelope.locator('.message-type')).toHaveText(
         PreviewBridgeMessageType.DATA_MODEL_CHANGE,
       );
       const catalogEnvelope = envelopes

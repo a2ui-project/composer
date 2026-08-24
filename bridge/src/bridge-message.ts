@@ -30,6 +30,12 @@ export enum PreviewBridgeMessageType {
   SEND_TO_SERVER = 'SEND_TO_SERVER',
   SET_BLOCKING_STATE = 'SET_BLOCKING_STATE',
   SET_THEME = 'SET_THEME',
+  /**
+   * Dispatched from the preview iframe to the host container whenever the rendered content's
+   * dimensions change. Enables the host to dynamically resize the iframe container to fit
+   * the exact content height, preventing inner scrollbars or clipping.
+   */
+  SURFACE_RESIZE = 'SURFACE_RESIZE',
 }
 
 /** Enum representing the supported theme preference modes. */
@@ -41,6 +47,20 @@ export enum ThemePreference {
 /** Payload for SET_THEME message type. */
 export declare interface SetThemePayload {
   theme: ThemePreference;
+}
+
+/**
+ * Payload for the SURFACE_RESIZE message type.
+ * Contains the measured scroll/offset dimensions of the rendered A2UI surface.
+ */
+export declare interface SurfaceResizePayload {
+  /** The computed content height in pixels. */
+  height: number;
+  /**
+   * The computed content width in pixels. Optional because the host container
+   * typically controls horizontal width (100%), but available for fixed/floating surfaces.
+   */
+  width?: number;
 }
 
 /**

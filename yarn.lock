@@ -5088,6 +5088,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/dompurify@npm:3.2.0":
+  version: 3.2.0
+  resolution: "@types/dompurify@npm:3.2.0"
+  dependencies:
+    dompurify: "npm:*"
+  checksum: 10c0/e83fec586ffbb1b43f7c8479f2a99c223814d240db912d53fb126aaeea52a4091deceeb75632b5d76004d88ef0fbf444984887b121dece6fa69f4172ed4b2b07
+  languageName: node
+  linkType: hard
+
 "@types/eslint-scope@npm:^3.7.7":
   version: 3.7.7
   resolution: "@types/eslint-scope@npm:3.7.7"
@@ -5945,14 +5954,17 @@ __metadata:
     "@google/genai": "npm:2.11.0"
     "@monaco-editor/loader": "npm:1.7.0"
     "@playwright/test": "npm:1.61.1"
+    "@types/dompurify": "npm:3.2.0"
     "@types/jsdom": "npm:28.0.3"
     "@vitest/coverage-v8": "npm:4.1.10"
     a2ui-bridge: "npm:0.1.0"
     angular-eslint: "npm:22.1.0"
     dockview: "npm:7.0.3"
+    dompurify: "npm:3.4.14"
     eslint: "npm:10.7.0"
     jsdom: "npm:29.1.1"
     lit-basic-catalog: "npm:0.1.0"
+    marked: "npm:18.0.11"
     monaco-editor: "npm:0.56.0"
     ng-basic-catalog: "npm:0.1.0"
     prettier: "npm:3.9.6"
@@ -7196,6 +7208,18 @@ __metadata:
   dependencies:
     domelementtype: "npm:^2.3.0"
   checksum: 10c0/bba1e5932b3e196ad6862286d76adc89a0dbf0c773e5ced1eb01f9af930c50093a084eff14b8de5ea60b895c56a04d5de8bbc4930c5543d029091916770b2d2a
+  languageName: node
+  linkType: hard
+
+"dompurify@npm:*, dompurify@npm:3.4.14":
+  version: 3.4.14
+  resolution: "dompurify@npm:3.4.14"
+  dependencies:
+    "@types/trusted-types": "npm:^2.0.7"
+  dependenciesMeta:
+    "@types/trusted-types":
+      optional: true
+  checksum: 10c0/feca07ece3805d1d4e33e847c11196888dcdc97b2afe0bb8a2fd11de4e62bfdc434c2403ee3fb3c7771e903325041d062febec6c5518796391fdc0419a90a873
   languageName: node
   linkType: hard
 
@@ -9623,6 +9647,15 @@ __metadata:
   bin:
     marked: bin/marked.js
   checksum: 10c0/57a47cb110f7b1a10f398b0a7236f9183aad2dcd5345ee73f2732b6387e585d04cef472bc655d2f84c542296be9728e179aebe3ed7f2f8666b8a0a9dae592876
+  languageName: node
+  linkType: hard
+
+"marked@npm:18.0.11":
+  version: 18.0.11
+  resolution: "marked@npm:18.0.11"
+  bin:
+    marked: bin/marked.js
+  checksum: 10c0/6c2a2bea05974f08f869d591a8eb6aa7fe68e56edbfe74c2d15eea3b85d45aabfea9dada6914d6f4a7917d612059b64eb8b9e5fd190c74ad8ab79c1f48a249b3
   languageName: node
   linkType: hard
 

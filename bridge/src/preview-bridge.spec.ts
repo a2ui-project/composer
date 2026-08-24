@@ -2281,4 +2281,45 @@ describe('PreviewBridge Core API Runtime', () => {
       );
     });
   });
+
+  describe('Surface Dimension & Dynamic Height Synchronization', () => {
+    it('dispatches SURFACE_RESIZE with computed dimensions', () => {
+      const spy = vi.spyOn(window.parent, 'postMessage');
+
+      Object.defineProperty(document.body, 'scrollHeight', {value: 450, configurable: true});
+      Object.defineProperty(document.body, 'scrollWidth', {value: 800, configurable: true});
+
+      bridge.dispatchSurfaceResize();
+
+      expect(spy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.SURFACE_RESIZE,
+          payload: {
+            height: 450,
+            width: 800,
+          },
+        },
+        window.location.origin || '*',
+      );
+    });
+
+    it('triggers dispatchSurfaceResize upon attachRenderer', () => {
+      const resizeSpy = vi.spyOn(bridge, 'dispatchSurfaceResize');
+      const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+      const processor = {processMessages: vi.fn()};
+
+      bridge.attachRenderer(processor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+      });
+
+      expect(resizeSpy).toHaveBeenCalled();
+    });
+
+    it('cleans up resize observers and event listeners on destroy', () => {
+      const destroySpy = vi.spyOn(bridge['surfaceResizeObserver'], 'destroy');
+      bridge.destroy();
+      expect(destroySpy).toHaveBeenCalled();
+    });
+  });
 });
