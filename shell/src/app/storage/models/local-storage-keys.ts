@@ -42,4 +42,7 @@ export enum LocalStorageKey {
   CUSTOM_RENDERERS = 'a2ui_composer_custom_renderers',
   /** Key for persisting the user selected API key ID. */
   SELECTED_API_KEY = 'a2ui_composer_selected_api_key',
+
+  /** @deprecated Key for retrieving the active workspace prompt in-progress draft content. */
+  ACTIVE_DRAFT = 'a2ui_composer_active_draft',
 }
