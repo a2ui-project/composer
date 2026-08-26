@@ -222,9 +222,27 @@ describe('Standard3pA2aTransport', () => {
       for await (const _ of stream) {
         // iterate
       }
-    }).rejects.toThrow('A2A Service error: 500');
+    }).rejects.toThrow('A2A Service error: 500 Internal Server Error. Internal server error');
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles server error response when reading error text body fails', async () => {
+    const mockResponse = new Response(null, {
+      status: 502,
+      statusText: 'Bad Gateway',
+    });
+    vi.spyOn(mockResponse, 'text').mockRejectedValue(new Error('Stream reading failure'));
+    globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const message: A2aMessage = {role: 'user', parts: [{text: 'Hi'}]};
+    const stream = transport.sendMessageStream('http://localhost:8000', message);
+
+    await expect(async () => {
+      for await (const _ of stream) {
+        // iterate
+      }
+    }).rejects.toThrow('A2A Service error: 502 Bad Gateway. <unable to read response body>');
   });
 
   it('handles abort signal when sending message stream', async () => {

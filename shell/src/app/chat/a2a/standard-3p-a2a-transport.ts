@@ -222,8 +222,10 @@ export class Standard3pA2aTransport implements A2aTransport {
       // If the endpoint failed with a non-routing error (e.g. 500 Server Error, 401 Unauthorized),
       // throw immediately rather than trying other endpoints that would fail identically.
       if (res.status !== 404 && res.status !== 405) {
-        const errorText = await res.text().catch(() => '');
-        throw new Error(`A2A Service error: ${res.status} ${res.statusText}. ${errorText}`);
+        const errorText = await res.text().catch(() => '<unable to read response body>');
+        throw new Error(
+          `A2A Service error: ${res.status} ${res.statusText}${errorText ? `. ${errorText}` : ''}`,
+        );
       }
     }
 
