@@ -18,7 +18,7 @@
  * Formats an epoch timestamp (in milliseconds) into localized "HH:mm:ss.SSS" format.
  *
  * @param epoch The timestamp in milliseconds.
- * @returns Formatted localized timezone-safe time string.
+ * @return Formatted localized timezone-safe time string.
  */
 export function formatTimestamp(epoch: number): string {
   const date = new Date(epoch);

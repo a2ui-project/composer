@@ -144,7 +144,7 @@ export abstract class LlmClient {
    *
    * @param messages The accumulated sequence of messages representing the turn
    *   history.
-   * @returns A promise resolving to the final complete model response segment.
+   * @return A promise resolving to the final complete model response segment.
    */
   abstract chat(messages: LlmMessage[]): Promise<LlmResponse>;
 
@@ -154,7 +154,7 @@ export abstract class LlmClient {
    *
    * @param messages The accumulated sequence of messages representing the turn
    *   history.
-   * @returns A promise resolving to an active stream response boundary
+   * @return A promise resolving to an active stream response boundary
    *   interface.
    */
   abstract chatStream(messages: LlmMessage[]): Promise<LlmStreamResponse>;

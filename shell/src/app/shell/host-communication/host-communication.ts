@@ -85,7 +85,7 @@ export class HostCommunication implements OnDestroy {
 
   /**
    * Retrieves a snapshot copy of the recent message history buffer.
-   * @returns Array of stored message envelopes
+   * @return Array of stored message envelopes
    */
   getHistoryBuffer(): MessageEnvelope[] {
     return [...this.messageHistoryBuffer];
@@ -93,7 +93,7 @@ export class HostCommunication implements OnDestroy {
 
   /**
    * Retrieves the most recent catalog message envelope received from the preview frame.
-   * @returns Latest catalog envelope or null if none received
+   * @return Latest catalog envelope or null if none received
    */
   getLatestCatalog(): MessageEnvelope | null {
     return this.latestCatalogEnvelope;
@@ -292,7 +292,7 @@ export class HostCommunication implements OnDestroy {
 
   /**
    * Retrieves the currently registered iframe element, if any.
-   * @returns HTMLIFrameElement or null
+   * @return HTMLIFrameElement or null
    */
   getIframeElement(): HTMLIFrameElement | null {
     return this.iframeElement;

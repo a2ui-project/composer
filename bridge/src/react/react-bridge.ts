@@ -45,7 +45,7 @@ export interface ReactSandboxOptions {
  *
  * @param catalogs The array of component catalogs matching A2UI specifications.
  * @param options Optional configuration payloads.
- * @returns A reactive state object containing the active surface drawing model.
+ * @return A reactive state object containing the active surface drawing model.
  */
 export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
   catalogs: Catalog<C>[],

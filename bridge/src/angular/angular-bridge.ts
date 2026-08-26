@@ -131,7 +131,7 @@ export class A2uiSandboxConnection implements OnDestroy {
  *
  * @param catalogsClasses The array of catalog component provider classes (e.g. BasicCatalog) to register and manage.
  * @param options Optional configuration adapter block holding local catalogJson and markdownRendererFn hook delegates.
- * @returns Angular EnvironmentProviders ready for modern standalone bootstrapping application scopes.
+ * @return Angular EnvironmentProviders ready for modern standalone bootstrapping application scopes.
  */
 export function provideA2uiSandbox(
   catalogsClasses: Array<Type<Catalog<ComponentApi>>>,

@@ -21,7 +21,7 @@
  * falls back to `crypto.getRandomValues()` with RFC4122 v4 bit manipulation,
  * and falls back to a `Math.random()` pseudo-random generator in legacy or non-secure HTTP contexts.
  *
- * @returns An RFC4122 v4 UUID string.
+ * @return An RFC4122 v4 UUID string.
  */
 export function generateUuid(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') {

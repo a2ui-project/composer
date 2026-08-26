@@ -129,7 +129,7 @@ const CATEGORIES_ORDER = ['Layout', 'Content', 'Input', 'Feedback', 'Other'];
  * Resolves the visual category for a component using rule-based keyword mapping.
  *
  * @param key The component key.
- * @returns The category string (e.g. 'Layout', 'Content', 'Input', 'Feedback', 'Other').
+ * @return The category string (e.g. 'Layout', 'Content', 'Input', 'Feedback', 'Other').
  */
 function getCategoryForComponent(key: string): string {
   const lowerKey = key.toLowerCase();

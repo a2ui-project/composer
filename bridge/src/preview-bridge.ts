@@ -211,7 +211,7 @@ export class PreviewBridge {
    *
    * @param processor The framework-specific message processor.
    * @param config The configuration object containing the surface group and lifecycle callbacks.
-   * @returns A subscription handle to detach the renderer and clean up surface connections.
+   * @return A subscription handle to detach the renderer and clean up surface connections.
    */
   attachRenderer(processor: RendererProcessor, config: RendererConfig): SurfaceStateSubscription {
     if (!config) {
@@ -583,7 +583,7 @@ export class PreviewBridge {
    * duplicate listeners and memory leaks during tab switching or hot-reloading.
    *
    * @param surfaceGroup The surface group or catalog renderer service model to connect.
-   * @returns A unified teardown handle exposing a single unsubscribe method to cleanly reclaim all child observers.
+   * @return A unified teardown handle exposing a single unsubscribe method to cleanly reclaim all child observers.
    */
   private connectSurfaceGroup(surfaceGroup: SurfaceGroupLike): {unsubscribe(): void} {
     const subscriptions = new Map<string, {unsubscribe(): void}>();

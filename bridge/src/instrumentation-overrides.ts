@@ -50,7 +50,7 @@ let rejectionHandler: ((event: PromiseRejectionEvent) => void) | null;
  *
  * @param obj The value or object to safely clone.
  * @param ancestors A set of ancestor object references used to track and prevent circular references during recursion.
- * @returns A safe, deep-cloned representation of the input value.
+ * @return A safe, deep-cloned representation of the input value.
  */
 function deepCloneSafe(obj: unknown, ancestors: Set<unknown> = new Set<unknown>()): unknown {
   if (obj instanceof Error) {

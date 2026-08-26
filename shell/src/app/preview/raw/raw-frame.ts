@@ -186,7 +186,7 @@ export class RawFrame {
    * If parsing fails, it throws a SyntaxError (which callers are expected to catch).
    *
    * @param value The raw layout string to parse.
-   * @returns An array of parsed JSON objects (or empty array if input is empty).
+   * @return An array of parsed JSON objects (or empty array if input is empty).
    */
   private parseLayoutString(value: string): unknown[] | null {
     const trimmed = value.trim();

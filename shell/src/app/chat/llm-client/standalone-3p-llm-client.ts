@@ -121,7 +121,7 @@ export class Standalone3pLlmClient extends LlmClient {
    * configurations.
    *
    * @param messages The sequence of messages representing the turn history.
-   * @returns A promise resolving to the completed response content envelope.
+   * @return A promise resolving to the completed response content envelope.
    */
   override async chat(messages: LlmMessage[]): Promise<LlmResponse> {
     const stream = await this.chatStream(messages);

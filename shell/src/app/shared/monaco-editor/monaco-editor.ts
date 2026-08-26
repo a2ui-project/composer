@@ -234,7 +234,7 @@ export class MonacoEditor {
    *
    * @param layoutSchema The dynamically generated schema representing the full A2UI layout
    *        structure, including the active catalog's components.
-   * @returns An array of schemas configured with URIs that match `$ref` references
+   * @return An array of schemas configured with URIs that match `$ref` references
    *          within the component schemas. We map local constants (like COMMON_TYPES_SCHEMA)
    *          to both `file:///` and HTTP URIs so the Monaco JSON worker can resolve them
    *          synchronously without needing an external schema request service.

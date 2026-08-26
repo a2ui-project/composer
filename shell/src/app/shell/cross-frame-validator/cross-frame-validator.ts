@@ -38,7 +38,7 @@ export class CrossFrameValidator {
    *
    * @param message The outgoing message object to validate.
    * @param errors An optional array to collect validation error messages.
-   * @returns `true` if the message is valid, `false` otherwise.
+   * @return `true` if the message is valid, `false` otherwise.
    */
   static validateOutgoingMessage(message: unknown, errors?: string[]): boolean {
     if (!message || typeof message !== 'object' || Array.isArray(message)) {
