@@ -188,8 +188,8 @@ export class CrossFrameValidator {
       }
 
       default: {
-        console.warn(`Unrecognized message type: ${msgType}`);
-        return true;
+        CrossFrameValidator.recordError(`Unrecognized message type: ${String(msgType)}`, errors);
+        return false;
       }
     }
   }
@@ -255,7 +255,11 @@ export class CrossFrameValidator {
       }
 
       default: {
-        return true;
+        CrossFrameValidator.recordError(
+          `Unrecognized incoming message type: ${String(msgType)}`,
+          errors,
+        );
+        return false;
       }
     }
   }

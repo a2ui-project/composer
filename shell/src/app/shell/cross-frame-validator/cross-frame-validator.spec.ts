@@ -20,11 +20,9 @@ import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 
 describe('CrossFrameValidator', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
-  let warnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -827,12 +825,18 @@ describe('CrossFrameValidator', () => {
   });
 
   describe('Unrecognized Message Types', () => {
-    it('logs warning and returns true for unrecognized message type', () => {
+    it('logs error and returns false for unrecognized outgoing message type', () => {
       expect(
         CrossFrameValidator.validateOutgoingMessage({type: 'UNKNOWN_EVENT', payload: 123}),
-      ).toBe(true);
-      expect(warnSpy).toHaveBeenCalledWith('Unrecognized message type: UNKNOWN_EVENT');
-      expect(errorSpy).not.toHaveBeenCalled();
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith('Unrecognized message type: UNKNOWN_EVENT');
+    });
+
+    it('logs error and returns false for unrecognized incoming message type', () => {
+      expect(
+        CrossFrameValidator.validateIncomingMessage({type: 'UNKNOWN_EVENT', payload: 123}),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith('Unrecognized incoming message type: UNKNOWN_EVENT');
     });
   });
 
