@@ -155,7 +155,7 @@
         margin-top: 12px;
 
         .clear-address-btn {
-          color: #5f6368;
+          color: var(--mat-sys-on-surface-variant, #5f6368);
           font-size: 0.82rem;
           display: inline-flex;
           align-items: center;
@@ -173,13 +173,13 @@
         }
 
         .cancel-btn {
-          color: #5f6368;
+          color: var(--mat-sys-on-surface-variant, #5f6368);
           font-size: 0.85rem;
         }
 
         .save-btn {
-          background: #6750a4;
-          color: #ffffff;
+          background: var(--mat-sys-primary, #6750a4);
+          color: var(--mat-sys-on-primary, #ffffff);
           border-radius: 20px;
           padding: 0 20px;
           height: 38px;
@@ -190,12 +190,12 @@
           gap: 8px;
 
           .btn-spinner {
-            --mdc-circular-progress-active-indicator-color: #ffffff;
+            --mdc-circular-progress-active-indicator-color: var(--mat-sys-on-primary, #ffffff);
           }
 
           &:disabled {
-            background: #e0e0e0;
-            color: #9e9e9e;
+            background: var(--mat-sys-surface-container-highest, #e0e0e0);
+            color: var(--mat-sys-on-surface-variant, #9e9e9e);
           }
         }
       }
