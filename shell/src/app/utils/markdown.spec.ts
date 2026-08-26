@@ -64,6 +64,13 @@ describe('Markdown Engine', () => {
         '<a href="https://google.com" title="Google Site" target="_blank" rel="noopener noreferrer">Google</a>',
       );
     });
+
+    it('sanitizes dangerous link URLs and escapes quotes in title attributes', () => {
+      const mdWithXss = '[Attack](javascript:alert(1) "Evil \\"quotes\\" & title")';
+      const html = renderInlineMarkdown(mdWithXss);
+      expect(html).toContain('href="#"');
+      expect(html).toContain('title="Evil &quot;quotes&quot; &amp; title"');
+    });
   });
 
   describe('renderMarkdown', () => {
