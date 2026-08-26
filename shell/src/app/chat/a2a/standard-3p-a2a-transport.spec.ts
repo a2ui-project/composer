@@ -91,6 +91,20 @@ describe('Standard3pA2aTransport', () => {
     await expect(transport.getAgentCard('http://localhost:8000')).rejects.toThrow('Network error');
   });
 
+  it('handles null JSON response when discovering AgentCard', async () => {
+    globalThis.fetch = vi.fn().mockImplementation(
+      async () =>
+        new Response(JSON.stringify(null), {
+          status: 200,
+          headers: {'Content-Type': 'application/json'},
+        }),
+    );
+
+    await expect(transport.getAgentCard('http://localhost:8000')).rejects.toThrow(
+      'Failed to retrieve AgentCard',
+    );
+  });
+
   it('streams TaskStatusUpdateEvents over SSE with X-A2A-Tenant header and skips invalid json', async () => {
     let capturedHeaders: Record<string, string> = {};
     let capturedBody: unknown = null;
@@ -98,6 +112,8 @@ describe('Standard3pA2aTransport', () => {
     const sseChunks = [
       'data:\n\n', // Empty line
       'data: invalid-json-block\n\n',
+      'data: null\n\n', // Null literal JSON
+      'data: 12345\n\n', // Primitive literal JSON
       'data: {"taskId": "task-1", "message": {"role": "agent", "parts": [{"text": "Hello standard"}]}}\n\n',
       'data: [DONE]\n\n',
     ].join('');

@@ -98,12 +98,14 @@ export class Standard3pA2aTransport implements A2aTransport {
         });
         if (response.ok) {
           const data = (await response.json()) as ({agentCard?: AgentCard} & AgentCard) | null;
-          const card = data?.agentCard || data;
-          if (card && typeof card === 'object' && typeof card.name === 'string') {
-            if (card.url && typeof card.url === 'string') {
-              this.endpointCache.set(baseUrl, card.url);
+          if (data && typeof data === 'object') {
+            const card = data.agentCard || data;
+            if (typeof card === 'object' && card !== null && typeof card.name === 'string') {
+              if (card.url && typeof card.url === 'string') {
+                this.endpointCache.set(baseUrl, card.url);
+              }
+              return card;
             }
-            return card;
           }
         }
       } catch (err: unknown) {
@@ -317,15 +319,19 @@ export class Standard3pA2aTransport implements A2aTransport {
         }
 
         const combinedData = dataLines.join('\n');
-        let parsed: Record<string, unknown>;
+        let parsed: Record<string, unknown> | null = null;
         try {
-          parsed = JSON.parse(combinedData) as Record<string, unknown>;
+          parsed = JSON.parse(combinedData) as Record<string, unknown> | null;
         } catch (err: unknown) {
           console.warn(
             'Failed to parse A2A SSE data chunk:',
             combinedData,
             err instanceof Error ? err.message : String(err),
           );
+          continue;
+        }
+
+        if (!parsed || typeof parsed !== 'object') {
           continue;
         }
 
