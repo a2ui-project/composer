@@ -40,8 +40,7 @@ test.describe('A2aChatMessage Visual Regression & Layout', () => {
     await expect(chatHistory.locator('.agent-badge-name')).toContainText(
       'Smart Travel Planner Agent',
     );
-    await expect(chatHistory.locator('.canvas-artifact-card')).toBeVisible();
-    await expect(chatHistory.locator('.view-canvas-btn')).toBeVisible();
+    await expect(chatHistory.locator('.inline-surface-card')).toBeVisible();
 
     await expect(chatHistory).toHaveScreenshot('chat-conversation-and-surface.png');
   });

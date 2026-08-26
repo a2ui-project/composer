@@ -63,6 +63,8 @@ export class A2aChatHistory implements AfterViewChecked {
   readonly endpoint = input<string>('');
   /** Whether the A2UI surface canvas column is currently visible. */
   readonly isCanvasOpen = input<boolean>(false);
+  /** The currently active Canvas payload displayed in the RHS panel, if any. */
+  readonly activeCanvasPayload = input<RenderA2uiItem[] | null>(null);
 
   /** Emitted when the user clicks a sample prompt chip in the welcome showcase. */
   readonly samplePromptClicked = output<string>();

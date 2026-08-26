@@ -60,6 +60,12 @@ export class RenderedFrame {
   /** Tracks dynamic surface height reported by the guest renderer frame. */
   readonly dynamicHeight = signal<number | null>(null);
 
+  /** Computed pixel height string or 100% when rendered within dynamic/inline layout contexts. */
+  readonly frameHeight = computed(() => {
+    const h = this.dynamicHeight();
+    return h && h > 0 ? h : null;
+  });
+
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
@@ -136,7 +142,7 @@ export class RenderedFrame {
     effect(() => {
       const payload = this.payload();
       if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-        this.hostCommunication.sendRenderA2UI(payload);
+        this.sendPayloadToIframe(payload);
       }
     });
 
@@ -157,7 +163,7 @@ export class RenderedFrame {
           ) {
             const payload = untracked(() => this.payload());
             if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-              this.hostCommunication.sendRenderA2UI(payload);
+              this.sendPayloadToIframe(payload);
             }
           } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
             if (CrossFrameValidator.validateIncomingMessage(envelope)) {
@@ -170,13 +176,41 @@ export class RenderedFrame {
     });
   }
 
+  private sendPayloadToIframe(payload: unknown[]): void {
+    const frame = this.iframeRef()?.nativeElement;
+    const targetWindow = frame?.contentWindow;
+    if (targetWindow) {
+      const expectedUrl =
+        typeof this.startupResolution?.getResolvedRendererUrl === 'function'
+          ? this.startupResolution.getResolvedRendererUrl()
+          : typeof this.startupResolution?.resolvedUrl === 'function'
+            ? this.startupResolution.resolvedUrl()
+            : null;
+      if (expectedUrl) {
+        try {
+          const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
+          targetWindow.postMessage(
+            {
+              type: PreviewBridgeMessageType.RENDER_A2UI,
+              payload,
+            },
+            targetOrigin,
+          );
+        } catch (e) {
+          console.warn('Failed to postMessage to iframe:', e);
+        }
+      }
+    }
+    this.hostCommunication.sendRenderA2UI(payload);
+  }
+
   /**
    * Dispatches the active A2UI payload to the renderer iframe once the DOM iframe element finishes loading.
    */
   protected syncPayloadOnIframeLoad(): void {
     const payload = this.payload();
     if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-      this.hostCommunication.sendRenderA2UI(payload);
+      this.sendPayloadToIframe(payload);
     }
   }
 }

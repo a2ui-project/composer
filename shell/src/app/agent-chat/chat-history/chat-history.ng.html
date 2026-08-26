@@ -85,6 +85,7 @@
           [agentIconUrl]="getAgentIconUrl()"
           [agentName]="getAgentDisplayName()"
           [isCanvasOpen]="isCanvasOpen()"
+          [activeCanvasPayload]="activeCanvasPayload()"
           (openCanvas)="openCanvas.emit($event)"
           (closeCanvas)="closeCanvas.emit()"
           (openInspector)="openInspector.emit()"

@@ -22,7 +22,7 @@ import {
   TaskStatusUpdateEvent,
 } from '../../chat/a2a/a2a-types';
 import {generateUuid as uuid} from '../../utils/uuid';
-import {InspectorEvent, UiAgentInfo} from '../types';
+import {CanvasArtifact, InspectorEvent, UiAgentInfo} from '../types';
 
 /**
  * Default fallback icon URL for A2A Agents.
@@ -140,17 +140,236 @@ export function createErrorEvent(err: unknown): InspectorEvent {
   };
 }
 
+interface ExtractedCanvasInfo {
+  isCanvas: boolean;
+  cardTitle?: string;
+  cardDescription?: string;
+  cardIcon?: string;
+  autoOpen?: boolean;
+  childIds: string[];
+}
+
+function extractStringProp(val: unknown): string | undefined {
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object' && val !== null) {
+    const obj = val as Record<string, unknown>;
+    if (typeof obj['literalString'] === 'string') return obj['literalString'];
+    if (typeof obj['path'] === 'string') return obj['path'];
+  }
+  return undefined;
+}
+
+function extractBooleanProp(val: unknown, defaultVal: boolean): boolean {
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'string') {
+    if (val.toLowerCase() === 'true') return true;
+    if (val.toLowerCase() === 'false') return false;
+  }
+  if (typeof val === 'object' && val !== null) {
+    const obj = val as Record<string, unknown>;
+    if (typeof obj['literalBoolean'] === 'boolean') return obj['literalBoolean'];
+    if (typeof obj['literalBoolean'] === 'string') {
+      return obj['literalBoolean'].toLowerCase() === 'true';
+    }
+  }
+  return defaultVal;
+}
+
+function getCanvasInfo(c: unknown): ExtractedCanvasInfo {
+  if (!c || typeof c !== 'object') {
+    return {isCanvas: false, childIds: []};
+  }
+  const obj = c as Record<string, unknown>;
+  const compVal = obj['component'];
+
+  // Flat / legacy string format: { component: "Canvas", children: [...], cardTitle: "...", cardDescription: "...", cardIcon: "...", autoOpen: ... }
+  if (typeof compVal === 'string' && compVal.toLowerCase() === 'canvas') {
+    const cardTitle =
+      extractStringProp(obj['cardTitle']) ||
+      extractStringProp(obj['title']) ||
+      extractStringProp(obj['label']) ||
+      extractStringProp(obj['name']);
+    const cardDescription =
+      extractStringProp(obj['cardDescription']) || extractStringProp(obj['description']);
+    const cardIcon = extractStringProp(obj['cardIcon']) || extractStringProp(obj['icon']);
+    const autoOpen = 'autoOpen' in obj ? extractBooleanProp(obj['autoOpen'], true) : undefined;
+
+    const childVal = obj['children'] || obj['child'] || obj['content'] || obj['items'];
+    const childIds = Array.isArray(childVal)
+      ? childVal.map(item =>
+          typeof item === 'string'
+            ? item
+            : String((item as Record<string, unknown>)?.['id'] || item),
+        )
+      : typeof childVal === 'string'
+        ? [childVal]
+        : [];
+    return {
+      isCanvas: true,
+      cardTitle,
+      cardDescription,
+      cardIcon,
+      autoOpen,
+      childIds,
+    };
+  }
+
+  // Standard v0.9 object mapping: { component: { Canvas: { children: [...], cardTitle: "...", cardDescription: "...", cardIcon: "...", autoOpen: ... } } }
+  if (typeof compVal === 'object' && compVal !== null) {
+    const compRecord = compVal as Record<string, unknown>;
+    for (const key of Object.keys(compRecord)) {
+      if (key.toLowerCase() === 'canvas') {
+        const canvasProps = (compRecord[key] as Record<string, unknown>) || {};
+        const cardTitle =
+          extractStringProp(canvasProps['cardTitle']) ||
+          extractStringProp(canvasProps['title']) ||
+          extractStringProp(canvasProps['label']) ||
+          extractStringProp(canvasProps['name']) ||
+          extractStringProp(obj['cardTitle']) ||
+          extractStringProp(obj['title']);
+        const cardDescription =
+          extractStringProp(canvasProps['cardDescription']) ||
+          extractStringProp(canvasProps['description']) ||
+          extractStringProp(obj['cardDescription']);
+        const cardIcon =
+          extractStringProp(canvasProps['cardIcon']) ||
+          extractStringProp(canvasProps['icon']) ||
+          extractStringProp(obj['cardIcon']);
+        const autoOpen =
+          'autoOpen' in canvasProps
+            ? extractBooleanProp(canvasProps['autoOpen'], true)
+            : 'autoOpen' in obj
+              ? extractBooleanProp(obj['autoOpen'], true)
+              : undefined;
+
+        const childVal =
+          canvasProps['children'] ||
+          canvasProps['child'] ||
+          canvasProps['content'] ||
+          canvasProps['items'] ||
+          obj['children'] ||
+          obj['child'];
+        const childIds = Array.isArray(childVal)
+          ? childVal.map(item =>
+              typeof item === 'string'
+                ? item
+                : String((item as Record<string, unknown>)?.['id'] || item),
+            )
+          : typeof childVal === 'string'
+            ? [childVal]
+            : [];
+        return {
+          isCanvas: true,
+          cardTitle,
+          cardDescription,
+          cardIcon,
+          autoOpen,
+          childIds,
+        };
+      }
+    }
+  }
+
+  return {isCanvas: false, childIds: []};
+}
+
+function extractChildReferences(comp: Record<string, unknown>): string[] {
+  const refs: string[] = [];
+
+  function collectFrom(val: unknown): void {
+    if (!val) return;
+    if (typeof val === 'string') {
+      refs.push(val);
+    } else if (Array.isArray(val)) {
+      for (const item of val) {
+        if (typeof item === 'string') {
+          refs.push(item);
+        } else if (typeof item === 'object' && item !== null) {
+          collectFrom((item as Record<string, unknown>)['id'] || item);
+        }
+      }
+    } else if (typeof val === 'object') {
+      const obj = val as Record<string, unknown>;
+      if ('child' in obj) collectFrom(obj['child']);
+      if ('children' in obj) collectFrom(obj['children']);
+      if ('items' in obj) collectFrom(obj['items']);
+      if ('content' in obj) collectFrom(obj['content']);
+    }
+  }
+
+  collectFrom(comp['child']);
+  collectFrom(comp['children']);
+  collectFrom(comp['items']);
+  collectFrom(comp['content']);
+
+  const compVal = comp['component'];
+  if (typeof compVal === 'object' && compVal !== null) {
+    for (const key of Object.keys(compVal as Record<string, unknown>)) {
+      const props = (compVal as Record<string, unknown>)[key];
+      if (typeof props === 'object' && props !== null) {
+        collectFrom((props as Record<string, unknown>)['child']);
+        collectFrom((props as Record<string, unknown>)['children']);
+        collectFrom((props as Record<string, unknown>)['items']);
+        collectFrom((props as Record<string, unknown>)['content']);
+      }
+    }
+  }
+
+  return refs;
+}
+
+function removeReferences(
+  comp: Record<string, unknown>,
+  idsToRemove: Set<string>,
+): Record<string, unknown> {
+  const cloned = JSON.parse(JSON.stringify(comp)) as Record<string, unknown>;
+
+  function sanitize(obj: Record<string, unknown>): void {
+    if (Array.isArray(obj['children'])) {
+      obj['children'] = obj['children'].filter((item: unknown) => {
+        const id = typeof item === 'string' ? item : (item as Record<string, unknown>)?.['id'];
+        return !idsToRemove.has(String(id));
+      });
+    }
+    if (Array.isArray(obj['items'])) {
+      obj['items'] = obj['items'].filter((item: unknown) => {
+        const id = typeof item === 'string' ? item : (item as Record<string, unknown>)?.['id'];
+        return !idsToRemove.has(String(id));
+      });
+    }
+    if (typeof obj['child'] === 'string' && idsToRemove.has(obj['child'])) {
+      delete obj['child'];
+    }
+  }
+
+  sanitize(cloned);
+  const compVal = cloned['component'];
+  if (typeof compVal === 'object' && compVal !== null) {
+    for (const key of Object.keys(compVal as Record<string, unknown>)) {
+      const props = (compVal as Record<string, unknown>)[key];
+      if (typeof props === 'object' && props !== null) {
+        sanitize(props as Record<string, unknown>);
+      }
+    }
+  }
+
+  return cloned;
+}
+
 /**
- * Checks if a list of A2UI layout items contains any component nodes or canvas.
+ * Checks if a list of A2UI layout items explicitly contains a "Canvas" component node.
  */
 export function hasA2uiCanvasComponent(items: RenderA2uiItem[]): boolean {
   if (!items || !Array.isArray(items) || items.length === 0) return false;
-  return items.some(
-    item =>
-      item.createSurface !== undefined ||
-      item.updateComponents !== undefined ||
-      item.updateDataModel !== undefined,
-  );
+  return items.some(item => {
+    if (item.updateComponents?.components && Array.isArray(item.updateComponents.components)) {
+      return item.updateComponents.components.some(c => getCanvasInfo(c).isCanvas);
+    }
+    if (item.createSurface) {
+      if (getCanvasInfo(item.createSurface).isCanvas) return true;
+    }
+    return getCanvasInfo(item).isCanvas;
+  });
 }
 
 /**
@@ -174,10 +393,200 @@ export function normalizeA2uiItems(items: unknown[]): RenderA2uiItem[] {
 }
 
 /**
+ * Partitioned A2UI surface structure separating inline chat components and RHS canvas subtrees.
+ */
+export interface PartitionedA2uiSurface {
+  /** The surface payload rendered inline in the chat bubble (e.g. List + non-Canvas cards). */
+  inlinePayload: RenderA2uiItem[] | null;
+  /** Array of isolated Canvas artifacts extracted from each Canvas component in the surface. */
+  canvasArtifacts: CanvasArtifact[];
+  /** Whether the surface contains at least one Canvas component. */
+  hasCanvas: boolean;
+}
+
+/**
+ * Partitions a surface's A2UI items into inline components and Canvas preview subtrees.
+ *
+ * Example:
+ * If an A2UI surface contains a List with 9 non-Canvas cards and 1 Canvas component containing a form:
+ * - `inlinePayload` contains the List with the 9 non-Canvas cards.
+ * - `canvasArtifacts` contains individual isolated subtrees for each Canvas component with its metadata.
+ * - `hasCanvas` is set to true.
+ */
+export function partitionA2uiSurfacePayload(items: RenderA2uiItem[]): PartitionedA2uiSurface {
+  const normalized = normalizeA2uiItems(items);
+  if (normalized.length === 0) {
+    return {inlinePayload: null, canvasArtifacts: [], hasCanvas: false};
+  }
+
+  if (!hasA2uiCanvasComponent(normalized)) {
+    return {
+      inlinePayload: normalized,
+      canvasArtifacts: [],
+      hasCanvas: false,
+    };
+  }
+
+  const allComponents: Array<Record<string, unknown>> = [];
+  const createSurfaceItems: RenderA2uiItem[] = [];
+  const updateDataModelItems: RenderA2uiItem[] = [];
+  const otherItems: RenderA2uiItem[] = [];
+
+  for (const item of normalized) {
+    if (item.createSurface) {
+      createSurfaceItems.push(item);
+    }
+    if (item.updateDataModel) {
+      updateDataModelItems.push(item);
+    }
+    if (item.updateComponents?.components && Array.isArray(item.updateComponents.components)) {
+      for (const comp of item.updateComponents.components) {
+        if (typeof comp === 'object' && comp !== null) {
+          allComponents.push(comp as Record<string, unknown>);
+        }
+      }
+    } else if (!item.createSurface && !item.updateDataModel) {
+      otherItems.push(item);
+    }
+  }
+
+  const compMap = new Map<string, Record<string, unknown>>();
+  for (const comp of allComponents) {
+    const id = String(comp['id'] || '');
+    if (id) compMap.set(id, comp);
+  }
+
+  const canvasArtifacts: CanvasArtifact[] = [];
+  const canvasCompIds = new Set<string>();
+  const allCanvasDescendantIds = new Set<string>();
+
+  // Extract each Canvas component into its own CanvasArtifact
+  for (const comp of allComponents) {
+    const info = getCanvasInfo(comp);
+    if (!info.isCanvas) continue;
+
+    const compId = String(comp['id'] || '');
+    if (compId) canvasCompIds.add(compId);
+
+    const childRootIds = new Set<string>(info.childIds);
+    const canvasDescendantIds = new Set<string>(childRootIds);
+    const queue = Array.from(childRootIds);
+
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      allCanvasDescendantIds.add(currentId);
+      const childComp = compMap.get(currentId);
+      if (!childComp) continue;
+
+      const childRefs = extractChildReferences(childComp);
+      for (const ref of childRefs) {
+        if (!canvasDescendantIds.has(ref)) {
+          canvasDescendantIds.add(ref);
+          allCanvasDescendantIds.add(ref);
+          queue.push(ref);
+        }
+      }
+    }
+
+    let canvasComponents = allComponents.filter(c => {
+      const id = String(c['id'] || '');
+      return canvasDescendantIds.has(id);
+    });
+
+    if (canvasComponents.length > 0) {
+      const hasRoot = canvasComponents.some(c => c['id'] === 'root');
+      if (!hasRoot) {
+        if (childRootIds.size === 1) {
+          const rootId = Array.from(childRootIds)[0];
+          canvasComponents = canvasComponents.map(c => {
+            if (c['id'] === rootId) {
+              return {...c, id: 'root'};
+            }
+            return c;
+          });
+        } else if (childRootIds.size > 1) {
+          canvasComponents = [
+            {
+              id: 'root',
+              component: 'Column',
+              children: Array.from(childRootIds),
+            },
+            ...canvasComponents,
+          ];
+        }
+      }
+
+      const individualPayload: RenderA2uiItem[] = [
+        ...createSurfaceItems,
+        ...updateDataModelItems,
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: createSurfaceItems[0]?.createSurface?.surfaceId || 'default',
+            components: canvasComponents as unknown as Array<Record<string, unknown>>,
+          },
+        } as RenderA2uiItem,
+        ...otherItems,
+      ];
+
+      const cardTitle = info.cardTitle || 'Interactive content';
+      const cardDescription = info.cardDescription;
+      const cardIcon = info.cardIcon || 'apps';
+      const autoOpen = info.autoOpen !== undefined ? info.autoOpen : true;
+
+      canvasArtifacts.push({
+        id: compId || `canvas-${canvasArtifacts.length}`,
+        cardTitle,
+        cardDescription,
+        cardIcon,
+        autoOpen,
+        payload: individualPayload,
+      });
+    }
+  }
+
+  // Build Inline Payload (Chat Bubble)
+  const inlineComponents: Array<Record<string, unknown>> = [];
+  for (const comp of allComponents) {
+    const id = String(comp['id'] || '');
+    if (canvasCompIds.has(id) || allCanvasDescendantIds.has(id)) {
+      continue;
+    }
+    const sanitizedComp = removeReferences(comp, canvasCompIds);
+    inlineComponents.push(sanitizedComp);
+  }
+
+  let inlinePayload: RenderA2uiItem[] | null = null;
+  if (inlineComponents.length > 0) {
+    inlinePayload = [
+      ...createSurfaceItems,
+      ...updateDataModelItems,
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: createSurfaceItems[0]?.createSurface?.surfaceId || 'default',
+          components: inlineComponents as unknown as Array<Record<string, unknown>>,
+        },
+      } as RenderA2uiItem,
+      ...otherItems,
+    ];
+  }
+
+  const hasCanvas = canvasArtifacts.length > 0 || hasA2uiCanvasComponent(normalized);
+
+  return {
+    inlinePayload,
+    canvasArtifacts,
+    hasCanvas,
+  };
+}
+
+/**
  * Unwraps or prepares layout items for the live canvas renderer iframe.
  */
 export function unwrapCanvasForRenderer(items: RenderA2uiItem[]): RenderA2uiItem[] {
-  return normalizeA2uiItems(items);
+  const partitioned = partitionA2uiSurfacePayload(items);
+  return partitioned.canvasArtifacts[0]?.payload || normalizeA2uiItems(items);
 }
 
 /**
@@ -241,7 +650,22 @@ export function parseA2aStreamEvent(
           result.thoughtChunk = (result.thoughtChunk || '') + thoughtText;
         }
       } else if (part.text) {
-        result.textChunk = (result.textChunk || '') + part.text;
+        let textContent = part.text;
+        const a2uiTagMatch = textContent.match(/<a2ui-json>([\s\S]*?)<\/a2ui-json>/);
+        if (a2uiTagMatch) {
+          try {
+            const parsedJson = JSON.parse(a2uiTagMatch[1].trim());
+            if (Array.isArray(parsedJson)) {
+              result.a2uiItems.push(...normalizeA2uiItems(parsedJson));
+            } else if (typeof parsedJson === 'object' && parsedJson !== null) {
+              result.a2uiItems.push(...normalizeA2uiItems([parsedJson]));
+            }
+            textContent = textContent.replace(/<a2ui-json>[\s\S]*?<\/a2ui-json>/g, '').trim();
+          } catch {}
+        }
+        if (textContent) {
+          result.textChunk = (result.textChunk || '') + textContent;
+        }
       }
 
       if (part.data) {
@@ -249,6 +673,10 @@ export function parseA2aStreamEvent(
         if (typeof rawData === 'object' && rawData !== null && 'data' in rawData) {
           const envelope = rawData as {mimeType?: string; data?: unknown};
           if (typeof envelope.data === 'string' && envelope.data.trim().startsWith('[')) {
+            try {
+              rawData = JSON.parse(envelope.data);
+            } catch {}
+          } else if (typeof envelope.data === 'string' && envelope.data.trim().startsWith('{')) {
             try {
               rawData = JSON.parse(envelope.data);
             } catch {}

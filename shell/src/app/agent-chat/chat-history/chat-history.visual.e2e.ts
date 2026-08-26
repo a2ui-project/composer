@@ -43,13 +43,15 @@ test.describe('A2aChatHistory Visual Regression & Layout', () => {
     // Turn 1
     const textarea = page.locator('.prompt-textarea');
     await textarea.fill('What is the best season to visit Tokyo?');
-    await textarea.press('Enter');
+    await page.locator('.send-circle-btn').click();
     await expect(chatHistory.locator('.agent-message-container')).toHaveCount(1);
+    await expect(page.locator('.stop-circle-btn')).not.toBeVisible();
 
     // Turn 2
     await textarea.fill('Recommend good areas to stay in Tokyo');
-    await textarea.press('Enter');
+    await page.locator('.send-circle-btn').click();
     await expect(chatHistory.locator('.agent-message-container')).toHaveCount(2);
+    await expect(page.locator('.stop-circle-btn')).not.toBeVisible();
 
     // Assertions
     await expect(chatHistory.locator('.user-message-bubble')).toHaveCount(2);
@@ -78,8 +80,7 @@ test.describe('A2aChatHistory Visual Regression & Layout', () => {
       'Find non-stop flights from SFO to NRT next month',
     );
     await expect(chatHistory.locator('.agent-message-container')).toBeVisible();
-    await expect(chatHistory.locator('.canvas-artifact-card')).toBeVisible();
-    await expect(chatHistory.locator('.view-canvas-btn')).toBeVisible();
+    await expect(chatHistory.locator('.inline-surface-card')).toBeVisible();
     await expect(chatHistory.locator('.welcome-card')).not.toBeVisible();
 
     await expect(chatHistory).toHaveScreenshot('chat-history-with-canvas.png');

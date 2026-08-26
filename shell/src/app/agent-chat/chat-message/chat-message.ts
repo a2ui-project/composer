@@ -30,9 +30,10 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {RenderA2uiItem} from 'a2ui-bridge';
+import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {renderMarkdown} from '../../utils/markdown';
 import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
-import {UiMessage} from '../types';
+import {CanvasArtifact, UiMessage} from '../types';
 
 /**
  * Message bubble item rendering textual responses, markdown, thinking blocks,
@@ -47,6 +48,7 @@ import {UiMessage} from '../types';
     MatExpansionModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
+    RenderedFrame,
   ],
   templateUrl: './chat-message.ng.html',
   styleUrl: './chat-message.scss',
@@ -63,6 +65,8 @@ export class A2aChatMessage {
   readonly agentName = input<string>('Agent');
   /** Whether the A2UI surface canvas is currently open. */
   readonly isCanvasOpen = input<boolean>(false);
+  /** The currently active Canvas payload displayed in the RHS panel, if any. */
+  readonly activeCanvasPayload = input<RenderA2uiItem[] | null>(null);
 
   /** Emitted when the user clicks the card button to view this message's A2UI payload in Canvas. */
   readonly openCanvas = output<RenderA2uiItem[]>();
@@ -93,6 +97,31 @@ export class A2aChatMessage {
     return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
   });
 
+  protected readonly hasInlineSurface = computed<boolean>(() => {
+    const m = this.message();
+    const hasExplicitInline = Boolean(m.inlineA2uiPayload && m.inlineA2uiPayload.length > 0);
+    const hasLegacyInline = Boolean(!m.hasCanvas && m.a2uiPayload && m.a2uiPayload.length > 0);
+    return hasExplicitInline || hasLegacyInline;
+  });
+
+  protected readonly inlinePayload = computed<RenderA2uiItem[] | undefined>(() => {
+    const m = this.message();
+    return m.inlineA2uiPayload || m.a2uiPayload;
+  });
+
+  protected readonly hasImages = computed<boolean>(() => {
+    const images = this.message().images;
+    return Boolean(images && images.length > 0);
+  });
+
+  protected readonly thinkingLabel = computed<string>(() => {
+    return this.message().isStreaming ? 'Thinking...' : 'Reasoning Process';
+  });
+
+  protected readonly thinkingExpandIcon = computed<string>(() => {
+    return this.isThinkingExpanded() ? 'expand_less' : 'expand_more';
+  });
+
   protected readonly isPending = computed<boolean>(() => {
     const m = this.message();
     return (
@@ -103,12 +132,39 @@ export class A2aChatMessage {
     );
   });
 
+  protected readonly canvasArtifacts = computed<CanvasArtifact[]>(() => {
+    const m = this.message();
+    if (m.canvasArtifacts && m.canvasArtifacts.length > 0) {
+      return m.canvasArtifacts;
+    }
+    if (m.hasCanvas && m.a2uiPayload) {
+      return [
+        {
+          id: 'default-canvas',
+          cardTitle: 'Interactive content',
+          cardIcon: 'apps',
+          autoOpen: true,
+          payload: m.a2uiPayload,
+        },
+      ];
+    }
+    return [];
+  });
+
+  protected isArtifactActive(artifact: CanvasArtifact): boolean {
+    if (!this.isCanvasOpen()) return false;
+    const active = this.activeCanvasPayload();
+    if (active) {
+      return active === artifact.payload;
+    }
+    return this.canvasArtifacts().length === 1;
+  }
+
   protected toggleThinkingExpansion(): void {
     this.isThinkingExpanded.update(v => !v);
   }
 
-  protected openCanvasArtifact(): void {
-    const payload = this.message().a2uiPayload;
+  protected openCanvasArtifact(payload: RenderA2uiItem[]): void {
     if (payload && payload.length > 0) {
       this.openCanvas.emit(payload);
     }
