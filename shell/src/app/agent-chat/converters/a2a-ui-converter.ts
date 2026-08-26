@@ -322,7 +322,15 @@ function removeReferences(
   comp: Record<string, unknown>,
   idsToRemove: Set<string>,
 ): Record<string, unknown> {
-  const cloned = JSON.parse(JSON.stringify(comp)) as Record<string, unknown>;
+  let cloned: Record<string, unknown>;
+  try {
+    cloned =
+      typeof structuredClone === 'function'
+        ? structuredClone(comp)
+        : (JSON.parse(JSON.stringify(comp)) as Record<string, unknown>);
+  } catch {
+    cloned = JSON.parse(JSON.stringify(comp)) as Record<string, unknown>;
+  }
 
   function sanitize(obj: Record<string, unknown>): void {
     if (Array.isArray(obj['children'])) {

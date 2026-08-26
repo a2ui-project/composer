@@ -103,14 +103,59 @@
         min-height: 0;
         width: 100%;
         overflow-y: auto;
+
+        a2ui-composer-rendered-frame {
+          height: 100%;
+          display: block;
+        }
+      }
+    }
+
+    .inspector-resize-handle {
+      width: 10px;
+      height: 100%;
+      align-self: stretch;
+      margin-left: -5px;
+      margin-right: -5px;
+      cursor: col-resize;
+      z-index: 20;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      transition: background 0.15s ease;
+
+      .resize-grip {
+        width: 3px;
+        height: 28px;
+        background: #dadce0;
+        border-radius: 2px;
+        transition:
+          background 0.15s ease,
+          height 0.15s ease;
+      }
+
+      &:hover,
+      &:active,
+      &:focus-visible {
+        background: rgba(26, 115, 232, 0.1);
+        outline: none;
+
+        .resize-grip {
+          background: #1a73e8;
+          height: 42px;
+        }
       }
     }
 
     .inspector-column {
-      width: 380px;
       flex-shrink: 0;
       height: 100%;
       z-index: 10;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
   }
 }
