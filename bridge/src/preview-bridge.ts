@@ -144,7 +144,12 @@ export class PreviewBridge {
   private currentAppliedTheme?: ThemePreference;
 
   /** Handles DOM mutations and window viewport resizing to broadcast dimension updates to the host. */
-  private readonly surfaceResizeObserver: SurfaceResizeObserver;
+  private readonly surfaceResizeObserver = new SurfaceResizeObserver(dimensions => {
+    this.sendMessage({
+      type: PreviewBridgeMessageType.SURFACE_RESIZE,
+      payload: dimensions,
+    });
+  });
 
   private readonly cachedParentOrigin: string | null = null;
 
@@ -160,12 +165,6 @@ export class PreviewBridge {
     this.initMessageListener();
     setupInstrumentationOverrides(this);
     this.initThemeFromUrl();
-    this.surfaceResizeObserver = new SurfaceResizeObserver(dimensions => {
-      this.sendMessage({
-        type: PreviewBridgeMessageType.SURFACE_RESIZE,
-        payload: dimensions,
-      });
-    });
   }
 
   /**
@@ -181,7 +180,7 @@ export class PreviewBridge {
    * @param force When true, bypasses the dimension deduplication cache.
    */
   dispatchSurfaceResize(force = false): void {
-    this.surfaceResizeObserver?.measureAndDispatch(force);
+    this.surfaceResizeObserver.measureAndDispatch(force);
   }
 
   /**
@@ -297,7 +296,7 @@ export class PreviewBridge {
    */
   destroy(): void {
     teardownInstrumentationOverrides();
-    this.surfaceResizeObserver?.destroy();
+    this.surfaceResizeObserver.destroy();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
     }
