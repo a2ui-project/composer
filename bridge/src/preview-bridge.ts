@@ -33,30 +33,16 @@ import {
   CatalogDetails,
   ThemePreference,
 } from './bridge-message';
-export * from './bridge-message';
 
 import {SurfaceResizeObserver} from './surface-resize-observer';
-export * from './surface-resize-observer';
 
 import type {
-  DataModelObservable,
   SurfaceInstance,
   SurfaceGroupLike,
   RendererConfig,
   SurfaceStateSubscription,
   ComponentUsages,
-  ComponentUsage,
 } from './render-config';
-
-export type {
-  DataModelObservable,
-  SurfaceInstance,
-  SurfaceGroupLike,
-  RendererConfig,
-  SurfaceStateSubscription,
-  ComponentUsages,
-  ComponentUsage,
-};
 
 /**
  * A framework-agnostic processor interface that handles A2UI protocol payloads.

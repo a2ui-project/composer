@@ -32,7 +32,7 @@ import {
   SurfaceStateSubscription,
   CatalogDetails,
   type ComponentUsages,
-} from '../preview-bridge.js';
+} from '../index.js';
 
 /**
  * Options block configuring custom element generation and static payload injection

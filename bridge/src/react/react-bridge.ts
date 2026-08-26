@@ -22,7 +22,7 @@ import {
   ComponentApi,
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
-import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages} from '../preview-bridge.js';
+import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages} from '../index.js';
 
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   /** The reactive dynamic surface drawing model representing the active canvas. */

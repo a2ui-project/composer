@@ -37,7 +37,7 @@ import {
   SurfaceStateSubscription,
   CatalogDetails,
   type ComponentUsages,
-} from '../preview-bridge.js';
+} from '../index.js';
 
 export interface AngularSandboxOptions {
   /** Optional custom markdown rendering delegate callback hook */
