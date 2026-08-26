@@ -372,4 +372,17 @@ describe('A2aChatView', () => {
     expect(messages[1].sender).toBe('error');
     expect(messages[1].text).toContain('Unknown communication error');
   });
+
+  it('sets error message when agent URL is empty / unconfigured during message sending', async () => {
+    mockAgentUrlSignal.set('');
+    fixture.componentInstance['sendUserMessage']({text: 'Send with no URL', images: []});
+    await fixture.whenStable();
+
+    const messages = fixture.componentInstance['messages']();
+    expect(messages.length).toBe(2);
+    expect(messages[1].sender).toBe('error');
+    expect(messages[1].text).toBe('Error: Agent URL is not configured.');
+    expect(fixture.componentInstance['isStreaming']()).toBe(false);
+    expect(mockA2aTransport.sendMessageStream).not.toHaveBeenCalled();
+  });
 });
