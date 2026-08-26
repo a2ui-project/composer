@@ -240,6 +240,27 @@ describe('A2aChatView', () => {
     expect(messages[0].images?.[0].name).toBe('screen.png');
   });
 
+  it('safely handles undefined or empty text when sending image-only messages or empty submissions', () => {
+    const initialCount = fixture.componentInstance['messages']().length;
+    // Empty submission should be a no-op
+    fixture.componentInstance['sendUserMessage']({text: '   ', images: []});
+    expect(fixture.componentInstance['messages']().length).toBe(initialCount);
+
+    // Submission with undefined text but valid image
+    fixture.componentInstance['sendUserMessage']({
+      text: undefined as unknown as string,
+      images: [
+        {
+          name: 'only-image.png',
+          mimeType: 'image/png',
+          data: 'base64data',
+          previewUrl: 'data:image/png;base64,base64data',
+        },
+      ],
+    });
+    expect(fixture.componentInstance['messages']().length).toBe(initialCount + 2);
+  });
+
   it('parses incoming A2UI payload into agent response message', async () => {
     mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
       yield {
