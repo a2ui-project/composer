@@ -265,7 +265,7 @@ export class A2aChatView implements OnInit {
       }
     }
 
-    if (!action) return;
+    if (action === null || action === undefined) return;
 
     if (this.isStreaming()) {
       this.cancelActiveGeneration();
@@ -564,13 +564,18 @@ export class A2aChatView implements OnInit {
       this.inspectorWidth.set(newWidth);
     };
 
-    const onMouseUp = () => {
+    const cleanup = () => {
       this.isResizingInspector.set(false);
       resizeController.abort();
+      removeDestroyHook();
     };
 
+    const removeDestroyHook = this.destroyRef.onDestroy(() => {
+      resizeController.abort();
+    });
+
     window.addEventListener('mousemove', onMouseMove, {signal});
-    window.addEventListener('mouseup', onMouseUp, {signal});
+    window.addEventListener('mouseup', cleanup, {signal});
   }
 
   protected handleInspectorResizeKey(event: KeyboardEvent): void {

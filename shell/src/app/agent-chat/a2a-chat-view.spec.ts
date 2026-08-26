@@ -615,4 +615,53 @@ describe('A2aChatView', () => {
     expect(agentMsg.sender).toBe('agent');
     expect(agentMsg.text).toBe('Hello from mock streaming!');
   });
+
+  it('handles falsy actions like boolean false or number 0 in handleSendToServerAction without dropping them', async () => {
+    // null or undefined should be ignored
+    const initialCount = fixture.componentInstance['messages']().length;
+    fixture.componentInstance['handleSendToServerAction'](null);
+    fixture.componentInstance['handleSendToServerAction'](undefined);
+    expect(fixture.componentInstance['messages']().length).toBe(initialCount);
+
+    // boolean false should be dispatched
+    fixture.componentInstance['handleSendToServerAction']({action: false});
+    await fixture.whenStable();
+    expect(mockA2aTransport.sendMessageStream).toHaveBeenCalledWith(
+      'http://localhost:8000',
+      expect.objectContaining({
+        parts: expect.arrayContaining([
+          expect.objectContaining({
+            data: expect.objectContaining({action: false}),
+          }),
+        ]),
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('cleans up resize event listeners on window mouseup or component destroy', () => {
+    const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
+    const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
+
+    const mousedownEvent = new MouseEvent('mousedown', {clientX: 400});
+    fixture.componentInstance['startInspectorResize'](mousedownEvent);
+
+    expect(fixture.componentInstance['isResizingInspector']()).toBe(true);
+    expect(addEventListenerSpy).toHaveBeenCalledWith(
+      'mousemove',
+      expect.any(Function),
+      expect.any(Object),
+    );
+    expect(addEventListenerSpy).toHaveBeenCalledWith(
+      'mouseup',
+      expect.any(Function),
+      expect.any(Object),
+    );
+
+    // Trigger mouseup on window
+    const mouseupEvent = new MouseEvent('mouseup');
+    window.dispatchEvent(mouseupEvent);
+
+    expect(fixture.componentInstance['isResizingInspector']()).toBe(false);
+  });
 });

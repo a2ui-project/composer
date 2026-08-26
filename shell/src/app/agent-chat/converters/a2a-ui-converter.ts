@@ -322,15 +322,7 @@ function removeReferences(
   comp: Record<string, unknown>,
   idsToRemove: Set<string>,
 ): Record<string, unknown> {
-  let cloned: Record<string, unknown>;
-  try {
-    cloned =
-      typeof structuredClone === 'function'
-        ? structuredClone(comp)
-        : (JSON.parse(JSON.stringify(comp)) as Record<string, unknown>);
-  } catch {
-    cloned = JSON.parse(JSON.stringify(comp)) as Record<string, unknown>;
-  }
+  const cloned = structuredClone(comp);
 
   function sanitize(obj: Record<string, unknown>): void {
     if (Array.isArray(obj['children'])) {
@@ -531,7 +523,7 @@ export function partitionA2uiSurfacePayload(items: RenderA2uiItem[]): Partitione
           version: 'v0.9',
           updateComponents: {
             surfaceId: createSurfaceItems[0]?.createSurface?.surfaceId || 'default',
-            components: canvasComponents as unknown as Array<Record<string, unknown>>,
+            components: canvasComponents,
           },
         } as RenderA2uiItem,
         ...otherItems,
@@ -573,7 +565,7 @@ export function partitionA2uiSurfacePayload(items: RenderA2uiItem[]): Partitione
         version: 'v0.9',
         updateComponents: {
           surfaceId: createSurfaceItems[0]?.createSurface?.surfaceId || 'default',
-          components: inlineComponents as unknown as Array<Record<string, unknown>>,
+          components: inlineComponents,
         },
       } as RenderA2uiItem,
       ...otherItems,
