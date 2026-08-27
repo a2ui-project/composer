@@ -631,4 +631,54 @@ describe('HostCommunication', () => {
       expect(service.getIframeElement()).toBeNull();
     });
   });
+
+  describe('multiple registered iframes', () => {
+    it('accepts incoming messages from all concurrently registered iframes', () => {
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
+
+      const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
+      const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;
+
+      // Register canvas iframe first
+      service.registerIframe(canvasIframe);
+
+      // Register inline iframe subsequently (e.g. flight card rendered in chat)
+      service.registerIframe(inlineIframe);
+
+      // Verify message from the second (inline) iframe is accepted
+      const inlineEvent = new MessageEvent('message', {
+        source: inlineWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.SEND_TO_SERVER, payload: {action: 'flight_clicked'}},
+      });
+      window.dispatchEvent(inlineEvent);
+      expect(service.latestEnvelope()?.payload).toEqual({action: 'flight_clicked'});
+
+      // Verify future message from the first (canvas) iframe is STILL accepted
+      const canvasEvent = new MessageEvent('message', {
+        source: canvasWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.SEND_TO_SERVER, payload: {action: 'canvas_clicked'}},
+      });
+      window.dispatchEvent(canvasEvent);
+      expect(service.latestEnvelope()?.payload).toEqual({action: 'canvas_clicked'});
+    });
+
+    it('unregisters an iframe correctly when unregisterIframe is called', () => {
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
+
+      service.registerIframe(canvasIframe);
+      service.unregisterIframe(canvasIframe);
+
+      const event = new MessageEvent('message', {
+        source: canvasWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.SEND_TO_SERVER, payload: {action: 'ignored'}},
+      });
+      window.dispatchEvent(event);
+      expect(service.latestEnvelope()).toBeNull();
+    });
+  });
 });

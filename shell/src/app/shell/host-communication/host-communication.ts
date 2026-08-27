@@ -58,6 +58,8 @@ export class HostCommunication implements OnDestroy {
   private readonly configProvider = inject(AppConfigProvider);
   private iframeWindow: Window | null = null;
   private iframeElement: HTMLIFrameElement | null = null;
+  private readonly registeredIframes = new Set<HTMLIFrameElement>();
+  private readonly registeredWindows = new Set<Window>();
   private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
 
   /** Readonly signal tracking the most recent message envelope */
@@ -114,8 +116,13 @@ export class HostCommunication implements OnDestroy {
   };
 
   private readonly messageListener = (event: MessageEvent) => {
-    const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
-    if (!activeWindow) {
+    const hasRegisteredTarget =
+      this.iframeElement !== null ||
+      this.iframeWindow !== null ||
+      this.registeredIframes.size > 0 ||
+      this.registeredWindows.size > 0;
+
+    if (!hasRegisteredTarget) {
       const isBridgeMessage =
         event.data &&
         typeof event.data === 'object' &&
@@ -129,7 +136,14 @@ export class HostCommunication implements OnDestroy {
       }
       return;
     }
-    if (event.source !== activeWindow) {
+
+    const matchesSource =
+      (this.iframeElement && this.iframeElement.contentWindow === event.source) ||
+      (this.iframeWindow && this.iframeWindow === event.source) ||
+      this.registeredWindows.has(event.source as Window) ||
+      Array.from(this.registeredIframes).some(iframe => iframe.contentWindow === event.source);
+
+    if (!matchesSource) {
       return;
     }
 
@@ -181,8 +195,12 @@ export class HostCommunication implements OnDestroy {
   }
 
   private flushEarlyMessages(): void {
-    const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
-    if (activeWindow && this.earlyMessageBuffer.length > 0) {
+    const hasTarget =
+      this.iframeElement !== null ||
+      this.iframeWindow !== null ||
+      this.registeredIframes.size > 0 ||
+      this.registeredWindows.size > 0;
+    if (hasTarget && this.earlyMessageBuffer.length > 0) {
       const messages = [...this.earlyMessageBuffer];
       this.earlyMessageBuffer.length = 0;
       for (const msg of messages) {
@@ -193,13 +211,15 @@ export class HostCommunication implements OnDestroy {
 
   /**
    * Registers an active iframe DOM element or content window target and flushes
-   * any buffered early messages.
-   * @param target Target iframe element, window reference, or null to unregister
+   * any buffered early messages. Supports multiple concurrent iframes.
+   * @param target Target iframe element, window reference, or null to unregister all
    */
   registerIframe(target: HTMLIFrameElement | Window | null): void {
     if (!target) {
       this.iframeElement = null;
       this.iframeWindow = null;
+      this.registeredIframes.clear();
+      this.registeredWindows.clear();
       this.earlyMessageBuffer.length = 0;
       return;
     }
@@ -207,9 +227,11 @@ export class HostCommunication implements OnDestroy {
     let windowTarget: Window | null = null;
     if ('contentWindow' in target) {
       this.iframeElement = target as HTMLIFrameElement;
+      this.registeredIframes.add(target as HTMLIFrameElement);
       windowTarget = target.contentWindow;
     } else {
       this.iframeElement = null;
+      this.registeredWindows.add(target as Window);
       windowTarget = target as Window;
     }
 
@@ -217,6 +239,26 @@ export class HostCommunication implements OnDestroy {
     if (windowTarget) {
       this.flushEarlyMessages();
       this.sendTheme(this.configProvider.themePreference());
+    }
+  }
+
+  /**
+   * Unregisters a previously registered iframe element or window target.
+   * @param target Target iframe element or window reference to unregister
+   */
+  unregisterIframe(target: HTMLIFrameElement | Window | null): void {
+    if (!target) return;
+    if ('contentWindow' in target) {
+      this.registeredIframes.delete(target as HTMLIFrameElement);
+      if (this.iframeElement === target) {
+        this.iframeElement = this.registeredIframes.values().next().value ?? null;
+        this.iframeWindow = this.iframeElement ? this.iframeElement.contentWindow : null;
+      }
+    } else {
+      this.registeredWindows.delete(target as Window);
+      if (this.iframeWindow === target) {
+        this.iframeWindow = this.registeredWindows.values().next().value ?? null;
+      }
     }
   }
 
@@ -255,6 +297,25 @@ export class HostCommunication implements OnDestroy {
         theme: theme,
       },
     });
+    for (const iframe of this.registeredIframes) {
+      if (iframe.contentWindow && iframe.contentWindow !== this.iframeWindow) {
+        try {
+          const expectedUrl = this.startupResolution.getResolvedRendererUrl();
+          if (expectedUrl) {
+            const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
+            iframe.contentWindow.postMessage(
+              {
+                type: PreviewBridgeMessageType.SET_THEME,
+                payload: {theme},
+              },
+              targetOrigin,
+            );
+          }
+        } catch {
+          // Ignore error posting theme to secondary frame
+        }
+      }
+    }
   }
 
   /**
@@ -278,6 +339,10 @@ export class HostCommunication implements OnDestroy {
 
   ngOnDestroy(): void {
     this.earlyMessageBuffer.length = 0;
+    this.registeredIframes.clear();
+    this.registeredWindows.clear();
+    this.iframeElement = null;
+    this.iframeWindow = null;
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
       delete window.a2uiHostCommunication;

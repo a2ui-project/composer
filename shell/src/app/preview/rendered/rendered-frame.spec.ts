@@ -62,6 +62,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     const messageStreamSignal = signal(null);
     hostCommunicationServiceMock = {
       registerIframe: vi.fn(),
+      unregisterIframe: vi.fn(),
       sendTheme: vi.fn(),
       sendRenderA2UI: vi.fn(),
       messageStream: messageStreamSignal,
