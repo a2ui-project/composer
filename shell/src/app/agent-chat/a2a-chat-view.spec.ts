@@ -250,6 +250,27 @@ describe('A2aChatView', () => {
     expect(messages[0].images?.[0].name).toBe('screen.png');
   });
 
+  it('safely handles undefined or empty text when sending image-only messages or empty submissions', () => {
+    const initialCount = fixture.componentInstance['messages']().length;
+    // Empty submission should be a no-op
+    fixture.componentInstance['sendUserMessage']({text: '   ', images: []});
+    expect(fixture.componentInstance['messages']().length).toBe(initialCount);
+
+    // Submission with undefined text but valid image
+    fixture.componentInstance['sendUserMessage']({
+      text: undefined as unknown as string,
+      images: [
+        {
+          name: 'only-image.png',
+          mimeType: 'image/png',
+          data: 'base64data',
+          previewUrl: 'data:image/png;base64,base64data',
+        },
+      ],
+    });
+    expect(fixture.componentInstance['messages']().length).toBe(initialCount + 2);
+  });
+
   it('parses incoming A2UI payload into agent response message', async () => {
     mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
       yield {
@@ -563,6 +584,19 @@ describe('A2aChatView', () => {
     expect(messages[1].text).toContain('Unknown communication error');
   });
 
+  it('sets error message when agent URL is empty / unconfigured during message sending', async () => {
+    mockAgentUrlSignal.set('');
+    fixture.componentInstance['sendUserMessage']({text: 'Send with no URL', images: []});
+    await fixture.whenStable();
+
+    const messages = fixture.componentInstance['messages']();
+    expect(messages.length).toBe(2);
+    expect(messages[1].sender).toBe('error');
+    expect(messages[1].text).toBe('Error: Agent URL is not configured.');
+    expect(fixture.componentInstance['isStreaming']()).toBe(false);
+    expect(mockA2aTransport.sendMessageStream).not.toHaveBeenCalled();
+  });
+
   it('triggers user action message and sends action to agent when SEND_TO_SERVER arrives from hostCommunication', async () => {
     const actionPayload = {
       name: 'select_demo',
@@ -623,9 +657,10 @@ describe('A2aChatView', () => {
     fixture.componentInstance['handleSendToServerAction'](undefined);
     expect(fixture.componentInstance['messages']().length).toBe(initialCount);
 
-    // boolean false should be dispatched
-    fixture.componentInstance['handleSendToServerAction']({action: false});
+    // false should be dispatched
+    fixture.componentInstance['handleSendToServerAction'](false);
     await fixture.whenStable();
+
     expect(mockA2aTransport.sendMessageStream).toHaveBeenCalledWith(
       'http://localhost:8000',
       expect.objectContaining({
