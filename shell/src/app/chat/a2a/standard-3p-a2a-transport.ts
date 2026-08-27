@@ -54,8 +54,7 @@ export class Standard3pA2aTransport implements A2aTransport {
     }
   }
 
-  private resolveUrl(baseUrl: string, relativePath: string): string {
-    const base = this.validateAndNormalizeBaseUrl(baseUrl);
+  private resolveUrl(base: URL, relativePath: string): string {
     const cleanPath = relativePath.replace(/^\/+/, '');
     const cleanBasePath = base.pathname.replace(/\/+$/, '');
     if (!cleanPath) {
@@ -74,19 +73,20 @@ export class Standard3pA2aTransport implements A2aTransport {
    * @returns Parsed AgentCard.
    */
   async getAgentCard(baseUrl: string, options?: A2aTransportOptions): Promise<AgentCard> {
-    this.validateAndNormalizeBaseUrl(baseUrl);
+    const base = this.validateAndNormalizeBaseUrl(baseUrl);
 
-    const wellKnownEndpoints = [
-      this.resolveUrl(baseUrl, '.well-known/agent-card.json'),
-      this.resolveUrl(baseUrl, '.well-known/agent.json'),
-      this.resolveUrl(baseUrl, 'agent/card'),
-      this.resolveUrl(baseUrl, ''),
+    const wellKnownPaths = [
+      '.well-known/agent-card.json',
+      '.well-known/agent.json',
+      'agent/card',
+      '',
     ];
 
     let lastError: Error | null = null;
     const signal = options?.abortSignal || AbortSignal.timeout(10_000);
 
-    for (const endpoint of wellKnownEndpoints) {
+    for (const relativePath of wellKnownPaths) {
+      const endpoint = this.resolveUrl(base, relativePath);
       try {
         const response = await fetch(endpoint, {
           method: 'GET',
@@ -132,7 +132,7 @@ export class Standard3pA2aTransport implements A2aTransport {
     message: A2aMessage,
     options?: A2aTransportOptions,
   ): AsyncIterable<TaskStatusUpdateEvent> {
-    this.validateAndNormalizeBaseUrl(baseUrl);
+    const base = this.validateAndNormalizeBaseUrl(baseUrl);
     const messageId = message.messageId || uuid();
     const taskId = options?.taskId || message.taskId;
     const contextId = options?.contextId || message.contextId;
@@ -173,16 +173,16 @@ export class Standard3pA2aTransport implements A2aTransport {
     };
 
     const cachedEndpoint = this.endpointCache.get(baseUrl);
-    const candidates: Array<{url: string; body: unknown}> = cachedEndpoint
+    const candidateDefs: Array<{url?: string; path?: string; body: unknown}> = cachedEndpoint
       ? [{url: cachedEndpoint, body: jsonRpcPayload}]
       : [
-          {url: this.resolveUrl(baseUrl, ''), body: jsonRpcPayload},
-          {url: this.resolveUrl(baseUrl, 'jsonrpc'), body: jsonRpcPayload},
-          {url: this.resolveUrl(baseUrl, 'sendStreaming'), body: restPayload},
-          {url: this.resolveUrl(baseUrl, 'v1/tasks/sendStreaming'), body: restPayload},
-          {url: this.resolveUrl(baseUrl, 'tasks/sendStreaming'), body: restPayload},
-          {url: this.resolveUrl(baseUrl, 'SendStreamingMessage'), body: restPayload},
-          {url: this.resolveUrl(baseUrl, 'message:sendStreaming'), body: restPayload},
+          {path: '', body: jsonRpcPayload},
+          {path: 'jsonrpc', body: jsonRpcPayload},
+          {path: 'sendStreaming', body: restPayload},
+          {path: 'v1/tasks/sendStreaming', body: restPayload},
+          {path: 'tasks/sendStreaming', body: restPayload},
+          {path: 'SendStreamingMessage', body: restPayload},
+          {path: 'message:sendStreaming', body: restPayload},
         ];
 
     const headers: Record<string, string> = {
@@ -196,10 +196,11 @@ export class Standard3pA2aTransport implements A2aTransport {
     let lastError: Error | null = null;
 
     // Iterate through candidates until an endpoint successfully accepts the connection (200 OK)
-    for (const candidate of candidates) {
+    for (const candidate of candidateDefs) {
+      const targetUrl = candidate.url || this.resolveUrl(base, candidate.path || '');
       let res: Response;
       try {
-        res = await fetch(candidate.url, {
+        res = await fetch(targetUrl, {
           method: 'POST',
           headers,
           body: JSON.stringify(candidate.body),
@@ -215,7 +216,7 @@ export class Standard3pA2aTransport implements A2aTransport {
 
       if (res.ok) {
         response = res;
-        this.endpointCache.set(baseUrl, candidate.url);
+        this.endpointCache.set(baseUrl, targetUrl);
         break;
       }
 
