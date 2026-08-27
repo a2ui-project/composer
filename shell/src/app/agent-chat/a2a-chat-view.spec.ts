@@ -640,8 +640,8 @@ describe('A2aChatView', () => {
   });
 
   it('cleans up resize event listeners on window mouseup or component destroy', () => {
+    const abortSpy = vi.spyOn(AbortController.prototype, 'abort');
     const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
-    const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
 
     const mousedownEvent = new MouseEvent('mousedown', {clientX: 400});
     fixture.componentInstance['startInspectorResize'](mousedownEvent);
@@ -663,5 +663,71 @@ describe('A2aChatView', () => {
     window.dispatchEvent(mouseupEvent);
 
     expect(fixture.componentInstance['isResizingInspector']()).toBe(false);
+    expect(abortSpy).toHaveBeenCalled();
+  });
+
+  it('does not overwrite active canvas payload when a new turn contains an inline-only surface', async () => {
+    const canvasPayload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'canvas-demo',
+          catalogId: 'cat-1',
+          component: 'Canvas',
+        },
+      },
+    ];
+
+    // 1. User opens Canvas with an artifact from chat
+    fixture.componentInstance['openCanvasSurface'](canvasPayload);
+    expect(fixture.componentInstance['isCanvasOpen']()).toBe(true);
+    expect(fixture.componentInstance['activeCanvasPayload']()).toEqual(canvasPayload);
+
+    // 2. Subsequent turn arrives with an inline-only surface (e.g. flight card with no Canvas component)
+    const inlineOnlyPayload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'flight-card-surface',
+          catalogId: 'cat-1',
+        },
+        updateComponents: {
+          surfaceId: 'flight-card-surface',
+          components: [{id: 'flight-card', component: {Card: {title: 'OS 87 · Vienna to NY'}}}],
+        },
+      },
+    ];
+
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      yield {
+        taskId: 't-inline-turn',
+        contextId: 'c-inline-turn',
+        message: {
+          role: 'agent',
+          parts: [
+            {text: 'Here is the flight status card:'},
+            {
+              data: {
+                mimeType: 'application/json+a2ui',
+                data: JSON.stringify(inlineOnlyPayload),
+              },
+            },
+          ],
+        },
+        final: true,
+      };
+    });
+
+    fixture.componentInstance['sendUserMessage']({text: 'Show flight', images: []});
+    await fixture.whenStable();
+
+    const messages = fixture.componentInstance['messages']();
+    const newAgentMsg = messages[1];
+    expect(newAgentMsg.hasCanvas).toBe(false);
+    expect(newAgentMsg.inlineA2uiPayload).toBeDefined();
+
+    // Canvas remains open with the original canvas payload and was NOT overwritten by the flight card
+    expect(fixture.componentInstance['isCanvasOpen']()).toBe(true);
+    expect(fixture.componentInstance['activeCanvasPayload']()).toEqual(canvasPayload);
   });
 });

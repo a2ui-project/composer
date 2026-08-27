@@ -503,14 +503,14 @@ export class A2aChatView implements OnInit {
             }
             return false;
           });
-          this.activeCanvasPayload.set(
-            matching ? matching.payload : activeMsg.canvasArtifacts[0].payload,
-          );
+          if (matching) {
+            this.activeCanvasPayload.set(matching.payload);
+          } else if (autoOpenArtifact) {
+            this.activeCanvasPayload.set(autoOpenArtifact.payload);
+          }
         } else if (autoOpenArtifact) {
           this.openCanvasSurface(autoOpenArtifact.payload);
         }
-      } else if (this.isCanvasOpen() && activeMsg?.a2uiPayload) {
-        this.activeCanvasPayload.set(activeMsg.a2uiPayload);
       }
     }
   }

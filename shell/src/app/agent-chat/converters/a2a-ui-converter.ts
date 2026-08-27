@@ -572,6 +572,16 @@ export function partitionA2uiSurfacePayload(items: RenderA2uiItem[]): Partitione
     ];
   }
 
+  if (canvasArtifacts.length === 0 && hasA2uiCanvasComponent(normalized)) {
+    canvasArtifacts.push({
+      id: createSurfaceItems[0]?.createSurface?.surfaceId || 'canvas-0',
+      cardTitle: 'Interactive content',
+      cardIcon: 'apps',
+      autoOpen: true,
+      payload: normalized,
+    });
+  }
+
   const hasCanvas = canvasArtifacts.length > 0 || hasA2uiCanvasComponent(normalized);
 
   return {
