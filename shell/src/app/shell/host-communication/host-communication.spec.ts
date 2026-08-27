@@ -79,6 +79,7 @@ describe('HostCommunication', () => {
       payload: {status: 'ok'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -99,6 +100,7 @@ describe('HostCommunication', () => {
       payload: undefined,
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -212,6 +214,7 @@ describe('HostCommunication', () => {
       payload: {status: 'ok'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -342,6 +345,7 @@ describe('HostCommunication', () => {
       payload: {status: 'early'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -366,6 +370,7 @@ describe('HostCommunication', () => {
       payload: {status: 'early-element'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -509,6 +514,7 @@ describe('HostCommunication', () => {
       payload: catalogPayload,
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
 
     const history = service.getHistoryBuffer();
@@ -614,6 +620,7 @@ describe('HostCommunication', () => {
       payload: {status: 'early'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -679,6 +686,28 @@ describe('HostCommunication', () => {
       });
       window.dispatchEvent(event);
       expect(service.latestEnvelope()).toBeNull();
+    });
+
+    it('dispatches sendRenderA2UI to the explicitly provided target iframe instead of the default registered frame', () => {
+      const defaultWindow = {postMessage: vi.fn()} as unknown as Window;
+      const defaultIframe = {contentWindow: defaultWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(defaultIframe);
+      vi.mocked(defaultWindow.postMessage).mockClear();
+
+      const specificWindow = {postMessage: vi.fn()} as unknown as Window;
+      const specificIframe = {contentWindow: specificWindow} as unknown as HTMLIFrameElement;
+
+      const payload = [{version: 'v0.9', createSurface: {surfaceId: 'test', catalogId: 'test'}}];
+      service.sendRenderA2UI(payload, specificIframe);
+
+      expect(specificWindow.postMessage).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        },
+        'http://localhost:3000',
+      );
+      expect(defaultWindow.postMessage).not.toHaveBeenCalled();
     });
   });
 });

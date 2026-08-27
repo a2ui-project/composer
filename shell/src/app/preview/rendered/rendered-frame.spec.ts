@@ -301,7 +301,10 @@ describe('RenderedFrame Live Preview Viewport', () => {
     fixture.componentRef.setInput('payload', payload);
     fixture.detectChanges();
 
-    expect(hostCommunicationServiceMock.sendRenderA2UI).toHaveBeenCalledWith(payload);
+    expect(hostCommunicationServiceMock.sendRenderA2UI).toHaveBeenCalledWith(
+      payload,
+      expect.anything(),
+    );
   });
 
   it('updates dynamicHeight when SURFACE_RESIZE message arrives', () => {
@@ -347,7 +350,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     });
     newFixture.detectChanges();
 
-    expect(sendSpy).toHaveBeenCalledWith(payload);
+    expect(sendSpy).toHaveBeenCalledWith(payload, expect.anything());
 
     sendSpy.mockClear();
     messageStreamSignal.set({
@@ -358,7 +361,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     });
     newFixture.detectChanges();
 
-    expect(sendSpy).toHaveBeenCalledWith(payload);
+    expect(sendSpy).toHaveBeenCalledWith(payload, expect.anything());
   });
 
   it('triggers syncPayloadOnIframeLoad and dispatches payload if available', () => {
@@ -370,7 +373,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     sendSpy.mockClear();
 
     fixture.componentInstance['syncPayloadOnIframeLoad']();
-    expect(sendSpy).toHaveBeenCalledWith(payload);
+    expect(sendSpy).toHaveBeenCalledWith(payload, expect.anything());
   });
 
   it('does not dispatch sendRenderA2UI when payload is empty or null', () => {
@@ -429,5 +432,28 @@ describe('RenderedFrame Live Preview Viewport', () => {
     newFixture.detectChanges();
 
     expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it('ignores incoming bridge messages when sourceWindow belongs to a different frame', () => {
+    const messageStreamSignal = signal<unknown>(null);
+    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
+      value: messageStreamSignal,
+      writable: true,
+    });
+
+    const newFixture = TestBed.createComponent(RenderedFrame);
+    newFixture.detectChanges();
+
+    const otherWindow = {postMessage: vi.fn()} as unknown as Window;
+    messageStreamSignal.set({
+      type: 'SURFACE_RESIZE',
+      payload: {height: 999},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      sourceWindow: otherWindow,
+    });
+    newFixture.detectChanges();
+
+    expect(newFixture.componentInstance.dynamicHeight()).toBeNull();
   });
 });

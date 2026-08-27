@@ -38,6 +38,8 @@ export declare interface MessageEnvelope {
   origin: string;
   /** Epoch millisecond timestamp recording when the message was received */
   timestamp: number;
+  /** Window source that dispatched this message */
+  sourceWindow?: Window | null;
 }
 
 declare global {
@@ -169,6 +171,7 @@ export class HostCommunication implements OnDestroy {
         payload: data.payload,
         origin: event.origin,
         timestamp: Date.now(),
+        sourceWindow: (event.source as Window) ?? null,
       };
       if (type === PreviewBridgeMessageType.A2UI_CATALOG) {
         this.latestCatalogEnvelope = envelope;
@@ -265,14 +268,23 @@ export class HostCommunication implements OnDestroy {
   /**
    * Validates and dispatches a structured postMessage payload to the registered guest frame.
    * @param message Structured message payload
+   * @param target Optional explicit target iframe element or window reference
    */
-  sendMessage(message: {type: PreviewBridgeMessageType; payload?: unknown}): void {
+  sendMessage(
+    message: {type: PreviewBridgeMessageType; payload?: unknown},
+    target?: HTMLIFrameElement | Window | null,
+  ): void {
     if (!CrossFrameValidator.validateOutgoingMessage(message)) {
       console.error('Blocked dispatch of malformed message type...', message);
       return;
     }
 
-    const targetWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
+    let targetWindow: Window | null = null;
+    if (target) {
+      targetWindow = 'contentWindow' in target ? target.contentWindow : (target as Window);
+    } else {
+      targetWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
+    }
     if (!targetWindow) return;
 
     const expectedUrl = this.startupResolution.getResolvedRendererUrl();
@@ -321,12 +333,16 @@ export class HostCommunication implements OnDestroy {
   /**
    * Helper utility dispatching a RENDER_A2UI layout array to the preview renderer.
    * @param payload Array of layout nodes or configuration objects
+   * @param target Optional explicit target iframe element or window reference
    */
-  sendRenderA2UI(payload: unknown[]): void {
-    this.sendMessage({
-      type: PreviewBridgeMessageType.RENDER_A2UI,
-      payload: payload,
-    });
+  sendRenderA2UI(payload: unknown[], target?: HTMLIFrameElement | Window | null): void {
+    this.sendMessage(
+      {
+        type: PreviewBridgeMessageType.RENDER_A2UI,
+        payload: payload,
+      },
+      target,
+    );
   }
 
   /**

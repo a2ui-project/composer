@@ -151,11 +151,12 @@ export class RenderedFrame {
 
     // Outbound payload dispatch: forwards updated A2UI declarative JSON payloads
     // from the host/parent component to the renderer iframe over postMessage whenever
-    // the payload input signal emits a non-empty array.
+    // the payload input signal emits a non-empty array and the iframe element is available.
     effect(() => {
       const payload = this.payload();
-      if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-        this.hostCommunication.sendRenderA2UI(payload);
+      const iframe = this.iframeRef()?.nativeElement;
+      if (iframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
+        this.hostCommunication.sendRenderA2UI(payload, iframe);
       }
     });
 
@@ -170,13 +171,21 @@ export class RenderedFrame {
       if (typeof msgStream === 'function') {
         const envelope = msgStream();
         if (envelope) {
+          const myIframe = this.iframeRef()?.nativeElement;
+          const myWindow = myIframe?.contentWindow;
+
+          // In multi-frame environments, ignore messages dispatched by other iframes
+          if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
+            return;
+          }
+
           if (
             envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
             envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
           ) {
             const payload = untracked(() => this.payload());
-            if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-              this.hostCommunication.sendRenderA2UI(payload);
+            if (myIframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
+              this.hostCommunication.sendRenderA2UI(payload, myIframe);
             }
           } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
             if (CrossFrameValidator.validateIncomingMessage(envelope)) {
@@ -194,8 +203,9 @@ export class RenderedFrame {
    */
   protected syncPayloadOnIframeLoad(): void {
     const payload = this.payload();
-    if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-      this.hostCommunication.sendRenderA2UI(payload);
+    const iframe = this.iframeRef()?.nativeElement;
+    if (iframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
+      this.hostCommunication.sendRenderA2UI(payload, iframe);
     }
   }
 }
