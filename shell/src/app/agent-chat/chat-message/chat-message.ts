@@ -151,6 +151,10 @@ export class A2aChatMessage {
     return [];
   });
 
+  protected readonly hasCanvasArtifacts = computed<boolean>(() => {
+    return this.canvasArtifacts().length > 0;
+  });
+
   protected isArtifactActive(artifact: CanvasArtifact): boolean {
     if (!this.isCanvasOpen()) return false;
     const active = this.activeCanvasPayload();

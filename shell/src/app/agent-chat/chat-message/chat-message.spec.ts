@@ -235,6 +235,7 @@ describe('A2aChatMessage', () => {
 
     const cardElements = fixture.nativeElement.querySelectorAll('.canvas-artifact-card');
     expect(cardElements.length).toBe(2);
+    expect(fixture.nativeElement.querySelector('.has-canvas-artifacts')).not.toBeNull();
 
     expect(cardElements[0].textContent).toContain('Flight Itinerary');
     expect(cardElements[0].textContent).toContain('Select your seat');

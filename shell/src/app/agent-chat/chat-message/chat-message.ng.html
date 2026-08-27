@@ -27,7 +27,11 @@
       {{ message().text }}
     </div>
   } @else {
-    <div class="agent-message-container" [class.has-inline-surface]="hasInlineSurface()">
+    <div
+      class="agent-message-container"
+      [class.has-inline-surface]="hasInlineSurface()"
+      [class.has-canvas-artifacts]="hasCanvasArtifacts()"
+    >
       <div class="agent-header-badge">
         <div class="mini-avatar">
           <mat-icon class="mini-avatar-icon">smart_toy</mat-icon>
