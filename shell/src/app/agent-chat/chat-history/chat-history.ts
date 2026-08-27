@@ -19,6 +19,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  effect,
   input,
   output,
   viewChild,
@@ -78,6 +79,22 @@ export class A2aChatHistory implements AfterViewChecked {
   protected readonly scrollContainerRef = viewChild<ElementRef<HTMLDivElement>>('scrollContainer');
 
   private shouldAutoScroll = true;
+  private lastScrollTop = 0;
+  private previousMessageCount = 0;
+
+  constructor() {
+    effect(() => {
+      const currentCount = this.messages().length;
+      if (currentCount > this.previousMessageCount) {
+        const lastMsg = this.messages()[currentCount - 1];
+        if (lastMsg?.sender === 'user') {
+          this.shouldAutoScroll = true;
+          this.scrollToLatestMessage();
+        }
+      }
+      this.previousMessageCount = currentCount;
+    });
+  }
 
   ngAfterViewChecked(): void {
     if (this.shouldAutoScroll) {
@@ -85,11 +102,32 @@ export class A2aChatHistory implements AfterViewChecked {
     }
   }
 
+  protected handleWheel(event: WheelEvent): void {
+    if (event.deltaY < 0) {
+      // User explicitly scrolled upward: immediately release auto-scroll lock
+      this.shouldAutoScroll = false;
+    }
+  }
+
+  protected handleTouchStart(): void {
+    // User touch interaction releases auto-scroll until bottom is reached
+    this.shouldAutoScroll = false;
+  }
+
   protected handleViewportScroll(): void {
     const el = this.scrollContainerRef()?.nativeElement;
     if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
-    this.shouldAutoScroll = atBottom;
+
+    const currentScrollTop = el.scrollTop;
+    const isScrollingUp = currentScrollTop < this.lastScrollTop;
+    this.lastScrollTop = currentScrollTop;
+
+    const distanceToBottom = el.scrollHeight - currentScrollTop - el.clientHeight;
+    if (isScrollingUp) {
+      this.shouldAutoScroll = false;
+    } else {
+      this.shouldAutoScroll = distanceToBottom < 30;
+    }
   }
 
   protected scrollToLatestMessage(): void {

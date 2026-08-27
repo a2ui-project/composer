@@ -121,4 +121,35 @@ describe('A2aChatHistory', () => {
       expect(el.scrollTop).toBe(1000);
     }
   });
+
+  it('disables shouldAutoScroll when user scrolls upward via wheel event', () => {
+    fixture.componentInstance['shouldAutoScroll'] = true;
+    const wheelEvent = new WheelEvent('wheel', {deltaY: -50});
+    fixture.componentInstance['handleWheel'](wheelEvent);
+    expect(fixture.componentInstance['shouldAutoScroll']).toBe(false);
+  });
+
+  it('disables shouldAutoScroll on touchstart', () => {
+    fixture.componentInstance['shouldAutoScroll'] = true;
+    fixture.componentInstance['handleTouchStart']();
+    expect(fixture.componentInstance['shouldAutoScroll']).toBe(false);
+  });
+
+  it('disables shouldAutoScroll when viewport scroll moves upward', () => {
+    const el = fixture.componentInstance['scrollContainerRef']()?.nativeElement;
+    if (el) {
+      Object.defineProperty(el, 'scrollHeight', {value: 2000, configurable: true});
+      Object.defineProperty(el, 'clientHeight', {value: 400, configurable: true});
+
+      // User was at bottom
+      el.scrollTop = 1600;
+      fixture.componentInstance['handleViewportScroll']();
+      expect(fixture.componentInstance['shouldAutoScroll']).toBe(true);
+
+      // User scrolls up by 50px
+      el.scrollTop = 1550;
+      fixture.componentInstance['handleViewportScroll']();
+      expect(fixture.componentInstance['shouldAutoScroll']).toBe(false);
+    }
+  });
 });

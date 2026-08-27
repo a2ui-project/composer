@@ -199,13 +199,41 @@ export class RenderedFrame {
   }
 
   /**
+   * Forwards wheel events from the guest iframe to parent scroll containers
+   * to ensure mouse/trackpad scrolling is not trapped by iframe viewports.
+   */
+  protected setupIframeWheelForwarding(iframe: HTMLIFrameElement): void {
+    try {
+      iframe.contentWindow?.addEventListener(
+        'wheel',
+        (event: WheelEvent) => {
+          const scrollParent = iframe.closest('.chat-history-container, .side-canvas-viewport');
+          if (scrollParent) {
+            scrollParent.scrollBy({
+              top: event.deltaY,
+              left: event.deltaX,
+              behavior: 'auto',
+            });
+          }
+        },
+        {passive: true},
+      );
+    } catch {
+      // Safe fallback if frame is restricted by cross-origin policies
+    }
+  }
+
+  /**
    * Dispatches the active A2UI payload to the renderer iframe once the DOM iframe element finishes loading.
    */
   protected syncPayloadOnIframeLoad(): void {
     const payload = this.payload();
     const iframe = this.iframeRef()?.nativeElement;
-    if (iframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
-      this.hostCommunication.sendRenderA2UI(payload, iframe);
+    if (iframe) {
+      this.setupIframeWheelForwarding(iframe);
+      if (payload !== null && Array.isArray(payload) && payload.length > 0) {
+        this.hostCommunication.sendRenderA2UI(payload, iframe);
+      }
     }
   }
 }
