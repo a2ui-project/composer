@@ -99,8 +99,8 @@ export class A2aChatMessage {
 
   protected readonly hasInlineSurface = computed<boolean>(() => {
     const m = this.message();
-    const hasExplicitInline = Boolean(m.inlineA2uiPayload && m.inlineA2uiPayload.length > 0);
-    const hasLegacyInline = Boolean(!m.hasCanvas && m.a2uiPayload && m.a2uiPayload.length > 0);
+    const hasExplicitInline = Boolean(m.inlineA2uiPayload?.length);
+    const hasLegacyInline = !m.hasCanvas && Boolean(m.a2uiPayload?.length);
     return hasExplicitInline || hasLegacyInline;
   });
 
@@ -110,8 +110,7 @@ export class A2aChatMessage {
   });
 
   protected readonly hasImages = computed<boolean>(() => {
-    const images = this.message().images;
-    return Boolean(images && images.length > 0);
+    return Boolean(this.message().images?.length);
   });
 
   protected readonly thinkingLabel = computed<string>(() => {
@@ -124,20 +123,15 @@ export class A2aChatMessage {
 
   protected readonly isPending = computed<boolean>(() => {
     const m = this.message();
-    return (
-      m.isStreaming === true &&
-      !m.text &&
-      !m.thinking &&
-      (!m.a2uiPayload || m.a2uiPayload.length === 0)
-    );
+    return m.isStreaming === true && !m.text && !m.thinking && !m.a2uiPayload?.length;
   });
 
   protected readonly canvasArtifacts = computed<CanvasArtifact[]>(() => {
     const m = this.message();
-    if (m.canvasArtifacts && m.canvasArtifacts.length > 0) {
+    if (m.canvasArtifacts?.length) {
       return m.canvasArtifacts;
     }
-    if (m.hasCanvas && m.a2uiPayload) {
+    if (m.hasCanvas && m.a2uiPayload?.length) {
       return [
         {
           id: 'default-canvas',
@@ -152,7 +146,7 @@ export class A2aChatMessage {
   });
 
   protected readonly hasCanvasArtifacts = computed<boolean>(() => {
-    return this.canvasArtifacts().length > 0;
+    return Boolean(this.canvasArtifacts().length);
   });
 
   protected isArtifactActive(artifact: CanvasArtifact): boolean {
@@ -169,7 +163,7 @@ export class A2aChatMessage {
   }
 
   protected openCanvasArtifact(payload: RenderA2uiItem[]): void {
-    if (payload && payload.length > 0) {
+    if (payload?.length) {
       this.openCanvas.emit(payload);
     }
   }
