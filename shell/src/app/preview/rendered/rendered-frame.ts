@@ -22,7 +22,6 @@ import {
   effect,
   computed,
   untracked,
-  input,
   signal,
 } from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
@@ -53,9 +52,6 @@ export class RenderedFrame {
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
-
-  /** Optional layout payload to render immediately into the guest iframe. */
-  readonly payload = input<unknown[] | null | undefined>(null);
 
   /** Tracks dynamic surface height reported by the guest renderer frame. */
   readonly dynamicHeight = signal<number | null>(null);
@@ -130,53 +126,16 @@ export class RenderedFrame {
       this.hostCommunication.sendTheme(theme);
     });
 
-    // Outbound payload dispatch: forwards updated A2UI declarative JSON payloads
-    // from the host/parent component to the renderer iframe over postMessage whenever
-    // the payload input signal emits a non-empty array.
+    // Inbound bridge listener: adjusts the iframe container height to fit the rendered
+    // A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
     effect(() => {
-      const payload = this.payload();
-      if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-        this.hostCommunication.sendRenderA2UI(payload);
-      }
-    });
-
-    // Inbound bridge listener: handles lifecycle signals and dynamic layout updates
-    // received from the renderer iframe:
-    // 1. RENDERER_READY / A2UI_CATALOG: Resolves startup race conditions by flushing
-    //    the current untracked payload as soon as the iframe finishes booting and catalog loading.
-    // 2. SURFACE_RESIZE: Automatically adjusts the iframe container height to fit the rendered
-    //    A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
-    effect(() => {
-      const msgStream = this.hostCommunication?.messageStream;
-      if (typeof msgStream === 'function') {
-        const envelope = msgStream();
-        if (envelope) {
-          if (
-            envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
-            envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
-          ) {
-            const payload = untracked(() => this.payload());
-            if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-              this.hostCommunication.sendRenderA2UI(payload);
-            }
-          } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-            if (CrossFrameValidator.validateIncomingMessage(envelope)) {
-              const resizePayload = envelope.payload as {height: number; width?: number};
-              this.dynamicHeight.set(resizePayload.height);
-            }
-          }
+      const envelope = this.hostCommunication.messageStream();
+      if (envelope?.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
+        if (CrossFrameValidator.validateIncomingMessage(envelope)) {
+          const resizePayload = envelope.payload as {height: number; width?: number};
+          this.dynamicHeight.set(resizePayload.height);
         }
       }
     });
-  }
-
-  /**
-   * Dispatches the active A2UI payload to the renderer iframe once the DOM iframe element finishes loading.
-   */
-  protected syncPayloadOnIframeLoad(): void {
-    const payload = this.payload();
-    if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-      this.hostCommunication.sendRenderA2UI(payload);
-    }
   }
 }

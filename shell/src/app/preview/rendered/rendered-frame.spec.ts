@@ -293,16 +293,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(await harness.isLocked()).toBe(false);
   });
 
-  it('dispatches sendRenderA2UI when payload input changes', () => {
-    hostCommunicationServiceMock.sendRenderA2UI = vi.fn();
-    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
-
-    fixture.componentRef.setInput('payload', payload);
-    fixture.detectChanges();
-
-    expect(hostCommunicationServiceMock.sendRenderA2UI).toHaveBeenCalledWith(payload);
-  });
-
   it('updates dynamicHeight when SURFACE_RESIZE message arrives', () => {
     const mockEnvelope = {
       type: 'SURFACE_RESIZE',
@@ -322,70 +312,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(newFixture.componentInstance.dynamicHeight()).toBe(520);
   });
 
-  it('re-dispatches sendRenderA2UI when RENDERER_READY or A2UI_CATALOG arrives from bridge', () => {
-    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
-    const messageStreamSignal = signal<unknown>(null);
-    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
-      value: messageStreamSignal,
-      writable: true,
-    });
-
-    const newFixture = TestBed.createComponent(RenderedFrame);
-    newFixture.componentRef.setInput('payload', payload);
-    newFixture.detectChanges();
-
-    const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
-    sendSpy.mockClear();
-
-    messageStreamSignal.set({
-      type: 'RENDERER_READY',
-      payload: {},
-      origin: 'http://localhost:3000',
-      timestamp: Date.now(),
-    });
-    newFixture.detectChanges();
-
-    expect(sendSpy).toHaveBeenCalledWith(payload);
-
-    sendSpy.mockClear();
-    messageStreamSignal.set({
-      type: 'A2UI_CATALOG',
-      payload: {},
-      origin: 'http://localhost:3000',
-      timestamp: Date.now(),
-    });
-    newFixture.detectChanges();
-
-    expect(sendSpy).toHaveBeenCalledWith(payload);
-  });
-
-  it('triggers syncPayloadOnIframeLoad and dispatches payload if available', () => {
-    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
-    fixture.componentRef.setInput('payload', payload);
-    fixture.detectChanges();
-
-    const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
-    sendSpy.mockClear();
-
-    fixture.componentInstance['syncPayloadOnIframeLoad']();
-    expect(sendSpy).toHaveBeenCalledWith(payload);
-  });
-
-  it('does not dispatch sendRenderA2UI when payload is empty or null', () => {
-    const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
-    sendSpy.mockClear();
-
-    fixture.componentRef.setInput('payload', []);
-    fixture.detectChanges();
-
-    expect(sendSpy).not.toHaveBeenCalled();
-
-    fixture.componentRef.setInput('payload', null);
-    fixture.detectChanges();
-
-    expect(sendSpy).not.toHaveBeenCalled();
-  });
-
   it('ignores SURFACE_RESIZE when height is missing or not a number', () => {
     const messageStreamSignal = signal<unknown>({
       type: 'SURFACE_RESIZE',
@@ -402,30 +328,5 @@ describe('RenderedFrame Live Preview Viewport', () => {
     newFixture.detectChanges();
 
     expect(newFixture.componentInstance.dynamicHeight()).toBeNull();
-  });
-
-  it('does not dispatch when RENDERER_READY arrives and payload is empty', () => {
-    const messageStreamSignal = signal<unknown>(null);
-    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
-      value: messageStreamSignal,
-      writable: true,
-    });
-
-    const newFixture = TestBed.createComponent(RenderedFrame);
-    newFixture.componentRef.setInput('payload', null);
-    newFixture.detectChanges();
-
-    const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
-    sendSpy.mockClear();
-
-    messageStreamSignal.set({
-      type: 'RENDERER_READY',
-      payload: {},
-      origin: 'http://localhost:3000',
-      timestamp: Date.now(),
-    });
-    newFixture.detectChanges();
-
-    expect(sendSpy).not.toHaveBeenCalled();
   });
 });

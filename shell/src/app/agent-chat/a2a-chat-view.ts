@@ -19,17 +19,20 @@ import {
   Component,
   DestroyRef,
   OnInit,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {RenderA2uiItem} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, RenderA2uiItem} from 'a2ui-bridge';
 import {A2A_TRANSPORT} from '../chat/a2a/a2a-transport.token';
 import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../chat/a2a/a2a-types';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
+import {HostCommunication} from '../shell/host-communication/host-communication';
 import {
   AppConfigProvider,
   A2aBackendMode,
@@ -76,6 +79,7 @@ import {InspectorEvent, UiAgentInfo, UiMessage} from './types';
 export class A2aChatView implements OnInit {
   protected readonly configProvider = inject(AppConfigProvider);
   private readonly a2aTransport = inject(A2A_TRANSPORT);
+  private readonly hostCommunication = inject(HostCommunication);
   private readonly destroyRef = inject(DestroyRef);
 
   /** Discovered A2A AgentCard metadata for the connected agent. */
@@ -107,6 +111,30 @@ export class A2aChatView implements OnInit {
   protected readonly isStreaming = signal<boolean>(false);
 
   private activeAbortController?: AbortController;
+
+  constructor() {
+    effect(() => {
+      const payload = this.activeCanvasPayload();
+      const isOpen = this.isCanvasOpen();
+      if (isOpen && payload !== null && Array.isArray(payload) && payload.length > 0) {
+        this.hostCommunication.sendRenderA2UI(payload);
+      }
+    });
+
+    effect(() => {
+      const envelope = this.hostCommunication.messageStream();
+      if (
+        envelope?.type === PreviewBridgeMessageType.RENDERER_READY ||
+        envelope?.type === PreviewBridgeMessageType.A2UI_CATALOG
+      ) {
+        const payload = untracked(() => this.activeCanvasPayload());
+        const isOpen = untracked(() => this.isCanvasOpen());
+        if (isOpen && payload !== null && Array.isArray(payload) && payload.length > 0) {
+          this.hostCommunication.sendRenderA2UI(payload);
+        }
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => {

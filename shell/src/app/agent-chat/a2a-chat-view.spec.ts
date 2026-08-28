@@ -406,4 +406,13 @@ describe('A2aChatView', () => {
     expect(fixture.componentInstance['isStreaming']()).toBe(false);
     expect(mockA2aTransport.sendMessageStream).not.toHaveBeenCalled();
   });
+
+  it('dispatches sendRenderA2UI when canvas surface is opened with payload', () => {
+    const hostComm = TestBed.inject(HostCommunication);
+    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+    fixture.componentInstance['openCanvasSurface'](payload as any);
+    fixture.detectChanges();
+
+    expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(payload);
+  });
 });
