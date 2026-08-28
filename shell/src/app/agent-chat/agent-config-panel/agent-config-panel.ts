@@ -14,15 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  HostListener,
-  inject,
-  input,
-  OnInit,
-  output,
-} from '@angular/core';
+import {Component, HostListener, inject, input, OnInit, output} from '@angular/core';
 import {
   AbstractControl,
   FormBuilder,
@@ -42,6 +34,7 @@ import {MatSelectModule} from '@angular/material/select';
 import {A2A_BACKEND_OPTIONS, A2aBackendOption} from '../../chat/a2a/a2a-transport.token';
 import {A2aBackendMode} from '../../settings/app-config-provider/app-config-provider';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
+import {isValidHttpUrl} from '../../utils/url';
 
 export interface AgentConfigSaveEvent {
   endpoint: string;
@@ -53,15 +46,7 @@ export function httpUrlValidator(): ValidatorFn {
   return (control: AbstractControl): ValidationErrors | null => {
     const val = (control.value || '').trim();
     if (!val) return null;
-    try {
-      const url = new URL(val);
-      if (url.protocol === 'http:' || url.protocol === 'https:') {
-        return null;
-      }
-      return {invalidHttpUrl: true};
-    } catch {
-      return {invalidHttpUrl: true};
-    }
+    return isValidHttpUrl(val) ? null : {invalidHttpUrl: true};
   };
 }
 
@@ -70,7 +55,6 @@ export function httpUrlValidator(): ValidatorFn {
  */
 @Component({
   selector: 'a2ui-composer-agent-config-panel',
-  standalone: true,
   imports: [
     ReactiveFormsModule,
     A11yModule,
@@ -83,7 +67,6 @@ export function httpUrlValidator(): ValidatorFn {
   ],
   templateUrl: './agent-config-panel.ng.html',
   styleUrl: './agent-config-panel.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AgentConfigPanel implements OnInit {
   private readonly fb = inject(FormBuilder);

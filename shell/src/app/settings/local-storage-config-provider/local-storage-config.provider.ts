@@ -29,7 +29,7 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
-import {SafeUrlValidatorService} from '../../shared/security/safe-url-validator.service';
+import {isValidHttpUrl} from '../../utils/url';
 
 /**
  * Concrete implementation of the AppConfigProvider that integrates with
@@ -50,7 +50,6 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   private readonly secureCredentialsStorage = inject(SecureCredentialsStorage);
 
   private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
-  private readonly safeUrlValidator = inject(SafeUrlValidatorService);
 
   private readonly environmentContext = inject(EnvironmentContextService);
   private readonly startupConfigState = inject(StartupConfigStateService);
@@ -223,7 +222,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
       this.localStorageInteractions.removeItem(LocalStorageKey.A2A_AGENT_URL);
       return;
     }
-    if (!this.safeUrlValidator.isValidHttpUrl(trimmed)) {
+    if (!isValidHttpUrl(trimmed)) {
       console.warn(`Refusing to persist invalid or non-HTTP A2A agent URL: ${trimmed}`);
       return;
     }
