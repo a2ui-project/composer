@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ChangeDetectionStrategy, Component, computed, input, output} from '@angular/core';
+import {Component, computed, input, output} from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
@@ -28,11 +28,9 @@ import {UiAgentInfo} from '../types';
  */
 @Component({
   selector: 'a2ui-composer-agent-header',
-  standalone: true,
   imports: [MatButtonModule, MatIconModule, MatTooltipModule],
   templateUrl: './agent-header.ng.html',
   styleUrl: './agent-header.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class A2aAgentHeader {
   /** Presentational agent metadata and capabilities to display in the header. */

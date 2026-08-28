@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {ChangeDetectionStrategy, Component, computed, input, output, signal} from '@angular/core';
+import {Component, computed, input, output, signal} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
+import {MatIconModule} from '@angular/material/icon';
 import {MatChipsModule} from '@angular/material/chips';
 import {MatExpansionModule} from '@angular/material/expansion';
-import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {formatJson} from '../../utils/json';
 import {InspectorEvent} from '../types';
@@ -30,7 +30,6 @@ import {InspectorEvent} from '../types';
  */
 @Component({
   selector: 'a2ui-composer-message-inspector',
-  standalone: true,
   imports: [
     FormsModule,
     MatButtonModule,
@@ -41,7 +40,6 @@ import {InspectorEvent} from '../types';
   ],
   templateUrl: './message-inspector.ng.html',
   styleUrl: './message-inspector.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class A2aMessageInspector {
   /** Recorded raw A2A protocol events and JSON-RPC transport traces. */

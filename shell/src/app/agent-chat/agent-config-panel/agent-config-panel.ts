@@ -14,15 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  HostListener,
-  inject,
-  input,
-  OnInit,
-  output,
-} from '@angular/core';
+import {Component, HostListener, inject, input, OnInit, output} from '@angular/core';
 import {
   AbstractControl,
   FormBuilder,
@@ -63,7 +55,6 @@ export function httpUrlValidator(): ValidatorFn {
  */
 @Component({
   selector: 'a2ui-composer-agent-config-panel',
-  standalone: true,
   imports: [
     ReactiveFormsModule,
     A11yModule,
@@ -76,7 +67,6 @@ export function httpUrlValidator(): ValidatorFn {
   ],
   templateUrl: './agent-config-panel.ng.html',
   styleUrl: './agent-config-panel.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AgentConfigPanel implements OnInit {
   private readonly fb = inject(FormBuilder);

@@ -19,7 +19,7 @@
     <div class="user-message-bubble">
       @if (message().images && message().images!.length > 0) {
         <div class="msg-images-tray">
-          @for (img of message().images; track $index) {
+          @for (img of message().images; track img.name || img.previewUrl || $index) {
             <img [src]="img.previewUrl || img.data" [alt]="img.name" class="msg-image-thumb" />
           }
         </div>
@@ -38,7 +38,7 @@
       <div class="agent-message-body">
         @if (message().images && message().images!.length > 0) {
           <div class="msg-images-tray">
-            @for (img of message().images; track $index) {
+            @for (img of message().images; track img.name || img.previewUrl || $index) {
               <img [src]="img.previewUrl || img.data" [alt]="img.name" class="msg-image-thumb" />
             }
           </div>

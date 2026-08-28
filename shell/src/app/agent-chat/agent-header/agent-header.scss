@@ -38,8 +38,8 @@
       width: 36px;
       height: 36px;
       border-radius: 8px;
-      background: #e8f0fe;
-      color: #1967d2;
+      background: var(--mat-sys-primary-container, #e8f0fe);
+      color: var(--mat-sys-on-primary-container, #1967d2);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -141,8 +141,8 @@
     flex-shrink: 0;
 
     .session-chip {
-      background: #f3edf7;
-      color: #49454f;
+      background: var(--mat-sys-surface-container, #f3edf7);
+      color: var(--mat-sys-on-surface-variant, #49454f);
       border-radius: 8px;
       padding: 6px 12px;
       font-size: var(--mat-sys-label-small-size, 0.78rem);
