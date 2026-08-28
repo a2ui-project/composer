@@ -22,7 +22,7 @@ export class SafeUrlValidatorService {
    * Validates that a string is a valid URL with an http or https protocol.
    * Prevents javascript:, data:, and other potentially dangerous schemes.
    */
-  isValidHttpUrl(url: string | null | undefined): boolean {
+  static isValidHttpUrl(url: string | null | undefined): boolean {
     if (!url) {
       return false;
     }
@@ -32,5 +32,13 @@ export class SafeUrlValidatorService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Validates that a string is a valid URL with an http or https protocol.
+   * Prevents javascript:, data:, and other potentially dangerous schemes.
+   */
+  isValidHttpUrl(url: string | null | undefined): boolean {
+    return SafeUrlValidatorService.isValidHttpUrl(url);
   }
 }

@@ -57,4 +57,13 @@ describe('SafeUrlValidatorService', () => {
       expect(service.isValidHttpUrl('')).toBe(false);
     });
   });
+
+  describe('SafeUrlValidatorService.isValidHttpUrl (static)', () => {
+    it('validates http and https correctly', () => {
+      expect(SafeUrlValidatorService.isValidHttpUrl('http://localhost:8088')).toBe(true);
+      expect(SafeUrlValidatorService.isValidHttpUrl('https://example.com')).toBe(true);
+      expect(SafeUrlValidatorService.isValidHttpUrl('ftp://example.com')).toBe(false);
+      expect(SafeUrlValidatorService.isValidHttpUrl('')).toBe(false);
+    });
+  });
 });
