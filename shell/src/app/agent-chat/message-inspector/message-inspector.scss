@@ -49,9 +49,7 @@
         height: 20px;
       }
 
-      .inspector-title,
-      h2,
-      h3 {
+      .inspector-title {
         margin: 0;
         font-size: var(--mat-sys-title-small-size, 0.95rem);
         font-weight: var(--mat-sys-title-small-weight, 600);

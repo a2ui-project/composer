@@ -17,8 +17,8 @@
 <aside class="inspector-drawer" aria-labelledby="inspector-title">
   <div class="inspector-header">
     <div class="header-title">
-      <mat-icon class="header-icon">article</mat-icon>
-      <h2 id="inspector-title" class="inspector-title">A2A Message Inspector</h2>
+      <mat-icon class="header-icon" aria-hidden="true">article</mat-icon>
+      <span id="inspector-title" class="inspector-title">A2A Message Inspector</span>
       @if (events().length > 0) {
         <span class="event-counter-badge">{{ events().length }}</span>
       }
