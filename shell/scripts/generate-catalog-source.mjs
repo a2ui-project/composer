@@ -44,7 +44,11 @@ const toPascal = kebab =>
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join('');
 
-const readSourceFile = (abs, label) => ({label, path: repoPath(abs), code: readFileSync(abs, 'utf8')});
+const readSourceFile = (abs, label) => ({
+  label,
+  path: repoPath(abs),
+  code: readFileSync(abs, 'utf8'),
+});
 
 // Definitions: the zod contract + the Angular catalog assembly.
 const definitions = [

@@ -64,7 +64,12 @@ describe('CatalogReference', () => {
 
   it('groups every documented component under its category in a stable order', () => {
     const groups = component.groups();
-    expect(groups.map(g => g.category)).toEqual(['Layout', 'Content', 'Data Display', 'Interactive']);
+    expect(groups.map(g => g.category)).toEqual([
+      'Layout',
+      'Content',
+      'Data Display',
+      'Interactive',
+    ]);
     const grouped = groups.flatMap(g => g.docs.map(d => d.name)).sort();
     const all = COMPONENT_DOCS.map(d => d.name).sort();
     expect(grouped).toEqual(all);
@@ -124,8 +129,7 @@ describe('CatalogReference', () => {
     // is assembled from these same objects, so their names are the catalog's.
     const catalogNames = Object.values(apis)
       .filter(
-        (v): v is {name: string} =>
-          !!v && typeof v === 'object' && 'name' in v && 'schema' in v,
+        (v): v is {name: string} => !!v && typeof v === 'object' && 'name' in v && 'schema' in v,
       )
       .map(v => v.name)
       .sort();

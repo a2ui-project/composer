@@ -104,7 +104,9 @@
               </ng-container>
               <ng-container matColumnDef="type">
                 <th mat-header-cell *matHeaderCellDef>Type</th>
-                <td mat-cell *matCellDef="let prop"><code class="ref-prop-type">{{ prop.type }}</code></td>
+                <td mat-cell *matCellDef="let prop">
+                  <code class="ref-prop-type">{{ prop.type }}</code>
+                </td>
               </ng-container>
               <ng-container matColumnDef="required">
                 <th mat-header-cell *matHeaderCellDef>Required</th>

@@ -60,9 +60,24 @@ export const COMPONENT_DOCS: ComponentDoc[] = [
     description:
       'Horizontal layout container. Accepts a static child-id array or a v0.9 template ({ componentId, path }) that repeats one child per element of a bound array.',
     props: [
-      {name: 'children', type: 'ChildList', required: true, description: 'Static child ids or a { componentId, path } template.'},
-      {name: 'gap', type: 'number', required: false, description: 'Spacing between children, in pixels.'},
-      {name: 'align', type: "'start' | 'center' | 'end' | 'stretch'", required: false, description: 'Cross-axis (vertical) alignment.'},
+      {
+        name: 'children',
+        type: 'ChildList',
+        required: true,
+        description: 'Static child ids or a { componentId, path } template.',
+      },
+      {
+        name: 'gap',
+        type: 'number',
+        required: false,
+        description: 'Spacing between children, in pixels.',
+      },
+      {
+        name: 'align',
+        type: "'start' | 'center' | 'end' | 'stretch'",
+        required: false,
+        description: 'Cross-axis (vertical) alignment.',
+      },
       {
         name: 'justify',
         type: "'start' | 'center' | 'end' | 'spaceBetween' | 'spaceAround' | 'spaceEvenly' | 'stretch'",
@@ -82,9 +97,24 @@ export const COMPONENT_DOCS: ComponentDoc[] = [
     category: 'Layout',
     description: 'Vertical layout container. Same static-or-template child semantics as Row.',
     props: [
-      {name: 'children', type: 'ChildList', required: true, description: 'Static child ids or a { componentId, path } template.'},
-      {name: 'gap', type: 'number', required: false, description: 'Spacing between children, in pixels.'},
-      {name: 'align', type: "'start' | 'center' | 'end' | 'stretch'", required: false, description: 'Cross-axis (horizontal) alignment.'},
+      {
+        name: 'children',
+        type: 'ChildList',
+        required: true,
+        description: 'Static child ids or a { componentId, path } template.',
+      },
+      {
+        name: 'gap',
+        type: 'number',
+        required: false,
+        description: 'Spacing between children, in pixels.',
+      },
+      {
+        name: 'align',
+        type: "'start' | 'center' | 'end' | 'stretch'",
+        required: false,
+        description: 'Cross-axis (horizontal) alignment.',
+      },
     ],
     usage: [
       {id: 'root', component: 'Column', gap: 4, children: ['t1', 't2']},
@@ -99,21 +129,55 @@ export const COMPONENT_DOCS: ComponentDoc[] = [
       'A titled card with a single child slot. `child` is the id of another component in the tree, letting a flat tree express nested layouts.',
     props: [
       {name: 'title', type: 'DynamicString', required: true, description: 'Card heading.'},
-      {name: 'subtitle', type: 'DynamicString', required: false, description: 'Secondary line under the title.'},
-      {name: 'child', type: 'ComponentId', required: false, description: 'Id of the component rendered as the card body.'},
+      {
+        name: 'subtitle',
+        type: 'DynamicString',
+        required: false,
+        description: 'Secondary line under the title.',
+      },
+      {
+        name: 'child',
+        type: 'ComponentId',
+        required: false,
+        description: 'Id of the component rendered as the card body.',
+      },
     ],
     usage: [
-      {id: 'root', component: 'DashboardCard', title: 'Revenue', subtitle: 'Quarter-to-date', child: 'm'},
-      {id: 'm', component: 'Metric', label: 'Total revenue', value: '$1.24M', trend: 'up', trendValue: '+12.4%'},
+      {
+        id: 'root',
+        component: 'DashboardCard',
+        title: 'Revenue',
+        subtitle: 'Quarter-to-date',
+        child: 'm',
+      },
+      {
+        id: 'm',
+        component: 'Metric',
+        label: 'Total revenue',
+        value: '$1.24M',
+        trend: 'up',
+        trendValue: '+12.4%',
+      },
     ],
   },
   {
     name: 'Title',
     category: 'Content',
-    description: 'A plain heading. `text` is a DynamicString, so it can be a literal or a { path } binding into the data model.',
+    description:
+      'A plain heading. `text` is a DynamicString, so it can be a literal or a { path } binding into the data model.',
     props: [
-      {name: 'text', type: 'DynamicString', required: true, description: 'Heading text (literal or path binding).'},
-      {name: 'level', type: "'h1' | 'h2' | 'h3'", required: false, description: 'Heading level / visual size.'},
+      {
+        name: 'text',
+        type: 'DynamicString',
+        required: true,
+        description: 'Heading text (literal or path binding).',
+      },
+      {
+        name: 'level',
+        type: "'h1' | 'h2' | 'h3'",
+        required: false,
+        description: 'Heading level / visual size.',
+      },
     ],
     usage: [{id: 'root', component: 'Title', text: 'Quarterly Business Review', level: 'h1'}],
   },
@@ -135,14 +199,39 @@ export const COMPONENT_DOCS: ComponentDoc[] = [
   {
     name: 'Metric',
     category: 'Data Display',
-    description: 'A KPI stat block: an uppercase label, a large value, and an optional coloured trend indicator.',
+    description:
+      'A KPI stat block: an uppercase label, a large value, and an optional coloured trend indicator.',
     props: [
-      {name: 'label', type: 'DynamicString', required: true, description: 'Uppercase caption above the value.'},
+      {
+        name: 'label',
+        type: 'DynamicString',
+        required: true,
+        description: 'Uppercase caption above the value.',
+      },
       {name: 'value', type: 'DynamicString', required: true, description: 'The headline figure.'},
-      {name: 'trend', type: "'up' | 'down' | 'neutral'", required: false, description: 'Direction of the trend indicator.'},
-      {name: 'trendValue', type: 'DynamicString', required: false, description: 'Text shown beside the trend arrow.'},
+      {
+        name: 'trend',
+        type: "'up' | 'down' | 'neutral'",
+        required: false,
+        description: 'Direction of the trend indicator.',
+      },
+      {
+        name: 'trendValue',
+        type: 'DynamicString',
+        required: false,
+        description: 'Text shown beside the trend arrow.',
+      },
     ],
-    usage: [{id: 'root', component: 'Metric', label: 'New customers', value: '1,284', trend: 'up', trendValue: '+8.2%'}],
+    usage: [
+      {
+        id: 'root',
+        component: 'Metric',
+        label: 'New customers',
+        value: '1,284',
+        trend: 'up',
+        trendValue: '+8.2%',
+      },
+    ],
   },
   {
     name: 'PieChart',
@@ -150,8 +239,18 @@ export const COMPONENT_DOCS: ComponentDoc[] = [
     description:
       'A hand-rolled SVG donut. `data` is a DynamicValue array of { label, value, color? }; slices fall back to a palette when no colour is given.',
     props: [
-      {name: 'data', type: 'DynamicValue', required: true, description: 'Array of { label, value, color? } (literal or path binding).'},
-      {name: 'innerRadius', type: 'number', required: false, description: 'Donut hole radius (viewBox is 200×200; defaults to 40).'},
+      {
+        name: 'data',
+        type: 'DynamicValue',
+        required: true,
+        description: 'Array of { label, value, color? } (literal or path binding).',
+      },
+      {
+        name: 'innerRadius',
+        type: 'number',
+        required: false,
+        description: 'Donut hole radius (viewBox is 200×200; defaults to 40).',
+      },
     ],
     usage: [
       {
@@ -172,10 +271,25 @@ export const COMPONENT_DOCS: ComponentDoc[] = [
     description:
       'A hand-rolled SVG bar chart. Bars scale to the max value; valuePrefix/valueSuffix decorate each bar label (e.g. 305 → $305K).',
     props: [
-      {name: 'data', type: 'DynamicValue', required: true, description: 'Array of { label, value } (literal or path binding).'},
+      {
+        name: 'data',
+        type: 'DynamicValue',
+        required: true,
+        description: 'Array of { label, value } (literal or path binding).',
+      },
       {name: 'color', type: 'string', required: false, description: 'Bar fill colour.'},
-      {name: 'valuePrefix', type: 'string', required: false, description: 'Prepended to each value label.'},
-      {name: 'valueSuffix', type: 'string', required: false, description: 'Appended to each value label.'},
+      {
+        name: 'valuePrefix',
+        type: 'string',
+        required: false,
+        description: 'Prepended to each value label.',
+      },
+      {
+        name: 'valueSuffix',
+        type: 'string',
+        required: false,
+        description: 'Appended to each value label.',
+      },
     ],
     usage: [
       {
@@ -195,10 +309,21 @@ export const COMPONENT_DOCS: ComponentDoc[] = [
   {
     name: 'DataTable',
     category: 'Data Display',
-    description: 'A simple table. `columns` declares key/label pairs; `rows` are records keyed by those column keys.',
+    description:
+      'A simple table. `columns` declares key/label pairs; `rows` are records keyed by those column keys.',
     props: [
-      {name: 'columns', type: '{ key: string; label: string }[]', required: true, description: 'Column definitions in display order.'},
-      {name: 'rows', type: 'Record<string, unknown>[]', required: true, description: 'Row records keyed by column key.'},
+      {
+        name: 'columns',
+        type: '{ key: string; label: string }[]',
+        required: true,
+        description: 'Column definitions in display order.',
+      },
+      {
+        name: 'rows',
+        type: 'Record<string, unknown>[]',
+        required: true,
+        description: 'Row records keyed by column key.',
+      },
     ],
     usage: [
       {
@@ -225,18 +350,48 @@ export const COMPONENT_DOCS: ComponentDoc[] = [
       'A rich flight-result card — the showcase component. Every string prop is a DynamicString; `action` fires an event (typically book_flight) with a resolved context.',
     props: [
       {name: 'airline', type: 'DynamicString', required: true, description: 'Airline name.'},
-      {name: 'airlineLogo', type: 'DynamicString', required: true, description: 'Logo image URL (a broken/empty logo is hidden).'},
+      {
+        name: 'airlineLogo',
+        type: 'DynamicString',
+        required: true,
+        description: 'Logo image URL (a broken/empty logo is hidden).',
+      },
       {name: 'flightNumber', type: 'DynamicString', required: true, description: 'Flight number.'},
       {name: 'origin', type: 'DynamicString', required: true, description: 'Origin airport code.'},
-      {name: 'destination', type: 'DynamicString', required: true, description: 'Destination airport code.'},
+      {
+        name: 'destination',
+        type: 'DynamicString',
+        required: true,
+        description: 'Destination airport code.',
+      },
       {name: 'date', type: 'DynamicString', required: true, description: 'Travel date.'},
-      {name: 'departureTime', type: 'DynamicString', required: true, description: 'Departure time.'},
+      {
+        name: 'departureTime',
+        type: 'DynamicString',
+        required: true,
+        description: 'Departure time.',
+      },
       {name: 'arrivalTime', type: 'DynamicString', required: true, description: 'Arrival time.'},
       {name: 'duration', type: 'DynamicString', required: true, description: 'Flight duration.'},
-      {name: 'status', type: 'DynamicString', required: true, description: 'Status label (e.g. On time).'},
-      {name: 'statusColor', type: 'DynamicString', required: false, description: 'Colour for the status text.'},
+      {
+        name: 'status',
+        type: 'DynamicString',
+        required: true,
+        description: 'Status label (e.g. On time).',
+      },
+      {
+        name: 'statusColor',
+        type: 'DynamicString',
+        required: false,
+        description: 'Colour for the status text.',
+      },
       {name: 'price', type: 'DynamicString', required: true, description: 'Fare.'},
-      {name: 'action', type: 'Action', required: false, description: 'Event dispatched when the book button is pressed.'},
+      {
+        name: 'action',
+        type: 'Action',
+        required: false,
+        description: 'Event dispatched when the book button is pressed.',
+      },
     ],
     usage: [
       {
@@ -264,12 +419,33 @@ export const COMPONENT_DOCS: ComponentDoc[] = [
     description:
       'An action button that renders its `child` component as the label. `action` is dispatched through the surface on press; the button shows a confirmed state afterwards.',
     props: [
-      {name: 'child', type: 'ComponentId', required: true, description: 'Id of the component rendered as the button label.'},
-      {name: 'variant', type: "'primary' | 'secondary' | 'ghost'", required: false, description: 'Visual style.'},
-      {name: 'action', type: 'Action', required: false, description: 'Event dispatched when pressed.'},
+      {
+        name: 'child',
+        type: 'ComponentId',
+        required: true,
+        description: 'Id of the component rendered as the button label.',
+      },
+      {
+        name: 'variant',
+        type: "'primary' | 'secondary' | 'ghost'",
+        required: false,
+        description: 'Visual style.',
+      },
+      {
+        name: 'action',
+        type: 'Action',
+        required: false,
+        description: 'Event dispatched when pressed.',
+      },
     ],
     usage: [
-      {id: 'root', component: 'Button', variant: 'primary', action: {event: {name: 'book_flight'}}, child: 'label'},
+      {
+        id: 'root',
+        component: 'Button',
+        variant: 'primary',
+        action: {event: {name: 'book_flight'}},
+        child: 'label',
+      },
       {id: 'label', component: 'Title', text: 'Book flight', level: 'h3'},
     ],
   },

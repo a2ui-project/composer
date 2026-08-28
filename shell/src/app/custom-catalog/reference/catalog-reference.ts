@@ -55,7 +55,13 @@ interface DocGroup {
 @Component({
   selector: 'a2ui-composer-catalog-reference',
   standalone: true,
-  imports: [MatButtonModule, MatButtonToggleModule, MatIconModule, MatTableModule, SurfaceComponent],
+  imports: [
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatIconModule,
+    MatTableModule,
+    SurfaceComponent,
+  ],
   templateUrl: './catalog-reference.ng.html',
   styleUrl: './catalog-reference.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
