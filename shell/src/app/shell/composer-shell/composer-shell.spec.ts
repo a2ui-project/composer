@@ -276,7 +276,7 @@ describe('ComposerShell Layout', () => {
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(7);
+    expect(hiddenAttrs.length).toBe(8);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });

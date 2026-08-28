@@ -86,7 +86,8 @@ const EXAMPLES: Example[] = [
       provide: A2UI_RENDERER_CONFIG,
       useFactory: () => ({
         catalogs: [buildDashboardCatalog()],
-        actionHandler: (action: unknown) => console.info('[custom-catalog] action dispatched', action),
+        actionHandler: (action: unknown) =>
+          console.info('[custom-catalog] action dispatched', action),
       }),
     },
   ],

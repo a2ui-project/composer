@@ -96,7 +96,12 @@
           </button>
           <span class="th-step-readout">{{ step() }} / {{ totalSteps() }}</span>
         </div>
-        <div class="th-progress" role="progressbar" [attr.aria-valuenow]="step()" [attr.aria-valuemax]="totalSteps()">
+        <div
+          class="th-progress"
+          role="progressbar"
+          [attr.aria-valuenow]="step()"
+          [attr.aria-valuemax]="totalSteps()"
+        >
           <div class="th-progress-fill" [style.width.%]="progress()"></div>
         </div>
       </div>
@@ -144,9 +149,13 @@
               <dt>Recording</dt>
               <dd>{{ config().label }}</dd>
               <dt>Surface id</dt>
-              <dd><code>{{ config().surfaceId }}</code></dd>
+              <dd>
+                <code>{{ config().surfaceId }}</code>
+              </dd>
               <dt>Catalog id</dt>
-              <dd><code>{{ config().catalogId }}</code></dd>
+              <dd>
+                <code>{{ config().catalogId }}</code>
+              </dd>
               <dt>Messages</dt>
               <dd>{{ config().totalSteps }}</dd>
             </dl>
