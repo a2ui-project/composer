@@ -15,30 +15,29 @@
  */
 
 import {Injectable} from '@angular/core';
+import {isValidHttpUrl} from '../../utils/url';
 
-@Injectable({providedIn: 'root'})
+export {isValidHttpUrl};
+
+/**
+ * Service wrapper for URL validation.
+ * @deprecated Prefer using pure function `isValidHttpUrl` from `../../utils/url`.
+ */
+@Injectable({
+  providedIn: 'root',
+})
 export class SafeUrlValidatorService {
   /**
-   * Validates that a string is a valid URL with an http or https protocol.
-   * Prevents javascript:, data:, and other potentially dangerous schemes.
+   * Static validation helper delegating to `isValidHttpUrl`.
    */
   static isValidHttpUrl(url: string | null | undefined): boolean {
-    if (!url) {
-      return false;
-    }
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-    } catch {
-      return false;
-    }
+    return isValidHttpUrl(url);
   }
 
   /**
-   * Validates that a string is a valid URL with an http or https protocol.
-   * Prevents javascript:, data:, and other potentially dangerous schemes.
+   * Instance validation method delegating to `isValidHttpUrl`.
    */
   isValidHttpUrl(url: string | null | undefined): boolean {
-    return SafeUrlValidatorService.isValidHttpUrl(url);
+    return isValidHttpUrl(url);
   }
 }

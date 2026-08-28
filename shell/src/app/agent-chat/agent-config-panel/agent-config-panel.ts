@@ -34,7 +34,7 @@ import {MatSelectModule} from '@angular/material/select';
 import {A2A_BACKEND_OPTIONS, A2aBackendOption} from '../../chat/a2a/a2a-transport.token';
 import {A2aBackendMode} from '../../settings/app-config-provider/app-config-provider';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
-import {SafeUrlValidatorService} from '../../shared/security/safe-url-validator.service';
+import {isValidHttpUrl} from '../../utils/url';
 
 export interface AgentConfigSaveEvent {
   endpoint: string;
@@ -46,7 +46,7 @@ export function httpUrlValidator(): ValidatorFn {
   return (control: AbstractControl): ValidationErrors | null => {
     const val = (control.value || '').trim();
     if (!val) return null;
-    return SafeUrlValidatorService.isValidHttpUrl(val) ? null : {invalidHttpUrl: true};
+    return isValidHttpUrl(val) ? null : {invalidHttpUrl: true};
   };
 }
 
