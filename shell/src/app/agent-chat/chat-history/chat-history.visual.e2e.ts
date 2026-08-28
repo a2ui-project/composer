@@ -44,12 +44,16 @@ test.describe('A2aChatHistory Visual Regression & Layout', () => {
     const textarea = page.locator('.prompt-textarea');
     await textarea.fill('What is the best season to visit Tokyo?');
     await textarea.press('Enter');
-    await expect(chatHistory.locator('.agent-message-container')).toHaveCount(1);
+    await expect(chatHistory.locator('.agent-message-container').first()).toContainText(
+      'cherry blossoms',
+    );
 
     // Turn 2
     await textarea.fill('Recommend good areas to stay in Tokyo');
     await textarea.press('Enter');
-    await expect(chatHistory.locator('.agent-message-container')).toHaveCount(2);
+    await expect(chatHistory.locator('.agent-message-container').nth(1)).toContainText(
+      'Shinjuku or Shibuya',
+    );
 
     // Assertions
     await expect(chatHistory.locator('.user-message-bubble')).toHaveCount(2);

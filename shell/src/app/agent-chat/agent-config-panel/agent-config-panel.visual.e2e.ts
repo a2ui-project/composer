@@ -14,7 +14,18 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect, type Locator} from '@playwright/test';
+
+async function waitForImageLoad(locator: Locator): Promise<void> {
+  await locator.evaluate((img: HTMLImageElement) =>
+    img.complete && img.naturalWidth > 0
+      ? Promise.resolve()
+      : new Promise<void>(resolve => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        }),
+  );
+}
 
 test.describe('AgentConfigPanel Visual Regression & Layout', () => {
   test.beforeEach(async ({page}) => {
@@ -36,14 +47,7 @@ test.describe('AgentConfigPanel Visual Regression & Layout', () => {
     // Verify DOM structure, avatar logo, titles, and button states
     const avatar = panel.locator('.avatar-image');
     await expect(avatar).toHaveAttribute('src', /Untitled_design\.original\.png/);
-    await avatar.evaluate((img: HTMLImageElement) =>
-      img.complete && img.naturalWidth > 0
-        ? Promise.resolve()
-        : new Promise<void>(resolve => {
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-          }),
-    );
+    await waitForImageLoad(avatar);
 
     const title = panel.locator('.config-title');
     await expect(title).toHaveText('A2A Agent Configuration');
@@ -108,14 +112,7 @@ test.describe('AgentConfigPanel Visual Regression & Layout', () => {
 
     const avatar = panel.locator('.avatar-image');
     await expect(avatar).toHaveAttribute('src', /Untitled_design\.original\.png/);
-    await avatar.evaluate((img: HTMLImageElement) =>
-      img.complete && img.naturalWidth > 0
-        ? Promise.resolve()
-        : new Promise<void>(resolve => {
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-          }),
-    );
+    await waitForImageLoad(avatar);
 
     await panel.getByLabel('Agent Endpoint URL').fill('http://localhost:8088');
     await panel.getByLabel('Tenant ID').fill('tenant-prod-east');

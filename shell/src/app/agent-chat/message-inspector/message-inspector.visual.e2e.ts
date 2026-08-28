@@ -33,7 +33,7 @@ test.describe('A2aMessageInspector Visual Regression & Layout', () => {
     await page.locator('.inspector-toggle-btn').click();
     const inspector = page.locator('a2ui-composer-message-inspector');
     await expect(inspector).toBeVisible();
-    await expect(inspector.locator('.header-title h3')).toContainText('A2A Message Inspector');
+    await expect(inspector.locator('.inspector-title')).toContainText('A2A Message Inspector');
     await expect(inspector.locator('.event-counter-badge')).toBeVisible();
     await expect(inspector.locator('.clear-all-btn')).toBeVisible();
     await expect(inspector.locator('.filter-chips')).toBeVisible();
