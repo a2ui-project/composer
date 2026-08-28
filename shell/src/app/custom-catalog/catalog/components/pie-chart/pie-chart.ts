@@ -49,12 +49,7 @@ const OUTER_R = 80;
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="cc-pie">
-      <svg
-        class="cc-pie__svg"
-        viewBox="0 0 200 200"
-        role="img"
-        preserveAspectRatio="xMidYMid meet"
-      >
+      <svg class="cc-pie__svg" viewBox="0 0 200 200" role="img" preserveAspectRatio="xMidYMid meet">
         @for (slice of slices(); track slice.label) {
           <path [attr.d]="slice.path" [attr.fill]="slice.color" />
         }

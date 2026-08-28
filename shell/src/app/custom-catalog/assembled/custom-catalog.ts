@@ -14,13 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import {ChangeDetectionStrategy, Component, computed, inject, signal} from '@angular/core';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatIconModule} from '@angular/material/icon';
 import {A2uiRendererService, A2UI_RENDERER_CONFIG, SurfaceComponent} from '@a2ui/angular/v0_9';
@@ -84,7 +78,8 @@ const EXAMPLES: Example[] = [
       provide: A2UI_RENDERER_CONFIG,
       useFactory: () => ({
         catalogs: [buildDashboardCatalog()],
-        actionHandler: (action: unknown) => console.info('[custom-catalog] action dispatched', action),
+        actionHandler: (action: unknown) =>
+          console.info('[custom-catalog] action dispatched', action),
       }),
     },
   ],
@@ -165,7 +160,14 @@ export class CustomCatalog {
       return;
     }
     this.renderer.processMessages([
-      {updateDataModel: {surfaceId: this.activeExampleId(), path: '/', op: 'replace', value: parsed}},
+      {
+        updateDataModel: {
+          surfaceId: this.activeExampleId(),
+          path: '/',
+          op: 'replace',
+          value: parsed,
+        },
+      },
     ] as never);
   }
 }

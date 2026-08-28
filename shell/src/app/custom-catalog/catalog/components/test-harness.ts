@@ -80,7 +80,10 @@ export async function renderSurface(
     {version: 'v0.9', createSurface: {surfaceId: SURFACE_ID, catalogId: DASHBOARD_CATALOG_ID}},
   ];
   if (dataModel) {
-    messages.push({version: 'v0.9', updateDataModel: {surfaceId: SURFACE_ID, path: '/', value: dataModel}});
+    messages.push({
+      version: 'v0.9',
+      updateDataModel: {surfaceId: SURFACE_ID, path: '/', value: dataModel},
+    });
   }
   messages.push({version: 'v0.9', updateComponents: {surfaceId: SURFACE_ID, components}});
 
