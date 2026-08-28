@@ -128,7 +128,7 @@ export class RenderedFrame {
     // Inbound bridge listener: adjusts the iframe container height to fit the rendered
     // A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
     effect(() => {
-      const envelope = this.hostCommunication.messageStream();
+      const envelope = this.hostCommunication.messageStream?.();
       if (envelope?.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
         if (CrossFrameValidator.validateIncomingMessage(envelope)) {
           const resizePayload = envelope.payload as {height: number; width?: number};
