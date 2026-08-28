@@ -238,7 +238,13 @@
 
 .ref-preview {
   padding: var(--cpk-space-5, var(--cpk-fb-space-5));
-  overflow-x: auto;
+  overflow: auto;
+
+  // Several catalog components (BarChart, DataTable) are authored to fill
+  // their container, so an unbounded preview renders them at full page width.
+  // Give the surface a sane box; anything larger scrolls inside the card.
+  max-height: 560px;
+  max-width: 640px;
 }
 
 .ref-code {
