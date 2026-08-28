@@ -42,7 +42,7 @@ export const routes: Routes = [
       {
         path: 'a2a',
         loadComponent: () => import('./agent-chat/a2a-chat-view').then(m => m.A2aChatView),
-        title: 'A2A Agent Testing - A2UI Composer',
+        title: 'A2A Agent Testing',
         canActivate: [startupGuard],
       },
       {
