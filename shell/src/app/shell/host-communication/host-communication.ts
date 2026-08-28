@@ -247,6 +247,10 @@ export class HostCommunication implements OnDestroy {
 
   /**
    * Unregisters a previously registered iframe element or window target.
+   * Handles both HTMLIFrameElement and raw Window targets, ensuring that if
+   * the active communication target is removed, the service gracefully falls
+   * back to any remaining iframe or window rather than breaking the channel.
+   *
    * @param target Target iframe element or window reference to unregister
    */
   unregisterIframe(target: HTMLIFrameElement | Window | null): void {
@@ -260,12 +264,15 @@ export class HostCommunication implements OnDestroy {
           : (this.registeredWindows.values().next().value ?? null);
       }
     } else {
+      // Target is a direct Window reference (e.g. external popout or window-only test target).
       this.registeredWindows.delete(target as Window);
       if (this.iframeWindow === target) {
         const nextWindow = this.registeredWindows.values().next().value ?? null;
         if (nextWindow) {
           this.iframeWindow = nextWindow;
         } else {
+          // If no windows remain, fall back to any active iframe element in registeredIframes
+          // to prevent leaving the active communication channel disconnected when mixing targets.
           this.iframeElement = this.registeredIframes.values().next().value ?? null;
           this.iframeWindow = this.iframeElement ? this.iframeElement.contentWindow : null;
         }
