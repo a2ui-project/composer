@@ -35,7 +35,7 @@ test.describe('A2aChatView Full Orchestration Visual Regression & Layout', () =>
     const textarea = page.locator('.prompt-textarea');
     await textarea.fill('Find non-stop flights from SFO to NRT next month');
     await textarea.press('Enter');
-    await expect(page.locator('.agent-message-container')).toBeVisible();
+    await expect(page.locator('.agent-message-container')).toContainText('Flight NH007');
 
     // Open inspector drawer
     await page.locator('.inspector-toggle-btn').click();

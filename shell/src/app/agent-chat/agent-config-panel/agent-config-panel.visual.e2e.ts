@@ -81,14 +81,7 @@ test.describe('AgentConfigPanel Visual Regression & Layout', () => {
 
     const avatar = panel.locator('.avatar-image');
     await expect(avatar).toHaveAttribute('src', /Untitled_design\.original\.png/);
-    await avatar.evaluate((img: HTMLImageElement) =>
-      img.complete && img.naturalWidth > 0
-        ? Promise.resolve()
-        : new Promise<void>(resolve => {
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-          }),
-    );
+    await waitForImageLoad(avatar);
 
     await panel.getByLabel('Agent Endpoint URL').fill('http://mock-failing-agent.local');
     await panel.locator('.save-btn').click();
