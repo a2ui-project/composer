@@ -175,6 +175,97 @@ function extractBooleanProp(val: unknown, defaultVal: boolean): boolean {
   return defaultVal;
 }
 
+function extractChildIds(childVal: unknown): string[] {
+  if (Array.isArray(childVal)) {
+    return childVal.map(item =>
+      typeof item === 'string' ? item : String((item as Record<string, unknown>)?.['id'] || item),
+    );
+  }
+  if (typeof childVal === 'string') {
+    return [childVal];
+  }
+  return [];
+}
+
+interface ExtractedCardMetadata {
+  cardTitle?: string;
+  cardDescription?: string;
+  cardIcon?: string;
+  autoOpen?: boolean;
+}
+
+function extractCardMetadata(
+  primary: Record<string, unknown>,
+  fallback?: Record<string, unknown>,
+): ExtractedCardMetadata {
+  const cardTitle =
+    extractStringProp(primary['cardTitle']) ||
+    extractStringProp(primary['title']) ||
+    extractStringProp(primary['label']) ||
+    extractStringProp(primary['name']) ||
+    (fallback &&
+      (extractStringProp(fallback['cardTitle']) ||
+        extractStringProp(fallback['title']) ||
+        extractStringProp(fallback['label']) ||
+        extractStringProp(fallback['name'])));
+
+  const cardDescription =
+    extractStringProp(primary['cardDescription']) ||
+    extractStringProp(primary['description']) ||
+    (fallback &&
+      (extractStringProp(fallback['cardDescription']) ||
+        extractStringProp(fallback['description'])));
+
+  const cardIcon =
+    extractStringProp(primary['cardIcon']) ||
+    extractStringProp(primary['icon']) ||
+    (fallback && (extractStringProp(fallback['cardIcon']) || extractStringProp(fallback['icon'])));
+
+  const autoOpen =
+    'autoOpen' in primary
+      ? extractBooleanProp(primary['autoOpen'], true)
+      : fallback && 'autoOpen' in fallback
+        ? extractBooleanProp(fallback['autoOpen'], true)
+        : undefined;
+
+  return {cardTitle, cardDescription, cardIcon, autoOpen};
+}
+
+function extractFromFlatCanvas(obj: Record<string, unknown>): ExtractedCanvasInfo {
+  const metadata = extractCardMetadata(obj);
+  const childVal = obj['children'] || obj['child'] || obj['content'] || obj['items'];
+  return {
+    isCanvas: true,
+    ...metadata,
+    childIds: extractChildIds(childVal),
+  };
+}
+
+function extractFromNestedCanvas(
+  obj: Record<string, unknown>,
+  compRecord: Record<string, unknown>,
+): ExtractedCanvasInfo | null {
+  for (const key of Object.keys(compRecord)) {
+    if (key.toLowerCase() === 'canvas') {
+      const canvasProps = (compRecord[key] as Record<string, unknown>) || {};
+      const metadata = extractCardMetadata(canvasProps, obj);
+      const childVal =
+        canvasProps['children'] ||
+        canvasProps['child'] ||
+        canvasProps['content'] ||
+        canvasProps['items'] ||
+        obj['children'] ||
+        obj['child'];
+      return {
+        isCanvas: true,
+        ...metadata,
+        childIds: extractChildIds(childVal),
+      };
+    }
+  }
+  return null;
+}
+
 function getCanvasInfo(c: unknown): ExtractedCanvasInfo {
   if (!c || typeof c !== 'object') {
     return {isCanvas: false, childIds: []};
@@ -182,91 +273,16 @@ function getCanvasInfo(c: unknown): ExtractedCanvasInfo {
   const obj = c as Record<string, unknown>;
   const compVal = obj['component'];
 
-  // Flat / legacy string format: { component: "Canvas", children: [...], cardTitle: "...", cardDescription: "...", cardIcon: "...", autoOpen: ... }
+  // Flat / legacy string format: { component: "Canvas", ... }
   if (typeof compVal === 'string' && compVal.toLowerCase() === 'canvas') {
-    const cardTitle =
-      extractStringProp(obj['cardTitle']) ||
-      extractStringProp(obj['title']) ||
-      extractStringProp(obj['label']) ||
-      extractStringProp(obj['name']);
-    const cardDescription =
-      extractStringProp(obj['cardDescription']) || extractStringProp(obj['description']);
-    const cardIcon = extractStringProp(obj['cardIcon']) || extractStringProp(obj['icon']);
-    const autoOpen = 'autoOpen' in obj ? extractBooleanProp(obj['autoOpen'], true) : undefined;
-
-    const childVal = obj['children'] || obj['child'] || obj['content'] || obj['items'];
-    const childIds = Array.isArray(childVal)
-      ? childVal.map(item =>
-          typeof item === 'string'
-            ? item
-            : String((item as Record<string, unknown>)?.['id'] || item),
-        )
-      : typeof childVal === 'string'
-        ? [childVal]
-        : [];
-    return {
-      isCanvas: true,
-      cardTitle,
-      cardDescription,
-      cardIcon,
-      autoOpen,
-      childIds,
-    };
+    return extractFromFlatCanvas(obj);
   }
 
-  // Standard v0.9 object mapping: { component: { Canvas: { children: [...], cardTitle: "...", cardDescription: "...", cardIcon: "...", autoOpen: ... } } }
+  // Standard v0.9 object mapping: { component: { Canvas: { ... } } }
   if (typeof compVal === 'object' && compVal !== null) {
-    const compRecord = compVal as Record<string, unknown>;
-    for (const key of Object.keys(compRecord)) {
-      if (key.toLowerCase() === 'canvas') {
-        const canvasProps = (compRecord[key] as Record<string, unknown>) || {};
-        const cardTitle =
-          extractStringProp(canvasProps['cardTitle']) ||
-          extractStringProp(canvasProps['title']) ||
-          extractStringProp(canvasProps['label']) ||
-          extractStringProp(canvasProps['name']) ||
-          extractStringProp(obj['cardTitle']) ||
-          extractStringProp(obj['title']);
-        const cardDescription =
-          extractStringProp(canvasProps['cardDescription']) ||
-          extractStringProp(canvasProps['description']) ||
-          extractStringProp(obj['cardDescription']);
-        const cardIcon =
-          extractStringProp(canvasProps['cardIcon']) ||
-          extractStringProp(canvasProps['icon']) ||
-          extractStringProp(obj['cardIcon']);
-        const autoOpen =
-          'autoOpen' in canvasProps
-            ? extractBooleanProp(canvasProps['autoOpen'], true)
-            : 'autoOpen' in obj
-              ? extractBooleanProp(obj['autoOpen'], true)
-              : undefined;
-
-        const childVal =
-          canvasProps['children'] ||
-          canvasProps['child'] ||
-          canvasProps['content'] ||
-          canvasProps['items'] ||
-          obj['children'] ||
-          obj['child'];
-        const childIds = Array.isArray(childVal)
-          ? childVal.map(item =>
-              typeof item === 'string'
-                ? item
-                : String((item as Record<string, unknown>)?.['id'] || item),
-            )
-          : typeof childVal === 'string'
-            ? [childVal]
-            : [];
-        return {
-          isCanvas: true,
-          cardTitle,
-          cardDescription,
-          cardIcon,
-          autoOpen,
-          childIds,
-        };
-      }
+    const nestedInfo = extractFromNestedCanvas(obj, compVal as Record<string, unknown>);
+    if (nestedInfo) {
+      return nestedInfo;
     }
   }
 
