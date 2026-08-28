@@ -492,7 +492,9 @@ export class CatalogSchemaResolver {
     }
 
     const isCommonTypes =
-      pointer === 'common_types.json' || pointer.startsWith('common_types.json#');
+      pointer === 'common_types.json' ||
+      pointer.startsWith('common_types.json#') ||
+      pointer.includes('/common_types.json#');
     if (isCommonTypes) {
       const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
       if (localResolved !== undefined) {
@@ -501,7 +503,10 @@ export class CatalogSchemaResolver {
       return this.resolveJsonPointerBase(COMMON_TYPES_SCHEMA, relativePointer);
     }
 
-    const isCatalog = pointer === 'catalog.json' || pointer.startsWith('catalog.json#');
+    const isCatalog =
+      pointer === 'catalog.json' ||
+      pointer.startsWith('catalog.json#') ||
+      pointer.includes('/catalog.json#');
     if (isCatalog) {
       const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
       if (localResolved !== undefined) {
