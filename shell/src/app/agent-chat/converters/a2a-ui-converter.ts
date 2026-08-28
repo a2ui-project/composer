@@ -141,15 +141,14 @@ export function createErrorEvent(err: unknown): InspectorEvent {
 }
 
 import {
-  PartitionedA2uiSurface,
   hasA2uiCanvasComponent,
   normalizeA2uiItems,
   partitionA2uiSurfacePayload,
   unwrapCanvasForRenderer,
 } from './surface-partitioner';
 
+export type {PartitionedA2uiSurface} from './surface-partitioner';
 export {
-  PartitionedA2uiSurface,
   hasA2uiCanvasComponent,
   normalizeA2uiItems,
   partitionA2uiSurfacePayload,
