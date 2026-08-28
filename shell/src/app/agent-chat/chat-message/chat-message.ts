@@ -97,6 +97,16 @@ export class A2aChatMessage {
     return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
   });
 
+  /**
+   * Whether this message renders an embedded inline A2UI surface in the chat timeline.
+   *
+   * - Explicit inline: For partitioned messages (supporting mixed inline + Canvas turns),
+   *   `inlineA2uiPayload` is populated separately from `canvasArtifacts`.
+   * - Legacy fallback: For unpartitioned messages or test fixtures where only `a2uiPayload`
+   *   is provided, `hasCanvas: true` directed the entire payload to the Canvas side panel,
+   *   whereas `hasCanvas: false` (or falsy) meant the payload rendered inline in the chat bubble.
+   *   Therefore, we only treat `a2uiPayload` as inline when `!m.hasCanvas`.
+   */
   protected readonly hasInlineSurface = computed<boolean>(() => {
     const m = this.message();
     const hasExplicitInline = Boolean(m.inlineA2uiPayload?.length);
@@ -106,7 +116,7 @@ export class A2aChatMessage {
 
   protected readonly inlinePayload = computed<RenderA2uiItem[] | undefined>(() => {
     const m = this.message();
-    return m.inlineA2uiPayload || m.a2uiPayload;
+    return m.inlineA2uiPayload || (!m.hasCanvas ? m.a2uiPayload : undefined);
   });
 
   protected readonly hasImages = computed<boolean>(() => {
