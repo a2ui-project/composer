@@ -95,4 +95,74 @@ describe('A2aStreamEventParser', () => {
     const parsed = parser.parse(event);
     expect(parsed.isCompleted).toBe(true);
   });
+
+  it('unwraps JSON-RPC result wrappers', () => {
+    const event = {
+      result: {
+        taskId: 'rpc-task-1',
+        contextId: 'rpc-ctx-1',
+        message: {
+          role: 'agent',
+          parts: [{text: 'RPC unwrapped text'}],
+        },
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.taskId).toBe('rpc-task-1');
+    expect(parsed.contextId).toBe('rpc-ctx-1');
+    expect(parsed.textChunk).toBe('RPC unwrapped text');
+  });
+
+  it('extracts A2UI items from top-level artifact parts', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-5',
+      artifact: {
+        parts: [
+          {
+            data: [{createSurface: {surfaceId: 'art-surf-1'}}],
+          },
+        ],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.a2uiItems.length).toBe(1);
+    expect(parsed.a2uiItems[0].createSurface?.surfaceId).toBe('art-surf-1');
+  });
+
+  it('unpacks stringified JSON payload envelopes', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-6',
+      message: {
+        role: 'agent',
+        parts: [
+          {
+            data: {
+              mimeType: 'application/json',
+              data: JSON.stringify([{createSurface: {surfaceId: 'str-surf-1'}}]),
+            },
+          },
+        ],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.a2uiItems.length).toBe(1);
+    expect(parsed.a2uiItems[0].createSurface?.surfaceId).toBe('str-surf-1');
+  });
+
+  it('recognizes failed status and string status forms as terminal', () => {
+    const failedEvent: TaskStatusUpdateEvent = {
+      taskId: 'task-7',
+      status: {state: 'failed'},
+    };
+    expect(parser.parse(failedEvent).isCompleted).toBe(true);
+
+    const stringStatusEvent = {
+      taskId: 'task-8',
+      status: 'canceled',
+    };
+    expect(parser.parse(stringStatusEvent).isCompleted).toBe(true);
+  });
 });
