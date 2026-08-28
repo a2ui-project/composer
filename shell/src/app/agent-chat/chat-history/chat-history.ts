@@ -23,7 +23,8 @@ import {RenderA2uiItem} from 'a2ui-bridge';
 import {AgentCard} from '../../chat/a2a/a2a-types';
 import {A2aChatMessage} from '../chat-message/chat-message';
 import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
-import {UiAgentInfo, UiMessage} from '../types';
+import {UiAgentInfo} from '../agent-header/types';
+import {UiMessage} from '../chat-message/types';
 
 /**
  * Scrollable chat stream viewport displaying conversation turns, welcome showcase,

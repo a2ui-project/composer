@@ -17,7 +17,8 @@
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
 import {generateUuid as uuid} from '../../utils/uuid';
-import {InspectorEvent, UiAgentInfo} from '../types';
+import {UiAgentInfo} from '../agent-header/types';
+import {InspectorEvent} from '../message-inspector/types';
 
 /**
  * Default fallback icon URL for A2A Agents.

@@ -22,7 +22,7 @@ import {MatChipsModule} from '@angular/material/chips';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {formatJson} from '../../utils/json';
-import {InspectorEvent} from '../types';
+import {InspectorEvent} from './types';
 
 /**
  * Side-drawer diagnostic inspector for observing, filtering, and copying

@@ -20,7 +20,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {AgentCard} from '../../chat/a2a/a2a-types';
 import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
-import {UiAgentInfo} from '../types';
+import {UiAgentInfo} from './types';
 
 /**
  * Top header toolbar component for Agent Chat, displaying agent identity,

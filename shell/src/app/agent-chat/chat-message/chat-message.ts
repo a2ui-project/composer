@@ -24,7 +24,7 @@ import {MatTooltipModule} from '@angular/material/tooltip';
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {renderMarkdown} from '../../utils/markdown';
 import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
-import {UiMessage} from '../types';
+import {UiMessage} from './types';
 
 /**
  * Message bubble item rendering textual responses, markdown, thinking blocks,
