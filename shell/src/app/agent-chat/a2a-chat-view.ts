@@ -212,6 +212,10 @@ export class A2aChatView implements OnInit {
     if (!userText && images.length === 0) return;
 
     const userMessageId = uuid();
+    const agentMessageId = uuid();
+    const contextId = this.activeContextId() || uuid();
+    this.activeContextId.set(contextId);
+
     const userUiMessage: UiMessage = {
       id: userMessageId,
       sender: 'user',
@@ -219,12 +223,25 @@ export class A2aChatView implements OnInit {
       images,
       timestamp: Date.now(),
     };
+    const agentUiMessage = this.createPendingAgentMessage(agentMessageId);
 
+    const a2aMsg = this.buildOutgoingA2aMessage(userText, images, contextId);
+    this.recordInspectorEvent(createSentMessageEvent(a2aMsg));
+
+    this.messages.update(msgs => [...msgs, userUiMessage, agentUiMessage]);
+    this.executeStreamingTurn(a2aMsg, agentMessageId, undefined, contextId);
+  }
+
+  private buildOutgoingA2aMessage(
+    text: string,
+    images: SendMessageEvent['images'],
+    contextId: string,
+  ): A2aMessage {
     const parts: A2aMessage['parts'] = [];
-    if (userText) {
-      parts.push({text: userText});
+    if (text) {
+      parts.push({text});
     }
-    for (const img of images) {
+    for (const img of images || []) {
       parts.push({
         data: {
           mimeType: img.mimeType,
@@ -233,20 +250,15 @@ export class A2aChatView implements OnInit {
         },
       });
     }
-
-    const contextId = this.activeContextId() || uuid();
-    this.activeContextId.set(contextId);
-
-    const a2aMsg: A2aMessage = {
+    return {
       role: 'user',
       parts,
       contextId,
     };
+  }
 
-    this.recordInspectorEvent(createSentMessageEvent(a2aMsg));
-
-    const agentMessageId = uuid();
-    const agentUiMessage: UiMessage = {
+  private createPendingAgentMessage(agentMessageId: string): UiMessage {
+    return {
       id: agentMessageId,
       sender: 'agent',
       text: '',
@@ -255,9 +267,6 @@ export class A2aChatView implements OnInit {
       isStreaming: true,
       a2uiPayload: [],
     };
-
-    this.messages.update(msgs => [...msgs, userUiMessage, agentUiMessage]);
-    this.executeStreamingTurn(a2aMsg, agentMessageId, undefined, contextId);
   }
 
   protected submitSamplePrompt(prompt: string): void {
@@ -270,92 +279,119 @@ export class A2aChatView implements OnInit {
     taskId?: string,
     contextId?: string,
   ): Promise<void> {
+    const controller = this.initTurnAbortController();
+
+    const url = this.configProvider.a2aAgentUrl();
+    if (!url) {
+      this.handleMissingAgentUrl(agentMessageId, controller);
+      return;
+    }
+
+    try {
+      await this.consumeStreamTurn(url, a2aMsg, agentMessageId, controller, taskId, contextId);
+    } catch (err: unknown) {
+      if (!controller.signal.aborted) {
+        this.handleStreamingError(err, agentMessageId);
+      }
+    } finally {
+      this.finalizeStreamingTurn(agentMessageId, controller);
+    }
+  }
+
+  private initTurnAbortController(): AbortController {
     this.isStreaming.set(true);
     if (this.activeAbortController) {
       this.activeAbortController.abort();
     }
     const controller = new AbortController();
     this.activeAbortController = controller;
+    return controller;
+  }
 
-    const url = this.configProvider.a2aAgentUrl();
-    if (!url) {
-      this.messages.update(msgs =>
-        msgs.map(m =>
-          m.id === agentMessageId
-            ? {
-                ...m,
-                sender: 'error',
-                text: 'Error: Agent URL is not configured.',
-                isStreaming: false,
-              }
-            : m,
-        ),
-      );
-      if (this.activeAbortController === controller) {
-        this.isStreaming.set(false);
-        this.activeAbortController = undefined;
-      }
-      return;
-    }
-    const tenantId = this.configProvider.a2aTenantId() || undefined;
-
-    try {
-      const stream = this.a2aTransport.sendMessageStream(url, a2aMsg, {
-        tenantId,
-        taskId,
-        contextId,
-        abortSignal: controller.signal,
-      });
-
-      for await (const chunk of stream) {
-        if (controller.signal.aborted) break;
-        this.recordInspectorEvent(createReceivedEvent(chunk));
-        this.handleStreamEvent(chunk, agentMessageId);
-      }
-    } catch (err: unknown) {
-      if (controller.signal.aborted) {
-        return;
-      }
-      const errText = err instanceof Error ? err.message : 'Unknown communication error';
-      this.recordInspectorEvent(createErrorEvent(errText));
-
-      this.messages.update(msgs =>
-        msgs.map(m =>
-          m.id === agentMessageId
-            ? {
-                ...m,
-                sender: 'error',
-                text: m.text ? `${m.text}\n\n[Error: ${errText}]` : `Error: ${errText}`,
-                isStreaming: false,
-              }
-            : m,
-        ),
-      );
-    } finally {
-      if (this.activeAbortController === controller) {
-        this.isStreaming.set(false);
-        this.activeAbortController = undefined;
-      }
-
-      this.messages.update(msgs =>
-        msgs.map(m => {
-          if (m.id !== agentMessageId) return m;
-          if (controller.signal.aborted) {
-            const currentText = m.text ? `${m.text}\n\n*(Turn cancelled)*` : '*(Turn cancelled)*';
-            return {...m, text: currentText, isStreaming: false};
-          }
-          const hasContent = m.text || m.thinking || (m.a2uiPayload && m.a2uiPayload.length > 0);
-          if (!hasContent && m.sender !== 'error') {
-            return {
+  private handleMissingAgentUrl(agentMessageId: string, controller: AbortController): void {
+    this.messages.update(msgs =>
+      msgs.map(m =>
+        m.id === agentMessageId
+          ? {
               ...m,
-              text: '*(Agent finished without generating content. Check the agent server console logs or Message Inspector for details.)*',
+              sender: 'error',
+              text: 'Error: Agent URL is not configured.',
               isStreaming: false,
-            };
-          }
-          return {...m, isStreaming: false};
-        }),
-      );
+            }
+          : m,
+      ),
+    );
+    if (this.activeAbortController === controller) {
+      this.isStreaming.set(false);
+      this.activeAbortController = undefined;
     }
+  }
+
+  private async consumeStreamTurn(
+    url: string,
+    a2aMsg: A2aMessage,
+    agentMessageId: string,
+    controller: AbortController,
+    taskId?: string,
+    contextId?: string,
+  ): Promise<void> {
+    const tenantId = this.configProvider.a2aTenantId() || undefined;
+    const stream = this.a2aTransport.sendMessageStream(url, a2aMsg, {
+      tenantId,
+      taskId,
+      contextId,
+      abortSignal: controller.signal,
+    });
+
+    for await (const chunk of stream) {
+      if (controller.signal.aborted) break;
+      this.recordInspectorEvent(createReceivedEvent(chunk));
+      this.handleStreamEvent(chunk, agentMessageId);
+    }
+  }
+
+  private handleStreamingError(err: unknown, agentMessageId: string): void {
+    const errText = err instanceof Error ? err.message : 'Unknown communication error';
+    this.recordInspectorEvent(createErrorEvent(errText));
+
+    this.messages.update(msgs =>
+      msgs.map(m =>
+        m.id === agentMessageId
+          ? {
+              ...m,
+              sender: 'error',
+              text: m.text ? `${m.text}\n\n[Error: ${errText}]` : `Error: ${errText}`,
+              isStreaming: false,
+            }
+          : m,
+      ),
+    );
+  }
+
+  private finalizeStreamingTurn(agentMessageId: string, controller: AbortController): void {
+    if (this.activeAbortController === controller) {
+      this.isStreaming.set(false);
+      this.activeAbortController = undefined;
+    }
+
+    this.messages.update(msgs =>
+      msgs.map(m => {
+        if (m.id !== agentMessageId) return m;
+        if (controller.signal.aborted) {
+          const currentText = m.text ? `${m.text}\n\n*(Turn cancelled)*` : '*(Turn cancelled)*';
+          return {...m, text: currentText, isStreaming: false};
+        }
+        const hasContent = m.text || m.thinking || (m.a2uiPayload && m.a2uiPayload.length > 0);
+        if (!hasContent && m.sender !== 'error') {
+          return {
+            ...m,
+            text: '*(Agent finished without generating content. Check the agent server console logs or Message Inspector for details.)*',
+            isStreaming: false,
+          };
+        }
+        return {...m, isStreaming: false};
+      }),
+    );
   }
 
   private handleStreamEvent(event: TaskStatusUpdateEvent, agentMessageId: string): void {
