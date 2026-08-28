@@ -14,20 +14,30 @@
  * limitations under the License.
  */
 
+@use '../styles/cpk-fallbacks' as cpk-fallbacks;
+
+// Render correctly even when the shell theme layer is absent.
+:host {
+  @include cpk-fallbacks.light;
+}
+
+:host-context(.dark-theme) {
+  @include cpk-fallbacks.dark;
+}
 :host {
   display: block;
   height: 100%;
   box-sizing: border-box;
-  color: var(--cpk-text-primary);
-  font-family: var(--cpk-font-body);
+  color: var(--cpk-text-primary, var(--cpk-fb-text-primary));
+  font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
 }
 
 .th-page {
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: var(--cpk-space-4);
-  padding: var(--cpk-space-5);
+  gap: var(--cpk-space-4, var(--cpk-fb-space-4));
+  padding: var(--cpk-space-5, var(--cpk-fb-space-5));
   box-sizing: border-box;
 }
 
@@ -35,12 +45,12 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--cpk-space-5);
+  gap: var(--cpk-space-5, var(--cpk-fb-space-5));
   flex-wrap: wrap;
 }
 
 .th-title {
-  margin: 0 0 var(--cpk-space-1);
+  margin: 0 0 var(--cpk-space-1, var(--cpk-fb-space-1));
   font-size: 1.5rem;
   font-weight: 600;
 }
@@ -48,34 +58,34 @@
 .th-subtitle {
   margin: 0;
   max-width: 62ch;
-  color: var(--cpk-text-secondary);
+  color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
   font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .th-recording-switch,
 .th-inspector-tabs {
-  border: 1px solid var(--cpk-border);
-  border-radius: var(--cpk-radius-pill);
+  border: 1px solid var(--cpk-border, var(--cpk-fb-border));
+  border-radius: var(--cpk-radius-pill, var(--cpk-fb-radius-pill));
   overflow: hidden;
-  background: var(--cpk-surface-elevated);
+  background: var(--cpk-surface-elevated, var(--cpk-fb-surface-elevated));
   flex: 0 0 auto;
 
   ::ng-deep .mat-button-toggle-label-content {
     display: inline-flex;
     align-items: center;
-    gap: var(--cpk-space-2);
+    gap: var(--cpk-space-2, var(--cpk-fb-space-2));
     line-height: 36px;
-    padding: 0 var(--cpk-space-4);
+    padding: 0 var(--cpk-space-4, var(--cpk-fb-space-4));
   }
 
   ::ng-deep .mat-button-toggle {
-    color: var(--cpk-text-secondary);
+    color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
   }
 
   ::ng-deep .mat-button-toggle-checked {
-    background: var(--cpk-accent-bg);
-    color: var(--cpk-accent);
+    background: var(--cpk-accent-bg, var(--cpk-fb-accent-bg));
+    color: var(--cpk-accent, var(--cpk-fb-accent));
   }
 
   ::ng-deep mat-icon {
@@ -90,7 +100,7 @@
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
-  gap: var(--cpk-space-4);
+  gap: var(--cpk-space-4, var(--cpk-fb-space-4));
 
   @media (max-width: 900px) {
     grid-template-columns: minmax(0, 1fr);
@@ -102,7 +112,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: var(--cpk-space-4);
+  gap: var(--cpk-space-4, var(--cpk-fb-space-4));
 }
 
 .th-stage {
@@ -110,22 +120,22 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--cpk-border);
-  border-radius: var(--cpk-radius-lg);
-  background: var(--cpk-surface-elevated);
-  box-shadow: var(--cpk-shadow-card);
+  border: 1px solid var(--cpk-border, var(--cpk-fb-border));
+  border-radius: var(--cpk-radius-lg, var(--cpk-fb-radius-lg));
+  background: var(--cpk-surface-elevated, var(--cpk-fb-surface-elevated));
+  box-shadow: var(--cpk-shadow-card, var(--cpk-fb-shadow-card));
   overflow: hidden;
 }
 
 .th-pane-label {
   flex: 0 0 auto;
-  padding: var(--cpk-space-3) var(--cpk-space-4);
-  border-bottom: 1px solid var(--cpk-divider);
+  padding: var(--cpk-space-3, var(--cpk-fb-space-3)) var(--cpk-space-4, var(--cpk-fb-space-4));
+  border-bottom: 1px solid var(--cpk-divider, var(--cpk-fb-divider));
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--cpk-text-secondary);
+  color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
 }
 
 .th-surface-scroll {
@@ -133,7 +143,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: var(--cpk-space-5);
+  padding: var(--cpk-space-5, var(--cpk-fb-space-5));
 }
 
 .th-empty {
@@ -143,8 +153,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--cpk-space-3);
-  color: var(--cpk-text-secondary);
+  gap: var(--cpk-space-3, var(--cpk-fb-space-3));
+  color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
   text-align: center;
   pointer-events: none;
 }
@@ -166,42 +176,42 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--cpk-space-2);
-  padding: var(--cpk-space-3) var(--cpk-space-4);
-  border: 1px solid var(--cpk-border);
-  border-radius: var(--cpk-radius-lg);
-  background: var(--cpk-surface-elevated);
-  box-shadow: var(--cpk-shadow-card);
+  gap: var(--cpk-space-2, var(--cpk-fb-space-2));
+  padding: var(--cpk-space-3, var(--cpk-fb-space-3)) var(--cpk-space-4, var(--cpk-fb-space-4));
+  border: 1px solid var(--cpk-border, var(--cpk-fb-border));
+  border-radius: var(--cpk-radius-lg, var(--cpk-fb-radius-lg));
+  background: var(--cpk-surface-elevated, var(--cpk-fb-surface-elevated));
+  box-shadow: var(--cpk-shadow-card, var(--cpk-fb-shadow-card));
 }
 
 .th-controls {
   display: flex;
   align-items: center;
-  gap: var(--cpk-space-1);
+  gap: var(--cpk-space-1, var(--cpk-fb-space-1));
 }
 
 .th-play {
-  color: var(--cpk-accent);
+  color: var(--cpk-accent, var(--cpk-fb-accent));
 }
 
 .th-step-readout {
   margin-left: auto;
-  font-family: var(--cpk-font-mono);
+  font-family: var(--cpk-font-mono, var(--cpk-fb-font-mono));
   font-size: 0.8125rem;
-  color: var(--cpk-text-secondary);
+  color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
   font-variant-numeric: tabular-nums;
 }
 
 .th-progress {
   height: 4px;
   border-radius: 9999px;
-  background: var(--cpk-divider);
+  background: var(--cpk-divider, var(--cpk-fb-divider));
   overflow: hidden;
 }
 
 .th-progress-fill {
   height: 100%;
-  background: var(--cpk-accent);
+  background: var(--cpk-accent, var(--cpk-fb-accent));
   transition: width 0.2s ease;
 }
 
@@ -209,12 +219,12 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: var(--cpk-space-3);
-  border: 1px solid var(--cpk-border);
-  border-radius: var(--cpk-radius-lg);
-  background: var(--cpk-surface-elevated);
-  box-shadow: var(--cpk-shadow-card);
-  padding: var(--cpk-space-3);
+  gap: var(--cpk-space-3, var(--cpk-fb-space-3));
+  border: 1px solid var(--cpk-border, var(--cpk-fb-border));
+  border-radius: var(--cpk-radius-lg, var(--cpk-fb-radius-lg));
+  background: var(--cpk-surface-elevated, var(--cpk-fb-surface-elevated));
+  box-shadow: var(--cpk-shadow-card, var(--cpk-fb-shadow-card));
+  padding: var(--cpk-space-3, var(--cpk-fb-space-3));
   box-sizing: border-box;
 }
 
@@ -240,31 +250,31 @@
 .th-event {
   display: flex;
   align-items: center;
-  gap: var(--cpk-space-2);
+  gap: var(--cpk-space-2, var(--cpk-fb-space-2));
   width: 100%;
   text-align: left;
-  padding: var(--cpk-space-2) var(--cpk-space-2);
+  padding: var(--cpk-space-2, var(--cpk-fb-space-2)) var(--cpk-space-2, var(--cpk-fb-space-2));
   border: 1px solid transparent;
   border-radius: var(--cpk-radius-md, 8px);
   background: transparent;
-  color: var(--cpk-text-secondary);
-  font-family: var(--cpk-font-body);
+  color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
+  font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
   font-size: 0.8rem;
   cursor: pointer;
   opacity: 0.6;
 
   &:hover {
-    background: var(--cpk-glass-bg-hover);
+    background: var(--cpk-glass-bg-hover, var(--cpk-fb-glass-bg-hover));
   }
 
   &.applied {
     opacity: 1;
-    color: var(--cpk-text-primary);
+    color: var(--cpk-text-primary, var(--cpk-fb-text-primary));
   }
 
   &.active {
-    background: var(--cpk-accent-bg);
-    border-color: var(--cpk-accent);
+    background: var(--cpk-accent-bg, var(--cpk-fb-accent-bg));
+    border-color: var(--cpk-accent, var(--cpk-fb-accent));
   }
 }
 
@@ -272,35 +282,35 @@
   flex: 0 0 auto;
   width: 18px;
   text-align: right;
-  font-family: var(--cpk-font-mono);
+  font-family: var(--cpk-font-mono, var(--cpk-fb-font-mono));
   font-size: 0.72rem;
-  color: var(--cpk-text-secondary);
+  color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
   font-variant-numeric: tabular-nums;
 }
 
 .th-event-type {
   flex: 0 0 auto;
-  font-family: var(--cpk-font-mono);
+  font-family: var(--cpk-font-mono, var(--cpk-fb-font-mono));
   font-size: 0.68rem;
   padding: 1px 6px;
   border-radius: 4px;
-  background: var(--cpk-divider);
-  color: var(--cpk-text-secondary);
+  background: var(--cpk-divider, var(--cpk-fb-divider));
+  color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
 }
 
 .th-type-createSurface {
-  background: var(--cpk-accent-bg);
-  color: var(--cpk-accent);
+  background: var(--cpk-accent-bg, var(--cpk-fb-accent-bg));
+  color: var(--cpk-accent, var(--cpk-fb-accent));
 }
 
 .th-type-updateComponents {
-  background: var(--cpk-success-bg);
-  color: var(--cpk-success);
+  background: var(--cpk-success-bg, var(--cpk-fb-success-bg));
+  color: var(--cpk-success, var(--cpk-fb-success));
 }
 
 .th-type-updateDataModel {
-  background: var(--cpk-warning-bg);
-  color: var(--cpk-warning);
+  background: var(--cpk-warning-bg, var(--cpk-fb-warning-bg));
+  color: var(--cpk-warning, var(--cpk-fb-warning));
 }
 
 .th-event-summary {
@@ -312,12 +322,12 @@
 
 .th-code {
   margin: 0;
-  padding: var(--cpk-space-3);
+  padding: var(--cpk-space-3, var(--cpk-fb-space-3));
   overflow: auto;
-  font-family: var(--cpk-font-mono);
+  font-family: var(--cpk-font-mono, var(--cpk-fb-font-mono));
   font-size: 0.75rem;
   line-height: 1.5;
-  color: var(--cpk-text-primary);
+  color: var(--cpk-text-primary, var(--cpk-fb-text-primary));
   white-space: pre;
 }
 
@@ -325,11 +335,11 @@
   margin: 0;
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: var(--cpk-space-2) var(--cpk-space-4);
+  gap: var(--cpk-space-2, var(--cpk-fb-space-2)) var(--cpk-space-4, var(--cpk-fb-space-4));
   font-size: 0.8125rem;
 
   dt {
-    color: var(--cpk-text-secondary);
+    color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
     font-weight: 600;
   }
 
@@ -338,7 +348,7 @@
     overflow-wrap: anywhere;
 
     code {
-      font-family: var(--cpk-font-mono);
+      font-family: var(--cpk-font-mono, var(--cpk-fb-font-mono));
       font-size: 0.75rem;
     }
   }
