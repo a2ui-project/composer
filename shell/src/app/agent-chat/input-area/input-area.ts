@@ -14,20 +14,12 @@
  * limitations under the License.
  */
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  ElementRef,
-  input,
-  output,
-  signal,
-  viewChild,
-} from '@angular/core';
+import {Component, ElementRef, input, output, signal, viewChild} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {UiAttachedImage} from '../types';
+import {UiAttachedImage} from '../chat-message/types';
 
 export interface SendMessageEvent {
   text: string;
@@ -40,11 +32,9 @@ export interface SendMessageEvent {
  */
 @Component({
   selector: 'a2ui-composer-input-area',
-  standalone: true,
   imports: [FormsModule, MatButtonModule, MatIconModule, MatTooltipModule],
   templateUrl: './input-area.ng.html',
   styleUrl: './input-area.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class A2aInputArea {
   /** Whether the input area and controls are disabled. */

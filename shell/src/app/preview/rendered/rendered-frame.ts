@@ -26,7 +26,7 @@ import {
 } from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {SafeUrlValidatorService} from '../../shared/security/safe-url-validator.service';
+import {isValidHttpUrl} from '../../utils/url';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
@@ -47,7 +47,6 @@ import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame
 })
 export class RenderedFrame {
   private sanitizer = inject(DomSanitizer);
-  private urlValidator = inject(SafeUrlValidatorService);
   private startupResolution = inject(StartupResolution);
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
@@ -103,7 +102,7 @@ export class RenderedFrame {
       url.searchParams.set('theme', initialTheme);
 
       const urlString = url.toString();
-      if (!this.urlValidator.isValidHttpUrl(urlString)) {
+      if (!isValidHttpUrl(urlString)) {
         console.error('Renderer URL failed safe validation:', urlString);
         return null;
       }

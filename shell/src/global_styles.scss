@@ -25,6 +25,9 @@ $light-theme: mat.define-theme(
       theme-type: light,
       primary: mat.$violet-palette,
     ),
+    typography: (
+      plain-family: 'Roboto, sans-serif',
+    ),
   )
 );
 
@@ -34,10 +37,18 @@ $dark-theme: mat.define-theme(
       theme-type: dark,
       primary: mat.$violet-palette,
     ),
+    typography: (
+      plain-family: 'Roboto, sans-serif',
+    ),
   )
 );
 
 @include mat.all-component-bases($light-theme);
+
+:root {
+  @include mat.all-component-typographies($light-theme);
+  @include mat.system-level-typography($light-theme);
+}
 
 :root,
 .light-theme {
