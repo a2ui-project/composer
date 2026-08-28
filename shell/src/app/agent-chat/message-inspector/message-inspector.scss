@@ -51,8 +51,8 @@
 
       h3 {
         margin: 0;
-        font-size: 0.95rem;
-        font-weight: 600;
+        font-size: var(--mat-sys-title-small-size, 0.95rem);
+        font-weight: var(--mat-sys-title-small-weight, 600);
         color: var(--mat-sys-on-surface, #1f1f1f);
       }
 
@@ -60,8 +60,8 @@
         background: var(--mat-sys-primary-container, #dbeafe);
         color: var(--mat-sys-on-primary-container, #1d4ed8);
         border-radius: 10px;
-        font-size: 0.72rem;
-        font-weight: 600;
+        font-size: var(--mat-sys-label-small-size, 0.72rem);
+        font-weight: var(--mat-sys-label-small-weight, 600);
         padding: 1px 7px;
         min-width: 14px;
         text-align: center;
@@ -74,7 +74,7 @@
       gap: 4px;
 
       .clear-all-btn {
-        font-size: 0.78rem;
+        font-size: var(--mat-sys-label-small-size, 0.78rem);
         height: 28px;
         line-height: 28px;
         padding: 0 8px;
@@ -128,7 +128,7 @@
         flex: 1;
         border: none;
         outline: none;
-        font-size: 0.8rem;
+        font-size: var(--mat-sys-body-small-size, 0.8rem);
         background: transparent;
         color: var(--mat-sys-on-surface, #1f1f1f);
 
@@ -162,8 +162,8 @@
         border: 1px solid var(--mat-sys-outline-variant, #dadce0);
         border-radius: 14px;
         padding: 2px 10px;
-        font-size: 0.72rem;
-        font-weight: 500;
+        font-size: var(--mat-sys-label-small-size, 0.72rem);
+        font-weight: var(--mat-sys-label-small-weight, 500);
         color: var(--mat-sys-on-surface-variant, #5f6368);
         cursor: pointer;
         transition: all 0.15s ease;
@@ -208,7 +208,7 @@
 
       p {
         margin: 0;
-        font-size: 0.85rem;
+        font-size: var(--mat-sys-body-medium-size, 0.85rem);
       }
     }
 
@@ -231,7 +231,7 @@
           padding: 8px 12px;
           height: auto !important;
           min-height: 38px;
-          font-size: 0.82rem;
+          font-size: var(--mat-sys-body-small-size, 0.82rem);
 
           .event-title {
             display: flex;
@@ -244,8 +244,8 @@
               gap: 4px;
               border-radius: 12px;
               padding: 2px 8px;
-              font-size: 0.72rem;
-              font-weight: 600;
+              font-size: var(--mat-sys-label-small-size, 0.72rem);
+              font-weight: var(--mat-sys-label-small-weight, 600);
 
               .dir-icon {
                 font-size: 13px;
@@ -270,7 +270,7 @@
             }
 
             .type-tag {
-              font-size: 0.75rem;
+              font-size: var(--mat-sys-label-small-size, 0.75rem);
               color: var(--mat-sys-on-surface-variant, #5f6368);
               font-family: monospace;
             }
@@ -284,7 +284,7 @@
             margin-right: 4px;
 
             .event-time {
-              font-size: 0.72rem;
+              font-size: var(--mat-sys-label-small-size, 0.72rem);
               color: var(--mat-sys-on-surface-variant, #757575);
             }
 
@@ -316,8 +316,8 @@
 
           .json-code-table {
             font-family: monospace;
-            font-size: 0.78rem;
-            line-height: 1.5;
+            font-size: var(--mat-sys-body-small-size, 0.78rem);
+            line-height: var(--mat-sys-body-small-line-height, 1.5);
             display: flex;
             flex-direction: column;
             overflow-x: auto;

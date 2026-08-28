@@ -31,9 +31,9 @@
       color: var(--mat-sys-on-primary, #ffffff);
       border-radius: 20px;
       padding: 8px 18px;
-      font-size: 0.88rem;
+      font-size: var(--mat-sys-body-medium-size, 0.88rem);
       max-width: 80%;
-      line-height: 1.4;
+      line-height: var(--mat-sys-body-medium-line-height, 1.4);
       word-break: break-word;
       display: inline-flex;
       align-items: center;
@@ -78,8 +78,8 @@
         }
 
         .agent-badge-name {
-          font-size: 0.78rem;
-          font-weight: 500;
+          font-size: var(--mat-sys-label-small-size, 0.78rem);
+          font-weight: var(--mat-sys-label-small-weight, 500);
           color: var(--mat-sys-on-surface-variant, #5f6368);
         }
       }
@@ -90,9 +90,9 @@
         gap: 8px;
 
         .agent-text-content {
-          font-size: 0.88rem;
+          font-size: var(--mat-sys-body-medium-size, 0.88rem);
           color: var(--mat-sys-on-surface, #1f1f1f);
-          line-height: 1.5;
+          line-height: var(--mat-sys-body-medium-line-height, 1.5);
 
           &.error {
             color: var(--mat-sys-on-error-container, #b3261e);
@@ -139,9 +139,9 @@
             padding: 6px 12px;
             cursor: pointer;
             user-select: none;
-            font-size: 0.82rem;
+            font-size: var(--mat-sys-label-medium-size, 0.82rem);
             color: var(--mat-sys-on-surface-variant, #5f6368);
-            font-weight: 500;
+            font-weight: var(--mat-sys-label-medium-weight, 500);
             background: var(--mat-sys-surface-container, #f1f3f4);
 
             .thinking-icon {
@@ -165,9 +165,9 @@
 
           .thinking-content {
             padding: 10px 14px;
-            font-size: 0.82rem;
+            font-size: var(--mat-sys-body-small-size, 0.82rem);
             color: var(--mat-sys-on-surface-variant, #49454f);
-            line-height: 1.4;
+            line-height: var(--mat-sys-body-small-line-height, 1.4);
             font-family: inherit;
             background: var(--mat-sys-surface, #ffffff);
             border-top: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
@@ -211,13 +211,13 @@
               gap: 2px;
 
               .btn-main-title {
-                font-weight: 600;
-                font-size: 0.85rem;
+                font-weight: var(--mat-sys-label-large-weight, 600);
+                font-size: var(--mat-sys-label-large-size, 0.85rem);
                 color: var(--mat-sys-on-surface, #1f1f1f);
               }
 
               .btn-sub-title {
-                font-size: 0.75rem;
+                font-size: var(--mat-sys-body-small-size, 0.75rem);
                 color: var(--mat-sys-on-surface-variant, #5f6368);
               }
             }
@@ -234,8 +234,8 @@
             border-radius: 8px;
             height: 36px;
             padding: 0 14px;
-            font-weight: 500;
-            font-size: 0.82rem;
+            font-weight: var(--mat-sys-label-medium-weight, 500);
+            font-size: var(--mat-sys-label-medium-size, 0.82rem);
             display: inline-flex;
             align-items: center;
             gap: 6px;

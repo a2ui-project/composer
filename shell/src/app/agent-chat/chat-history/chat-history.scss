@@ -41,14 +41,14 @@
     }
 
     .connecting-title {
-      font-size: 1.1rem;
-      font-weight: 600;
+      font-size: var(--mat-sys-title-medium-size, 1.1rem);
+      font-weight: var(--mat-sys-title-medium-weight, 600);
       color: var(--mat-sys-on-surface, #1f1f1f);
       margin: 0 0 8px 0;
     }
 
     .connecting-subtitle {
-      font-size: 0.85rem;
+      font-size: var(--mat-sys-body-small-size, 0.85rem);
       color: var(--mat-sys-on-surface-variant, #5f6368);
       margin: 0;
 
@@ -58,7 +58,7 @@
         padding: 2px 6px;
         border-radius: 4px;
         font-family: monospace;
-        font-size: 0.82rem;
+        font-size: var(--mat-sys-body-small-size, 0.82rem);
         color: var(--mat-sys-on-surface, #3c4043);
       }
     }
@@ -113,16 +113,16 @@
 
           .welcome-title {
             margin: 0;
-            font-size: 1.05rem;
-            font-weight: 700;
+            font-size: var(--mat-sys-title-medium-size, 1.05rem);
+            font-weight: var(--mat-sys-title-medium-weight, 700);
             color: var(--mat-sys-on-surface, #1f1f1f);
           }
 
           .welcome-desc {
             margin: 0;
-            font-size: 0.82rem;
+            font-size: var(--mat-sys-body-small-size, 0.82rem);
             color: var(--mat-sys-on-surface-variant, #5f6368);
-            line-height: 1.4;
+            line-height: var(--mat-sys-body-small-line-height, 1.4);
           }
         }
       }
@@ -136,8 +136,8 @@
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          font-size: 0.75rem;
-          font-weight: 500;
+          font-size: var(--mat-sys-label-small-size, 0.75rem);
+          font-weight: var(--mat-sys-label-small-weight, 500);
           padding: 4px 10px;
           border-radius: 12px;
 
@@ -167,7 +167,7 @@
         background: var(--mat-sys-surface-container, #f1f3f4);
         border-radius: 8px;
         padding: 10px 14px;
-        font-size: 0.82rem;
+        font-size: var(--mat-sys-body-small-size, 0.82rem);
         color: var(--mat-sys-on-surface-variant, #444746);
 
         .banner-icon {
@@ -178,7 +178,7 @@
         }
 
         .banner-text {
-          font-weight: 500;
+          font-weight: var(--mat-sys-body-small-weight, 500);
         }
       }
     }

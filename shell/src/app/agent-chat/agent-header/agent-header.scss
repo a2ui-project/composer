@@ -70,8 +70,8 @@
 
         .agent-title {
           margin: 0;
-          font-size: 0.95rem;
-          font-weight: 600;
+          font-size: var(--mat-sys-title-small-size, 0.95rem);
+          font-weight: var(--mat-sys-title-small-weight, 600);
           color: var(--mat-sys-on-surface, #1f1f1f);
           white-space: nowrap;
           overflow: hidden;
@@ -79,18 +79,18 @@
         }
 
         .agent-version-chip {
-          font-size: 0.72rem;
+          font-size: var(--mat-sys-label-small-size, 0.72rem);
           padding: 1px 6px;
           border-radius: 10px;
           background: var(--mat-sys-secondary-container, #e8def8);
           color: var(--mat-sys-on-secondary-container, #1d192b);
-          font-weight: 500;
+          font-weight: var(--mat-sys-label-small-weight, 500);
         }
       }
 
       .agent-endpoint-row {
         font-family: monospace;
-        font-size: 0.75rem;
+        font-size: var(--mat-sys-body-small-size, 0.75rem);
         color: var(--mat-sys-on-surface-variant, #757575);
 
         .endpoint-text {
@@ -145,7 +145,7 @@
       color: #49454f;
       border-radius: 8px;
       padding: 6px 12px;
-      font-size: 0.78rem;
+      font-size: var(--mat-sys-label-small-size, 0.78rem);
       font-family: monospace;
       max-width: 180px;
       white-space: nowrap;
@@ -158,8 +158,8 @@
       align-items: center;
       gap: 6px;
       border-radius: 20px;
-      font-size: 0.82rem;
-      font-weight: 500;
+      font-size: var(--mat-sys-label-medium-size, 0.82rem);
+      font-weight: var(--mat-sys-label-medium-weight, 500);
       padding: 0 14px;
       height: 34px;
 

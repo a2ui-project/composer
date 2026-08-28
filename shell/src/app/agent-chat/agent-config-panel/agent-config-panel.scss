@@ -87,19 +87,21 @@
 
         .config-title {
           margin: 0;
-          font-size: 1.05rem;
-          font-weight: 600;
+          font-size: var(--mat-sys-title-medium-size, 1.05rem);
+          font-weight: var(--mat-sys-title-medium-weight, 600);
+          line-height: var(--mat-sys-title-medium-line-height, 1.4);
           color: var(--mat-sys-on-surface, #1f1f1f);
         }
 
         .config-subtitle {
           margin: 0;
-          font-size: 0.8rem;
+          font-size: var(--mat-sys-body-small-size, 0.8rem);
           color: var(--mat-sys-on-surface-variant, #5f6368);
-          line-height: 1.35;
+          line-height: var(--mat-sys-body-small-line-height, 1.35);
 
           .mono-code {
             font-family: monospace;
+            font-size: var(--mat-sys-body-small-size, 0.78rem);
             background: var(--mat-sys-surface-container-high, #f1f3f4);
             padding: 1px 4px;
             border-radius: 3px;
@@ -118,7 +120,7 @@
         width: 100%;
 
         mat-hint {
-          font-size: 0.75rem;
+          font-size: var(--mat-sys-body-small-size, 0.75rem);
           color: var(--mat-sys-on-surface-variant, #757575);
         }
       }
@@ -132,8 +134,8 @@
         border: 1px solid var(--mat-sys-error-outline, #f9d2d2);
         padding: 10px 14px;
         border-radius: 8px;
-        font-size: 0.82rem;
-        line-height: 1.35;
+        font-size: var(--mat-sys-body-small-size, 0.82rem);
+        line-height: var(--mat-sys-body-small-line-height, 1.35);
 
         mat-icon {
           font-size: 18px;
@@ -156,7 +158,8 @@
 
         .clear-address-btn {
           color: var(--mat-sys-on-surface-variant, #5f6368);
-          font-size: 0.82rem;
+          font-size: var(--mat-sys-label-medium-size, 0.82rem);
+          font-weight: var(--mat-sys-label-medium-weight, 500);
           display: inline-flex;
           align-items: center;
           gap: 6px;
@@ -174,7 +177,8 @@
 
         .cancel-btn {
           color: var(--mat-sys-on-surface-variant, #5f6368);
-          font-size: 0.85rem;
+          font-size: var(--mat-sys-label-large-size, 0.85rem);
+          font-weight: var(--mat-sys-label-large-weight, 500);
         }
 
         .save-btn {
@@ -183,8 +187,8 @@
           border-radius: 20px;
           padding: 0 20px;
           height: 38px;
-          font-size: 0.85rem;
-          font-weight: 500;
+          font-size: var(--mat-sys-label-large-size, 0.85rem);
+          font-weight: var(--mat-sys-label-large-weight, 500);
           display: inline-flex;
           align-items: center;
           gap: 8px;

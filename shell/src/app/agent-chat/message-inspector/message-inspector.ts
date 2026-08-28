@@ -21,6 +21,7 @@ import {MatChipsModule} from '@angular/material/chips';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
+import {formatJson} from '../../utils/json';
 import {InspectorEvent} from '../types';
 
 /**
@@ -85,7 +86,7 @@ export class A2aMessageInspector {
   protected formatJsonPayload(payload: unknown): string {
     if (payload === undefined) return '';
     try {
-      return JSON.stringify(payload, null, 2);
+      return formatJson(payload);
     } catch {
       return String(payload);
     }

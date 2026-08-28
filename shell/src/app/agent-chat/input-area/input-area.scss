@@ -70,15 +70,15 @@
         }
 
         .chip-name {
-          font-size: 0.78rem;
-          font-weight: 500;
+          font-size: var(--mat-sys-label-small-size, 0.78rem);
+          font-weight: var(--mat-sys-label-small-weight, 500);
           color: var(--mat-sys-on-surface, #3c4043);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
           flex: 1;
           min-width: 0;
-          line-height: 1.2;
+          line-height: var(--mat-sys-label-small-line-height, 1.2);
         }
 
         .remove-img-btn {
@@ -119,8 +119,8 @@
       outline: none;
       resize: none;
       font-family: inherit;
-      font-size: 0.88rem;
-      line-height: 1.4;
+      font-size: var(--mat-sys-body-medium-size, 0.88rem);
+      line-height: var(--mat-sys-body-medium-line-height, 1.4);
       color: var(--mat-sys-on-surface, #1f1f1f);
       background: transparent;
       width: 100%;
