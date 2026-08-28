@@ -17,7 +17,7 @@
 /**
  * A recorded A2A event item for the Message Inspector debugger.
  */
-export interface InspectorEvent {
+export interface MessageInspectorEvent {
   /** Unique identifier for the recorded protocol trace event. */
   id: string;
   /** Timestamp when the event was transmitted or received. */
@@ -29,3 +29,8 @@ export interface InspectorEvent {
   /** Full raw JSON payload or error object associated with the event. */
   payload: unknown;
 }
+
+/**
+ * @deprecated Use MessageInspectorEvent instead.
+ */
+export type InspectorEvent = MessageInspectorEvent;

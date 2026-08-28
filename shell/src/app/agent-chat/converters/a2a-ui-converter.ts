@@ -18,7 +18,7 @@ import {RenderA2uiItem} from 'a2ui-bridge';
 import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
 import {generateUuid as uuid} from '../../utils/uuid';
 import {UiAgentInfo} from '../agent-header/types';
-import {InspectorEvent} from '../message-inspector/types';
+import {MessageInspectorEvent} from '../message-inspector/message-inspector-event';
 
 /**
  * Default fallback icon URL for A2A Agents.
@@ -70,7 +70,7 @@ export function a2aCardToUiAgentInfo(card: AgentCard | null, url: string | null)
 /**
  * Creates an InspectorEvent recording an outgoing message turn.
  */
-export function createSentMessageEvent(msg: A2aMessage): InspectorEvent {
+export function createSentMessageEvent(msg: A2aMessage): MessageInspectorEvent {
   const textSummary = msg.parts?.find(p => p.text)?.text?.slice(0, 40) || 'Message turn';
   return {
     id: uuid(),
@@ -84,7 +84,7 @@ export function createSentMessageEvent(msg: A2aMessage): InspectorEvent {
 /**
  * Creates an InspectorEvent recording an outgoing user UI action.
  */
-export function createSentActionEvent(taskId: string, action: unknown): InspectorEvent {
+export function createSentActionEvent(taskId: string, action: unknown): MessageInspectorEvent {
   return {
     id: uuid(),
     timestamp: Date.now(),
@@ -97,7 +97,7 @@ export function createSentActionEvent(taskId: string, action: unknown): Inspecto
 /**
  * Creates an InspectorEvent recording an incoming streaming event chunk.
  */
-export function createReceivedEvent(event: TaskStatusUpdateEvent): InspectorEvent {
+export function createReceivedEvent(event: TaskStatusUpdateEvent): MessageInspectorEvent {
   const taskId = event.taskId || event.contextId || 'event';
   let summary = `Received Event (${taskId})`;
   if (event.status) {
@@ -125,7 +125,7 @@ export function createReceivedEvent(event: TaskStatusUpdateEvent): InspectorEven
 /**
  * Creates an InspectorEvent recording an error event.
  */
-export function createErrorEvent(err: unknown): InspectorEvent {
+export function createErrorEvent(err: unknown): MessageInspectorEvent {
   const msg = err instanceof Error ? err.message : String(err);
   return {
     id: uuid(),

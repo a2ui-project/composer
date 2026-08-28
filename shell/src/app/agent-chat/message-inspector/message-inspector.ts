@@ -22,7 +22,7 @@ import {MatChipsModule} from '@angular/material/chips';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {formatJson} from '../../utils/json';
-import {InspectorEvent} from './types';
+import {MessageInspectorEvent} from './message-inspector-event';
 
 /**
  * Side-drawer diagnostic inspector for observing, filtering, and copying
@@ -43,7 +43,7 @@ import {InspectorEvent} from './types';
 })
 export class A2aMessageInspector {
   /** Recorded raw A2A protocol events and JSON-RPC transport traces. */
-  readonly events = input<InspectorEvent[]>([]);
+  readonly events = input<MessageInspectorEvent[]>([]);
   /** Emitted when the user closes the message inspector side drawer. */
   readonly closeDrawer = output<void>();
   /** Emitted when the user clears all recorded inspector events. */
@@ -99,7 +99,7 @@ export class A2aMessageInspector {
     }));
   }
 
-  protected async copyEventJsonToClipboard(event: InspectorEvent): Promise<void> {
+  protected async copyEventJsonToClipboard(event: MessageInspectorEvent): Promise<void> {
     const jsonStr = this.formatJsonPayload(event.payload);
     try {
       await navigator.clipboard.writeText(jsonStr);
