@@ -24,7 +24,6 @@ import {
   untracked,
   input,
   signal,
-  DestroyRef,
 } from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
@@ -54,7 +53,6 @@ export class RenderedFrame {
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
-  private destroyRef = inject(DestroyRef);
 
   /** Optional layout payload to render immediately into the guest iframe. */
   readonly payload = input<unknown[] | null | undefined>(null);
@@ -128,19 +126,14 @@ export class RenderedFrame {
   });
 
   constructor() {
-    effect(() => {
+    effect(onCleanup => {
       const ref = this.iframeRef();
       const el = ref?.nativeElement ?? null;
       if (el) {
         this.hostCommunication.registerIframe(el);
-      }
-    });
-
-    this.destroyRef.onDestroy(() => {
-      const ref = this.iframeRef();
-      const el = ref?.nativeElement ?? null;
-      if (el) {
-        this.hostCommunication.unregisterIframe?.(el);
+        onCleanup(() => {
+          this.hostCommunication.unregisterIframe?.(el);
+        });
       }
     });
 

@@ -255,12 +255,20 @@ export class HostCommunication implements OnDestroy {
       this.registeredIframes.delete(target as HTMLIFrameElement);
       if (this.iframeElement === target) {
         this.iframeElement = this.registeredIframes.values().next().value ?? null;
-        this.iframeWindow = this.iframeElement ? this.iframeElement.contentWindow : null;
+        this.iframeWindow = this.iframeElement
+          ? this.iframeElement.contentWindow
+          : (this.registeredWindows.values().next().value ?? null);
       }
     } else {
       this.registeredWindows.delete(target as Window);
       if (this.iframeWindow === target) {
-        this.iframeWindow = this.registeredWindows.values().next().value ?? null;
+        const nextWindow = this.registeredWindows.values().next().value ?? null;
+        if (nextWindow) {
+          this.iframeWindow = nextWindow;
+        } else {
+          this.iframeElement = this.registeredIframes.values().next().value ?? null;
+          this.iframeWindow = this.iframeElement ? this.iframeElement.contentWindow : null;
+        }
       }
     }
   }

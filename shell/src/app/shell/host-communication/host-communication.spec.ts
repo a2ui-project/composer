@@ -688,6 +688,26 @@ describe('HostCommunication', () => {
       expect(service.latestEnvelope()).toBeNull();
     });
 
+    it('cross-falls back between registered iframes and registered windows on unregister', () => {
+      const windowTarget = {postMessage: vi.fn()} as unknown as Window;
+      const iframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      const iframeElement = {contentWindow: iframeWindow} as unknown as HTMLIFrameElement;
+
+      service.registerIframe(iframeElement);
+      service.registerIframe(windowTarget);
+
+      service.unregisterIframe(windowTarget);
+
+      service.sendTheme(ThemePreference.DARK);
+      expect(iframeWindow.postMessage).toHaveBeenCalled();
+
+      vi.mocked(iframeWindow.postMessage).mockClear();
+      service.unregisterIframe(iframeElement);
+
+      service.sendTheme(ThemePreference.LIGHT);
+      expect(iframeWindow.postMessage).not.toHaveBeenCalled();
+    });
+
     it('dispatches sendRenderA2UI to the explicitly provided target iframe instead of the default registered frame', () => {
       const defaultWindow = {postMessage: vi.fn()} as unknown as Window;
       const defaultIframe = {contentWindow: defaultWindow} as unknown as HTMLIFrameElement;
