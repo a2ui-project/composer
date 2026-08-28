@@ -50,7 +50,7 @@ import {
 } from './converters/a2a-ui-converter';
 import {A2aInputArea, SendMessageEvent} from './input-area/input-area';
 import {A2aMessageInspector} from './message-inspector/message-inspector';
-import {InspectorEvent, UiAgentInfo, UiMessage} from './types';
+import {CanvasArtifact, InspectorEvent, UiAgentInfo, UiMessage} from './types';
 
 /**
  * Top-level view container managing end-to-end Agent-to-Agent (A2A) testing,
@@ -81,18 +81,6 @@ export class A2aChatView implements OnInit {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly destroyRef = inject(DestroyRef);
   private readonly initTimestamp = Date.now();
-
-  constructor() {
-    this.hostCommunication.messageStream$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(envelope => {
-        if (!envelope) return;
-        if (envelope.timestamp && envelope.timestamp < this.initTimestamp) return;
-        if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
-          this.handleSendToServerAction(envelope.payload);
-        }
-      });
-  }
 
   /** Discovered A2A AgentCard metadata for the connected agent. */
   protected readonly agentCard = signal<AgentCard | null>(null);
@@ -128,6 +116,18 @@ export class A2aChatView implements OnInit {
   protected readonly isResizingInspector = signal<boolean>(false);
 
   private activeAbortController?: AbortController;
+
+  constructor() {
+    this.hostCommunication.messageStream$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(envelope => {
+        if (!envelope) return;
+        if (envelope.timestamp && envelope.timestamp < this.initTimestamp) return;
+        if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
+          this.handleSendToServerAction(envelope.payload);
+        }
+      });
+  }
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => {
@@ -490,19 +490,9 @@ export class A2aChatView implements OnInit {
         const autoOpenArtifact = activeMsg.canvasArtifacts.find(a => a.autoOpen);
         if (this.isCanvasOpen()) {
           const currentActive = this.activeCanvasPayload();
-          const matching = activeMsg.canvasArtifacts.find(a => {
-            if (a.payload === currentActive) return true;
-            if (
-              currentActive &&
-              currentActive.length > 0 &&
-              a.payload.length > 0 &&
-              a.payload[0].createSurface?.surfaceId &&
-              a.payload[0].createSurface?.surfaceId === currentActive[0].createSurface?.surfaceId
-            ) {
-              return true;
-            }
-            return false;
-          });
+          const matching = activeMsg.canvasArtifacts.find(a =>
+            this.matchesActiveCanvasPayload(a, currentActive),
+          );
           if (matching) {
             this.activeCanvasPayload.set(matching.payload);
           } else if (autoOpenArtifact) {
@@ -513,6 +503,16 @@ export class A2aChatView implements OnInit {
         }
       }
     }
+  }
+
+  private matchesActiveCanvasPayload(
+    artifact: CanvasArtifact,
+    currentActive: RenderA2uiItem[] | null,
+  ): boolean {
+    if (artifact.payload === currentActive) return true;
+    const activeSurfaceId = currentActive?.[0]?.createSurface?.surfaceId;
+    const artifactSurfaceId = artifact.payload?.[0]?.createSurface?.surfaceId;
+    return Boolean(activeSurfaceId && activeSurfaceId === artifactSurfaceId);
   }
 
   protected cancelActiveGeneration(): void {
