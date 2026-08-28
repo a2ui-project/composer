@@ -306,7 +306,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
       expect.anything(),
     );
   });
-
   it('updates dynamicHeight when SURFACE_RESIZE message arrives', () => {
     const mockEnvelope = {
       type: 'SURFACE_RESIZE',
@@ -408,7 +407,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
 
     expect(newFixture.componentInstance.dynamicHeight()).toBeNull();
   });
-
   it('does not dispatch when RENDERER_READY arrives and payload is empty', () => {
     const messageStreamSignal = signal<unknown>(null);
     Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {

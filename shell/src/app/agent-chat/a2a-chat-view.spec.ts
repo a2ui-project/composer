@@ -18,7 +18,7 @@ import {signal, WritableSignal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {Subject} from 'rxjs';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, RenderA2uiItem} from 'a2ui-bridge';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {HostCommunication, MessageEnvelope} from '../shell/host-communication/host-communication';
@@ -764,5 +764,16 @@ describe('A2aChatView', () => {
     // Canvas remains open with the original canvas payload and was NOT overwritten by the flight card
     expect(fixture.componentInstance['isCanvasOpen']()).toBe(true);
     expect(fixture.componentInstance['activeCanvasPayload']()).toEqual(canvasPayload);
+  });
+
+  it('dispatches sendRenderA2UI when canvas surface is opened with payload', () => {
+    const hostComm = TestBed.inject(HostCommunication);
+    const payload: RenderA2uiItem[] = [
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+    ];
+    fixture.componentInstance['openCanvasSurface'](payload);
+    fixture.detectChanges();
+
+    expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(payload);
   });
 });

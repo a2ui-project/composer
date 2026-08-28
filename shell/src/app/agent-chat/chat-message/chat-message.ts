@@ -14,15 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  input,
-  output,
-  signal,
-} from '@angular/core';
+import {Component, computed, inject, input, output, signal} from '@angular/core';
 import {DomSanitizer, SafeHtml} from '@angular/platform-browser';
 import {MatButtonModule} from '@angular/material/button';
 import {MatExpansionModule} from '@angular/material/expansion';
@@ -33,7 +25,7 @@ import {RenderA2uiItem} from 'a2ui-bridge';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {renderMarkdown} from '../../utils/markdown';
 import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
-import {CanvasArtifact, UiMessage} from '../types';
+import {CanvasArtifact, UiMessage} from './types';
 
 /**
  * Message bubble item rendering textual responses, markdown, thinking blocks,
@@ -41,7 +33,6 @@ import {CanvasArtifact, UiMessage} from '../types';
  */
 @Component({
   selector: 'a2ui-composer-chat-message',
-  standalone: true,
   imports: [
     MatButtonModule,
     MatIconModule,
@@ -52,7 +43,6 @@ import {CanvasArtifact, UiMessage} from '../types';
   ],
   templateUrl: './chat-message.ng.html',
   styleUrl: './chat-message.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class A2aChatMessage {
   private readonly sanitizer = inject(DomSanitizer);
@@ -97,21 +87,30 @@ export class A2aChatMessage {
     return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
   });
 
+  /**
+   * Whether this message renders an embedded inline A2UI surface in the chat timeline.
+   *
+   * - Explicit inline: For partitioned messages (supporting mixed inline + Canvas turns),
+   *   `inlineA2uiPayload` is populated separately from `canvasArtifacts`.
+   * - Legacy fallback: For unpartitioned messages or test fixtures where only `a2uiPayload`
+   *   is provided, `hasCanvas: true` directed the entire payload to the Canvas side panel,
+   *   whereas `hasCanvas: false` (or falsy) meant the payload rendered inline in the chat bubble.
+   *   Therefore, we only treat `a2uiPayload` as inline when `!m.hasCanvas`.
+   */
   protected readonly hasInlineSurface = computed<boolean>(() => {
     const m = this.message();
-    const hasExplicitInline = Boolean(m.inlineA2uiPayload && m.inlineA2uiPayload.length > 0);
-    const hasLegacyInline = Boolean(!m.hasCanvas && m.a2uiPayload && m.a2uiPayload.length > 0);
+    const hasExplicitInline = Boolean(m.inlineA2uiPayload?.length);
+    const hasLegacyInline = !m.hasCanvas && Boolean(m.a2uiPayload?.length);
     return hasExplicitInline || hasLegacyInline;
   });
 
   protected readonly inlinePayload = computed<RenderA2uiItem[] | undefined>(() => {
     const m = this.message();
-    return m.inlineA2uiPayload || m.a2uiPayload;
+    return m.inlineA2uiPayload || (!m.hasCanvas ? m.a2uiPayload : undefined);
   });
 
   protected readonly hasImages = computed<boolean>(() => {
-    const images = this.message().images;
-    return Boolean(images && images.length > 0);
+    return Boolean(this.message().images?.length);
   });
 
   protected readonly thinkingLabel = computed<string>(() => {
@@ -124,20 +123,15 @@ export class A2aChatMessage {
 
   protected readonly isPending = computed<boolean>(() => {
     const m = this.message();
-    return (
-      m.isStreaming === true &&
-      !m.text &&
-      !m.thinking &&
-      (!m.a2uiPayload || m.a2uiPayload.length === 0)
-    );
+    return m.isStreaming === true && !m.text && !m.thinking && !m.a2uiPayload?.length;
   });
 
   protected readonly canvasArtifacts = computed<CanvasArtifact[]>(() => {
     const m = this.message();
-    if (m.canvasArtifacts && m.canvasArtifacts.length > 0) {
+    if (m.canvasArtifacts?.length) {
       return m.canvasArtifacts;
     }
-    if (m.hasCanvas && m.a2uiPayload) {
+    if (m.hasCanvas && m.a2uiPayload?.length) {
       return [
         {
           id: 'default-canvas',
@@ -152,7 +146,7 @@ export class A2aChatMessage {
   });
 
   protected readonly hasCanvasArtifacts = computed<boolean>(() => {
-    return this.canvasArtifacts().length > 0;
+    return Boolean(this.canvasArtifacts().length);
   });
 
   protected isArtifactActive(artifact: CanvasArtifact): boolean {
@@ -169,7 +163,7 @@ export class A2aChatMessage {
   }
 
   protected openCanvasArtifact(payload: RenderA2uiItem[]): void {
-    if (payload && payload.length > 0) {
+    if (payload?.length) {
       this.openCanvas.emit(payload);
     }
   }

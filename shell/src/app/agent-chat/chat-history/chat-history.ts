@@ -16,7 +16,6 @@
 
 import {
   AfterViewChecked,
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   effect,
@@ -29,9 +28,11 @@ import {MatChipsModule} from '@angular/material/chips';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {RenderA2uiItem} from 'a2ui-bridge';
+import {AgentCard} from '../../chat/a2a/a2a-types';
 import {A2aChatMessage} from '../chat-message/chat-message';
 import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
-import {UiAgentInfo, UiMessage} from '../types';
+import {UiAgentInfo} from '../agent-header/types';
+import {UiMessage} from '../chat-message/types';
 
 /**
  * Scrollable chat stream viewport displaying conversation turns, welcome showcase,
@@ -39,7 +40,6 @@ import {UiAgentInfo, UiMessage} from '../types';
  */
 @Component({
   selector: 'a2ui-composer-chat-history',
-  standalone: true,
   imports: [
     MatButtonModule,
     MatIconModule,
@@ -49,13 +49,14 @@ import {UiAgentInfo, UiMessage} from '../types';
   ],
   templateUrl: './chat-history.ng.html',
   styleUrl: './chat-history.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class A2aChatHistory implements AfterViewChecked {
   /** Chronological list of UI messages rendered in the conversation timeline. */
   readonly messages = input<UiMessage[]>([]);
   /** Agent metadata and capability badges to display in the empty showcase state. */
   readonly agentInfo = input<UiAgentInfo | null>(null);
+  /** Optional raw agent card discovery manifest. */
+  readonly agentCard = input<AgentCard | null>(null);
   /** Whether the agent is currently streaming response tokens. */
   readonly isStreaming = input<boolean>(false);
   /** Whether the initial handshake or connection to the agent is in progress. */
@@ -138,10 +139,10 @@ export class A2aChatHistory implements AfterViewChecked {
   }
 
   protected getAgentIconUrl(): string {
-    return this.agentInfo()?.iconUrl || DEFAULT_A2A_ICON_URL;
+    return this.agentInfo()?.iconUrl || this.agentCard()?.iconUrl || DEFAULT_A2A_ICON_URL;
   }
 
   protected getAgentDisplayName(): string {
-    return this.agentInfo()?.name || 'Agent';
+    return this.agentInfo()?.name || this.agentCard()?.name || 'Agent';
   }
 }

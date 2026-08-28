@@ -19,7 +19,7 @@
     <div class="user-message-bubble">
       @if (hasImages()) {
         <div class="msg-images-tray">
-          @for (img of message().images; track $index) {
+          @for (img of message().images; track img.name || img.previewUrl || $index) {
             <img [src]="img.previewUrl || img.data" [alt]="img.name" class="msg-image-thumb" />
           }
         </div>
@@ -42,7 +42,7 @@
       <div class="agent-message-body">
         @if (hasImages()) {
           <div class="msg-images-tray">
-            @for (img of message().images; track $index) {
+            @for (img of message().images; track img.name || img.previewUrl || $index) {
               <img [src]="img.previewUrl || img.data" [alt]="img.name" class="msg-image-thumb" />
             }
           </div>
@@ -119,7 +119,7 @@
                 aria-label="Close Canvas Preview"
               >
                 <mat-icon>close</mat-icon>
-                <span>Close</span>
+                Close
               </button>
             }
           </div>
