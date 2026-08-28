@@ -49,9 +49,11 @@ import {
   hasA2uiCanvasComponent,
   parseA2aStreamEvent,
 } from './converters/a2a-ui-converter';
+import {UiAgentInfo} from './agent-header/types';
+import {UiMessage} from './chat-message/types';
 import {A2aInputArea, SendMessageEvent} from './input-area/input-area';
 import {A2aMessageInspector} from './message-inspector/message-inspector';
-import {InspectorEvent, UiAgentInfo, UiMessage} from './types';
+import {MessageInspectorEvent} from './message-inspector/message-inspector-event';
 
 /**
  * Top-level view container managing end-to-end Agent-to-Agent (A2A) testing,
@@ -89,7 +91,7 @@ export class A2aChatView implements OnInit {
   /** Message conversation history list. */
   protected readonly messages = signal<UiMessage[]>([]);
   /** Raw A2A protocol events recorded for inspection. */
-  protected readonly inspectorEvents = signal<InspectorEvent[]>([]);
+  protected readonly inspectorEvents = signal<MessageInspectorEvent[]>([]);
   /** Current active task ID from the agent server. */
   protected readonly activeTaskId = signal<string | null>(null);
   /** Current active conversation context / session ID. */
@@ -474,7 +476,7 @@ export class A2aChatView implements OnInit {
     this.inspectorEvents.set([]);
   }
 
-  private recordInspectorEvent(event: InspectorEvent): void {
+  private recordInspectorEvent(event: MessageInspectorEvent): void {
     this.inspectorEvents.update(evts => [event, ...evts].slice(0, 500));
   }
 }
