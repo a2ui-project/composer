@@ -25,7 +25,6 @@
       sandbox="allow-scripts allow-same-origin allow-forms"
       class="preview-iframe"
       title="Rendered Preview"
-      [style.height]="frameHeight() ? frameHeight() + 'px' : '100%'"
       (load)="syncPayloadOnIframeLoad()"
     ></iframe>
   } @else {

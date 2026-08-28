@@ -14,15 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  input,
-  output,
-  signal,
-} from '@angular/core';
+import {Component, computed, inject, input, output, signal} from '@angular/core';
 import {DomSanitizer, SafeHtml} from '@angular/platform-browser';
 import {MatButtonModule} from '@angular/material/button';
 import {MatExpansionModule} from '@angular/material/expansion';
@@ -33,7 +25,7 @@ import {RenderA2uiItem} from 'a2ui-bridge';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {renderMarkdown} from '../../utils/markdown';
 import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
-import {CanvasArtifact, UiMessage} from '../types';
+import {CanvasArtifact, UiMessage} from './types';
 
 /**
  * Message bubble item rendering textual responses, markdown, thinking blocks,
@@ -41,7 +33,6 @@ import {CanvasArtifact, UiMessage} from '../types';
  */
 @Component({
   selector: 'a2ui-composer-chat-message',
-  standalone: true,
   imports: [
     MatButtonModule,
     MatIconModule,
@@ -52,7 +43,6 @@ import {CanvasArtifact, UiMessage} from '../types';
   ],
   templateUrl: './chat-message.ng.html',
   styleUrl: './chat-message.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class A2aChatMessage {
   private readonly sanitizer = inject(DomSanitizer);

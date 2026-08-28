@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-import {ChangeDetectionStrategy, Component, computed, input, output, signal} from '@angular/core';
+import {Component, computed, input, output, signal} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
+import {MatIconModule} from '@angular/material/icon';
 import {MatChipsModule} from '@angular/material/chips';
 import {MatExpansionModule} from '@angular/material/expansion';
-import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {InspectorEvent} from '../types';
+import {formatJson} from '../../utils/json';
+import {MessageInspectorEvent} from './message-inspector-event';
 
 /**
  * Side-drawer diagnostic inspector for observing, filtering, and copying
@@ -29,7 +30,6 @@ import {InspectorEvent} from '../types';
  */
 @Component({
   selector: 'a2ui-composer-message-inspector',
-  standalone: true,
   imports: [
     FormsModule,
     MatButtonModule,
@@ -40,11 +40,10 @@ import {InspectorEvent} from '../types';
   ],
   templateUrl: './message-inspector.ng.html',
   styleUrl: './message-inspector.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class A2aMessageInspector {
   /** Recorded raw A2A protocol events and JSON-RPC transport traces. */
-  readonly events = input<InspectorEvent[]>([]);
+  readonly events = input<MessageInspectorEvent[]>([]);
   /** Emitted when the user closes the message inspector side drawer. */
   readonly closeDrawer = output<void>();
   /** Emitted when the user clears all recorded inspector events. */
@@ -85,7 +84,7 @@ export class A2aMessageInspector {
   protected formatJsonPayload(payload: unknown): string {
     if (payload === undefined) return '';
     try {
-      return JSON.stringify(payload, null, 2);
+      return formatJson(payload);
     } catch {
       return String(payload);
     }
@@ -100,7 +99,7 @@ export class A2aMessageInspector {
     }));
   }
 
-  protected async copyEventJsonToClipboard(event: InspectorEvent): Promise<void> {
+  protected async copyEventJsonToClipboard(event: MessageInspectorEvent): Promise<void> {
     const jsonStr = this.formatJsonPayload(event.payload);
     try {
       await navigator.clipboard.writeText(jsonStr);

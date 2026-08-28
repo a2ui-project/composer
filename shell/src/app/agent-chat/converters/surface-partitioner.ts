@@ -15,7 +15,7 @@
  */
 
 import {RenderA2uiItem} from 'a2ui-bridge';
-import {CanvasArtifact} from '../types';
+import {CanvasArtifact} from '../chat-message/types';
 
 interface ExtractedCanvasInfo {
   isCanvas: boolean;

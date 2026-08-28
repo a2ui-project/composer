@@ -14,23 +14,20 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
-
-@Injectable({providedIn: 'root'})
-export class SafeUrlValidatorService {
-  /**
-   * Validates that a string is a valid URL with an http or https protocol.
-   * Prevents javascript:, data:, and other potentially dangerous schemes.
-   */
-  isValidHttpUrl(url: string | null | undefined): boolean {
-    if (!url) {
-      return false;
-    }
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-    } catch {
-      return false;
-    }
+/**
+ * Validates that a string is a well-formed HTTP or HTTPS URL.
+ *
+ * Returns `false` for `null`, `undefined`, empty strings, non-URL strings,
+ * or non-http(s) protocols such as `javascript:`, `data:`, `file:`, or `ftp:`.
+ */
+export function isValidHttpUrl(url: string | null | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
   }
 }

@@ -14,15 +14,10 @@
  * limitations under the License.
  */
 
-import {RenderA2uiItem} from 'a2ui-bridge';
-import {
-  A2aMessage,
-  AgentCard,
-  TERMINAL_TASK_STATES,
-  TaskStatusUpdateEvent,
-} from '../../chat/a2a/a2a-types';
+import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
 import {generateUuid as uuid} from '../../utils/uuid';
-import {InspectorEvent, UiAgentInfo} from '../types';
+import {UiAgentInfo} from '../agent-header/types';
+import {MessageInspectorEvent} from '../message-inspector/message-inspector-event';
 
 /**
  * Default fallback icon URL for A2A Agents.
@@ -74,7 +69,7 @@ export function a2aCardToUiAgentInfo(card: AgentCard | null, url: string | null)
 /**
  * Creates an InspectorEvent recording an outgoing message turn.
  */
-export function createSentMessageEvent(msg: A2aMessage): InspectorEvent {
+export function createSentMessageEvent(msg: A2aMessage): MessageInspectorEvent {
   const textSummary = msg.parts?.find(p => p.text)?.text?.slice(0, 40) || 'Message turn';
   return {
     id: uuid(),
@@ -88,7 +83,7 @@ export function createSentMessageEvent(msg: A2aMessage): InspectorEvent {
 /**
  * Creates an InspectorEvent recording an outgoing user UI action.
  */
-export function createSentActionEvent(taskId: string, action: unknown): InspectorEvent {
+export function createSentActionEvent(taskId: string, action: unknown): MessageInspectorEvent {
   return {
     id: uuid(),
     timestamp: Date.now(),
@@ -101,7 +96,7 @@ export function createSentActionEvent(taskId: string, action: unknown): Inspecto
 /**
  * Creates an InspectorEvent recording an incoming streaming event chunk.
  */
-export function createReceivedEvent(event: TaskStatusUpdateEvent): InspectorEvent {
+export function createReceivedEvent(event: TaskStatusUpdateEvent): MessageInspectorEvent {
   const taskId = event.taskId || event.contextId || 'event';
   let summary = `Received Event (${taskId})`;
   if (event.status) {
@@ -129,7 +124,7 @@ export function createReceivedEvent(event: TaskStatusUpdateEvent): InspectorEven
 /**
  * Creates an InspectorEvent recording an error event.
  */
-export function createErrorEvent(err: unknown): InspectorEvent {
+export function createErrorEvent(err: unknown): MessageInspectorEvent {
   const msg = err instanceof Error ? err.message : String(err);
   return {
     id: uuid(),
@@ -155,17 +150,11 @@ export {
   unwrapCanvasForRenderer,
 };
 
-/**
- * Result structure returned by parseA2aStreamEvent.
- */
-export interface ParsedA2aStreamEvent {
-  contextId?: string;
-  taskId?: string;
-  textChunk?: string;
-  thoughtChunk?: string;
-  a2uiItems: RenderA2uiItem[];
-  isCompleted: boolean;
-}
+import {A2aStreamEventParser, type ParsedA2aStreamEvent} from './a2a-stream-event-parser.service';
+export {A2aStreamEventParser};
+export type {ParsedA2aStreamEvent};
+
+const defaultStreamEventParser = new A2aStreamEventParser();
 
 /**
  * Parses an incoming TaskStatusUpdateEvent into textual chunks, thoughts, and layout items.
@@ -173,132 +162,5 @@ export interface ParsedA2aStreamEvent {
 export function parseA2aStreamEvent(
   event: TaskStatusUpdateEvent | Record<string, unknown>,
 ): ParsedA2aStreamEvent {
-  const unwrapped = (event as Record<string, unknown>)?.['result']
-    ? ((event as Record<string, unknown>)['result'] as TaskStatusUpdateEvent)
-    : (event as TaskStatusUpdateEvent);
-
-  const eventObj = unwrapped as Record<string, unknown>;
-  const result: ParsedA2aStreamEvent = {
-    contextId:
-      unwrapped.contextId ||
-      (eventObj['kind'] === 'task' ? undefined : (eventObj['contextId'] as string)),
-    taskId:
-      unwrapped.taskId ||
-      (eventObj['kind'] === 'task' ? (eventObj['id'] as string) : (eventObj['taskId'] as string)),
-    a2uiItems: [],
-    isCompleted: !!unwrapped.final,
-  };
-
-  const msg =
-    unwrapped.message ||
-    (typeof unwrapped.status === 'object' && unwrapped.status !== null
-      ? unwrapped.status.message
-      : undefined) ||
-    (eventObj['kind'] === 'message' ? (unwrapped as unknown as A2aMessage) : undefined);
-
-  if (typeof msg === 'string') {
-    result.textChunk = (result.textChunk || '') + msg;
-  } else if (typeof msg === 'object' && msg !== null && Array.isArray(msg.parts)) {
-    for (const part of msg.parts) {
-      const partObj = part as Record<string, unknown>;
-      const isThought =
-        part.metadata?.['adk_thought'] === true ||
-        part.metadata?.['adk_thought'] === 'true' ||
-        part.metadata?.['thought'] === true ||
-        part.metadata?.['thought'] === 'true' ||
-        partObj['kind'] === 'thought' ||
-        partObj['thought'] !== undefined;
-
-      if (isThought) {
-        const thoughtText =
-          typeof partObj['thought'] === 'string' ? (partObj['thought'] as string) : part.text;
-        if (thoughtText) {
-          result.thoughtChunk = (result.thoughtChunk || '') + thoughtText;
-        }
-      } else if (part.text) {
-        let textContent = part.text;
-        const a2uiTagMatch = textContent.match(/<a2ui-json>([\s\S]*?)<\/a2ui-json>/);
-        if (a2uiTagMatch) {
-          try {
-            const parsedJson = JSON.parse(a2uiTagMatch[1].trim());
-            if (Array.isArray(parsedJson)) {
-              result.a2uiItems.push(...normalizeA2uiItems(parsedJson));
-            } else if (typeof parsedJson === 'object' && parsedJson !== null) {
-              result.a2uiItems.push(...normalizeA2uiItems([parsedJson]));
-            }
-            textContent = textContent.replace(/<a2ui-json>[\s\S]*?<\/a2ui-json>/g, '').trim();
-          } catch {}
-        }
-        if (textContent) {
-          result.textChunk = (result.textChunk || '') + textContent;
-        }
-      }
-
-      if (part.data) {
-        let rawData: unknown = part.data;
-        if (typeof rawData === 'object' && rawData !== null && 'data' in rawData) {
-          const envelope = rawData as {mimeType?: string; data?: unknown};
-          if (typeof envelope.data === 'string' && envelope.data.trim().startsWith('[')) {
-            try {
-              rawData = JSON.parse(envelope.data);
-            } catch {}
-          } else if (typeof envelope.data === 'string' && envelope.data.trim().startsWith('{')) {
-            try {
-              rawData = JSON.parse(envelope.data);
-            } catch {}
-          } else if (envelope.data) {
-            rawData = envelope.data;
-          }
-        }
-
-        if (Array.isArray(rawData)) {
-          result.a2uiItems.push(...normalizeA2uiItems(rawData));
-        } else if (typeof rawData === 'object' && rawData !== null) {
-          result.a2uiItems.push(...normalizeA2uiItems([rawData]));
-        }
-      }
-
-      if (part.artifact?.parts) {
-        for (const artPart of part.artifact.parts) {
-          if (artPart.data) {
-            if (Array.isArray(artPart.data)) {
-              result.a2uiItems.push(...normalizeA2uiItems(artPart.data));
-            } else {
-              result.a2uiItems.push(...normalizeA2uiItems([artPart.data]));
-            }
-          }
-        }
-      }
-    }
-  }
-
-  if (unwrapped.artifact?.parts) {
-    for (const artPart of unwrapped.artifact.parts) {
-      if (artPart.data) {
-        if (Array.isArray(artPart.data)) {
-          result.a2uiItems.push(...normalizeA2uiItems(artPart.data));
-        } else {
-          result.a2uiItems.push(...normalizeA2uiItems([artPart.data]));
-        }
-      }
-    }
-  }
-
-  const statusState =
-    typeof unwrapped.status === 'object' && unwrapped.status !== null
-      ? (unwrapped.status.state || '').toLowerCase()
-      : typeof unwrapped.status === 'string'
-        ? unwrapped.status.toLowerCase()
-        : '';
-
-  if (
-    TERMINAL_TASK_STATES.has(statusState) ||
-    unwrapped.final === true ||
-    eventObj['final'] === true ||
-    eventObj['isCompleted'] === true
-  ) {
-    result.isCompleted = true;
-  }
-
-  return result;
+  return defaultStreamEventParser.parse(event);
 }

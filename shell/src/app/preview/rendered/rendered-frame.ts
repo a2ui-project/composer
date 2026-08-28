@@ -27,7 +27,7 @@ import {
 } from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {SafeUrlValidatorService} from '../../shared/security/safe-url-validator.service';
+import {isValidHttpUrl} from '../../utils/url';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
@@ -48,7 +48,6 @@ import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame
 })
 export class RenderedFrame {
   private sanitizer = inject(DomSanitizer);
-  private urlValidator = inject(SafeUrlValidatorService);
   private startupResolution = inject(StartupResolution);
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
@@ -113,7 +112,7 @@ export class RenderedFrame {
       url.searchParams.set('theme', initialTheme);
 
       const urlString = url.toString();
-      if (!this.urlValidator.isValidHttpUrl(urlString)) {
+      if (!isValidHttpUrl(urlString)) {
         console.error('Renderer URL failed safe validation:', urlString);
         return null;
       }
@@ -146,31 +145,22 @@ export class RenderedFrame {
       }
     });
 
-    // Inbound bridge listener: handles lifecycle signals and dynamic layout updates
-    // received from the renderer iframe:
-    // 1. RENDERER_READY / A2UI_CATALOG: Resolves startup race conditions by flushing
-    //    the current untracked payload as soon as the iframe finishes booting and catalog loading.
-    // 2. SURFACE_RESIZE: Automatically adjusts the iframe container height to fit the rendered
-    //    A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
+    // Inbound bridge listener: adjusts the iframe container height to fit the rendered
+    // A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
     effect(() => {
-      const msgStream = this.hostCommunication?.messageStream;
-      if (typeof msgStream === 'function') {
-        const envelope = msgStream();
-        if (envelope) {
-          if (
-            envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
-            envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
-          ) {
-            const payload = untracked(() => this.payload());
-            if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-              this.hostCommunication.sendRenderA2UI(payload);
-            }
-          } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-            if (CrossFrameValidator.validateIncomingMessage(envelope)) {
-              const resizePayload = envelope.payload as {height: number; width?: number};
-              this.dynamicHeight.set(resizePayload.height);
-            }
-          }
+      const envelope = this.hostCommunication.messageStream?.();
+      if (envelope?.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
+        if (CrossFrameValidator.validateIncomingMessage(envelope)) {
+          const resizePayload = envelope.payload as {height: number; width?: number};
+          this.dynamicHeight.set(resizePayload.height);
+        }
+      } else if (
+        envelope?.type === PreviewBridgeMessageType.RENDERER_READY ||
+        envelope?.type === PreviewBridgeMessageType.A2UI_CATALOG
+      ) {
+        const payload = untracked(() => this.payload());
+        if (payload !== null && Array.isArray(payload) && payload.length > 0) {
+          this.hostCommunication.sendRenderA2UI(payload);
         }
       }
     });

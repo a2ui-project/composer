@@ -54,7 +54,7 @@
       }
 
       <mat-form-field appearance="outline" class="form-field full-width">
-        <mat-label>Agent Endpoint URL*</mat-label>
+        <mat-label>Agent Endpoint URL</mat-label>
         <input
           matInput
           formControlName="endpoint"
@@ -74,11 +74,11 @@
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="form-field full-width">
-        <mat-label>Tenant ID (Optional)</mat-label>
+        <mat-label>Tenant ID</mat-label>
         <input
           matInput
           formControlName="tenantId"
-          placeholder="Tenant ID (Optional)"
+          placeholder="Tenant ID"
           autocomplete="off"
           aria-label="Tenant ID"
         />
@@ -103,7 +103,7 @@
           aria-label="Clear Address"
         >
           <mat-icon>delete_outline</mat-icon>
-          <span>Clear Address</span>
+          Clear Address
         </button>
 
         <span class="spacer"></span>
@@ -131,9 +131,9 @@
         >
           @if (isConnecting()) {
             <mat-spinner diameter="16" class="btn-spinner"></mat-spinner>
-            <span>Connecting...</span>
+            Connecting...
           } @else {
-            <span>Connect Agent</span>
+            Connect Agent
           }
         </button>
       </div>

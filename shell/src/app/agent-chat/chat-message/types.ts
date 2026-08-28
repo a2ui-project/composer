@@ -15,7 +15,7 @@
  */
 
 import {RenderA2uiItem} from 'a2ui-bridge';
-import {A2aMessage, AgentCapability, AgentSkill} from '../chat/a2a/a2a-types';
+import {A2aMessage} from '../../chat/a2a/a2a-types';
 
 /**
  * Image attachment payload attached to a chat message.
@@ -97,42 +97,4 @@ export interface UiMessage {
   toolCalls?: UiToolCall[];
   /** Workspace file artifacts generated or referenced in this turn. */
   artifacts?: Array<{id?: string; name?: string; type?: string}>;
-}
-
-/**
- * Agent display details shown in the header and showcase card.
- */
-export interface UiAgentInfo {
-  /** Display name of the connected agent. */
-  name: string;
-  /** High-level description of the agent's capabilities. */
-  description?: string;
-  /** Semantic version identifier of the agent. */
-  version?: string;
-  /** Base URL or endpoint where the A2A agent server is hosted. */
-  endpoint: string;
-  /** URL of the agent avatar or icon image. */
-  iconUrl?: string;
-  /** List of registered skills and actions the agent supports. */
-  skills?: AgentSkill[];
-  /** Protocol feature flags and capabilities supported by the agent. */
-  capabilities?: AgentCapability;
-  /** Suggested starter prompts or queries for the agent. */
-  samplePrompts?: string[];
-}
-
-/**
- * A recorded A2A event item for the Message Inspector debugger.
- */
-export interface InspectorEvent {
-  /** Unique identifier for the recorded protocol trace event. */
-  id: string;
-  /** Timestamp when the event was transmitted or received. */
-  timestamp: Date | number;
-  /** Transport direction indicating whether the event was sent, received, or errored. */
-  direction: 'sent' | 'received' | 'error';
-  /** Human-readable headline summarizing the event type and method. */
-  summary: string;
-  /** Full raw JSON payload or error object associated with the event. */
-  payload: unknown;
 }
