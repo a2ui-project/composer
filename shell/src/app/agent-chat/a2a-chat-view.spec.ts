@@ -18,6 +18,7 @@ import {signal, WritableSignal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {RenderA2uiItem} from 'a2ui-bridge';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {
@@ -409,8 +410,10 @@ describe('A2aChatView', () => {
 
   it('dispatches sendRenderA2UI when canvas surface is opened with payload', () => {
     const hostComm = TestBed.inject(HostCommunication);
-    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
-    fixture.componentInstance['openCanvasSurface'](payload as any);
+    const payload: RenderA2uiItem[] = [
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+    ];
+    fixture.componentInstance['openCanvasSurface'](payload);
     fixture.detectChanges();
 
     expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(payload);
