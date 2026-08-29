@@ -16,12 +16,15 @@
 
 import {Injectable, inject} from '@angular/core';
 import {
+  extractXmlThoughts,
   LlmClient,
   LlmMessage,
   LlmResponse,
   LlmStreamResponse,
   MessageRole,
   CANCEL_ERROR_NAME,
+  StreamProcessingState,
+  THINKING_BUDGET,
 } from './llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {
@@ -32,17 +35,6 @@ import {
   GenerateContentConfig,
   GenerateContentResponse,
 } from '@google/genai';
-
-const TAG_REGEX = /<(thought|thinking|reasoning)>([\s\S]*?)(?:<\/\1>|$)/gi;
-
-interface StreamProcessingState {
-  accumulatedText: string;
-  accumulatedRawText: string;
-  emittedContentLength: number;
-  emittedThinkingLength: number;
-  isDone: boolean;
-  streamError: unknown;
-}
 
 /**
  * Standard public endpoint authentication client utilizing user developer keys.
@@ -113,25 +105,6 @@ export class Standalone3pLlmClient extends LlmClient {
     }
 
     return {systemInstruction, contents};
-  }
-
-  /**
-   * Generates a static conversational response for the provided chat history.
-   * Dynamically constructs the GoogleGenAI network target matching active
-   * configurations.
-   *
-   * @param messages The sequence of messages representing the turn history.
-   * @return A promise resolving to the completed response content envelope.
-   */
-  override async chat(messages: LlmMessage[]): Promise<LlmResponse> {
-    const stream = await this.chatStream(messages);
-    const content = await stream.complete;
-    // We don't get the combined thinking easily back from stream.complete unless we change complete type,
-    // but chat is rarely used directly for full text. We can just return content.
-    return {
-      content,
-      isComplete: true,
-    };
   }
 
   /**
@@ -211,7 +184,7 @@ export class Standalone3pLlmClient extends LlmClient {
     }
     config.thinkingConfig = {
       includeThoughts: true,
-      thinkingBudget: 1024,
+      thinkingBudget: THINKING_BUDGET,
     };
     return config;
   }
@@ -254,19 +227,6 @@ export class Standalone3pLlmClient extends LlmClient {
     return {chunkContent, nativeThoughtVal};
   }
 
-  private extractXmlThoughts(accumulatedRawText: string): {
-    cleanText: string;
-    totalExtractedThinking: string;
-  } {
-    let totalExtractedThinking = '';
-    TAG_REGEX.lastIndex = 0;
-    const cleanText = accumulatedRawText.replace(TAG_REGEX, (_, _tag, innerText) => {
-      totalExtractedThinking += innerText;
-      return '';
-    });
-    return {cleanText, totalExtractedThinking};
-  }
-
   private async consumeStream(
     responseStream: AsyncIterable<GenerateContentResponse>,
     state: StreamProcessingState,
@@ -281,9 +241,7 @@ export class Standalone3pLlmClient extends LlmClient {
 
         state.accumulatedRawText += chunkContent;
 
-        const {cleanText, totalExtractedThinking} = this.extractXmlThoughts(
-          state.accumulatedRawText,
-        );
+        const {cleanText, totalExtractedThinking} = extractXmlThoughts(state.accumulatedRawText);
 
         const contentVal = cleanText.slice(state.emittedContentLength);
         const tagThought = totalExtractedThinking.slice(state.emittedThinkingLength);
@@ -322,47 +280,5 @@ export class Standalone3pLlmClient extends LlmClient {
       rejectComplete(finalErr);
       notify();
     }
-  }
-
-  private createContentStream(
-    buffer: LlmResponse[],
-    state: StreamProcessingState,
-    listeners: (() => void)[],
-  ): AsyncIterable<LlmResponse> {
-    return {
-      [Symbol.asyncIterator]() {
-        let localBufferIndex = 0;
-        return {
-          async next(): Promise<IteratorResult<LlmResponse>> {
-            // Wait in-loop while buffer is exhausted and stream is active/errored
-            while (localBufferIndex >= buffer.length && !state.isDone && !state.streamError) {
-              await new Promise<void>((resolve, reject) => {
-                listeners.push(() => {
-                  if (state.streamError) {
-                    reject(state.streamError);
-                  } else {
-                    resolve();
-                  }
-                });
-              });
-            }
-
-            // Throw connection exceptions immediately upon exhausting successful yields
-            if (localBufferIndex >= buffer.length && state.streamError) {
-              throw state.streamError;
-            }
-
-            // Yield buffered chunks
-            if (localBufferIndex < buffer.length) {
-              const value = buffer[localBufferIndex];
-              localBufferIndex++;
-              return {value, done: false};
-            }
-
-            return {value: undefined, done: true};
-          },
-        };
-      },
-    };
   }
 }
