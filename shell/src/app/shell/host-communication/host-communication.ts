@@ -117,14 +117,17 @@ export class HostCommunication implements OnDestroy {
       this.triggerMessageStreamForTesting(envelope),
   };
 
-  private readonly messageListener = (event: MessageEvent) => {
-    const hasRegisteredTarget =
+  private hasRegisteredTarget(): boolean {
+    return (
       this.iframeElement !== null ||
       this.iframeWindow !== null ||
       this.registeredIframes.size > 0 ||
-      this.registeredWindows.size > 0;
+      this.registeredWindows.size > 0
+    );
+  }
 
-    if (!hasRegisteredTarget) {
+  private readonly messageListener = (event: MessageEvent) => {
+    if (!this.hasRegisteredTarget()) {
       const isBridgeMessage =
         event.data &&
         typeof event.data === 'object' &&
@@ -198,12 +201,7 @@ export class HostCommunication implements OnDestroy {
   }
 
   private flushEarlyMessages(): void {
-    const hasTarget =
-      this.iframeElement !== null ||
-      this.iframeWindow !== null ||
-      this.registeredIframes.size > 0 ||
-      this.registeredWindows.size > 0;
-    if (hasTarget && this.earlyMessageBuffer.length > 0) {
+    if (this.hasRegisteredTarget() && this.earlyMessageBuffer.length > 0) {
       const messages = [...this.earlyMessageBuffer];
       this.earlyMessageBuffer.length = 0;
       for (const msg of messages) {
@@ -253,7 +251,7 @@ export class HostCommunication implements OnDestroy {
    *
    * @param target Target iframe element or window reference to unregister
    */
-  unregisterIframe(target: HTMLIFrameElement | Window | null): void {
+  unregisterIframe(target: HTMLIFrameElement | Window): void {
     if (!target) return;
     if ('contentWindow' in target) {
       this.registeredIframes.delete(target as HTMLIFrameElement);

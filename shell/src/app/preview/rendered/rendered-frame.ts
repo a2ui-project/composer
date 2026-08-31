@@ -131,7 +131,7 @@ export class RenderedFrame {
       if (el) {
         this.hostCommunication.registerIframe(el);
         onCleanup(() => {
-          this.hostCommunication.unregisterIframe?.(el);
+          this.hostCommunication.unregisterIframe(el);
         });
       }
     });
@@ -155,31 +155,28 @@ export class RenderedFrame {
     // Inbound bridge listener: adjusts the iframe container height to fit the rendered
     // A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
     effect(() => {
-      const msgStream = this.hostCommunication?.messageStream;
-      if (typeof msgStream === 'function') {
-        const envelope = msgStream();
-        if (envelope) {
-          const myIframe = this.iframeRef()?.nativeElement;
-          const myWindow = myIframe?.contentWindow;
+      const envelope = this.hostCommunication.messageStream();
+      if (envelope) {
+        const myIframe = this.iframeRef()?.nativeElement;
+        const myWindow = myIframe?.contentWindow;
 
-          // In multi-frame environments, ignore messages dispatched by other iframes
-          if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
-            return;
+        // In multi-frame environments, ignore messages dispatched by other iframes
+        if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
+          return;
+        }
+
+        if (
+          envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
+          envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
+        ) {
+          const payload = untracked(() => this.payload());
+          if (myIframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
+            this.hostCommunication.sendRenderA2UI(payload, myIframe);
           }
-
-          if (
-            envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
-            envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
-          ) {
-            const payload = untracked(() => this.payload());
-            if (myIframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
-              this.hostCommunication.sendRenderA2UI(payload, myIframe);
-            }
-          } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-            if (CrossFrameValidator.validateIncomingMessage(envelope)) {
-              const resizePayload = envelope.payload as {height: number; width?: number};
-              this.dynamicHeight.set(resizePayload.height);
-            }
+        } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
+          if (CrossFrameValidator.validateIncomingMessage(envelope)) {
+            const resizePayload = envelope.payload as {height: number; width?: number};
+            this.dynamicHeight.set(resizePayload.height);
           }
         }
       }
