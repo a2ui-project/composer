@@ -31,7 +31,6 @@
   overflow: hidden;
   background-color: var(--mat-sys-surface);
   position: relative;
-  transition: height 0.15s ease-out;
 
   &.is-locked {
     pointer-events: none;

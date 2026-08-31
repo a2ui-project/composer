@@ -79,6 +79,7 @@ describe('HostCommunication', () => {
       payload: {status: 'ok'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -99,6 +100,7 @@ describe('HostCommunication', () => {
       payload: undefined,
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -226,6 +228,7 @@ describe('HostCommunication', () => {
       payload: {status: 'ok'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -363,6 +366,7 @@ describe('HostCommunication', () => {
       payload: {status: 'early'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -387,6 +391,7 @@ describe('HostCommunication', () => {
       payload: {status: 'early-element'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -530,6 +535,7 @@ describe('HostCommunication', () => {
       payload: catalogPayload,
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
 
     const history = service.getHistoryBuffer();
@@ -636,6 +642,7 @@ describe('HostCommunication', () => {
       payload: {status: 'early'},
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
+      sourceWindow: mockIframeWindow,
     });
   });
 
@@ -840,6 +847,114 @@ describe('HostCommunication', () => {
       expect(service.isRendererReady()).toBe(true);
       // It should send SET_THEME again on each RENDERER_READY per standard behavior
       expect(mockIframeWindow.postMessage).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('multiple registered iframes', () => {
+    it('accepts incoming messages from all concurrently registered iframes', () => {
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
+
+      const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
+      const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;
+
+      // Register canvas iframe first
+      service.registerIframe(canvasIframe);
+
+      // Register inline iframe subsequently (e.g. flight card rendered in chat)
+      service.registerIframe(inlineIframe);
+
+      // Verify message from the second (inline) iframe is accepted
+      const inlineEvent = new MessageEvent('message', {
+        source: inlineWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.SEND_TO_SERVER, payload: {action: 'flight_clicked'}},
+      });
+      window.dispatchEvent(inlineEvent);
+      expect(service.latestEnvelope()?.payload).toEqual({action: 'flight_clicked'});
+
+      // Verify future message from the first (canvas) iframe is STILL accepted
+      const canvasEvent = new MessageEvent('message', {
+        source: canvasWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.SEND_TO_SERVER, payload: {action: 'canvas_clicked'}},
+      });
+      window.dispatchEvent(canvasEvent);
+      expect(service.latestEnvelope()?.payload).toEqual({action: 'canvas_clicked'});
+    });
+
+    it('unregisters an iframe correctly when unregisterIframe is called', () => {
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
+
+      service.registerIframe(canvasIframe);
+      service.unregisterIframe(canvasIframe);
+
+      const event = new MessageEvent('message', {
+        source: canvasWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.SEND_TO_SERVER, payload: {action: 'ignored'}},
+      });
+      window.dispatchEvent(event);
+      expect(service.latestEnvelope()).toBeNull();
+    });
+
+    it('cross-falls back between registered iframes and registered windows on unregister', () => {
+      const windowTarget = {postMessage: vi.fn()} as unknown as Window;
+      const iframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      const iframeElement = {contentWindow: iframeWindow} as unknown as HTMLIFrameElement;
+
+      service.registerIframe(iframeElement);
+      service.registerIframe(windowTarget);
+
+      service.unregisterIframe(windowTarget);
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: iframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      vi.mocked(iframeWindow.postMessage).mockClear();
+
+      service.sendTheme(ThemePreference.DARK);
+      expect(iframeWindow.postMessage).toHaveBeenCalled();
+
+      vi.mocked(iframeWindow.postMessage).mockClear();
+      service.unregisterIframe(iframeElement);
+
+      service.sendTheme(ThemePreference.LIGHT);
+      expect(iframeWindow.postMessage).not.toHaveBeenCalled();
+    });
+
+    it('dispatches sendRenderA2UI to the explicitly provided target iframe instead of the default registered frame', () => {
+      const defaultWindow = {postMessage: vi.fn()} as unknown as Window;
+      const defaultIframe = {contentWindow: defaultWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(defaultIframe);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: defaultWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      vi.mocked(defaultWindow.postMessage).mockClear();
+
+      const specificWindow = {postMessage: vi.fn()} as unknown as Window;
+      const specificIframe = {contentWindow: specificWindow} as unknown as HTMLIFrameElement;
+
+      const payload = [{version: 'v0.9', createSurface: {surfaceId: 'test', catalogId: 'test'}}];
+      service.sendRenderA2UI(payload, specificIframe);
+
+      expect(specificWindow.postMessage).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.RENDER_A2UI,
+          payload,
+        },
+        'http://localhost:3000',
+      );
+      expect(defaultWindow.postMessage).not.toHaveBeenCalled();
     });
   });
 });

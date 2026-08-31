@@ -38,6 +38,8 @@ export declare interface MessageEnvelope {
   origin: string;
   /** Epoch millisecond timestamp recording when the message was received */
   timestamp: number;
+  /** Window source that dispatched this message */
+  sourceWindow?: Window | null;
 }
 
 declare global {
@@ -58,6 +60,8 @@ export class HostCommunication implements OnDestroy {
   private readonly configProvider = inject(AppConfigProvider);
   private iframeWindow: Window | null = null;
   private iframeElement: HTMLIFrameElement | null = null;
+  private readonly registeredIframes = new Set<HTMLIFrameElement>();
+  private readonly registeredWindows = new Set<Window>();
   private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
   private readonly isRendererReadySignal = signal<boolean>(false);
 
@@ -121,9 +125,17 @@ export class HostCommunication implements OnDestroy {
       this.triggerMessageStreamForTesting(envelope),
   };
 
+  private hasRegisteredTarget(): boolean {
+    return (
+      this.iframeElement !== null ||
+      this.iframeWindow !== null ||
+      this.registeredIframes.size > 0 ||
+      this.registeredWindows.size > 0
+    );
+  }
+
   private readonly messageListener = (event: MessageEvent) => {
-    const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
-    if (!activeWindow) {
+    if (!this.hasRegisteredTarget()) {
       const isBridgeMessage =
         event.data &&
         typeof event.data === 'object' &&
@@ -137,7 +149,14 @@ export class HostCommunication implements OnDestroy {
       }
       return;
     }
-    if (event.source !== activeWindow) {
+
+    const matchesSource =
+      (this.iframeElement && this.iframeElement.contentWindow === event.source) ||
+      (this.iframeWindow && this.iframeWindow === event.source) ||
+      this.registeredWindows.has(event.source as Window) ||
+      Array.from(this.registeredIframes).some(iframe => iframe.contentWindow === event.source);
+
+    if (!matchesSource) {
       return;
     }
 
@@ -163,6 +182,7 @@ export class HostCommunication implements OnDestroy {
         payload: data.payload,
         origin: event.origin,
         timestamp: Date.now(),
+        sourceWindow: (event.source as Window) ?? null,
       };
       if (type === PreviewBridgeMessageType.A2UI_CATALOG) {
         this.latestCatalogEnvelope = envelope;
@@ -195,8 +215,7 @@ export class HostCommunication implements OnDestroy {
   }
 
   private flushEarlyMessages(): void {
-    const activeWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
-    if (activeWindow && this.earlyMessageBuffer.length > 0) {
+    if (this.hasRegisteredTarget() && this.earlyMessageBuffer.length > 0) {
       const messages = [...this.earlyMessageBuffer];
       this.earlyMessageBuffer.length = 0;
       for (const msg of messages) {
@@ -207,14 +226,16 @@ export class HostCommunication implements OnDestroy {
 
   /**
    * Registers an active iframe DOM element or content window target and flushes
-   * any buffered early messages.
-   * @param target Target iframe element, window reference, or null to unregister
+   * any buffered early messages. Supports multiple concurrent iframes.
+   * @param target Target iframe element, window reference, or null to unregister all
    */
   registerIframe(target: HTMLIFrameElement | Window | null): void {
     this.outboundMessageBuffer.length = 0;
     if (!target) {
       this.iframeElement = null;
       this.iframeWindow = null;
+      this.registeredIframes.clear();
+      this.registeredWindows.clear();
       this.earlyMessageBuffer.length = 0;
       this.isRendererReadySignal.set(false);
       return;
@@ -223,9 +244,11 @@ export class HostCommunication implements OnDestroy {
     let windowTarget: Window | null = null;
     if ('contentWindow' in target) {
       this.iframeElement = target as HTMLIFrameElement;
+      this.registeredIframes.add(target as HTMLIFrameElement);
       windowTarget = target.contentWindow;
     } else {
       this.iframeElement = null;
+      this.registeredWindows.add(target as Window);
       windowTarget = target as Window;
     }
 
@@ -237,10 +260,49 @@ export class HostCommunication implements OnDestroy {
   }
 
   /**
+   * Unregisters a previously registered iframe element or window target.
+   * Handles both HTMLIFrameElement and raw Window targets, ensuring that if
+   * the active communication target is removed, the service gracefully falls
+   * back to any remaining iframe or window rather than breaking the channel.
+   *
+   * @param target Target iframe element or window reference to unregister
+   */
+  unregisterIframe(target: HTMLIFrameElement | Window): void {
+    if (!target) return;
+    if ('contentWindow' in target) {
+      this.registeredIframes.delete(target as HTMLIFrameElement);
+      if (this.iframeElement === target) {
+        this.iframeElement = this.registeredIframes.values().next().value ?? null;
+        this.iframeWindow = this.iframeElement
+          ? this.iframeElement.contentWindow
+          : (this.registeredWindows.values().next().value ?? null);
+      }
+    } else {
+      // Target is a direct Window reference (e.g. external popout or window-only test target).
+      this.registeredWindows.delete(target as Window);
+      if (this.iframeWindow === target) {
+        const nextWindow = this.registeredWindows.values().next().value ?? null;
+        if (nextWindow) {
+          this.iframeWindow = nextWindow;
+        } else {
+          // If no windows remain, fall back to any active iframe element in registeredIframes
+          // to prevent leaving the active communication channel disconnected when mixing targets.
+          this.iframeElement = this.registeredIframes.values().next().value ?? null;
+          this.iframeWindow = this.iframeElement ? this.iframeElement.contentWindow : null;
+        }
+      }
+    }
+  }
+
+  /**
    * Validates and dispatches a structured postMessage payload to the registered guest frame.
    * @param message Structured message payload
+   * @param target Optional explicit target iframe element or window reference
    */
-  sendMessage(message: {type: PreviewBridgeMessageType; payload?: unknown}): void {
+  sendMessage(
+    message: {type: PreviewBridgeMessageType; payload?: unknown},
+    target?: HTMLIFrameElement | Window | null,
+  ): void {
     if (!CrossFrameValidator.validateOutgoingMessage(message)) {
       console.error('Blocked dispatch of malformed message type...', message);
       return;
@@ -252,7 +314,12 @@ export class HostCommunication implements OnDestroy {
       return;
     }
 
-    const targetWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
+    let targetWindow: Window | null = null;
+    if (target) {
+      targetWindow = 'contentWindow' in target ? target.contentWindow : (target as Window);
+    } else {
+      targetWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
+    }
     if (!targetWindow) return;
 
     const expectedUrl = this.startupResolution.getResolvedRendererUrl();
@@ -277,17 +344,40 @@ export class HostCommunication implements OnDestroy {
         theme: theme,
       },
     });
+    for (const iframe of this.registeredIframes) {
+      if (iframe.contentWindow && iframe.contentWindow !== this.iframeWindow) {
+        try {
+          const expectedUrl = this.startupResolution.getResolvedRendererUrl();
+          if (expectedUrl) {
+            const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
+            iframe.contentWindow.postMessage(
+              {
+                type: PreviewBridgeMessageType.SET_THEME,
+                payload: {theme},
+              },
+              targetOrigin,
+            );
+          }
+        } catch {
+          // Ignore error posting theme to secondary frame
+        }
+      }
+    }
   }
 
   /**
    * Helper utility dispatching a RENDER_A2UI layout array to the preview renderer.
    * @param payload Array of layout nodes or configuration objects
+   * @param target Optional explicit target iframe element or window reference
    */
-  sendRenderA2UI(payload: unknown[]): void {
-    this.sendMessage({
-      type: PreviewBridgeMessageType.RENDER_A2UI,
-      payload: payload,
-    });
+  sendRenderA2UI(payload: unknown[], target?: HTMLIFrameElement | Window | null): void {
+    this.sendMessage(
+      {
+        type: PreviewBridgeMessageType.RENDER_A2UI,
+        payload: payload,
+      },
+      target,
+    );
   }
 
   /**
@@ -302,6 +392,10 @@ export class HostCommunication implements OnDestroy {
     this.outboundMessageBuffer.length = 0;
     this.isRendererReadySignal.set(false);
     this.earlyMessageBuffer.length = 0;
+    this.registeredIframes.clear();
+    this.registeredWindows.clear();
+    this.iframeElement = null;
+    this.iframeWindow = null;
     this.messageStreamSubject.complete();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);

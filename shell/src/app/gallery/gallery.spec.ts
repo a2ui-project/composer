@@ -72,6 +72,7 @@ class MockCatalogManagement {
 class MockHostCommunication {
   sendRenderA2UI = vi.fn();
   registerIframe = vi.fn();
+  unregisterIframe = vi.fn();
   sendTheme = vi.fn();
   readonly messageStream$ = new ReplaySubject<unknown>(1);
   readonly messageStream = signal(null);

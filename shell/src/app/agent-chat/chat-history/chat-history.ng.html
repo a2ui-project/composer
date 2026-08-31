@@ -20,6 +20,8 @@
   role="log"
   aria-live="polite"
   (scroll)="handleViewportScroll()"
+  (wheel)="handleWheel($event)"
+  (touchstart)="handleTouchStart()"
 >
   @if (isConnecting()) {
     <div class="connecting-showcase">

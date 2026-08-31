@@ -62,6 +62,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     const messageStreamSignal = signal(null);
     hostCommunicationServiceMock = {
       registerIframe: vi.fn(),
+      unregisterIframe: vi.fn(),
       sendTheme: vi.fn(),
       sendRenderA2UI: vi.fn(),
       messageStream: messageStreamSignal,
@@ -293,6 +294,18 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(await harness.isLocked()).toBe(false);
   });
 
+  it('dispatches sendRenderA2UI when payload input changes', () => {
+    hostCommunicationServiceMock.sendRenderA2UI = vi.fn();
+    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+
+    fixture.componentRef.setInput('payload', payload);
+    fixture.detectChanges();
+
+    expect(hostCommunicationServiceMock.sendRenderA2UI).toHaveBeenCalledWith(
+      payload,
+      expect.anything(),
+    );
+  });
   it('updates dynamicHeight when SURFACE_RESIZE message arrives', () => {
     const mockEnvelope = {
       type: 'SURFACE_RESIZE',
@@ -313,6 +326,70 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(newFixture.componentInstance.frameHeight()).toBe(520);
   });
 
+  it('re-dispatches sendRenderA2UI when RENDERER_READY or A2UI_CATALOG arrives from bridge', () => {
+    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+    const messageStreamSignal = signal<unknown>(null);
+    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
+      value: messageStreamSignal,
+      writable: true,
+    });
+
+    const newFixture = TestBed.createComponent(RenderedFrame);
+    newFixture.componentRef.setInput('payload', payload);
+    newFixture.detectChanges();
+
+    const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
+    sendSpy.mockClear();
+
+    messageStreamSignal.set({
+      type: 'RENDERER_READY',
+      payload: {},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+    newFixture.detectChanges();
+
+    expect(sendSpy).toHaveBeenCalledWith(payload, expect.anything());
+
+    sendSpy.mockClear();
+    messageStreamSignal.set({
+      type: 'A2UI_CATALOG',
+      payload: {},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+    newFixture.detectChanges();
+
+    expect(sendSpy).toHaveBeenCalledWith(payload, expect.anything());
+  });
+
+  it('triggers syncPayloadOnIframeLoad and dispatches payload if available', () => {
+    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+    fixture.componentRef.setInput('payload', payload);
+    fixture.detectChanges();
+
+    const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
+    sendSpy.mockClear();
+
+    fixture.componentInstance['syncPayloadOnIframeLoad']();
+    expect(sendSpy).toHaveBeenCalledWith(payload, expect.anything());
+  });
+
+  it('does not dispatch sendRenderA2UI when payload is empty or null', () => {
+    const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
+    sendSpy.mockClear();
+
+    fixture.componentRef.setInput('payload', []);
+    fixture.detectChanges();
+
+    expect(sendSpy).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('payload', null);
+    fixture.detectChanges();
+
+    expect(sendSpy).not.toHaveBeenCalled();
+  });
+
   it('ignores SURFACE_RESIZE when height is missing or not a number', () => {
     const messageStreamSignal = signal<unknown>({
       type: 'SURFACE_RESIZE',
@@ -329,5 +406,89 @@ describe('RenderedFrame Live Preview Viewport', () => {
     newFixture.detectChanges();
 
     expect(newFixture.componentInstance.dynamicHeight()).toBeNull();
+  });
+  it('does not dispatch when RENDERER_READY arrives and payload is empty', () => {
+    const messageStreamSignal = signal<unknown>(null);
+    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
+      value: messageStreamSignal,
+      writable: true,
+    });
+
+    const newFixture = TestBed.createComponent(RenderedFrame);
+    newFixture.componentRef.setInput('payload', null);
+    newFixture.detectChanges();
+
+    const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
+    sendSpy.mockClear();
+
+    messageStreamSignal.set({
+      type: 'RENDERER_READY',
+      payload: {},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+    newFixture.detectChanges();
+
+    expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it('ignores incoming bridge messages when sourceWindow belongs to a different frame', () => {
+    const messageStreamSignal = signal<unknown>(null);
+    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
+      value: messageStreamSignal,
+      writable: true,
+    });
+
+    const newFixture = TestBed.createComponent(RenderedFrame);
+    newFixture.detectChanges();
+
+    const otherWindow = {postMessage: vi.fn()} as unknown as Window;
+    messageStreamSignal.set({
+      type: 'SURFACE_RESIZE',
+      payload: {height: 999},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+      sourceWindow: otherWindow,
+    });
+    newFixture.detectChanges();
+
+    expect(newFixture.componentInstance.dynamicHeight()).toBeNull();
+  });
+
+  it('forwards wheel events from iframe contentWindow to parent scrollable container', () => {
+    const parentContainer = document.createElement('div');
+    parentContainer.className = 'chat-history-container';
+    parentContainer.scrollBy = vi.fn();
+
+    const iframe = document.createElement('iframe');
+    parentContainer.appendChild(iframe);
+    document.body.appendChild(parentContainer);
+
+    let wheelListener: ((event: WheelEvent) => void) | undefined;
+    const fakeContentWindow = {
+      addEventListener: vi.fn((type: string, listener: (event: WheelEvent) => void) => {
+        if (type === 'wheel') {
+          wheelListener = listener;
+        }
+      }),
+    };
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: fakeContentWindow,
+      configurable: true,
+    });
+
+    fixture.componentInstance['setupIframeWheelForwarding'](iframe);
+    expect(fakeContentWindow.addEventListener).toHaveBeenCalledWith('wheel', expect.any(Function), {
+      passive: true,
+    });
+
+    wheelListener?.({deltaY: 50, deltaX: 0} as WheelEvent);
+    expect(parentContainer.scrollBy).toHaveBeenCalledWith({
+      top: 50,
+      left: 0,
+      behavior: 'auto',
+    });
+
+    document.body.removeChild(parentContainer);
   });
 });

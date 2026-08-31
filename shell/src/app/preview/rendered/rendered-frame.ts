@@ -125,9 +125,15 @@ export class RenderedFrame {
   });
 
   constructor() {
-    effect(() => {
+    effect(onCleanup => {
       const ref = this.iframeRef();
-      this.hostCommunication.registerIframe(ref?.nativeElement ?? null);
+      const el = ref?.nativeElement ?? null;
+      if (el) {
+        this.hostCommunication.registerIframe(el);
+        onCleanup(() => {
+          this.hostCommunication.unregisterIframe(el);
+        });
+      }
     });
 
     effect(() => {
@@ -137,33 +143,69 @@ export class RenderedFrame {
 
     // Outbound payload dispatch: forwards updated A2UI declarative JSON payloads
     // from the host/parent component to the renderer iframe over postMessage whenever
-    // the payload input signal emits a non-empty array.
+    // the payload input signal emits a non-empty array and the iframe element is available.
     effect(() => {
       const payload = this.payload();
-      if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-        this.hostCommunication.sendRenderA2UI(payload);
+      const iframe = this.iframeRef()?.nativeElement;
+      if (iframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
+        this.hostCommunication.sendRenderA2UI(payload, iframe);
       }
     });
 
     // Inbound bridge listener: adjusts the iframe container height to fit the rendered
     // A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
     effect(() => {
-      const envelope = this.hostCommunication.messageStream?.();
-      if (envelope?.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-        if (CrossFrameValidator.validateIncomingMessage(envelope)) {
-          const resizePayload = envelope.payload as {height: number; width?: number};
-          this.dynamicHeight.set(resizePayload.height);
+      const envelope = this.hostCommunication.messageStream();
+      if (envelope) {
+        const myIframe = this.iframeRef()?.nativeElement;
+        const myWindow = myIframe?.contentWindow;
+
+        // In multi-frame environments, ignore messages dispatched by other iframes
+        if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
+          return;
         }
-      } else if (
-        envelope?.type === PreviewBridgeMessageType.RENDERER_READY ||
-        envelope?.type === PreviewBridgeMessageType.A2UI_CATALOG
-      ) {
-        const payload = untracked(() => this.payload());
-        if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-          this.hostCommunication.sendRenderA2UI(payload);
+
+        if (
+          envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
+          envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
+        ) {
+          const payload = untracked(() => this.payload());
+          if (myIframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
+            this.hostCommunication.sendRenderA2UI(payload, myIframe);
+          }
+        } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
+          if (CrossFrameValidator.validateIncomingMessage(envelope)) {
+            const resizePayload = envelope.payload as {height: number; width?: number};
+            this.dynamicHeight.set(resizePayload.height);
+          }
         }
       }
     });
+  }
+
+  /**
+   * Forwards wheel events from the guest iframe to parent scroll containers
+   * to ensure mouse/trackpad scrolling is not trapped by iframe viewports.
+   */
+  protected setupIframeWheelForwarding(iframe: HTMLIFrameElement): void {
+    try {
+      iframe.contentWindow?.addEventListener(
+        'wheel',
+        (event: WheelEvent) => {
+          const scrollParent = iframe.closest('.chat-history-container, .side-canvas-viewport');
+          if (scrollParent) {
+            scrollParent.scrollBy({
+              top: event.deltaY,
+              left: event.deltaX,
+              behavior: 'auto',
+            });
+          }
+        },
+        {passive: true},
+      );
+    } catch {
+      // Safe fallback if frame is restricted by cross-origin policies
+    }
   }
 
   /**
@@ -171,8 +213,12 @@ export class RenderedFrame {
    */
   protected syncPayloadOnIframeLoad(): void {
     const payload = this.payload();
-    if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-      this.hostCommunication.sendRenderA2UI(payload);
+    const iframe = this.iframeRef()?.nativeElement;
+    if (iframe) {
+      this.setupIframeWheelForwarding(iframe);
+      if (payload !== null && Array.isArray(payload) && payload.length > 0) {
+        this.hostCommunication.sendRenderA2UI(payload, iframe);
+      }
     }
   }
 }
