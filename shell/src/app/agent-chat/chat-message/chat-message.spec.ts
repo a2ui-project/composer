@@ -44,6 +44,7 @@ describe('A2aChatMessage', () => {
           provide: HostCommunication,
           useValue: {
             registerIframe: vi.fn(),
+            unregisterIframe: vi.fn(),
             sendTheme: vi.fn(),
             sendRenderA2UI: vi.fn(),
             messageStream: signal(null),
