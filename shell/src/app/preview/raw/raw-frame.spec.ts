@@ -38,6 +38,10 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 
+import {ErrorLogger} from '../../debug/error-logger.service';
+import {OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
+import {ComposerDockview} from '../../shell/composer-workspace/composer-dockview.service';
+
 const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() => {
   const undoStack: string[] = [];
   const redoStack: string[] = [];
@@ -61,6 +65,8 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     pushUndoStop: vi.fn(),
     trigger: vi.fn(),
     onDidChangeModelContent: vi.fn(() => ({dispose: () => {}})),
+    onDidChangeMarkers: vi.fn(() => ({dispose: () => {}})),
+    getModelMarkers: vi.fn(() => []),
     updateOptions: vi.fn(),
     dispose: vi.fn(),
     getModel: vi.fn(() => ({
@@ -155,6 +161,8 @@ vi.mock('@monaco-editor/loader', () => {
             setValue: vi.fn(),
             dispose: vi.fn(),
           })),
+          onDidChangeMarkers: vi.fn(() => ({dispose: () => {}})),
+          getModelMarkers: vi.fn(() => []),
         },
         languages: {
           json: {
@@ -289,12 +297,26 @@ describe('RawFrame JSON Source Editor View', () => {
   let chatStateMock: MockChatState;
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
   let messageStreamSubject: Subject<unknown>;
+  let errorLoggerMock: {error: ReturnType<typeof vi.fn>};
+  let dockviewServiceMock: {openPanel: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
     mockThemePreference = signal<ThemePreference>(ThemePreference.LIGHT);
-    snackBarMock = {open: vi.fn(), dismiss: vi.fn()};
+    snackBarMock = {
+      open: vi.fn().mockReturnValue({
+        onAction: () => ({
+          subscribe: cb => {
+            cb();
+            return {unsubscribe: () => {}};
+          },
+        }),
+      }),
+      dismiss: vi.fn(),
+    };
+    errorLoggerMock = {error: vi.fn()};
+    dockviewServiceMock = {openPanel: vi.fn()};
     messageStreamSubject = new Subject<unknown>();
 
     undoStack.length = 0;
@@ -330,6 +352,7 @@ describe('RawFrame JSON Source Editor View', () => {
           useValue: {
             sendRenderA2UI: sendRenderA2UIMock,
             messageStream$: messageStreamSubject.asObservable(),
+            isRendererReady: vi.fn().mockReturnValue(false),
           },
         },
         {
@@ -348,6 +371,8 @@ describe('RawFrame JSON Source Editor View', () => {
         {provide: ChatState, useClass: MockChatState},
         {provide: MatSnackBar, useValue: snackBarMock},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
+        {provide: ErrorLogger, useValue: errorLoggerMock},
+        {provide: ComposerDockview, useValue: dockviewServiceMock},
       ],
     }).compileComponents();
 
@@ -738,5 +763,84 @@ describe('RawFrame JSON Source Editor View', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(component.TEST_ONLY.layoutJson()()).toBe(initialLayout);
+  });
+
+  describe('watchdog timer', () => {
+    it('logs error when renderer is unresponsive after watchdog timeout', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Preview frame did not respond within 15 seconds.',
+          sourceTag: '[Previewer]',
+          level: 'warn',
+        }),
+      );
+    });
+
+    it('ignores watchdog trigger when renderer becomes ready', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      TestBed.inject(HostCommunication).isRendererReady.mockReturnValue(true);
+      component.TEST_ONLY.startWatchdog();
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('notifySchemaErrors', () => {
+    it('opens snackbar with schema error information and opens errors view upon action', async () => {
+      const {component} = await setup(false);
+      const markers = [{severity: 8, message: 'Invalid field'}];
+
+      snackBarMock.open.mockReturnValue({
+        onAction: () => ({
+          subscribe: (cb: unknown) => {
+            if (typeof cb === 'function') cb();
+          },
+        }),
+      });
+
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+      component.TEST_ONLY.notifySchemaErrors(markers as unknown[] as monaco.editor.IMarker[]);
+
+      expect(snackBarMock.open).toHaveBeenCalledWith(
+        'Schema error: Invalid field',
+        'View in Errors Tab',
+        expect.any(Object),
+      );
+      expect(dispatchSpy).toHaveBeenCalledWith(expect.any(OpenPanelEvent));
+    });
+  });
+
+  it('handles schema marker changes and shows snackbar for errors', async () => {
+    const {fixture} = await setup(false);
+    vi.useFakeTimers();
+    const markers = [
+      {severity: 8, message: 'Invalid property a'},
+      {severity: 8, message: 'Invalid property b'},
+    ];
+    fixture.componentInstance.onMarkersChange(
+      markers as unknown as import('monaco-editor').editor.IMarker[],
+    );
+    vi.advanceTimersByTime(1100);
+    fixture.detectChanges();
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Found 2 schema errors in JSON.',
+      'View in Errors Tab',
+      expect.any(Object),
+    );
+
+    // Clear
+    fixture.componentInstance.onMarkersChange([]);
+    vi.advanceTimersByTime(1100);
+    expect(snackBarMock.open).toHaveBeenCalledTimes(1); // not called again
+    vi.useRealTimers();
   });
 });

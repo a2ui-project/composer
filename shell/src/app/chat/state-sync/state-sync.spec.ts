@@ -700,5 +700,38 @@ describe('StateSync Autosave Draft Integrations', () => {
 
       expect(service.activeDraft()).toBe('');
     });
+
+    it('resets previousCatalogId allowing subsequent catalog emission to rehydrate activeDraft on flushDraft', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      });
+      TestBed.tick();
+      expect(service.activeDraft()).toBe(CAR_BOOKING);
+
+      service.updateDraft('[{"version": "v0.9", "custom": true}]');
+      TestBed.tick();
+
+      service.flushDraft();
+      TestBed.tick();
+
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      TestBed.tick();
+
+      expect(service.activeDraft()).toContain('material_catalog.json');
+      expect(service.activeDraft()).not.toContain('Book a Car');
+    });
+
+    it('falls back to CAR_BOOKING when activeRenderer samplePayload is absent and catalogId is empty on flushDraft', () => {
+      startupConfigStateMock.activeRenderer.set(null);
+      catalogManagementMock.activeCatalog.set(null);
+      TestBed.tick();
+
+      service.flushDraft();
+      TestBed.tick();
+
+      expect(service.activeDraft()).toBe(CAR_BOOKING);
+    });
   });
 });

@@ -37,6 +37,7 @@ import {
 } from '../../settings/app-config-provider/app-config-provider';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
+import {ErrorLogger, ErrorLogItem} from '../../debug/error-logger.service';
 
 /**
  * A standalone Angular component that wraps the Monaco Editor.
@@ -46,7 +47,7 @@ import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
  * (dark/light mode) and integrates with the active A2UI catalog to provide
  * real-time schema validation and autocompletion for component properties.
  */
-const LAYOUT_MODEL_URI = 'a2ui://layout.json';
+const MODEL_URI = 'inmemory://model/layout.json';
 
 @Component({
   selector: 'a2ui-composer-monaco-editor',
@@ -60,6 +61,7 @@ export class MonacoEditor {
   readonly value = input<string>('');
   readonly readOnly = input<boolean>(false);
   readonly valueChange = output<string>();
+  readonly markersChange = output<monaco.editor.IMarker[]>();
 
   private editor?: monaco.editor.IStandaloneCodeEditor;
   private readonly monacoInstance = signal<typeof monaco | null>(null);
@@ -67,11 +69,183 @@ export class MonacoEditor {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly errorLogger = inject(ErrorLogger);
 
   protected readonly isDarkTheme = computed(
     () => this.configProvider.themePreference() === ThemePreference.DARK,
   );
   protected readonly monacoTheme = computed(() => (this.isDarkTheme() ? 'vs-dark' : 'vs-light'));
+
+  /**
+   * Resolves a JSON Pointer RFC 6901 compliant path against an object payload.
+   *
+   * @param obj - The base JSON object to traverse.
+   * @param pointer - The JSON pointer URI / path string.
+   * @returns The resolved inner object payload or undefined if invalid.
+   */
+  static resolveJsonPointer(obj: unknown, pointer: string): unknown {
+    if (!pointer || pointer === '' || pointer === '#') {
+      return obj;
+    }
+    let p = pointer.startsWith('#') ? pointer.substring(1) : pointer;
+    if (p.startsWith('/')) {
+      p = p.substring(1);
+    }
+    const parts = p.split('/');
+    let current: unknown = obj;
+
+    for (const part of parts) {
+      if (current === null || typeof current !== 'object') {
+        return undefined;
+      }
+
+      // RFC 6901 compliant segment unescaping and URL decoding before prototype
+      // guards to preserve exact segment logic and strictly avoid JS prototype
+      // pollution injections / URI decoding bugs
+      let unescaped = part.replace(/~1/g, '/').replace(/~0/g, '~');
+      try {
+        unescaped = decodeURIComponent(unescaped);
+      } catch {
+        // Fall back to unescaped if invalid URI encoding
+      }
+
+      if (unescaped === '__proto__' || unescaped === 'constructor' || unescaped === 'prototype') {
+        return undefined;
+      }
+
+      current = Object.prototype.hasOwnProperty.call(current, unescaped)
+        ? (current as Record<string, unknown>)[unescaped]
+        : undefined;
+    }
+
+    return current;
+  }
+
+  /**
+   * Evaluates Draft-07 JSON Schema inputs and synthesizes deep structure.
+   * Aggressively flattens in-memory `allOf` constructs and links `$ref` dependencies.
+   *
+   * @param rawSchema - The current node of the JSON schema.
+   * @param externalSchemas - Available root nodes to satisfy `$ref` queries.
+   * @param rootDefinitions - Storage accumulator for synthesized definitions.
+   * @param visited - Tracks cycle breaking refs.
+   * @param isRoot - Signals if the node is at the apex context.
+   * @param depth - Traverses execution tree structure (limit prevents cyclic halting).
+   * @returns Synthesized, flatter JSON structure representation without inline `allOf`.
+   */
+  static resolveAndFlattenSchemaForDraft07(
+    rawSchema: Record<string, unknown>,
+    externalSchemas: Record<string, Record<string, unknown>> = {},
+    rootDefinitions: Record<string, unknown> = {},
+    visited = new Set<string>(),
+    isRoot = true,
+    depth = 0,
+  ): Record<string, unknown> {
+    // Thread safety recursion bounding prevents catastrophic backtracking
+    // loops or halting when attempting to flatten deeply nested cyclic refs.
+    if (depth > 50) {
+      return {error: 'Max schema recursion depth exceeded'};
+    }
+
+    const result: Record<string, unknown> = {...rawSchema};
+    if (isRoot) {
+      result['definitions'] = rootDefinitions;
+    }
+
+    const refResult = MonacoEditor.mergeSchemaRef(
+      result,
+      externalSchemas,
+      rootDefinitions,
+      visited,
+      depth,
+    );
+    if (refResult) {
+      return refResult;
+    }
+
+    if (Array.isArray(result['allOf'])) {
+      // allOf dependencies are eagerly evaluated inline synchronously
+      // because Draft-07 tooling often expects composed primitives instead of references.
+      MonacoEditor.resolveAllOf(result, externalSchemas, rootDefinitions, visited, depth);
+    }
+
+    return result;
+  }
+
+  private static mergeSchemaRef(
+    result: Record<string, unknown>,
+    externalSchemas: Record<string, Record<string, unknown>>,
+    rootDefinitions: Record<string, unknown>,
+    visited: Set<string>,
+    depth: number,
+  ): Record<string, unknown> | null {
+    if (typeof result['$ref'] === 'string') {
+      const ref = result['$ref'];
+      if (ref.includes('#')) {
+        const [uri, pointer] = ref.split('#');
+        if (uri && externalSchemas[uri]) {
+          const defKey = `${uri.replace(/[^a-zA-Z0-9]/g, '_')}_${pointer.replace(/[^a-zA-Z0-9]/g, '_')}`;
+          if (visited.has(ref)) {
+            return {$ref: `#/definitions/${defKey}`};
+          }
+          visited.add(ref);
+          const resolved = MonacoEditor.resolveJsonPointer(externalSchemas[uri], '#' + pointer);
+          if (resolved && typeof resolved === 'object') {
+            rootDefinitions[defKey] = MonacoEditor.resolveAndFlattenSchemaForDraft07(
+              resolved as Record<string, unknown>,
+              externalSchemas,
+              rootDefinitions,
+              visited,
+              false,
+              depth + 1,
+            );
+            return {$ref: `#/definitions/${defKey}`};
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  private static resolveAllOf(
+    result: Record<string, unknown>,
+    externalSchemas: Record<string, Record<string, unknown>>,
+    rootDefinitions: Record<string, unknown>,
+    visited: Set<string>,
+    depth: number,
+  ): void {
+    const properties: Record<string, unknown> = {
+      ...((result['properties'] as Record<string, unknown>) || {}),
+    };
+    const required = new Set<string>((result['required'] as string[]) || []);
+
+    const allOf = result['allOf'] as unknown[];
+    for (const sub of allOf) {
+      if (sub && typeof sub === 'object') {
+        const flattenedSub = MonacoEditor.resolveAndFlattenSchemaForDraft07(
+          sub as Record<string, unknown>,
+          externalSchemas,
+          rootDefinitions,
+          visited,
+          false,
+          depth + 1,
+        );
+        if (flattenedSub['properties'] && typeof flattenedSub['properties'] === 'object') {
+          Object.assign(properties, flattenedSub['properties']);
+        }
+        if (Array.isArray(flattenedSub['required'])) {
+          flattenedSub['required'].forEach(r => required.add(r));
+        }
+      }
+    }
+    result['properties'] = properties;
+    if (required.size > 0) {
+      result['required'] = Array.from(required);
+    }
+    result['additionalProperties'] = false;
+    delete result['allOf'];
+    delete result['unevaluatedProperties'];
+  }
 
   constructor() {
     // Synchronize external value changes into the Monaco editor instance
@@ -120,6 +294,13 @@ export class MonacoEditor {
                 sendDataModel: {type: 'boolean'},
               },
               required: ['surfaceId', 'catalogId'],
+            },
+            deleteSurface: {
+              type: 'object',
+              properties: {
+                surfaceId: {type: 'string'},
+              },
+              required: ['surfaceId'],
             },
             updateComponents: {
               type: 'object',
@@ -193,14 +374,19 @@ export class MonacoEditor {
     afterNextRender(() => {
       loader.config({paths: {vs: 'assets/monaco/vs'}});
 
-      loader.init().then(monacoInstance => {
+      loader.init().then((monacoInstance: typeof monaco) => {
         if (destroyed) {
           return;
         }
         this.monacoInstance.set(monacoInstance);
 
-        const modelUri = monacoInstance.Uri.parse(LAYOUT_MODEL_URI);
-        const model = monacoInstance.editor.createModel(this.value(), 'json', modelUri);
+        const modelUri = monacoInstance.Uri.parse(MODEL_URI);
+        let model = monacoInstance.editor.getModel(modelUri);
+        if (model) {
+          model.setValue(this.value());
+        } else {
+          model = monacoInstance.editor.createModel(this.value(), 'json', modelUri);
+        }
 
         const editor = monacoInstance.editor.create(this.editorContainer().nativeElement, {
           model,
@@ -224,6 +410,44 @@ export class MonacoEditor {
             this.valueChange.emit(val);
           }
         });
+
+        const markersDisposable = monacoInstance.editor.onDidChangeMarkers(
+          ([uri]: readonly monaco.Uri[]) => {
+            if (uri.toString() === modelUri.toString()) {
+              const markers = monacoInstance.editor.getModelMarkers({resource: uri});
+
+              this.markersChange.emit(markers);
+
+              const timestamp = Date.now();
+              markers.forEach((marker: monaco.editor.IMarker) => {
+                const item: Partial<ErrorLogItem> = {
+                  id: `${timestamp}-${Math.random().toString(36).substring(2, 9)}`,
+                  timestamp,
+                  level:
+                    marker.severity === 8
+                      ? 'error'
+                      : marker.severity === 4
+                        ? 'warn'
+                        : marker.severity === 2
+                          ? 'info'
+                          : 'log',
+                  message: marker.message,
+                  sourceTag: '[Editor]',
+                  line: marker.startLineNumber,
+                  column: marker.startColumn,
+                };
+                if (item.level === 'error') this.errorLogger.error(item);
+                else if (item.level === 'warn') this.errorLogger.warn(item);
+                else if (item.level === 'info') this.errorLogger.info(item);
+                else this.errorLogger.log(item);
+              });
+            }
+          },
+        );
+
+        this.destroyRef.onDestroy(() => {
+          markersDisposable.dispose();
+        });
       });
     });
   }
@@ -243,7 +467,7 @@ export class MonacoEditor {
     return [
       {
         uri: 'a2ui-catalog-schema',
-        fileMatch: [LAYOUT_MODEL_URI],
+        fileMatch: [MODEL_URI],
         schema: structuredClone(layoutSchema),
       },
       {
