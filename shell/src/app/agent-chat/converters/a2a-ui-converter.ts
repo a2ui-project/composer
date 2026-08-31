@@ -18,6 +18,7 @@ import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../../chat/a2a/a2a-t
 import {generateUuid as uuid} from '../../utils/uuid';
 import {UiAgentInfo} from '../agent-header/types';
 import {MessageInspectorEvent} from '../message-inspector/message-inspector-event';
+import {A2aStreamEventParser, type ParsedA2aStreamEvent} from './a2a-stream-event-parser.service';
 
 /**
  * Default fallback icon URL for A2A Agents.
@@ -134,25 +135,6 @@ export function createErrorEvent(err: unknown): MessageInspectorEvent {
     payload: err instanceof Error ? {message: err.message, stack: err.stack, name: err.name} : err,
   };
 }
-
-import {
-  hasA2uiCanvasComponent,
-  normalizeA2uiItems,
-  partitionA2uiSurfacePayload,
-  unwrapCanvasForRenderer,
-} from './surface-partitioner';
-
-export type {PartitionedA2uiSurface} from './surface-partitioner';
-export {
-  hasA2uiCanvasComponent,
-  normalizeA2uiItems,
-  partitionA2uiSurfacePayload,
-  unwrapCanvasForRenderer,
-};
-
-import {A2aStreamEventParser, type ParsedA2aStreamEvent} from './a2a-stream-event-parser.service';
-export {A2aStreamEventParser};
-export type {ParsedA2aStreamEvent};
 
 const defaultStreamEventParser = new A2aStreamEventParser();
 

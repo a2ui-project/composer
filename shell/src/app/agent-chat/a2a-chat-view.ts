@@ -48,8 +48,8 @@ import {
   createReceivedEvent,
   createSentMessageEvent,
   parseA2aStreamEvent,
-  partitionA2uiSurfacePayload,
 } from './converters/a2a-ui-converter';
+import {partitionA2uiSurfacePayload} from './converters/surface-partitioner';
 import {UiAgentInfo} from './agent-header/types';
 import {CanvasArtifact, UiMessage} from './chat-message/types';
 import {A2aInputArea, SendMessageEvent} from './input-area/input-area';
