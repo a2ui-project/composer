@@ -26,3 +26,13 @@ export enum ComposerPanelId {
   Errors = 'errors',
   RawMessages = 'rawMessages',
 }
+
+/**
+ * An event which will be fired to open one of the dockview panels.
+ */
+export class OpenPanelEvent extends CustomEvent<{panelId: ComposerPanelId}> {
+  static readonly TYPE = 'a2ui-open-panel';
+  constructor(panelId: ComposerPanelId) {
+    super(OpenPanelEvent.TYPE, {detail: {panelId}, bubbles: true, composed: true});
+  }
+}
