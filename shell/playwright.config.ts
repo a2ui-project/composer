@@ -18,8 +18,8 @@ import {defineConfig, devices} from '@playwright/test';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['e2e/**/*.e2e.ts', 'src/**/*.e2e.ts'],
-  testIgnore: process.env['VISUAL_TESTS'] ? [] : ['**/*.visual.e2e.ts'],
+  testMatch: ['e2e/**/*.e2e.ts', 'src/**/*.visual.ts'],
+  testIgnore: process.env['VISUAL_TESTS'] ? [] : ['**/*.visual.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 2 : 0,
