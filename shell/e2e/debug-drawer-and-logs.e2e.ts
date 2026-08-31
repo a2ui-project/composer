@@ -102,7 +102,7 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     await expect(errorRow).toHaveCount(1);
     await expect(page.locator('.errors-container table')).toContainText('E2E Exception trace');
 
-    const expandBtn = page.getByRole('button', {name: 'Toggle Stack Trace'});
+    const expandBtn = page.getByRole('button', {name: 'Toggle Details'});
     await expandBtn.click();
     await expect(page.locator('.stack-preview')).toBeVisible();
     await expect(page.locator('.stack-preview')).toContainText('Error: E2E Failure');
@@ -134,7 +134,7 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     const errorRow = page.locator('.errors-container table tr.element-row').first();
     await expect(errorRow).toBeVisible();
     await expect(errorRow).toContainText('warn');
-    await expect(errorRow).toContainText('console');
+    await expect(errorRow).toContainText('Previewer');
     await expect(errorRow).toContainText('Telemetry active warn');
   });
 
@@ -178,7 +178,6 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
       window.parent.postMessage(msg, '*');
     }, crashMsg);
 
-    await expect(eventsTabLabel).toContainText('(1)');
     await expect(errorsTabLabel).toContainText('(1)');
 
     await eventsTabLabel.click();

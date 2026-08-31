@@ -44,12 +44,17 @@
         <th mat-header-cell *matHeaderCellDef>Message</th>
         <td mat-cell *matCellDef="let element">
           <div class="message-cell">
-            <span class="error-message-text">{{ element.message }}</span>
-            @if (element.stack) {
+            <span class="error-message-text">
+              {{ element.message }}
+              @if (element.line !== undefined && element.column !== undefined) {
+                <span class="line-col"> (Line {{ element.line }}, Col {{ element.column }})</span>
+              }
+            </span>
+            @if (element.stack || element.snippet) {
               <button
                 mat-icon-button
                 (click)="toggleRow(element); $event.stopPropagation()"
-                aria-label="Toggle Stack Trace"
+                aria-label="Toggle Details"
               >
                 <mat-icon aria-hidden="true">{{
                   isRowExpanded(element) ? 'keyboard_arrow_up' : 'keyboard_arrow_down'
@@ -64,6 +69,9 @@
       <ng-container matColumnDef="expandedDetail">
         <td mat-cell *matCellDef="let element" [attr.colspan]="columnsToDisplay.length">
           <div class="element-detail">
+            @if (element.snippet) {
+              <pre class="snippet-preview">{{ element.snippet }}</pre>
+            }
             @if (element.stack) {
               <pre class="stack-preview">{{ element.stack }}</pre>
             }
@@ -78,7 +86,7 @@
         class="element-row"
         [attr.data-row-index]="i"
       ></tr>
-      <!-- Collapsible stack row -->
+      <!-- Collapsible details row -->
       <tr
         mat-row
         *matRowDef="let element; columns: ['expandedDetail']"
