@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 import {
   Component,
   inject,
@@ -36,6 +37,8 @@ import {MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {tryParseJsonArray} from '../../utils/json';
+import {ErrorLogger} from '../../debug/error-logger.service';
+import type {editor} from 'monaco-editor';
 
 /**
  * Hosts the raw JSON view of active surface models, allowing direct source editing
@@ -50,11 +53,16 @@ import {tryParseJsonArray} from '../../utils/json';
 })
 export class RawFrame {
   protected readonly isExtensionMode = inject(IS_EXTENSION_MODE);
+  /** The current JSON layout representation reflecting the active draft. */
   protected readonly layoutJson: WritableSignal<string>;
+  /** Tracks if the current layout string fails to parse. */
   protected readonly isJsonInvalid: WritableSignal<boolean> = signal(false);
 
   readonly TEST_ONLY = {
     layoutJson: () => this.layoutJson,
+    notifySchemaErrors: (markers: editor.IMarker[]) => this.notifySchemaErrors(markers),
+    startWatchdog: () => this.startWatchdog(),
+    clearWatchdog: () => this.clearWatchdog(),
   };
 
   private readonly hostCommunication = inject(HostCommunication);
@@ -62,10 +70,16 @@ export class RawFrame {
   private readonly stateSync = inject(StateSync);
   private readonly chatState = inject(ChatState);
   private readonly usageTrackingService = inject(UsageTrackingService);
+  private readonly errorLogger = inject(ErrorLogger);
   private readonly destroyRef = inject(DestroyRef);
   private readonly snackBar = inject(MatSnackBar);
   private readonly layoutInput$ = new Subject<string>();
   private isDestroyed = false;
+
+  private readonly WATCHDOG_TIMEOUT_MS = 15000;
+  private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastErrorSignature: string | null = null;
+  private readonly markerSubject = new Subject<editor.IMarker[]>();
 
   /** Public lock indicator preventing typing deadlocks during generative LLM stream turns. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
@@ -73,7 +87,26 @@ export class RawFrame {
   constructor() {
     this.destroyRef.onDestroy(() => {
       this.isDestroyed = true;
+      this.clearWatchdog();
     });
+
+    this.markerSubject
+      .pipe(debounceTime(1000), takeUntilDestroyed(this.destroyRef))
+      .subscribe(markers => {
+        this.notifySchemaErrors(markers);
+      });
+
+    this.hostCommunication.messageStream$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(envelope => {
+        if (
+          envelope?.type === PreviewBridgeMessageType.RENDER_SUCCESS ||
+          envelope?.type === PreviewBridgeMessageType.RENDER_ERROR ||
+          envelope?.type === PreviewBridgeMessageType.RENDERER_READY
+        ) {
+          this.startWatchdog();
+        }
+      });
 
     // Initialize backing editor layout state Signal dynamically from the volatile session cache
     this.layoutJson = signal(this.stateSync.hydrateActiveDraft());
@@ -132,6 +165,7 @@ export class RawFrame {
               const payload = this.parseLayoutString(activeDraftVal);
               if (payload !== null) {
                 this.hostCommunication.sendRenderA2UI(payload);
+                this.startWatchdog();
               } else {
                 this.showJsonSyntaxError();
               }
@@ -164,10 +198,11 @@ export class RawFrame {
           }
         }),
         filter((payload): payload is unknown[] => payload !== null),
-        takeUntilDestroyed(),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((payload: unknown[]) => {
         this.hostCommunication.sendRenderA2UI(payload);
+        this.startWatchdog();
       });
   }
 
@@ -175,6 +210,66 @@ export class RawFrame {
     this.layoutJson.set(value);
     this.layoutInput$.next(value);
     this.stateSync.updateDraft(value);
+  }
+
+  protected onMarkersChange(markers: editor.IMarker[]): void {
+    this.markerSubject.next(markers);
+  }
+
+  private clearWatchdog(): void {
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+  }
+
+  private startWatchdog(): void {
+    this.clearWatchdog();
+    if (
+      this.chatState.isProgrammaticStreamActive() ||
+      (typeof document !== 'undefined' && document.hidden)
+    ) {
+      return;
+    }
+
+    this.watchdogTimer = setTimeout(() => {
+      if (!this.hostCommunication.isRendererReady()) {
+        this.errorLogger.error({
+          sourceTag: '[Previewer]',
+          message: 'Preview frame did not respond within 15 seconds.',
+          level: 'warn',
+        });
+      }
+    }, this.WATCHDOG_TIMEOUT_MS);
+  }
+
+  private notifySchemaErrors(markers: editor.IMarker[]): void {
+    const errorMarkers = markers.filter(m => m.severity === 8);
+    if (errorMarkers.length === 0) {
+      this.lastErrorSignature = null;
+      return;
+    }
+    const currentSignature = errorMarkers
+      .map(m => m.message)
+      .sort()
+      .join('|');
+    if (this.lastErrorSignature === currentSignature) return;
+    this.lastErrorSignature = currentSignature;
+
+    const message =
+      errorMarkers.length === 1
+        ? `Schema error: ${errorMarkers[0].message}`
+        : `Found ${errorMarkers.length} schema errors in JSON.`;
+
+    this.snackBar
+      .open(message, 'View in Errors Tab', {
+        duration: 5000,
+        panelClass: 'schema-error-snackbar',
+      })
+      .onAction()
+      .subscribe(() => {
+        window.dispatchEvent(new OpenPanelEvent(ComposerPanelId.Errors));
+      });
   }
 
   /**
