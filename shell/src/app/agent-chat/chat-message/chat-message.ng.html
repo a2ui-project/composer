@@ -17,7 +17,7 @@
 <div class="message-row" [class]="message().sender">
   @if (message().sender === 'user') {
     <div class="user-message-bubble">
-      @if (message().images && message().images!.length > 0) {
+      @if (hasImages()) {
         <div class="msg-images-tray">
           @for (img of message().images; track img.name || img.previewUrl || $index) {
             <img [src]="img.previewUrl || img.data" [alt]="img.name" class="msg-image-thumb" />
@@ -27,7 +27,11 @@
       {{ message().text }}
     </div>
   } @else {
-    <div class="agent-message-container">
+    <div
+      class="agent-message-container"
+      [class.has-inline-surface]="hasInlineSurface()"
+      [class.has-canvas-artifacts]="hasCanvasArtifacts()"
+    >
       <div class="agent-header-badge">
         <div class="mini-avatar">
           <mat-icon class="mini-avatar-icon">smart_toy</mat-icon>
@@ -36,7 +40,7 @@
       </div>
 
       <div class="agent-message-body">
-        @if (message().images && message().images!.length > 0) {
+        @if (hasImages()) {
           <div class="msg-images-tray">
             @for (img of message().images; track img.name || img.previewUrl || $index) {
               <img [src]="img.previewUrl || img.data" [alt]="img.name" class="msg-image-thumb" />
@@ -58,10 +62,10 @@
             >
               <mat-icon class="thinking-icon">psychology</mat-icon>
               <span class="thinking-label">
-                {{ message().isStreaming ? 'Thinking...' : 'Reasoning Process' }}
+                {{ thinkingLabel() }}
               </span>
               <mat-icon class="expand-arrow">
-                {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
+                {{ thinkingExpandIcon() }}
               </mat-icon>
             </div>
             @if (isThinkingExpanded()) {
@@ -79,23 +83,33 @@
           </div>
         }
 
-        @if (message().a2uiPayload && message().a2uiPayload!.length > 0) {
+        @if (hasInlineSurface()) {
+          <div class="inline-surface-card">
+            <a2ui-composer-rendered-frame
+              [payload]="inlinePayload()"
+            ></a2ui-composer-rendered-frame>
+          </div>
+        }
+
+        @for (art of canvasArtifacts(); track art.id) {
           <div class="canvas-artifact-card">
             <button
               mat-flat-button
               type="button"
               class="view-canvas-btn"
-              (click)="openCanvasArtifact()"
-              aria-label="View workspace artifact in Canvas"
+              (click)="openCanvasArtifact(art.payload)"
+              [attr.aria-label]="'View ' + art.cardTitle + ' in Canvas'"
             >
-              <mat-icon class="grid-icon">dashboard_customize</mat-icon>
+              <mat-icon class="grid-icon">{{ art.cardIcon || 'apps' }}</mat-icon>
               <div class="btn-text-col">
-                <span class="btn-main-title">View in Canvas</span>
-                <span class="btn-sub-title">Workspace artifact ready on Canvas</span>
+                <span class="btn-main-title">{{ art.cardTitle }}</span>
+                @if (art.cardDescription) {
+                  <span class="btn-sub-title">{{ art.cardDescription }}</span>
+                }
               </div>
             </button>
 
-            @if (isCanvasOpen()) {
+            @if (isArtifactActive(art)) {
               <button
                 mat-flat-button
                 type="button"

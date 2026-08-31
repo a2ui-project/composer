@@ -24,6 +24,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
@@ -46,18 +47,18 @@ import {
   createErrorEvent,
   createReceivedEvent,
   createSentMessageEvent,
-  hasA2uiCanvasComponent,
   parseA2aStreamEvent,
 } from './converters/a2a-ui-converter';
+import {partitionA2uiSurfacePayload} from './converters/surface-partitioner';
 import {UiAgentInfo} from './agent-header/types';
-import {UiMessage} from './chat-message/types';
+import {CanvasArtifact, UiMessage} from './chat-message/types';
 import {A2aInputArea, SendMessageEvent} from './input-area/input-area';
 import {A2aMessageInspector} from './message-inspector/message-inspector';
 import {MessageInspectorEvent} from './message-inspector/message-inspector-event';
 
 /**
  * Top-level view container managing end-to-end Agent-to-Agent (A2A) testing,
- * interactive message exchanges, live A2UI surface rendering, and side drawer diagnostics.
+ * interactive message exchanges, live A2UI surface rendering, resizable inspector, and side drawer diagnostics.
  */
 @Component({
   selector: 'a2ui-composer-a2a-chat-view',
@@ -83,6 +84,7 @@ export class A2aChatView implements OnInit {
   private readonly a2aTransport = inject(A2A_TRANSPORT);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly initTimestamp = Date.now();
 
   /** Discovered A2A AgentCard metadata for the connected agent. */
   protected readonly agentCard = signal<AgentCard | null>(null);
@@ -112,9 +114,24 @@ export class A2aChatView implements OnInit {
   /** Whether a response stream turn is currently executing. */
   protected readonly isStreaming = signal<boolean>(false);
 
+  /** Width in pixels for the resizable message inspector panel. */
+  readonly inspectorWidth = signal<number>(380);
+  /** Whether the inspector panel is currently being resized by mouse drag. */
+  protected readonly isResizingInspector = signal<boolean>(false);
+
   private activeAbortController?: AbortController;
 
   constructor() {
+    this.hostCommunication.messageStream$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(envelope => {
+        if (!envelope) return;
+        if (envelope.timestamp && envelope.timestamp < this.initTimestamp) return;
+        if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER) {
+          this.handleSendToServerAction(envelope.payload);
+        }
+      });
+
     effect(() => {
       const payload = this.activeCanvasPayload();
       const isOpen = this.isCanvasOpen();
@@ -271,6 +288,88 @@ export class A2aChatView implements OnInit {
     };
   }
 
+  protected handleSendToServerAction(payload: unknown): void {
+    const rawPayload = payload as {version?: string; action?: unknown} | undefined;
+    let action = rawPayload?.action !== undefined ? rawPayload.action : payload;
+
+    if (typeof action === 'string') {
+      try {
+        action = JSON.parse(action);
+      } catch {
+        // Keep string if not JSON
+      }
+    }
+
+    if (action === null || action === undefined) return;
+
+    if (this.isStreaming()) {
+      this.cancelActiveGeneration();
+    }
+
+    let actionData: Record<string, unknown>;
+    if (typeof action === 'object' && action !== null && !Array.isArray(action)) {
+      const obj = action as Record<string, unknown>;
+      if ('userAction' in obj) {
+        actionData = {...obj, action: obj['userAction']};
+      } else {
+        actionData = {...obj, userAction: obj, action: obj};
+      }
+    } else {
+      actionData = {userAction: action, action};
+    }
+
+    const contextId = this.activeContextId() || uuid();
+    this.activeContextId.set(contextId);
+
+    let actionText = 'User action triggered.';
+    if (typeof action === 'object' && action !== null) {
+      const obj = action as Record<string, unknown>;
+      const eventObj = (obj['event'] || obj['userAction'] || obj) as Record<string, unknown>;
+      if (typeof eventObj['name'] === 'string' && eventObj['name']) {
+        actionText = `Action: ${eventObj['name']}`;
+      } else if (typeof obj['name'] === 'string' && obj['name']) {
+        actionText = `Action: ${obj['name']}`;
+      }
+    }
+
+    const userUiMessage: UiMessage = {
+      id: uuid(),
+      sender: 'user',
+      text: actionText,
+      timestamp: Date.now(),
+    };
+
+    const a2aMsg: A2aMessage = {
+      role: 'user',
+      parts: [
+        {text: actionText},
+        {
+          data: actionData,
+          metadata: {
+            type: 'a2ui_action',
+          },
+        },
+      ],
+      contextId,
+    };
+
+    this.recordInspectorEvent(createSentMessageEvent(a2aMsg));
+
+    const agentMessageId = uuid();
+    const agentUiMessage: UiMessage = {
+      id: agentMessageId,
+      sender: 'agent',
+      text: '',
+      thinking: '',
+      timestamp: Date.now(),
+      isStreaming: true,
+      a2uiPayload: [],
+    };
+
+    this.messages.update(msgs => [...msgs, userUiMessage, agentUiMessage]);
+    this.executeStreamingTurn(a2aMsg, agentMessageId, undefined, contextId);
+  }
+
   protected submitSamplePrompt(prompt: string): void {
     this.sendUserMessage({text: prompt, images: []});
   }
@@ -410,7 +509,19 @@ export class A2aChatView implements OnInit {
       msgs.map(m => {
         if (m.id !== agentMessageId) return m;
 
-        const updatedText = parsed.textChunk ? m.text + parsed.textChunk : m.text;
+        let updatedText = m.text;
+        if (parsed.textChunk) {
+          if (!m.text) {
+            updatedText = parsed.textChunk;
+          } else if (parsed.textChunk === m.text) {
+            updatedText = m.text;
+          } else if (parsed.textChunk.startsWith(m.text)) {
+            updatedText = parsed.textChunk;
+          } else {
+            updatedText = m.text + parsed.textChunk;
+          }
+        }
+
         const updatedThinking = parsed.thoughtChunk
           ? (m.thinking || '') + parsed.thoughtChunk
           : m.thinking;
@@ -419,21 +530,51 @@ export class A2aChatView implements OnInit {
             ? [...(m.a2uiPayload || []), ...parsed.a2uiItems]
             : m.a2uiPayload;
 
+        const partitioned = partitionA2uiSurfacePayload(updatedPayload || []);
+
         return {
           ...m,
           text: updatedText,
           thinking: updatedThinking,
           a2uiPayload: updatedPayload,
-          hasCanvas: hasA2uiCanvasComponent(updatedPayload || []),
+          inlineA2uiPayload: partitioned.inlinePayload || undefined,
+          canvasArtifacts: partitioned.canvasArtifacts,
+          hasCanvas: partitioned.hasCanvas,
           isStreaming: !parsed.isCompleted,
           rawA2aMessage: event.message || m.rawA2aMessage,
         };
       }),
     );
 
-    if (this.isCanvasOpen() && parsed.a2uiItems.length > 0) {
-      this.activeCanvasPayload.update(prev => [...(prev || []), ...parsed.a2uiItems]);
+    if (parsed.a2uiItems.length > 0) {
+      const activeMsg = this.messages().find(m => m.id === agentMessageId);
+      if (activeMsg?.canvasArtifacts && activeMsg.canvasArtifacts.length > 0) {
+        const autoOpenArtifact = activeMsg.canvasArtifacts.find(a => a.autoOpen);
+        if (this.isCanvasOpen()) {
+          const currentActive = this.activeCanvasPayload();
+          const matching = activeMsg.canvasArtifacts.find(a =>
+            this.matchesActiveCanvasPayload(a, currentActive),
+          );
+          if (matching) {
+            this.activeCanvasPayload.set(matching.payload);
+          } else if (autoOpenArtifact) {
+            this.activeCanvasPayload.set(autoOpenArtifact.payload);
+          }
+        } else if (autoOpenArtifact) {
+          this.openCanvasSurface(autoOpenArtifact.payload);
+        }
+      }
     }
+  }
+
+  private matchesActiveCanvasPayload(
+    artifact: CanvasArtifact,
+    currentActive: RenderA2uiItem[] | null,
+  ): boolean {
+    if (artifact.payload === currentActive) return true;
+    const activeSurfaceId = currentActive?.[0]?.createSurface?.surfaceId;
+    const artifactSurfaceId = artifact.payload?.[0]?.createSurface?.surfaceId;
+    return Boolean(activeSurfaceId && activeSurfaceId === artifactSurfaceId);
   }
 
   protected cancelActiveGeneration(): void {
@@ -466,6 +607,48 @@ export class A2aChatView implements OnInit {
 
   protected toggleInspectorDrawer(): void {
     this.isInspectorOpen.update(v => !v);
+  }
+
+  protected startInspectorResize(event: MouseEvent): void {
+    event.preventDefault();
+    this.isResizingInspector.set(true);
+
+    const startX = event.clientX;
+    const startWidth = this.inspectorWidth();
+    const resizeController = new AbortController();
+    const {signal} = resizeController;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX;
+      const minWidth = 280;
+      const maxWidth = Math.max(300, Math.floor(window.innerWidth * 0.7));
+      const newWidth = Math.min(Math.max(startWidth + delta, minWidth), maxWidth);
+      this.inspectorWidth.set(newWidth);
+    };
+
+    const cleanup = () => {
+      this.isResizingInspector.set(false);
+      resizeController.abort();
+      removeDestroyHook();
+    };
+
+    const removeDestroyHook = this.destroyRef.onDestroy(() => {
+      resizeController.abort();
+    });
+
+    window.addEventListener('mousemove', onMouseMove, {signal});
+    window.addEventListener('mouseup', cleanup, {signal});
+  }
+
+  protected handleInspectorResizeKey(event: KeyboardEvent): void {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      const maxWidth = Math.max(300, Math.floor(window.innerWidth * 0.7));
+      this.inspectorWidth.update(w => Math.min(w + 24, maxWidth));
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      this.inspectorWidth.update(w => Math.max(w - 24, 280));
+    }
   }
 
   protected openConfigPanel(): void {

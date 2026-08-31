@@ -22,6 +22,7 @@ import {
   effect,
   computed,
   untracked,
+  input,
   signal,
 } from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
@@ -52,8 +53,17 @@ export class RenderedFrame {
   private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
 
+  /** Optional layout payload to render immediately into the guest iframe. */
+  readonly payload = input<unknown[] | null | undefined>(null);
+
   /** Tracks dynamic surface height reported by the guest renderer frame. */
   readonly dynamicHeight = signal<number | null>(null);
+
+  /** Computed pixel height string or 100% when rendered within dynamic/inline layout contexts. */
+  readonly frameHeight = computed(() => {
+    const h = this.dynamicHeight();
+    return h && h > 0 ? h : null;
+  });
 
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
@@ -125,6 +135,16 @@ export class RenderedFrame {
       this.hostCommunication.sendTheme(theme);
     });
 
+    // Outbound payload dispatch: forwards updated A2UI declarative JSON payloads
+    // from the host/parent component to the renderer iframe over postMessage whenever
+    // the payload input signal emits a non-empty array.
+    effect(() => {
+      const payload = this.payload();
+      if (payload !== null && Array.isArray(payload) && payload.length > 0) {
+        this.hostCommunication.sendRenderA2UI(payload);
+      }
+    });
+
     // Inbound bridge listener: adjusts the iframe container height to fit the rendered
     // A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
     effect(() => {
@@ -134,7 +154,25 @@ export class RenderedFrame {
           const resizePayload = envelope.payload as {height: number; width?: number};
           this.dynamicHeight.set(resizePayload.height);
         }
+      } else if (
+        envelope?.type === PreviewBridgeMessageType.RENDERER_READY ||
+        envelope?.type === PreviewBridgeMessageType.A2UI_CATALOG
+      ) {
+        const payload = untracked(() => this.payload());
+        if (payload !== null && Array.isArray(payload) && payload.length > 0) {
+          this.hostCommunication.sendRenderA2UI(payload);
+        }
       }
     });
+  }
+
+  /**
+   * Dispatches the active A2UI payload to the renderer iframe once the DOM iframe element finishes loading.
+   */
+  protected syncPayloadOnIframeLoad(): void {
+    const payload = this.payload();
+    if (payload !== null && Array.isArray(payload) && payload.length > 0) {
+      this.hostCommunication.sendRenderA2UI(payload);
+    }
   }
 }

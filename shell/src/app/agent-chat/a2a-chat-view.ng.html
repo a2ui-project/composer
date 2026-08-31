@@ -41,6 +41,7 @@
           [isConnecting]="isConnecting()"
           [endpoint]="configProvider.a2aAgentUrl() || ''"
           [isCanvasOpen]="isCanvasOpen()"
+          [activeCanvasPayload]="activeCanvasPayload()"
           (samplePromptClicked)="submitSamplePrompt($event)"
           (openCanvas)="openCanvasSurface($event)"
           (closeCanvas)="closeCanvasSurface()"
@@ -82,9 +83,23 @@
       </div>
     }
 
-    <!-- Right Inspector Side Drawer -->
+    <!-- Right Inspector Side Drawer with Resizable Splitter Handle -->
     @if (isInspectorOpen()) {
-      <div class="inspector-column">
+      <div
+        class="inspector-resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize A2A message inspection panel"
+        [attr.aria-valuenow]="inspectorWidth()"
+        [attr.aria-valuemin]="280"
+        tabindex="0"
+        (mousedown)="startInspectorResize($event)"
+        (keydown)="handleInspectorResizeKey($event)"
+      >
+        <div class="resize-grip"></div>
+      </div>
+
+      <div class="inspector-column" [style.width.px]="inspectorWidth()">
         <a2ui-composer-message-inspector
           [events]="inspectorEvents()"
           (closeDrawer)="toggleInspectorDrawer()"

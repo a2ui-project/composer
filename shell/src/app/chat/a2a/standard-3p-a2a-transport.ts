@@ -135,6 +135,11 @@ export class Standard3pA2aTransport implements A2aTransport {
     const taskId = options?.taskId || message.taskId;
     const contextId = options?.contextId || message.contextId;
 
+    const supportedExtensions = [
+      'https://a2ui.org/a2a-extension/a2ui/v0.9',
+      'https://a2ui.org/a2a-extension/a2ui/v0.8',
+    ];
+
     // Normalize message parts to standard A2A schema (explicitly tagging text and data parts with kind)
     const messageObj: Record<string, unknown> = {
       messageId,
@@ -144,8 +149,17 @@ export class Standard3pA2aTransport implements A2aTransport {
         if (p.data !== undefined) return {kind: 'data', data: p.data};
         return p;
       }) || [{kind: 'text', text: ''}],
+      extensions: supportedExtensions,
       ...(contextId ? {contextId} : {}),
       ...(taskId ? {taskId} : {}),
+    };
+
+    const configuration = {
+      capabilities: {
+        extensions: supportedExtensions.map(uri => ({uri})),
+      },
+      extensions: supportedExtensions,
+      acceptedOutputModes: ['text/plain', 'application/json', 'application/json+a2ui'],
     };
 
     // 1. Standard A2A JSON-RPC 2.0 envelope (preferred specification format for `POST /` and `POST /jsonrpc`).
@@ -155,6 +169,7 @@ export class Standard3pA2aTransport implements A2aTransport {
       method: 'message/stream',
       params: {
         message: messageObj,
+        configuration,
         ...(contextId ? {contextId} : {}),
         ...(taskId ? {taskId} : {}),
         ...(options?.tenantId ? {tenant: options.tenantId} : {}),
@@ -167,6 +182,7 @@ export class Standard3pA2aTransport implements A2aTransport {
       ...(options?.tenantId ? {tenant: options.tenantId} : {}),
       ...(taskId ? {taskId} : {}),
       ...(contextId ? {contextId} : {}),
+      configuration,
       message: messageObj,
     };
 

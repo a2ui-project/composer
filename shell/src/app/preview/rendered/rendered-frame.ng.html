@@ -13,7 +13,11 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-<div class="rendered-frame-container" [class.is-locked]="isLocked()">
+<div
+  class="rendered-frame-container"
+  [class.is-locked]="isLocked()"
+  [style.height]="frameHeight() ? frameHeight() + 'px' : '100%'"
+>
   @if (safeRendererUrl()) {
     <iframe
       #previewIframe
@@ -21,6 +25,7 @@
       sandbox="allow-scripts allow-same-origin allow-forms"
       class="preview-iframe"
       title="Rendered Preview"
+      (load)="syncPayloadOnIframeLoad()"
     ></iframe>
   } @else {
     <div class="rendered-frame-placeholder">Rendered UI Placeholder</div>

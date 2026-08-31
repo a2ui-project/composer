@@ -117,9 +117,11 @@ describe('A2aChatMessage', () => {
     expect(await harness.getImageCount()).toBe(1);
   });
 
-  it('emits openCanvas and closeCanvas when canvas button is clicked on A2UI payload', async () => {
+  it('emits openCanvas and closeCanvas when canvas button is clicked on A2UI payload with hasCanvas', async () => {
     const openSpy = vi.spyOn(fixture.componentInstance.openCanvas, 'emit');
-    const a2uiPayload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+    const a2uiPayload = [
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1', component: 'Canvas'}},
+    ];
 
     fixture.componentRef.setInput('isCanvasOpen', false);
     fixture.componentRef.setInput('message', {
@@ -127,9 +129,13 @@ describe('A2aChatMessage', () => {
       sender: 'agent',
       text: 'Here is your UI:',
       a2uiPayload,
+      hasCanvas: true,
       timestamp: Date.now(),
     });
     fixture.detectChanges();
+
+    expect(await harness.hasCanvasButton()).toBe(true);
+    expect(await harness.hasInlineSurface()).toBe(false);
 
     await harness.clickOpenCanvas();
     expect(openSpy).toHaveBeenCalledWith(a2uiPayload);
@@ -140,6 +146,133 @@ describe('A2aChatMessage', () => {
 
     await harness.clickCloseCanvas();
     expect(closeSpy).toHaveBeenCalled();
+  });
+
+  it('renders both inline surface and Canvas toggle card for mixed surfaces', async () => {
+    const openSpy = vi.spyOn(fixture.componentInstance.openCanvas, 'emit');
+    const inlinePayload = [
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's1',
+          components: [{id: 'root-list', component: {List: {children: ['c1', 'c2']}}}],
+        },
+      },
+    ];
+    const canvasPayload = [
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's1',
+          components: [{id: 'form-1', component: {Form: {}}}],
+        },
+      },
+    ];
+
+    fixture.componentRef.setInput('isCanvasOpen', false);
+    fixture.componentRef.setInput('message', {
+      id: 'msg-mixed',
+      sender: 'agent',
+      text: 'Here are your options and reservation form:',
+      inlineA2uiPayload: inlinePayload,
+      canvasArtifacts: [
+        {
+          id: 'flight-res',
+          cardTitle: 'Flight Reservation',
+          cardDescription: 'Booking flow ready on Canvas',
+          cardIcon: 'flight',
+          autoOpen: true,
+          payload: canvasPayload,
+        },
+      ],
+      hasCanvas: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    expect(await harness.hasInlineSurface()).toBe(true);
+    expect(await harness.hasCanvasButton()).toBe(true);
+    const btnText = await harness.getCanvasButtonText();
+    expect(btnText).toContain('Flight Reservation');
+    expect(btnText).toContain('Booking flow ready on Canvas');
+
+    await harness.clickOpenCanvas();
+    expect(openSpy).toHaveBeenCalledWith(canvasPayload);
+  });
+
+  it('renders separate toggle cards for each Canvas artifact in canvasArtifacts', async () => {
+    const openSpy = vi.spyOn(fixture.componentInstance.openCanvas, 'emit');
+    const flightPayload = [{version: 'v0.9', createSurface: {surfaceId: 'flight'}}];
+    const cruisePayload = [{version: 'v0.9', createSurface: {surfaceId: 'cruise'}}];
+
+    fixture.componentRef.setInput('isCanvasOpen', true);
+    fixture.componentRef.setInput('activeCanvasPayload', flightPayload);
+    fixture.componentRef.setInput('message', {
+      id: 'msg-multi-canvas',
+      sender: 'agent',
+      text: 'Options available:',
+      canvasArtifacts: [
+        {
+          id: 'flight-art',
+          cardTitle: 'Flight Itinerary',
+          cardDescription: 'Select your seat',
+          cardIcon: 'flight',
+          autoOpen: false,
+          payload: flightPayload,
+        },
+        {
+          id: 'cruise-art',
+          cardTitle: 'Cruise Itinerary',
+          cardDescription: 'Choose cabin',
+          cardIcon: 'directions_boat',
+          autoOpen: true,
+          payload: cruisePayload,
+        },
+      ],
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    const cardElements = fixture.nativeElement.querySelectorAll('.canvas-artifact-card');
+    expect(cardElements.length).toBe(2);
+    expect(fixture.nativeElement.querySelector('.has-canvas-artifacts')).not.toBeNull();
+
+    expect(cardElements[0].textContent).toContain('Flight Itinerary');
+    expect(cardElements[0].textContent).toContain('Select your seat');
+    expect(cardElements[0].querySelector('.close-canvas-btn')).not.toBeNull();
+
+    expect(cardElements[1].textContent).toContain('Cruise Itinerary');
+    expect(cardElements[1].textContent).toContain('Choose cabin');
+    expect(cardElements[1].querySelector('.close-canvas-btn')).toBeNull();
+
+    const cruiseBtn = cardElements[1].querySelector('.view-canvas-btn') as HTMLButtonElement;
+    cruiseBtn.click();
+    expect(openSpy).toHaveBeenCalledWith(cruisePayload);
+  });
+
+  it('renders inline surface when payload has no Canvas component', async () => {
+    const a2uiPayload = [
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's1',
+          components: [{id: 'card-1', component: 'Card'}],
+        },
+      },
+    ];
+
+    fixture.componentRef.setInput('message', {
+      id: 'msg-inline',
+      sender: 'agent',
+      text: 'Here is your inline card:',
+      a2uiPayload,
+      hasCanvas: false,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    expect(await harness.hasCanvasButton()).toBe(false);
+    expect(await harness.hasInlineSurface()).toBe(true);
   });
 
   it('displays pending indicator when agent is streaming before first token arrives', async () => {
