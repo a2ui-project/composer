@@ -23,10 +23,7 @@ import {
   createSentActionEvent,
   createSentMessageEvent,
   DEFAULT_A2A_ICON_URL,
-  hasA2uiCanvasComponent,
-  normalizeA2uiItems,
   parseA2aStreamEvent,
-  unwrapCanvasForRenderer,
 } from './a2a-ui-converter';
 
 describe('A2aUiConverter', () => {
@@ -124,54 +121,6 @@ describe('A2aUiConverter', () => {
       const strEvent = createErrorEvent('String error');
       expect(strEvent.summary).toContain('String error');
       expect(strEvent.payload).toBe('String error');
-    });
-  });
-
-  describe('normalizeA2uiItems and hasA2uiCanvasComponent', () => {
-    it('normalizes items ensuring version v0.9', () => {
-      const raw = [{createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
-      const normalized = normalizeA2uiItems(raw);
-      expect(normalized.length).toBe(1);
-      expect(normalized[0].version).toBe('v0.9');
-      expect(normalized[0].createSurface).toBeDefined();
-    });
-
-    it('returns empty array for invalid inputs', () => {
-      expect(normalizeA2uiItems(null as unknown as unknown[])).toEqual([]);
-      expect(normalizeA2uiItems([null, 'invalid', 123])).toEqual([]);
-    });
-
-    it('detects canvas components correctly', () => {
-      expect(hasA2uiCanvasComponent([])).toBe(false);
-      expect(
-        hasA2uiCanvasComponent([
-          {
-            version: 'v0.9',
-            createSurface: {surfaceId: 's1', catalogId: 'c1'},
-          },
-        ]),
-      ).toBe(true);
-      expect(
-        hasA2uiCanvasComponent([
-          {
-            version: 'v0.9',
-            updateComponents: {surfaceId: 's1', components: []},
-          },
-        ]),
-      ).toBe(true);
-      expect(
-        hasA2uiCanvasComponent([
-          {
-            version: 'v0.9',
-            updateDataModel: {surfaceId: 's1', data: {}},
-          },
-        ]),
-      ).toBe(true);
-    });
-
-    it('unwraps canvas for renderer', () => {
-      const items = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
-      expect(unwrapCanvasForRenderer(items)).toEqual(items);
     });
   });
 

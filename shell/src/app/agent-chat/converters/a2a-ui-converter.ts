@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {RenderA2uiItem} from 'a2ui-bridge';
 import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
 import {generateUuid as uuid} from '../../utils/uuid';
 import {UiAgentInfo} from '../agent-header/types';
 import {MessageInspectorEvent} from '../message-inspector/message-inspector-event';
+import {A2aStreamEventParser, type ParsedA2aStreamEvent} from './a2a-stream-event-parser.service';
 
 /**
  * Default fallback icon URL for A2A Agents.
@@ -134,34 +134,6 @@ export function createErrorEvent(err: unknown): MessageInspectorEvent {
     summary: `Transport Error: ${msg}`,
     payload: err instanceof Error ? {message: err.message, stack: err.stack, name: err.name} : err,
   };
-}
-
-/**
- * Checks if a list of A2UI layout items contains any component nodes or canvas.
- */
-export function hasA2uiCanvasComponent(items: RenderA2uiItem[]): boolean {
-  if (!items || !Array.isArray(items) || items.length === 0) return false;
-  return items.some(
-    item =>
-      item.createSurface !== undefined ||
-      item.updateComponents !== undefined ||
-      item.updateDataModel !== undefined,
-  );
-}
-
-import {
-  A2aStreamEventParser,
-  normalizeA2uiItems,
-  type ParsedA2aStreamEvent,
-} from './a2a-stream-event-parser.service';
-export {A2aStreamEventParser, normalizeA2uiItems};
-export type {ParsedA2aStreamEvent};
-
-/**
- * Unwraps or prepares layout items for the live canvas renderer iframe.
- */
-export function unwrapCanvasForRenderer(items: RenderA2uiItem[]): RenderA2uiItem[] {
-  return normalizeA2uiItems(items);
 }
 
 const defaultStreamEventParser = new A2aStreamEventParser();

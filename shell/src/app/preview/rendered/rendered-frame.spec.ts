@@ -310,6 +310,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     newFixture.detectChanges();
 
     expect(newFixture.componentInstance.dynamicHeight()).toBe(520);
+    expect(newFixture.componentInstance.frameHeight()).toBe(520);
   });
 
   it('ignores SURFACE_RESIZE when height is missing or not a number', () => {

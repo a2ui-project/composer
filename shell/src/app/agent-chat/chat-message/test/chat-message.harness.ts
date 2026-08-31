@@ -34,6 +34,22 @@ export class A2aChatMessageHarness extends ComponentHarness {
   private getToolChips = this.locatorForAll('.tool-call-chip');
   private getPendingIndicator = this.locatorForOptional('.pending-response-indicator');
   private getStreamingCursor = this.locatorForOptional('.streaming-cursor');
+  private getInlineSurface = this.locatorForOptional('.inline-surface-card');
+
+  async hasInlineSurface(): Promise<boolean> {
+    const el = await this.getInlineSurface();
+    return el !== null;
+  }
+
+  async hasCanvasButton(): Promise<boolean> {
+    const btn = await this.getOpenCanvasButton();
+    return btn !== null;
+  }
+
+  async getCanvasButtonText(): Promise<string | null> {
+    const btn = await this.getOpenCanvasButton();
+    return btn ? btn.getText() : null;
+  }
 
   async getSenderNameText(): Promise<string | null> {
     const el = await this.getSenderName();

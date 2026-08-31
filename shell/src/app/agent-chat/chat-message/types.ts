@@ -46,6 +46,24 @@ export interface UiToolCall {
 }
 
 /**
+ * Metadata and isolated payload for an individual Canvas component extracted from an A2UI surface.
+ */
+export interface CanvasArtifact {
+  /** Unique component identifier for the Canvas. */
+  id: string;
+  /** Opener card title for the Canvas component. Defaults to 'Interactive content'. */
+  cardTitle: string;
+  /** Opener card description for the Canvas component. */
+  cardDescription?: string;
+  /** Material Symbols icon token for the Canvas component. Defaults to 'apps'. */
+  cardIcon: string;
+  /** Whether the Canvas side panel should automatically open when this content arrives. Defaults to true. */
+  autoOpen: boolean;
+  /** Isolated A2UI payload subtree for this Canvas component. */
+  payload: RenderA2uiItem[];
+}
+
+/**
  * UI View Model for an individual chat message.
  */
 export interface UiMessage {
@@ -67,7 +85,11 @@ export interface UiMessage {
   isThinkingExpanded?: boolean;
   /** A2UI declarative UI specification payloads emitted with the message. */
   a2uiPayload?: RenderA2uiItem[];
-  /** Whether the message contains an interactive A2UI surface card. */
+  /** Sanitized A2UI payload containing non-canvas items for inline chat rendering. */
+  inlineA2uiPayload?: RenderA2uiItem[];
+  /** Array of Canvas artifacts extracted from this message's surface payload. */
+  canvasArtifacts?: CanvasArtifact[];
+  /** Whether the message contains interactive Canvas surface cards. */
   hasCanvas?: boolean;
   /** User-uploaded image attachments accompanying this message. */
   images?: UiAttachedImage[];
