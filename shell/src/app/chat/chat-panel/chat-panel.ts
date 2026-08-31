@@ -291,8 +291,8 @@ export class ChatPanel {
     try {
       const trimmed = this.chatCleaner.cleanPayload(text);
       const parsedArray = tryParseJsonArray(trimmed);
-      if (parsedArray) {
-        return parsedArray.reduce(
+      if (parsedArray.success) {
+        return parsedArray.data.reduce(
           (acc: number, cmd: unknown) => acc + this.getCommandComponentCount(cmd),
           0,
         );

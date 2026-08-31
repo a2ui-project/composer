@@ -40,7 +40,6 @@ import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking
 
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
-import {ComposerDockview} from '../../shell/composer-workspace/composer-dockview.service';
 
 const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() => {
   const undoStack: string[] = [];
@@ -154,6 +153,7 @@ vi.mock('@monaco-editor/loader', () => {
         editor: {
           create: createMock,
           getModel: vi.fn(() => null),
+          onDidChangeMarkers: vi.fn(() => ({dispose: vi.fn()})),
           createModel: vi.fn((value, language, uri) => ({
             value,
             language,
@@ -298,7 +298,6 @@ describe('RawFrame JSON Source Editor View', () => {
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
   let messageStreamSubject: Subject<unknown>;
   let errorLoggerMock: {error: ReturnType<typeof vi.fn>};
-  let dockviewServiceMock: {openPanel: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
@@ -372,7 +371,6 @@ describe('RawFrame JSON Source Editor View', () => {
         {provide: MatSnackBar, useValue: snackBarMock},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
         {provide: ErrorLogger, useValue: errorLoggerMock},
-        {provide: ComposerDockview, useValue: dockviewServiceMock},
       ],
     }).compileComponents();
 
@@ -745,9 +743,21 @@ describe('RawFrame JSON Source Editor View', () => {
     expect(component['isDestroyed']).toBe(true);
   });
 
-  it('handles SyntaxError gracefully when parsing invalid layout JSON string', async () => {
+  it('handles SyntaxError gracefully incorporating structured JsonParseResult metadata on failure', async () => {
     const {component} = await setup(false);
-    expect(() => component['parseLayoutString']('{invalid json}')).toThrow(SyntaxError);
+
+    let caughtError: (Error & {line?: number; column?: number; snippet?: string}) | undefined;
+    try {
+      component['parseLayoutString']('{\n  "invalid": json\n}');
+    } catch (e) {
+      caughtError = e as Error;
+    }
+
+    expect(caughtError!.message).toMatch(/Unexpected token/);
+    // V8 node tests output this pattern
+    expect(caughtError?.message).toMatch(/Unexpected token/);
+    expect('line' in caughtError!).toBe(true);
+    expect('snippet' in caughtError!).toBe(true);
   });
 
   it('aborts microtask execution and signal update guard when component is destroyed before microtask runs', async () => {

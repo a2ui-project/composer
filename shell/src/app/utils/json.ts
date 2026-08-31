@@ -15,56 +15,108 @@
  */
 
 /**
- * Attempts to parse the provided string content as a JSON array.
- * Returns the parsed array if successful, or null if the string is not a valid JSON array.
- *
- * @param content The string content to parse.
- * @return The parsed array, or null if parsing fails or the content is not an array.
+ * Describes a detailed failure state from attempting to parse JSON.
  */
-export function tryParseJsonArray(content?: string | null): unknown[] | null {
+export interface JsonParseError {
+  /** The descriptive error message */
+  message: string;
+  /** The 1-indexed line number where the syntax error occurred, if resolvable */
+  line?: number;
+  /** The 1-indexed column number within the line, if resolvable */
+  column?: number;
+  /** The raw substring representing the malformed section, if resolvable */
+  snippet?: string;
+}
+
+/**
+ * Discriminated union for safe JSON parsing results.
+ * Avoids throwing arbitrary runtime exceptions on malformed boundaries.
+ */
+export type JsonParseResult<T> =
+  | {readonly success: true; readonly data: T}
+  | {readonly success: false; readonly data: null; readonly error: JsonParseError};
+
+/**
+ * Extracts line and column coordinates from heterogeneous JS engine SyntaxError messages.
+ *
+ * @param error - The trapped JSON syntax error.
+ * @param rawText - The raw source text that triggered the failure.
+ * @returns Resolvable line and column coordinates.
+ */
+export function extractErrorDetails(
+  error: SyntaxError | Error,
+  rawText: string,
+): {line?: number; column?: number} {
+  const message = error.message;
+
+  const lineColMatch = message.match(/line (\d+) column (\d+)/i);
+  if (lineColMatch) {
+    return {
+      line: parseInt(lineColMatch[1], 10),
+      column: parseInt(lineColMatch[2], 10),
+    };
+  }
+  return {};
+}
+
+/**
+ * Safely evaluates input text, predicting whether it should be parsed as a singular
+ * JSON object, a JSON array, or newline-delimited JSON Lines (JSONL).
+ *
+ * @param content - The raw string representation to parse.
+ * @returns A structured JsonParseResult union.
+ */
+export function tryParseJsonArray(content?: string | null): JsonParseResult<unknown[]> {
   if (content == null) {
-    return null;
+    return {success: false, data: null, error: {message: 'Content is null or undefined'}};
   }
   const trimmed = content.trim();
   if (trimmed.length === 0) {
-    return null;
+    return {success: false, data: null, error: {message: 'Content is empty'}};
   }
+
+  let lastError: SyntaxError | Error | null = null;
 
   if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
-        return parsed;
+        return {success: true, data: parsed};
       }
     } catch (e) {
-      // Ignore array parse errors
+      lastError = e as Error;
     }
   } else if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
     try {
       const parsed = JSON.parse(trimmed);
       if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return [parsed];
+        return {success: true, data: [parsed]};
       }
     } catch (e) {
-      // Ignore object parse errors
+      lastError = e as Error;
     }
   }
 
   // Try parsing as JSON Lines
-  const lines = trimmed
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
+  const rawLines = trimmed.split('\n');
+  const lines: Array<{text: string; originalIndex: number}> = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const text = rawLines[i].trim();
+    if (text.length > 0) {
+      lines.push({text, originalIndex: i});
+    }
+  }
+
   if (lines.length > 0) {
     const parsedLines: unknown[] = [];
     let validJSONL = true;
     for (const line of lines) {
-      if (!line.startsWith('{') || !line.endsWith('}')) {
+      if (!line.text.startsWith('{') || !line.text.endsWith('}')) {
         validJSONL = false;
         break;
       }
       try {
-        const parsed = JSON.parse(line);
+        const parsed = JSON.parse(line.text);
         if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
           parsedLines.push(parsed);
         } else {
@@ -72,16 +124,47 @@ export function tryParseJsonArray(content?: string | null): unknown[] | null {
           break;
         }
       } catch (e) {
+        lastError = e as Error;
+        if (lastError instanceof Error) {
+          const details = extractErrorDetails(lastError, line.text);
+          return {
+            success: false,
+            data: null,
+            error: {
+              message: lastError.message,
+              line: line.originalIndex + 1, // 1-indexed relative to raw output
+              column: details.column,
+              snippet: rawLines[line.originalIndex],
+            },
+          };
+        }
         validJSONL = false;
         break;
       }
     }
     if (validJSONL) {
-      return parsedLines;
+      return {success: true, data: parsedLines};
     }
   }
 
-  return null;
+  if (lastError instanceof Error) {
+    const details = extractErrorDetails(lastError, content);
+    return {
+      success: false,
+      data: null,
+      error: {
+        message: lastError.message,
+        line: details.line,
+        column: details.column,
+        snippet:
+          details.line !== undefined && details.line > 0 && details.line <= rawLines.length
+            ? rawLines[details.line - 1]
+            : undefined,
+      },
+    };
+  }
+
+  return {success: false, data: null, error: {message: 'Invalid JSON format'}};
 }
 
 /**
