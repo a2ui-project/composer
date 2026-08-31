@@ -289,10 +289,12 @@ export class RawFrame {
       return [];
     }
     const parsed = tryParseJsonArray(trimmed);
-    if (parsed !== null) {
-      return parsed;
+    if (parsed.success) {
+      return parsed.data;
     }
-    throw new SyntaxError('Invalid JSON');
+    const err = new SyntaxError(parsed.error.message);
+    Object.assign(err, parsed.error);
+    throw err;
   }
 
   private showJsonSyntaxError(): void {

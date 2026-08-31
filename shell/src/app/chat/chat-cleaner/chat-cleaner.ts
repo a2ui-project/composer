@@ -132,7 +132,7 @@ export class ChatCleaner {
             break;
           }
           const parsed = tryParseJsonArray(candidate);
-          if (parsed !== null && isLayoutArray(parsed)) {
+          if (parsed.success && isLayoutArray(parsed.data)) {
             result = candidate;
             break;
           }
@@ -162,6 +162,6 @@ export class ChatCleaner {
       return true;
     }
     const parsedArray = tryParseJsonArray(trimmed);
-    return parsedArray !== null && isLayoutArray(parsedArray);
+    return parsedArray.success && isLayoutArray(parsedArray.data);
   }
 }

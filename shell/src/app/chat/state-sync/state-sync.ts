@@ -261,8 +261,8 @@ export class StateSync {
     }
 
     const parsed = tryParseJsonArray(trimmed);
-    if (parsed) {
-      const sanitized = parsed
+    if (parsed.success) {
+      const sanitized = parsed.data
         .map(block => {
           if (block && typeof block === 'object' && !Array.isArray(block)) {
             return this.sanitizeBlock(block as RenderA2uiItem);

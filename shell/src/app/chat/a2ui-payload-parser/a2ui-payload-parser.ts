@@ -41,8 +41,8 @@ export function parseAndHealJsonLines(content?: string | null): ParseResult {
 
   // Attempt full JSON parsing before line-by-line processing
   const parsedArray = tryParseJsonArray(content);
-  if (parsedArray) {
-    return {blocks: parsedArray, wasHealed: false};
+  if (parsedArray.success) {
+    return {blocks: parsedArray.data, wasHealed: false};
   }
 
   try {

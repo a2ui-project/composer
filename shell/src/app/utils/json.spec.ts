@@ -14,44 +14,101 @@
  * limitations under the License.
  */
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 import {tryParseJsonArray, formatJson} from './json';
 
 describe('JSON Array Parser Utilities', () => {
   it('parses valid JSON array strings including whitespace trimming', () => {
-    expect(tryParseJsonArray('  [1, 2, 3]  ')).toEqual([1, 2, 3]);
-    expect(tryParseJsonArray('["hello", "world"]')).toEqual(['hello', 'world']);
-    expect(tryParseJsonArray('[]')).toEqual([]);
+    expect(tryParseJsonArray('  [1, 2, 3]  ')).toEqual({success: true, data: [1, 2, 3]});
+    expect(tryParseJsonArray('["hello", "world"]')).toEqual({
+      success: true,
+      data: ['hello', 'world'],
+    });
+    expect(tryParseJsonArray('[]')).toEqual({success: true, data: []});
   });
 
-  it('returns null safely when input is null or undefined', () => {
-    expect(tryParseJsonArray(null)).toBeNull();
-    expect(tryParseJsonArray(undefined)).toBeNull();
+  it('returns failure safely when input is null or undefined', () => {
+    expect(tryParseJsonArray(null)).toEqual({
+      success: false,
+      data: null,
+      error: {message: 'Content is null or undefined'},
+    });
+    expect(tryParseJsonArray(undefined)).toEqual({
+      success: false,
+      data: null,
+      error: {message: 'Content is null or undefined'},
+    });
   });
 
-  it('returns null safely for invalid JSON Lines or primitive values', () => {
-    expect(tryParseJsonArray('')).toBeNull();
-    expect(tryParseJsonArray('   ')).toBeNull();
-    expect(tryParseJsonArray('  [1, 2, ')).toBeNull();
-    expect(tryParseJsonArray('invalid json')).toBeNull();
-    expect(tryParseJsonArray('"string primitive"')).toBeNull();
-    expect(tryParseJsonArray('123')).toBeNull();
-    expect(tryParseJsonArray('{"a": 1}\n{"b": 2}\ninvalid\n{"c": 3}')).toBeNull();
-    expect(tryParseJsonArray('{"a": 1\n{"b": 2}')).toBeNull();
-    expect(tryParseJsonArray('{"a": 1}\n{ "syntax_error": }')).toBeNull();
+  it('returns structured errors securely for invalid JSON Lines or primitive values', () => {
+    expect(tryParseJsonArray('')).toEqual({
+      success: false,
+      data: null,
+      error: expect.objectContaining({message: 'Content is empty'}),
+    });
+    expect(tryParseJsonArray('   ')).toEqual({
+      success: false,
+      data: null,
+      error: expect.objectContaining({message: 'Content is empty'}),
+    });
+
+    const arrErr = tryParseJsonArray('  [1, 2, ');
+    expect(arrErr.success).toBe(false);
+
+    expect(tryParseJsonArray('invalid json').success).toBe(false);
+    expect(tryParseJsonArray('"string primitive"').success).toBe(false);
+    expect(tryParseJsonArray('123').success).toBe(false);
+    expect(tryParseJsonArray('{"a": 1}\n{"b": 2}\ninvalid\n{"c": 3}').success).toBe(false);
+    expect(tryParseJsonArray('{"a": 1\n{"b": 2}').success).toBe(false);
+    expect(tryParseJsonArray('{"a": 1}\n{ "syntax_error": }').success).toBe(false);
   });
 
   it('parses a single JSON object as a single-element array', () => {
-    expect(tryParseJsonArray('{"not": "an array"}')).toEqual([{not: 'an array'}]);
-    expect(tryParseJsonArray('  {"foo": "bar"}  ')).toEqual([{foo: 'bar'}]);
+    expect(tryParseJsonArray('{"not": "an array"}')).toEqual({
+      success: true,
+      data: [{not: 'an array'}],
+    });
+    expect(tryParseJsonArray('  {"foo": "bar"}  ')).toEqual({success: true, data: [{foo: 'bar'}]});
   });
 
   it('parses multiline JSON Lines (JSONL) string into an array of objects', () => {
-    expect(tryParseJsonArray('{"a": 1}\n{"b": 2}\n{"c": 3}')).toEqual([{a: 1}, {b: 2}, {c: 3}]);
+    expect(tryParseJsonArray('{"a": 1}\n{"b": 2}\n{"c": 3}')).toEqual({
+      success: true,
+      data: [{a: 1}, {b: 2}, {c: 3}],
+    });
   });
 
   it('parses JSON Lines with leading, trailing, and intermediate blank lines', () => {
-    expect(tryParseJsonArray('\n  \n{"a": 1}\n\n  {"b": 2} \n ')).toEqual([{a: 1}, {b: 2}]);
+    expect(tryParseJsonArray('\n  \n{"a": 1}\n\n  {"b": 2} \n ')).toEqual({
+      success: true,
+      data: [{a: 1}, {b: 2}],
+    });
+  });
+
+  it('extracts V8 position offsets consistently via single-pass tracking loops', () => {
+    const _originalParse = JSON.parse;
+    JSON.parse = vi.fn().mockImplementation(() => {
+      throw new SyntaxError('Unexpected token } in JSON at position 39');
+    });
+    const result = tryParseJsonArray('{\n  "version": "v0.9",\n  "test": \n}');
+    JSON.parse = _originalParse;
+    // @ts-expect-error Types mismatch in tests
+    expect(result.success).toBe(false);
+    // @ts-expect-error Types mismatch in tests
+    console.log(result.error);
+    expect(result.error.snippet).toBe('}');
+  });
+
+  it('extracts line and columns out of JSON lines strictly relative to full output', () => {
+    const payload = '{"a": 1}\n{"b": 2}\n{"syntax_error": }\n{"d": 4}';
+    const result = tryParseJsonArray(payload);
+
+    // @ts-expect-error Types mismatch in tests
+    expect(result.success).toBe(false);
+    // @ts-expect-error Types mismatch in tests
+    expect(result.error.line).toBe(3);
+    // @ts-expect-error Types mismatch in tests
+    expect(result.error.snippet).toBe('{"syntax_error": }');
   });
 });
 
