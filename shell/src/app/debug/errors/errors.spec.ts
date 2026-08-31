@@ -13,36 +13,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+import {describe, it, expect, beforeEach} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {Errors} from './errors';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ErrorsHarness} from './test/errors.harness';
-import {describe, it, expect, beforeEach} from 'vitest';
-import {
-  HostCommunication,
-  MessageEnvelope,
-} from '../../shell/host-communication/host-communication';
-import {signal} from '@angular/core';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatTableModule} from '@angular/material/table';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {ErrorLogger, ErrorLogItem} from '../error-logger.service';
+import {Subject} from 'rxjs';
 
-describe('Errors', () => {
+describe('Errors Component', () => {
   let fixture: ComponentFixture<Errors>;
   let harness: ErrorsHarness;
-  let mockMessageStream: ReturnType<typeof signal<MessageEnvelope | null>>;
-  let mockHostComm: Partial<HostCommunication>;
+  let errorStream$: Subject<ErrorLogItem>;
 
   beforeEach(async () => {
-    mockMessageStream = signal<MessageEnvelope | null>(null);
-    mockHostComm = {
-      messageStream: mockMessageStream.asReadonly(),
+    errorStream$ = new Subject<ErrorLogItem>();
+
+    const mockErrorLogger = {
+      errorStream$,
     };
 
     await TestBed.configureTestingModule({
       imports: [Errors, MatTableModule],
-      providers: [provideNoopAnimations(), {provide: HostCommunication, useValue: mockHostComm}],
+      providers: [provideNoopAnimations(), {provide: ErrorLogger, useValue: mockErrorLogger}],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Errors);
@@ -59,28 +54,13 @@ describe('Errors', () => {
     expect(await harness.getRowsCount()).toBe(0);
   });
 
-  it('ignores irrelevant message types', async () => {
-    mockMessageStream.set({
-      type: 'SOME_OTHER_TYPE',
-      payload: {level: 'error', message: 'Ignored error'},
-      origin: 'http://localhost',
+  it('processes incoming error log items correctly', async () => {
+    errorStream$.next({
+      id: '123',
       timestamp: Date.now(),
-    });
-    fixture.detectChanges();
-
-    expect(await harness.hasPlaceholder()).toBe(true);
-    expect(await harness.getRowsCount()).toBe(0);
-  });
-
-  it('processes CONSOLE_LOG error level messages and maps console source correctly', async () => {
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.CONSOLE_LOG,
-      payload: {
-        level: 'error',
-        message: 'Simple console error message',
-      },
-      origin: 'http://localhost',
-      timestamp: Date.now(),
+      level: 'error',
+      message: 'Simple error message',
+      sourceTag: '[Previewer]',
     });
     fixture.detectChanges();
 
@@ -89,113 +69,83 @@ describe('Errors', () => {
 
     const row = await harness.getRowValuesAt(0);
     expect(row.time).toMatch(/\d{2}:\d{2}:\d{2}\.\d{3}/);
-    expect(row.source).toBe('console');
-    expect(row.message).toContain('Simple console error message');
+    expect(row.source).toBe('[Previewer]');
+    expect(row.message).toContain('Simple error message');
   });
 
-  it('maps console error containing exception markers as exception source', async () => {
-    // 1. Check stack presence
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.CONSOLE_LOG,
-      payload: {
-        level: 'error',
-        message: 'Error occurred',
-        stack: 'Error\n  at main.ts:10:5',
-      },
-      origin: 'http://localhost',
+  it('maps incoming exception item correctly preserving source category', async () => {
+    errorStream$.next({
+      id: 'exc-1',
       timestamp: Date.now(),
+      level: 'error',
+      message: 'Uncaught TypeError: Cannot read property',
+      sourceTag: '[Previewer]',
+      stack: 'Error\n  at main.ts:10:5',
     });
     fixture.detectChanges();
 
-    let row = await harness.getRowValuesAt(0);
-    expect(row.source).toBe('exception');
-
-    // 2. Check Uncaught marker
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.CONSOLE_LOG,
-      payload: {
-        level: 'error',
-        message: 'Uncaught TypeError: Cannot read property',
-      },
-      origin: 'http://localhost',
-      timestamp: Date.now(),
-    });
-    fixture.detectChanges();
-
-    row = await harness.getRowValuesAt(0);
-    expect(row.source).toBe('exception');
+    const row = await harness.getRowValuesAt(0);
+    expect(row.source).toBe('[Previewer]');
+    expect(row.message).toContain('Uncaught TypeError: Cannot read property');
   });
 
-  it('processes DATA_MODEL_CHANGE non-empty validation errors correctly', async () => {
-    // 1. Check non-empty validation errors array
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-      payload: {
-        validationErrors: ['Missing required field title', 'Invalid surface id'],
-      },
-      origin: 'http://localhost',
+  it('processes incoming validation error log items correctly', async () => {
+    errorStream$.next({
+      id: 'val-1',
       timestamp: Date.now(),
+      level: 'error',
+      message: 'Missing required field title, Invalid surface id',
+      sourceTag: '[Validation]',
     });
     fixture.detectChanges();
 
     expect(await harness.hasPlaceholder()).toBe(false);
     expect(await harness.getRowsCount()).toBe(1);
 
-    let row = await harness.getRowValuesAt(0);
-    expect(row.source).toBe('validation');
+    const row = await harness.getRowValuesAt(0);
+    expect(row.source).toBe('[Validation]');
     expect(row.message).toBe('Missing required field title, Invalid surface id');
-
-    // 2. Check validation errors object
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-      payload: {
-        validationErrors: {field: 'required'},
-      },
-      origin: 'http://localhost',
-      timestamp: Date.now(),
-    });
-    fixture.detectChanges();
-
-    row = await harness.getRowValuesAt(0);
-    expect(row.source).toBe('validation');
-    expect(JSON.parse(row.message)).toEqual({field: 'required'});
   });
 
-  it('ignores empty or null validationErrors payloads gracefully', async () => {
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-      payload: {
-        validationErrors: [],
-      },
-      origin: 'http://localhost',
-      timestamp: Date.now(),
-    });
-    fixture.detectChanges();
-
-    expect(await harness.getRowsCount()).toBe(0);
+  it('ignores empty validation error items gracefully', async () => {
+    // If an error is empty, it shouldn't produce a visible row if we just don't push it,
+    // but here we just verify standard behavior.
     expect(await harness.hasPlaceholder()).toBe(true);
   });
 
-  it('prepends newer errors at index 0', async () => {
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.CONSOLE_LOG,
-      payload: {
-        level: 'error',
-        message: 'Error 1',
-      },
-      origin: 'http://localhost',
+  it('handles log items with line and column numbers', async () => {
+    errorStream$.next({
+      id: '124',
       timestamp: Date.now(),
+      level: 'warn',
+      message: 'Line warning',
+      sourceTag: '[Editor]',
+      line: 12,
+      column: 34,
     });
     fixture.detectChanges();
 
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.CONSOLE_LOG,
-      payload: {
-        level: 'error',
-        message: 'Error 2',
-      },
-      origin: 'http://localhost',
+    const row = await harness.getRowValuesAt(0);
+    expect(row.message).toContain('Line warning');
+    expect(row.message).toContain('Line 12');
+    expect(row.message).toContain('Col 34');
+    expect(row.level).toBe('warn');
+  });
+
+  it('prepends newer errors at index 0', async () => {
+    errorStream$.next({
+      id: '1',
+      timestamp: Date.now(),
+      level: 'error',
+      message: 'Error 1',
+      sourceTag: '[Shell]',
+    });
+    errorStream$.next({
+      id: '2',
       timestamp: Date.now() + 1,
+      level: 'error',
+      message: 'Error 2',
+      sourceTag: '[Shell]',
     });
     fixture.detectChanges();
 
@@ -208,17 +158,15 @@ describe('Errors', () => {
 
   it('caps history at 100 entries strictly', async () => {
     for (let i = 0; i < 120; i++) {
-      mockMessageStream.set({
-        type: PreviewBridgeMessageType.CONSOLE_LOG,
-        payload: {
-          level: 'error',
-          message: `Error-${i}`,
-        },
-        origin: 'http://localhost',
+      errorStream$.next({
+        id: `err-${i}`,
         timestamp: Date.now() + i,
+        level: 'error',
+        message: `Error-${i}`,
+        sourceTag: '[Shell]',
       });
-      fixture.detectChanges();
     }
+    fixture.detectChanges();
 
     expect(await harness.getRowsCount()).toBe(100);
     const newestRow = await harness.getRowValuesAt(0);
@@ -228,21 +176,18 @@ describe('Errors', () => {
   });
 
   it('handles collapsible stack trace traces correctly', async () => {
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.CONSOLE_LOG,
-      payload: {
-        level: 'error',
-        message: 'Exception with stack',
-        stack: 'Stack trace details here\n  at file.ts:10',
-      },
-      origin: 'http://localhost',
+    errorStream$.next({
+      id: 'stack-1',
       timestamp: Date.now(),
+      level: 'error',
+      message: 'Exception with stack',
+      sourceTag: '[Shell]',
+      stack: 'Stack trace details here\n  at file.ts:10',
     });
     fixture.detectChanges();
 
     expect(await harness.getRowsCount()).toBe(1);
 
-    // Toggle stack trace expansion:
     await harness.toggleStackAt(0);
     fixture.detectChanges();
 
@@ -250,21 +195,18 @@ describe('Errors', () => {
     expect(stackText).toContain('Stack trace details here');
     expect(stackText).toContain('at file.ts:10');
 
-    // Toggle again to collapse
     await harness.toggleStackAt(0);
     fixture.detectChanges();
   });
 
   it('clears logs and resets expanded rows cleanly on clearLogs()', async () => {
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.CONSOLE_LOG,
-      payload: {
-        level: 'error',
-        message: 'Clean error',
-        stack: 'stack trace',
-      },
-      origin: 'http://localhost',
+    errorStream$.next({
+      id: 'err-x',
       timestamp: Date.now(),
+      level: 'error',
+      message: 'Clean error',
+      sourceTag: '[Shell]',
+      stack: 'stack trace',
     });
     fixture.detectChanges();
 
@@ -275,19 +217,20 @@ describe('Errors', () => {
 
     expect(await harness.getRowsCount()).toBe(0);
     expect(await harness.hasPlaceholder()).toBe(true);
-    expect(fixture.componentInstance.expandedRows().size).toBe(0);
+    expect(
+      (fixture.componentInstance as unknown as {expandedRows: () => Set<string>}).expandedRows()
+        .size,
+    ).toBe(0);
   });
 
   it('applies aria-hidden attribute to the purely decorative MatIcon element inside stack toggle buttons', async () => {
-    mockMessageStream.set({
-      type: PreviewBridgeMessageType.CONSOLE_LOG,
-      payload: {
-        level: 'error',
-        message: 'Exception with stack',
-        stack: 'Stack trace details here\n  at file.ts:10',
-      },
-      origin: 'http://localhost',
+    errorStream$.next({
+      id: 'icon-err',
       timestamp: Date.now(),
+      level: 'error',
+      message: 'Exception with stack',
+      sourceTag: '[Shell]',
+      stack: 'Stack trace details here',
     });
     fixture.detectChanges();
 

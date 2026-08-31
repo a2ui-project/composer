@@ -24,6 +24,7 @@ import {
 } from '../../settings/app-config-provider/app-config-provider';
 import {CrossFrameValidator} from '../cross-frame-validator/cross-frame-validator';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {ErrorLogger, ErrorLogLevel} from '../../debug/error-logger.service';
 
 /**
  * Schema representing a structured postMessage payload used to communicate
@@ -58,6 +59,7 @@ declare global {
 export class HostCommunication implements OnDestroy {
   private readonly startupResolution = inject(StartupResolution);
   private readonly configProvider = inject(AppConfigProvider);
+  private readonly errorLogger = inject(ErrorLogger);
   private iframeWindow: Window | null = null;
   private iframeElement: HTMLIFrameElement | null = null;
   private readonly registeredIframes = new Set<HTMLIFrameElement>();
@@ -196,12 +198,31 @@ export class HostCommunication implements OnDestroy {
           this.sendMessage(msg);
         }
       }
-      if (type !== PreviewBridgeMessageType.CONSOLE_LOG) {
-        this.messageHistoryBuffer.push(envelope);
-        if (this.messageHistoryBuffer.length > 100) {
-          this.messageHistoryBuffer.shift();
-        }
+      if (type === PreviewBridgeMessageType.CONSOLE_LOG) {
+        const payloadObj = data.payload as {level?: string; message?: string; stack?: string};
+        const levelStr = payloadObj?.level || 'log';
+        const msg = payloadObj?.message || '';
+        const stackStr = payloadObj?.stack;
+        let level: ErrorLogLevel = 'log';
+        if (levelStr === 'error') level = 'error';
+        else if (levelStr === 'warn') level = 'warn';
+        else if (levelStr === 'info') level = 'info';
+
+        this.errorLogger.log({
+          level,
+          message: msg,
+          sourceTag: '[Previewer]',
+          ...(stackStr !== undefined ? {stack: stackStr} : {}),
+        });
+        this.messageStreamSubject.next(envelope);
+        return;
       }
+
+      this.messageHistoryBuffer.push(envelope);
+      if (this.messageHistoryBuffer.length > 100) {
+        this.messageHistoryBuffer.shift();
+      }
+
       this.latestEnvelopeSignal.set(envelope);
       this.messageStreamSubject.next(envelope);
     }

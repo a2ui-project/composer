@@ -21,19 +21,33 @@ import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {ErrorLogger} from '../../debug/error-logger.service';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {signal, WritableSignal} from '@angular/core';
 
 describe('HostCommunication', () => {
   let service: HostCommunication;
-  let startupResolutionMock: Partial<StartupResolution>;
+  let startupResolutionMock: {getResolvedRendererUrl: ReturnType<typeof vi.fn>};
   let themePreferenceSignal: WritableSignal<ThemePreference>;
+  let mockErrorLogger: {
+    log: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+    info: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     themePreferenceSignal = signal<ThemePreference>(ThemePreference.LIGHT);
     startupResolutionMock = {
       getResolvedRendererUrl: vi.fn().mockReturnValue('http://localhost:3000/renderer'),
+    };
+
+    mockErrorLogger = {
+      log: vi.fn(),
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -47,6 +61,10 @@ describe('HostCommunication', () => {
           useValue: {
             themePreference: themePreferenceSignal,
           },
+        },
+        {
+          provide: ErrorLogger,
+          useValue: mockErrorLogger,
         },
       ],
     });
@@ -847,6 +865,33 @@ describe('HostCommunication', () => {
       expect(service.isRendererReady()).toBe(true);
       // It should send SET_THEME again on each RENDERER_READY per standard behavior
       expect(mockIframeWindow.postMessage).toHaveBeenCalledTimes(2);
+    });
+
+    describe('consolidation with ErrorLogger', () => {
+      it('pushes CONSOLE_LOG to ErrorLogger with [Previewer] tag', () => {
+        const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+        service.registerIframe(mockIframeWindow);
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: mockIframeWindow,
+            origin: 'http://localhost:3000',
+            data: {
+              type: PreviewBridgeMessageType.CONSOLE_LOG,
+              payload: {
+                level: 'error',
+                message: 'Cannot read properties {"line":5}',
+              },
+            },
+          }),
+        );
+
+        expect(mockErrorLogger.log).toHaveBeenCalledWith({
+          level: 'error',
+          message: 'Cannot read properties {"line":5}',
+          sourceTag: '[Previewer]',
+        });
+      });
     });
   });
 
