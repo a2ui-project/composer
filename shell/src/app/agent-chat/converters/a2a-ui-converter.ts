@@ -20,8 +20,6 @@ import {UiAgentInfo} from '../agent-header/types';
 import {MessageInspectorEvent} from '../message-inspector/message-inspector-event';
 import {A2aStreamEventParser, type ParsedA2aStreamEvent} from './a2a-stream-event-parser.service';
 
-export type {ParsedA2aStreamEvent};
-
 /**
  * Default fallback icon URL for A2A Agents.
  */
