@@ -1,0 +1,74 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="cc-page">
+  <header class="cc-header">
+    <div class="cc-intro">
+      <h1 class="cc-title">Custom Catalog</h1>
+      <p class="cc-subtitle">
+        Two example trees assembled from one custom A2UI v0.9 catalog (11 components), rendered
+        natively. Edit the data model on the right — the preview updates live.
+      </p>
+    </div>
+    <mat-button-toggle-group
+      class="cc-example-switch"
+      [value]="activeExampleId()"
+      (change)="selectExample($event.value)"
+      aria-label="Example tree"
+      hideSingleSelectionIndicator
+    >
+      @for (ex of examples; track ex.id) {
+        <mat-button-toggle [value]="ex.id">
+          <mat-icon aria-hidden="true">{{ ex.icon }}</mat-icon>
+          <span class="cc-example-label">{{ ex.label }}</span>
+        </mat-button-toggle>
+      }
+    </mat-button-toggle-group>
+  </header>
+
+  <div class="cc-body">
+    <section class="cc-preview">
+      <div class="cc-pane-label">Assembled Components</div>
+      <div class="cc-surface-scroll">
+        <a2ui-v09-surface [surfaceId]="activeExampleId()"></a2ui-v09-surface>
+      </div>
+    </section>
+
+    <section class="cc-data">
+      <div class="cc-pane-label">Component Data</div>
+      <div class="cc-data-tabs" role="tablist">
+        @for (state of activeStates(); track state.name; let i = $index) {
+          <button
+            type="button"
+            role="tab"
+            class="cc-data-tab"
+            [class.active]="i === activeStateIndex()"
+            [attr.aria-selected]="i === activeStateIndex()"
+            (click)="selectState(i)"
+          >
+            {{ state.name }}
+          </button>
+        }
+      </div>
+      <div class="cc-editor">
+        <a2ui-composer-monaco-editor
+          [value]="editorValue()"
+          (valueChange)="onEdit($event)"
+        ></a2ui-composer-monaco-editor>
+      </div>
+    </section>
+  </div>
+</div>
