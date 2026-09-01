@@ -17,7 +17,7 @@
 <div class="settings-container">
   <mat-card class="settings-card">
     <mat-card-header>
-      <mat-card-title>A2UI Composer Settings</mat-card-title>
+      <h2 mat-card-title>A2UI Composer Settings</h2>
     </mat-card-header>
     <mat-card-content>
       <form [formGroup]="settingsForm">
@@ -129,7 +129,7 @@
               >[Catalog Error] {{ catalogErrorMessage() }}</code
             >
           } @else if (catalogStatus() === 'Connected') {
-            <code class="success-log" style="color: #4caf50"
+            <code class="success-log" style="color: #188038"
               >[System] Catalog handshake completed successfully. Active catalog ready.</code
             >
           } @else if (catalogStatus() === 'Indexing') {
