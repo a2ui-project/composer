@@ -187,7 +187,7 @@ export class A2aChatView implements OnInit {
 
       this.configProvider.setA2aAgentUrl(trimmedUrl);
       if (tenantId !== undefined) {
-        this.configProvider.setA2aTenantId(tenantId.trim());
+        this.configProvider.setA2aTenantId((tenantId || '').trim());
       }
       if (backendMode) {
         this.configProvider.setA2aBackendMode(backendMode);
@@ -310,12 +310,12 @@ export class A2aChatView implements OnInit {
     if (typeof action === 'object' && action !== null && !Array.isArray(action)) {
       const obj = action as Record<string, unknown>;
       if ('userAction' in obj) {
-        actionData = {...obj, action: obj['userAction']};
+        actionData = {...obj, ['action']: obj['userAction']};
       } else {
-        actionData = {...obj, userAction: obj, action: obj};
+        actionData = {...obj, ['userAction']: obj, ['action']: obj};
       }
     } else {
-      actionData = {userAction: action, action};
+      actionData = {['userAction']: action, ['action']: action};
     }
 
     const contextId = this.activeContextId() || uuid();
