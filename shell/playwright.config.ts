@@ -17,8 +17,9 @@
 import {defineConfig, devices} from '@playwright/test';
 
 export default defineConfig({
-  testDir: './e2e',
-  testMatch: '**/*.e2e.ts',
+  testDir: '.',
+  testMatch: ['e2e/**/*.e2e.ts', 'src/**/*.visual.ts'],
+  testIgnore: process.env['VISUAL_TESTS'] ? [] : ['**/*.visual.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 2 : 0,
@@ -34,8 +35,17 @@ export default defineConfig({
       },
     ],
   ],
+  expect: {
+    toHaveScreenshot: {
+      maxDiffPixelRatio: 0.02,
+      animations: 'disabled',
+      scale: 'css',
+    },
+  },
+  snapshotPathTemplate: '{testFileDir}/__snapshots__/{arg}{ext}',
   use: {
     baseURL: 'http://localhost:4200',
+    viewport: {width: 1280, height: 800},
     trace: 'on-first-retry',
     screenshot: 'on',
   },
