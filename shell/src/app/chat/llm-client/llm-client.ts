@@ -208,6 +208,26 @@ export abstract class LlmClient {
   abstract chatStream(messages: LlmMessage[]): Promise<LlmStreamResponse>;
 
   /**
+   * Extracts and removes XML-like thought tags (`<thought>`, `<thinking>`,
+   * `<reasoning>`) from raw streaming text.
+   *
+   * @param accumulatedRawText The raw stream string containing potential thought
+   *     tags.
+   * @return An object containing the sanitized clean text and extracted thoughts.
+   */
+  protected extractXmlThoughts(accumulatedRawText: string): ExtractedXmlThoughts {
+    let totalExtractedThinking = '';
+    const cleanText = accumulatedRawText.replace(
+      /<(thought|thinking|reasoning)>([\s\S]*?)(?:<\/\1>|$)/gi,
+      (_, _tag, innerText) => {
+        totalExtractedThinking += innerText;
+        return '';
+      },
+    );
+    return {cleanText, totalExtractedThinking};
+  }
+
+  /**
    * Creates an asynchronous iterable stream from a buffered queue of responses.
    *
    * Resolves new chunks as they are pushed to the buffer, yields them in order,
@@ -221,7 +241,7 @@ export abstract class LlmClient {
    * updates occur.
    * @return An asynchronous iterable stream yielding `LlmResponse` objects.
    */
-  createContentStream(
+  protected createContentStream(
     buffer: LlmResponse[],
     state: StreamProcessingState,
     listeners: Array<() => void>,
@@ -264,24 +284,4 @@ export abstract class LlmClient {
       },
     };
   }
-}
-
-/**
- * Extracts and removes XML-like thought tags (`<thought>`, `<thinking>`,
- * `<reasoning>`) from raw streaming text.
- *
- * @param accumulatedRawText The raw stream string containing potential thought
- *     tags.
- * @return An object containing the sanitized clean text and extracted thoughts.
- */
-export function extractXmlThoughts(accumulatedRawText: string): ExtractedXmlThoughts {
-  let totalExtractedThinking = '';
-  const cleanText = accumulatedRawText.replace(
-    /<(thought|thinking|reasoning)>([\s\S]*?)(?:<\/\1>|$)/gi,
-    (_, _tag, innerText) => {
-      totalExtractedThinking += innerText;
-      return '';
-    },
-  );
-  return {cleanText, totalExtractedThinking};
 }
