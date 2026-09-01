@@ -240,7 +240,9 @@ export class Standalone3pLlmClient extends LlmClient {
 
         state.accumulatedRawText += chunkContent;
 
-        const {cleanText, totalExtractedThinking} = this.extractXmlThoughts(state.accumulatedRawText);
+        const {cleanText, totalExtractedThinking} = this.extractXmlThoughts(
+          state.accumulatedRawText,
+        );
 
         const contentVal = cleanText.slice(state.emittedContentLength);
         const tagThought = totalExtractedThinking.slice(state.emittedThinkingLength);
