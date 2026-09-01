@@ -34,7 +34,7 @@ export class ScreenshotCaptureService {
   /**
    * Captures a screenshot of the current tab, optionally restricted to a target element.
    * @param targetElement Optional DOM element to restrict the screenshot to.
-   * @returns A base64-encoded PNG image string.
+   * @return A base64-encoded PNG image string.
    */
   async captureScreenshot(targetElement: Element | null | undefined): Promise<string> {
     if (!targetElement || !targetElement.isConnected) {

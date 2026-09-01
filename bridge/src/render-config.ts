@@ -25,7 +25,7 @@ export declare interface DataModelObservable {
    *
    * @param path The nested object path to observe (empty string for the root model).
    * @param cb The callback executed with the updated data model value payload.
-   * @returns A subscription handle exposing an unsubscribe cleanup method.
+   * @return A subscription handle exposing an unsubscribe cleanup method.
    */
   subscribe(path: string, cb: (val: unknown) => void): {unsubscribe(): void};
 }
@@ -50,7 +50,7 @@ export declare interface SurfaceGroupLike {
      * Subscribes a callback to listen to new surface creation events.
      *
      * @param cb The callback executed with the newly created surface instance.
-     * @returns A subscription handle exposing an unsubscribe cleanup method.
+     * @return A subscription handle exposing an unsubscribe cleanup method.
      */
     subscribe(cb: (surface: SurfaceInstance) => void): {unsubscribe(): void};
   };

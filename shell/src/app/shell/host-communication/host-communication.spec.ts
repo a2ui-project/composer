@@ -138,6 +138,13 @@ describe('HostCommunication', () => {
       postMessage: vi.fn(),
     } as unknown as Window;
     service.registerIframe(mockIframeWindow);
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+      }),
+    );
 
     service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
 
@@ -184,6 +191,13 @@ describe('HostCommunication', () => {
   it('successfully invokes postMessage when sendRenderA2UI is called with a valid payload', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+      }),
+    );
 
     const validPayload = [{version: 'v0.9', updateDataModel: {surfaceId: 's-1'}}];
     service.sendRenderA2UI(validPayload);
@@ -219,6 +233,13 @@ describe('HostCommunication', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     const mockIFrameElement = {contentWindow: mockIframeWindow} as unknown as HTMLIFrameElement;
     service.registerIframe(mockIFrameElement);
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+      }),
+    );
 
     service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
 
@@ -542,6 +563,13 @@ describe('HostCommunication', () => {
   it('dispatches SET_THEME message via sendTheme', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+      }),
+    );
 
     service.sendTheme(ThemePreference.DARK);
 
@@ -576,19 +604,13 @@ describe('HostCommunication', () => {
     );
   });
 
-  it('automatically dispatches current themePreference upon iframe registration', () => {
+  it('suppresses automatic dispatch of current themePreference upon iframe registration', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     themePreferenceSignal.set(ThemePreference.DARK);
 
     service.registerIframe(mockIframeWindow);
 
-    expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
-      {
-        type: PreviewBridgeMessageType.SET_THEME,
-        payload: {theme: ThemePreference.DARK},
-      },
-      'http://localhost:3000',
-    );
+    expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
   });
 
   it('preserves early message buffer when registering an unattached iframe element with null contentWindow', () => {
@@ -629,6 +651,195 @@ describe('HostCommunication', () => {
 
       service.registerIframe(null);
       expect(service.getIframeElement()).toBeNull();
+    });
+  });
+
+  describe('Renderer Readiness', () => {
+    it('initializes renderer readiness signal to false', () => {
+      expect(service.isRendererReady()).toBe(false);
+    });
+
+    it('resets renderer readiness to false when iframe target is re-registered or nulled', () => {
+      // Simulate ready
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(service.isRendererReady()).toBe(true);
+
+      // Null it out
+      service.registerIframe(null);
+      expect(service.isRendererReady()).toBe(false);
+
+      // Register again
+      service.registerIframe(mockIframeWindow);
+      expect(service.isRendererReady()).toBe(false);
+    });
+
+    it('transitions renderer readiness to true upon receiving RENDERER_READY message and triggers sendTheme', () => {
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+      expect(service.isRendererReady()).toBe(false);
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      expect(service.isRendererReady()).toBe(true);
+      expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.SET_THEME,
+          payload: {theme: ThemePreference.LIGHT},
+        },
+        'http://localhost:3000',
+      );
+    });
+
+    it('queues outbound messages when renderer is not ready', () => {
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+      expect(service.isRendererReady()).toBe(false);
+
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
+
+      // Checking that outboundMessageBuffer buffered the message.
+      // We can assert via internal state if possible, but the best way is to send RENDERER_READY and check if it's flushed.
+      // But wait, the flush spec will cover flushing. To prove queueing, we can check mock postMessage count before and after RENDERER_READY.
+    });
+
+    it('flushes queued outbound messages in order when RENDERER_READY is received', () => {
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      service.sendMessage({type: PreviewBridgeMessageType.CONSOLE_LOG});
+      expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      // It should have sent SET_THEME plus the 2 queued messages
+      expect(mockIframeWindow.postMessage).toHaveBeenNthCalledWith(
+        1,
+        {
+          type: PreviewBridgeMessageType.SET_THEME,
+          payload: {theme: ThemePreference.LIGHT},
+        },
+        'http://localhost:3000',
+      );
+      expect(mockIframeWindow.postMessage).toHaveBeenNthCalledWith(
+        2,
+        {type: PreviewBridgeMessageType.GET_CATALOG},
+        'http://localhost:3000',
+      );
+      expect(mockIframeWindow.postMessage).toHaveBeenNthCalledWith(
+        3,
+        {type: PreviewBridgeMessageType.CONSOLE_LOG},
+        'http://localhost:3000',
+      );
+      expect(mockIframeWindow.postMessage).toHaveBeenCalledTimes(3);
+    });
+
+    it('clears the outbound buffer on registerTarget, unregisterTarget, and ngOnDestroy', () => {
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+
+      // Seed buffer
+      service.registerIframe(mockIframeWindow);
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+
+      // Clears on unregisterTarget (registerIframe(null))
+      service.registerIframe(null);
+      expect(service['outboundMessageBuffer'].length).toBe(0);
+
+      // Seed buffer again
+      service.registerIframe(mockIframeWindow);
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+
+      // Clears on registerTarget (registerIframe with target)
+      service.registerIframe(mockIframeWindow);
+      expect(service['outboundMessageBuffer'].length).toBe(0);
+
+      // Seed buffer again
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+
+      // Clears on ngOnDestroy
+      service.ngOnDestroy();
+      expect(service['outboundMessageBuffer'].length).toBe(0);
+    });
+    it('allows outbound messages in sendMessage when renderer is ready', () => {
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      expect(service.isRendererReady()).toBe(true);
+
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.GET_CATALOG},
+        'http://localhost:3000',
+      );
+    });
+
+    it('resets renderer readiness to false upon destruction (ngOnDestroy)', () => {
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(service.isRendererReady()).toBe(true);
+
+      service.ngOnDestroy();
+      expect(service.isRendererReady()).toBe(false);
+    });
+
+    it('preserves readiness on repeated RENDERER_READY messages', () => {
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+
+      const readyEvent = new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+      });
+
+      window.dispatchEvent(readyEvent);
+      expect(service.isRendererReady()).toBe(true);
+      expect(mockIframeWindow.postMessage).toHaveBeenCalledTimes(1);
+
+      // Send another one
+      window.dispatchEvent(readyEvent);
+      expect(service.isRendererReady()).toBe(true);
+      // It should send SET_THEME again on each RENDERER_READY per standard behavior
+      expect(mockIframeWindow.postMessage).toHaveBeenCalledTimes(2);
     });
   });
 });

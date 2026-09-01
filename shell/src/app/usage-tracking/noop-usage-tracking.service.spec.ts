@@ -89,6 +89,11 @@ describe('NoopUsageTrackingService', () => {
       service.trackRendererEdit({rendererId: 'custom-1'});
       service.trackRendererDelete({rendererId: 'custom-1'});
       service.trackApiKeyUpdate({action: ApiKeyAction.SELECT});
+      service.trackConversationView();
+      service.trackConversationSessionEnd({
+        durationSeconds: 15,
+        interfaceCount: 3,
+      });
     }).not.toThrow();
   });
 });

@@ -34,7 +34,7 @@ export class FileIngestionService {
    * Reads a given File object as an AttachedFile.
    *
    * @param file The file to read and attach.
-   * @returns A promise resolving to the AttachedFile containing the parsed contents.
+   * @return A promise resolving to the AttachedFile containing the parsed contents.
    */
   readFileAsAttachment(file: File): Promise<AttachedFile> {
     return new Promise((resolve, reject) => {

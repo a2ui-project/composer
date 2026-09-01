@@ -50,7 +50,7 @@ export class CatalogSchemaResolver {
    * Resolves and parses all properties for the specified component from the catalog schema.
    *
    * @param componentName The name of the component to resolve.
-   * @returns An array of parsed property definitions.
+   * @return An array of parsed property definitions.
    */
   resolveComponentProperties(componentName: string): ParsedProperty[] {
     if (this.schema == null || typeof this.schema !== 'object') {
@@ -103,7 +103,7 @@ export class CatalogSchemaResolver {
    * Resolves and returns the fully resolved schemas for all properties of the specified component.
    *
    * @param componentName The name of the component.
-   * @returns A dictionary of property name to resolved schema.
+   * @return A dictionary of property name to resolved schema.
    */
   resolveComponentPropertiesSchema(componentName: string): Record<string, CatalogComponentSchema> {
     if (this.schema == null || typeof this.schema !== 'object') {
@@ -243,7 +243,7 @@ export class CatalogSchemaResolver {
    * @param propSchema The schema definition of the property to resolve.
    * @param rootSchema The root catalog schema containing definitions for references.
    * @param visitedRefs Set of references visited in the current path to detect and prevent circular resolution loops.
-   * @returns A fully resolved component schema with references inline and sub-schemas normalized.
+   * @return A fully resolved component schema with references inline and sub-schemas normalized.
    */
   private resolvePropertySchema(
     propSchema: CatalogComponentSchema | null | undefined,
@@ -492,7 +492,9 @@ export class CatalogSchemaResolver {
     }
 
     const isCommonTypes =
-      pointer === 'common_types.json' || pointer.startsWith('common_types.json#');
+      pointer === 'common_types.json' ||
+      pointer.startsWith('common_types.json#') ||
+      pointer.includes('/common_types.json#');
     if (isCommonTypes) {
       const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
       if (localResolved !== undefined) {
@@ -501,7 +503,10 @@ export class CatalogSchemaResolver {
       return this.resolveJsonPointerBase(COMMON_TYPES_SCHEMA, relativePointer);
     }
 
-    const isCatalog = pointer === 'catalog.json' || pointer.startsWith('catalog.json#');
+    const isCatalog =
+      pointer === 'catalog.json' ||
+      pointer.startsWith('catalog.json#') ||
+      pointer.includes('/catalog.json#');
     if (isCatalog) {
       const localResolved = this.resolveJsonPointerBase(schema, relativePointer);
       if (localResolved !== undefined) {

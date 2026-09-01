@@ -19,7 +19,7 @@
  * Returns the parsed array if successful, or null if the string is not a valid JSON array.
  *
  * @param content The string content to parse.
- * @returns The parsed array, or null if parsing fails or the content is not an array.
+ * @return The parsed array, or null if parsing fails or the content is not an array.
  */
 export function tryParseJsonArray(content?: string | null): unknown[] | null {
   if (content == null) {
@@ -88,7 +88,7 @@ export function tryParseJsonArray(content?: string | null): unknown[] | null {
  * Formats the given value as a JSON string with 2-space indentation.
  *
  * @param value The value to format.
- * @returns The formatted JSON string.
+ * @return The formatted JSON string.
  */
 export function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);

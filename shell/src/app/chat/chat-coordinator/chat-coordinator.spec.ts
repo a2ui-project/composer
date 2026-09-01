@@ -301,7 +301,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
     await service.submitPrompt('Create broken screen');
 
-    // Assert that the commited layout is fully healed and sanitized:
+    // Assert that the committed layout is fully healed and sanitized:
     // - Markdown stripped
     // - missing bracket appended to array
     // - trailing comma removed

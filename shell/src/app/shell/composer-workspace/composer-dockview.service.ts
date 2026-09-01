@@ -254,7 +254,7 @@ export class ComposerDockview {
   }
 
   private buildDockviewLayout(): void {
-    localStorage.removeItem('a2ui_composer_active_draft');
+    this.storage.removeItem(LocalStorageKey.ACTIVE_DRAFT);
 
     const savedLayout = this.storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
     let layoutRestored = false;

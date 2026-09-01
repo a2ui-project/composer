@@ -367,7 +367,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   /**
    * Resolves the initial authentication mode override from storage.
    *
-   * @returns The initial authentication mode.
+   * @return The initial authentication mode.
    */
   private getInitialForcedAuth(): AuthType {
     if (!this.is1PAuthEnabled) {

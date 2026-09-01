@@ -1204,4 +1204,35 @@ describe('CatalogSchemaResolver', () => {
     );
     consoleWarnSpy.mockRestore();
   });
+
+  it('resolves canonical full URL references to common_types.json', () => {
+    const mockSchema = {
+      components: {
+        Card: {
+          properties: {
+            child: {
+              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
+            },
+            action: {
+              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action',
+            },
+          },
+        },
+      },
+    };
+    const resolver = new CatalogSchemaResolver(mockSchema);
+    const properties = resolver.resolveComponentProperties('Card');
+    expect(properties).toContainEqual({
+      name: 'child',
+      description: '',
+      type: 'string',
+      required: false,
+    });
+    expect(properties).toContainEqual({
+      name: 'action',
+      description: '',
+      type: 'object',
+      required: false,
+    });
+  });
 });

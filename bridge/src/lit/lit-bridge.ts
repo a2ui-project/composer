@@ -32,7 +32,7 @@ import {
   SurfaceStateSubscription,
   CatalogDetails,
   type ComponentUsages,
-} from '../preview-bridge.js';
+} from '../index.js';
 
 /**
  * Options block configuring custom element generation and static payload injection
@@ -177,7 +177,7 @@ export class A2uiSandboxRoot extends LitElement {
  *
  * @param catalogs The array of component catalogs defining local layouts.
  * @param options Optional configuration options block holding the HTML tag name and preloaded catalog JSON data.
- * @returns The A2uiSandboxRoot custom element constructor value ready for nominal references.
+ * @return The A2uiSandboxRoot custom element constructor value ready for nominal references.
  */
 export function bootstrapLitSandbox<T extends ComponentApi>(
   catalogs: Catalog<T>[],

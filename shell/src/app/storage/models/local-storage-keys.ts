@@ -48,4 +48,7 @@ export enum LocalStorageKey {
   A2A_TENANT_ID = 'a2ui_composer_a2a_tenant_id',
   /** Key for storing active A2A transport protocol backend mode. */
   A2A_BACKEND_MODE = 'a2ui_composer_a2a_backend_mode',
+
+  /** @deprecated Key for retrieving the active workspace prompt in-progress draft content. */
+  ACTIVE_DRAFT = 'a2ui_composer_active_draft',
 }

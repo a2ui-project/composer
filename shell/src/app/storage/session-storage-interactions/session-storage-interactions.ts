@@ -39,7 +39,7 @@ export class SessionStorageInteractions {
   /**
    * Retrieves an item from the underlying sessionStorage.
    * @param key Stored item identifier
-   * @returns Stored string value or null if non-existent or inaccessible
+   * @return Stored string value or null if non-existent or inaccessible
    */
   getItem(key: string): string | null {
     if (!this.storage) return null;

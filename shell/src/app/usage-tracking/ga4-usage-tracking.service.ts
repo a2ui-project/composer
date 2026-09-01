@@ -88,7 +88,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     }
 
     windowObj.gtag('js', new Date());
-    windowObj.gtag('config', this.config.measurementId, {send_page_view: false});
+    windowObj.gtag('config', this.config.measurementId, this.getConfigOptions());
 
     const existingScript = this.document.querySelector(
       `script[src*="${this.config.measurementId}"]`,
@@ -102,17 +102,24 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     }
   }
 
-  private getBaselineDimensions(): Record<string, unknown> {
+  protected getConfigOptions(): Record<string, unknown> {
+    return {
+      ['send_page_view']: false,
+    };
+  }
+
+  protected getBaselineDimensions(): Record<string, unknown> {
     const is3P = this.startupResolution.isThirdPartyEnvironment();
     const activeRendererId = this.startupConfigState.selectedRendererId() || 'default';
     const catalogObj = this.catalogManagement.activeCatalog();
     const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
     return {
-      composer_session_id: this._composerSessionId,
-      usage_type: is3P ? UsageType.THIRD_PARTY : UsageType.FIRST_PARTY,
-      env_mode: this.appConfigProvider.envMode(),
-      active_renderer_id: activeRendererId,
-      catalog_id: catalogId,
+      ['send_to']: this.config.measurementId,
+      ['composer_session_id']: this._composerSessionId,
+      ['usage_type']: is3P ? UsageType.THIRD_PARTY : UsageType.FIRST_PARTY,
+      ['env_mode']: this.appConfigProvider.envMode(),
+      ['active_renderer_id']: activeRendererId,
+      ['catalog_id']: catalogId,
     };
   }
 
@@ -136,26 +143,26 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
 
   trackPageView(params: {pagePath: string}): void {
     this.dispatchGtagEvent('page_view', {
-      page_path: params.pagePath,
+      ['page_path']: params.pagePath,
     });
   }
 
   trackShareDesign(params: {status: ShareTrackingStatus; compressedLengthChars: number}): void {
     this.dispatchGtagEvent('share_design', {
-      status: params.status,
-      compressed_length_chars: params.compressedLengthChars,
+      ['status']: params.status,
+      ['compressed_length_chars']: params.compressedLengthChars,
     });
   }
 
   trackSessionReset(params: {totalPromptTurns: number}): void {
     this.dispatchGtagEvent('session_reset', {
-      total_prompt_turns: params.totalPromptTurns,
+      ['total_prompt_turns']: params.totalPromptTurns,
     });
   }
 
   trackThemeToggle(params: {theme: ThemePreference}): void {
     this.dispatchGtagEvent('theme_toggle', {
-      theme: params.theme,
+      ['theme']: params.theme,
     });
   }
 
@@ -170,13 +177,13 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   }): string {
     const promptId = params.promptId || generateUuid();
     this.dispatchGtagEvent('chat_prompt', {
-      prompt_id: promptId,
-      catalog_id: params.catalogId,
-      turn_type: params.turnType,
-      turn_index: params.turnIndex,
-      attempt_number: params.attemptNumber,
-      has_screenshot: params.hasScreenshot,
-      attachment_count: params.attachmentCount,
+      ['prompt_id']: promptId,
+      ['catalog_id']: params.catalogId,
+      ['turn_type']: params.turnType,
+      ['turn_index']: params.turnIndex,
+      ['attempt_number']: params.attemptNumber,
+      ['has_screenshot']: params.hasScreenshot,
+      ['attachment_count']: params.attachmentCount,
     });
     return promptId;
   }
@@ -190,44 +197,44 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   }): string {
     const promptId = params.promptId || generateUuid();
     this.dispatchGtagEvent('chat_prompt_retry', {
-      prompt_id: promptId,
-      catalog_id: params.catalogId,
-      turn_index: params.turnIndex,
-      attempt_number: params.attemptNumber,
-      ...(params.retryOfPromptId ? {retry_of_prompt_id: params.retryOfPromptId} : {}),
+      ['prompt_id']: promptId,
+      ['catalog_id']: params.catalogId,
+      ['turn_index']: params.turnIndex,
+      ['attempt_number']: params.attemptNumber,
+      ...(params.retryOfPromptId ? {['retry_of_prompt_id']: params.retryOfPromptId} : {}),
     });
     return promptId;
   }
 
   trackChatCancel(params: {promptId: string; turnIndex: number; pipelineStatus: string}): void {
     this.dispatchGtagEvent('chat_prompt_cancel', {
-      prompt_id: params.promptId,
-      turn_index: params.turnIndex,
-      pipeline_status_at_cancel: params.pipelineStatus,
+      ['prompt_id']: params.promptId,
+      ['turn_index']: params.turnIndex,
+      ['pipeline_status_at_cancel']: params.pipelineStatus,
     });
   }
 
   trackDebugTabView(params: {panelId: ComposerPanelId}): void {
     this.dispatchGtagEvent('debug_tab_view', {
-      tab_id: params.panelId,
+      ['tab_id']: params.panelId,
     });
   }
 
   trackRawMessageExpanded(params: {messageType: PreviewBridgeMessageType | string}): void {
     this.dispatchGtagEvent('raw_message_expanded', {
-      message_type: params.messageType,
+      ['message_type']: params.messageType,
     });
   }
 
   trackDataModelEdit(params: {isValidJson: boolean}): void {
     this.dispatchGtagEvent('data_model_edit', {
-      is_valid_json: params.isValidJson,
+      ['is_valid_json']: params.isValidJson,
     });
   }
 
   trackJsonEditorEdit(params: {isValidJson: boolean}): void {
     this.dispatchGtagEvent('json_editor_edit', {
-      is_valid_json: params.isValidJson,
+      ['is_valid_json']: params.isValidJson,
     });
   }
 
@@ -237,45 +244,56 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
 
   trackGalleryComponentSelect(params: {componentKey: string; category: string}): void {
     this.dispatchGtagEvent('gallery_component_select', {
-      component_key: params.componentKey,
-      category: params.category,
+      ['component_key']: params.componentKey,
+      ['category']: params.category,
     });
   }
 
   trackGalleryCopyUsage(params: {componentKey: string}): void {
     this.dispatchGtagEvent('gallery_copy_usage', {
-      component_key: params.componentKey,
+      ['component_key']: params.componentKey,
     });
   }
 
   trackRendererSwitch(params: {fromRendererId: string | null; toRendererId: string}): void {
     this.dispatchGtagEvent('renderer_switch', {
-      from_renderer_id: params.fromRendererId,
-      to_renderer_id: params.toRendererId,
+      ['from_renderer_id']: params.fromRendererId,
+      ['to_renderer_id']: params.toRendererId,
     });
   }
 
   trackRendererAdd(params: {rendererId: string}): void {
     this.dispatchGtagEvent('renderer_add', {
-      renderer_id: params.rendererId,
+      ['renderer_id']: params.rendererId,
     });
   }
 
   trackRendererEdit(params: {rendererId: string}): void {
     this.dispatchGtagEvent('renderer_edit', {
-      renderer_id: params.rendererId,
+      ['renderer_id']: params.rendererId,
     });
   }
 
   trackRendererDelete(params: {rendererId: string}): void {
     this.dispatchGtagEvent('renderer_delete', {
-      renderer_id: params.rendererId,
+      ['renderer_id']: params.rendererId,
     });
   }
 
   trackApiKeyUpdate(params: {action: ApiKeyAction}): void {
     this.dispatchGtagEvent('api_key_update', {
-      action: params.action,
+      ['action']: params.action,
+    });
+  }
+
+  trackConversationView(): void {
+    this.dispatchGtagEvent('conversation_view');
+  }
+
+  trackConversationSessionEnd(params: {durationSeconds: number; interfaceCount: number}): void {
+    this.dispatchGtagEvent('conversation_session_end', {
+      ['duration_seconds']: params.durationSeconds,
+      ['interface_count']: params.interfaceCount,
     });
   }
 }

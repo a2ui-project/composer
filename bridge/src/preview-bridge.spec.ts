@@ -21,7 +21,7 @@ import {
   SurfaceGroupLike,
   SurfaceInstance,
   RendererConfig,
-} from './preview-bridge';
+} from './index';
 import {PreviewBridgeMessageType, ThemePreference} from './bridge-message';
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 

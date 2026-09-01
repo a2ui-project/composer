@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-export interface SurfaceDimensions {
+/**
+ * Dimensions payload transmitted across the Preview Bridge boundary on surface resize events.
+ *
+ * NOTE: Declared as a `declare interface` so `tsickle` generates compiler externs
+ * definitions for JSCompiler (Closure Compiler), preventing property renaming across frame boundaries.
+ */
+export declare interface SurfaceDimensions {
   height: number;
   width: number;
 }

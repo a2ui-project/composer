@@ -49,7 +49,7 @@ export class LocalStorageInteractions {
    * Retrieves an item from browser local storage securely.
    *
    * @param key The strongly-typed local storage key enum.
-   * @returns The associated string value, or null if storage is unavailable.
+   * @return The associated string value, or null if storage is unavailable.
    */
   getItem(key: LocalStorageKey): string | null {
     if (!this._isStorageAvailable) {

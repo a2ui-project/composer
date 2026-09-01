@@ -27,6 +27,8 @@ export enum EnvMode {
   STANDALONE = 'standalone',
   /** Running integrated inside a host developer IDE container context. */
   EXTENSION = 'extension',
+  /** Running as a plugin to Antigravity. */
+  PLUGIN = 'plugin',
 }
 
 /**

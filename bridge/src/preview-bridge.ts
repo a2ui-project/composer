@@ -33,30 +33,17 @@ import {
   CatalogDetails,
   ThemePreference,
 } from './bridge-message';
-export * from './bridge-message';
 
 import {SurfaceResizeObserver} from './surface-resize-observer';
 export * from './surface-resize-observer';
 
 import type {
-  DataModelObservable,
   SurfaceInstance,
   SurfaceGroupLike,
   RendererConfig,
   SurfaceStateSubscription,
   ComponentUsages,
-  ComponentUsage,
 } from './render-config';
-
-export type {
-  DataModelObservable,
-  SurfaceInstance,
-  SurfaceGroupLike,
-  RendererConfig,
-  SurfaceStateSubscription,
-  ComponentUsages,
-  ComponentUsage,
-};
 
 /**
  * A framework-agnostic processor interface that handles A2UI protocol payloads.
@@ -158,7 +145,12 @@ export class PreviewBridge {
   private currentAppliedTheme?: ThemePreference;
 
   /** Handles DOM mutations and window viewport resizing to broadcast dimension updates to the host. */
-  private readonly surfaceResizeObserver: SurfaceResizeObserver;
+  private readonly surfaceResizeObserver = new SurfaceResizeObserver(dimensions => {
+    this.sendMessage({
+      type: PreviewBridgeMessageType.SURFACE_RESIZE,
+      payload: dimensions,
+    });
+  });
 
   private readonly cachedParentOrigin: string | null = null;
 
@@ -174,12 +166,6 @@ export class PreviewBridge {
     this.initMessageListener();
     setupInstrumentationOverrides(this);
     this.initThemeFromUrl();
-    this.surfaceResizeObserver = new SurfaceResizeObserver(dimensions => {
-      this.sendMessage({
-        type: PreviewBridgeMessageType.SURFACE_RESIZE,
-        payload: dimensions,
-      });
-    });
   }
 
   /**
@@ -195,7 +181,7 @@ export class PreviewBridge {
    * @param force When true, bypasses the dimension deduplication cache.
    */
   dispatchSurfaceResize(force = false): void {
-    this.surfaceResizeObserver?.measureAndDispatch(force);
+    this.surfaceResizeObserver.measureAndDispatch(force);
   }
 
   /**
@@ -236,7 +222,7 @@ export class PreviewBridge {
    *
    * @param processor The framework-specific message processor.
    * @param config The configuration object containing the surface group and lifecycle callbacks.
-   * @returns A subscription handle to detach the renderer and clean up surface connections.
+   * @return A subscription handle to detach the renderer and clean up surface connections.
    */
   attachRenderer(processor: RendererProcessor, config: RendererConfig): SurfaceStateSubscription {
     if (!config) {
@@ -311,7 +297,7 @@ export class PreviewBridge {
    */
   destroy(): void {
     teardownInstrumentationOverrides();
-    this.surfaceResizeObserver?.destroy();
+    this.surfaceResizeObserver.destroy();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
     }
@@ -617,7 +603,7 @@ export class PreviewBridge {
    * duplicate listeners and memory leaks during tab switching or hot-reloading.
    *
    * @param surfaceGroup The surface group or catalog renderer service model to connect.
-   * @returns A unified teardown handle exposing a single unsubscribe method to cleanly reclaim all child observers.
+   * @return A unified teardown handle exposing a single unsubscribe method to cleanly reclaim all child observers.
    */
   private connectSurfaceGroup(surfaceGroup: SurfaceGroupLike): {unsubscribe(): void} {
     const subscriptions = new Map<string, {unsubscribe(): void}>();
