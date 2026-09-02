@@ -59,6 +59,15 @@ describe('normalizeHttpUrl', () => {
     expect(normalizeHttpUrl('127.0.0.1:9876')).toBe('http://127.0.0.1:9876');
   });
 
+  it('rejects non-http(s) protocols by returning an empty string', () => {
+    expect(normalizeHttpUrl('ftp://example.com')).toBe('');
+    expect(normalizeHttpUrl('file:///path/to/file')).toBe('');
+    expect(normalizeHttpUrl('javascript:alert(1)')).toBe('');
+    expect(normalizeHttpUrl('data:text/html,hello')).toBe('');
+    expect(normalizeHttpUrl('mailto:test@example.com')).toBe('');
+    expect(normalizeHttpUrl('ws://example.com')).toBe('');
+  });
+
   it('handles empty or null inputs', () => {
     expect(normalizeHttpUrl('')).toBe('');
     expect(normalizeHttpUrl(null)).toBe('');

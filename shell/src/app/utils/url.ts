@@ -17,8 +17,9 @@
 /**
  * Normalizes an endpoint string to ensure it has an http:// or https:// scheme.
  * If the string does not specify a protocol (e.g. "suyangw.c.googlers.com:12345" or "localhost:8080"),
- * prepends "http://". If the string already contains a scheme (e.g. "https://...", "file:..."),
- * it is returned as-is without prepending.
+ * prepends "http://". If the string already contains an http:// or https:// scheme, it is
+ * preserved. If the string specifies any other scheme (e.g. "ftp://...", "file:...", "javascript:..."),
+ * returns an empty string as only HTTP(S) endpoints are supported.
  */
 export function normalizeHttpUrl(url: string | null | undefined): string {
   if (!url) return '';
@@ -31,7 +32,7 @@ export function normalizeHttpUrl(url: string | null | undefined): string {
     /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(trimmed) ||
     /^(javascript|data|about|blob|mailto):/i.test(trimmed)
   ) {
-    return trimmed;
+    return '';
   }
   return `http://${trimmed}`;
 }
@@ -65,11 +66,5 @@ export function isValidEndpointUrl(url: string | null | undefined): boolean {
   if (!trimmed || trimmed.includes(' ') || trimmed.startsWith('/') || trimmed.startsWith('//')) {
     return false;
   }
-  if (
-    /^(javascript|data|about|blob|mailto):/i.test(trimmed) ||
-    (!/^https?:\/\//i.test(trimmed) && /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(trimmed))
-  ) {
-    return false;
-  }
-  return isValidHttpUrl(normalizeHttpUrl(url));
+  return isValidHttpUrl(normalizeHttpUrl(trimmed));
 }
