@@ -144,50 +144,50 @@ export class Standard3pA2aTransport implements A2aTransport {
     ];
 
     // Normalize message parts to standard A2A schema (explicitly tagging text and data parts with kind).
-    // Note: Property keys are explicitly quoted to prevent Closure Compiler from renaming them during minification.
+    // Note: Property keys use computed string literals to prevent Closure Compiler from renaming them during minification in google3.
     const messageObj: Record<string, unknown> = {
-      'messageId': messageId,
-      'role': message.role || 'user',
-      'parts': message.parts?.map(p => {
-        if (p.text !== undefined) return {'kind': 'text', 'text': p.text};
-        if (p.data !== undefined) return {'kind': 'data', 'data': p.data};
+      ['messageId']: messageId,
+      ['role']: message.role || 'user',
+      ['parts']: message.parts?.map(p => {
+        if (p.text !== undefined) return {['kind']: 'text', ['text']: p.text};
+        if (p.data !== undefined) return {['kind']: 'data', ['data']: p.data};
         return p;
-      }) || [{'kind': 'text', 'text': ''}],
-      'extensions': supportedExtensions,
-      ...(contextId ? {'contextId': contextId} : {}),
-      ...(taskId ? {'taskId': taskId} : {}),
+      }) || [{['kind']: 'text', ['text']: ''}],
+      ['extensions']: supportedExtensions,
+      ...(contextId ? {['contextId']: contextId} : {}),
+      ...(taskId ? {['taskId']: taskId} : {}),
     };
 
     const configuration = {
-      'capabilities': {
-        'extensions': supportedExtensions.map(uri => ({'uri': uri})),
+      ['capabilities']: {
+        ['extensions']: supportedExtensions.map(uri => ({['uri']: uri})),
       },
-      'extensions': supportedExtensions,
-      'acceptedOutputModes': ['text/plain', 'application/json', 'application/json+a2ui'],
+      ['extensions']: supportedExtensions,
+      ['acceptedOutputModes']: ['text/plain', 'application/json', 'application/json+a2ui'],
     };
 
     // 1. Standard A2A JSON-RPC 2.0 envelope (preferred specification format for `POST /` and `POST /jsonrpc`).
     const jsonRpcPayload = {
-      'jsonrpc': '2.0',
-      'id': uuid(),
-      'method': 'message/stream',
-      'params': {
-        'message': messageObj,
-        'configuration': configuration,
-        ...(contextId ? {'contextId': contextId} : {}),
-        ...(taskId ? {'taskId': taskId} : {}),
-        ...(options?.tenantId ? {'tenant': options.tenantId} : {}),
+      ['jsonrpc']: '2.0',
+      ['id']: uuid(),
+      ['method']: 'message/stream',
+      ['params']: {
+        ['message']: messageObj,
+        ['configuration']: configuration,
+        ...(contextId ? {['contextId']: contextId} : {}),
+        ...(taskId ? {['taskId']: taskId} : {}),
+        ...(options?.tenantId ? {['tenant']: options.tenantId} : {}),
       },
     };
 
     // 2. Flat REST payload for backwards compatibility with earlier/custom community sample agents
     // that expose dedicated REST streaming endpoints (e.g. `/sendStreaming`, `/v1/tasks/sendStreaming`).
     const restPayload = {
-      ...(options?.tenantId ? {'tenant': options.tenantId} : {}),
-      ...(taskId ? {'taskId': taskId} : {}),
-      ...(contextId ? {'contextId': contextId} : {}),
-      'configuration': configuration,
-      'message': messageObj,
+      ...(options?.tenantId ? {['tenant']: options.tenantId} : {}),
+      ...(taskId ? {['taskId']: taskId} : {}),
+      ...(contextId ? {['contextId']: contextId} : {}),
+      ['configuration']: configuration,
+      ['message']: messageObj,
     };
 
     const cachedEndpoint = this.endpointCache.get(baseUrl);
@@ -288,10 +288,10 @@ export class Standard3pA2aTransport implements A2aTransport {
       parts: [
         {
           data: {
-            'action': action,
+            ['action']: action,
           },
           metadata: {
-            'type': 'a2ui_action',
+            ['type']: 'a2ui_action',
           },
         },
       ],
