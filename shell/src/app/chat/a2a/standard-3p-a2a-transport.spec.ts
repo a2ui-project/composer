@@ -145,6 +145,7 @@ describe('Standard3pA2aTransport', () => {
         tenant: 'team_alpha',
         taskId: 'task-123',
         message: {
+          messageId: expect.any(String),
           role: 'user',
           taskId: 'task-123',
         },

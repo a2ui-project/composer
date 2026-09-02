@@ -19,6 +19,12 @@
       "options": {
         "singleQuote": false
       }
+    },
+    {
+      "files": ["**/standard-3p-a2a-transport.ts"],
+      "options": {
+        "quoteProps": "preserve"
+      }
     }
   ]
 }
