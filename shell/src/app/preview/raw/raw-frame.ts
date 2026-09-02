@@ -77,6 +77,8 @@ export class RawFrame {
   private readonly layoutInput$ = new Subject<string>();
   private isDestroyed = false;
 
+  // A precise 15-second timeout handles normal connectivity limits and bootstrap
+  // without improperly punishing acceptable processing latency on slow renderers.
   private readonly WATCHDOG_TIMEOUT_MS = 15000;
   private readonly INVALID_JSON_TIMEOUT_MS = 3000;
   private readonly SCHEMA_ERROR_DEBOUNCE_MS = 50;
@@ -281,6 +283,10 @@ export class RawFrame {
 
   private startWatchdog(): void {
     this.clearWatchdog();
+    // Suspend watchdog lifecycle during active LLM streams (since
+    // transient payloads are predictably broken) and when document is
+    // hidden (to avoid aggressive throttling timeouts triggered by
+    // browser background tab optimizations).
     if (
       this.isJsonInvalid() ||
       this.hasActiveSchemaErrors ||
