@@ -66,6 +66,8 @@ describe('normalizeHttpUrl', () => {
     expect(normalizeHttpUrl('data:text/html,hello')).toBe('');
     expect(normalizeHttpUrl('mailto:test@example.com')).toBe('');
     expect(normalizeHttpUrl('ws://example.com')).toBe('');
+    expect(normalizeHttpUrl('about:blank')).toBe('');
+    expect(normalizeHttpUrl('blob:http://example.com/uuid')).toBe('');
   });
 
   it('handles empty or null inputs', () => {

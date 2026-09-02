@@ -28,10 +28,7 @@ export function normalizeHttpUrl(url: string | null | undefined): string {
   if (/^https?:\/\//i.test(trimmed)) {
     return trimmed;
   }
-  if (
-    /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(trimmed) ||
-    /^(javascript|data|about|blob|mailto):/i.test(trimmed)
-  ) {
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\d)/i.test(trimmed)) {
     return '';
   }
   return `http://${trimmed}`;
