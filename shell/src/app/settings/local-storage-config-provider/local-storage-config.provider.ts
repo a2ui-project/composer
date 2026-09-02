@@ -216,17 +216,16 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
    * @param url The target destination URL endpoint.
    */
   override setA2aAgentUrl(url: string): void {
-    const trimmed = (url || '').trim();
-    if (!trimmed) {
+    const normalized = normalizeHttpUrl(url);
+    if (!normalized) {
       this._a2aAgentUrl.set('');
       this.localStorageInteractions.removeItem(LocalStorageKey.A2A_AGENT_URL);
       return;
     }
-    if (!isValidEndpointUrl(trimmed)) {
-      console.warn(`Refusing to persist invalid or non-HTTP A2A agent URL: ${trimmed}`);
+    if (!isValidEndpointUrl(url)) {
+      console.warn(`Refusing to persist invalid or non-HTTP A2A agent URL: ${(url || '').trim()}`);
       return;
     }
-    const normalized = normalizeHttpUrl(trimmed);
     this._a2aAgentUrl.set(normalized);
     this.localStorageInteractions.setItem(LocalStorageKey.A2A_AGENT_URL, normalized);
   }

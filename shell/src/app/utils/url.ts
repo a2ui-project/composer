@@ -71,5 +71,5 @@ export function isValidEndpointUrl(url: string | null | undefined): boolean {
   ) {
     return false;
   }
-  return isValidHttpUrl(normalizeHttpUrl(trimmed));
+  return isValidHttpUrl(normalizeHttpUrl(url));
 }

@@ -130,6 +130,22 @@ describe('AgentConfigPanel', () => {
     });
   });
 
+  it('normalizes raw host endpoint without protocol on save', () => {
+    const spy = vi.spyOn(fixture.componentInstance.saveAndConnect, 'emit');
+    fixture.componentInstance['form'].setValue({
+      endpoint: '  localhost:8080  ',
+      tenantId: 'tenant-1',
+      backendMode: A2aBackendMode.HTTP_JSONRPC,
+    });
+    fixture.componentInstance['saveAndConnectAgent']();
+
+    expect(spy).toHaveBeenCalledWith({
+      endpoint: 'http://localhost:8080',
+      tenantId: 'tenant-1',
+      backendMode: A2aBackendMode.HTTP_JSONRPC,
+    });
+  });
+
   it('validates invalid non-HTTP URL schemes', async () => {
     await harness.setEndpoint('javascript:alert(1)');
     expect(await harness.isSaveDisabled()).toBe(true);

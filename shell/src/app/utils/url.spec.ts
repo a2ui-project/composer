@@ -64,6 +64,12 @@ describe('normalizeHttpUrl', () => {
     expect(normalizeHttpUrl(null)).toBe('');
     expect(normalizeHttpUrl(undefined)).toBe('');
   });
+
+  it('trims leading and trailing whitespace', () => {
+    expect(normalizeHttpUrl('  http://localhost:12345  ')).toBe('http://localhost:12345');
+    expect(normalizeHttpUrl('  localhost:8080  ')).toBe('http://localhost:8080');
+    expect(normalizeHttpUrl('   ')).toBe('');
+  });
 });
 
 describe('isValidEndpointUrl', () => {

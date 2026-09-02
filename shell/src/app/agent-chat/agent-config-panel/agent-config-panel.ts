@@ -125,7 +125,7 @@ export class AgentConfigPanel implements OnInit {
     }
     const val = this.form.getRawValue();
     this.saveAndConnect.emit({
-      endpoint: normalizeHttpUrl((val.endpoint || '').trim()),
+      endpoint: normalizeHttpUrl(val.endpoint),
       tenantId: (val.tenantId || '').trim(),
       backendMode: val.backendMode as A2aBackendMode,
     });

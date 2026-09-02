@@ -167,16 +167,16 @@ export class A2aChatView implements OnInit {
     tenantId?: string,
     backendMode?: A2aBackendMode,
   ): Promise<void> {
-    const trimmedUrl = normalizeHttpUrl(url);
-    if (!trimmedUrl || !isValidEndpointUrl(trimmedUrl) || this.isConnecting()) return;
+    const normalizedUrl = normalizeHttpUrl(url);
+    if (!normalizedUrl || !isValidEndpointUrl(normalizedUrl) || this.isConnecting()) return;
 
     this.isConnecting.set(true);
     this.connectionError.set(null);
 
     try {
-      const card = await this.a2aTransport.getAgentCard(trimmedUrl);
+      const card = await this.a2aTransport.getAgentCard(normalizedUrl);
 
-      this.configProvider.setA2aAgentUrl(trimmedUrl);
+      this.configProvider.setA2aAgentUrl(normalizedUrl);
       if (tenantId !== undefined) {
         this.configProvider.setA2aTenantId((tenantId || '').trim());
       }
@@ -185,7 +185,7 @@ export class A2aChatView implements OnInit {
       }
 
       this.agentCard.set(card);
-      const info = a2aCardToUiAgentInfo(card, trimmedUrl);
+      const info = a2aCardToUiAgentInfo(card, normalizedUrl);
       this.agentInfo.set(info);
       this.isConfigPanelOpen.set(false);
     } catch (err: unknown) {
