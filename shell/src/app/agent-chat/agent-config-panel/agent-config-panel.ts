@@ -34,7 +34,7 @@ import {MatSelectModule} from '@angular/material/select';
 import {A2A_BACKEND_OPTIONS, A2aBackendOption} from '../../chat/a2a/a2a-transport.token';
 import {A2aBackendMode} from '../../settings/app-config-provider/app-config-provider';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
-import {isValidHttpUrl} from '../../utils/url';
+import {isValidEndpointUrl, normalizeHttpUrl} from '../../utils/url';
 
 export interface AgentConfigSaveEvent {
   endpoint: string;
@@ -46,7 +46,7 @@ export function httpUrlValidator(): ValidatorFn {
   return (control: AbstractControl): ValidationErrors | null => {
     const val = (control.value || '').trim();
     if (!val) return null;
-    return isValidHttpUrl(val) ? null : {invalidHttpUrl: true};
+    return isValidEndpointUrl(val) ? null : {invalidHttpUrl: true};
   };
 }
 
@@ -125,7 +125,7 @@ export class AgentConfigPanel implements OnInit {
     }
     const val = this.form.getRawValue();
     this.saveAndConnect.emit({
-      endpoint: (val.endpoint || '').trim(),
+      endpoint: normalizeHttpUrl((val.endpoint || '').trim()),
       tenantId: (val.tenantId || '').trim(),
       backendMode: val.backendMode as A2aBackendMode,
     });

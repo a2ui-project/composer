@@ -29,7 +29,7 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
-import {isValidHttpUrl} from '../../utils/url';
+import {isValidEndpointUrl, normalizeHttpUrl} from '../../utils/url';
 
 /**
  * Concrete implementation of the AppConfigProvider that integrates with
@@ -222,12 +222,13 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
       this.localStorageInteractions.removeItem(LocalStorageKey.A2A_AGENT_URL);
       return;
     }
-    if (!isValidHttpUrl(trimmed)) {
+    if (!isValidEndpointUrl(trimmed)) {
       console.warn(`Refusing to persist invalid or non-HTTP A2A agent URL: ${trimmed}`);
       return;
     }
-    this._a2aAgentUrl.set(trimmed);
-    this.localStorageInteractions.setItem(LocalStorageKey.A2A_AGENT_URL, trimmed);
+    const normalized = normalizeHttpUrl(trimmed);
+    this._a2aAgentUrl.set(normalized);
+    this.localStorageInteractions.setItem(LocalStorageKey.A2A_AGENT_URL, normalized);
   }
 
   /**

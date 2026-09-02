@@ -37,6 +37,16 @@ describe('SurfacePartitioner', () => {
       expect(normalizeA2uiItems([null, 'invalid', 123])).toEqual([]);
     });
 
+    it('filters out non-A2UI items such as tool calls', () => {
+      const mixed = [
+        {createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+        {name: 'show_vacation_booking_form', args: {}, id: 'call_123'},
+      ];
+      const normalized = normalizeA2uiItems(mixed);
+      expect(normalized.length).toBe(1);
+      expect(normalized[0].createSurface).toBeDefined();
+    });
+
     it('detects canvas components correctly', () => {
       expect(hasA2uiCanvasComponent([])).toBe(false);
       expect(

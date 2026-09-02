@@ -569,6 +569,19 @@ describe('LocalStorageAppConfigProvider', () => {
       expect(localStorage.getItem(LocalStorageKey.A2A_TENANT_ID)).toBeNull();
     });
 
+    it('normalizes raw host and port addresses to http:// in setA2aAgentUrl', () => {
+      const provider = setupProvider();
+      provider.setA2aAgentUrl('localhost:8080');
+      expect(provider.a2aAgentUrl()).toBe('http://localhost:8080');
+      expect(localStorage.getItem(LocalStorageKey.A2A_AGENT_URL)).toBe('http://localhost:8080');
+
+      provider.setA2aAgentUrl('suyangw.c.googlers.com:12345');
+      expect(provider.a2aAgentUrl()).toBe('http://suyangw.c.googlers.com:12345');
+      expect(localStorage.getItem(LocalStorageKey.A2A_AGENT_URL)).toBe(
+        'http://suyangw.c.googlers.com:12345',
+      );
+    });
+
     it('initializes A2A configurations from localStorage if present', () => {
       localStorage.setItem(LocalStorageKey.A2A_AGENT_URL, 'http://custom-agent:8080');
       localStorage.setItem(LocalStorageKey.A2A_TENANT_ID, 'custom-tenant');

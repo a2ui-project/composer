@@ -24,6 +24,7 @@ import {MatTooltipModule} from '@angular/material/tooltip';
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {renderMarkdown} from '../../utils/markdown';
+import {safeBypassHtml} from '../../utils/sanitizer';
 import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
 import {CanvasArtifact, UiMessage} from './types';
 
@@ -67,18 +68,18 @@ export class A2aChatMessage {
 
   protected readonly isThinkingExpanded = signal<boolean>(false);
 
-  protected readonly formattedContent = computed<SafeHtml>(() => {
+  protected readonly formattedContent = computed<SafeHtml | string>(() => {
     const rawText = this.message().text || '';
     if (!rawText.trim()) return '';
     const html = renderMarkdown(rawText);
-    return this.sanitizer.bypassSecurityTrustHtml(html);
+    return safeBypassHtml(this.sanitizer, html);
   });
 
-  protected readonly formattedThinking = computed<SafeHtml>(() => {
+  protected readonly formattedThinking = computed<SafeHtml | string>(() => {
     const raw = this.message().thinking || '';
     if (!raw.trim()) return '';
     const html = renderMarkdown(raw);
-    return this.sanitizer.bypassSecurityTrustHtml(html);
+    return safeBypassHtml(this.sanitizer, html);
   });
 
   protected readonly formattedTime = computed<string>(() => {

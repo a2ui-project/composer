@@ -101,7 +101,10 @@ export class Standard3pA2aTransport implements A2aTransport {
           const card = data?.agentCard || data;
           if (card && typeof card === 'object' && typeof card.name === 'string') {
             if (card.url && typeof card.url === 'string') {
-              this.endpointCache.set(baseUrl, card.url);
+              const cardUrl = card.url.trim();
+              if (/^https?:\/\//i.test(cardUrl)) {
+                this.endpointCache.set(baseUrl, cardUrl);
+              }
             }
             return card;
           }
@@ -187,17 +190,26 @@ export class Standard3pA2aTransport implements A2aTransport {
     };
 
     const cachedEndpoint = this.endpointCache.get(baseUrl);
-    const candidates: Array<{url: string; body: unknown}> = cachedEndpoint
-      ? [{url: cachedEndpoint, body: jsonRpcPayload}]
-      : [
-          {url: this.resolveUrl(baseUrl, ''), body: jsonRpcPayload},
-          {url: this.resolveUrl(baseUrl, 'jsonrpc'), body: jsonRpcPayload},
-          {url: this.resolveUrl(baseUrl, 'sendStreaming'), body: restPayload},
-          {url: this.resolveUrl(baseUrl, 'v1/tasks/sendStreaming'), body: restPayload},
-          {url: this.resolveUrl(baseUrl, 'tasks/sendStreaming'), body: restPayload},
-          {url: this.resolveUrl(baseUrl, 'SendStreamingMessage'), body: restPayload},
-          {url: this.resolveUrl(baseUrl, 'message:sendStreaming'), body: restPayload},
-        ];
+    const validCached =
+      cachedEndpoint && /^https?:\/\//i.test(cachedEndpoint) ? cachedEndpoint : null;
+    const defaultCandidates: Array<{url: string; body: unknown}> = [
+      {url: this.resolveUrl(baseUrl, ''), body: jsonRpcPayload},
+      {url: this.resolveUrl(baseUrl, 'jsonrpc'), body: jsonRpcPayload},
+      {url: this.resolveUrl(baseUrl, 'sendStreaming'), body: restPayload},
+      {url: this.resolveUrl(baseUrl, 'v1/tasks/sendStreaming'), body: restPayload},
+      {url: this.resolveUrl(baseUrl, 'tasks/sendStreaming'), body: restPayload},
+      {url: this.resolveUrl(baseUrl, 'SendStreamingMessage'), body: restPayload},
+      {url: this.resolveUrl(baseUrl, 'message:sendStreaming'), body: restPayload},
+    ];
+    const candidates: Array<{url: string; body: unknown}> = [];
+    if (validCached) {
+      candidates.push({url: validCached, body: jsonRpcPayload});
+    }
+    for (const cand of defaultCandidates) {
+      if (!candidates.some(c => c.url === cand.url)) {
+        candidates.push(cand);
+      }
+    }
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

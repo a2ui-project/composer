@@ -85,6 +85,36 @@ describe('A2aStreamEventParser', () => {
     expect(parsed.a2uiItems[0].createSurface?.surfaceId).toBe('surf-1');
   });
 
+  it('filters out non-A2UI data such as tool calls from a2uiItems and records them in toolCalls', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-tool',
+      message: {
+        role: 'agent',
+        parts: [
+          {
+            data: {
+              name: 'show_vacation_booking_form',
+              args: {},
+              id: 'call_3478204',
+            },
+          },
+          {
+            data: {
+              createSurface: {surfaceId: 'surf-1', catalogId: 'cat-1'},
+            },
+          },
+        ],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.a2uiItems.length).toBe(1);
+    expect(parsed.a2uiItems[0].createSurface?.surfaceId).toBe('surf-1');
+    expect(parsed.toolCalls?.length).toBe(1);
+    expect(parsed.toolCalls?.[0].name).toBe('show_vacation_booking_form');
+    expect(parsed.toolCalls?.[0].id).toBe('call_3478204');
+  });
+
   it('detects terminal completed states', () => {
     const event: TaskStatusUpdateEvent = {
       taskId: 'task-4',

@@ -191,6 +191,57 @@ describe('Standard3pA2aTransport', () => {
     });
   });
 
+  it('falls back through candidates when cached agent card endpoint fails', async () => {
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url === 'http://localhost:8000/.well-known/agent.json') {
+        return new Response(
+          JSON.stringify({
+            name: 'Cached Agent',
+            url: 'http://localhost:8000/custom-cached-path',
+          }),
+          {status: 200, headers: {'Content-Type': 'application/json'}},
+        );
+      }
+      return new Response(null, {status: 404});
+    });
+
+    await transport.getAgentCard('http://localhost:8000');
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'data: {"jsonrpc": "2.0", "result": {"taskId": "task-cached-fallback", "final": true}}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+
+    const requestedUrls: string[] = [];
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+      requestedUrls.push(url);
+      if (url === 'http://localhost:8000/jsonrpc') {
+        return new Response(stream, {
+          status: 200,
+          headers: {'Content-Type': 'text/event-stream'},
+        });
+      }
+      return new Response(null, {status: 404});
+    });
+
+    const message: A2aMessage = {role: 'user', parts: [{text: 'Hello fallback'}]};
+    const events: TaskStatusUpdateEvent[] = [];
+    for await (const event of transport.sendMessageStream('http://localhost:8000', message)) {
+      events.push(event);
+    }
+
+    expect(events.length).toBe(1);
+    expect(requestedUrls[0]).toBe('http://localhost:8000/custom-cached-path');
+    expect(requestedUrls).toContain('http://localhost:8000/jsonrpc');
+  });
+
   it('handles 500 server error response during streaming', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(
       new Response('Internal server error', {

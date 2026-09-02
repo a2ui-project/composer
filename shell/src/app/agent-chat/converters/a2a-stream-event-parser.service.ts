@@ -22,25 +22,26 @@ import {
   TERMINAL_TASK_STATES,
   TaskStatusUpdateEvent,
 } from '../../chat/a2a/a2a-types';
+import {UiToolCall} from '../chat-message/types';
+import {isA2uiItem, normalizeA2uiItems} from './surface-partitioner';
 
 /**
- * Normalizes an array of raw layout updates into valid `RenderA2uiItem` specifications.
+ * Extracts a UiToolCall structure if an object represents a function or tool call invocation.
  */
-export function normalizeA2uiItems(items: unknown[]): RenderA2uiItem[] {
-  if (!items || !Array.isArray(items)) return [];
-
-  return items
-    .map(item => {
-      if (typeof item === 'object' && item !== null) {
-        const itemObj = item as Record<string, unknown>;
-        return {
-          version: 'v0.9',
-          ...itemObj,
-        } as RenderA2uiItem;
-      }
-      return null;
-    })
-    .filter((item): item is RenderA2uiItem => item !== null);
+export function extractToolCall(item: unknown): UiToolCall | null {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+  const obj = item as Record<string, unknown>;
+  if (typeof obj['name'] === 'string' && obj['name'].length > 0 && !isA2uiItem(obj)) {
+    return {
+      name: obj['name'],
+      args:
+        typeof obj['args'] === 'object' && obj['args'] !== null
+          ? (obj['args'] as Record<string, unknown>)
+          : undefined,
+      id: typeof obj['id'] === 'string' ? obj['id'] : undefined,
+    };
+  }
+  return null;
 }
 
 /**
@@ -52,6 +53,7 @@ export interface ParsedA2aStreamEvent {
   textChunk?: string;
   thoughtChunk?: string;
   a2uiItems: RenderA2uiItem[];
+  toolCalls?: UiToolCall[];
   isCompleted: boolean;
 }
 
@@ -150,13 +152,13 @@ export class A2aStreamEventParser {
     }
 
     if (part.data) {
-      this.extractDataPayload(part.data, result.a2uiItems);
+      this.extractDataPayload(part.data, result);
     }
 
     if (part.artifact?.parts) {
       for (const artPart of part.artifact.parts) {
         if (artPart.data) {
-          this.extractDataPayload(artPart.data, result.a2uiItems);
+          this.extractDataPayload(artPart.data, result);
         }
       }
     }
@@ -173,7 +175,7 @@ export class A2aStreamEventParser {
     );
   }
 
-  private extractDataPayload(data: unknown, target: RenderA2uiItem[]): void {
+  private extractDataPayload(data: unknown, result: ParsedA2aStreamEvent): void {
     let rawData = data;
     if (typeof rawData === 'object' && rawData !== null && 'data' in rawData) {
       const envelope = rawData as {mimeType?: string; data?: unknown};
@@ -186,10 +188,22 @@ export class A2aStreamEventParser {
       }
     }
 
-    if (Array.isArray(rawData)) {
-      target.push(...normalizeA2uiItems(rawData));
-    } else if (typeof rawData === 'object' && rawData !== null) {
-      target.push(...normalizeA2uiItems([rawData]));
+    const items = Array.isArray(rawData)
+      ? rawData
+      : typeof rawData === 'object' && rawData !== null
+        ? [rawData]
+        : [];
+
+    result.a2uiItems.push(...normalizeA2uiItems(items));
+
+    for (const item of items) {
+      const toolCall = extractToolCall(item);
+      if (toolCall) {
+        if (!result.toolCalls) {
+          result.toolCalls = [];
+        }
+        result.toolCalls.push(toolCall);
+      }
     }
   }
 
@@ -200,7 +214,7 @@ export class A2aStreamEventParser {
     if (unwrapped.artifact?.parts) {
       for (const artPart of unwrapped.artifact.parts) {
         if (artPart.data) {
-          this.extractDataPayload(artPart.data, result.a2uiItems);
+          this.extractDataPayload(artPart.data, result);
         }
       }
     }

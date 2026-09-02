@@ -15,7 +15,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {isValidHttpUrl} from './url';
+import {isValidEndpointUrl, isValidHttpUrl, normalizeHttpUrl} from './url';
 
 describe('isValidHttpUrl', () => {
   it('returns true for valid http and https URLs', () => {
@@ -40,5 +40,47 @@ describe('isValidHttpUrl', () => {
     expect(isValidHttpUrl(undefined)).toBe(false);
     expect(isValidHttpUrl('not a url')).toBe(false);
     expect(isValidHttpUrl('//example.com')).toBe(false);
+  });
+});
+
+describe('normalizeHttpUrl', () => {
+  it('preserves existing http and https URLs', () => {
+    expect(normalizeHttpUrl('http://localhost:12345')).toBe('http://localhost:12345');
+    expect(normalizeHttpUrl('https://suyangw.c.googlers.com:12345')).toBe(
+      'https://suyangw.c.googlers.com:12345',
+    );
+  });
+
+  it('prepends http:// to raw host and host:port strings', () => {
+    expect(normalizeHttpUrl('suyangw.c.googlers.com:12345')).toBe(
+      'http://suyangw.c.googlers.com:12345',
+    );
+    expect(normalizeHttpUrl('localhost:8080')).toBe('http://localhost:8080');
+    expect(normalizeHttpUrl('127.0.0.1:9876')).toBe('http://127.0.0.1:9876');
+  });
+
+  it('handles empty or null inputs', () => {
+    expect(normalizeHttpUrl('')).toBe('');
+    expect(normalizeHttpUrl(null)).toBe('');
+    expect(normalizeHttpUrl(undefined)).toBe('');
+  });
+});
+
+describe('isValidEndpointUrl', () => {
+  it('accepts valid http, https, and raw host:port addresses', () => {
+    expect(isValidEndpointUrl('suyangw.c.googlers.com:12345')).toBe(true);
+    expect(isValidEndpointUrl('http://suyangw.c.googlers.com:12345')).toBe(true);
+    expect(isValidEndpointUrl('localhost:12345')).toBe(true);
+    expect(isValidEndpointUrl('http://localhost:12345')).toBe(true);
+    expect(isValidEndpointUrl('https://example.com')).toBe(true);
+  });
+
+  it('rejects invalid or unsafe protocols and malformed strings', () => {
+    expect(isValidEndpointUrl('')).toBe(false);
+    expect(isValidEndpointUrl('   ')).toBe(false);
+    expect(isValidEndpointUrl('not a valid url')).toBe(false);
+    expect(isValidEndpointUrl('javascript:alert(1)')).toBe(false);
+    expect(isValidEndpointUrl('data:text/html,hello')).toBe(false);
+    expect(isValidEndpointUrl('ftp://example.com')).toBe(false);
   });
 });

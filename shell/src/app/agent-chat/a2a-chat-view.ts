@@ -14,16 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  OnInit,
-  effect,
-  inject,
-  signal,
-  untracked,
-} from '@angular/core';
+import {Component, DestroyRef, OnInit, effect, inject, signal, untracked} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -39,6 +30,7 @@ import {
   A2aBackendMode,
 } from '../settings/app-config-provider/app-config-provider';
 import {generateUuid as uuid} from '../utils/uuid';
+import {isValidEndpointUrl, normalizeHttpUrl} from '../utils/url';
 import {AgentConfigPanel, AgentConfigSaveEvent} from './agent-config-panel/agent-config-panel';
 import {A2aAgentHeader} from './agent-header/agent-header';
 import {A2aChatHistory} from './chat-history/chat-history';
@@ -77,7 +69,6 @@ import {MessageInspectorEvent} from './message-inspector/message-inspector-event
   ],
   templateUrl: './a2a-chat-view.ng.html',
   styleUrl: './a2a-chat-view.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class A2aChatView implements OnInit {
   protected readonly configProvider = inject(AppConfigProvider);
@@ -176,21 +167,22 @@ export class A2aChatView implements OnInit {
     tenantId?: string,
     backendMode?: A2aBackendMode,
   ): Promise<void> {
-    const trimmedUrl = url?.trim();
-    if (!trimmedUrl || this.isConnecting()) return;
+    const trimmedUrl = normalizeHttpUrl(url);
+    if (!trimmedUrl || !isValidEndpointUrl(trimmedUrl) || this.isConnecting()) return;
 
     this.isConnecting.set(true);
     this.connectionError.set(null);
 
     try {
+      if (backendMode) {
+        this.configProvider.setA2aBackendMode(backendMode);
+      }
+
       const card = await this.a2aTransport.getAgentCard(trimmedUrl);
 
       this.configProvider.setA2aAgentUrl(trimmedUrl);
       if (tenantId !== undefined) {
         this.configProvider.setA2aTenantId((tenantId || '').trim());
-      }
-      if (backendMode) {
-        this.configProvider.setA2aBackendMode(backendMode);
       }
 
       this.agentCard.set(card);
@@ -529,6 +521,10 @@ export class A2aChatView implements OnInit {
           parsed.a2uiItems.length > 0
             ? [...(m.a2uiPayload || []), ...parsed.a2uiItems]
             : m.a2uiPayload;
+        const updatedToolCalls =
+          parsed.toolCalls && parsed.toolCalls.length > 0
+            ? [...(m.toolCalls || []), ...parsed.toolCalls]
+            : m.toolCalls;
 
         const partitioned = partitionA2uiSurfacePayload(updatedPayload || []);
 
@@ -537,6 +533,7 @@ export class A2aChatView implements OnInit {
           text: updatedText,
           thinking: updatedThinking,
           a2uiPayload: updatedPayload,
+          toolCalls: updatedToolCalls,
           inlineA2uiPayload: partitioned.inlinePayload || undefined,
           canvasArtifacts: partitioned.canvasArtifacts,
           hasCanvas: partitioned.hasCanvas,

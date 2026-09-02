@@ -265,24 +265,37 @@ export function hasA2uiCanvasComponent(items: RenderA2uiItem[]): boolean {
   });
 }
 
+export const A2UI_UPDATE_KEYS = [
+  'createSurface',
+  'updateComponents',
+  'updateDataModel',
+  'deleteSurface',
+] as const;
+
 /**
- * Normalizes an array of raw layout updates into valid `RenderA2uiItem` specifications.
+ * Checks if a candidate object is a valid A2UI v0.9 update specification item.
+ */
+export function isA2uiItem(item: unknown): boolean {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const obj = item as Record<string, unknown>;
+  return A2UI_UPDATE_KEYS.some(key => key in obj && obj[key] !== undefined && obj[key] !== null);
+}
+
+/**
+ * Normalizes an array of raw layout updates into valid `RenderA2uiItem` specifications,
+ * filtering out any non-A2UI objects.
  */
 export function normalizeA2uiItems(items: unknown[]): RenderA2uiItem[] {
   if (!items || !Array.isArray(items)) return [];
 
-  return items
-    .map(item => {
-      if (typeof item === 'object' && item !== null) {
-        const itemObj = item as Record<string, unknown>;
-        return {
-          version: 'v0.9',
-          ...itemObj,
-        } as RenderA2uiItem;
-      }
-      return null;
-    })
-    .filter((item): item is RenderA2uiItem => item !== null);
+  return items.filter(isA2uiItem).map(item => {
+    const itemObj = item as Record<string, unknown>;
+    return {
+      version:
+        typeof itemObj['version'] === 'string' && itemObj['version'] ? itemObj['version'] : 'v0.9',
+      ...itemObj,
+    } as RenderA2uiItem;
+  });
 }
 
 /**
@@ -324,7 +337,9 @@ function categorizeSurfaceItems(items: RenderA2uiItem[]): CategorizedSurfaceItem
         }
       }
     } else if (!item.createSurface && !item.updateDataModel) {
-      otherItems.push(item);
+      if (item.deleteSurface) {
+        otherItems.push(item);
+      }
     }
   }
 

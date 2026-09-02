@@ -15,6 +15,28 @@
  */
 
 /**
+ * Normalizes an endpoint string to ensure it has an http:// or https:// scheme.
+ * If the string does not specify a protocol (e.g. "suyangw.c.googlers.com:12345" or "localhost:8080"),
+ * prepends "http://". If the string already contains a scheme (e.g. "https://...", "file:..."),
+ * it is returned as-is without prepending.
+ */
+export function normalizeHttpUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(trimmed) ||
+    /^(javascript|data|about|blob|mailto):/i.test(trimmed)
+  ) {
+    return trimmed;
+  }
+  return `http://${trimmed}`;
+}
+
+/**
  * Validates that a string is a well-formed HTTP or HTTPS URL.
  *
  * Returns `false` for `null`, `undefined`, empty strings, non-URL strings,
@@ -30,4 +52,24 @@ export function isValidHttpUrl(url: string | null | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Validates that a string is a well-formed endpoint address, supporting both full
+ * URLs (e.g. "http://suyangw.c.googlers.com:12345") and raw host(:port) addresses
+ * (e.g. "suyangw.c.googlers.com:12345" or "localhost:8080").
+ */
+export function isValidEndpointUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.includes(' ') || trimmed.startsWith('/') || trimmed.startsWith('//')) {
+    return false;
+  }
+  if (
+    /^(javascript|data|about|blob|mailto):/i.test(trimmed) ||
+    (!/^https?:\/\//i.test(trimmed) && /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(trimmed))
+  ) {
+    return false;
+  }
+  return isValidHttpUrl(normalizeHttpUrl(trimmed));
 }
