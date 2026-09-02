@@ -255,7 +255,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
     if (this._isApiKeyProvidedByConfig()) {
       return;
     }
-    const trimmedKey = key.trim();
+    const trimmedKey = (key || '').trim();
     this._isApiKeyProvidedByConfig.set(false);
     this._geminiApiKey.set(trimmedKey);
     try {

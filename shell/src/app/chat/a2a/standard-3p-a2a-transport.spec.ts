@@ -242,6 +242,63 @@ describe('Standard3pA2aTransport', () => {
     expect(requestedUrls).toContain('http://localhost:8000/jsonrpc');
   });
 
+  it('pairs cached REST candidate endpoints with restPayload instead of jsonRpcPayload', async () => {
+    const encoder = new TextEncoder();
+    const createStream = () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode('data: {"result": {"taskId": "task-rest-cache", "final": true}}\n\n'),
+          );
+          controller.close();
+        },
+      });
+
+    let firstCallBody: unknown;
+    let secondCallBody: unknown;
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === 'http://localhost:8000/sendStreaming') {
+        firstCallBody = JSON.parse(init?.body as string);
+        return new Response(createStream(), {
+          status: 200,
+          headers: {'Content-Type': 'text/event-stream'},
+        });
+      }
+      return new Response(null, {status: 404});
+    });
+
+    const message: A2aMessage = {role: 'user', parts: [{text: 'First call'}]};
+    for await (const _ of transport.sendMessageStream('http://localhost:8000', message)) {
+      // consume
+    }
+
+    expect(firstCallBody).toHaveProperty('message');
+    expect(firstCallBody).not.toHaveProperty('jsonrpc');
+
+    const callUrls: string[] = [];
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      callUrls.push(url);
+      if (url === 'http://localhost:8000/sendStreaming') {
+        secondCallBody = JSON.parse(init?.body as string);
+        return new Response(createStream(), {
+          status: 200,
+          headers: {'Content-Type': 'text/event-stream'},
+        });
+      }
+      return new Response(null, {status: 404});
+    });
+
+    const secondMsg: A2aMessage = {role: 'user', parts: [{text: 'Second call'}]};
+    for await (const _ of transport.sendMessageStream('http://localhost:8000', secondMsg)) {
+      // consume
+    }
+
+    expect(callUrls).toEqual(['http://localhost:8000/sendStreaming']);
+    expect(secondCallBody).toHaveProperty('message');
+    expect(secondCallBody).not.toHaveProperty('jsonrpc');
+  });
+
   it('handles 500 server error response during streaming', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(
       new Response('Internal server error', {

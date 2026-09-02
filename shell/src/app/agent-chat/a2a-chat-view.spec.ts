@@ -511,6 +511,36 @@ describe('A2aChatView', () => {
     );
   });
 
+  it('does not persist backendMode or agent URL if agent connection fails', async () => {
+    vi.clearAllMocks();
+    mockA2aTransport.getAgentCard = vi.fn().mockRejectedValue(new Error('Connection failed'));
+
+    await fixture.componentInstance['connectToAgent'](
+      'http://localhost:9999',
+      'test-tenant',
+      A2aBackendMode.HTTP_JSONRPC,
+    );
+
+    expect(mockConfigProvider.setA2aBackendMode).not.toHaveBeenCalled();
+    expect(mockConfigProvider.setA2aAgentUrl).not.toHaveBeenCalled();
+    expect(mockConfigProvider.setA2aTenantId).not.toHaveBeenCalled();
+  });
+
+  it('persists backendMode and configuration when agent connection succeeds', async () => {
+    vi.clearAllMocks();
+    mockA2aTransport.getAgentCard = vi.fn().mockResolvedValue({name: 'Test Agent'});
+
+    await fixture.componentInstance['connectToAgent'](
+      'http://localhost:9999',
+      'test-tenant',
+      A2aBackendMode.HTTP_JSONRPC,
+    );
+
+    expect(mockConfigProvider.setA2aAgentUrl).toHaveBeenCalledWith('http://localhost:9999');
+    expect(mockConfigProvider.setA2aTenantId).toHaveBeenCalledWith('test-tenant');
+    expect(mockConfigProvider.setA2aBackendMode).toHaveBeenCalledWith(A2aBackendMode.HTTP_JSONRPC);
+  });
+
   it('displays fallback message when agent response generates no content', async () => {
     mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
       yield {

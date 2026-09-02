@@ -203,7 +203,8 @@ export class Standard3pA2aTransport implements A2aTransport {
     ];
     const candidates: Array<{url: string; body: unknown}> = [];
     if (validCached) {
-      candidates.push({url: validCached, body: jsonRpcPayload});
+      const matched = defaultCandidates.find(c => c.url === validCached);
+      candidates.push({url: validCached, body: matched ? matched.body : jsonRpcPayload});
     }
     for (const cand of defaultCandidates) {
       if (!candidates.some(c => c.url === cand.url)) {
