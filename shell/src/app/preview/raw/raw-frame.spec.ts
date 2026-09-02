@@ -793,14 +793,61 @@ describe('RawFrame JSON Source Editor View', () => {
       );
     });
 
-    it('ignores watchdog trigger when renderer becomes ready', async () => {
+    it('logs IFRAME_UNRESPONSIVE_ERROR when renderer is ready but watchdog timeout fires', async () => {
       vi.useFakeTimers();
       const {component} = await setup(false);
       TestBed.inject(HostCommunication).isRendererReady.mockReturnValue(true);
       component.TEST_ONLY.startWatchdog();
 
       vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message:
+            'IFRAME_UNRESPONSIVE_ERROR: Preview frame failed to process payload within 15 seconds.',
+          sourceTag: '[Previewer]',
+          level: 'error',
+        }),
+      );
+    });
+
+    it('clears watchdog on RENDER_SUCCESS ping', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      TestBed.inject(HostCommunication).isRendererReady.mockReturnValue(true);
+
+      component.TEST_ONLY.startWatchdog();
+      vi.advanceTimersByTime(10000);
+
+      // Emit RENDER_SUCCESS
+      messageStreamSubject.next({type: 'RENDER_SUCCESS'});
+
+      // Wait remaining 15s to ensure timer is fully cleared (not restarted)
+      vi.advanceTimersByTime(15000);
+
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('suspends watchdog when generative streaming is active', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      chatStateMock.isProgrammaticStreamActive.set(true);
+
+      component.TEST_ONLY.startWatchdog();
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('suspends watchdog when document is hidden', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      Object.defineProperty(document, 'hidden', {value: true, configurable: true});
+
+      component.TEST_ONLY.startWatchdog();
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+
+      // Reset
+      Object.defineProperty(document, 'hidden', {value: false, configurable: true});
     });
   });
 

@@ -76,6 +76,8 @@ export class RawFrame {
   private readonly layoutInput$ = new Subject<string>();
   private isDestroyed = false;
 
+  // A precise 15-second timeout handles normal connectivity limits and bootstrap
+  // without improperly punishing acceptable processing latency on slow renderers.
   private readonly WATCHDOG_TIMEOUT_MS = 15000;
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private lastErrorSignature: string | null = null;
@@ -104,7 +106,7 @@ export class RawFrame {
           envelope?.type === PreviewBridgeMessageType.RENDER_ERROR ||
           envelope?.type === PreviewBridgeMessageType.RENDERER_READY
         ) {
-          this.startWatchdog();
+          this.clearWatchdog();
         }
       });
 
@@ -225,6 +227,10 @@ export class RawFrame {
 
   private startWatchdog(): void {
     this.clearWatchdog();
+    // Suspend watchdog lifecycle during active LLM streams (since
+    // transient payloads are predictably broken) and when document is
+    // hidden (to avoid aggressive throttling timeouts triggered by
+    // browser background tab optimizations).
     if (
       this.chatState.isProgrammaticStreamActive() ||
       (typeof document !== 'undefined' && document.hidden)
@@ -238,6 +244,13 @@ export class RawFrame {
           sourceTag: '[Previewer]',
           message: 'Preview frame did not respond within 15 seconds.',
           level: 'warn',
+        });
+      } else {
+        this.errorLogger.error({
+          sourceTag: '[Previewer]',
+          message:
+            'IFRAME_UNRESPONSIVE_ERROR: Preview frame failed to process payload within 15 seconds.',
+          level: 'error',
         });
       }
     }, this.WATCHDOG_TIMEOUT_MS);
