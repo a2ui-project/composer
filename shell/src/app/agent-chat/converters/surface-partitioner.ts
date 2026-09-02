@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {RenderA2uiItem} from 'a2ui-bridge';
+import {A2UI_UPDATE_KEYS, RenderA2uiItem} from 'a2ui-bridge';
 import {CanvasArtifact} from '../chat-message/types';
 
 interface ExtractedCanvasInfo {
@@ -265,15 +265,31 @@ export function hasA2uiCanvasComponent(items: RenderA2uiItem[]): boolean {
   });
 }
 
-export const A2UI_UPDATE_KEYS = [
-  'createSurface',
-  'updateComponents',
-  'updateDataModel',
-  'deleteSurface',
-] as const;
+/**
+ * Canonical update operation keys defined in the A2UI v0.9 layout specification.
+ * Re-exported from `a2ui-bridge` as the shared source of truth across the shell and bridge.
+ *
+ * Each item in an A2UI message payload corresponds to one of these four update operations:
+ * - `createSurface`: Initializes a new surface with a catalog and root component.
+ * - `updateComponents`: Inserts, modifies, or reorders components in an existing surface.
+ * - `updateDataModel`: Updates data model properties bound to UI components.
+ * - `deleteSurface`: Destroys an existing surface and releases its resources.
+ *
+ * Used by {@link isA2uiItem} to discriminate A2UI layout messages from agent tool calls.
+ */
+export {A2UI_UPDATE_KEYS};
 
 /**
  * Checks if a candidate object is a valid A2UI v0.9 update specification item.
+ *
+ * An object is recognized as an A2UI item if it contains at least one of the canonical
+ * update operation keys ({@link A2UI_UPDATE_KEYS}) with a defined non-null value.
+ * Used during streaming ingestion to partition genuine A2UI UI payloads from
+ * non-A2UI messages (such as agent tool/function calls) so they are preserved
+ * without causing canvas dispatch errors.
+ *
+ * @param item The candidate object or chunk to inspect.
+ * @returns `true` if the item contains a valid A2UI update operation, `false` otherwise.
  */
 export function isA2uiItem(item: unknown): boolean {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return false;

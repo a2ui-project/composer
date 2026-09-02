@@ -160,6 +160,24 @@ export declare interface RenderA2uiItem {
   [key: string]: unknown;
 }
 
+/**
+ * Canonical update operation keys defined in the A2UI v0.9 layout specification.
+ * Each valid `RenderA2uiItem` contains exactly one of these update operations:
+ * - `createSurface`: Initializes a new surface with a catalog and root component.
+ * - `updateComponents`: Inserts, modifies, or reorders components in an existing surface.
+ * - `updateDataModel`: Updates data model properties bound to UI components.
+ * - `deleteSurface`: Destroys an existing surface and releases its resources.
+ */
+export const A2UI_UPDATE_KEYS = [
+  'createSurface',
+  'updateComponents',
+  'updateDataModel',
+  'deleteSurface',
+] as const;
+
+/** Type representing any one of the canonical A2UI update operation keys. */
+export type A2uiUpdateKey = (typeof A2UI_UPDATE_KEYS)[number];
+
 /** Minimal catalog definition representation used by the Preview Bridge. */
 export declare interface CatalogDetails {
   catalogId?: string;

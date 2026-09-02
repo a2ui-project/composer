@@ -17,6 +17,7 @@
 import {
   PreviewBridgeMessageType,
   RenderA2uiItem,
+  A2UI_UPDATE_KEYS,
   BaseSurfaceDetails,
   CreateSurfaceDetails,
   UpdateComponentsDetails,
@@ -281,8 +282,7 @@ export class CrossFrameValidator {
       return false;
     }
 
-    const updateKeys = ['createSurface', 'updateComponents', 'updateDataModel', 'deleteSurface'];
-    const presentKeys = updateKeys.filter(
+    const presentKeys = A2UI_UPDATE_KEYS.filter(
       key => key in itemObj && (itemObj as Record<string, unknown>)[key] !== undefined,
     );
 
