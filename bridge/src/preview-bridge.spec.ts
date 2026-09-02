@@ -483,7 +483,6 @@ describe('PreviewBridge Core API Runtime', () => {
 
   it('responds with COMPONENT_USAGES containing empty object if getComponentUsages throws an error', async () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
     const processor = {processMessages: vi.fn()};
 
@@ -516,6 +515,7 @@ describe('PreviewBridge Core API Runtime', () => {
       'PreviewBridge: Error invoking getComponentUsages:',
       expect.any(Error),
     );
+    errorSpy.mockRestore();
   });
 
   it('triggers onCatalogResolved callback when createSurface command contains catalogId', async () => {
@@ -581,7 +581,6 @@ describe('PreviewBridge Core API Runtime', () => {
 
   it('strictly halts and transmits A2UI_CATALOG error envelope if in-memory catalog processing throws', async () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     window.fetch = vi.fn();
 
     const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
@@ -824,7 +823,6 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('catches and shields DOMExceptions during cross-origin postMessage', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {
       throw new DOMException('Blocked a frame with origin from accessing a cross-origin frame.');
     });
@@ -883,7 +881,6 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('catches and logs errors thrown by the attached dynamic renderer during RENDER_A2UI dispatching', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     const mockGroup = {
       onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
     };
@@ -1255,7 +1252,6 @@ describe('PreviewBridge Core API Runtime', () => {
 
   describe('Coverage Edge Cases & Telemetry Guardrails', () => {
     it('logs error and returns empty subscription handle when attachRenderer is called without a surfaceGroup', () => {
-      vi.spyOn(console, 'error').mockImplementation(() => {});
       const processor = {processMessages: vi.fn()};
 
       const conn = bridge.attachRenderer(processor, {
@@ -1322,7 +1318,6 @@ describe('PreviewBridge Core API Runtime', () => {
 
     it('logs error when active renderer clear throws during RENDER_A2UI reset dispatching', () => {
       vi.useFakeTimers();
-      vi.spyOn(console, 'error').mockImplementation(() => {});
       const mockGroup = {
         onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
       };
@@ -1433,7 +1428,6 @@ describe('PreviewBridge Core API Runtime', () => {
 
     it('logs error when deferred RENDER_A2UI layout processing throws in macro-task timer', () => {
       vi.useFakeTimers();
-      vi.spyOn(console, 'error').mockImplementation(() => {});
       const mockGroup = {
         onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
       };
@@ -1575,7 +1569,6 @@ describe('PreviewBridge Core API Runtime', () => {
     });
 
     it('logs error when data model subscription fails for a dynamically registered surface', () => {
-      vi.spyOn(console, 'error').mockImplementation(() => {});
       let surfaceCallback: (surface: SurfaceInstance) => void = () => {};
       const surfaceGroupMock: SurfaceGroupLike = {
         onSurfaceCreated: {
@@ -2013,7 +2006,6 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('logs error and returns empty handle when attachRenderer is called with null config', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     const processor = {processMessages: vi.fn()};
 
     const handle = bridge.attachRenderer(processor, null as unknown as RendererConfig);
@@ -2026,7 +2018,6 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('logs error when connection.unsubscribe() throws during bridge.destroy()', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     const processor = {processMessages: vi.fn()};
 
     const throwingGroup = {
@@ -2059,7 +2050,6 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('logs error when onCatalogResolved callback throws an unexpected exception', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
     const processor = {processMessages: vi.fn()};
 
@@ -2234,7 +2224,6 @@ describe('PreviewBridge Core API Runtime', () => {
     });
 
     it('logs error if onThemeChange callback throws an exception', () => {
-      vi.spyOn(console, 'error').mockImplementation(() => {});
       const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
       const processor = {processMessages: vi.fn()};
 
@@ -2281,7 +2270,6 @@ describe('PreviewBridge Core API Runtime', () => {
     });
 
     it('logs error if onThemeChange callback throws an exception during attachRenderer', () => {
-      vi.spyOn(console, 'error').mockImplementation(() => {});
       bridge.applyThemeToDom(ThemePreference.DARK);
 
       const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
@@ -2347,6 +2335,7 @@ describe('PreviewBridge Core API Runtime', () => {
     let onErrorMock: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
+      errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       processMessagesMock = vi.fn();
       onErrorMock = vi.fn();
       const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
