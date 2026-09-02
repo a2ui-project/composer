@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, computed, inject, input, output, signal} from '@angular/core';
-import {DomSanitizer, SafeHtml} from '@angular/platform-browser';
+import {Component, computed, input, output, signal} from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {MatIconModule} from '@angular/material/icon';
@@ -24,7 +23,6 @@ import {MatTooltipModule} from '@angular/material/tooltip';
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {renderMarkdown} from '../../utils/markdown';
-import {safeBypassHtml} from '../../utils/sanitizer';
 import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
 import {CanvasArtifact, UiMessage} from './types';
 
@@ -46,8 +44,6 @@ import {CanvasArtifact, UiMessage} from './types';
   styleUrl: './chat-message.scss',
 })
 export class A2aChatMessage {
-  private readonly sanitizer = inject(DomSanitizer);
-
   /** UI message object containing sender role, text, thinking trace, and optional A2UI payload. */
   readonly message = input.required<UiMessage>();
   /** URL for the agent's display avatar icon. */
@@ -68,18 +64,16 @@ export class A2aChatMessage {
 
   protected readonly isThinkingExpanded = signal<boolean>(false);
 
-  protected readonly formattedContent = computed<SafeHtml | string>(() => {
+  protected readonly formattedContent = computed<string>(() => {
     const rawText = this.message().text || '';
     if (!rawText.trim()) return '';
-    const html = renderMarkdown(rawText);
-    return safeBypassHtml(this.sanitizer, html);
+    return renderMarkdown(rawText);
   });
 
-  protected readonly formattedThinking = computed<SafeHtml | string>(() => {
+  protected readonly formattedThinking = computed<string>(() => {
     const raw = this.message().thinking || '';
     if (!raw.trim()) return '';
-    const html = renderMarkdown(raw);
-    return safeBypassHtml(this.sanitizer, html);
+    return renderMarkdown(raw);
   });
 
   protected readonly formattedTime = computed<string>(() => {
