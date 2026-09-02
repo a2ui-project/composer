@@ -338,10 +338,9 @@ function categorizeSurfaceItems(items: RenderA2uiItem[]): CategorizedSurfaceItem
           allComponents.push(comp as Record<string, unknown>);
         }
       }
-    } else if (!item.createSurface && !item.updateDataModel) {
-      if (item.deleteSurface) {
-        otherItems.push(item);
-      }
+    }
+    if (item.deleteSurface) {
+      otherItems.push(item);
     }
   }
 

@@ -439,5 +439,25 @@ describe('SurfacePartitioner', () => {
       expect(inlineComps.length).toBe(3);
       expect(inlineComps.map(c => c['id'])).toEqual(['root-list', 'hotel-card', 'car-card']);
     });
+
+    it('preserves deleteSurface items in partitioned payload', () => {
+      const payloadWithDelete = [
+        {
+          version: 'v0.9',
+          createSurface: {surfaceId: 'surf-1', catalogId: 'cat-1'},
+        },
+        {
+          version: 'v0.9',
+          deleteSurface: {surfaceId: 'surf-old'},
+        },
+      ];
+
+      const partitioned = partitionA2uiSurfacePayload(payloadWithDelete);
+      expect(partitioned.hasCanvas).toBe(false);
+      expect(partitioned.inlinePayload).not.toBeNull();
+      expect(
+        partitioned.inlinePayload?.some(item => item.deleteSurface?.surfaceId === 'surf-old'),
+      ).toBe(true);
+    });
   });
 });
