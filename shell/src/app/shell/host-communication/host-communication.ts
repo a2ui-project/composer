@@ -169,19 +169,8 @@ export class HostCommunication implements OnDestroy {
       return;
     }
 
-    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-    if (!expectedUrl) {
-      return;
-    }
-
-    try {
-      const expectedOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
-      if (event.origin !== expectedOrigin) {
-        return;
-      }
-    } catch (err) {
-      return;
-    }
+    const expectedOrigin = this.resolveExpectedRendererOrigin();
+    if (!expectedOrigin || event.origin !== expectedOrigin) return;
 
     const data = event.data;
     if (data && typeof data === 'object' && data.type) {
@@ -335,6 +324,7 @@ export class HostCommunication implements OnDestroy {
     try {
       return new URL(expectedUrl, globalThis.location?.href).origin;
     } catch (err) {
+      // Ignore malformed URL
       return null;
     }
   }
@@ -373,7 +363,7 @@ export class HostCommunication implements OnDestroy {
     try {
       targetWindow.postMessage(message, targetOrigin);
     } catch (err) {
-      // Ignore malformed URL
+      // Ignore postMessage failure (e.g. detached or restricted frame)
     }
   }
 
@@ -402,7 +392,7 @@ export class HostCommunication implements OnDestroy {
     try {
       el.contentWindow.postMessage(message, targetOrigin);
     } catch (err) {
-      // Ignore malformed URL
+      // Ignore postMessage failure (e.g. detached or restricted frame)
     }
   }
 
@@ -419,18 +409,16 @@ export class HostCommunication implements OnDestroy {
     });
     for (const iframe of this.registeredIframes) {
       if (iframe.contentWindow && iframe.contentWindow !== this.iframeWindow) {
+        const targetOrigin = this.resolveExpectedRendererOrigin();
+        if (!targetOrigin) continue;
         try {
-          const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-          if (expectedUrl) {
-            const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
-            iframe.contentWindow.postMessage(
-              {
-                type: PreviewBridgeMessageType.SET_THEME,
-                payload: {theme},
-              },
-              targetOrigin,
-            );
-          }
+          iframe.contentWindow.postMessage(
+            {
+              type: PreviewBridgeMessageType.SET_THEME,
+              payload: {theme},
+            },
+            targetOrigin,
+          );
         } catch {
           // Ignore error posting theme to secondary frame
         }

@@ -965,12 +965,45 @@ describe('HostCommunication', () => {
       service.registerIframe(primaryIframe);
       expect(service.getIframeElement()).toBe(primaryIframe);
 
-      const secondaryIframe = {
-        contentWindow: {postMessage: vi.fn()},
-      } as unknown as HTMLIFrameElement;
+      const secondaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const secondaryIframe = {contentWindow: secondaryWindow} as unknown as HTMLIFrameElement;
       service.registerSecondaryIframe(secondaryIframe);
 
       expect(service.getIframeElement()).toBe(primaryIframe);
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: secondaryWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      expect(service.latestEnvelope()?.sourceWindow).toBe(secondaryWindow);
+      expect(service.getIframeElement()).toBe(primaryIframe);
+    });
+
+    it('ignores inbound messages from a secondary iframe after it is unregistered', () => {
+      const primaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const primaryIframe = {contentWindow: primaryWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(primaryIframe);
+
+      const secondaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const secondaryIframe = {contentWindow: secondaryWindow} as unknown as HTMLIFrameElement;
+      service.registerSecondaryIframe(secondaryIframe);
+      service.unregisterSecondaryIframe(secondaryIframe);
+
+      const envelopeBeforeDispatch = service.latestEnvelope();
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: secondaryWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      expect(service.latestEnvelope()).toBe(envelopeBeforeDispatch);
     });
 
     it('does not clear the outbound buffer or flip global readiness when registering a secondary iframe', () => {
