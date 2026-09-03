@@ -16,6 +16,7 @@
     "prettier:check": "yarn workspaces foreach -A --exclude a2ui-composer-root run prettier:check",
     "tsc": "yarn --cwd shell tsc --noEmit && yarn --cwd bridge tsc --project tsconfig.bridge.json --noEmit",
     "clean": "yarn workspaces foreach -A --exclude a2ui-composer-root run clean",
+    "generate:demos": "node scripts/generate-demos.mjs",
     "lint": "yarn workspaces foreach -A --exclude a2ui-composer-root run lint"
   },
   "resolutions": {
