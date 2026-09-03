@@ -125,7 +125,36 @@ describe('DemosCatalog', () => {
     expect(service.demos()).toBeNull();
   });
 
-  it('falls back to an empty array once the 2 second timeout elapses', () => {
+  it('falls back to an empty array once the 2 second timeout elapses, once the coordinator has been ready', () => {
+    vi.useFakeTimers();
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    // The initial request cannot be answered (the coordinator frame is still
+    // on about:blank), so no fallback timer is armed for it yet. A
+    // RENDERER_READY marks the coordinator ready and triggers the re-request
+    // that the fallback timer below actually covers.
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    expect(service.loadingDemos()).toBe(true);
+    expect(service.demos()).toBeNull();
+
+    vi.advanceTimersByTime(2000);
+
+    expect(service.loadingDemos()).toBe(false);
+    expect(service.demos()).toEqual([]);
+  });
+
+  it('leaves demos unresolved rather than falsely empty when the coordinator never reports ready', () => {
     vi.useFakeTimers();
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
@@ -136,10 +165,14 @@ describe('DemosCatalog', () => {
     expect(service.loadingDemos()).toBe(true);
     expect(service.demos()).toBeNull();
 
+    // No RENDERER_READY ever arrives (e.g. a slow-booting dev bundle still
+    // mid-boot). The initial request was never landable, so the fallback
+    // timer must never have been armed for it: falling back to [] here
+    // would be the "No Demos Available" flash from finding A1.
     vi.advanceTimersByTime(2000);
 
-    expect(service.loadingDemos()).toBe(false);
-    expect(service.demos()).toEqual([]);
+    expect(service.loadingDemos()).toBe(true);
+    expect(service.demos()).toBeNull();
   });
 
   it('clears the cache back to null when setDemosActive(false) is called', () => {

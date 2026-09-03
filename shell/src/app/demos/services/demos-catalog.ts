@@ -63,6 +63,21 @@ export class DemosCatalog {
    * RENDERER_READY. React `<StrictMode>` emits RENDERER_READY twice per
    * frame mount, so this dedupes the resulting re-request to once per
    * window identity.
+   *
+   * This also doubles as "has this coordinator ever finished booting", used
+   * by {@link requestDemos} to decide whether the 2s fallback timeout can be
+   * armed at all (see finding A1).
+   *
+   * Caveat: a WindowProxy's identity is stable across the frame's own
+   * navigations, so this WeakSet cannot by itself distinguish a coordinator
+   * reload's fresh RENDERER_READY from a duplicate of the one before it —
+   * the same trap that was a live bug in `DemoCard` before it switched to a
+   * per-load flag reset on the frame's `load` event. It is not a live bug
+   * here only because the sole thing that reloads the coordinator frame
+   * (switching the active renderer) also swaps `activeCatalog()`'s object
+   * identity, which independently re-requests demos via the `effect()`
+   * below. If that coupling ever changes, this WeakSet will silently
+   * swallow the coordinator's post-reload readiness.
    */
   private readonly readyWindows = new WeakSet<Window>();
 
@@ -138,12 +153,22 @@ export class DemosCatalog {
 
     this.hostCommunication.sendToFrame({type: PreviewBridgeMessageType.GET_DEMOS}, coordinator);
 
-    this.demosTimeoutId = setTimeout(() => {
-      if (this._loadingDemos()) {
-        this._loadingDemos.set(false);
-        this._demos.set([]);
-      }
-    }, 2000);
+    // The very first GET_DEMOS after a fresh mount can never be answered:
+    // the coordinator iframe was created microseconds ago and is still on
+    // about:blank. The RENDERER_READY handler above is what actually
+    // rescues that case by re-requesting once the frame boots. Arming the
+    // fallback timeout for an unanswerable request would race that rescue —
+    // a cold dev bundle routinely takes longer than 2s to boot, so the
+    // timeout would fire first and flash "No Demos Available". Only arm it
+    // once this coordinator has proven it can respond at all.
+    if (coordinator.contentWindow && this.readyWindows.has(coordinator.contentWindow)) {
+      this.demosTimeoutId = setTimeout(() => {
+        if (this._loadingDemos()) {
+          this._loadingDemos.set(false);
+          this._demos.set([]);
+        }
+      }, 2000);
+    }
   }
 
   /**
