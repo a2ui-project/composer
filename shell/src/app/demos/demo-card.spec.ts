@@ -193,6 +193,36 @@ describe('DemoCard sandboxed live demo frame', () => {
     expect(fixture.componentInstance.cardHeight()).toBe(320);
   });
 
+  it('adopts the first rendered height instead of the guest bridge pre-render report', () => {
+    const fixture = mountCard(true);
+
+    // preview-bridge dispatches RENDERER_READY and a SURFACE_RESIZE back to back, so the
+    // first report measures an empty document whose scrollHeight is the iframe's own CSS
+    // height (--demo-card-min-h, 200px). Freezing on it pinned every card in the wall to
+    // the minimum and clipped the demo under .demo-card-surface { overflow: hidden }.
+    emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 200, width: 480});
+    expect(fixture.componentInstance.cardHeight()).toBe(200);
+
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 420, width: 480});
+    expect(fixture.componentInstance.cardHeight()).toBe(420);
+  });
+
+  it('freezes once a rendered height has been adopted after a pre-render report', () => {
+    const fixture = mountCard(true);
+
+    emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 200, width: 480});
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 420, width: 480});
+    expect(fixture.componentInstance.cardHeight()).toBe(420);
+
+    // Continuing to listen past the pre-render report must not weaken the freeze: later
+    // reflows inside the guest would otherwise reshuffle the masonry columns under the
+    // reader.
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 500, width: 480});
+    expect(fixture.componentInstance.cardHeight()).toBe(420);
+  });
+
   it('clamps an out-of-range reported height into the card bounds', () => {
     const fixture = mountCard(true);
 
