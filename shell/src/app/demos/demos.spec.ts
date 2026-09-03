@@ -21,7 +21,7 @@ import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {EMPTY, ReplaySubject} from 'rxjs';
 import {type Demo} from 'a2ui-bridge';
-import {Demos} from './demos';
+import {Demos, MAX_MOUNTED_CARDS} from './demos';
 import {DemosHarness} from './test/demos.harness';
 import {DemosCatalog} from './services/demos-catalog';
 import {HostCommunication} from '../shell/host-communication/host-communication';
@@ -31,9 +31,6 @@ import {
   ThemePreference,
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
-
-/** Largest number of live renderer frames the wall is allowed to keep mounted. */
-const MAX_MOUNTED_CARDS = 6;
 
 class MockDemosCatalog {
   readonly demos = signal<Demo[] | null>(null);
@@ -169,11 +166,27 @@ describe('Demos Component', () => {
     await flushIntersections();
 
     expect(await harness.getCardCount()).toBe(12);
-    expect(fixture.componentInstance.mountedCount()).toBeGreaterThan(0);
-    expect(fixture.componentInstance.mountedCount()).toBeLessThanOrEqual(MAX_MOUNTED_CARDS);
+    expect(fixture.componentInstance.mountedCount()).toBe(MAX_MOUNTED_CARDS);
     const mountedFrames = (fixture.nativeElement as HTMLElement).querySelectorAll(
       '.demos-wall iframe',
     );
-    expect(mountedFrames.length).toBeLessThanOrEqual(MAX_MOUNTED_CARDS);
+    expect(mountedFrames.length).toBe(MAX_MOUNTED_CARDS);
+  });
+
+  it('shows the loading state while demos are unresolved, before any request is in flight', async () => {
+    expect(demosCatalogMock.demos()).toBeNull();
+    expect(demosCatalogMock.loadingDemos()).toBe(false);
+
+    expect(await harness.isLoading()).toBe(true);
+    expect(await harness.getCardCount()).toBe(0);
+    expect(await harness.getEmptyStateSubtitleText()).toBeNull();
+  });
+
+  it('broadcasts the theme exactly once when the route mounts', () => {
+    const hostCommunicationMock = TestBed.inject(
+      HostCommunication,
+    ) as unknown as MockHostCommunication;
+
+    expect(hostCommunicationMock.sendTheme).toHaveBeenCalledTimes(1);
   });
 });
