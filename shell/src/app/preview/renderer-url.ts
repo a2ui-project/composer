@@ -22,10 +22,9 @@ import {isValidHttpUrl} from '../utils/url';
  * http(s) URL before it is handed to the caller for sanitization.
  */
 export function buildRendererUrl(
-  rendererUrl: string | null | undefined,
+  currentUrl: string | null | undefined,
   theme: string,
 ): string | null {
-  const currentUrl = rendererUrl;
   if (!currentUrl) return null;
 
   try {

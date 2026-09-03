@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, afterEach, vi} from 'vitest';
+import {describe, it, expect} from 'vitest';
 import {buildRendererUrl} from './renderer-url';
 
 describe('buildRendererUrl', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it('returns null when the resolved URL is not a valid http(s) URL', () => {
     expect(buildRendererUrl('javascript:alert(1)', 'light')).toBeNull();
   });
