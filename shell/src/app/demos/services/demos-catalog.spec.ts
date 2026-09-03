@@ -24,7 +24,7 @@ import {
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType, type Demo} from 'a2ui-bridge';
-import {DemosCatalog} from './demos-catalog';
+import {DemosCatalog, type TrackedDemo} from './demos-catalog';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 
 class MockCatalogManagement {
@@ -39,6 +39,14 @@ class MockHostCommunication {
 /** Builds a fake coordinator iframe with a distinct contentWindow identity. */
 function createCoordinator(): HTMLIFrameElement {
   return {contentWindow: {} as Window} as HTMLIFrameElement;
+}
+
+/**
+ * Pairs a demo with the track key the service is expected to assign it, for
+ * comparison against the cached array.
+ */
+function tracked(demo: Demo, trackKey: string): TrackedDemo {
+  return {...demo, trackKey};
 }
 
 describe('DemosCatalog', () => {
@@ -101,7 +109,7 @@ describe('DemosCatalog', () => {
     });
     TestBed.tick();
 
-    expect(service.demos()).toEqual(demos);
+    expect(service.demos()).toEqual([tracked(demos[0], 'demo-1')]);
   });
 
   it('drops null entries from a DEMOS payload instead of stranding the wall', () => {
@@ -126,7 +134,7 @@ describe('DemosCatalog', () => {
     });
     TestBed.tick();
 
-    expect(service.demos()).toEqual([first, second]);
+    expect(service.demos()).toEqual([tracked(first, 'demo-1'), tracked(second, 'demo-2')]);
     expect(service.loadingDemos()).toBe(false);
   });
 
@@ -152,7 +160,7 @@ describe('DemosCatalog', () => {
     // Both fields reach the DOM only through interpolation and a plain-text
     // [title] attribute, so HTML-encoding them here would surface literally
     // as "Tables &amp; Charts" on the card.
-    expect(service.demos()).toEqual(demos);
+    expect(service.demos()).toEqual([tracked(demos[0], 'demo-1')]);
   });
 
   it('replaces non-string demo text with an empty string', () => {
@@ -171,7 +179,138 @@ describe('DemosCatalog', () => {
     });
     TestBed.tick();
 
-    expect(service.demos()).toEqual([{id: 'demo-1', name: '', description: '', a2ui: []}]);
+    expect(service.demos()).toEqual([
+      {id: 'demo-1', name: '', description: '', a2ui: [], trackKey: 'demo-1'},
+    ]);
+  });
+
+  it('keeps both demos and keys them apart when a renderer reuses an id', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    const first: Demo = {id: 'chart', name: 'Chart One', description: 'First', a2ui: []};
+    const second: Demo = {id: 'chart', name: 'Chart Two', description: 'Second', a2ui: []};
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: [first, second],
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    // Dropping the duplicate would silently discard renderer-supplied content,
+    // and leaving both on one key raises NG0955 in a dev build and reconciles
+    // two cards onto a single frame in a production one.
+    const demos = service.demos() ?? [];
+    expect(demos).toHaveLength(2);
+    expect(new Set(demos.map(demo => demo.trackKey)).size).toBe(2);
+    // The renderer's own id and display text survive the deduplication.
+    expect(demos.map(demo => demo.id)).toEqual(['chart', 'chart']);
+    expect(demos.map(demo => demo.name)).toEqual(['Chart One', 'Chart Two']);
+    expect(demos.map(demo => demo.description)).toEqual(['First', 'Second']);
+    expect(demos[0].trackKey).toBe('chart');
+  });
+
+  it('keys demos whose id is missing or empty', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: [
+        {name: 'No Id', description: 'Absent', a2ui: []},
+        {id: '', name: 'Empty Id', description: 'Blank', a2ui: []},
+      ],
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    const demos = service.demos() ?? [];
+    expect(demos).toHaveLength(2);
+    expect(demos.map(demo => demo.name)).toEqual(['No Id', 'Empty Id']);
+    for (const demo of demos) {
+      expect(typeof demo.trackKey).toBe('string');
+      expect(demo.trackKey.length).toBeGreaterThan(0);
+    }
+    expect(new Set(demos.map(demo => demo.trackKey)).size).toBe(2);
+  });
+
+  it('keys demos whose id is not a string, leaving the id itself untouched', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: [
+        {id: 42, name: 'Numeric Id', description: 'A number', a2ui: []},
+        {id: {}, name: 'Object Id', description: 'An object', a2ui: []},
+      ],
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    const demos = service.demos() ?? [];
+    expect(demos).toHaveLength(2);
+    for (const demo of demos) {
+      expect(typeof demo.trackKey).toBe('string');
+      expect(demo.trackKey.length).toBeGreaterThan(0);
+    }
+    expect(new Set(demos.map(demo => demo.trackKey)).size).toBe(2);
+    // The id is protocol data belonging to the renderer; the wall keys off
+    // `trackKey` instead of rewriting it.
+    expect((demos[0] as {id: unknown}).id).toBe(42);
+    expect((demos[1] as {id: unknown}).id).toEqual({});
+  });
+
+  it('loses no demo to a bad id, and keys every survivor uniquely', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    // Every way a renderer's ids can fail the wall at once, including an id
+    // that collides with the suffix form a duplicate is keyed into.
+    const payload = [
+      {id: 'demo-1', name: 'One', description: 'First', a2ui: []},
+      {id: 'demo-1', name: 'One again', description: 'Duplicate', a2ui: []},
+      {id: '', name: 'Empty', description: 'Blank id', a2ui: []},
+      {name: 'Missing', description: 'No id at all', a2ui: []},
+      {id: 7, name: 'Numeric', description: 'Non-string id', a2ui: []},
+      {id: 'demo-1#1', name: 'Collides', description: 'Matches a suffixed key', a2ui: []},
+    ];
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    const demos = service.demos() ?? [];
+    expect(demos).toHaveLength(payload.length);
+    expect(demos.map(demo => demo.name)).toEqual(payload.map(entry => entry.name));
+
+    const trackKeys = demos.map(demo => demo.trackKey);
+    expect(trackKeys.every(key => typeof key === 'string' && key.length > 0)).toBe(true);
+    expect(new Set(trackKeys).size).toBe(payload.length);
   });
 
   it('ignores a DEMOS envelope originating from a window other than the coordinator', () => {
@@ -302,7 +441,7 @@ describe('DemosCatalog', () => {
       sourceWindow: coordinator.contentWindow,
     });
     TestBed.tick();
-    expect(service.demos()).toEqual(demos);
+    expect(service.demos()).toEqual([tracked(demos[0], 'demo-1')]);
 
     service.setDemosActive(false);
     TestBed.tick();

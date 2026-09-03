@@ -52,8 +52,13 @@ export const MAX_MOUNTED_CARDS = 6;
  */
 const MOUNT_ROOT_MARGIN = '100% 0px';
 
-/** Attribute carrying a card's demo id so intersection entries map back to demos. */
-const DEMO_ID_ATTRIBUTE = 'data-demo-id';
+/**
+ * Attribute carrying a card's track key so intersection entries map back to
+ * demos. It carries the shell-assigned `trackKey` rather than the renderer's
+ * own `Demo.id`, because only the former is guaranteed to be present and
+ * unique across the wall.
+ */
+const DEMO_KEY_ATTRIBUTE = 'data-demo-key';
 
 /**
  * Hosts the `/demos` route: a hidden coordinator frame plus a lazily mounted
@@ -120,16 +125,16 @@ export class Demos implements OnInit, OnDestroy {
     read: ElementRef,
   });
 
-  private readonly mountedIdsSignal = signal<ReadonlySet<string>>(new Set<string>());
+  private readonly mountedKeysSignal = signal<ReadonlySet<string>>(new Set<string>());
 
-  /** Ids of the demos whose cards currently hold a live renderer frame. */
-  protected readonly mountedIds = this.mountedIdsSignal.asReadonly();
+  /** Track keys of the demos whose cards currently hold a live renderer frame. */
+  protected readonly mountedKeys = this.mountedKeysSignal.asReadonly();
 
   /** Number of demo cards currently holding a live renderer frame. */
-  readonly mountedCount = computed(() => this.mountedIdsSignal().size);
+  readonly mountedCount = computed(() => this.mountedKeysSignal().size);
 
-  /** Ids reported by the observer as within one viewport of the reader. */
-  private readonly visibleIds = new Set<string>();
+  /** Track keys reported by the observer as within one viewport of the reader. */
+  private readonly visibleKeys = new Set<string>();
 
   /** Card host elements currently handed to the observer. */
   private readonly observedElements = new Set<Element>();
@@ -187,7 +192,7 @@ export class Demos implements OnInit, OnDestroy {
     this.intersectionObserver?.disconnect();
     this.intersectionObserver = null;
     this.observedElements.clear();
-    this.visibleIds.clear();
+    this.visibleKeys.clear();
   }
 
   /**
@@ -196,14 +201,14 @@ export class Demos implements OnInit, OnDestroy {
    */
   private onIntersection(entries: IntersectionObserverEntry[]): void {
     for (const entry of entries) {
-      const demoId = readDemoId(entry.target);
-      if (!demoId) {
+      const trackKey = readTrackKey(entry.target);
+      if (!trackKey) {
         continue;
       }
       if (entry.isIntersecting) {
-        this.visibleIds.add(demoId);
+        this.visibleKeys.add(trackKey);
       } else {
-        this.visibleIds.delete(demoId);
+        this.visibleKeys.delete(trackKey);
       }
     }
     this.reconcileMountedCards();
@@ -223,9 +228,9 @@ export class Demos implements OnInit, OnDestroy {
       }
       observer.unobserve(element);
       this.observedElements.delete(element);
-      const demoId = readDemoId(element);
-      if (demoId) {
-        this.visibleIds.delete(demoId);
+      const trackKey = readTrackKey(element);
+      if (trackKey) {
+        this.visibleKeys.delete(trackKey);
       }
     }
 
@@ -248,12 +253,12 @@ export class Demos implements OnInit, OnDestroy {
    * is then spent on the remaining visible cards in document order.
    */
   private reconcileMountedCards(): void {
-    const previous = this.mountedIdsSignal();
+    const previous = this.mountedKeysSignal();
     const next = new Set<string>();
 
-    for (const demoId of previous) {
-      if (this.visibleIds.has(demoId)) {
-        next.add(demoId);
+    for (const trackKey of previous) {
+      if (this.visibleKeys.has(trackKey)) {
+        next.add(trackKey);
       }
     }
 
@@ -261,32 +266,32 @@ export class Demos implements OnInit, OnDestroy {
       if (next.size >= MAX_MOUNTED_CARDS) {
         break;
       }
-      if (this.visibleIds.has(demo.id)) {
-        next.add(demo.id);
+      if (this.visibleKeys.has(demo.trackKey)) {
+        next.add(demo.trackKey);
       }
     }
 
     if (areSetsEqual(previous, next)) {
       return;
     }
-    this.mountedIdsSignal.set(next);
+    this.mountedKeysSignal.set(next);
   }
 }
 
 /**
- * Reads the demo id a card host element was tagged with.
+ * Reads the track key a card host element was tagged with.
  * @param element Card host element observed by the wall.
- * @return The demo id, or null when the element carries none.
+ * @return The demo's track key, or null when the element carries none.
  */
-function readDemoId(element: Element): string | null {
-  return element.getAttribute(DEMO_ID_ATTRIBUTE);
+function readTrackKey(element: Element): string | null {
+  return element.getAttribute(DEMO_KEY_ATTRIBUTE);
 }
 
 /**
- * Compares two id sets by content.
+ * Compares two track-key sets by content.
  * @param a First set.
  * @param b Second set.
- * @return Whether both sets hold exactly the same ids.
+ * @return Whether both sets hold exactly the same keys.
  */
 function areSetsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   if (a.size !== b.size) {

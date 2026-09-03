@@ -21,6 +21,27 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {PreviewBridgeMessageType, type Demo} from 'a2ui-bridge';
 
 /**
+ * A renderer-supplied {@link Demo} paired with the shell's own display
+ * identity.
+ *
+ * `Demo.id` is protocol data: a renderer is free to omit it, send a non-string,
+ * or reuse one across two demos, and a wall keyed on it survives none of those.
+ * The key it needs is the `@for` track expression, the mounted-cards set member
+ * and a DOM attribute all at once, so a duplicate raises NG0955 in a dev build
+ * and silently reconciles two cards onto one frame in a production one.
+ * `trackKey` is assigned by {@link sanitizeDemos} and is guaranteed to be a
+ * non-empty string that is unique across one demos payload; the renderer's own
+ * `id` is left exactly as it arrived.
+ *
+ * This type is deliberately internal to the shell: `Demo` is a published
+ * protocol type in `bridge/src/render-config.ts` and gains nothing from it.
+ */
+export interface TrackedDemo extends Demo {
+  /** Shell-assigned identity: non-empty, and unique within one demos payload. */
+  readonly trackKey: string;
+}
+
+/**
  * Owns the request/cache/timeout lifecycle for demos fetched from the
  * renderer connected over the bridge.
  *
@@ -40,7 +61,7 @@ export class DemosCatalog {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly destroyRef = inject(DestroyRef);
 
-  private readonly _demos = signal<Demo[] | null>(null);
+  private readonly _demos = signal<TrackedDemo[] | null>(null);
   /** Cached demos returned by the connected renderer, or null if unresolved. */
   readonly demos = this._demos.asReadonly();
 
@@ -239,13 +260,20 @@ export class DemosCatalog {
 
 /**
  * Normalizes a renderer-supplied demos array: entries that are not objects
- * are dropped, and each surviving demo's `name`/`description` are reduced to
- * plain strings.
+ * are dropped, each surviving demo's `name`/`description` are reduced to
+ * plain strings, and every survivor is given a {@link TrackedDemo.trackKey}
+ * that is non-empty and unique across the returned array.
  *
  * The array itself is guarded by `Array.isArray` at the call site, but its
  * elements are not, and this runs inside the `messageStream$` subscriber
  * where a throw escapes to RxJS's global unhandled-error handler: the DEMOS
  * envelope would be dropped and the wall left spinning on `loadingDemos`.
+ *
+ * Nothing renderer-supplied is rewritten to establish that key. Demos are
+ * never dropped for a bad id, and `id` itself is passed through untouched so
+ * that a renderer keeps whatever identity it published; the wall consumes
+ * `trackKey` instead. `name` and `description` are display content and are
+ * likewise never touched for keying purposes.
  *
  * `name` and `description` are deliberately not HTML-sanitized. Their only
  * consumers are `{{ }}` interpolation and a plain-text `[title]` attribute
@@ -256,14 +284,52 @@ export class DemosCatalog {
  * sanitization has to be reintroduced there, at that sink.
  * @param demos Raw demos array received from the renderer.
  * @return A new array holding only object entries, with plain-text
- *     `name`/`description` fields.
+ *     `name`/`description` fields and a unique `trackKey` each.
  */
-function sanitizeDemos(demos: readonly unknown[]): Demo[] {
-  return demos
-    .filter((demo): demo is Demo => typeof demo === 'object' && demo !== null)
-    .map(demo => ({
+function sanitizeDemos(demos: readonly unknown[]): TrackedDemo[] {
+  const usedKeys = new Set<string>();
+  const tracked: TrackedDemo[] = [];
+
+  demos.forEach((entry, index) => {
+    if (typeof entry !== 'object' || entry === null) {
+      return;
+    }
+    const demo = entry as Demo;
+    tracked.push({
       ...demo,
       name: typeof demo.name === 'string' ? demo.name : '',
       description: typeof demo.description === 'string' ? demo.description : '',
-    }));
+      // Assigned after the spread so a renderer that happens to publish its own
+      // `trackKey` field cannot displace the one guaranteed here.
+      trackKey: reserveTrackKey(demo.id, index, usedKeys),
+    });
+  });
+
+  return tracked;
+}
+
+/**
+ * Reserves a unique track key for one demo, preferring the renderer's own id.
+ *
+ * A usable id (a non-empty string) is used verbatim, which keeps the wall's
+ * DOM attributes readable and matches what a well-behaved renderer intends. An
+ * id that is missing, empty or not a string falls back to the demo's position
+ * in the payload, and any key already taken — by an earlier duplicate id, or
+ * by an id that collides with a positional fallback — is suffixed until it is
+ * free. The loop terminates because each attempt proposes a key it has not
+ * proposed before and only finitely many are taken.
+ * @param id The `id` field as received from the renderer, of unknown type.
+ * @param index Position of the demo within the payload.
+ * @param usedKeys Keys already handed out for this payload; mutated here.
+ * @return A non-empty key that no other demo in this payload holds.
+ */
+function reserveTrackKey(id: unknown, index: number, usedKeys: Set<string>): string {
+  const base = typeof id === 'string' && id !== '' ? id : `demo-${index}`;
+  let key = base;
+  let suffix = 1;
+  while (usedKeys.has(key)) {
+    key = `${base}#${suffix++}`;
+  }
+  usedKeys.add(key);
+  return key;
 }
