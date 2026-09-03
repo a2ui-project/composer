@@ -32,6 +32,7 @@ import {
   SurfaceStateSubscription,
   CatalogDetails,
   type ComponentUsages,
+  type Demo,
 } from '../index.js';
 
 /**
@@ -49,6 +50,8 @@ export interface LitSandboxOptions {
   getComponentUsages?: () => Promise<ComponentUsages>;
   /** Optional callback when theme changes. */
   onThemeChange?: (theme: ThemePreference) => void;
+  /** Optional callback to retrieve the renderer's demos. */
+  getDemos?: () => Promise<Demo[]>;
 }
 
 /**
@@ -78,6 +81,8 @@ export class A2uiSandboxRoot extends LitElement {
   static getComponentUsages?: () => Promise<ComponentUsages> = undefined;
   /** Optional callback when theme changes shared statically */
   static onThemeChange?: (theme: ThemePreference) => void = undefined;
+  /** Optional callback to retrieve the renderer's demos shared statically */
+  static getDemos?: () => Promise<Demo[]> = undefined;
 
   // Core dynamic processing engine mapping actions outbox proxies
   private processor = new MessageProcessor(
@@ -130,6 +135,7 @@ export class A2uiSandboxRoot extends LitElement {
       surfaceGroup: this.processor.model,
       catalogJson: (this.constructor as typeof A2uiSandboxRoot).catalogJson,
       getComponentUsages: (this.constructor as typeof A2uiSandboxRoot).getComponentUsages,
+      getDemos: (this.constructor as typeof A2uiSandboxRoot).getDemos,
       onThemeChange: (this.constructor as typeof A2uiSandboxRoot).onThemeChange,
       onCatalogResolved: catalogId => {
         for (const catalog of (this.constructor as typeof A2uiSandboxRoot).catalogs) {
@@ -193,6 +199,7 @@ export function bootstrapLitSandbox<T extends ComponentApi>(
     clazz.catalogJson = options?.catalogJson;
     clazz.markdownRenderer = options?.markdownRenderer;
     clazz.getComponentUsages = options?.getComponentUsages;
+    clazz.getDemos = options?.getDemos;
     clazz.onThemeChange = options?.onThemeChange;
   };
 
