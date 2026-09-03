@@ -95,9 +95,6 @@ export class DemoCard {
 
   protected readonly iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('demoIframe');
 
-  /** Bumped on every guest frame load so the bridge subscription re-binds to the live window. */
-  private readonly frameLoadTick = signal(0);
-
   protected readonly safeRendererUrl = computed(() => {
     const built = buildRendererUrl(
       this.startupResolution.resolvedUrl(),
@@ -131,7 +128,6 @@ export class DemoCard {
     // renderer readiness for every other consumer each time a card mounts.
     effect(onCleanup => {
       const element = this.iframeRef()?.nativeElement ?? null;
-      this.frameLoadTick();
       if (!element) {
         return;
       }
@@ -151,11 +147,6 @@ export class DemoCard {
         this.hostCommunication.unregisterSecondaryIframe(element);
       });
     });
-  }
-
-  /** Re-binds the bridge subscription when the guest frame navigates to a fresh window. */
-  protected onFrameLoad(): void {
-    this.frameLoadTick.update(tick => tick + 1);
   }
 
   /**

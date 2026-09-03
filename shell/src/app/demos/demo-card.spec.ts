@@ -174,4 +174,46 @@ describe('DemoCard sandboxed live demo frame', () => {
 
     expect(fixture.componentInstance.state()).toBe('error');
   });
+
+  it('registers as a secondary consumer and never claims the primary iframe slot', () => {
+    const registerSecondarySpy = vi.spyOn(hostCommunication, 'registerSecondaryIframe');
+    const registerIframeSpy = vi.spyOn(hostCommunication, 'registerIframe');
+
+    const fixture = mountCard(true);
+    const iframe = frameOf(fixture);
+
+    // registerIframe clears the shared outboundMessageBuffer and resets the global
+    // isRendererReadySignal on every call, which would wipe in-flight sends for every
+    // other consumer in the app when a card lazily mounts. Cards must only ever use
+    // registerSecondaryIframe, which performs neither reset.
+    expect(iframe).not.toBeNull();
+    expect(registerSecondarySpy).toHaveBeenCalledWith(iframe);
+    expect(registerIframeSpy).not.toHaveBeenCalled();
+  });
+
+  it('ignores envelopes for message types it does not act on and envelopes from foreign windows', () => {
+    const fixture = mountCard(true);
+    sendToFrameSpy.mockClear();
+
+    // 37 of the 43 demos set sendDataModel: true, so cards constantly receive
+    // DATA_MODEL_CHANGE echoes from their own frame that this page has no use for.
+    emitFromCard(fixture, PreviewBridgeMessageType.DATA_MODEL_CHANGE, {
+      updateDataModel: {surfaceId: 'surface-weather'},
+    });
+
+    // A SURFACE_RESIZE dispatched by some other window entirely must also be ignored,
+    // even though the type is one this card otherwise acts on.
+    const foreignEnvelope: MessageEnvelope = {
+      type: PreviewBridgeMessageType.SURFACE_RESIZE,
+      payload: {height: 320, width: 480},
+      origin: RENDERER_ORIGIN,
+      timestamp: Date.now(),
+      sourceWindow: {} as Window,
+    };
+    hostCommunication.TEST_ONLY.triggerMessageStreamForTesting(foreignEnvelope);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.cardHeight()).toBeNull();
+    expect(sendToFrameSpy).not.toHaveBeenCalled();
+  });
 });
