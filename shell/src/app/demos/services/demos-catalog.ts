@@ -116,10 +116,16 @@ export class DemosCatalog {
    * `CatalogManagement.activeCatalog()` directly, because that signal changes
    * object identity on every completed catalog handshake even when the catalog
    * is byte-identical: the A2UI_CATALOG handler `structuredClone`s the payload
-   * and sets the result. And handshakes happen constantly on this route —
+   * and sets the result. And handshakes happen repeatedly on this route —
    * `CatalogManagement` subscribes to `messageStream$` with no `sourceWindow`
-   * filter, so every one of the N demo card frames registered via
-   * `registerSecondaryIframe` starts a fresh one when it reports RENDERER_READY.
+   * filter, so a RENDERER_READY from any of the N demo card frames registered
+   * via `registerSecondaryIframe` can start a fresh one, not just one from the
+   * coordinator. Not every READY does: `CatalogManagement` ignores one that
+   * arrives while a handshake is still in flight (it warns 'Handshake already
+   * in progress. Ignoring RENDERER_READY.'), so a burst of cards mounting
+   * together collapses into fewer handshakes than cards. The ones that do land
+   * are the sequential READYs — cards mounting as the reader scrolls, each
+   * after the previous handshake has settled — and they are enough.
    *
    * Keyed on the object, each of those replies re-entered `requestDemos()`,
    * which sets `_demos` back to null; the route's `@else` branch was destroyed,
