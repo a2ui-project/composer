@@ -68,7 +68,7 @@ export declare interface ComponentUsage {
 export type ComponentUsages = Record<string, ComponentUsage>;
 
 /**
- * Represents a message structure transmitted across the Preview Bridge iframe boundary.
+ * Represents a single named demo the renderer can serve over the Preview Bridge.
  *
  * NOTE: Declared as a `declare interface` so `tsickle` generates compiler externs
  * definitions for JSCompiler (Closure Compiler), preventing property renaming across frame boundaries.
