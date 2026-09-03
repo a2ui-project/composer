@@ -25,6 +25,7 @@ import {
   provideZonelessChangeDetection,
   createEnvironmentInjector,
   EnvironmentInjector,
+  type ApplicationConfig,
 } from '@angular/core';
 import {a2uiBridge} from 'a2ui-bridge';
 
@@ -155,5 +156,54 @@ describe('A2uiSandbox', () => {
       expect(demo.a2ui[0].version).toBe('v0.9');
     }
     expect(new Set(DEMOS.map(d => d.id)).size).toBe(DEMOS.length);
+  });
+
+  it('wires getDemos from the bootstrap providers through to the bridge', async () => {
+    // Intercept the real bootstrap so the sandbox options main.ts actually
+    // passes can be inspected without standing up a second application.
+    // Reading getDemos back out of those providers (rather than out of a
+    // locally built options object) is what makes deleting getDemos from
+    // main.ts fail this test.
+    const bootstrapConfigs: ApplicationConfig[] = [];
+    vi.doMock('@angular/platform-browser', async () => {
+      const actual = await vi.importActual<typeof import('@angular/platform-browser')>(
+        '@angular/platform-browser',
+      );
+      return {
+        ...actual,
+        bootstrapApplication: (component: unknown, config: ApplicationConfig) => {
+          bootstrapConfigs.push(config);
+          return Promise.resolve();
+        },
+      };
+    });
+
+    let environmentInjector: EnvironmentInjector | undefined;
+    try {
+      await import('./main.js');
+      expect(bootstrapConfigs).toHaveLength(1);
+
+      const attachRenderer = vi.mocked(a2uiBridge.attachRenderer);
+      const callsBefore = attachRenderer.mock.calls.length;
+      environmentInjector = createEnvironmentInjector(
+        bootstrapConfigs[0].providers,
+        TestBed.inject(EnvironmentInjector),
+      );
+
+      // Resolving the connection is what forwards the bootstrap options to the bridge.
+      expect(environmentInjector.get(A2uiSandboxConnection)).toBeTruthy();
+      expect(attachRenderer.mock.calls).toHaveLength(callsBefore + 1);
+
+      const rendererConfig = attachRenderer.mock.calls[callsBefore][1];
+      expect(rendererConfig.getDemos).toBeTypeOf('function');
+
+      const {DEMOS} = await import('./demos.js');
+      const served = await rendererConfig.getDemos!();
+      expect(served).toHaveLength(43);
+      expect(served).toBe(DEMOS);
+    } finally {
+      environmentInjector?.destroy();
+      vi.doUnmock('@angular/platform-browser');
+    }
   });
 });
