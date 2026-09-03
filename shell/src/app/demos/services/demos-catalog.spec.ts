@@ -381,18 +381,62 @@ describe('DemosCatalog', () => {
     expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
   });
 
-  it('re-requests demos when activeCatalog receives a new object identity', () => {
+  it('re-requests demos when activeCatalog resolves to a different catalog id', () => {
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
     service.setDemosActive(true);
-    catalogManagementMock.activeCatalog.set({components: {}});
+    catalogManagementMock.activeCatalog.set({catalogId: 'catalog-ng', components: {}});
     TestBed.tick();
 
     expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
 
-    // A renderer switch produces a brand new Catalog object identity, even if
-    // structurally similar to the previous one.
-    catalogManagementMock.activeCatalog.set({components: {}});
+    // Switching renderers in Settings resolves a different renderer's catalog, and
+    // that genuinely different catalog must re-request the wall's demos.
+    catalogManagementMock.activeCatalog.set({catalogId: 'catalog-lit', components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not re-request when a re-handshake yields the same catalog id', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({catalogId: 'catalog-ng', components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+
+    // `CatalogManagement` subscribes to messageStream$ with no sourceWindow filter, so
+    // every demo card frame's RENDERER_READY starts a fresh catalog handshake, and each
+    // A2UI_CATALOG reply structuredClones the payload into a brand new object identity.
+    // Keyed on the object, each one re-entered requestDemos(), which nulls `demos`, tears
+    // down every card, and makes the remounted frames report ready again: the wall tore
+    // itself down and rebuilt on a loop.
+    catalogManagementMock.activeCatalog.set({catalogId: 'catalog-ng', components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+    expect(service.demos()).toBeNull();
+    expect(service.loadingDemos()).toBe(true);
+  });
+
+  it('re-requests across a renderer switch even when the new catalog reuses the id', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({catalogId: 'catalog-shared', components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+
+    // `CatalogManagement` clears activeCatalog to null the moment resolvedUrl() changes
+    // and only re-establishes it once the new renderer answers, so the gate closes and
+    // reopens. Two renderers that happen to publish the same catalogId therefore still
+    // re-request.
+    catalogManagementMock.activeCatalog.set(null);
+    TestBed.tick();
+    catalogManagementMock.activeCatalog.set({catalogId: 'catalog-shared', components: {}});
     TestBed.tick();
 
     expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
