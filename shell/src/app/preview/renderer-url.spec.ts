@@ -15,19 +15,20 @@
  */
 
 import {describe, it, expect} from 'vitest';
+import {ThemePreference} from 'a2ui-bridge';
 import {buildRendererUrl} from './renderer-url';
 
 describe('buildRendererUrl', () => {
   it('returns null when the resolved URL is not a valid http(s) URL', () => {
-    expect(buildRendererUrl('javascript:alert(1)', 'light')).toBeNull();
+    expect(buildRendererUrl('javascript:alert(1)', ThemePreference.LIGHT)).toBeNull();
   });
 
   it('returns null when the renderer URL is null', () => {
-    expect(buildRendererUrl(null, 'light')).toBeNull();
+    expect(buildRendererUrl(null, ThemePreference.LIGHT)).toBeNull();
   });
 
   it('appends the origin query param and the requested theme', () => {
-    const result = buildRendererUrl('http://localhost:3000/renderer', 'dark');
+    const result = buildRendererUrl('http://localhost:3000/renderer', ThemePreference.DARK);
     expect(result).toBe(
       'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=dark',
     );
@@ -36,7 +37,7 @@ describe('buildRendererUrl', () => {
   it('strips a caller-supplied origin param before appending the trusted origins', () => {
     const result = buildRendererUrl(
       'http://localhost:3000/renderer?origin=https://evil.example.com',
-      'light',
+      ThemePreference.LIGHT,
     );
     expect(result).toBe(
       'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',

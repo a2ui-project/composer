@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {ThemePreference} from 'a2ui-bridge';
 import {isValidHttpUrl} from '../utils/url';
 
 /**
@@ -23,7 +24,7 @@ import {isValidHttpUrl} from '../utils/url';
  */
 export function buildRendererUrl(
   currentUrl: string | null | undefined,
-  theme: string,
+  theme: ThemePreference,
 ): string | null {
   if (!currentUrl) return null;
 
