@@ -95,7 +95,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     // getComponentUsages, getDemos, etc.) are captured once at first attach; later changes to
     // them are silently ignored until the component unmounts and remounts.
     //
-    // TODO: `eslint-plugin-react-hooks` is not configured in this repo. If it ever is, do not
+    // TODO(jerelvelarde): `eslint-plugin-react-hooks` is not configured in this repo. If it ever is, do not
     // let its `exhaustive-deps` autofix rewrite this array — that would reintroduce the loop
     // described above. Add the suppression explicitly instead, verbatim as its own comment line:
     // "eslint-disable-next-line react-hooks/exhaustive-deps" (omitted as a live directive today
