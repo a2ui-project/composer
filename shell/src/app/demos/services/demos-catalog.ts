@@ -19,7 +19,6 @@ import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType, type Demo} from 'a2ui-bridge';
-import {sanitizeHtml} from 'safevalues';
 
 /**
  * Owns the request/cache/timeout lifecycle for demos fetched from the
@@ -59,14 +58,20 @@ export class DemosCatalog {
   private demosTimeoutId?: ReturnType<typeof setTimeout>;
 
   /**
-   * Windows that have already triggered a re-request in response to
-   * RENDERER_READY. React `<StrictMode>` emits RENDERER_READY twice per
-   * frame mount, so this dedupes the resulting re-request to once per
-   * window identity.
+   * Windows that have reported RENDERER_READY at least once, i.e. "this
+   * coordinator has finished booting".
    *
-   * This also doubles as "has this coordinator ever finished booting", used
-   * by {@link requestDemos} to decide whether the 2s fallback timeout can be
-   * armed at all (see finding A1).
+   * Membership is recorded unconditionally, the moment a window first
+   * reports ready, because booting is a property of the frame alone.
+   * {@link requestDemos} reads it to decide whether the 2s fallback timeout
+   * may be armed: a request sent to a frame that has never spoken cannot be
+   * answered, so timing it out would only flash "No Demos Available" over a
+   * renderer that is still coming up.
+   *
+   * The same membership separately dedupes the re-request that readiness
+   * triggers: React `<StrictMode>` emits RENDERER_READY twice per frame
+   * mount, so only the first envelope from a given window identity
+   * re-requests demos.
    *
    * Caveat: a WindowProxy's identity is stable across the frame's own
    * navigations, so this WeakSet cannot by itself distinguish a coordinator
@@ -120,14 +125,20 @@ export class DemosCatalog {
           this.demosTimeoutId = undefined;
         }
         const payload = envelope.payload;
-        const demos = Array.isArray(payload) ? sanitizeDemos(payload as Demo[]) : [];
+        const demos = Array.isArray(payload) ? sanitizeDemos(payload) : [];
         this._demos.set(demos);
         this._loadingDemos.set(false);
       } else if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
         const win = envelope.sourceWindow;
         if (win && !this.readyWindows.has(win)) {
+          // Record the boot before consulting the gate. On a cold load the
+          // gate is still shut here: `CatalogManagement` sends GET_CATALOG in
+          // response to this very RENDERER_READY and only sets
+          // `activeCatalog` when the A2UI_CATALOG reply lands. Recording the
+          // boot inside the gate would drop it on exactly the load where the
+          // fallback timeout matters most.
+          this.readyWindows.add(win);
           if (this._demosActive() && this.catalogManagement.activeCatalog()) {
-            this.readyWindows.add(win);
             this.requestDemos();
           }
         }
@@ -189,19 +200,32 @@ export class DemosCatalog {
 }
 
 /**
- * Sanitizes renderer-supplied demo `name` and `description` fields, matching
- * how {@link CatalogManagement} treats renderer-supplied catalog `title` and
- * `description` fields.
+ * Normalizes a renderer-supplied demos array: entries that are not objects
+ * are dropped, and each surviving demo's `name`/`description` are reduced to
+ * plain strings.
+ *
+ * The array itself is guarded by `Array.isArray` at the call site, but its
+ * elements are not, and this runs inside the `messageStream$` subscriber
+ * where a throw escapes to RxJS's global unhandled-error handler: the DEMOS
+ * envelope would be dropped and the wall left spinning on `loadingDemos`.
+ *
+ * `name` and `description` are deliberately not HTML-sanitized. Their only
+ * consumers are `{{ }}` interpolation and a plain-text `[title]` attribute
+ * binding in `demo-card.ng.html`, and Angular already escapes both, so an
+ * HTML round-trip on top of that only corrupts the text: a demo named
+ * "Tables & Charts" would reach the card as "Tables &amp; Charts". If either
+ * field ever gains an HTML sink such as an `[innerHTML]` binding,
+ * sanitization has to be reintroduced there, at that sink.
  * @param demos Raw demos array received from the renderer.
- * @return A new array of demos with sanitized `name`/`description` fields.
+ * @return A new array holding only object entries, with plain-text
+ *     `name`/`description` fields.
  */
-function sanitizeDemos(demos: Demo[]): Demo[] {
-  return demos.map(demo => ({
-    ...demo,
-    name: typeof demo.name === 'string' ? sanitizeHtml(demo.name).toString() : demo.name,
-    description:
-      typeof demo.description === 'string'
-        ? sanitizeHtml(demo.description).toString()
-        : demo.description,
-  }));
+function sanitizeDemos(demos: readonly unknown[]): Demo[] {
+  return demos
+    .filter((demo): demo is Demo => typeof demo === 'object' && demo !== null)
+    .map(demo => ({
+      ...demo,
+      name: typeof demo.name === 'string' ? demo.name : '',
+      description: typeof demo.description === 'string' ? demo.description : '',
+    }));
 }
