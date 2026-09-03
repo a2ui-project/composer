@@ -125,11 +125,9 @@
             <code>[System] Active renderer updated to {{ activeRendererUrl() }}</code>
           }
           @if (catalogErrorMessage()) {
-            <code class="error-log" style="color: #f44336; font-weight: bold"
-              >[Catalog Error] {{ catalogErrorMessage() }}</code
-            >
+            <code class="error-log">[Catalog Error] {{ catalogErrorMessage() }}</code>
           } @else if (catalogStatus() === 'Connected') {
-            <code class="success-log" style="color: #188038"
+            <code class="success-log"
               >[System] Catalog handshake completed successfully. Active catalog ready.</code
             >
           } @else if (catalogStatus() === 'Indexing') {

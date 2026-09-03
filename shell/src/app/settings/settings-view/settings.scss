@@ -95,6 +95,15 @@ mat-form-field {
   }
 }
 
+.error-log {
+  color: var(--mat-sys-error);
+  font-weight: bold;
+}
+
+.success-log {
+  color: var(--mat-sys-tertiary);
+}
+
 ::ng-deep body .mat-mdc-slide-toggle {
   .mat-internal-form-field,
   .mdc-form-field {
