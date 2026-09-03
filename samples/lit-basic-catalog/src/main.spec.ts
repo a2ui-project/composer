@@ -144,4 +144,18 @@ describe('AppRoot Lit Element', () => {
     await (textEl as unknown as {updateComplete: Promise<void>})?.updateComplete;
     expect(textEl?.shadowRoot?.innerHTML).toContain('<strong>bold text</strong>');
   });
+
+  it('serves the full basic-catalog demo set', async () => {
+    const {DEMOS} = await import('./demos.js');
+    expect(DEMOS).toHaveLength(43);
+    for (const demo of DEMOS) {
+      expect(demo.id).toBeTruthy();
+      expect(demo.name).toBeTruthy();
+      expect(demo.description).toBeTruthy();
+      expect(Array.isArray(demo.a2ui)).toBe(true);
+      expect(demo.a2ui.length).toBeGreaterThan(0);
+      expect(demo.a2ui[0].version).toBe('v0.9');
+    }
+    expect(new Set(DEMOS.map(d => d.id)).size).toBe(DEMOS.length);
+  });
 });

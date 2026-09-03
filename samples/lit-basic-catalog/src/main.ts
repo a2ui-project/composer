@@ -21,11 +21,13 @@ import {renderMarkdown} from '@a2ui/markdown-it';
 
 // Export AppRoot class constructor value with a safe double cast to bypass duplicate-dependency nominal mismatches:
 import {COMPONENT_USAGES} from './usages.js';
+import {DEMOS} from './demos.js';
 
 export const AppRoot = bootstrapLitSandbox([basicCatalog as unknown as Catalog<ComponentApi>], {
   elementTagName: 'app-root',
   markdownRenderer: renderMarkdown,
   getComponentUsages: async () => COMPONENT_USAGES,
+  getDemos: async () => DEMOS,
 });
 
 // Export AppRoot instance type under same name (type/value namespace merging)
