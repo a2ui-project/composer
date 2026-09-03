@@ -22,7 +22,7 @@ import {
   ComponentApi,
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
-import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages} from '../index.js';
+import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages, Demo} from '../index.js';
 
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   /** The reactive dynamic surface drawing model representing the active canvas. */
@@ -36,6 +36,8 @@ export interface ReactSandboxOptions {
   getComponentUsages?: () => Promise<ComponentUsages>;
   /** Optional callback when theme changes. */
   onThemeChange?: (theme: ThemePreference) => void;
+  /** Optional callback to retrieve the renderer's demos. */
+  getDemos?: () => Promise<Demo[]>;
 }
 
 /**
@@ -64,6 +66,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
       surfaceGroup: processor.model,
       catalogJson: options?.catalogJson,
       getComponentUsages: options?.getComponentUsages,
+      getDemos: options?.getDemos,
       onThemeChange: options?.onThemeChange,
       onCatalogResolved: catalogId => {
         for (const catalog of catalogs) {
