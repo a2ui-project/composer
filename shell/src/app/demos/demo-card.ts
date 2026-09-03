@@ -36,12 +36,22 @@ import {AppConfigProvider} from '../settings/app-config-provider/app-config-prov
 import {CrossFrameValidator} from '../shell/cross-frame-validator/cross-frame-validator';
 
 /** Lifecycle phases of a single demo card's renderer frame handshake. */
-export type DemoCardState = 'idle' | 'mounting' | 'ready' | 'error';
+type DemoCardState = 'idle' | 'mounting' | 'ready' | 'error';
 
-/** Smallest height a demo card's rendered surface is allowed to occupy. */
+/**
+ * Smallest height a demo card's rendered surface is allowed to occupy.
+ *
+ * Must match the `--demo-card-min-h` custom property declared on `:host` in
+ * demo-card.scss.
+ */
 const MIN_CARD_HEIGHT_PX = 200;
 
-/** Largest height a demo card's rendered surface is allowed to occupy. */
+/**
+ * Largest height a demo card's rendered surface is allowed to occupy.
+ *
+ * Must match the `--demo-card-max-h` custom property declared on `:host` in
+ * demo-card.scss.
+ */
 const MAX_CARD_HEIGHT_PX = 560;
 
 /**
@@ -153,6 +163,24 @@ export class DemoCard {
       onCleanup(() => {
         subscription?.unsubscribe();
         this.hostCommunication.unregisterSecondaryIframe(element);
+      });
+    });
+
+    // Renderer-switch trigger: switching renderers in Settings is what actually causes
+    // a reload (it changes resolvedUrl(), which changes safeRendererUrl() and thus the
+    // iframe's `src`). Resetting here reacts to that cause directly, instead of relying
+    // on the frame's `load` event as a proxy for it. That matters because `load` and this
+    // load's RENDERER_READY posts are both delivered asynchronously with no ordering
+    // guarantee between them: under React StrictMode, if `load` were to fire between the
+    // two READY posts, a reset keyed only on `load` would re-arm the flag mid-load and
+    // cause a duplicate RENDER_A2UI send that replays createSurface for the same
+    // surfaceId. This effect closes that gap for the actual renderer-switch case; the
+    // `load` listener (see {@link DemoCard.onFrameLoad}) remains as the cover for a
+    // guest-initiated reload that doesn't change safeRendererUrl().
+    effect(() => {
+      this.safeRendererUrl();
+      untracked(() => {
+        this.payloadSentForCurrentLoad = false;
       });
     });
   }

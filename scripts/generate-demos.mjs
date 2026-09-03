@@ -50,8 +50,18 @@ const OUTPUT_PATHS = [
 const LICENSE_HEADER = readLicenseHeader();
 
 function readLicenseHeader() {
-  const bridgeMessageSource = readFileSync(join(REPO_ROOT, 'bridge/src/bridge-message.ts'), 'utf8');
+  const bridgeMessagePath = join(REPO_ROOT, 'bridge/src/bridge-message.ts');
+  const bridgeMessageSource = readFileSync(bridgeMessagePath, 'utf8');
   const lines = bridgeMessageSource.split('\n').slice(0, 15);
+  const lastLine = lines[lines.length - 1];
+  if (!lastLine.trimStart().startsWith('*/')) {
+    throw new Error(
+      `Expected the first 15 lines of ${bridgeMessagePath} to end the file's opening ` +
+        `license comment block (a line starting with "*/"), but line 15 was ` +
+        `${JSON.stringify(lastLine)}. The license header in bridge-message.ts likely ` +
+        'changed length; update the slice in readLicenseHeader() to match.',
+    );
+  }
   return lines.join('\n');
 }
 

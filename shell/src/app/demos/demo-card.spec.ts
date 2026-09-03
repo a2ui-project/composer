@@ -51,6 +51,7 @@ const DEMO: Demo = {
 describe('DemoCard sandboxed live demo frame', () => {
   let hostCommunication: HostCommunication;
   let sendToFrameSpy: MockInstance<HostCommunication['sendToFrame']>;
+  let sendMessageSpy: MockInstance<HostCommunication['sendMessage']>;
   let resolvedUrlSignal: WritableSignal<string | null>;
 
   beforeEach(async () => {
@@ -73,6 +74,7 @@ describe('DemoCard sandboxed live demo frame', () => {
 
     hostCommunication = TestBed.inject(HostCommunication);
     sendToFrameSpy = vi.spyOn(hostCommunication, 'sendToFrame');
+    sendMessageSpy = vi.spyOn(hostCommunication, 'sendMessage');
   });
 
   afterEach(() => {
@@ -144,6 +146,9 @@ describe('DemoCard sandboxed live demo frame', () => {
       {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
       iframe,
     );
+    // Targeted sends to this card's own frame must go through sendToFrame; sendMessage
+    // broadcasts to every registered iframe and would leak this card's payload to others.
+    expect(sendMessageSpy).not.toHaveBeenCalled();
     expect(fixture.componentInstance.state()).toBe('ready');
   });
 
@@ -222,6 +227,31 @@ describe('DemoCard sandboxed live demo frame', () => {
     expect(iframe).not.toBeNull();
     expect(registerSecondarySpy).toHaveBeenCalledWith(iframe);
     expect(registerIframeSpy).not.toHaveBeenCalled();
+  });
+
+  it('unregisters its iframe when the mount gate closes', () => {
+    const unregisterSecondarySpy = vi.spyOn(hostCommunication, 'unregisterSecondaryIframe');
+    const fixture = mountCard(true);
+    const iframe = frameOf(fixture);
+    expect(iframe).not.toBeNull();
+
+    fixture.componentRef.setInput('mount', false);
+    fixture.detectChanges();
+
+    // A leaked entry in registeredIframes would silently widen matchesSource's
+    // acceptance check and the sendTheme broadcast fan-out for every other consumer.
+    expect(unregisterSecondarySpy).toHaveBeenCalledWith(iframe);
+  });
+
+  it('unregisters its iframe when the card is destroyed', () => {
+    const unregisterSecondarySpy = vi.spyOn(hostCommunication, 'unregisterSecondaryIframe');
+    const fixture = mountCard(true);
+    const iframe = frameOf(fixture);
+    expect(iframe).not.toBeNull();
+
+    fixture.destroy();
+
+    expect(unregisterSecondarySpy).toHaveBeenCalledWith(iframe);
   });
 
   it('ignores envelopes for message types it does not act on and envelopes from foreign windows', () => {
