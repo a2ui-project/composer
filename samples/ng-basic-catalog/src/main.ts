@@ -22,6 +22,7 @@ import {BasicCatalog} from '@a2ui/angular/v0_9';
 import catalogJson from './assets/catalog.json';
 
 import {COMPONENT_USAGES} from './assets/usages.js';
+import {DEMOS} from './demos.js';
 
 bootstrapApplication(AppComponent, {
   providers: [
@@ -29,6 +30,7 @@ bootstrapApplication(AppComponent, {
     provideA2uiSandbox([BasicCatalog], {
       catalogJson,
       getComponentUsages: async () => COMPONENT_USAGES,
+      getDemos: async () => DEMOS,
     }),
   ],
 }).catch(err => console.error('A2UI Sandbox Bootstrap Failed:', err));
