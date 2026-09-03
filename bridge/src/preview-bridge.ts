@@ -43,6 +43,7 @@ import type {
   RendererConfig,
   SurfaceStateSubscription,
   ComponentUsages,
+  Demo,
 } from './render-config';
 
 /**
@@ -407,6 +408,10 @@ export class PreviewBridge {
 
       case PreviewBridgeMessageType.GET_COMPONENT_USAGES:
         void this.handleGetComponentUsages();
+        break;
+
+      case PreviewBridgeMessageType.GET_DEMOS:
+        void this.handleGetDemos();
         break;
 
       case PreviewBridgeMessageType.SET_THEME:
@@ -881,6 +886,24 @@ export class PreviewBridge {
     this.sendMessage({
       type: PreviewBridgeMessageType.COMPONENT_USAGES,
       payload: usages,
+    });
+  }
+
+  /**
+   * Invokes the getDemos callback and returns the resolved demos.
+   */
+  private async handleGetDemos(): Promise<void> {
+    let demos: Demo[] = [];
+    if (this.activeRenderer?.config.getDemos) {
+      try {
+        demos = await this.activeRenderer.config.getDemos();
+      } catch (error) {
+        console.error('PreviewBridge: Error invoking getDemos:', error);
+      }
+    }
+    this.sendMessage({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: demos,
     });
   }
 
