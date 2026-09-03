@@ -71,6 +71,21 @@ const LICENSE_HEADER_MARKERS = ['Copyright', 'Licensed under the Apache License,
 const LICENSE_HEADER = readLicenseHeader();
 
 /**
+ * Collapses CRLF and lone-CR line endings to LF.
+ *
+ * Everything this script generates is LF-only, but what it reads back is
+ * whatever the checkout produced: with `core.autocrlf=true` on Windows, and no
+ * `.gitattributes` in this repo to say otherwise, git materializes these files
+ * with CRLF. Comparisons therefore have to run on normalized text, or `--check`
+ * reports permanent drift that `yarn generate:demos` cannot resolve -- it
+ * rewrites the files with LF, git reports no change, and the next `--check`
+ * fails again.
+ */
+function toLf(text) {
+  return text.replace(/\r\n?/g, '\n');
+}
+
+/**
  * Parses a JSON file, attaching the file's path to any parse failure.
  *
  * A bare `SyntaxError` from `JSON.parse` points at this helper rather than at
@@ -93,7 +108,7 @@ function readLicenseHeader() {
   // remove), producing generated files with a CRLF header and an LF body.
   // These files are prettier-ignored, so nothing downstream normalizes them
   // and contributors on other platforms get spurious whole-file diffs.
-  const bridgeMessageSource = readFileSync(bridgeMessagePath, 'utf8').replace(/\r\n?/g, '\n');
+  const bridgeMessageSource = toLf(readFileSync(bridgeMessagePath, 'utf8'));
   const lines = bridgeMessageSource.split('\n').slice(0, LICENSE_HEADER_LINE_COUNT);
   const lastLine = lines[lines.length - 1];
   if (!lastLine.trimStart().startsWith('*/')) {
@@ -273,9 +288,13 @@ function writeOutputs(moduleSource, demoCount) {
 }
 
 function checkOutputs(moduleSource, demoCount, version) {
+  // Compare on LF-normalized text. `moduleSource` is LF-only by construction
+  // and `writeOutputs` keeps writing it that way; only this comparison has to
+  // tolerate a checkout that put CRLF on disk. See `toLf`.
+  const expected = toLf(moduleSource);
   const drifted = OUTPUT_PATHS.filter(outputPath => {
     const absolutePath = join(REPO_ROOT, outputPath);
-    return !existsSync(absolutePath) || readFileSync(absolutePath, 'utf8') !== moduleSource;
+    return !existsSync(absolutePath) || toLf(readFileSync(absolutePath, 'utf8')) !== expected;
   });
 
   if (drifted.length > 0) {
