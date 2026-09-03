@@ -28,6 +28,7 @@
           sandbox="allow-scripts allow-same-origin allow-forms"
           class="demo-card-frame"
           [title]="demo().name + ' live demo'"
+          (load)="onFrameLoad()"
         ></iframe>
       } @else {
         <div class="demo-card-placeholder" aria-hidden="true"></div>
