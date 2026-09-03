@@ -1,0 +1,56 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="demos-container">
+  <!--
+    The coordinator frame is mounted unconditionally and kept visually hidden. It is
+    the only frame on this page that registers as the bridge's primary target, and
+    its handshake is what resolves the active catalog that gates the GET_DEMOS
+    request. Mounting frames only once demos had arrived could never bootstrap.
+  -->
+  <div #coordinatorHost class="coordinator-frame" aria-hidden="true">
+    <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
+  </div>
+
+  <header class="demos-header">
+    <h1 class="demos-title">Demos</h1>
+    <p class="demos-subtitle">Live demos served by the connected renderer.</p>
+  </header>
+
+  @if (loadingDemos()) {
+    <div class="demos-loading" role="status">
+      <mat-spinner diameter="32"></mat-spinner>
+      <span>Loading demos...</span>
+    </div>
+  } @else if (isEmpty()) {
+    <div class="empty-state">
+      <mat-icon class="empty-icon">auto_awesome_mosaic</mat-icon>
+      <h3 class="empty-title">No Demos Available</h3>
+      <p class="empty-subtitle">This renderer doesn't provide demos yet.</p>
+    </div>
+  } @else {
+    <div class="demos-wall">
+      @for (demo of demos() ?? []; track demo.id) {
+        <a2ui-composer-demo-card
+          #cardHost
+          [attr.data-demo-id]="demo.id"
+          [demo]="demo"
+          [mount]="mountedIds().has(demo.id)"
+        ></a2ui-composer-demo-card>
+      }
+    </div>
+  }
+</div>

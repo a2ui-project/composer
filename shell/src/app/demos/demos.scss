@@ -1,0 +1,135 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  height: 100%;
+}
+
+.demos-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+/*
+ * Keeps the coordinator frame in the layout tree (so it loads and completes its
+ * bridge handshake) while removing it from view, matching the gallery's hidden
+ * frame idiom.
+ */
+.coordinator-frame {
+  visibility: hidden;
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.demos-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.demos-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface, #1c1b1f);
+}
+
+.demos-subtitle {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant, #49454f);
+  opacity: 0.8;
+}
+
+/* CSS columns masonry: cards keep their natural heights and never split. */
+.demos-wall {
+  column-count: 3;
+  column-gap: 16px;
+
+  a2ui-composer-demo-card {
+    display: block;
+    margin: 0 0 16px;
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+@media (max-width: 1180px) {
+  .demos-wall {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .demos-wall {
+    column-count: 1;
+  }
+}
+
+.demos-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 24px;
+  color: var(--mat-sys-on-surface-variant, #666);
+  font-size: 0.9rem;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 240px;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.empty-title {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.empty-subtitle {
+  margin: 0;
+  max-width: 400px;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
