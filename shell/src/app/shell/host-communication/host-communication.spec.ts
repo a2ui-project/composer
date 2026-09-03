@@ -957,4 +957,81 @@ describe('HostCommunication', () => {
       expect(defaultWindow.postMessage).not.toHaveBeenCalled();
     });
   });
+
+  describe('secondary iframe registration', () => {
+    it('does not change the primary target when registering a secondary iframe', () => {
+      const primaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const primaryIframe = {contentWindow: primaryWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(primaryIframe);
+      expect(service.getIframeElement()).toBe(primaryIframe);
+
+      const secondaryIframe = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+      service.registerSecondaryIframe(secondaryIframe);
+
+      expect(service.getIframeElement()).toBe(primaryIframe);
+    });
+
+    it('does not clear the outbound buffer or flip global readiness when registering a secondary iframe', () => {
+      const primaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const primaryIframe = {contentWindow: primaryWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(primaryIframe);
+      service.sendMessage({type: PreviewBridgeMessageType.GET_COMPONENT_USAGES});
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+      expect(service.isRendererReady()).toBe(false);
+
+      const secondaryIframe = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+      service.registerSecondaryIframe(secondaryIframe);
+
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+      expect(service.isRendererReady()).toBe(false);
+    });
+
+    it('delivers via messageStreamFor only envelopes whose sourceWindow matches', () => {
+      const matchingWindow = {postMessage: vi.fn()} as unknown as Window;
+      const otherWindow = {postMessage: vi.fn()} as unknown as Window;
+
+      const received: MessageEnvelope[] = [];
+      const subscription = service.messageStreamFor(matchingWindow).subscribe(envelope => {
+        received.push(envelope);
+      });
+
+      service.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.RENDER_A2UI,
+        origin: 'http://localhost:3000',
+        timestamp: Date.now(),
+        sourceWindow: otherWindow,
+      });
+      service.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost:3000',
+        timestamp: Date.now(),
+        sourceWindow: matchingWindow,
+      });
+
+      subscription.unsubscribe();
+
+      expect(received.length).toBe(1);
+      expect(received[0].type).toBe(PreviewBridgeMessageType.RENDERER_READY);
+      expect(received[0].sourceWindow).toBe(matchingWindow);
+    });
+
+    it('sendToFrame posts to the given frame even when the renderer is not globally ready', () => {
+      const targetIframe = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+
+      expect(service.isRendererReady()).toBe(false);
+
+      service.sendToFrame({type: PreviewBridgeMessageType.GET_COMPONENT_USAGES}, targetIframe);
+
+      expect(targetIframe.contentWindow!.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.GET_COMPONENT_USAGES},
+        'http://localhost:3000',
+      );
+    });
+  });
 });

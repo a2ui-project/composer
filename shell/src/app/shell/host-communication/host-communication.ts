@@ -16,7 +16,7 @@
 
 import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
-import {ReplaySubject} from 'rxjs';
+import {Observable, ReplaySubject, filter} from 'rxjs';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {
   AppConfigProvider,
@@ -78,6 +78,15 @@ export class HostCommunication implements OnDestroy {
   readonly messageStream = toSignal(this.messageStream$, {
     initialValue: null,
   });
+
+  /**
+   * Derives a filtered message stream scoped to envelopes originating from a specific window.
+   * @param win Source window to filter incoming message envelopes by
+   * @return Observable emitting only envelopes whose sourceWindow matches the given window
+   */
+  messageStreamFor(win: Window): Observable<MessageEnvelope> {
+    return this.messageStream$.pipe(filter(e => e.sourceWindow === win));
+  }
 
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
   private readonly earlyMessageBuffer: MessageEvent[] = [];
@@ -295,6 +304,42 @@ export class HostCommunication implements OnDestroy {
   }
 
   /**
+   * Registers an additional secondary iframe target for message dispatch without
+   * disturbing the primary communication target, outbound buffer, or readiness state.
+   * Unlike {@link registerIframe}, this performs no buffer clearing or readiness reset,
+   * so it is safe to call for auxiliary consumers while a primary exchange is in flight.
+   * @param el Secondary iframe element to register
+   */
+  registerSecondaryIframe(el: HTMLIFrameElement): void {
+    this.registeredIframes.add(el);
+  }
+
+  /**
+   * Unregisters a previously registered secondary iframe target added via
+   * {@link registerSecondaryIframe}. Only removes the element from the tracked
+   * set; it does not affect the primary target, outbound buffer, or readiness state.
+   * @param el Secondary iframe element to unregister
+   */
+  unregisterSecondaryIframe(el: HTMLIFrameElement): void {
+    this.registeredIframes.delete(el);
+  }
+
+  /**
+   * Resolves the expected renderer origin from the currently configured renderer URL.
+   * @return Resolved origin string, or null if no renderer URL is configured or it fails to parse
+   */
+  private resolveExpectedRendererOrigin(): string | null {
+    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
+    if (!expectedUrl) return null;
+
+    try {
+      return new URL(expectedUrl, globalThis.location?.href).origin;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /**
    * Validates and dispatches a structured postMessage payload to the registered guest frame.
    * @param message Structured message payload
    * @param target Optional explicit target iframe element or window reference
@@ -322,12 +367,40 @@ export class HostCommunication implements OnDestroy {
     }
     if (!targetWindow) return;
 
-    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-    if (!expectedUrl) return;
+    const targetOrigin = this.resolveExpectedRendererOrigin();
+    if (!targetOrigin) return;
 
     try {
-      const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
       targetWindow.postMessage(message, targetOrigin);
+    } catch (err) {
+      // Ignore malformed URL
+    }
+  }
+
+  /**
+   * Validates and dispatches a structured postMessage payload directly to a specific
+   * iframe target, bypassing the renderer-readiness gate and outbound message queue
+   * used by {@link sendMessage}. Intended for targeted sends to secondary frames where
+   * queueing would otherwise replay the message to the primary frame instead.
+   * @param message Structured message payload
+   * @param el Target iframe element to post the message to
+   */
+  sendToFrame(
+    message: {type: PreviewBridgeMessageType; payload?: unknown},
+    el: HTMLIFrameElement,
+  ): void {
+    if (!CrossFrameValidator.validateOutgoingMessage(message)) {
+      console.error('Blocked dispatch of malformed message type...', message);
+      return;
+    }
+
+    if (!el.contentWindow) return;
+
+    const targetOrigin = this.resolveExpectedRendererOrigin();
+    if (!targetOrigin) return;
+
+    try {
+      el.contentWindow.postMessage(message, targetOrigin);
     } catch (err) {
       // Ignore malformed URL
     }
