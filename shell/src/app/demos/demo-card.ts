@@ -66,9 +66,10 @@ const READY_TIMEOUT_MS = 8000;
  *
  * The frame is only attached once {@link DemoCard.mount} turns true, which keeps
  * a wall of cards lazy, and the demo payload is dispatched exactly once per frame
- * load after that frame's own RENDERER_READY handshake. The first reported
+ * load after that frame's own RENDERER_READY handshake. The first *rendered*
  * surface height is clamped and then frozen so the surrounding CSS-columns
- * masonry layout never reflows underneath the reader.
+ * masonry layout never reflows underneath the reader; see
+ * {@link DemoCard.cardHeightFrozen} for why the first report alone is not enough.
  */
 @Component({
   selector: 'a2ui-composer-demo-card',
@@ -97,6 +98,26 @@ export class DemoCard {
   private readonly cardHeightSignal = signal<number | null>(null);
   /** Readonly frozen surface height in pixels, or null before the first resize report. */
   readonly cardHeight = this.cardHeightSignal.asReadonly();
+
+  /**
+   * Whether {@link DemoCard.cardHeight} has been locked to a rendered measurement.
+   *
+   * Deliberately not derived from `cardHeight() !== null`. The guest bridge's very
+   * first SURFACE_RESIZE is dispatched immediately after RENDERER_READY and before
+   * any content exists, so it measures an empty document whose `scrollHeight` is
+   * just the iframe's own CSS height — `--demo-card-min-h`, i.e. exactly
+   * MIN_CARD_HEIGHT_PX. Freezing on that report pinned every card in the wall to the
+   * minimum and clipped its content under `.demo-card-surface { overflow: hidden }`.
+   *
+   * {@link DemoCard.payloadSentForCurrentLoad} cannot tell that report apart either:
+   * the guest posts RENDERER_READY and the pre-render SURFACE_RESIZE back to back, so
+   * the flag is already true by the time the resize envelope is delivered. Only the
+   * measurement itself distinguishes them — a report that clamps to exactly
+   * MIN_CARD_HEIGHT_PX carries no evidence that content has rendered, so the freeze
+   * waits for one that clamps above it. A genuinely shorter demo lays out at the
+   * minimum either way, so continuing to listen costs it nothing.
+   */
+  private cardHeightFrozen = false;
 
   /**
    * Whether the demo payload has already been sent for the frame's current document.
@@ -217,17 +238,22 @@ export class DemoCard {
         return;
       }
       case PreviewBridgeMessageType.SURFACE_RESIZE: {
-        if (this.cardHeightSignal() !== null) {
-          // Height is frozen after the first report so masonry columns stay stable.
+        if (this.cardHeightFrozen) {
+          // Height is frozen after the first rendered report so masonry columns stay stable.
           return;
         }
         if (!CrossFrameValidator.validateIncomingMessage(envelope)) {
           return;
         }
         const {height} = envelope.payload as {height: number};
-        this.cardHeightSignal.set(
-          Math.min(MAX_CARD_HEIGHT_PX, Math.max(MIN_CARD_HEIGHT_PX, Math.round(height))),
+        const clampedHeight = Math.min(
+          MAX_CARD_HEIGHT_PX,
+          Math.max(MIN_CARD_HEIGHT_PX, Math.round(height)),
         );
+        this.cardHeightSignal.set(clampedHeight);
+        if (clampedHeight > MIN_CARD_HEIGHT_PX) {
+          this.cardHeightFrozen = true;
+        }
         return;
       }
       default:
