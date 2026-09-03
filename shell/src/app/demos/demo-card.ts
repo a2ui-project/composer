@@ -55,8 +55,8 @@ const READY_TIMEOUT_MS = 8000;
  * Renders one live A2UI demo inside its own sandboxed renderer iframe.
  *
  * The frame is only attached once {@link DemoCard.mount} turns true, which keeps
- * a wall of cards lazy, and the demo payload is dispatched exactly once per guest
- * window after that frame's own RENDERER_READY handshake. The first reported
+ * a wall of cards lazy, and the demo payload is dispatched exactly once per frame
+ * load after that frame's own RENDERER_READY handshake. The first reported
  * surface height is clamped and then frozen so the surrounding CSS-columns
  * masonry layout never reflows underneath the reader.
  */
@@ -88,8 +88,15 @@ export class DemoCard {
   /** Readonly frozen surface height in pixels, or null before the first resize report. */
   readonly cardHeight = this.cardHeightSignal.asReadonly();
 
-  /** Guest windows that already received this card's demo payload. */
-  private readonly servedWindows = new WeakSet<Window>();
+  /**
+   * Whether the demo payload has already been sent for the frame's current document.
+   *
+   * Deliberately keyed on the frame's *load*, not on `contentWindow` identity: a
+   * WindowProxy keeps a stable identity across the frame's own navigations, so an
+   * identity-keyed guard cannot tell a re-announcing fresh document apart from a
+   * duplicate handshake. See {@link DemoCard.onFrameLoad}.
+   */
+  private payloadSentForCurrentLoad = false;
 
   private readyTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -132,6 +139,7 @@ export class DemoCard {
         return;
       }
 
+      this.payloadSentForCurrentLoad = false;
       this.hostCommunication.registerSecondaryIframe(element);
       const guestWindow = element.contentWindow;
       const subscription = guestWindow
@@ -169,11 +177,11 @@ export class DemoCard {
         this.clearReadyTimeout();
         this.stateSignal.set('ready');
         // React renderers under StrictMode announce readiness twice; the payload
-        // must be dispatched exactly once per guest window.
-        if (this.servedWindows.has(guestWindow)) {
+        // must be dispatched exactly once per frame load.
+        if (this.payloadSentForCurrentLoad) {
           return;
         }
-        this.servedWindows.add(guestWindow);
+        this.payloadSentForCurrentLoad = true;
         this.hostCommunication.sendToFrame(
           {type: PreviewBridgeMessageType.RENDER_A2UI, payload: this.demo().a2ui},
           iframe,
@@ -197,6 +205,22 @@ export class DemoCard {
       default:
         return;
     }
+  }
+
+  /**
+   * Re-arms the payload send for the document the frame has just finished loading.
+   *
+   * Switching renderers in Settings changes {@link StartupResolution.resolvedUrl}, so
+   * every card's iframe `src` changes and the frame reloads: the guest app boots fresh
+   * and emits a new RENDERER_READY. Because `contentWindow` returns a WindowProxy whose
+   * identity is stable across the frame's own navigations, guarding on window identity
+   * suppressed that resend and left the card sitting on the renderer's idle placeholder
+   * with no console error. Resetting only the sent state here lets a reload re-request
+   * the payload while a StrictMode double RENDERER_READY inside one load still collapses
+   * to a single send, and avoids unregister/re-register churn on the subscription.
+   */
+  protected onFrameLoad(): void {
+    this.payloadSentForCurrentLoad = false;
   }
 
   private clearReadyTimeout(): void {

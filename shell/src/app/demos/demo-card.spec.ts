@@ -134,11 +134,44 @@ describe('DemoCard sandboxed live demo frame', () => {
     const iframe = frameOf(fixture)!;
     sendToFrameSpy.mockClear();
 
+    // React renderers under StrictMode genuinely announce readiness twice, so two
+    // handshakes with no intervening frame load must still collapse to a single send.
     emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
     emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
 
     expect(sendToFrameSpy).toHaveBeenCalledTimes(1);
     expect(sendToFrameSpy).toHaveBeenCalledWith(
+      {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
+      iframe,
+    );
+    expect(fixture.componentInstance.state()).toBe('ready');
+  });
+
+  it('resends the demo payload after its own frame reloads', () => {
+    const fixture = mountCard(true);
+    const iframe = frameOf(fixture)!;
+    sendToFrameSpy.mockClear();
+
+    emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
+    expect(sendToFrameSpy).toHaveBeenCalledTimes(1);
+
+    // Switching renderers in Settings changes resolvedUrl(), which changes the frame's
+    // src and reloads it, so a freshly booted guest announces RENDERER_READY again.
+    // contentWindow keeps a stable WindowProxy identity across the frame's own
+    // navigations, so dedup keyed on that identity suppresses the resend and strands the
+    // card on the renderer's idle placeholder. Sent state must be per frame load.
+    iframe.dispatchEvent(new Event('load'));
+    fixture.detectChanges();
+    emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
+
+    expect(sendToFrameSpy).toHaveBeenCalledTimes(2);
+    expect(sendToFrameSpy).toHaveBeenNthCalledWith(
+      1,
+      {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
+      iframe,
+    );
+    expect(sendToFrameSpy).toHaveBeenNthCalledWith(
+      2,
       {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
       iframe,
     );
