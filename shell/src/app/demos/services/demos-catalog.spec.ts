@@ -1,0 +1,185 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {TestBed} from '@angular/core/testing';
+import {signal} from '@angular/core';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {ReplaySubject} from 'rxjs';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
+import {PreviewBridgeMessageType, type Demo} from 'a2ui-bridge';
+import {DemosCatalog} from './demos-catalog';
+import {Catalog} from '../../storage/models/catalog-storage.model';
+
+class MockCatalogManagement {
+  readonly activeCatalog = signal<Catalog | null>(null);
+}
+
+class MockHostCommunication {
+  sendToFrame = vi.fn();
+  readonly messageStream$ = new ReplaySubject<MessageEnvelope>(1);
+}
+
+/** Builds a fake coordinator iframe with a distinct contentWindow identity. */
+function createCoordinator(): HTMLIFrameElement {
+  return {contentWindow: {} as Window} as HTMLIFrameElement;
+}
+
+describe('DemosCatalog', () => {
+  let service: DemosCatalog;
+  let catalogManagementMock: MockCatalogManagement;
+  let hostCommunicationMock: MockHostCommunication;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        DemosCatalog,
+        {provide: CatalogManagement, useClass: MockCatalogManagement},
+        {provide: HostCommunication, useClass: MockHostCommunication},
+      ],
+    });
+
+    service = TestBed.inject(DemosCatalog);
+    catalogManagementMock = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
+    hostCommunicationMock = TestBed.inject(HostCommunication) as unknown as MockHostCommunication;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('sends no request until demosActive and activeCatalog are both set', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+
+    service.setDemosActive(true);
+    TestBed.tick();
+    expect(hostCommunicationMock.sendToFrame).not.toHaveBeenCalled();
+
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledWith(
+      {type: PreviewBridgeMessageType.GET_DEMOS},
+      coordinator,
+    );
+  });
+
+  it('caches a DEMOS envelope whose sourceWindow is the coordinator contentWindow', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    const demos: Demo[] = [{id: 'demo-1', name: 'Demo One', description: 'A demo', a2ui: []}];
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: demos,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    expect(service.demos()).toEqual(demos);
+  });
+
+  it('ignores a DEMOS envelope originating from a window other than the coordinator', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    const otherWindow = {} as Window;
+    const demos: Demo[] = [{id: 'demo-1', name: 'Demo One', description: 'A demo', a2ui: []}];
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: demos,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: otherWindow,
+    });
+    TestBed.tick();
+
+    expect(service.demos()).toBeNull();
+  });
+
+  it('falls back to an empty array once the 2 second timeout elapses', () => {
+    vi.useFakeTimers();
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    expect(service.loadingDemos()).toBe(true);
+    expect(service.demos()).toBeNull();
+
+    vi.advanceTimersByTime(2000);
+
+    expect(service.loadingDemos()).toBe(false);
+    expect(service.demos()).toEqual([]);
+  });
+
+  it('clears the cache back to null when setDemosActive(false) is called', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    const demos: Demo[] = [{id: 'demo-1', name: 'Demo One', description: 'A demo', a2ui: []}];
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: demos,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+    expect(service.demos()).toEqual(demos);
+
+    service.setDemosActive(false);
+    TestBed.tick();
+
+    expect(service.demos()).toBeNull();
+  });
+
+  it('re-requests demos when activeCatalog receives a new object identity', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+
+    // A renderer switch produces a brand new Catalog object identity, even if
+    // structurally similar to the previous one.
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
+  });
+});
