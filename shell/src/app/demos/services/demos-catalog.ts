@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, effect, DestroyRef, untracked} from '@angular/core';
+import {Injectable, inject, signal, computed, effect, DestroyRef, untracked} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -79,12 +79,50 @@ export class DemosCatalog {
    * the same trap that was a live bug in `DemoCard` before it switched to a
    * per-load flag reset on the frame's `load` event. It is not a live bug
    * here only because the sole thing that reloads the coordinator frame
-   * (switching the active renderer) also swaps `activeCatalog()`'s object
-   * identity, which independently re-requests demos via the `effect()`
-   * below. If that coupling ever changes, this WeakSet will silently
-   * swallow the coordinator's post-reload readiness.
+   * (switching the active renderer) also clears `activeCatalog()` to null
+   * before the new renderer's catalog resolves, and that closing and
+   * reopening of the gate independently re-requests demos via the
+   * `effect()` below. If that coupling ever changes, this WeakSet will
+   * silently swallow the coordinator's post-reload readiness.
    */
   private readonly readyWindows = new WeakSet<Window>();
+
+  /**
+   * Stable identity of the active catalog: its id, or null when no catalog is
+   * established.
+   *
+   * The gating effect below depends on this rather than on
+   * `CatalogManagement.activeCatalog()` directly, because that signal changes
+   * object identity on every completed catalog handshake even when the catalog
+   * is byte-identical: the A2UI_CATALOG handler `structuredClone`s the payload
+   * and sets the result. And handshakes happen constantly on this route —
+   * `CatalogManagement` subscribes to `messageStream$` with no `sourceWindow`
+   * filter, so every one of the N demo card frames registered via
+   * `registerSecondaryIframe` starts a fresh one when it reports RENDERER_READY.
+   *
+   * Keyed on the object, each of those replies re-entered `requestDemos()`,
+   * which sets `_demos` back to null; the route's `@else` branch was destroyed,
+   * every card torn down, and the remounted cards' frames booted and reported
+   * ready again — a wall that tore itself down and rebuilt on a loop. Keyed on
+   * the id, a re-handshake that yields the same catalog is a no-op.
+   *
+   * For the record: this does not stop the redundant per-card handshakes, which
+   * are still issued inside `CatalogManagement`. It only stops them from cycling
+   * the demos wall.
+   *
+   * `catalogId ?? $id` is the same identifier `CatalogManagement` requires before
+   * it will accept a catalog at all — an A2UI_CATALOG payload carrying neither is
+   * rejected outright — so a catalog reaching this signal always has one. The
+   * empty-string fallback only keeps a hypothetical id-less catalog reading as
+   * "present" here rather than collapsing into the null/absent case.
+   */
+  private readonly activeCatalogId = computed<string | null>(() => {
+    const catalog = this.catalogManagement.activeCatalog();
+    if (!catalog) {
+      return null;
+    }
+    return catalog.catalogId ?? catalog.$id ?? '';
+  });
 
   constructor() {
     this.destroyRef.onDestroy(() => {
@@ -96,10 +134,10 @@ export class DemosCatalog {
 
     effect(() => {
       const active = this._demosActive();
-      const catalog = this.catalogManagement.activeCatalog();
+      const catalogId = this.activeCatalogId();
       const coordinator = this.coordinatorSignal();
 
-      if (active && catalog && coordinator) {
+      if (active && catalogId !== null && coordinator) {
         this.requestDemos();
       } else {
         untracked(() => {
