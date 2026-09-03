@@ -37,6 +37,7 @@ import {
   SurfaceStateSubscription,
   CatalogDetails,
   type ComponentUsages,
+  type Demo,
 } from '../index.js';
 
 export interface AngularSandboxOptions {
@@ -48,6 +49,8 @@ export interface AngularSandboxOptions {
   getComponentUsages?: () => Promise<ComponentUsages>;
   /** Optional callback when theme changes. */
   onThemeChange?: (theme: ThemePreference) => void;
+  /** Optional callback to retrieve the renderer's demos. */
+  getDemos?: () => Promise<Demo[]>;
 }
 
 /**
@@ -83,6 +86,7 @@ export class A2uiSandboxConnection implements OnDestroy {
     catalogJson?: unknown,
     getComponentUsages?: () => Promise<ComponentUsages>,
     onThemeChange?: (theme: ThemePreference) => void,
+    getDemos?: () => Promise<Demo[]>,
   ) {
     const processor: RendererProcessor = {
       processMessages: payload =>
@@ -109,6 +113,7 @@ export class A2uiSandboxConnection implements OnDestroy {
       catalogJson: catalogJson,
       getComponentUsages: getComponentUsages,
       onThemeChange: onThemeChange,
+      getDemos: getDemos,
     });
   }
 
@@ -146,6 +151,7 @@ export function provideA2uiSandbox(
           options?.catalogJson,
           options?.getComponentUsages,
           options?.onThemeChange,
+          options?.getDemos,
         ),
     },
     ...catalogsClasses,
