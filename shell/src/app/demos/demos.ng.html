@@ -43,12 +43,12 @@
     </div>
   } @else {
     <div class="demos-wall">
-      @for (demo of demos() ?? []; track demo.id) {
+      @for (demo of demos() ?? []; track demo.trackKey) {
         <a2ui-composer-demo-card
           #cardHost
-          [attr.data-demo-id]="demo.id"
+          [attr.data-demo-key]="demo.trackKey"
           [demo]="demo"
-          [mount]="mountedIds().has(demo.id)"
+          [mount]="mountedKeys().has(demo.trackKey)"
         ></a2ui-composer-demo-card>
       }
     </div>

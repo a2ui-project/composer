@@ -20,10 +20,9 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {EMPTY, ReplaySubject} from 'rxjs';
-import {type Demo} from 'a2ui-bridge';
 import {Demos, MAX_MOUNTED_CARDS} from './demos';
 import {DemosHarness} from './test/demos.harness';
-import {DemosCatalog} from './services/demos-catalog';
+import {DemosCatalog, type TrackedDemo} from './services/demos-catalog';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {
@@ -33,7 +32,7 @@ import {
 import {ChatState} from '../chat/chat-state/chat-state';
 
 class MockDemosCatalog {
-  readonly demos = signal<Demo[] | null>(null);
+  readonly demos = signal<TrackedDemo[] | null>(null);
   readonly loadingDemos = signal(false);
   setDemosActive = vi.fn();
   setCoordinator = vi.fn();
@@ -64,11 +63,12 @@ class MockChatState {
 /**
  * Builds a deterministic list of demos.
  * @param count How many demos to synthesize.
- * @return A list of demos with stable ids.
+ * @return A list of demos with stable ids and track keys.
  */
-function makeDemos(count: number): Demo[] {
+function makeDemos(count: number): TrackedDemo[] {
   return Array.from({length: count}, (_unused, index) => ({
     id: `demo-${index}`,
+    trackKey: `demo-${index}`,
     name: `Demo ${index}`,
     description: `Description ${index}`,
     a2ui: [
@@ -148,6 +148,24 @@ describe('Demos Component', () => {
     await fixture.whenStable();
 
     expect(await harness.getCardCount()).toBe(2);
+  });
+
+  it('renders a card per demo when the renderer reuses an id across two demos', async () => {
+    // The wall keys off the shell-assigned track key rather than the
+    // renderer's `id`, so two demos sharing an id still reconcile as two
+    // independent cards instead of raising NG0955 and collapsing into one.
+    demosCatalogMock.demos.set([
+      {id: 'chart', trackKey: 'chart', name: 'Chart One', description: 'First', a2ui: []},
+      {id: 'chart', trackKey: 'chart#1', name: 'Chart Two', description: 'Second', a2ui: []},
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(await harness.getCardCount()).toBe(2);
+    const cardKeys = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('a2ui-composer-demo-card'),
+    ).map(card => card.getAttribute('data-demo-key'));
+    expect(cardKeys).toEqual(['chart', 'chart#1']);
   });
 
   it('shows the empty state when the renderer answers with no demos', async () => {
