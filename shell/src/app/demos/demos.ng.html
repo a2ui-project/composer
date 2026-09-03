@@ -30,7 +30,7 @@
     <p class="demos-subtitle">Live demos served by the connected renderer.</p>
   </header>
 
-  @if (loadingDemos()) {
+  @if (isResolving()) {
     <div class="demos-loading" role="status">
       <mat-spinner diameter="32"></mat-spinner>
       <span>Loading demos...</span>

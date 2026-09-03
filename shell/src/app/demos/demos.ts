@@ -34,9 +34,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {DemosCatalog} from './services/demos-catalog';
 import {DemoCard} from './demo-card';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
-import {HostCommunication} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
-import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
 
 /**
  * Largest number of demo cards allowed to hold a live renderer frame at once.
@@ -45,7 +43,7 @@ import {AppConfigProvider} from '../settings/app-config-provider/app-config-prov
  * dozens of demos, and dozens of simultaneously live renderer iframes would
  * exhaust the browser long before the reader reached the bottom of the wall.
  */
-const MAX_MOUNTED_CARDS = 6;
+export const MAX_MOUNTED_CARDS = 6;
 
 /**
  * Intersection margin governing when a card mounts and unmounts. One viewport
@@ -69,9 +67,11 @@ const DEMO_ID_ATTRIBUTE = 'data-demo-id';
  * request, no demos. Mounting it hidden mirrors the `/gallery` idiom.
  *
  * Card mounting is driven by a single {@link IntersectionObserver} owned here
- * rather than one observer per card, and this component owns the page's only theme
- * effect ({@link HostCommunication#sendTheme} fans a single broadcast out to every
- * registered frame, which is why {@link DemoCard} deliberately has none).
+ * rather than one observer per card. The theme broadcast (`HostCommunication
+ * .sendTheme`) is not this component's concern: the mounted {@link
+ * RenderedFrame} coordinator already runs that effect in its own constructor,
+ * so the cost of a theme flip is one broadcast regardless of how many cards
+ * happen to be mounted, and {@link DemoCard} deliberately adds none.
  *
  * Inbound bridge traffic is deliberately not consumed here: DATA_MODEL_CHANGE
  * echoes from card frames are of no use to this page, and each card handles its
@@ -87,9 +87,7 @@ const DEMO_ID_ATTRIBUTE = 'data-demo-id';
 })
 export class Demos implements OnInit, OnDestroy {
   private readonly demosCatalog = inject(DemosCatalog);
-  private readonly hostCommunication = inject(HostCommunication);
   private readonly startupResolution = inject(StartupResolution);
-  private readonly configProvider = inject(AppConfigProvider);
 
   /** Demos served by the connected renderer, or null while unresolved. */
   protected readonly demos = this.demosCatalog.demos;
@@ -103,6 +101,18 @@ export class Demos implements OnInit, OnDestroy {
    * with an empty list.
    */
   protected readonly isEmpty = computed(() => this.demos()?.length === 0);
+
+  /**
+   * Whether the wall should show its loading state rather than the empty state
+   * or the demo wall. This covers both an in-flight request and the initial
+   * `demos() === null` state that precedes it: the request itself is gated on
+   * the coordinator's handshake resolving the active catalog, so on a fresh
+   * load there is a window — unbounded, if the configured renderer never
+   * responds — where nothing is loading yet and `demos()` is still null. Without
+   * this, `isEmpty()` would read `undefined === 0` as `false` and the page would
+   * fall through to an empty `.demos-wall` with no explanation.
+   */
+  protected readonly isResolving = computed(() => this.loadingDemos() || this.demos() === null);
 
   private readonly coordinatorHost = viewChild.required<ElementRef<HTMLElement>>('coordinatorHost');
 
@@ -164,13 +174,6 @@ export class Demos implements OnInit, OnDestroy {
         return;
       }
       untracked(() => this.syncObservedElements(observer, elements));
-    });
-
-    // The page's single theme effect: sendTheme fans out to every registered frame,
-    // so a theme flip costs one broadcast rather than one per mounted card.
-    effect(() => {
-      const theme = this.configProvider.themePreference();
-      untracked(() => this.hostCommunication.sendTheme(theme));
     });
   }
 
