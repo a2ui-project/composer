@@ -166,6 +166,77 @@ describe('DemosCatalog', () => {
     expect(service.demos()).toBeNull();
   });
 
+  it('requests demos once the coordinator registers after activation and catalog resolution', () => {
+    // This mirrors the real route ordering: the route component activates
+    // demos and the catalog resolves before the coordinator iframe's
+    // viewChild query resolves and calls setCoordinator().
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).not.toHaveBeenCalled();
+
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledWith(
+      {type: PreviewBridgeMessageType.GET_DEMOS},
+      coordinator,
+    );
+  });
+
+  it('re-requests demos when a RENDERER_READY envelope arrives while the gate is open', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenLastCalledWith(
+      {type: PreviewBridgeMessageType.GET_DEMOS},
+      coordinator,
+    );
+  });
+
+  it('dedupes a second RENDERER_READY envelope from the same window', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+
+    const readyEnvelope: MessageEnvelope = {
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    };
+
+    hostCommunicationMock.messageStream$.next(readyEnvelope);
+    TestBed.tick();
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
+
+    // React <StrictMode> double-fires RENDERER_READY per frame mount; the
+    // second envelope from the same window identity must not re-request.
+    hostCommunicationMock.messageStream$.next(readyEnvelope);
+    TestBed.tick();
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
+  });
+
   it('re-requests demos when activeCatalog receives a new object identity', () => {
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);

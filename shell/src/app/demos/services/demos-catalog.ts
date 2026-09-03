@@ -25,11 +25,11 @@ import {sanitizeHtml} from 'safevalues';
  * Owns the request/cache/timeout lifecycle for demos fetched from the
  * renderer connected over the bridge.
  *
- * Unlike {@link GalleryCatalog}, which is safe to broadcast to a single
+ * Unlike `GalleryCatalog`, which is safe to broadcast to a single
  * primary iframe, the `/demos` route hosts a hidden coordinator frame
  * alongside N visible card frames. Requests are therefore targeted
  * explicitly at the registered coordinator element via
- * {@link HostCommunication#sendToFrame}, and incoming replies are filtered
+ * `HostCommunication.sendToFrame`, and incoming replies are filtered
  * by `sourceWindow` so that a card frame can never be mistaken for the
  * coordinator's response.
  */
@@ -54,7 +54,7 @@ export class DemosCatalog {
   readonly demosActive = this._demosActive.asReadonly();
 
   /** The hidden coordinator iframe that answers demos requests. */
-  private coordinator: HTMLIFrameElement | null = null;
+  private readonly coordinatorSignal = signal<HTMLIFrameElement | null>(null);
 
   private demosTimeoutId?: ReturnType<typeof setTimeout>;
 
@@ -77,8 +77,9 @@ export class DemosCatalog {
     effect(() => {
       const active = this._demosActive();
       const catalog = this.catalogManagement.activeCatalog();
+      const coordinator = this.coordinatorSignal();
 
-      if (active && catalog && this.coordinator) {
+      if (active && catalog && coordinator) {
         this.requestDemos();
       } else {
         untracked(() => {
@@ -93,7 +94,8 @@ export class DemosCatalog {
     });
 
     this.hostCommunication.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
-      if (!this.coordinator || envelope.sourceWindow !== this.coordinator.contentWindow) {
+      const coordinator = untracked(() => this.coordinatorSignal());
+      if (!coordinator || envelope.sourceWindow !== coordinator.contentWindow) {
         return;
       }
 
@@ -109,8 +111,8 @@ export class DemosCatalog {
       } else if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
         const win = envelope.sourceWindow;
         if (win && !this.readyWindows.has(win)) {
-          this.readyWindows.add(win);
           if (this._demosActive() && this.catalogManagement.activeCatalog()) {
+            this.readyWindows.add(win);
             this.requestDemos();
           }
         }
@@ -119,7 +121,8 @@ export class DemosCatalog {
   }
 
   private requestDemos(): void {
-    if (!this.coordinator) {
+    const coordinator = untracked(() => this.coordinatorSignal());
+    if (!coordinator) {
       return;
     }
 
@@ -133,10 +136,7 @@ export class DemosCatalog {
       this.demosTimeoutId = undefined;
     }
 
-    this.hostCommunication.sendToFrame(
-      {type: PreviewBridgeMessageType.GET_DEMOS},
-      this.coordinator,
-    );
+    this.hostCommunication.sendToFrame({type: PreviewBridgeMessageType.GET_DEMOS}, coordinator);
 
     this.demosTimeoutId = setTimeout(() => {
       if (this._loadingDemos()) {
@@ -159,7 +159,7 @@ export class DemosCatalog {
    * @param el Coordinator iframe element, or null to clear it.
    */
   setCoordinator(el: HTMLIFrameElement | null): void {
-    this.coordinator = el;
+    this.coordinatorSignal.set(el);
   }
 }
 
