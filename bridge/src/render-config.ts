@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {RenderA2uiItem, ThemePreference} from './bridge-message';
+import type {RenderA2uiItem, ThemePreference} from './bridge-message.js';
 
 /**
  * A lightweight, framework-agnostic representation of an observable data model stream.

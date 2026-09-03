@@ -87,6 +87,19 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     return () => {
       connection.unsubscribe();
     };
+    // Intentionally empty: `catalogs` and `options` are expected to be fresh array/object
+    // literals (and fresh arrow function callbacks) on every render from typical call sites.
+    // Listing them as dependencies would tear down and re-attach the renderer on every render,
+    // producing an infinite attach/detach loop and a stream of duplicate `RENDERER_READY`
+    // handshakes. Consequence: `catalogs` and every `options` callback (onThemeChange,
+    // getComponentUsages, getDemos, etc.) are captured once at first attach; later changes to
+    // them are silently ignored until the component unmounts and remounts.
+    //
+    // TODO: `eslint-plugin-react-hooks` is not configured in this repo. If it ever is, do not
+    // let its `exhaustive-deps` autofix rewrite this array — that would reintroduce the loop
+    // described above. Add the suppression explicitly instead, verbatim as its own comment line:
+    // "eslint-disable-next-line react-hooks/exhaustive-deps" (omitted as a live directive today
+    // because ESLint's flat config fails the build on a disable comment for an unregistered rule).
   }, []);
 
   return {surface};
