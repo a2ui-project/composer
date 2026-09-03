@@ -1,0 +1,108 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  width: 100%;
+
+  /* Keeps a card whole inside the parent's CSS-columns masonry layout. */
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.demo-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
+  background-color: var(--mat-sys-surface, #ffffff);
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+
+  &:hover,
+  &:focus-within {
+    box-shadow: var(--mat-sys-level3, 0 4px 12px rgba(0, 0, 0, 0.2));
+    transform: translateY(-2px);
+  }
+
+  &.is-error {
+    border-color: var(--mat-sys-error, #b3261e);
+  }
+}
+
+.demo-card-header {
+  padding-bottom: 8px;
+}
+
+.demo-card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface, #1c1b1f);
+}
+
+.demo-card-subtitle {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-surface-variant, #49454f);
+}
+
+.demo-card-content {
+  padding-bottom: 16px;
+}
+
+.demo-card-surface {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 200px;
+  max-height: 560px;
+  overflow: hidden;
+  border-radius: 8px;
+  background-color: var(--mat-sys-surface-container, #f3f0f4);
+}
+
+.demo-card-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  border: none;
+  isolation: isolate;
+}
+
+.demo-card-placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  background-color: var(--mat-sys-surface-container-highest, #f0f0f0);
+}
+
+.demo-card-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-error-container, #410e0b);
+  background-color: var(--mat-sys-error-container, #f9dedc);
+}
