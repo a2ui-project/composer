@@ -79,15 +79,6 @@ export class HostCommunication implements OnDestroy {
     initialValue: null,
   });
 
-  /**
-   * Derives a filtered message stream scoped to envelopes originating from a specific window.
-   * @param win Source window to filter incoming message envelopes by
-   * @return Observable emitting only envelopes whose sourceWindow matches the given window
-   */
-  messageStreamFor(win: Window): Observable<MessageEnvelope> {
-    return this.messageStream$.pipe(filter(e => e.sourceWindow === win));
-  }
-
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
   private readonly earlyMessageBuffer: MessageEvent[] = [];
   private readonly outboundMessageBuffer: Array<{
@@ -305,12 +296,29 @@ export class HostCommunication implements OnDestroy {
 
   /**
    * Unregisters a previously registered secondary iframe target added via
-   * {@link registerSecondaryIframe}. Only removes the element from the tracked
-   * set; it does not affect the primary target, outbound buffer, or readiness state.
+   * {@link registerSecondaryIframe}. Removes the element from the tracked set, and,
+   * if {@link unregisterIframe}'s fallback had promoted this element to the primary
+   * target in the meantime (e.g. cleanup ordering during route teardown), clears the
+   * dangling primary pointer rather than leaving it aimed at a detached iframe.
+   * It never promotes a replacement primary target itself; that remains
+   * {@link unregisterIframe}'s responsibility.
    * @param el Secondary iframe element to unregister
    */
   unregisterSecondaryIframe(el: HTMLIFrameElement): void {
     this.registeredIframes.delete(el);
+    if (this.iframeElement === el) {
+      this.iframeElement = null;
+      this.iframeWindow = null;
+    }
+  }
+
+  /**
+   * Derives a filtered message stream scoped to envelopes originating from a specific window.
+   * @param win Source window to filter incoming message envelopes by
+   * @return Observable emitting only envelopes whose sourceWindow matches the given window
+   */
+  messageStreamFor(win: Window): Observable<MessageEnvelope> {
+    return this.messageStream$.pipe(filter(e => e.sourceWindow === win));
   }
 
   /**
@@ -407,9 +415,9 @@ export class HostCommunication implements OnDestroy {
         theme: theme,
       },
     });
+    const targetOrigin = this.resolveExpectedRendererOrigin();
     for (const iframe of this.registeredIframes) {
       if (iframe.contentWindow && iframe.contentWindow !== this.iframeWindow) {
-        const targetOrigin = this.resolveExpectedRendererOrigin();
         if (!targetOrigin) continue;
         try {
           iframe.contentWindow.postMessage(

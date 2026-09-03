@@ -1006,6 +1006,27 @@ describe('HostCommunication', () => {
       expect(service.latestEnvelope()).toBe(envelopeBeforeDispatch);
     });
 
+    it('clears the primary pointer when unregisterSecondaryIframe removes an element that unregisterIframe had promoted to primary', () => {
+      const primaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const primaryIframe = {contentWindow: primaryWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(primaryIframe);
+
+      const secondaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const secondaryIframe = {contentWindow: secondaryWindow} as unknown as HTMLIFrameElement;
+      service.registerSecondaryIframe(secondaryIframe);
+
+      // unregisterIframe's fallback promotes the only remaining registered
+      // iframe (the secondary) to primary when the primary is removed, e.g.
+      // if the coordinator's cleanup runs before a demo card's during route
+      // teardown.
+      service.unregisterIframe(primaryIframe);
+      expect(service.getIframeElement()).toBe(secondaryIframe);
+
+      service.unregisterSecondaryIframe(secondaryIframe);
+
+      expect(service.getIframeElement()).toBeNull();
+    });
+
     it('does not clear the outbound buffer or flip global readiness when registering a secondary iframe', () => {
       const primaryWindow = {postMessage: vi.fn()} as unknown as Window;
       const primaryIframe = {contentWindow: primaryWindow} as unknown as HTMLIFrameElement;
