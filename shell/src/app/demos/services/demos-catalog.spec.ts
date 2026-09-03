@@ -104,6 +104,76 @@ describe('DemosCatalog', () => {
     expect(service.demos()).toEqual(demos);
   });
 
+  it('drops null entries from a DEMOS payload instead of stranding the wall', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    const first: Demo = {id: 'demo-1', name: 'Demo One', description: 'A demo', a2ui: []};
+    const second: Demo = {id: 'demo-2', name: 'Demo Two', description: 'Another demo', a2ui: []};
+
+    // Reading `name` off a null entry throws inside the messageStream$
+    // subscriber, where RxJS routes it to the global unhandled-error handler:
+    // the envelope is dropped and `loadingDemos` never clears.
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: [first, null, second],
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    expect(service.demos()).toEqual([first, second]);
+    expect(service.loadingDemos()).toBe(false);
+  });
+
+  it('preserves ampersands and angle brackets in demo name and description', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    const demos: Demo[] = [
+      {id: 'demo-1', name: 'Tables & Charts', description: 'Q1 < Q2', a2ui: []},
+    ];
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: demos,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    // Both fields reach the DOM only through interpolation and a plain-text
+    // [title] attribute, so HTML-encoding them here would surface literally
+    // as "Tables &amp; Charts" on the card.
+    expect(service.demos()).toEqual(demos);
+  });
+
+  it('replaces non-string demo text with an empty string', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: [{id: 'demo-1', name: {}, description: 42, a2ui: []}],
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    expect(service.demos()).toEqual([{id: 'demo-1', name: '', description: '', a2ui: []}]);
+  });
+
   it('ignores a DEMOS envelope originating from a window other than the coordinator', () => {
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
@@ -168,11 +238,52 @@ describe('DemosCatalog', () => {
     // No RENDERER_READY ever arrives (e.g. a slow-booting dev bundle still
     // mid-boot). The initial request was never landable, so the fallback
     // timer must never have been armed for it: falling back to [] here
-    // would be the "No Demos Available" flash from finding A1.
+    // would flash "No Demos Available" over a renderer that is still coming
+    // up.
     vi.advanceTimersByTime(2000);
 
     expect(service.loadingDemos()).toBe(true);
     expect(service.demos()).toBeNull();
+  });
+
+  it('arms the fallback when RENDERER_READY lands before activeCatalog resolves', () => {
+    vi.useFakeTimers();
+    const coordinator = createCoordinator();
+    service.setDemosActive(true);
+    service.setCoordinator(coordinator);
+    TestBed.tick();
+
+    // Real cold-load ordering, which the tests above invert: `CatalogManagement`
+    // sends GET_CATALOG *in response to* RENDERER_READY and only sets
+    // `activeCatalog` once the later A2UI_CATALOG reply lands. So the
+    // coordinator reports ready while `activeCatalog` is still null, and that
+    // boot has to be recorded even though the re-request below it is gated off.
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).not.toHaveBeenCalled();
+
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledWith(
+      {type: PreviewBridgeMessageType.GET_DEMOS},
+      coordinator,
+    );
+    expect(service.loadingDemos()).toBe(true);
+
+    // The coordinator has already proven it can respond, so a renderer that
+    // never answers GET_DEMOS must still resolve to the empty state rather
+    // than spinning on "Loading demos..." forever.
+    vi.advanceTimersByTime(2000);
+
+    expect(service.loadingDemos()).toBe(false);
+    expect(service.demos()).toEqual([]);
   });
 
   it('clears the cache back to null when setDemosActive(false) is called', () => {
