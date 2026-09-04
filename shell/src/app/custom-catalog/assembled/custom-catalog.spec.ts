@@ -149,6 +149,27 @@ describe('CustomCatalog', () => {
     expect(apisFile?.path).toBe('shell/src/app/custom-catalog/catalog/apis.ts');
   });
 
+  it('renders the source view DOM: a file list and the selected file verbatim', async () => {
+    component.setViewMode('renderers');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const items = Array.from(el.querySelectorAll('.cc-source-item'));
+    expect(items).toHaveLength(11);
+
+    // Exactly one file is marked current, and it is the one on screen.
+    const active = items.filter(i => i.getAttribute('aria-current') === 'true');
+    expect(active).toHaveLength(1);
+
+    const codeText = el.querySelector('.cc-source-code')?.textContent ?? '';
+    expect(codeText).toBe(component.selectedSource()?.code);
+
+    // The assembled panes are not in the DOM while a source view is showing.
+    expect(el.querySelector('.cc-preview')).toBeNull();
+    expect(el.querySelector('.cc-editor')).toBeNull();
+  });
+
   it('bundles exactly one renderer file per component the catalog defines', () => {
     // apis.ts exports one ComponentApi per catalog component; dashboard-catalog
     // is assembled from these same objects, so their names are the catalog's.
