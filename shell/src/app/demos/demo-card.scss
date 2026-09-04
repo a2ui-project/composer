@@ -51,13 +51,21 @@
   border-radius: 12px;
   border: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
   background-color: var(--mat-sys-surface, #ffffff);
+
+  /*
+   * Paint-only, by necessity rather than taste: up to MAX_MOUNTED_CARDS live renderer
+   * frames are on this wall at once, and anything that dirtied layout on hover would
+   * reflow the CSS-columns masonry — and every frame inside it — under the pointer.
+   */
   transition:
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
 
   &:hover,
   &:focus-within {
-    box-shadow: var(--mat-sys-level3, 0 4px 12px rgba(0, 0, 0, 0.2));
+    border-color: var(--mat-sys-primary, #6750a4);
+    box-shadow: var(--mat-sys-level2, 0 2px 10px rgba(0, 0, 0, 0.16));
     transform: translateY(-2px);
   }
 
@@ -66,25 +74,60 @@
   }
 }
 
-.demo-card-header {
-  padding-bottom: 8px;
+/*
+ * Padding here and nowhere else. The header is the card's only chrome: the surface below
+ * it runs edge to edge, so this is the single frame the reader sees rather than a
+ * bordered card wrapping a second bordered surface.
+ *
+ * The layout is stated rather than inherited from mat-card-header, which lays its
+ * children out in a row; a title and a truncating subtitle have to stack, and the
+ * subtitle needs a min-width it can actually shrink below for text-overflow to engage.
+ */
+.demo-card .demo-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 12px 14px 10px;
 }
 
 .demo-card-title {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 500;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.005em;
   color: var(--mat-sys-on-surface, #1c1b1f);
 }
 
+/*
+ * One line, ellipsised, and quiet. Truncation is visual only — the full description
+ * stays in the DOM for assistive technology and is bound to the native `title`
+ * attribute for hover. The colour token carries the demotion in both themes; a
+ * hardcoded grey would be invisible on the dark surface.
+ */
 .demo-card-subtitle {
+  display: block;
   margin: 0;
-  font-size: 0.8125rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.5;
   color: var(--mat-sys-on-surface-variant, #49454f);
+  opacity: 0.72;
 }
 
-.demo-card-content {
-  padding-bottom: 16px;
+/* Full bleed: the preview is the card's content, so it keeps none of mat-card's padding. */
+.demo-card .demo-card-content {
+  padding: 0;
 }
 
 .demo-card-surface {
@@ -94,8 +137,14 @@
   min-height: var(--demo-card-placeholder-h);
   max-height: var(--demo-card-max-h);
   overflow: hidden;
-  border-radius: 8px;
-  background-color: var(--mat-sys-surface-container, #f3f0f4);
+
+  /*
+   * No border-radius and no background of its own: the card behind it already provides
+   * both, and a second rounded, differently tinted rectangle inside the first was what
+   * made every card read as chrome wrapping chrome. The card's own overflow: hidden
+   * still rounds this surface off against the card's bottom corners.
+   */
+  background-color: transparent;
 
   /*
    * A measured card is sized by the inline height the component binds, so the
