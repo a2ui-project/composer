@@ -34,7 +34,7 @@
     <div
       class="demo-card-surface"
       [class.is-measured]="cardHeight() !== null"
-      [style.height.px]="cardHeight()"
+      [style.height.px]="surfaceHeight()"
     >
       @if (mount() && safeRendererUrl()) {
         <iframe

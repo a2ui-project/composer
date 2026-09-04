@@ -21,6 +21,8 @@
   /*
    * --demo-card-measure-h and --demo-card-max-h must match MEASURE_HEIGHT_PX and
    * MAX_CARD_HEIGHT_PX in demo-card.ts, which clamp every reported height to that range.
+   * Both are stated in the guest frame's own coordinate space, which is what the guest
+   * measures itself in; --demo-preview-scale converts that space to the wall's.
    *
    * --demo-card-measure-h is the height the frame is held at until its guest reports a
    * rendered height, and is therefore the floor of every measurement the card receives:
@@ -33,6 +35,13 @@
    * measuring height is the point — the two were once the same 200px value, which meant
    * every demo shorter than 200px measured as exactly 200 and no card could size below
    * it.
+   *
+   * --demo-preview-scale is deliberately *not* declared here. It is host-bound from
+   * PREVIEW_SCALE in demo-card.ts, which is the single source of truth for it, because
+   * the same factor also has to divide the measured height in surfaceHeight(); declaring
+   * a value here as well would give the two a way to drift apart. Every read below
+   * therefore falls back to `1`, the identity scale, which degrades the wall to the
+   * unscaled 1:1 layout rather than to a broken one.
    */
   --demo-card-measure-h: 32px;
   --demo-card-placeholder-h: 200px;
@@ -135,7 +144,12 @@
   display: block;
   width: 100%;
   min-height: var(--demo-card-placeholder-h);
-  max-height: var(--demo-card-max-h);
+
+  /*
+   * The clamp is stated in the guest's space (matching MAX_CARD_HEIGHT_PX) and converted
+   * here, because this box is measured in the wall's space.
+   */
+  max-height: calc(var(--demo-card-max-h) * var(--demo-preview-scale, 1));
   overflow: hidden;
 
   /*
@@ -158,20 +172,45 @@
 
 .demo-card-frame {
   display: block;
-  width: 100%;
   border: none;
   isolation: isolate;
 
   /*
+   * The frame is laid out in the guest's coordinate space and painted in the wall's.
+   *
+   * transform is presentational: it changes what is painted and never what the guest
+   * measures, which is the property the card's height math depends on. So the layout box
+   * is divided back up by the same factor — width here, height below — leaving the guest
+   * a viewport ~1/0.8 wider than the column while the painted result fills the column
+   * exactly. transform-origin must stay at the top left corner: any other origin shifts
+   * the painted frame away from its layout box, and since hit testing follows the paint,
+   * clicks inside the demo would land further off the further down the card they are.
+   *
+   * --demo-preview-scale is host-bound from PREVIEW_SCALE in demo-card.ts; see the
+   * :host block above for why it is not declared in this file.
+   */
+  transform-origin: top left;
+  transform: scale(var(--demo-preview-scale, 1));
+  width: calc(100% / var(--demo-preview-scale, 1));
+
+  /*
    * Until a measurement commits, the frame is a short probe rather than the visible
    * surface: its height is the floor of everything the guest can report, so it is held
-   * low enough that even the shortest demo measures above it. The placeholder covers
-   * the surface meanwhile, so this stunted frame is never the card the reader sees.
+   * low enough that even the shortest demo measures above it. Unscaled, because it is a
+   * value in the guest's space and the guest is what reads it back. The placeholder
+   * covers the surface meanwhile, so this stunted frame is never the card the reader
+   * sees.
    */
   height: var(--demo-card-measure-h);
 
+  /*
+   * Once measured, the surface carries the painted height, so the frame's own layout
+   * height is that divided back out — landing at (just under) the height the guest
+   * reported. surfaceHeight() floors, which is what keeps this side of the division
+   * from ever exceeding the reported height and provoking further growth.
+   */
   .demo-card-surface.is-measured & {
-    height: 100%;
+    height: calc(100% / var(--demo-preview-scale, 1));
   }
 }
 

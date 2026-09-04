@@ -77,10 +77,49 @@ const MEASURE_HEIGHT_PX = 32;
  * the basic catalog (Incremental, 672px) exceeds it; letting it through at full height
  * would hand a single card more than twice the wall's median card height.
  *
+ * Like every other height in this file it is stated in the guest's own coordinate
+ * space, so the tallest card the reader actually sees is this many pixels times
+ * {@link PREVIEW_SCALE}. The clamp is deliberately expressed before the scale rather
+ * than after it, because what it bounds is a card's share of a masonry column — a ratio
+ * against its neighbours, which shrink by that same factor.
+ *
  * Must match the `--demo-card-max-h` custom property declared on `:host` in
  * demo-card.scss.
  */
 const MAX_CARD_HEIGHT_PX = 560;
+
+/**
+ * Factor the renderer frame is visually scaled by so that a card reads as a preview.
+ *
+ * At 1:1 inside a ~345px masonry column a demo's own `<h1>` is set as large as the
+ * page's own "Demos" heading, so every card competed with the shell's chrome instead of
+ * previewing inside it. 0.8 is the largest reduction that answers that while keeping a
+ * demo's body copy legible — 14px of guest text lands at ~11px on screen — and it widens
+ * the guest's viewport to ~431px, enough that the demos lay themselves out roughly as
+ * they were authored rather than collapsing into narrow-column wrapping.
+ *
+ * This constant is the single source of truth for the scale, and it has to be, because
+ * the scale is applied in two places that would silently disagree if it were written
+ * twice. It reaches the stylesheet as the `--demo-preview-scale` custom property, host
+ * bound from {@link DemoCard.previewScale}, and reaches the layout through {@link
+ * DemoCard.surfaceHeight}:
+ *
+ * - The stylesheet scales the frame with `transform` and compensates its layout box with
+ *   `calc(100% / var(--demo-preview-scale))`, so the frame's *layout* size stays in the
+ *   guest's coordinate space while its *painted* size fills the card.
+ * - {@link DemoCard.surfaceHeight} scales the measured height by the same factor, so the
+ *   card's box is the painted height. Sizing the card from the raw reported height
+ *   instead is the whole hazard here: it would leave every card carrying
+ *   `(1 - PREVIEW_SCALE)` of dead space under its demo.
+ *
+ * The transform is presentational and never reaches the guest, which measures itself in
+ * its own unscaled viewport, so the scale cannot feed back into what it reports. {@link
+ * DemoCard.surfaceHeight} floors rather than rounds to keep it that way: flooring
+ * guarantees the frame's derived layout height never exceeds the height the guest
+ * reported, so a committed card can never provoke a strictly larger report and ratchet
+ * itself upwards a pixel at a time for the length of its growth phase.
+ */
+const PREVIEW_SCALE = 0.8;
 
 /**
  * How long a newly attached frame is measured before its height is committed.
@@ -151,6 +190,14 @@ const READY_TIMEOUT_MS = 8000;
   templateUrl: './demo-card.ng.html',
   styleUrl: './demo-card.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    // Publishes PREVIEW_SCALE to the stylesheet rather than restating it there, so the
+    // frame's transform, its compensating layout box and surfaceHeight() can never
+    // disagree about what the scale is. demo-card.scss reads it as
+    // `var(--demo-preview-scale, 1)`: the fallback is the identity scale, so the wall
+    // degrades to the unscaled 1:1 layout rather than to a broken one.
+    '[style.--demo-preview-scale]': 'previewScale',
+  },
 })
 export class DemoCard {
   private readonly sanitizer = inject(DomSanitizer);
@@ -169,8 +216,39 @@ export class DemoCard {
   readonly state = this.stateSignal.asReadonly();
 
   private readonly cardHeightSignal = signal<number | null>(null);
-  /** Readonly measured surface height in pixels, or null before any rendered report. */
+  /**
+   * Readonly measured height in pixels, or null before any rendered report.
+   *
+   * This is the height in the *guest's* coordinate space — what the demo measures inside
+   * its own unscaled viewport — not the height the card occupies on the wall. See {@link
+   * DemoCard.surfaceHeight} for the latter.
+   */
   readonly cardHeight = this.cardHeightSignal.asReadonly();
+
+  /** The frame's preview scale, published to the stylesheet as a custom property. */
+  protected readonly previewScale = String(PREVIEW_SCALE);
+
+  /**
+   * Height the card's surface actually occupies on the wall, or null before a report.
+   *
+   * The frame is painted at {@link PREVIEW_SCALE}, so the box around it has to be the
+   * *painted* height rather than the height the guest reported. Binding the raw
+   * measurement here instead would give every card `(1 - PREVIEW_SCALE)` of its own
+   * height as dead space below the demo — the exact defect the content-sized cards were
+   * introduced to remove, reintroduced by the scale.
+   *
+   * Floored, not rounded, so the frame's layout height — which the stylesheet derives
+   * back as `calc(100% / var(--demo-preview-scale))` — is never taller than the height
+   * the guest reported. Rounding up would make the frame's own viewport exceed its
+   * content, and since the guest's report is floored at its viewport that would come
+   * back as a strictly larger height, which the growth phase would accept, enlarging the
+   * frame again: a slow ratchet lasting the whole growth window. The cost is under a
+   * pixel of the demo's bottom padding.
+   */
+  protected readonly surfaceHeight = computed(() => {
+    const measured = this.cardHeight();
+    return measured === null ? null : Math.floor(measured * PREVIEW_SCALE);
+  });
 
   /**
    * How this card is currently treating its frame's height reports. Reset to `measuring`
