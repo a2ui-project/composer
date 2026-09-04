@@ -43,6 +43,7 @@ import type {
   RendererConfig,
   SurfaceStateSubscription,
   ComponentUsages,
+  Demo,
 } from './render-config';
 
 /**
@@ -85,12 +86,20 @@ interface ActiveRenderer {
  *    - `DATA_MODEL_CHANGE`: Incremental state mutations synchronized across frame contexts.
  *    - `SET_BLOCKING_STATE`: Blocks browser interactions by launching a full-screen dynamic overlay.
  *    - `GET_CATALOG`: Fetches catalog metadata definitions, stripping potential JS security prefixes.
+ *    - `GET_COMPONENT_USAGES`: Requests the active renderer's registered component usage samples.
+ *    - `GET_DEMOS`: Requests the active renderer's registered named demos.
+ *    - `SET_THEME`: Applies a light/dark theme preference and notifies the active renderer.
  *
  * 2. **Bridge ➡️ Shell (Outgoing Messages)**:
  *    - `RENDERER_READY`: Bootstrap handshake signal dispatched when the sandbox window is ready.
  *    - `SEND_TO_SERVER`: Relays user inputs and interactions (clicks, keyups) from components back to the composer.
  *    - `DATA_MODEL_CHANGE`: Transmits state value modifications back upward for cross-surface bindings.
  *    - `FORCE_UNBLOCK`: Emergency override signal allowing users to force-unblock locked frames.
+ *    - `A2UI_CATALOG`: Response to `GET_CATALOG`, carrying the resolved catalog JSON or an error.
+ *    - `COMPONENT_USAGES`: Response to `GET_COMPONENT_USAGES`, carrying the resolved usage samples.
+ *    - `SURFACE_RESIZE`: Broadcasts updated content dimensions whenever the rendered surface resizes.
+ *    - `CONSOLE_LOG`: Forwards intercepted `console.*` output and uncaught errors to the host.
+ *    - `DEMOS`: Response to `GET_DEMOS`, carrying the resolved list of named demos.
  *
  * ### 🕒 Lifecycle Phases
  *
@@ -407,6 +416,10 @@ export class PreviewBridge {
 
       case PreviewBridgeMessageType.GET_COMPONENT_USAGES:
         void this.handleGetComponentUsages();
+        break;
+
+      case PreviewBridgeMessageType.GET_DEMOS:
+        void this.handleGetDemos();
         break;
 
       case PreviewBridgeMessageType.SET_THEME:
@@ -881,6 +894,24 @@ export class PreviewBridge {
     this.sendMessage({
       type: PreviewBridgeMessageType.COMPONENT_USAGES,
       payload: usages,
+    });
+  }
+
+  /**
+   * Invokes the getDemos callback and returns the resolved demos.
+   */
+  private async handleGetDemos(): Promise<void> {
+    let demos: Demo[] = [];
+    if (this.activeRenderer?.config.getDemos) {
+      try {
+        demos = await this.activeRenderer.config.getDemos();
+      } catch (error) {
+        console.error('PreviewBridge: Error invoking getDemos:', error);
+      }
+    }
+    this.sendMessage({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: demos,
     });
   }
 

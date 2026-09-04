@@ -86,6 +86,19 @@ export class CrossFrameValidator {
         return true;
       }
 
+      case PreviewBridgeMessageType.GET_DEMOS: {
+        if (msgPayload !== undefined && msgPayload !== null) {
+          if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
+            CrossFrameValidator.recordError(
+              'Malformed payload for GET_DEMOS: must be an object, null, or undefined.',
+              errors,
+            );
+            return false;
+          }
+        }
+        return true;
+      }
+
       case PreviewBridgeMessageType.RENDER_A2UI: {
         if (!msgPayload || !Array.isArray(msgPayload)) {
           CrossFrameValidator.recordError(

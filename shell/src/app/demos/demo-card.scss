@@ -1,0 +1,424 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  width: 100%;
+
+  /*
+   * --demo-card-measure-h and --demo-card-max-h must match MEASURE_HEIGHT_PX and
+   * MAX_CARD_HEIGHT_PX in demo-card.ts, which clamp every reported height to that range.
+   * Both are stated in the guest frame's own coordinate space, which is what the guest
+   * measures itself in; --demo-preview-scale converts that space to the wall's.
+   *
+   * --demo-card-measure-h is the height the frame is held at until its guest reports a
+   * rendered height, and is therefore the floor of every measurement the card receives:
+   * documentElement.scrollHeight can never come back smaller than the frame's own
+   * viewport. It is kept far below any real demo so even the shortest one is measurable.
+   *
+   * --demo-card-placeholder-h has no counterpart in demo-card.ts because it is purely
+   * presentational: it is the resting height of the loading placeholder on a card that
+   * has not been measured yet, and never reaches the frame. Keeping it separate from the
+   * measuring height is the point — the two were once the same 200px value, which meant
+   * every demo shorter than 200px measured as exactly 200 and no card could size below
+   * it.
+   *
+   * --demo-preview-scale is deliberately *not* declared here. It is host-bound from
+   * PREVIEW_SCALE in demo-card.ts, which is the single source of truth for it, because
+   * the same factor also has to divide the measured height in surfaceHeight(); declaring
+   * a value here as well would give the two a way to drift apart. Every read below
+   * therefore falls back to `1`, the identity scale, which degrades the wall to the
+   * unscaled 1:1 layout rather than to a broken one.
+   */
+  --demo-card-measure-h: 32px;
+  --demo-card-placeholder-h: 200px;
+  --demo-card-max-h: 560px;
+
+  /* Keeps a card whole inside the parent's CSS-columns masonry layout. */
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
+
+  /*
+   * Entrance.
+   *
+   * A CSS animation and not a transition, and driven by nothing but this element
+   * coming into existence, because that is what makes it play exactly once. The
+   * hazard here is real and specific: a card's height is not known when it is
+   * created and commits a second or so later, and again as its demo grows, so an
+   * entrance keyed on "the card has content now" would restart mid-wall and the
+   * reader would watch 43 cards flicker. An animation started by element creation
+   * cannot be restarted by a height landing on it, by the frame mounting, or by the
+   * masonry reflowing around it — only by the element being replaced.
+   *
+   * Which also settles what happens on scroll-back: nothing. The wall creates every
+   * card up front and mounts and unmounts their *frames* as the reader moves, so a
+   * card scrolled past and returned to is the same element it always was and has
+   * long since finished animating. There is no replay to suppress.
+   *
+   * `--demo-card-enter-index` is the card's place in the cascade, bound by the wall
+   * (see `Demos.entranceStep`) and capped there rather than here, because the cap is
+   * derived from MAX_MOUNTED_CARDS and that constant belongs to demos.ts. The
+   * fallback is 0, which degrades to every card entering together rather than to
+   * nothing entering at all.
+   *
+   * `both` matters: `backwards` is what holds the card at the start of the keyframes
+   * during its delay, so a card waiting its turn is invisible rather than visible,
+   * then briefly hidden, then faded in.
+   */
+  --demo-card-enter-step: 35ms;
+
+  animation: demo-card-enter 320ms cubic-bezier(0.2, 0, 0, 1) both;
+  animation-delay: calc(var(--demo-card-enter-index, 0) * var(--demo-card-enter-step));
+}
+
+@keyframes demo-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * Reduced motion removes the entrance outright rather than shortening it. There is
+ * nothing to communicate here — the cards are all going to be there either way — so
+ * the honest reduction is for them to simply be there.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :host {
+    animation: none;
+  }
+}
+
+.demo-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+
+  /*
+   * surface-bright against the canvas's surface-dim; see demos.scss for why that pair
+   * and not the container ramp. Stated here rather than left to mat-card's own
+   * container colour, which resolves to plain `surface` — the same value the page
+   * behind it had.
+   */
+  background-color: var(--mat-sys-surface-bright, #ffffff);
+
+  /*
+   * mat-card-title and mat-card-subtitle set `font-family` from these tokens, which
+   * outranks the family the card inherits, so the two lines of text on every card
+   * were the only text on the route not following the shell's own font. Pointing the
+   * tokens at `inherit` hands the family back to the cascade — the card follows
+   * whatever the shell sets, from wherever it sets it, rather than tracking a copy
+   * baked into the card component's own tokens. Only the family is delegated: the
+   * size, weight and colour below are this card's, not mat-card's defaults.
+   */
+  --mat-card-title-text-font: inherit;
+  --mat-card-subtitle-text-font: inherit;
+
+  /*
+   * Elevation does the separating, so the outline no longer has to. The card used to
+   * carry a 1px outline-variant border because at 1.02 contrast against the page it
+   * was the only thing marking where the card ended; with a real tonal step and a
+   * real shadow the border is one line too many, and 43 of them made the wall read as
+   * a grid of boxes rather than a set of objects. Only the error state keeps a line,
+   * as an inset outline so it can appear without changing the card's box.
+   */
+  box-shadow: var(--mat-sys-level1);
+
+  /*
+   * Paint-only, by necessity rather than taste: up to MAX_MOUNTED_CARDS live renderer
+   * frames are on this wall at once, and anything that dirtied layout on hover would
+   * reflow the CSS-columns masonry — and every frame inside it — under the pointer.
+   */
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+
+  &:hover,
+  &:focus-within {
+    box-shadow: var(--mat-sys-level3);
+    transform: translateY(-2px);
+  }
+
+  &.is-error {
+    outline: 1px solid var(--mat-sys-error, #b3261e);
+    outline-offset: -1px;
+  }
+}
+
+/*
+ * The lift is motion, and reduced motion asks for none of it. The elevation change
+ * still happens — it is information about what the pointer is on — it just arrives
+ * without the travel.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .demo-card {
+    transition: none;
+
+    &:hover,
+    &:focus-within {
+      transform: none;
+    }
+  }
+}
+
+/*
+ * Padding here and nowhere else. The header is the card's only chrome: the surface below
+ * it runs edge to edge, so this is the single frame the reader sees rather than a
+ * bordered card wrapping a second bordered surface.
+ *
+ * The layout is stated rather than inherited from mat-card-header, which lays its
+ * children out in a row; a title and a truncating subtitle have to stack, and the
+ * subtitle needs a min-width it can actually shrink below for text-overflow to engage.
+ */
+/*
+ * The card's only chrome, and now marked as such.
+ *
+ * The rule underneath it is the one border the card kept, and it earns its place by
+ * separating two different things rather than by outlining one: above it is the
+ * shell talking about the demo, below it is the demo's own document. In light that
+ * boundary was invisible — the card and a demo's white page are within three units
+ * of each other — so the title read as floating over the demo rather than labelling
+ * it. It is the same `outline-variant` the card's own perimeter used to spend on
+ * saying something elevation now says better.
+ *
+ * The padding is tighter on the trailing edge than the leading one because the Open
+ * control carries its own inset; measured from the text, the block is even.
+ */
+.demo-card .demo-card-header {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 10px 9px 14px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
+}
+
+/*
+ * The text column. `min-width: 0` is what lets it shrink below its content so the
+ * subtitle's `text-overflow` engages: a flex item's default `min-width: auto` would
+ * hold the column at the full width of the untruncated description and push the Open
+ * button off the card instead.
+ */
+.demo-card-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/*
+ * Revealed on hover and whenever focus is anywhere inside the card, which is what
+ * makes it reachable without a mouse: tabbing to the button puts focus inside the
+ * card, so the card matches `:focus-within` and the button it is revealing is the
+ * thing that revealed it. `:focus-visible` on the button itself is kept as well, so
+ * the reveal does not depend on `:focus-within` matching through the frame.
+ *
+ * Hidden with `opacity` rather than `visibility` or `display`, because both of those
+ * remove the button from the tab order, and a control a keyboard reader cannot reach
+ * until they have already found it is not an affordance.
+ */
+.demo-card .demo-card-open {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0 10px;
+  height: 30px;
+  line-height: 30px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--mat-sys-primary, #6750a4);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+
+  .demo-card-open-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    font-size: 16px;
+    line-height: 16px;
+    vertical-align: middle;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary, #6750a4);
+    outline-offset: 2px;
+  }
+}
+
+.demo-card:hover .demo-card-open,
+.demo-card:focus-within .demo-card-open,
+.demo-card .demo-card-open:focus-visible {
+  opacity: 1;
+}
+
+/*
+ * Reduced motion takes the fade, not the reveal: the control still appears, it just
+ * appears at once.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .demo-card .demo-card-open {
+    transition: none;
+  }
+}
+
+.demo-card-title {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.005em;
+  color: var(--mat-sys-on-surface, #1c1b1f);
+}
+
+/*
+ * One line, ellipsised, and quiet. Truncation is visual only — the full description
+ * stays in the DOM for assistive technology and is bound to the native `title`
+ * attribute for hover. The colour token carries the demotion in both themes; a
+ * hardcoded grey would be invisible on the dark surface.
+ */
+.demo-card-subtitle {
+  display: block;
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--mat-sys-on-surface-variant, #49454f);
+  opacity: 0.72;
+}
+
+/* Full bleed: the preview is the card's content, so it keeps none of mat-card's padding. */
+.demo-card .demo-card-content {
+  padding: 0;
+}
+
+.demo-card-surface {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: var(--demo-card-placeholder-h);
+
+  /*
+   * The clamp is stated in the guest's space (matching MAX_CARD_HEIGHT_PX) and converted
+   * here, because this box is measured in the wall's space.
+   */
+  max-height: calc(var(--demo-card-max-h) * var(--demo-preview-scale, 1));
+  overflow: hidden;
+
+  /*
+   * No border-radius and no background of its own: the card behind it already provides
+   * both, and a second rounded, differently tinted rectangle inside the first was what
+   * made every card read as chrome wrapping chrome. The card's own overflow: hidden
+   * still rounds this surface off against the card's bottom corners.
+   */
+  background-color: transparent;
+
+  /*
+   * A measured card is sized by the inline height the component binds, so the
+   * placeholder floor has to give way: without this, no demo could ever present
+   * shorter than --demo-card-placeholder-h no matter what it measured.
+   */
+  &.is-measured {
+    min-height: 0;
+  }
+}
+
+.demo-card-frame {
+  display: block;
+  border: none;
+  isolation: isolate;
+
+  /*
+   * The frame is laid out in the guest's coordinate space and painted in the wall's.
+   *
+   * transform is presentational: it changes what is painted and never what the guest
+   * measures, which is the property the card's height math depends on. So the layout box
+   * is divided back up by the same factor — width here, height below — leaving the guest
+   * a viewport ~1/0.8 wider than the column while the painted result fills the column
+   * exactly. transform-origin must stay at the top left corner: any other origin shifts
+   * the painted frame away from its layout box, and since hit testing follows the paint,
+   * clicks inside the demo would land further off the further down the card they are.
+   *
+   * --demo-preview-scale is host-bound from PREVIEW_SCALE in demo-card.ts; see the
+   * :host block above for why it is not declared in this file.
+   */
+  transform-origin: top left;
+  transform: scale(var(--demo-preview-scale, 1));
+  width: calc(100% / var(--demo-preview-scale, 1));
+
+  /*
+   * Until a measurement commits, the frame is a short probe rather than the visible
+   * surface: its height is the floor of everything the guest can report, so it is held
+   * low enough that even the shortest demo measures above it. Unscaled, because it is a
+   * value in the guest's space and the guest is what reads it back. The placeholder
+   * covers the surface meanwhile, so this stunted frame is never the card the reader
+   * sees.
+   */
+  height: var(--demo-card-measure-h);
+
+  /*
+   * Once measured, the surface carries the painted height, so the frame's own layout
+   * height is that divided back out — landing at (just under) the height the guest
+   * reported. surfaceHeight() floors, which is what keeps this side of the division
+   * from ever exceeding the reported height and provoking further growth.
+   */
+  .demo-card-surface.is-measured & {
+    height: calc(100% / var(--demo-preview-scale, 1));
+  }
+}
+
+/*
+ * A well inset into the card rather than a panel laid on top of it: one step *down*
+ * the container ramp from the card's own surface-bright in either theme, so an
+ * unmeasured card reads as an empty frame waiting for its demo instead of as a card
+ * with nothing on it. surface-container-highest sat within three units of the dark
+ * card and was invisible there.
+ */
+.demo-card-placeholder {
+  position: absolute;
+  inset: 0;
+  background-color: var(--mat-sys-surface-container-high, #f0f0f0);
+}
+
+.demo-card-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-error-container, #410e0b);
+  background-color: var(--mat-sys-error-container, #f9dedc);
+}

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {ThemePreference} from './bridge-message';
+import type {RenderA2uiItem, ThemePreference} from './bridge-message.js';
 
 /**
  * A lightweight, framework-agnostic representation of an observable data model stream.
@@ -67,6 +67,23 @@ export declare interface ComponentUsage {
 /** A record mapping component names to their usage definition. */
 export type ComponentUsages = Record<string, ComponentUsage>;
 
+/**
+ * Represents a single named demo the renderer can serve over the Preview Bridge.
+ *
+ * NOTE: Declared as a `declare interface` so `tsickle` generates compiler externs
+ * definitions for JSCompiler (Closure Compiler), preventing property renaming across frame boundaries.
+ */
+export declare interface Demo {
+  /** The unique identifier of the demo. */
+  id: string;
+  /** The display name of the demo. */
+  name: string;
+  /** A short description of the demo. */
+  description: string;
+  /** The array of A2UI layout commands used to render the demo. */
+  a2ui: RenderA2uiItem[];
+}
+
 /** Configuration and lifecycle callbacks for attaching a renderer. */
 export declare interface RendererConfig {
   /** The reactive surface group model to connect for data synchronization. */
@@ -85,6 +102,8 @@ export declare interface RendererConfig {
   onThemeChange?: (theme: ThemePreference) => void;
   /** Optional callback to retrieve component usage samples. */
   getComponentUsages?: () => Promise<ComponentUsages>;
+  /** Optional callback to retrieve the renderer's demos. */
+  getDemos?: () => Promise<Demo[]>;
 }
 
 /** A subscription handle to detach a renderer and clean up connections. */

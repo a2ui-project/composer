@@ -957,4 +957,135 @@ describe('HostCommunication', () => {
       expect(defaultWindow.postMessage).not.toHaveBeenCalled();
     });
   });
+
+  describe('secondary iframe registration', () => {
+    it('does not change the primary target when registering a secondary iframe', () => {
+      const primaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const primaryIframe = {contentWindow: primaryWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(primaryIframe);
+      expect(service.getIframeElement()).toBe(primaryIframe);
+
+      const secondaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const secondaryIframe = {contentWindow: secondaryWindow} as unknown as HTMLIFrameElement;
+      service.registerSecondaryIframe(secondaryIframe);
+
+      expect(service.getIframeElement()).toBe(primaryIframe);
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: secondaryWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      expect(service.latestEnvelope()?.sourceWindow).toBe(secondaryWindow);
+      expect(service.getIframeElement()).toBe(primaryIframe);
+    });
+
+    it('ignores inbound messages from a secondary iframe after it is unregistered', () => {
+      const primaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const primaryIframe = {contentWindow: primaryWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(primaryIframe);
+
+      const secondaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const secondaryIframe = {contentWindow: secondaryWindow} as unknown as HTMLIFrameElement;
+      service.registerSecondaryIframe(secondaryIframe);
+      service.unregisterSecondaryIframe(secondaryIframe);
+
+      const envelopeBeforeDispatch = service.latestEnvelope();
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: secondaryWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      expect(service.latestEnvelope()).toBe(envelopeBeforeDispatch);
+    });
+
+    it('clears the primary pointer when unregisterSecondaryIframe removes an element that unregisterIframe had promoted to primary', () => {
+      const primaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const primaryIframe = {contentWindow: primaryWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(primaryIframe);
+
+      const secondaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const secondaryIframe = {contentWindow: secondaryWindow} as unknown as HTMLIFrameElement;
+      service.registerSecondaryIframe(secondaryIframe);
+
+      // unregisterIframe's fallback promotes the only remaining registered
+      // iframe (the secondary) to primary when the primary is removed, e.g.
+      // if the coordinator's cleanup runs before a demo card's during route
+      // teardown.
+      service.unregisterIframe(primaryIframe);
+      expect(service.getIframeElement()).toBe(secondaryIframe);
+
+      service.unregisterSecondaryIframe(secondaryIframe);
+
+      expect(service.getIframeElement()).toBeNull();
+    });
+
+    it('does not clear the outbound buffer or flip global readiness when registering a secondary iframe', () => {
+      const primaryWindow = {postMessage: vi.fn()} as unknown as Window;
+      const primaryIframe = {contentWindow: primaryWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(primaryIframe);
+      service.sendMessage({type: PreviewBridgeMessageType.GET_COMPONENT_USAGES});
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+      expect(service.isRendererReady()).toBe(false);
+
+      const secondaryIframe = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+      service.registerSecondaryIframe(secondaryIframe);
+
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+      expect(service.isRendererReady()).toBe(false);
+    });
+
+    it('delivers via messageStreamFor only envelopes whose sourceWindow matches', () => {
+      const matchingWindow = {postMessage: vi.fn()} as unknown as Window;
+      const otherWindow = {postMessage: vi.fn()} as unknown as Window;
+
+      const received: MessageEnvelope[] = [];
+      const subscription = service.messageStreamFor(matchingWindow).subscribe(envelope => {
+        received.push(envelope);
+      });
+
+      service.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.RENDER_A2UI,
+        origin: 'http://localhost:3000',
+        timestamp: Date.now(),
+        sourceWindow: otherWindow,
+      });
+      service.TEST_ONLY.triggerMessageStreamForTesting({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost:3000',
+        timestamp: Date.now(),
+        sourceWindow: matchingWindow,
+      });
+
+      subscription.unsubscribe();
+
+      expect(received.length).toBe(1);
+      expect(received[0].type).toBe(PreviewBridgeMessageType.RENDERER_READY);
+      expect(received[0].sourceWindow).toBe(matchingWindow);
+    });
+
+    it('sendToFrame posts to the given frame even when the renderer is not globally ready', () => {
+      const targetIframe = {
+        contentWindow: {postMessage: vi.fn()},
+      } as unknown as HTMLIFrameElement;
+
+      expect(service.isRendererReady()).toBe(false);
+
+      service.sendToFrame({type: PreviewBridgeMessageType.GET_COMPONENT_USAGES}, targetIframe);
+
+      expect(targetIframe.contentWindow!.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.GET_COMPONENT_USAGES},
+        'http://localhost:3000',
+      );
+    });
+  });
 });

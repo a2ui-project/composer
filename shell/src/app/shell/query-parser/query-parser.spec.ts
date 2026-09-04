@@ -129,6 +129,29 @@ describe('QueryParser', () => {
     });
   });
 
+  describe('buildSharedA2uiHash', () => {
+    it('round-trips a payload through the fragment it writes', async () => {
+      const originalJson = JSON.stringify([{version: 'v0.9', test: true}]);
+      const encoded = await QueryParser.encodeSharedPayload(originalJson);
+
+      const hash = QueryParser.buildSharedA2uiHash(encoded, 'http://localhost:3456/', 'basic');
+
+      // The point of a single builder is that its output is readable by the parser
+      // that shares the file with it, whichever producer called it.
+      const result = await QueryParser.parseSharedA2ui(`#${hash}`);
+      expect(result.error).toBeNull();
+      expect(result.payload).toBe(JSON.stringify([{version: 'v0.9', test: true}], null, 2));
+      expect(QueryParser.parseRendererUrl(`#${hash}`)).toBe('http://localhost:3456/');
+      expect(QueryParser.parseRendererId(`#${hash}`)).toBe('basic');
+    });
+
+    it('omits the renderer parameters it was given nothing for', () => {
+      const hash = QueryParser.buildSharedA2uiHash('d1.payload', null, null);
+
+      expect(hash).toBe('a2ui=d1.payload');
+    });
+  });
+
   describe('parseSharedA2ui', () => {
     it('returns payload with null error for valid compressed d1. payload from hash fragment', async () => {
       const originalJson = JSON.stringify([{version: 'v0.9', test: true}]);
