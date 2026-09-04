@@ -19,6 +19,23 @@
   height: 100%;
 }
 
+/*
+ * The wall paints its own canvas rather than inheriting whichever ancestor happens
+ * to have a background. Inherited, that ancestor was the same near-white as the
+ * cards themselves — 1.02 contrast between a card and the page it sits on in light,
+ * 1.00 in dark, where the card was fractionally *darker* than the page — so nothing
+ * on the wall floated and its elevation shadows fell on a surface indistinguishable
+ * from the thing casting them.
+ *
+ * surface-dim / surface-bright is the one Material pair that stays the right way
+ * round in both themes: dim is the deepest neutral surface and bright the lightest
+ * in each, so the canvas recedes and the card lifts whichever theme is on. The
+ * container ramp (surface-container-*) inverts between themes and would have made
+ * the dark card darker than its page all over again.
+ *
+ * That gives the route a three-step depth ramp — app chrome (surface-container),
+ * canvas (surface-dim), cards (surface-bright) — rather than one flat sheet.
+ */
 .demos-container {
   position: relative;
   display: flex;
@@ -28,6 +45,7 @@
   height: 100%;
   padding: 24px;
   overflow-y: auto;
+  background-color: var(--mat-sys-surface-dim, #ddd9d9);
 }
 
 /*
