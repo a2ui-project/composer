@@ -123,6 +123,18 @@
   background-color: var(--mat-sys-surface-bright, #ffffff);
 
   /*
+   * mat-card-title and mat-card-subtitle set `font-family` from these tokens, which
+   * outranks the family the card inherits, so the two lines of text on every card
+   * were the only text on the route not following the shell's own font. Pointing the
+   * tokens at `inherit` hands the family back to the cascade — the card follows
+   * whatever the shell sets, from wherever it sets it, rather than tracking a copy
+   * baked into the card component's own tokens. Only the family is delegated: the
+   * size, weight and colour below are this card's, not mat-card's defaults.
+   */
+  --mat-card-title-text-font: inherit;
+  --mat-card-subtitle-text-font: inherit;
+
+  /*
    * Elevation does the separating, so the outline no longer has to. The card used to
    * carry a 1px outline-variant border because at 1.02 contrast against the page it
    * was the only thing marking where the card ended; with a real tonal step and a
@@ -178,12 +190,27 @@
  * children out in a row; a title and a truncating subtitle have to stack, and the
  * subtitle needs a min-width it can actually shrink below for text-overflow to engage.
  */
+/*
+ * The card's only chrome, and now marked as such.
+ *
+ * The rule underneath it is the one border the card kept, and it earns its place by
+ * separating two different things rather than by outlining one: above it is the
+ * shell talking about the demo, below it is the demo's own document. In light that
+ * boundary was invisible — the card and a demo's white page are within three units
+ * of each other — so the title read as floating over the demo rather than labelling
+ * it. It is the same `outline-variant` the card's own perimeter used to spend on
+ * saying something elevation now says better.
+ *
+ * The padding is tighter on the trailing edge than the leading one because the Open
+ * control carries its own inset; measured from the text, the block is even.
+ */
 .demo-card .demo-card-header {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
   gap: 8px;
-  padding: 12px 10px 10px 14px;
+  padding: 11px 10px 9px 14px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
 }
 
 /*
