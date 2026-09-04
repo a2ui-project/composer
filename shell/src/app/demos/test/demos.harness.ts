@@ -30,6 +30,9 @@ export class DemosHarness extends ComponentHarness {
   private readonly getCards = this.locatorForAll('a2ui-composer-demo-card');
   private readonly getEmptySubtitle = this.locatorForOptional('.empty-subtitle');
   private readonly getLoading = this.locatorForOptional('.demos-loading');
+  private readonly getMountedFrames = this.locatorForAll(
+    'a2ui-composer-demo-card iframe.demo-card-frame',
+  );
 
   /**
    * Checks whether the hidden coordinator frame is mounted inside its wrapper.
@@ -46,6 +49,14 @@ export class DemosHarness extends ComponentHarness {
   async getCardCount(): Promise<number> {
     const cards = await this.getCards();
     return cards.length;
+  }
+
+  /**
+   * Returns the number of demo cards that currently hold a live renderer frame.
+   */
+  async getMountedCardCount(): Promise<number> {
+    const frames = await this.getMountedFrames();
+    return frames.length;
   }
 
   /**

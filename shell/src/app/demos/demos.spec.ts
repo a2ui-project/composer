@@ -293,6 +293,50 @@ describe('Demos Component', () => {
     expect(await harness.getCardCount()).toBe(2);
   });
 
+  it('staggers the entrance of every card and caps the cascade at one screenful', async () => {
+    demosCatalogMock.demos.set(makeDemos(MAX_MOUNTED_CARDS + 4));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const steps = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        'a2ui-composer-demo-card',
+      ),
+    ).map(card => card.style.getPropertyValue('--demo-card-enter-index'));
+
+    // The cascade runs one step per card up to the last position that can share the
+    // viewport, then holds: past there the delay would be time nobody is watching,
+    // and a reader scrolling down would meet cards still waiting to appear.
+    expect(steps.slice(0, MAX_MOUNTED_CARDS)).toEqual(
+      Array.from({length: MAX_MOUNTED_CARDS}, (_unused, index) => String(index)),
+    );
+    expect(steps.slice(MAX_MOUNTED_CARDS)).toEqual(
+      Array.from({length: 4}, () => String(MAX_MOUNTED_CARDS - 1)),
+    );
+  });
+
+  it('creates every card up front, so no entrance can replay on scroll-back', async () => {
+    demosCatalogMock.demos.set(makeDemos(MAX_MOUNTED_CARDS + 6));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const hosts = () =>
+      Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('a2ui-composer-demo-card'),
+      );
+    const before = hosts();
+
+    // Only frames are mounted and unmounted as the reader scrolls; the card elements
+    // themselves are created once. That is what makes an entrance animation keyed on
+    // element creation unable to replay — there is no second creation to key on.
+    expect(before).toHaveLength(MAX_MOUNTED_CARDS + 6);
+    expect(await harness.getMountedCardCount()).toBeLessThan(before.length);
+
+    await flushIntersections();
+
+    expect(hosts()).toEqual(before);
+  });
+
   it('renders a card per demo when the renderer reuses an id across two demos', async () => {
     // The wall keys off the shell-assigned track key rather than the
     // renderer's `id`, so two demos sharing an id still reconcile as two
