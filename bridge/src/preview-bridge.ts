@@ -188,6 +188,7 @@ interface ActiveRenderer {
  * fully cleanses the runtime space: removing window listeners, canceling pending macro-task timers,
  * destroying overlays, and invoking connection unsubscriptions to guarantee a clean slate.
  */
+
 export class PreviewBridge {
   /** The single active framework rendering stack connection hook. */
   private activeRenderer: ActiveRenderer | null = null;
@@ -464,7 +465,10 @@ export class PreviewBridge {
         break;
 
       case PreviewBridgeMessageType.RENDER_A2UI:
-        this.dispatchRenderA2ui(data.payload !== undefined ? data.payload : data);
+        this.dispatchRenderA2ui(
+          data.payload !== undefined ? data.payload : data,
+          Boolean(data.isStreaming),
+        );
         break;
 
       case PreviewBridgeMessageType.GET_CATALOG:
@@ -535,7 +539,7 @@ export class PreviewBridge {
    * If a createSurface instruction is present, it synchronously triggers a clear/unmount,
    * then defers the rendering actual layout command payload to a clean event cycle task.
    */
-  private dispatchRenderA2ui(payload: unknown): void {
+  private dispatchRenderA2ui(payload: unknown, isStreaming: boolean = false): void {
     // If a dynamic layout setup message is received before the framework application has
     // bootstrapped and attached its renderer, we print a warning and ignore the payload.
     // This should not ever happen since the host Shell is strictly designed never to dispatch
@@ -554,18 +558,19 @@ export class PreviewBridge {
     if (hasCreateSurface) {
       // Step 1: Synchronously dispatch null to trigger unmounting/reset
       try {
-        this.handleRenderA2ui(null);
+        this.handleRenderA2ui(null, isStreaming);
       } catch (err) {
         console.error('PreviewBridge: Error during RENDER_A2UI null reset dispatch:', err);
       }
 
-      // Step 2: Defer actual payload dispatch to the next event loop tick to trigger clean remount
+      // Step 2: Defer actual payload dispatch to the next event loop tick to
+      // trigger clean remount
       if (this.renderTimeoutId) {
         clearTimeout(this.renderTimeoutId);
       }
       this.renderTimeoutId = setTimeout(() => {
         try {
-          this.handleRenderA2ui(payload);
+          this.handleRenderA2ui(payload, isStreaming);
         } catch (err) {
           console.error('PreviewBridge: Error during deferred RENDER_A2UI payload dispatch:', err);
         }
@@ -573,7 +578,7 @@ export class PreviewBridge {
     } else {
       // Incremental state updates bypass the unmounting phase to prevent flicker
       try {
-        this.handleRenderA2ui(payload);
+        this.handleRenderA2ui(payload, isStreaming);
       } catch (err) {
         console.error('PreviewBridge: Error during direct RENDER_A2UI payload dispatch:', err);
       }
@@ -584,7 +589,7 @@ export class PreviewBridge {
    * Renders the specified payload array, mapping surface creation handles,
    * or delegates a resetting null command.
    */
-  private handleRenderA2ui(payload: unknown): void {
+  private handleRenderA2ui(payload: unknown, isStreaming: boolean = false): void {
     if (!this.activeRenderer) return;
 
     if (payload === null) {
@@ -617,13 +622,32 @@ export class PreviewBridge {
         }
       }
 
-      this.activeRenderer.processor.processMessages(payload as A2uiMessage[]);
+      try {
+        this.activeRenderer.processor.processMessages(payload as A2uiMessage[]);
+
+        // Suppresses the onError callback during active streaming when processMessages
+        // might throw. This strict check avoids crashing the view while receiving transient,
+        // incomplete JSON chunks before the payload finalizes.
+        if (this.activeRenderer.config.onError && !isStreaming) {
+          this.activeRenderer.config.onError(null);
+        }
+        this.sendMessage({type: PreviewBridgeMessageType.RENDER_SUCCESS});
+      } catch (err: unknown) {
+        if (!isStreaming && this.activeRenderer.config.onError) {
+          this.activeRenderer.config.onError(err instanceof Error ? err : new Error(String(err)));
+        }
+        this.sendMessage({
+          type: PreviewBridgeMessageType.RENDER_ERROR,
+          error: safeSerialize(err),
+        });
+      }
 
       if (hasCreateSurface && surfaceId) {
         this.activeRenderer.config.onSurfaceReady(surfaceId);
       }
 
-      // Defer measurement to the next event loop tick so asynchronous framework rendering and DOM attachment complete.
+      // Defer measurement to the next event loop tick so asynchronous framework
+      // rendering and DOM attachment complete.
       setTimeout(() => this.dispatchSurfaceResize(), 0);
     } else {
       console.warn('PreviewBridge: Unexpected non-array RENDER_A2UI payload received:', payload);
