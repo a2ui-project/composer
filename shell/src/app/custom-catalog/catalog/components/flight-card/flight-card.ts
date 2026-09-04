@@ -24,9 +24,9 @@ import {FlightCardApi} from '../../apis';
  * explicit `statusColor`.
  */
 const STATUS_COLORS: Record<string, string> = {
-  'On Time': 'var(--cpk-success)',
-  Delayed: 'var(--cpk-warning)',
-  Cancelled: 'var(--cpk-critical)',
+  'On Time': 'var(--cpk-success, var(--cpk-fb-success))',
+  Delayed: 'var(--cpk-warning, var(--cpk-fb-warning))',
+  Cancelled: 'var(--cpk-critical, var(--cpk-fb-critical))',
 };
 
 /**
@@ -95,20 +95,35 @@ const STATUS_COLORS: Record<string, string> = {
   `,
   styles: [
     `
-      .cc-flight {
-        border: 1px solid var(--cpk-border);
-        border-radius: var(--cpk-radius-lg);
-        padding: 20px;
-        background: var(--cpk-surface-elevated);
-        color: var(--cpk-text-primary);
-        min-width: 260px;
+      /*
+       * The renderer's <a2ui-v09-component-host> is "display: contents", so
+       * the flex item inside a Row is this host element rather than the .cc-flight
+       * div below. Flex sizing has to be declared here to have any effect.
+       */
+      :host {
+        display: flex;
+        /*
+         * Zero basis (like DashboardCard) so sibling flights share the Row
+         * evenly and stay side by side; min-width is the legibility floor
+         * below which the Row's flex-wrap should take over.
+         */
+        flex: 1 1 0;
+        min-width: 240px;
         max-width: 340px;
-        flex: 1 1 260px;
+      }
+      .cc-flight {
+        border: 1px solid var(--cpk-border, var(--cpk-fb-border));
+        border-radius: var(--cpk-radius-lg, var(--cpk-fb-radius-lg));
+        padding: 20px;
+        background: var(--cpk-surface-elevated, var(--cpk-fb-surface-elevated));
+        color: var(--cpk-text-primary, var(--cpk-fb-text-primary));
+        flex: 1 1 auto;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         gap: 12px;
-        box-shadow: var(--cpk-shadow-card);
-        font-family: var(--cpk-font-body);
+        box-shadow: var(--cpk-shadow-card, var(--cpk-fb-shadow-card));
+        font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
       }
       .cc-flight__head {
         display: flex;
@@ -138,11 +153,11 @@ const STATUS_COLORS: Record<string, string> = {
         display: flex;
         justify-content: space-between;
         font-size: 0.8rem;
-        color: var(--cpk-text-secondary);
+        color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
       }
       .cc-flight__rule {
         border: none;
-        border-top: 1px solid var(--cpk-divider);
+        border-top: 1px solid var(--cpk-divider, var(--cpk-fb-divider));
         margin: 0;
         width: 100%;
       }
@@ -157,7 +172,7 @@ const STATUS_COLORS: Record<string, string> = {
       }
       .cc-flight__duration {
         font-size: 0.75rem;
-        color: var(--cpk-text-secondary);
+        color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
       }
       .cc-flight__route {
         display: flex;
@@ -167,7 +182,7 @@ const STATUS_COLORS: Record<string, string> = {
         font-weight: 600;
       }
       .cc-flight__arrow {
-        color: var(--cpk-text-secondary);
+        color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
       }
       .cc-flight__foot {
         margin-top: auto;
@@ -188,25 +203,25 @@ const STATUS_COLORS: Record<string, string> = {
       }
       .cc-flight__status-text {
         font-size: 0.8rem;
-        color: var(--cpk-text-secondary);
+        color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
       }
       .cc-flight__cta {
         width: 100%;
         padding: 10px 16px;
-        border-radius: var(--cpk-radius-card);
-        border: 1px solid var(--cpk-border);
-        background: var(--cpk-surface-elevated);
-        color: var(--cpk-text-primary);
+        border-radius: var(--cpk-radius-card, var(--cpk-fb-radius-card));
+        border: 1px solid var(--cpk-border, var(--cpk-fb-border));
+        background: var(--cpk-surface-elevated, var(--cpk-fb-surface-elevated));
+        color: var(--cpk-text-primary, var(--cpk-fb-text-primary));
         font-size: 0.85rem;
         font-weight: 500;
         cursor: pointer;
         transition: all 0.2s ease;
-        font-family: var(--cpk-font-body);
+        font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
       }
       .cc-flight__cta--done {
-        border-color: var(--cpk-success);
-        background: var(--cpk-success-bg);
-        color: var(--cpk-success);
+        border-color: var(--cpk-success, var(--cpk-fb-success));
+        background: var(--cpk-success-bg, var(--cpk-fb-success-bg));
+        color: var(--cpk-success, var(--cpk-fb-success));
         cursor: default;
       }
     `,
@@ -242,7 +257,7 @@ export class CcFlightCard extends CatalogComponent<typeof FlightCardApi> {
   protected readonly dotColor = computed(() => {
     const explicit = this.props()['statusColor']?.value();
     if (typeof explicit === 'string' && explicit) return explicit;
-    return STATUS_COLORS[this.status()] ?? 'var(--cpk-success)';
+    return STATUS_COLORS[this.status()] ?? 'var(--cpk-success, var(--cpk-fb-success))';
   });
 
   protected readonly action = computed(() => this.props()['action']?.value());

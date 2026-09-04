@@ -65,10 +65,10 @@ import {ButtonApi} from '../../apis';
       .cc-button {
         width: 100%;
         padding: 10px 16px;
-        border-radius: var(--cpk-radius-card);
-        border: 1px solid var(--cpk-border);
-        background: var(--cpk-surface-elevated);
-        color: var(--cpk-text-primary);
+        border-radius: var(--cpk-radius-card, var(--cpk-fb-radius-card));
+        border: 1px solid var(--cpk-border, var(--cpk-fb-border));
+        background: var(--cpk-surface-elevated, var(--cpk-fb-surface-elevated));
+        color: var(--cpk-text-primary, var(--cpk-fb-text-primary));
         font-size: 0.85rem;
         font-weight: 500;
         cursor: pointer;
@@ -77,12 +77,12 @@ import {ButtonApi} from '../../apis';
         align-items: center;
         justify-content: center;
         gap: 6px;
-        font-family: var(--cpk-font-body);
+        font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
       }
       .cc-button--done {
-        border-color: var(--cpk-success);
-        background: var(--cpk-success-bg);
-        color: var(--cpk-success);
+        border-color: var(--cpk-success, var(--cpk-fb-success));
+        background: var(--cpk-success-bg, var(--cpk-fb-success-bg));
+        color: var(--cpk-success, var(--cpk-fb-success));
         cursor: default;
       }
     `,

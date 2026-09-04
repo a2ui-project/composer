@@ -64,13 +64,13 @@ interface TableColumn {
         width: 100%;
         border-collapse: collapse;
         font-size: 0.8rem;
-        font-family: var(--cpk-font-body);
+        font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
       }
       .cc-table th {
         text-align: left;
         padding: 8px 12px;
-        border-bottom: 2px solid var(--cpk-border);
-        color: var(--cpk-text-secondary);
+        border-bottom: 2px solid var(--cpk-border, var(--cpk-fb-border));
+        color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
         font-weight: 600;
         font-size: 0.7rem;
         text-transform: uppercase;
@@ -78,8 +78,8 @@ interface TableColumn {
       }
       .cc-table td {
         padding: 8px 12px;
-        color: var(--cpk-text-primary);
-        border-bottom: 1px solid var(--cpk-divider);
+        color: var(--cpk-text-primary, var(--cpk-fb-text-primary));
+        border-bottom: 1px solid var(--cpk-divider, var(--cpk-fb-divider));
       }
     `,
   ],

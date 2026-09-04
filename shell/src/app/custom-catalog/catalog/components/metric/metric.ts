@@ -19,9 +19,9 @@ import {CatalogComponent} from '@a2ui/angular/v0_9';
 import {MetricApi} from '../../apis';
 
 const TREND_COLORS: Record<string, string> = {
-  up: 'var(--cpk-success)',
-  down: 'var(--cpk-critical)',
-  neutral: 'var(--cpk-text-secondary)',
+  up: 'var(--cpk-success, var(--cpk-fb-success))',
+  down: 'var(--cpk-critical, var(--cpk-fb-critical))',
+  neutral: 'var(--cpk-text-secondary, var(--cpk-fb-text-secondary))',
 };
 
 const TREND_ICONS: Record<string, string> = {
@@ -58,11 +58,11 @@ const TREND_ICONS: Record<string, string> = {
         display: flex;
         flex-direction: column;
         gap: 4px;
-        font-family: var(--cpk-font-body);
+        font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
       }
       .cc-metric__label {
         font-size: 0.75rem;
-        color: var(--cpk-text-secondary);
+        color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
         font-weight: 500;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -75,7 +75,7 @@ const TREND_ICONS: Record<string, string> = {
       .cc-metric__value {
         font-size: 1.5rem;
         font-weight: 700;
-        color: var(--cpk-text-primary);
+        color: var(--cpk-text-primary, var(--cpk-fb-text-primary));
         letter-spacing: -0.02em;
       }
       .cc-metric__trend {
@@ -94,7 +94,9 @@ export class CcMetric extends CatalogComponent<typeof MetricApi> {
     return v != null ? String(v) : '';
   });
   protected readonly trendColor = computed(
-    () => TREND_COLORS[this.trend() ?? 'neutral'] ?? 'var(--cpk-text-secondary)',
+    () =>
+      TREND_COLORS[this.trend() ?? 'neutral'] ??
+      'var(--cpk-text-secondary, var(--cpk-fb-text-secondary))',
   );
   protected readonly trendIcon = computed(() => TREND_ICONS[this.trend() ?? 'neutral'] ?? '→');
 }

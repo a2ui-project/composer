@@ -45,9 +45,9 @@ import {TitleApi} from '../../apis';
       .cc-title {
         margin: 0;
         font-weight: 600;
-        color: var(--cpk-text-primary);
+        color: var(--cpk-text-primary, var(--cpk-fb-text-primary));
         letter-spacing: -0.01em;
-        font-family: var(--cpk-font-body);
+        font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
       }
       .cc-h1 {
         font-size: 1.75rem;

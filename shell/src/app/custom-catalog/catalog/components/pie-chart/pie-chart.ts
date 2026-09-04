@@ -72,9 +72,9 @@ const OUTER_R = 80;
       .cc-pie {
         display: flex;
         align-items: center;
-        gap: var(--cpk-space-4);
+        gap: var(--cpk-space-4, var(--cpk-fb-space-4));
         flex-wrap: wrap;
-        font-family: var(--cpk-font-body);
+        font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
       }
       .cc-pie__svg {
         width: 160px;
@@ -94,7 +94,7 @@ const OUTER_R = 80;
         align-items: center;
         gap: 8px;
         font-size: 0.8rem;
-        color: var(--cpk-text-secondary);
+        color: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
       }
       .cc-pie__swatch {
         width: 10px;
@@ -103,7 +103,7 @@ const OUTER_R = 80;
         flex: 0 0 auto;
       }
       .cc-pie__legend-label {
-        color: var(--cpk-text-primary);
+        color: var(--cpk-text-primary, var(--cpk-fb-text-primary));
       }
       .cc-pie__legend-value {
         margin-left: auto;

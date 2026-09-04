@@ -24,11 +24,26 @@ import {BadgeApi} from '../../apis';
  * back to a muted divider fill.
  */
 const VARIANTS: Record<string, {bg: string; color: string}> = {
-  success: {bg: 'var(--cpk-success-bg)', color: 'var(--cpk-success)'},
-  warning: {bg: 'var(--cpk-warning-bg)', color: 'var(--cpk-warning)'},
-  error: {bg: 'var(--cpk-critical-bg)', color: 'var(--cpk-critical)'},
-  info: {bg: 'var(--cpk-accent-bg)', color: 'var(--cpk-accent)'},
-  neutral: {bg: 'var(--cpk-divider)', color: 'var(--cpk-text-secondary)'},
+  success: {
+    bg: 'var(--cpk-success-bg, var(--cpk-fb-success-bg))',
+    color: 'var(--cpk-success, var(--cpk-fb-success))',
+  },
+  warning: {
+    bg: 'var(--cpk-warning-bg, var(--cpk-fb-warning-bg))',
+    color: 'var(--cpk-warning, var(--cpk-fb-warning))',
+  },
+  error: {
+    bg: 'var(--cpk-critical-bg, var(--cpk-fb-critical-bg))',
+    color: 'var(--cpk-critical, var(--cpk-fb-critical))',
+  },
+  info: {
+    bg: 'var(--cpk-accent-bg, var(--cpk-fb-accent-bg))',
+    color: 'var(--cpk-accent, var(--cpk-fb-accent))',
+  },
+  neutral: {
+    bg: 'var(--cpk-divider, var(--cpk-fb-divider))',
+    color: 'var(--cpk-text-secondary, var(--cpk-fb-text-secondary))',
+  },
 };
 
 /** `Badge` renderer — a small pill label with a semantic status variant. */
@@ -46,10 +61,10 @@ const VARIANTS: Record<string, {bg: string; color: string}> = {
       .cc-badge {
         display: inline-block;
         padding: 2px 8px;
-        border-radius: var(--cpk-radius-pill);
+        border-radius: var(--cpk-radius-pill, var(--cpk-fb-radius-pill));
         font-size: 0.7rem;
         font-weight: 500;
-        font-family: var(--cpk-font-body);
+        font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
       }
     `,
   ],

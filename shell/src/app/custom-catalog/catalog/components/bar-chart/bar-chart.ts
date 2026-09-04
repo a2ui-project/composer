@@ -100,23 +100,23 @@ const CHART_H = TOP_PAD + PLOT_H + BOTTOM_PAD;
     `
       .cc-bar {
         width: 100%;
-        font-family: var(--cpk-font-body);
+        font-family: var(--cpk-font-body, var(--cpk-fb-font-body));
       }
       .cc-bar__svg {
         width: 100%;
         height: auto;
       }
       .cc-bar__axis {
-        stroke: var(--cpk-divider);
+        stroke: var(--cpk-divider, var(--cpk-fb-divider));
         stroke-width: 1;
       }
       .cc-bar__value {
-        fill: var(--cpk-text-primary);
+        fill: var(--cpk-text-primary, var(--cpk-fb-text-primary));
         font-size: 11px;
         font-weight: 600;
       }
       .cc-bar__label {
-        fill: var(--cpk-text-secondary);
+        fill: var(--cpk-text-secondary, var(--cpk-fb-text-secondary));
         font-size: 11px;
       }
     `,
@@ -126,7 +126,9 @@ export class CcBarChart extends CatalogComponent<typeof BarChartApi> {
   protected readonly chartHeight = CHART_H;
   protected readonly baselineY = TOP_PAD + PLOT_H;
 
-  protected readonly color = computed(() => this.props()['color']?.value() ?? 'var(--cpk-accent)');
+  protected readonly color = computed(
+    () => this.props()['color']?.value() ?? 'var(--cpk-accent, var(--cpk-fb-accent))',
+  );
 
   private readonly prefix = computed(() => this.props()['valuePrefix']?.value() ?? '');
   private readonly suffix = computed(() => this.props()['valueSuffix']?.value() ?? '');
