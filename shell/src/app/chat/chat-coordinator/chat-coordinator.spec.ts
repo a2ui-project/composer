@@ -787,6 +787,7 @@ I'll output bad JSON.
       ]);
       const lastMsg = resultHistory[resultHistory.length - 1];
 
+      expect(lastMsg.role).toBe(MessageRole.MODEL);
       expect(lastMsg.parseError?.success).toBe(false);
     });
   });

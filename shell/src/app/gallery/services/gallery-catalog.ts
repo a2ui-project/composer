@@ -17,6 +17,7 @@
 import {Injectable, inject, signal, computed, effect, DestroyRef, untracked} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {CatalogSchemaResolver, ParsedProperty} from '../schema/catalog-schema-resolver';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {UsageGenerator} from './usage-generator';
@@ -152,6 +153,7 @@ function getCategoryForComponent(key: string): string {
 })
 export class GalleryCatalog {
   private readonly catalogManagement = inject(CatalogManagement);
+  private readonly errorLogger = inject(ErrorLogger);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly usageGenerator = inject(UsageGenerator);
   private readonly destroyRef = inject(DestroyRef);
@@ -161,7 +163,7 @@ export class GalleryCatalog {
    */
   readonly catalogSchemaResolver = computed(() => {
     const catalog = this.catalogManagement.activeCatalog();
-    return catalog ? new CatalogSchemaResolver(catalog) : null;
+    return catalog ? new CatalogSchemaResolver(catalog, this.errorLogger) : null;
   });
 
   private readonly _selectedComponentKey = signal<string | null>(null);

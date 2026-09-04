@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {Injectable, inject} from '@angular/core';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 declare global {
   class RestrictionTarget {
@@ -31,6 +32,8 @@ declare global {
  */
 @Injectable({providedIn: 'root'})
 export class ScreenshotCaptureService {
+  private readonly logger = inject(ErrorLogger).withTag('[Shell]');
+
   /**
    * Captures a screenshot of the current tab, optionally restricted to a target element.
    * @param targetElement Optional DOM element to restrict the screenshot to.
@@ -70,13 +73,13 @@ export class ScreenshotCaptureService {
             const target = await restrictionTargetClass.fromElement(targetElement);
             await track.restrictTo(target);
           } catch (restrictionError) {
-            console.warn(
+            this.logger.warn(
               'Failed to restrict video track to element, falling back to full tab capture:',
               restrictionError,
             );
           }
         } else {
-          console.warn('RestrictionTarget API not supported, capturing full tab.');
+          this.logger.warn('RestrictionTarget API not supported, capturing full tab.');
         }
       }
 
@@ -102,7 +105,7 @@ export class ScreenshotCaptureService {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       return canvas.toDataURL('image/png');
     } catch (error) {
-      console.warn('Capture canceled or failed:', error);
+      this.logger.warn('Capture canceled or failed:', error);
       throw error;
     } finally {
       if (stream) stream.getTracks().forEach(track => track.stop());

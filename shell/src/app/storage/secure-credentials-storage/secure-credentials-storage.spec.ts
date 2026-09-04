@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {TestBed} from '@angular/core/testing';
 import {
   SecureCredentialsStorage,
@@ -306,7 +307,7 @@ describe('SecureCredentialsStorage', () => {
   });
 
   it('resets memoized master key promise upon cryptographic key generation failure', async () => {
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
     const origGenerateKey = globalThis.crypto.subtle.generateKey;
     globalThis.crypto.subtle.generateKey = vi
       .fn()
@@ -315,7 +316,13 @@ describe('SecureCredentialsStorage', () => {
     await expect(service.setCredential('any-key', 'any-val')).rejects.toThrow(
       'Cryptographic master key generation failed.',
     );
-    expect(errSpy).toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'Failed to synthesize or persist unextractable Web Crypto master key',
+        ),
+      }),
+    );
 
     // Verify memoized promise was cleared by simulating successful subsequent generation
     globalThis.crypto.subtle.generateKey = origGenerateKey;
@@ -328,7 +335,7 @@ describe('SecureCredentialsStorage', () => {
   });
 
   it('throws actionable application error when Web Crypto Subtle encryption fails', async () => {
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
     const origEncrypt = globalThis.crypto.subtle.encrypt;
     globalThis.crypto.subtle.encrypt = vi
       .fn()
@@ -337,7 +344,13 @@ describe('SecureCredentialsStorage', () => {
     await expect(service.setCredential('any-key', 'any-val')).rejects.toThrow(
       'Failed to encrypt credentials token.',
     );
-    expect(errSpy).toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'Cryptographic encryption failed during token persistence for key: any-key',
+        ),
+      }),
+    );
 
     globalThis.crypto.subtle.encrypt = origEncrypt;
     errSpy.mockRestore();
@@ -356,7 +369,7 @@ describe('SecureCredentialsStorage', () => {
 
     const generateKeySpy = vi.spyOn(globalThis.crypto.subtle, 'generateKey');
 
-    const freshService = new SecureCredentialsStorage();
+    const freshService = TestBed.runInInjectionContext(() => new SecureCredentialsStorage());
     await freshService.setCredential('fresh-key', 'fresh-val');
 
     expect(generateKeySpy).not.toHaveBeenCalled();
@@ -389,18 +402,24 @@ describe('SecureCredentialsStorage', () => {
   });
 
   it('resets memoized master key promise when initial IndexedDB read transaction fails', async () => {
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
     Object.defineProperty(globalThis, 'indexedDB', {
       value: new FakeIndexedDB(storeMaps, false, 'error'),
       writable: true,
       configurable: true,
     });
 
-    const freshService = new SecureCredentialsStorage();
+    const freshService = TestBed.runInInjectionContext(() => new SecureCredentialsStorage());
     await expect(freshService.setCredential('any-key', 'any-val')).rejects.toThrow(
       'Cryptographic master key generation failed.',
     );
-    expect(errSpy).toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'Failed to synthesize or persist unextractable Web Crypto master key',
+        ),
+      }),
+    );
 
     Object.defineProperty(globalThis, 'indexedDB', {
       value: new FakeIndexedDB(storeMaps, false, 'success'),
