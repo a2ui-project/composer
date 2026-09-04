@@ -16,7 +16,18 @@
 <mat-card class="demo-card" [class.is-error]="state() === 'error'">
   <mat-card-header class="demo-card-header">
     <mat-card-title class="demo-card-title">{{ demo().name }}</mat-card-title>
-    <mat-card-subtitle class="demo-card-subtitle">{{ demo().description }}</mat-card-subtitle>
+    <!--
+      The description is truncated to one line in CSS, never in the binding: the full
+      text stays in the DOM, so assistive technology still reads it in full, and the
+      native `title` attribute — the same mechanism the frame below already uses — puts
+      it back within reach of a sighted reader on hover. Catalog descriptions repeat
+      verbatim across demos ("Simple example demonstrating basic catalog components."),
+      so at two lines of near-black they took the most prominent place on the card to
+      say the least.
+    -->
+    <mat-card-subtitle class="demo-card-subtitle" [title]="demo().description">{{
+      demo().description
+    }}</mat-card-subtitle>
   </mat-card-header>
 
   <mat-card-content class="demo-card-content">

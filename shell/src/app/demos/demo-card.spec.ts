@@ -146,6 +146,17 @@ describe('DemoCard sandboxed live demo frame', () => {
     fixture.detectChanges();
   }
 
+  it('keeps the full description reachable while the card shows one truncated line', () => {
+    const fixture = mountCard(true);
+    const subtitle = (fixture.nativeElement as HTMLElement).querySelector('.demo-card-subtitle')!;
+
+    // Truncation is a stylesheet concern (white-space/text-overflow), never a binding
+    // one: the whole description stays in the DOM so assistive technology still reads
+    // it, and the native title attribute puts it back within a sighted reader's reach.
+    expect(subtitle.textContent!.trim()).toBe(DEMO.description);
+    expect(subtitle.getAttribute('title')).toBe(DEMO.description);
+  });
+
   it('renders no iframe while the card is not mounted', () => {
     const fixture = mountCard(false);
 
