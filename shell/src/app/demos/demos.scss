@@ -83,14 +83,21 @@
   opacity: 0.8;
 }
 
-/* CSS columns masonry: cards keep their natural heights and never split. */
+/*
+ * CSS columns masonry: cards keep their natural heights and never split.
+ *
+ * The gutters are wider than the 16px they were, because the cards now cast a
+ * shadow into them: at 16px the level3 hover shadow of one card reached across the
+ * gutter and dimmed its neighbour, which read as the neighbour dimming rather than
+ * as this card lifting.
+ */
 .demos-wall {
   column-count: 3;
-  column-gap: 16px;
+  column-gap: 20px;
 
   a2ui-composer-demo-card {
     display: block;
-    margin: 0 0 16px;
+    margin: 0 0 20px;
     break-inside: avoid;
     -webkit-column-break-inside: avoid;
     page-break-inside: avoid;
