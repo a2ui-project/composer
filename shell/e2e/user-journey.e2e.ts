@@ -58,6 +58,7 @@ test.describe('E2E Workspace User Journey', () => {
     await expect(apiKeyDialog).toBeVisible();
     await apiKeyDialog.getByLabel('Name', {exact: true}).fill('Test Key');
     await apiKeyDialog.getByLabel('API Key', {exact: true}).fill('test-api-key');
+    await page.keyboard.press('Tab');
     await apiKeyDialog.getByRole('button', {name: 'Add', exact: true}).click();
     await expect(apiKeyDialog).toBeHidden();
 
