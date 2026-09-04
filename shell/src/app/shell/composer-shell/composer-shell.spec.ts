@@ -276,7 +276,7 @@ describe('ComposerShell Layout', () => {
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(9);
+    expect(hiddenAttrs.length).toBe(8);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
@@ -289,32 +289,17 @@ describe('ComposerShell Layout', () => {
       'widgets',
       'smart_toy',
       'dashboard_customize',
-      'menu_book',
       'settings',
     ]);
   });
 
   it('enables tooltips on navigation items and hides labels when collapsed initially', async () => {
-    expect(await harness.getNavListTooltipsDisabled()).toEqual([
-      false,
-      false,
-      false,
-      false,
-      false,
-      false,
-    ]);
+    expect(await harness.getNavListTooltipsDisabled()).toEqual([false, false, false, false, false]);
     expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(0);
     await harness.clickHamburgerButton();
     expect(await harness.isSidenavCollapsed()).toBe(false);
-    expect(await harness.getNavListTooltipsDisabled()).toEqual([
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
-    ]);
-    expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(6);
+    expect(await harness.getNavListTooltipsDisabled()).toEqual([true, true, true, true, true]);
+    expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(5);
   });
 
   it('sets explicit aria-label attributes on navigation links and connects hamburger button to sidenav', () => {
@@ -327,7 +312,6 @@ describe('ComposerShell Layout', () => {
       'Components Gallery',
       'A2A Agent Testing',
       'Custom Catalog',
-      'Catalog Reference',
       'Settings',
     ]);
 
@@ -349,11 +333,10 @@ describe('ComposerShell Layout', () => {
       'active-nav-item',
       'active-nav-item',
       'active-nav-item',
-      'active-nav-item',
     ]);
 
     const rlaDirectives = fixture.debugElement.queryAll(By.directive(RouterLinkActive));
-    expect(rlaDirectives.length).toBe(6);
+    expect(rlaDirectives.length).toBe(5);
     const rlaInstances = rlaDirectives.map(de => de.injector.get(RouterLinkActive));
     expect(rlaInstances[0].routerLinkActiveOptions).toEqual({exact: true});
 
