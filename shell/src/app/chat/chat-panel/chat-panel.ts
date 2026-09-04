@@ -33,14 +33,14 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatInputModule} from '@angular/material/input';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {RouterLink} from '@angular/router';
-import {RenderA2uiItem} from 'a2ui-bridge';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {tryParseJsonArray} from '../../utils/json';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
+import {parseAndHealJsonLines} from '../a2ui-payload-parser/a2ui-payload-parser';
+import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 import {ChatCoordinator} from '../chat-coordinator/chat-coordinator';
 import {ChatState} from '../chat-state/chat-state';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
@@ -148,7 +148,7 @@ export class ChatPanel {
    * system specs.
    */
   protected readonly visibleChatHistory = computed<
-    Array<LlmMessage & {isSnapshot: boolean; componentCount?: number}>
+    Array<LlmMessage & {isSnapshot: boolean; isStreaming?: boolean; componentCount?: number | null}>
   >(() => {
     return this.chatState
       .chatHistory()
@@ -161,15 +161,28 @@ export class ChatPanel {
             m.role === MessageRole.ERROR),
       )
       .map(m => {
-        const isSnapshot = m.content ? this.chatCleaner.isLayoutSnapshot(m.content) : false;
+        const isStreaming =
+          m.role === MessageRole.MODEL && this.chatState.isProgrammaticStreamActive();
+        const cleaned = m.content ? this.chatCleaner.cleanPayload(m.content) : '';
+        const parseResult = cleaned ? parseAndHealJsonLines(cleaned) : null;
+        let isSnapshot = false;
+        if (m.content && parseResult && parseResult.success) {
+          isSnapshot = !parseResult.isConversational;
+        }
         if (isSnapshot && m.content) {
           return {
             ...m,
-            isSnapshot,
-            componentCount: this.getComponentCount(m.content),
+            isSnapshot: true,
+            isStreaming: !!isStreaming,
+            componentCount: parseResult?.success ? parseResult.count : 0,
           };
         }
-        return {...m, isSnapshot};
+        return {
+          ...m,
+          isSnapshot: false,
+          isStreaming: !!isStreaming,
+          componentCount: null,
+        };
       });
   });
 
@@ -282,57 +295,18 @@ export class ChatPanel {
   }
 
   /**
-   * Counts the number of A2UI components declared in the given text.
+   * Type-safe helper to extract the parser syntax error message from the structured payload.
    */
-  getComponentCount(text?: string): number {
-    if (!text) {
-      return 0;
+  getParseErrorMessage(parseError: unknown): string {
+    if (!parseError || typeof parseError !== 'object') {
+      return 'Unknown formatting failure';
     }
-    try {
-      const trimmed = this.chatCleaner.cleanPayload(text);
-      const parsedArray = tryParseJsonArray(trimmed);
-      if (parsedArray.success) {
-        return parsedArray.data.reduce(
-          (acc: number, cmd: unknown) => acc + this.getCommandComponentCount(cmd),
-          0,
-        );
-      }
-
-      const lines = trimmed.split('\n').filter(l => l.trim().length > 0);
-      let count = 0;
-      for (const line of lines) {
-        if (!line.startsWith('{')) {
-          continue;
-        }
-
-        try {
-          const parsed = JSON.parse(line);
-          count += this.getCommandComponentCount(parsed);
-        } catch (e) {
-          // Ignore single line parse failures to remain resilient
-        }
-      }
-      return count;
-    } catch (e) {
-      // Swallows parse errors dynamically
-    }
-    return 0;
+    const result = parseError as Record<string, unknown>;
+    return typeof result['error'] === 'string' ? result['error'] : 'Invalid JSON layout structure';
   }
 
-  private getCommandComponentCount(parsed: unknown): number {
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return 0;
-    }
-    const parsedObj = parsed as RenderA2uiItem;
-    if (parsedObj['updateComponents'] && typeof parsedObj['updateComponents'] === 'object') {
-      const updateObj = parsedObj['updateComponents'];
-      if (Array.isArray(updateObj['components'])) {
-        return updateObj['components'].length;
-      }
-    } else if (parsedObj['createSurface']) {
-      return 1;
-    }
-    return 0;
+  viewParseErrorDetails(): void {
+    window.dispatchEvent(new OpenPanelEvent(ComposerPanelId.Errors));
   }
 
   /**

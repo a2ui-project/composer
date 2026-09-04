@@ -731,7 +731,7 @@ I should generate a text field.
       expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalled();
     });
 
-    it('throws an error for empty LLM response, sets FAILED status and aborts layout commit', async () => {
+    it('handles empty LLM response as an error and aborts layout commit', async () => {
       catalogManagementMock.activeCatalog.set({catalogId: 'test', components: {}});
       const rawText = `
 <thinking>
@@ -739,8 +739,10 @@ I have no idea what to do, I'll output nothing.
 </thinking>
       `;
 
-      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
-        const contentStream = createMockStream([rawText]);
+      llmClientMock.chatStream = vi.fn(async () => {
+        const contentStream = (async function* () {
+          yield {content: rawText};
+        })();
         return {contentStream, complete: Promise.resolve(rawText), cancel: vi.fn()};
       });
 
@@ -751,9 +753,8 @@ I have no idea what to do, I'll output nothing.
       await service.submitPrompt('Do nothing');
 
       expect(commitSpy).not.toHaveBeenCalled();
-      expect(pipelineSpy).toHaveBeenCalledWith(PipelineStatus.FAILED);
+      expect(pipelineSpy).toHaveBeenCalledWith(PipelineStatus.IDLE);
 
-      // Verify an ERROR bubble was pushed
       const historyUpdateArg =
         updateHistorySpy.mock.calls[updateHistorySpy.mock.calls.length - 1][0];
       const resultHistory = historyUpdateArg([
@@ -761,13 +762,47 @@ I have no idea what to do, I'll output nothing.
       ]);
       const lastMsg = resultHistory[resultHistory.length - 1];
 
-      expect(lastMsg.role).toBe(MessageRole.ERROR);
-      expect(lastMsg.content).toContain(
+      expect(lastMsg.parseError?.success).toBe(false);
+      expect(lastMsg.parseError?.error).toContain(
         'No valid A2UI JSON layout command block could be parsed or recovered',
       );
     });
-  });
 
+    it('detects unparseable layout outputs, sets IDLE status, and records diagnostic error', async () => {
+      catalogManagementMock.activeCatalog.set({catalogId: 'test', components: {}});
+      const rawText = `
+<thinking>
+I'll output bad JSON.
+</thinking>
+{ "version": "v
+      `;
+
+      llmClientMock.chatStream = vi.fn(async () => {
+        const contentStream = (async function* () {
+          yield {content: rawText};
+        })();
+        return {contentStream, complete: Promise.resolve(rawText), cancel: vi.fn()};
+      });
+
+      const commitSpy = vi.spyOn(stateSyncMock, 'commitLayoutFromLlm');
+      const pipelineSpy = vi.spyOn(chatStateMock, 'setPipelineStatus');
+      const updateHistorySpy = vi.spyOn(chatStateMock, 'updateChatHistory');
+
+      await service.submitPrompt('Do nothing');
+
+      expect(commitSpy).not.toHaveBeenCalled();
+      expect(pipelineSpy).toHaveBeenCalledWith(PipelineStatus.IDLE);
+
+      const historyUpdateArg =
+        updateHistorySpy.mock.calls[updateHistorySpy.mock.calls.length - 1][0];
+      const resultHistory = historyUpdateArg([
+        {role: MessageRole.MODEL, content: ''} as unknown as LlmMessage,
+      ]);
+      const lastMsg = resultHistory[resultHistory.length - 1];
+
+      expect(lastMsg.parseError?.success).toBe(false);
+    });
+  });
   describe('Telemetry Tracking', () => {
     it('tracks prompt turns upon submitPrompt', async () => {
       const trackingService = TestBed.inject(UsageTrackingService);
@@ -815,7 +850,7 @@ I have no idea what to do, I'll output nothing.
       const cancelSpy = vi.spyOn(trackingService, 'trackChatCancel');
 
       let cancelCalled = false;
-      const completePromise = new Promise<string>((_, reject) => {
+      const completePromise = new Promise((_, reject) => {
         const check = setInterval(() => {
           if (cancelCalled) {
             clearInterval(check);
@@ -828,16 +863,16 @@ I have no idea what to do, I'll output nothing.
       completePromise.catch(() => {});
 
       llmClientMock.chatStream = vi.fn(async () => {
-        const contentStream: AsyncIterable<{content: string; thinking?: string}> = {
+        const contentStream = {
           [Symbol.asyncIterator]() {
             return {
-              async next(): Promise<IteratorResult<{content: string; thinking?: string}>> {
+              async next() {
                 if (cancelCalled) {
                   const err = new Error('Cancelled');
                   err.name = CANCEL_ERROR_NAME;
                   throw err;
                 }
-                await new Promise<void>((_, reject) => {
+                await new Promise((_, reject) => {
                   const check = setInterval(() => {
                     if (cancelCalled) {
                       clearInterval(check);
@@ -847,7 +882,7 @@ I have no idea what to do, I'll output nothing.
                     }
                   }, 10);
                 });
-                return {value: undefined as unknown as {content: string}, done: true};
+                return {value: undefined, done: true};
               },
             };
           },

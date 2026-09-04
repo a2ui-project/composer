@@ -15,6 +15,7 @@
  */
 
 import {
+  HostListener,
   Component,
   effect,
   inject,
@@ -58,6 +59,13 @@ export declare interface WorkspaceMessagePayload {
   styleUrl: './composer-workspace.scss',
 })
 export class ComposerWorkspace implements OnInit, AfterViewInit {
+  @HostListener('window:a2ui-open-panel', ['$event']) onOpenPanel(event: Event) {
+    const detail = (event as CustomEvent).detail;
+    const panelId = typeof detail === 'string' ? detail : detail?.panelId;
+    if (panelId) {
+      this.composerDockview.openPanel(panelId);
+    }
+  }
   private readonly startupResolution = inject(StartupResolution);
   private readonly hostComm = inject(HostCommunication);
   private readonly configProvider = inject(AppConfigProvider);

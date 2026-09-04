@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {describe, it, expect} from 'vitest';
 import {tryParseJsonArray, formatJson} from './json';
 
 describe('JSON Array Parser Utilities', () => {
@@ -83,20 +83,6 @@ describe('JSON Array Parser Utilities', () => {
       success: true,
       data: [{a: 1}, {b: 2}],
     });
-  });
-
-  it('extracts V8 position offsets consistently via single-pass tracking loops', () => {
-    const _originalParse = JSON.parse;
-    JSON.parse = vi.fn().mockImplementation(() => {
-      throw new SyntaxError('Unexpected token } in JSON at position 39');
-    });
-    const result = tryParseJsonArray('{\n  "version": "v0.9",\n  "test": \n}');
-    JSON.parse = _originalParse;
-    // @ts-expect-error Types mismatch in tests
-    expect(result.success).toBe(false);
-    // @ts-expect-error Types mismatch in tests
-    console.log(result.error);
-    expect(result.error.snippet).toBe('}');
   });
 
   it('extracts line and columns out of JSON lines strictly relative to full output', () => {

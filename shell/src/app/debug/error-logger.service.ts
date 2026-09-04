@@ -15,6 +15,7 @@
  */
 import {Injectable} from '@angular/core';
 import {Subject, Observable} from 'rxjs';
+import {safeSerialize} from 'a2ui-bridge';
 
 /**
  * Defines the severity levels for log events.
@@ -81,64 +82,6 @@ export function isErrorLike(val: unknown): val is Error {
     !('component' in val)
   );
 }
-
-/**
- * Safely serializes an unknown value to a JSON string.
- * Handles cyclical structures and complex objects gracefully without throwing.
- *
- * @param val - The value to serialize.
- * @returns A JSON string representation, or a fallback string on failure.
- */
-export function safeSerialize(val: unknown): string {
-  function sanitize(v: unknown, seen: WeakSet<object>): unknown {
-    if (typeof v === 'bigint') return `${v.toString()}n`;
-
-    if (v !== null && typeof v === 'object') {
-      // Use WeakSet to detect and skip cyclic structures without creating
-      // memory leaks or strict reference loops during serialization.
-      if (seen.has(v)) return '[Circular]';
-
-      seen.add(v);
-      let result: unknown;
-
-      if (isErrorLike(v)) {
-        result = {
-          name: (v as unknown as Record<string, unknown>)['name'] || 'Error',
-          message: v.message,
-          stack: v.stack,
-        };
-      } else if (
-        'nodeType' in v &&
-        (v as Record<string, unknown>)['nodeType'] === 1 &&
-        typeof (v as Record<string, unknown>)['tagName'] === 'string'
-      ) {
-        // Assert nodeType === 1 to prevent property access crashes when
-        // serializing cross-realm DOM elements.
-        result = `[Element: <${((v as Record<string, unknown>)['tagName'] as string).toLowerCase()}>]`;
-      } else if (Array.isArray(v)) {
-        result = v.map(curr => sanitize(curr, seen));
-      } else {
-        const objResult: Record<string, unknown> = {};
-        for (const k of Object.keys(v)) {
-          objResult[k] = sanitize((v as Record<string, unknown>)[k], seen);
-        }
-        result = objResult;
-      }
-
-      seen.delete(v);
-      return result;
-    }
-    return v;
-  }
-
-  try {
-    const res = JSON.stringify(sanitize(val, new WeakSet()));
-    return res === undefined ? 'undefined' : res;
-  } catch {
-    return '[Unserializable]';
-  }
-}
-
 /**
  * Service for centralizing, structuring, and broadcasting shell log events.
  * Provides a unified channel for various subsystem diagnostics.

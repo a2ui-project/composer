@@ -13,111 +13,157 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 import {A2uiComponentInstance, RenderA2uiItem} from 'a2ui-bridge';
 import {tryParseJsonArray} from '../../utils/json';
 
 /**
- * Represents the result of parsing JSON Lines payload data.
+ * The standardized output structure for JSON Lines payload parsing.
+ * Supports disjoint outcomes between purely conversational text, strict structural updates,
+ * and syntax failures.
  */
-export declare interface ParseResult {
-  blocks: unknown[];
-  wasHealed: boolean;
+export declare interface SuccessConversationalParseResult {
+  readonly success: true;
+  readonly isConversational: true;
+  readonly blocks: [];
+  readonly count: 0;
 }
 
+export declare interface SuccessRenderParseResult {
+  readonly success: true;
+  readonly isConversational: false;
+  readonly blocks: RenderA2uiItem[];
+  readonly count: number;
+}
+
+export declare interface FailureParseResult {
+  readonly success: false;
+  readonly error: string;
+  readonly line?: number;
+  readonly column?: number;
+  readonly snippet?: string;
+}
+
+export type ParseResult =
+  SuccessConversationalParseResult | SuccessRenderParseResult | FailureParseResult;
+
 /**
- * Parses and attempts to syntax-heal a string of suspected A2UI JSON Lines.
+ * Determines whether raw LLM output contains valid A2UI JSON Lines format.
+ * Applies heuristic layout-recovery algorithms (trailing bracket injection, comma stripping)
+ * to heal interrupted streaming payloads or minor LLM formatting deviances.
  *
- * @param content Pre-cleaned JSON or JSON Lines string (e.g., stripped of pulse indicators,
- *                thinking tags, and markdown code fences via ChatCleaner.cleanPayload).
- * @return ParseResult containing parsed payload blocks and whether syntax healing occurred.
- * @throws Error if corrupted JSON Lines cannot be recovered or no valid blocks are parsed.
+ * @param content - The raw, unformatted LLM generation text buffer.
+ * @returns A structured classification of the payload's content intent and correctness.
  */
 export function parseAndHealJsonLines(content?: string | null): ParseResult {
   if (content == null || content.trim().length === 0) {
-    return {blocks: [], wasHealed: false};
+    return {
+      success: false,
+      error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+    };
   }
-  let wasHealed = false;
 
-  // Attempt full JSON parsing before line-by-line processing
   const parsedArray = tryParseJsonArray(content);
   if (parsedArray.success) {
-    return {blocks: parsedArray.data, wasHealed: false};
+    return {
+      success: true,
+      isConversational: false,
+      blocks: parsedArray.data as RenderA2uiItem[],
+      count: resolveComponentCount(parsedArray.data as RenderA2uiItem[]),
+    };
   }
 
-  try {
-    const parsedSingle = JSON.parse(content);
-    if (Array.isArray(parsedSingle)) {
-      return {blocks: parsedSingle, wasHealed};
+  const trimmed = content.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    const healed = attemptSyntaxHealing(content);
+    if (healed !== null && typeof healed === 'object') {
+      const blocks = (Array.isArray(healed) ? healed : [healed]) as RenderA2uiItem[];
+      return {
+        success: true,
+        isConversational: false,
+        blocks,
+        count: resolveComponentCount(blocks),
+      };
     }
-    if (parsedSingle && typeof parsedSingle === 'object') {
-      return {blocks: [parsedSingle], wasHealed};
-    }
-  } catch {
-    // Continue to line-by-line healing
   }
 
   const lines = content
     .split('\n')
     .map(l => l.trim())
     .filter(l => l.length > 0);
+
   const parsedBlocks: unknown[] = [];
+  let looksLikeA2ui = false;
 
   for (const line of lines) {
-    // Skip Markdown code tags if they leaked, or general prompt filler
-    // text lines
     if (line.startsWith('```') || (!line.startsWith('{') && !line.startsWith('['))) {
       continue;
     }
+    looksLikeA2ui = true;
 
-    // Syntax Healing Loop
     try {
       parsedBlocks.push(JSON.parse(line));
     } catch (err) {
-      wasHealed = true;
       const healedObj = attemptSyntaxHealing(line);
       if (healedObj !== null) {
         parsedBlocks.push(healedObj);
       } else {
-        // If it looks like A2UI JSON but couldn't be repaired, throw
-        // validation error
-        if (line.includes('"version"') || line.includes('"createSurface"')) {
-          throw new Error(`Syntax recovery failed for corrupted JSON Line:\n"${line}"`);
-        }
+        const errDetails = parsedArray.error;
+        return {
+          success: false,
+          error: errDetails?.message ?? 'Syntax recovery failed',
+          line: errDetails?.line,
+          column: errDetails?.column,
+          snippet: errDetails?.snippet,
+        };
       }
     }
   }
 
   if (parsedBlocks.length === 0) {
-    throw new Error('No valid A2UI JSON layout command block could be parsed or recovered.');
+    if (looksLikeA2ui || content.includes('"version"') || content.includes('"createSurface"')) {
+      const errDetails = parsedArray.error;
+      return {
+        success: false,
+        error: errDetails?.message ?? 'Syntax recovery failed',
+        line: errDetails?.line,
+        column: errDetails?.column,
+        snippet: errDetails?.snippet,
+      };
+    }
+    return {success: true, isConversational: true, blocks: [], count: 0};
   }
 
-  return {blocks: parsedBlocks, wasHealed};
+  return {
+    success: true,
+    isConversational: false,
+    blocks: parsedBlocks as RenderA2uiItem[],
+    count: resolveComponentCount(parsedBlocks as RenderA2uiItem[]),
+  };
 }
 
-/**
- * Attempts simple token-healing heuristics on a malformed JSON string.
- */
 export function attemptSyntaxHealing(line?: string | null): unknown | null {
   if (line == null || line.trim().length === 0) {
     return null;
   }
   let patched = line.trim();
 
-  // Repair 1: Strip trailing commas inside properties arrays
   patched = patched.replace(/,\s*([\]}])/g, '$1');
 
-  // Repair 2: Auto-close braces
   try {
     return JSON.parse(patched);
   } catch (e) {
-    // Loop to try appending up to 5 missing closing curly braces
     for (let i = 1; i <= 5; i++) {
       try {
         return JSON.parse(patched + '}'.repeat(i));
       } catch (_) {}
     }
-    // Loop to try appending matching square brackets then curly braces
+    for (let i = 1; i <= 3; i++) {
+      for (let j = 1; j <= 3; j++) {
+        try {
+          return JSON.parse(patched + '}'.repeat(i) + ']'.repeat(j));
+        } catch (_) {}
+      }
+    }
     for (let i = 1; i <= 3; i++) {
       for (let j = 1; j <= 3; j++) {
         try {
@@ -130,9 +176,6 @@ export function attemptSyntaxHealing(line?: string | null): unknown | null {
   return null;
 }
 
-/**
- * Type guard to determine if a parsed object is a valid RenderA2uiItem.
- */
 export function isRenderA2uiItem(block: unknown): block is RenderA2uiItem {
   if (!block || typeof block !== 'object') return false;
   const b = block as Record<string, unknown>;
@@ -141,9 +184,6 @@ export function isRenderA2uiItem(block: unknown): block is RenderA2uiItem {
   return Array.isArray(uc['components']);
 }
 
-/**
- * Validates and normalizes the parsed A2ui component payloads against the catalog schema.
- */
 export function runCatalogComponentSchemaCheck(
   parsedBlocks: unknown[],
   componentsObj?: Record<string, unknown>,
@@ -185,7 +225,6 @@ export function runCatalogComponentSchemaCheck(
       const compObj = comp as A2uiComponentInstance;
       let compType = compObj.component;
 
-      // legacy property "name" fallback: heal to "component" key mapping
       if ((compObj['name'] as unknown) && !compObj.component) {
         healed = true;
         compType = compObj['name'] as string;
@@ -199,15 +238,12 @@ export function runCatalogComponentSchemaCheck(
 
       let targetType = compType;
 
-      // Schema validation (only if catalog is actively loaded with components)
       if (componentsObj) {
         if (!componentsObj[compType]) {
-          // Unrecognized component type - check case-insensitive lookup!
           const normalized = compType.toLowerCase().replace(/[^a-z]/g, '');
           let healedType = componentHealMap[normalized];
 
           if (!healedType) {
-            // If not found directly, check synonym translation dictionary
             const synonymTarget = SYNONYM_MAP[normalized];
             if (synonymTarget) {
               healedType = componentHealMap[synonymTarget];
@@ -218,7 +254,6 @@ export function runCatalogComponentSchemaCheck(
             healed = true;
             targetType = healedType;
           } else {
-            // Fuzzy search matches
             const fuzzyMatch = normalized
               ? Object.keys(componentsObj).find(
                   key =>
@@ -240,20 +275,14 @@ export function runCatalogComponentSchemaCheck(
       }
 
       const cleanedComp = sanitizeComponentObject(compObj);
-      // Restore corrected element name
       cleanedComp.component = targetType;
       cleanedComponents.push(cleanedComp);
     }
-
-    // Commit sanitized array back in-place
     updateComponents.components = cleanedComponents as A2uiComponentInstance[];
   }
   return healed;
 }
 
-/**
- * Sanitizes data structures to produce a clean cloned copy.
- */
 export function sanitizeValue(val: unknown): unknown {
   if (val === null || typeof val !== 'object') {
     return val;
@@ -276,9 +305,17 @@ export function sanitizeValue(val: unknown): unknown {
   return cleaned;
 }
 
-/**
- * Wraps sanitizeValue to ensure the returned object operates strictly as an A2uiComponentInstance.
- */
 export function sanitizeComponentObject(obj: A2uiComponentInstance): A2uiComponentInstance {
   return sanitizeValue(obj) as A2uiComponentInstance;
+}
+
+function resolveComponentCount(blocks: RenderA2uiItem[]): number {
+  return blocks.reduce((acc, obj) => {
+    if (!obj || typeof obj !== 'object') return acc;
+    if (obj.updateComponents && Array.isArray(obj.updateComponents.components)) {
+      return acc + obj.updateComponents.components.length;
+    }
+    if (obj.createSurface) return acc + 1;
+    return acc;
+  }, 0);
 }
