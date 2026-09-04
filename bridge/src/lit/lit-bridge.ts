@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {LitElement, html, TemplateResult} from 'lit';
+import {LitElement, html, css, TemplateResult} from 'lit';
 import {state} from 'lit/decorators.js';
 import {ContextProvider} from '@lit/context';
 import {Context} from '@a2ui/lit/v0_9';
@@ -79,6 +79,40 @@ export class A2uiSandboxRoot extends LitElement {
   /** Optional callback when theme changes shared statically */
   static onThemeChange?: (theme: ThemePreference) => void = undefined;
 
+  static override styles = css`
+    :host {
+      display: block;
+      width: 100%;
+      min-height: 100vh;
+    }
+
+    .error-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      inset: 0;
+      z-index: 9999;
+      background-color: color-mix(in srgb, var(--a2ui-color-surface, canvas) 95%, transparent);
+      color: var(--a2ui-color-error, #d32f2f);
+      padding: 24px;
+      font-family: monospace;
+      overflow: auto;
+      box-sizing: border-box;
+    }
+
+    .error-overlay h3 {
+      margin-top: 0;
+    }
+
+    .error-overlay pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+    }
+  `;
+
   // Core dynamic processing engine mapping actions outbox proxies
   private processor = new MessageProcessor(
     (this.constructor as typeof A2uiSandboxRoot).catalogs,
@@ -101,6 +135,14 @@ export class A2uiSandboxRoot extends LitElement {
 
   @state()
   private surface?: SurfaceModel;
+
+  @state()
+  private error: Error | null = null;
+
+  @state()
+  private debouncedError: Error | null = null;
+
+  private debounceTimeout: ReturnType<typeof setTimeout> | null = null;
 
   private rendererConnection: SurfaceStateSubscription | null = null;
 
@@ -146,6 +188,20 @@ export class A2uiSandboxRoot extends LitElement {
         this.surface = undefined;
         this.requestUpdate();
       },
+      onError: (err: Error | null) => {
+        this.error = err;
+        if (!err) {
+          this.debouncedError = null;
+          if (this.debounceTimeout) clearTimeout(this.debounceTimeout);
+        } else {
+          if (this.debounceTimeout) clearTimeout(this.debounceTimeout);
+          // Buffer overlay triggers by 350ms to prevent visual flicker cascades
+          // during rapid keystrokes or streaming layout replacements.
+          this.debounceTimeout = setTimeout(() => {
+            this.debouncedError = err;
+          }, 350);
+        }
+      },
     });
   }
 
@@ -164,9 +220,31 @@ export class A2uiSandboxRoot extends LitElement {
         <p style="color: #666; padding: 24px; font-family: sans-serif; text-align: center;">
           A2UI Lit Sandbox active. Waiting for RENDER_A2UI...
         </p>
+        ${
+          this.debouncedError
+            ? html`
+                <div class="error-overlay">
+                  <h3>JSON Preview Error</h3>
+                  <pre>${this.debouncedError.message || String(this.debouncedError)}</pre>
+                </div>
+              `
+            : ''
+        }
       `;
     }
-    return html`<main><a2ui-surface .surface=${this.surface}></a2ui-surface></main>`;
+    return html`<main style="position: relative; width: 100%; height: 100%;">
+      <a2ui-surface .surface=${this.surface}></a2ui-surface>
+      ${
+        this.debouncedError
+          ? html`
+              <div class="error-overlay">
+                <h3>JSON Preview Error</h3>
+                <pre>${this.debouncedError.message || String(this.debouncedError)}</pre>
+              </div>
+            `
+          : ''
+      }
+    </main>`;
   }
 }
 

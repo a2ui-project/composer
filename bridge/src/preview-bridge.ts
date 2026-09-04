@@ -122,6 +122,65 @@ interface ActiveRenderer {
  * fully cleanses the runtime space: removing window listeners, canceling pending macro-task timers,
  * destroying overlays, and invoking connection unsubscriptions to guarantee a clean slate.
  */
+
+/**
+ * Safely serializes an unknown value to a JSON string without throwing on cyclical structures.
+ *
+ * @param val The value to serialize.
+ * @returns A JSON formatted string, or a fallback string on failure.
+ */
+export function safeSerialize(val: unknown): string {
+  function isErrorLike(v: unknown): v is Error {
+    return (
+      v !== null && typeof v === 'object' && ('message' in v || 'name' in v) && !('component' in v)
+    );
+  }
+
+  function sanitize(v: unknown, seen: WeakSet<object>): unknown {
+    if (typeof v === 'bigint') return `${v.toString()}n`;
+
+    if (v !== null && typeof v === 'object') {
+      if (seen.has(v)) return '[Circular]';
+
+      seen.add(v);
+      let result: unknown;
+
+      if (isErrorLike(v)) {
+        result = {
+          name: (v as unknown as Record<string, unknown>)['name'] || 'Error',
+          message: v.message,
+          stack: v.stack,
+        };
+      } else if (
+        'nodeType' in v &&
+        (v as Record<string, unknown>)['nodeType'] === 1 &&
+        typeof (v as Record<string, unknown>)['tagName'] === 'string'
+      ) {
+        result = `[Element: <${((v as Record<string, unknown>)['tagName'] as string).toLowerCase()}>]`;
+      } else if (Array.isArray(v)) {
+        result = v.map(curr => sanitize(curr, seen));
+      } else {
+        const objResult: Record<string, unknown> = {};
+        for (const k of Object.keys(v)) {
+          objResult[k] = sanitize((v as Record<string, unknown>)[k], seen);
+        }
+        result = objResult;
+      }
+
+      seen.delete(v);
+      return result;
+    }
+    return v;
+  }
+
+  try {
+    const res = JSON.stringify(sanitize(val, new WeakSet()));
+    return res === undefined ? 'undefined' : res;
+  } catch {
+    return '[Unserializable]';
+  }
+}
+
 export class PreviewBridge {
   /** The single active framework rendering stack connection hook. */
   private activeRenderer: ActiveRenderer | null = null;
@@ -398,7 +457,10 @@ export class PreviewBridge {
         break;
 
       case PreviewBridgeMessageType.RENDER_A2UI:
-        this.dispatchRenderA2ui(data.payload !== undefined ? data.payload : data);
+        this.dispatchRenderA2ui(
+          data.payload !== undefined ? data.payload : data,
+          Boolean(data.isStreaming),
+        );
         break;
 
       case PreviewBridgeMessageType.GET_CATALOG:
@@ -469,7 +531,7 @@ export class PreviewBridge {
    * If a createSurface instruction is present, it synchronously triggers a clear/unmount,
    * then defers the rendering actual layout command payload to a clean event cycle task.
    */
-  private dispatchRenderA2ui(payload: unknown): void {
+  private dispatchRenderA2ui(payload: unknown, isStreaming: boolean = false): void {
     // If a dynamic layout setup message is received before the framework application has
     // bootstrapped and attached its renderer, we print a warning and ignore the payload.
     // This should not ever happen since the host Shell is strictly designed never to dispatch
@@ -488,18 +550,19 @@ export class PreviewBridge {
     if (hasCreateSurface) {
       // Step 1: Synchronously dispatch null to trigger unmounting/reset
       try {
-        this.handleRenderA2ui(null);
+        this.handleRenderA2ui(null, isStreaming);
       } catch (err) {
         console.error('PreviewBridge: Error during RENDER_A2UI null reset dispatch:', err);
       }
 
-      // Step 2: Defer actual payload dispatch to the next event loop tick to trigger clean remount
+      // Step 2: Defer actual payload dispatch to the next event loop tick to
+      // trigger clean remount
       if (this.renderTimeoutId) {
         clearTimeout(this.renderTimeoutId);
       }
       this.renderTimeoutId = setTimeout(() => {
         try {
-          this.handleRenderA2ui(payload);
+          this.handleRenderA2ui(payload, isStreaming);
         } catch (err) {
           console.error('PreviewBridge: Error during deferred RENDER_A2UI payload dispatch:', err);
         }
@@ -507,7 +570,7 @@ export class PreviewBridge {
     } else {
       // Incremental state updates bypass the unmounting phase to prevent flicker
       try {
-        this.handleRenderA2ui(payload);
+        this.handleRenderA2ui(payload, isStreaming);
       } catch (err) {
         console.error('PreviewBridge: Error during direct RENDER_A2UI payload dispatch:', err);
       }
@@ -518,7 +581,7 @@ export class PreviewBridge {
    * Renders the specified payload array, mapping surface creation handles,
    * or delegates a resetting null command.
    */
-  private handleRenderA2ui(payload: unknown): void {
+  private handleRenderA2ui(payload: unknown, isStreaming: boolean = false): void {
     if (!this.activeRenderer) return;
 
     if (payload === null) {
@@ -551,13 +614,32 @@ export class PreviewBridge {
         }
       }
 
-      this.activeRenderer.processor.processMessages(payload as A2uiMessage[]);
+      try {
+        this.activeRenderer.processor.processMessages(payload as A2uiMessage[]);
+
+        // Suppresses the onError callback during active streaming when processMessages
+        // might throw. This strict check avoids crashing the view while receiving transient,
+        // incomplete JSON chunks before the payload finalizes.
+        if (this.activeRenderer.config.onError && !isStreaming) {
+          this.activeRenderer.config.onError(null);
+        }
+        this.sendMessage({type: PreviewBridgeMessageType.RENDER_SUCCESS});
+      } catch (err: unknown) {
+        if (!isStreaming && this.activeRenderer.config.onError) {
+          this.activeRenderer.config.onError(err instanceof Error ? err : new Error(String(err)));
+        }
+        this.sendMessage({
+          type: PreviewBridgeMessageType.RENDER_ERROR,
+          error: safeSerialize(err),
+        });
+      }
 
       if (hasCreateSurface && surfaceId) {
         this.activeRenderer.config.onSurfaceReady(surfaceId);
       }
 
-      // Defer measurement to the next event loop tick so asynchronous framework rendering and DOM attachment complete.
+      // Defer measurement to the next event loop tick so asynchronous framework
+      // rendering and DOM attachment complete.
       setTimeout(() => this.dispatchSurfaceResize(), 0);
     } else {
       console.warn('PreviewBridge: Unexpected non-array RENDER_A2UI payload received:', payload);

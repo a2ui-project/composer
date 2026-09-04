@@ -27,10 +27,12 @@ import type {A2uiMessage} from '@a2ui/web_core/v0_9';
 
 describe('PreviewBridge Core API Runtime', () => {
   let bridge: PreviewBridge;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
   let originalParent: Window;
   let originalLocation: Location;
 
   beforeEach(() => {
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     originalParent = window.parent;
     originalLocation = window.location;
 
@@ -57,6 +59,7 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   afterEach(() => {
+    if (errorSpy) errorSpy.mockRestore();
     bridge.destroy();
 
     const existing = document.getElementById('a2ui-blocking-overlay');
@@ -479,7 +482,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
   it('responds with COMPONENT_USAGES containing empty object if getComponentUsages throws an error', async () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
     const processor = {processMessages: vi.fn()};
 
@@ -512,7 +515,6 @@ describe('PreviewBridge Core API Runtime', () => {
       'PreviewBridge: Error invoking getComponentUsages:',
       expect.any(Error),
     );
-    errorSpy.mockRestore();
   });
 
   it('triggers onCatalogResolved callback when createSurface command contains catalogId', async () => {
@@ -578,7 +580,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
   it('strictly halts and transmits A2UI_CATALOG error envelope if in-memory catalog processing throws', async () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     window.fetch = vi.fn();
 
     const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
@@ -821,7 +823,7 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('catches and shields DOMExceptions during cross-origin postMessage', () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {
       throw new DOMException('Blocked a frame with origin from accessing a cross-origin frame.');
     });
@@ -880,7 +882,7 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('catches and logs errors thrown by the attached dynamic renderer during RENDER_A2UI dispatching', () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const mockGroup = {
       onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
     };
@@ -913,9 +915,12 @@ describe('PreviewBridge Core API Runtime', () => {
     );
 
     expect(throwingProcessor.processMessages).toHaveBeenCalled();
-    expect(errorSpy).toHaveBeenCalledWith(
-      'PreviewBridge: Error during direct RENDER_A2UI payload dispatch:',
-      expect.any(Error),
+    expect(window.parent.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PreviewBridgeMessageType.RENDER_ERROR,
+        error: expect.any(String),
+      }),
+      expect.anything(),
     );
 
     conn.unsubscribe();
@@ -1242,7 +1247,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
   describe('Coverage Edge Cases & Telemetry Guardrails', () => {
     it('logs error and returns empty subscription handle when attachRenderer is called without a surfaceGroup', () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       const processor = {processMessages: vi.fn()};
 
       const conn = bridge.attachRenderer(processor, {
@@ -1309,7 +1314,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     it('logs error when active renderer clear throws during RENDER_A2UI reset dispatching', () => {
       vi.useFakeTimers();
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       const mockGroup = {
         onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
       };
@@ -1416,7 +1421,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
     it('logs error when deferred RENDER_A2UI layout processing throws in macro-task timer', () => {
       vi.useFakeTimers();
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       const mockGroup = {
         onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
       };
@@ -1445,9 +1450,12 @@ describe('PreviewBridge Core API Runtime', () => {
 
       vi.runAllTimers();
 
-      expect(errorSpy).toHaveBeenCalledWith(
-        'PreviewBridge: Error during deferred RENDER_A2UI payload dispatch:',
-        expect.any(Error),
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: PreviewBridgeMessageType.RENDER_ERROR,
+          error: expect.any(String),
+        }),
+        expect.anything(),
       );
 
       conn.unsubscribe();
@@ -1555,7 +1563,7 @@ describe('PreviewBridge Core API Runtime', () => {
     });
 
     it('logs error when data model subscription fails for a dynamically registered surface', () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       let surfaceCallback: (surface: SurfaceInstance) => void = () => {};
       const surfaceGroupMock: SurfaceGroupLike = {
         onSurfaceCreated: {
@@ -1993,7 +2001,7 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('logs error and returns empty handle when attachRenderer is called with null config', () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const processor = {processMessages: vi.fn()};
 
     const handle = bridge.attachRenderer(processor, null as unknown as RendererConfig);
@@ -2006,7 +2014,7 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('logs error when connection.unsubscribe() throws during bridge.destroy()', () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const processor = {processMessages: vi.fn()};
 
     const throwingGroup = {
@@ -2039,7 +2047,7 @@ describe('PreviewBridge Core API Runtime', () => {
   });
 
   it('logs error when onCatalogResolved callback throws an unexpected exception', () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
     const processor = {processMessages: vi.fn()};
 
@@ -2214,7 +2222,7 @@ describe('PreviewBridge Core API Runtime', () => {
     });
 
     it('logs error if onThemeChange callback throws an exception', () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
       const processor = {processMessages: vi.fn()};
 
@@ -2261,7 +2269,7 @@ describe('PreviewBridge Core API Runtime', () => {
     });
 
     it('logs error if onThemeChange callback throws an exception during attachRenderer', () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       bridge.applyThemeToDom(ThemePreference.DARK);
 
       const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
@@ -2320,6 +2328,105 @@ describe('PreviewBridge Core API Runtime', () => {
       const destroySpy = vi.spyOn(bridge['surfaceResizeObserver'], 'destroy');
       bridge.destroy();
       expect(destroySpy).toHaveBeenCalled();
+    });
+  });
+  describe('Error Propagation and Handshake', () => {
+    let processMessagesMock: ReturnType<typeof vi.fn>;
+    let onErrorMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      processMessagesMock = vi.fn();
+      onErrorMock = vi.fn();
+      const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+      bridge.attachRenderer(
+        {processMessages: processMessagesMock},
+        {
+          surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+          onSurfaceReady: vi.fn(),
+          onError: onErrorMock,
+        },
+      );
+      // clear the initial RENDERER_READY message
+      (window.parent.postMessage as unknown as {mockClear: () => void}).mockClear();
+    });
+
+    it('suppresses onError callback when isStreaming is true despite processMessages throwing', async () => {
+      processMessagesMock.mockImplementation(() => {
+        throw new Error('Bad JSON');
+      });
+
+      const payload = {
+        isStreaming: true,
+        payload: [{version: 'v0.9', updateComponents: {surfaceId: 's1', components: []}}],
+      };
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {type: PreviewBridgeMessageType.RENDER_A2UI, ...payload},
+          source: window.parent,
+          origin: window.location.origin,
+        }),
+      );
+
+      // wait for setTimeout
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(onErrorMock).not.toHaveBeenCalled();
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: PreviewBridgeMessageType.RENDER_ERROR,
+          error: expect.any(String),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('invokes onError callback when processMessages throws during non-streaming edits', async () => {
+      const err = new Error('Syntax Error');
+      processMessagesMock.mockImplementation(() => {
+        throw err;
+      });
+
+      const payload = {
+        payload: [{version: 'v0.9', updateComponents: {surfaceId: 's1', components: []}}],
+      };
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {type: PreviewBridgeMessageType.RENDER_A2UI, ...payload},
+          source: window.parent,
+          origin: window.location.origin,
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(onErrorMock).toHaveBeenCalledWith(err);
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: PreviewBridgeMessageType.RENDER_ERROR,
+          error: expect.any(String),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('emits RENDER_SUCCESS and RENDER_ERROR bridge messages to parent host window accordingly', async () => {
+      const payload = {
+        payload: [{version: 'v0.9', updateComponents: {surfaceId: 's1', components: []}}],
+      };
+
+      // Clean success
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {type: PreviewBridgeMessageType.RENDER_A2UI, ...payload},
+          source: window.parent,
+          origin: window.location.origin,
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({type: PreviewBridgeMessageType.RENDER_SUCCESS}),
+        expect.anything(),
+      );
+      expect(onErrorMock).toHaveBeenCalledWith(null);
     });
   });
 });

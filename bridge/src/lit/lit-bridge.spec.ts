@@ -390,4 +390,41 @@ describe('Lit Framework Adapter Spec', () => {
 
     element.remove();
   });
+
+  it('defines static styles containing full-height host and fixed error overlay rules', () => {
+    const cssText = A2uiSandboxRoot.styles.cssText;
+    expect(cssText).toContain('min-height: 100vh');
+    expect(cssText).toContain('.error-overlay');
+    expect(cssText).toContain('position: fixed');
+    expect(cssText).toContain('z-index: 9999');
+    expect(cssText).not.toContain('--a2ui-color-error-overlay-bg');
+    expect(cssText).not.toContain('--a2ui-color-error-overlay-text');
+    expect(cssText).toContain('--a2ui-color-surface');
+    expect(cssText).toContain('--a2ui-color-error');
+  });
+
+  it('renders error overlay even when surface is absent when debounced error is present', () => {
+    vi.useFakeTimers();
+    bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root-error-test'});
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    const ctor = customElements.get('app-root-error-test');
+    const element = new ctor!();
+    document.body.appendChild(element);
+
+    const config = attachSpy.mock.lastCall![1];
+    config.onError!(new Error('Lit syntax error'));
+
+    vi.advanceTimersByTime(350);
+
+    const rendered = element.render() as unknown as TemplateResult;
+    const errorSubTemplate = rendered.values.find(
+      v => typeof v === 'object' && v !== null && 'strings' in v,
+    ) as TemplateResult | undefined;
+    expect(errorSubTemplate?.strings.join('')).toContain('error-overlay');
+    expect(errorSubTemplate?.strings.join('')).toContain('JSON Preview Error');
+
+    element.remove();
+    vi.useRealTimers();
+  });
 });

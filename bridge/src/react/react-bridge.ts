@@ -27,6 +27,8 @@ import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages} from '../i
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   /** The reactive dynamic surface drawing model representing the active canvas. */
   surface: SurfaceModel<C> | undefined;
+  /** The parsing / processing error encountered validating layouts. */
+  error: Error | null;
 }
 
 export interface ReactSandboxOptions {
@@ -52,6 +54,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
   options?: ReactSandboxOptions,
 ): UseA2uiSandboxResult<C> {
   const [surface, setSurface] = useState<SurfaceModel<C> | undefined>(undefined);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     // Instantiates a new dynamic MessageProcessor mapping outbound event actions
@@ -78,6 +81,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
       onSurfaceCleared: () => {
         setSurface(undefined);
       },
+      onError: setError,
     });
 
     // Standard React Hook cleanup: disposes connections and releases event listener subscriptions
@@ -86,5 +90,5 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     };
   }, []);
 
-  return {surface};
+  return {surface, error};
 }

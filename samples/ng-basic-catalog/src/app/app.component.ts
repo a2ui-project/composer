@@ -16,6 +16,9 @@
 
 import {Component, inject} from '@angular/core';
 import {SurfaceComponent} from '@a2ui/angular/v0_9';
+import {toObservable, toSignal} from '@angular/core/rxjs-interop';
+import {debounceTime, filter} from 'rxjs/operators';
+import {merge} from 'rxjs';
 import {A2uiSandboxConnection} from 'a2ui-bridge/angular';
 
 /**
@@ -34,4 +37,17 @@ export class AppComponent {
    * telemetries reactively.
    */
   protected sandbox = inject(A2uiSandboxConnection);
+
+  private error$ = toObservable(this.sandbox.error);
+
+  protected debouncedError = toSignal(
+    merge(
+      this.error$.pipe(filter(e => e === null)),
+      this.error$.pipe(
+        filter(e => e !== null),
+        debounceTime(350),
+      ),
+    ),
+    {initialValue: null},
+  );
 }
