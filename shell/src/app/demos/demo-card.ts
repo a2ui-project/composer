@@ -28,13 +28,16 @@ import {
   viewChild,
 } from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
+import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
+import {MatIconModule} from '@angular/material/icon';
 import {Demo, PreviewBridgeMessageType} from 'a2ui-bridge';
 import {buildRendererUrl} from '../preview/renderer-url';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {HostCommunication, MessageEnvelope} from '../shell/host-communication/host-communication';
 import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
 import {CrossFrameValidator} from '../shell/cross-frame-validator/cross-frame-validator';
+import {DemoLauncher} from './services/demo-launcher';
 
 /** Lifecycle phases of a single demo card's renderer frame handshake. */
 type DemoCardState = 'idle' | 'mounting' | 'ready' | 'error';
@@ -186,7 +189,7 @@ const READY_TIMEOUT_MS = 8000;
 @Component({
   selector: 'a2ui-composer-demo-card',
   standalone: true,
-  imports: [MatCardModule],
+  imports: [MatButtonModule, MatCardModule, MatIconModule],
   templateUrl: './demo-card.ng.html',
   styleUrl: './demo-card.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -204,6 +207,7 @@ export class DemoCard {
   private readonly startupResolution = inject(StartupResolution);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly configProvider = inject(AppConfigProvider);
+  private readonly demoLauncher = inject(DemoLauncher);
 
   /** The demo whose A2UI payload this card renders. */
   readonly demo = input.required<Demo>();
@@ -227,6 +231,16 @@ export class DemoCard {
 
   /** The frame's preview scale, published to the stylesheet as a custom property. */
   protected readonly previewScale = String(PREVIEW_SCALE);
+
+  /**
+   * Accessible name of this card's "Open" control.
+   *
+   * The visible label is one word, because the card has room for one word and the
+   * demo it belongs to is written directly above it. The accessible name cannot be:
+   * a screen reader listing the wall's controls would otherwise read 43 buttons all
+   * called "Open", which identifies none of them.
+   */
+  protected readonly openLabel = computed(() => `Open "${this.demo().name}" in the workspace`);
 
   /**
    * Height the card's surface actually occupies on the wall, or null before a report.
@@ -423,6 +437,16 @@ export class DemoCard {
       default:
         return;
     }
+  }
+
+  /**
+   * Sends this card's demo to the composer workspace as the active draft.
+   *
+   * The work belongs to {@link DemoLauncher}, which encodes the payload into the same
+   * shared-design link the Share button produces; the card only names the demo.
+   */
+  protected openInWorkspace(): void {
+    void this.demoLauncher.openInWorkspace(this.demo());
   }
 
   /**

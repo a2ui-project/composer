@@ -94,9 +94,79 @@
  */
 .demo-card .demo-card-header {
   display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 10px 10px 14px;
+}
+
+/*
+ * The text column. `min-width: 0` is what lets it shrink below its content so the
+ * subtitle's `text-overflow` engages: a flex item's default `min-width: auto` would
+ * hold the column at the full width of the untruncated description and push the Open
+ * button off the card instead.
+ */
+.demo-card-heading {
+  display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 12px 14px 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/*
+ * Revealed on hover and whenever focus is anywhere inside the card, which is what
+ * makes it reachable without a mouse: tabbing to the button puts focus inside the
+ * card, so the card matches `:focus-within` and the button it is revealing is the
+ * thing that revealed it. `:focus-visible` on the button itself is kept as well, so
+ * the reveal does not depend on `:focus-within` matching through the frame.
+ *
+ * Hidden with `opacity` rather than `visibility` or `display`, because both of those
+ * remove the button from the tab order, and a control a keyboard reader cannot reach
+ * until they have already found it is not an affordance.
+ */
+.demo-card .demo-card-open {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0 10px;
+  height: 30px;
+  line-height: 30px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--mat-sys-primary, #6750a4);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+
+  .demo-card-open-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    font-size: 16px;
+    line-height: 16px;
+    vertical-align: middle;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary, #6750a4);
+    outline-offset: 2px;
+  }
+}
+
+.demo-card:hover .demo-card-open,
+.demo-card:focus-within .demo-card-open,
+.demo-card .demo-card-open:focus-visible {
+  opacity: 1;
+}
+
+/*
+ * Reduced motion takes the fade, not the reveal: the control still appears, it just
+ * appears at once.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .demo-card .demo-card-open {
+    transition: none;
+  }
 }
 
 .demo-card-title {

@@ -15,19 +15,52 @@
 -->
 <mat-card class="demo-card" [class.is-error]="state() === 'error'">
   <mat-card-header class="demo-card-header">
-    <mat-card-title class="demo-card-title">{{ demo().name }}</mat-card-title>
+    <div class="demo-card-heading">
+      <mat-card-title class="demo-card-title">{{ demo().name }}</mat-card-title>
+      <!--
+        The description is truncated to one line in CSS, never in the binding: the full
+        text stays in the DOM, so assistive technology still reads it in full, and the
+        native `title` attribute — the same mechanism the frame below already uses — puts
+        it back within reach of a sighted reader on hover. Catalog descriptions repeat
+        verbatim across demos ("Simple example demonstrating basic catalog components."),
+        so at two lines of near-black they took the most prominent place on the card to
+        say the least.
+      -->
+      <mat-card-subtitle class="demo-card-subtitle" [title]="demo().description">{{
+        demo().description
+      }}</mat-card-subtitle>
+    </div>
+
     <!--
-      The description is truncated to one line in CSS, never in the binding: the full
-      text stays in the DOM, so assistive technology still reads it in full, and the
-      native `title` attribute — the same mechanism the frame below already uses — puts
-      it back within reach of a sighted reader on hover. Catalog descriptions repeat
-      verbatim across demos ("Simple example demonstrating basic catalog components."),
-      so at two lines of near-black they took the most prominent place on the card to
-      say the least.
+      The card's only navigation affordance, and deliberately a small explicit one
+      rather than the whole card.
+
+      The demo below is live: a reader can type into its form and press its buttons,
+      and click accuracy through the preview transform is what the frame's
+      `transform-origin` is pinned for. A card-sized click target would have to either
+      swallow those interactions or fire navigation when someone meant to use the demo,
+      and wrapping the card in a control is not available either — it contains an
+      iframe with its own focusable content, which may not be nested inside a button
+      or a link.
+
+      So the target is this button and nothing else, and it sits before the frame in
+      the tab order: keyboard readers reach "Open" on the way into a card rather than
+      after traversing the demo inside it. It is revealed on hover and on `:focus-within`
+      (see demo-card.scss) — the latter is what keeps it from being a mouse-only
+      affordance, since focusing it reveals it. Its accessible name names the demo,
+      because a wall of 43 buttons all called "Open" is no more use to a screen reader
+      than no buttons at all.
     -->
-    <mat-card-subtitle class="demo-card-subtitle" [title]="demo().description">{{
-      demo().description
-    }}</mat-card-subtitle>
+    <button
+      mat-button
+      type="button"
+      class="demo-card-open"
+      [attr.aria-label]="openLabel()"
+      (click)="openInWorkspace()"
+    >
+      <mat-icon class="demo-card-open-icon">edit</mat-icon>
+      Open
+    </button>
   </mat-card-header>
 
   <mat-card-content class="demo-card-content">
