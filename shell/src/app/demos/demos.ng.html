@@ -14,7 +14,13 @@
  limitations under the License.
 -->
 
-<div class="demos-container">
+<!--
+  #wallScroller is the element the wall actually scrolls in, and the intersection
+  observer's root: rooted on the window instead, this container would clip every
+  card before the observer's margin could widen anything. See
+  `Demos.ensureIntersectionObserver`.
+-->
+<div #wallScroller class="demos-container">
   <!--
     The coordinator frame is mounted unconditionally and kept visually hidden. It is
     the only frame on this page that registers as the bridge's primary target, and
