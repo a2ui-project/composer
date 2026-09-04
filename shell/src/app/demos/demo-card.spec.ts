@@ -32,6 +32,21 @@ const RENDERER_ORIGIN = 'http://localhost:3000';
 /** Ready handshake grace period the card allows before failing the demo closed. */
 const READY_TIMEOUT_MS = 8000;
 
+/**
+ * Height the frame is held at until a measurement commits, mirroring MEASURE_HEIGHT_PX
+ * in demo-card.ts. Reports at or below it are the frame measuring itself.
+ */
+const MEASURE_HEIGHT_PX = 32;
+
+/** Measurement window a newly attached frame gets, mirroring MEASURE_SETTLE_MS. */
+const MEASURE_SETTLE_MS = 1000;
+
+/** Quiet period that ends a committed card's growth phase, mirroring GROWTH_SETTLE_MS. */
+const GROWTH_SETTLE_MS = 8000;
+
+/** Upper bound on a committed height, mirroring MAX_CARD_HEIGHT_PX. */
+const MAX_CARD_HEIGHT_PX = 560;
+
 const DEMO: Demo = {
   id: 'weather-summary',
   name: 'Weather Summary',
@@ -94,6 +109,22 @@ describe('DemoCard sandboxed live demo frame', () => {
   /** Reads the card's renderer iframe element, or null while the card is unmounted. */
   function frameOf(fixture: ComponentFixture<DemoCard>): HTMLIFrameElement | null {
     return (fixture.nativeElement as HTMLElement).querySelector('iframe');
+  }
+
+  /** Reads the card's measured surface element. */
+  function surfaceOf(fixture: ComponentFixture<DemoCard>): HTMLElement {
+    return (fixture.nativeElement as HTMLElement).querySelector('.demo-card-surface')!;
+  }
+
+  /** Reads the card's loading placeholder, or null once a height has been committed. */
+  function placeholderOf(fixture: ComponentFixture<DemoCard>): HTMLElement | null {
+    return (fixture.nativeElement as HTMLElement).querySelector('.demo-card-placeholder');
+  }
+
+  /** Runs the card's height timers forward and lets the resulting signal writes render. */
+  function advance(fixture: ComponentFixture<DemoCard>, ms: number): void {
+    vi.advanceTimersByTime(ms);
+    fixture.detectChanges();
   }
 
   /** Simulates a bridge message dispatched by this card's own renderer frame. */
@@ -183,52 +214,157 @@ describe('DemoCard sandboxed live demo frame', () => {
     expect(fixture.componentInstance.state()).toBe('ready');
   });
 
-  it('freezes its height after the first surface resize report', () => {
+  it('commits the last height reported inside the measurement window, not the first', () => {
+    vi.useFakeTimers();
     const fixture = mountCard(true);
 
-    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 320, width: 480});
-    expect(fixture.componentInstance.cardHeight()).toBe(320);
+    // The renderer paints its own "waiting for a payload" screen before the demo mounts,
+    // so the first report above the floor measures that screen and not this demo. Against
+    // the Angular sample it is 166px, taller than seven of the catalog's demos: committing
+    // it on sight would leave each of them at the idle screen's height, and unable to
+    // recover, because sizing the frame to a committed height floors every later report at
+    // it and makes the shrink to the real content unobservable.
+    emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 166, width: 480});
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 56, width: 480});
+    expect(fixture.componentInstance.cardHeight()).toBeNull();
 
-    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 500, width: 480});
-    expect(fixture.componentInstance.cardHeight()).toBe(320);
+    advance(fixture, MEASURE_SETTLE_MS);
+
+    expect(fixture.componentInstance.cardHeight()).toBe(56);
   });
 
-  it('adopts the first rendered height instead of the guest bridge pre-render report', () => {
+  it('never commits a report at or below the height the frame is measured at', () => {
+    vi.useFakeTimers();
     const fixture = mountCard(true);
 
     // preview-bridge dispatches RENDERER_READY and a SURFACE_RESIZE back to back, so the
-    // first report measures an empty document whose scrollHeight is the iframe's own CSS
-    // height (--demo-card-min-h, 200px). Freezing on it pinned every card in the wall to
-    // the minimum and clipped the demo under .demo-card-surface { overflow: hidden }.
+    // first report measures an empty document, whose scrollHeight is nothing but the
+    // frame's own CSS height (--demo-card-measure-h). It is the measurement floor rather
+    // than evidence that anything rendered, and committing it pinned every card in the
+    // wall to one height and clipped its demo under .demo-card-surface { overflow: hidden }.
     emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
-    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 200, width: 480});
-    expect(fixture.componentInstance.cardHeight()).toBe(200);
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {
+      height: MEASURE_HEIGHT_PX,
+      width: 480,
+    });
+    advance(fixture, MEASURE_SETTLE_MS);
+
+    // Nothing committed, so the surface is still governed by its placeholder height and
+    // the frame is still short enough to measure the demo that has yet to arrive.
+    expect(fixture.componentInstance.cardHeight()).toBeNull();
+    expect(surfaceOf(fixture).style.height).toBe('');
+    expect(surfaceOf(fixture).classList.contains('is-measured')).toBe(false);
 
     emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 420, width: 480});
+    advance(fixture, MEASURE_SETTLE_MS);
+
     expect(fixture.componentInstance.cardHeight()).toBe(420);
   });
 
-  it('freezes once a rendered height has been adopted after a pre-render report', () => {
+  it('holds the frame at the measuring height under a placeholder until it commits', () => {
+    vi.useFakeTimers();
     const fixture = mountCard(true);
 
-    emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
-    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 200, width: 480});
-    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 420, width: 480});
-    expect(fixture.componentInstance.cardHeight()).toBe(420);
+    // Sizing the frame to the card is what floors the guest's measurement, so a card that
+    // has not measured yet keeps its frame short and hides it behind the placeholder.
+    expect(surfaceOf(fixture).classList.contains('is-measured')).toBe(false);
+    expect(placeholderOf(fixture)).not.toBeNull();
 
-    // Continuing to listen past the pre-render report must not weaken the freeze: later
-    // reflows inside the guest would otherwise reshuffle the masonry columns under the
-    // reader.
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 240, width: 480});
+    advance(fixture, MEASURE_SETTLE_MS);
+
+    expect(surfaceOf(fixture).classList.contains('is-measured')).toBe(true);
+    expect(surfaceOf(fixture).style.height).toBe('240px');
+    expect(placeholderOf(fixture)).toBeNull();
+  });
+
+  it('keeps growing after the window closes but never shrinks', () => {
+    vi.useFakeTimers();
+    const fixture = mountCard(true);
+
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 228, width: 480});
+    advance(fixture, MEASURE_SETTLE_MS);
+    expect(fixture.componentInstance.cardHeight()).toBe(228);
+
+    // A late image decode genuinely enlarges the demo, and the card has to follow it or
+    // it cuts through the content it just grew.
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 395, width: 480});
+    expect(fixture.componentInstance.cardHeight()).toBe(395);
+
+    // A smaller report is not news: the frame is 395px tall, so the guest's
+    // documentElement.scrollHeight cannot come back below that, and anything that does is
+    // a stale measurement. Following it down would make the card oscillate.
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 300, width: 480});
+    expect(fixture.componentInstance.cardHeight()).toBe(395);
+  });
+
+  it('stops following its frame once the reports have gone quiet', () => {
+    vi.useFakeTimers();
+    const fixture = mountCard(true);
+
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 320, width: 480});
+    advance(fixture, MEASURE_SETTLE_MS);
+    expect(fixture.componentInstance.cardHeight()).toBe(320);
+
+    advance(fixture, GROWTH_SETTLE_MS);
+
+    // Past the settle window the masonry columns are stable and the reader is looking at
+    // them, so a demo that reflows itself must no longer move the wall.
     emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 500, width: 480});
-    expect(fixture.componentInstance.cardHeight()).toBe(420);
+    expect(fixture.componentInstance.cardHeight()).toBe(320);
+  });
+
+  it('measures the demo again when the wall remounts its frame', () => {
+    vi.useFakeTimers();
+    const fixture = mountCard(true);
+
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 304, width: 480});
+    advance(fixture, MEASURE_SETTLE_MS + GROWTH_SETTLE_MS);
+    expect(fixture.componentInstance.cardHeight()).toBe(304);
+
+    // The wall drops a card's frame once it is more than a viewport away and gives it a
+    // new one on the way back. A first pass that caught a partial render would otherwise
+    // be permanent, so each frame gets its own measurement window.
+    fixture.componentRef.setInput('mount', false);
+    fixture.detectChanges();
+    fixture.componentRef.setInput('mount', true);
+    fixture.detectChanges();
+
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 388, width: 480});
+    advance(fixture, MEASURE_SETTLE_MS);
+
+    expect(fixture.componentInstance.cardHeight()).toBe(388);
   });
 
   it('clamps an out-of-range reported height into the card bounds', () => {
+    vi.useFakeTimers();
     const fixture = mountCard(true);
 
     emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 9000, width: 480});
+    advance(fixture, MEASURE_SETTLE_MS);
 
-    expect(fixture.componentInstance.cardHeight()).toBe(560);
+    // Clamped rather than honoured: the frame is a real viewport, so the demo keeps its
+    // full height and scrolls inside the card instead of dominating a masonry column.
+    expect(fixture.componentInstance.cardHeight()).toBe(MAX_CARD_HEIGHT_PX);
+  });
+
+  it('drops its measurement when the renderer changes underneath it', () => {
+    vi.useFakeTimers();
+    const fixture = mountCard(true);
+
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 420, width: 480});
+    advance(fixture, MEASURE_SETTLE_MS);
+    expect(fixture.componentInstance.cardHeight()).toBe(420);
+
+    // A different renderer lays the same demo out differently, so the old height is not
+    // evidence about the new one — and keeping it would floor the new guest's reports at
+    // a height it never measured.
+    resolvedUrlSignal.set('http://localhost:3000/other-renderer');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.cardHeight()).toBeNull();
+    expect(surfaceOf(fixture).classList.contains('is-measured')).toBe(false);
   });
 
   it('enters the error state when no ready handshake arrives in time', () => {

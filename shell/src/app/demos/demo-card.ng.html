@@ -20,7 +20,11 @@
   </mat-card-header>
 
   <mat-card-content class="demo-card-content">
-    <div class="demo-card-surface" [style.height.px]="cardHeight()">
+    <div
+      class="demo-card-surface"
+      [class.is-measured]="cardHeight() !== null"
+      [style.height.px]="cardHeight()"
+    >
       @if (mount() && safeRendererUrl()) {
         <iframe
           #demoIframe
@@ -30,7 +34,9 @@
           [title]="demo().name + ' live demo'"
           (load)="onFrameLoad()"
         ></iframe>
-      } @else {
+      }
+
+      @if (showPlaceholder()) {
         <div class="demo-card-placeholder" aria-hidden="true"></div>
       }
 

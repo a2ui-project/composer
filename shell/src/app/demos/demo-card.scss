@@ -19,10 +19,23 @@
   width: 100%;
 
   /*
-   * Must match MIN_CARD_HEIGHT_PX / MAX_CARD_HEIGHT_PX in demo-card.ts, which clamp
-   * the reported surface height to this same range.
+   * --demo-card-measure-h and --demo-card-max-h must match MEASURE_HEIGHT_PX and
+   * MAX_CARD_HEIGHT_PX in demo-card.ts, which clamp every reported height to that range.
+   *
+   * --demo-card-measure-h is the height the frame is held at until its guest reports a
+   * rendered height, and is therefore the floor of every measurement the card receives:
+   * documentElement.scrollHeight can never come back smaller than the frame's own
+   * viewport. It is kept far below any real demo so even the shortest one is measurable.
+   *
+   * --demo-card-placeholder-h has no counterpart in demo-card.ts because it is purely
+   * presentational: it is the resting height of the loading placeholder on a card that
+   * has not been measured yet, and never reaches the frame. Keeping it separate from the
+   * measuring height is the point — the two were once the same 200px value, which meant
+   * every demo shorter than 200px measured as exactly 200 and no card could size below
+   * it.
    */
-  --demo-card-min-h: 200px;
+  --demo-card-measure-h: 32px;
+  --demo-card-placeholder-h: 200px;
   --demo-card-max-h: 560px;
 
   /* Keeps a card whole inside the parent's CSS-columns masonry layout. */
@@ -78,26 +91,44 @@
   position: relative;
   display: block;
   width: 100%;
-  min-height: var(--demo-card-min-h);
+  min-height: var(--demo-card-placeholder-h);
   max-height: var(--demo-card-max-h);
   overflow: hidden;
   border-radius: 8px;
   background-color: var(--mat-sys-surface-container, #f3f0f4);
+
+  /*
+   * A measured card is sized by the inline height the component binds, so the
+   * placeholder floor has to give way: without this, no demo could ever present
+   * shorter than --demo-card-placeholder-h no matter what it measured.
+   */
+  &.is-measured {
+    min-height: 0;
+  }
 }
 
 .demo-card-frame {
   display: block;
   width: 100%;
-  height: 100%;
-  min-height: var(--demo-card-min-h);
   border: none;
   isolation: isolate;
+
+  /*
+   * Until a measurement commits, the frame is a short probe rather than the visible
+   * surface: its height is the floor of everything the guest can report, so it is held
+   * low enough that even the shortest demo measures above it. The placeholder covers
+   * the surface meanwhile, so this stunted frame is never the card the reader sees.
+   */
+  height: var(--demo-card-measure-h);
+
+  .demo-card-surface.is-measured & {
+    height: 100%;
+  }
 }
 
 .demo-card-placeholder {
-  width: 100%;
-  height: 100%;
-  min-height: var(--demo-card-min-h);
+  position: absolute;
+  inset: 0;
   background-color: var(--mat-sys-surface-container-highest, #f0f0f0);
 }
 
