@@ -25,6 +25,7 @@ import {
   AppConfigProvider,
   ThemePreference,
 } from '../settings/app-config-provider/app-config-provider';
+import {DemoLauncher} from './services/demo-launcher';
 
 const RENDERER_URL = 'http://localhost:3000/renderer';
 const RENDERER_ORIGIN = 'http://localhost:3000';
@@ -76,6 +77,7 @@ describe('DemoCard sandboxed live demo frame', () => {
   let sendToFrameSpy: MockInstance<HostCommunication['sendToFrame']>;
   let sendMessageSpy: MockInstance<HostCommunication['sendMessage']>;
   let resolvedUrlSignal: WritableSignal<string | null>;
+  let openInWorkspaceSpy: MockInstance<DemoLauncher['openInWorkspace']>;
 
   beforeEach(async () => {
     resolvedUrlSignal = signal<string | null>(RENDERER_URL);
@@ -95,6 +97,9 @@ describe('DemoCard sandboxed live demo frame', () => {
       ],
     }).compileComponents();
 
+    openInWorkspaceSpy = vi
+      .spyOn(TestBed.inject(DemoLauncher), 'openInWorkspace')
+      .mockResolvedValue(undefined);
     hostCommunication = TestBed.inject(HostCommunication);
     sendToFrameSpy = vi.spyOn(hostCommunication, 'sendToFrame');
     sendMessageSpy = vi.spyOn(hostCommunication, 'sendMessage');
@@ -163,6 +168,55 @@ describe('DemoCard sandboxed live demo frame', () => {
     // it, and the native title attribute puts it back within a sighted reader's reach.
     expect(subtitle.textContent!.trim()).toBe(DEMO.description);
     expect(subtitle.getAttribute('title')).toBe(DEMO.description);
+  });
+
+  it('names the demo in the accessible name of its open control', () => {
+    const fixture = mountCard(true);
+    const openButton = (fixture.nativeElement as HTMLElement).querySelector('.demo-card-open')!;
+
+    // The visible label is one word for every card on the wall; the accessible name is
+    // what tells a screen reader which of them this one opens.
+    expect(openButton.textContent?.trim()).toContain('Open');
+    expect(openButton.getAttribute('aria-label')).toBe(`Open "${DEMO.name}" in the workspace`);
+  });
+
+  it('sends its own demo to the workspace when the open control is activated', () => {
+    const fixture = mountCard(true);
+    const openButton = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '.demo-card-open',
+    )!;
+
+    openButton.click();
+    fixture.detectChanges();
+
+    expect(openInWorkspaceSpy).toHaveBeenCalledTimes(1);
+    expect(openInWorkspaceSpy).toHaveBeenCalledWith(DEMO);
+  });
+
+  it('keeps the open control focusable while it is visually withheld', () => {
+    const fixture = mountCard(true);
+    const openButton = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '.demo-card-open',
+    )!;
+
+    // Withheld with opacity rather than `display`/`visibility`/`hidden`, all of which
+    // would take the control out of the tab order and make it mouse-only.
+    expect(openButton.hidden).toBe(false);
+    expect(openButton.hasAttribute('disabled')).toBe(false);
+    expect(openButton.tabIndex).toBeGreaterThanOrEqual(0);
+  });
+
+  it('places the open control ahead of the demo frame in the tab order', () => {
+    const fixture = mountCard(true);
+    const host = fixture.nativeElement as HTMLElement;
+    const focusables = Array.from(host.querySelectorAll('button, iframe'));
+    const openIndex = focusables.findIndex(el => el.classList.contains('demo-card-open'));
+    const frameIndex = focusables.findIndex(el => el.tagName === 'IFRAME');
+
+    // A keyboard reader must arrive at "Open" on the way into a card rather than after
+    // traversing every focusable element the live demo contains.
+    expect(openIndex).toBeGreaterThanOrEqual(0);
+    expect(frameIndex).toBeGreaterThan(openIndex);
   });
 
   it('renders no iframe while the card is not mounted', () => {
