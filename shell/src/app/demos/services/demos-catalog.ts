@@ -265,7 +265,8 @@ export class DemosCatalog {
 }
 
 /**
- * Normalizes a renderer-supplied demos array: entries that are not objects
+ * Normalizes a renderer-supplied demos array: entries that are not plain
+ * objects — including arrays, which `typeof` also reports as `'object'` —
  * are dropped, each surviving demo's `name`/`description` are reduced to
  * plain strings, and every survivor is given a {@link TrackedDemo.trackKey}
  * that is non-empty and unique across the returned array.
@@ -297,7 +298,10 @@ function sanitizeDemos(demos: readonly unknown[]): TrackedDemo[] {
   const tracked: TrackedDemo[] = [];
 
   demos.forEach((entry, index) => {
-    if (typeof entry !== 'object' || entry === null) {
+    // `typeof [] === 'object'`, so without the `Array.isArray` guard a nested array survives as a
+    // demo: it would be spread into a card with empty text, and — since the spread copies nothing
+    // useful — the wall would show a blank tile for it.
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
       return;
     }
     const demo = entry as Demo;

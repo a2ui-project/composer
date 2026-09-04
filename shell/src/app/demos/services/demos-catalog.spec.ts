@@ -138,6 +138,34 @@ describe('DemosCatalog', () => {
     expect(service.loadingDemos()).toBe(false);
   });
 
+  it('drops array entries from a DEMOS payload and leaves the array untouched', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    const first: Demo = {id: 'demo-1', name: 'Demo One', description: 'A demo', a2ui: []};
+    const second: Demo = {id: 'demo-2', name: 'Demo Two', description: 'Another demo', a2ui: []};
+    // `typeof [] === 'object'`, so a nested array passes a bare object check and reaches the wall
+    // as a nameless card.
+    const nested: unknown[] = [first];
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: [first, nested, second],
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+
+    expect(service.demos()).toEqual([tracked(first, 'demo-1'), tracked(second, 'demo-2')]);
+    expect(nested).toEqual([first]);
+    expect(Object.keys(nested)).toEqual(['0']);
+    expect(service.loadingDemos()).toBe(false);
+  });
+
   it('preserves ampersands and angle brackets in demo name and description', () => {
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
