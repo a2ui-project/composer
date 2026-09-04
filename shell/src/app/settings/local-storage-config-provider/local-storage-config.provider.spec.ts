@@ -1,3 +1,4 @@
+import {ErrorLogger} from '../../debug/error-logger.service';
 /**
  * Copyright 2026 Google LLC
  *
@@ -18,7 +19,6 @@ import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SecureCredentialsKey} from '../../storage/models/secure-credentials-keys';
-
 import {
   EnvMode,
   AuthType,
@@ -78,6 +78,14 @@ class MockSecureCredentialsStorage {
 }
 
 describe('LocalStorageAppConfigProvider', () => {
+  const mockErrorLogger = {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    log: vi.fn(),
+  };
+  mockErrorLogger.withTag = () => mockErrorLogger;
+
   let mockEnvironmentContext: unknown;
   let mockStartupConfigState: unknown;
   let mockSecureStorage: MockSecureCredentialsStorage;
@@ -107,6 +115,7 @@ describe('LocalStorageAppConfigProvider', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
+        {provide: ErrorLogger, useValue: mockErrorLogger},
         LocalStorageAppConfigProvider,
         LocalStorageInteractions,
         {provide: SecureCredentialsStorage, useValue: mockSecureStorage},
@@ -294,13 +303,13 @@ describe('LocalStorageAppConfigProvider', () => {
   });
 
   it('handles simulated storage rejections gracefully during initialize bootstrap', async () => {
-    const warnSpy = vi.spyOn(console, 'warn');
     localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'err-key');
     vi.spyOn(mockSecureStorage, 'getCustomApiKey').mockRejectedValue(
       new Error('Simulated Read Failure'),
     );
 
     const provider = setupProvider();
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
     await provider.initialize();
 
     expect(warnSpy).toHaveBeenCalledWith(
@@ -311,7 +320,6 @@ describe('LocalStorageAppConfigProvider', () => {
   });
 
   it('attaches catch handler, logs warning, and re-throws when setGeminiApiKey write fails, after updating signal', async () => {
-    const warnSpy = vi.spyOn(console, 'warn');
     await mockSecureStorage.saveCustomApiKey('my-key', 'My Key', 'initial-key');
     localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-key');
     vi.spyOn(mockSecureStorage, 'saveCustomApiKey').mockRejectedValue(
@@ -319,11 +327,12 @@ describe('LocalStorageAppConfigProvider', () => {
     );
 
     const provider = setupProvider();
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
     await expect(provider.setGeminiApiKey('failed-key')).rejects.toThrow('Simulated Write Failure');
     expect(provider.geminiApiKey()).toBe('failed-key');
 
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to persist Gemini API key to SecureCredentialsStorage'),
+      'Failed to persist Gemini API key to SecureCredentialsStorage:',
       expect.any(Error),
     );
   });
@@ -347,7 +356,6 @@ describe('LocalStorageAppConfigProvider', () => {
   });
 
   it('logs warning and re-throws error when saveCustomApiKey encounters SecurityError or QuotaExceededError', async () => {
-    const warnSpy = vi.spyOn(console, 'warn');
     await mockSecureStorage.saveCustomApiKey('my-key', 'My Key', 'initial-key');
     localStorage.setItem(LocalStorageKey.SELECTED_API_KEY, 'my-key');
     vi.spyOn(mockSecureStorage, 'saveCustomApiKey').mockRejectedValue(
@@ -355,13 +363,14 @@ describe('LocalStorageAppConfigProvider', () => {
     );
 
     const provider = setupProvider();
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
     await expect(provider.setGeminiApiKey('sandboxed-key')).rejects.toThrow(
       'SecurityError in sandboxed iframe',
     );
     expect(provider.geminiApiKey()).toBe('sandboxed-key');
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to persist Gemini API key'),
-      expect.anything(),
+      'Failed to persist Gemini API key to SecureCredentialsStorage:',
+      expect.any(Error),
     );
   });
 

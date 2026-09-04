@@ -28,6 +28,7 @@ import {
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
 import {isValidEndpointUrl, normalizeHttpUrl} from '../../utils/url';
 
@@ -45,6 +46,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
   /** Central type-safe browser persistent storage service provider. */
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
+  private readonly errorLogger = inject(ErrorLogger);
 
   /** Highly secure credentials asynchronous storage engine. */
   private readonly secureCredentialsStorage = inject(SecureCredentialsStorage);
@@ -130,10 +132,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
       }
       this._geminiApiKey.set('');
     } catch (err) {
-      console.warn(
-        'Failed to resolve credentials from SecureCredentialsStorage during bootstrap',
-        err,
-      );
+      this.errorLogger
+        .withTag('[Settings]')
+        .warn('Failed to resolve credentials from SecureCredentialsStorage during bootstrap', err);
       this._geminiApiKey.set('');
     }
   }
@@ -268,7 +269,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
         }
       }
     } catch (err) {
-      console.warn('Failed to persist Gemini API key to SecureCredentialsStorage:', err);
+      this.errorLogger
+        .withTag('[Settings]')
+        .warn('Failed to persist Gemini API key to SecureCredentialsStorage:', err);
       throw err;
     }
   }

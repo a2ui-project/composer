@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {Injectable, inject} from '@angular/core';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {AbstractIndexedDbStorage} from '../abstract-indexed-db';
 import {CachedCatalogRecord} from '../models/catalog-storage.model';
 
@@ -24,6 +25,7 @@ import {CachedCatalogRecord} from '../models/catalog-storage.model';
  */
 @Injectable({providedIn: 'root'})
 export class IndexedDbStorage extends AbstractIndexedDbStorage {
+  private readonly logger = inject(ErrorLogger).withTag('[Storage]');
   protected readonly dbName = 'a2ui_composer_db';
   protected readonly dbVersion = 1;
   protected readonly storeName = 'catalogs';
@@ -61,7 +63,7 @@ export class IndexedDbStorage extends AbstractIndexedDbStorage {
       await this.executeAtomicWrite(record);
     } catch (err: unknown) {
       if (this.isQuotaError(err)) {
-        console.warn(
+        this.logger.warn(
           'QuotaExceededError encountered during write transaction. Triggering aggressive evict-down-to-3 fallback.',
         );
         await this.enforceLruCeiling(3, record.rendererUrl);
@@ -70,7 +72,7 @@ export class IndexedDbStorage extends AbstractIndexedDbStorage {
           await this.executeAtomicWrite(record);
         } catch (retryErr: unknown) {
           if (this.isQuotaError(retryErr)) {
-            console.error(
+            this.logger.error(
               'Extreme second QuotaExceededError encountered during retry. Flushing ALL remaining records.',
             );
             await this.flushAllRecords();
@@ -104,7 +106,7 @@ export class IndexedDbStorage extends AbstractIndexedDbStorage {
       await this.executeTransaction<void>(this.storeName, 'readwrite', tx => {
         for (const r of recordsToEvict) {
           tx.objectStore(this.storeName).delete(r.rendererUrl);
-          console.log(`Evicted oldest catalog record via LRU policy: ${r.rendererUrl}`);
+          this.logger.info(`Evicted oldest catalog record via LRU policy: ${r.rendererUrl}`);
         }
       });
     }
@@ -129,7 +131,7 @@ export class IndexedDbStorage extends AbstractIndexedDbStorage {
     await this.executeTransaction<void>(this.storeName, 'readwrite', tx => {
       tx.objectStore(this.storeName).clear();
     });
-    console.warn('Successfully flushed all catalog records from storage.');
+    this.logger.warn('Successfully flushed all catalog records from storage.');
   }
 
   private isQuotaError(err: unknown): boolean {
