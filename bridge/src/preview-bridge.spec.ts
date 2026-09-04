@@ -60,6 +60,7 @@ describe('PreviewBridge Core API Runtime', () => {
 
   afterEach(() => {
     if (errorSpy) errorSpy.mockRestore();
+    vi.restoreAllMocks();
     bridge.destroy();
 
     const existing = document.getElementById('a2ui-blocking-overlay');
@@ -2323,7 +2324,7 @@ describe('PreviewBridge Core API Runtime', () => {
     let onErrorMock: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
-    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       processMessagesMock = vi.fn();
       onErrorMock = vi.fn();
       const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};

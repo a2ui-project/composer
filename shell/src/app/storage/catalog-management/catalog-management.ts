@@ -15,6 +15,7 @@
  */
 
 import {Injectable, inject, signal, DestroyRef, effect} from '@angular/core';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {
   HostCommunication,
   MessageEnvelope,
@@ -37,6 +38,7 @@ import {stableStringify} from '../stable-stringify/stable-stringify';
   providedIn: 'root',
 })
 export class CatalogManagement {
+  private readonly logger = inject(ErrorLogger).withTag('[Storage]');
   private readonly hostCommunication = inject(HostCommunication);
   private readonly indexedDbStorage = inject(IndexedDbStorage);
   private readonly startupResolution = inject(StartupResolution);
@@ -177,7 +179,7 @@ export class CatalogManagement {
               }
             })
             .catch(err => {
-              console.warn(
+              this.logger.warn(
                 'Failed to fetch catalog record from IndexedDB for rendererUrl:',
                 targetUrl,
                 err,
@@ -194,7 +196,7 @@ export class CatalogManagement {
         concatMap((envelope: MessageEnvelope) => {
           if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
             if (this._isHandshakeInProgress()) {
-              console.warn('Handshake already in progress. Ignoring RENDERER_READY.');
+              this.logger.warn('Handshake already in progress. Ignoring RENDERER_READY.');
               return of(null);
             }
 
@@ -213,7 +215,7 @@ export class CatalogManagement {
               this._catalogError.set(
                 'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
               );
-              console.error('Watchdog timeout: A2UI_CATALOG not received within 5 seconds.');
+              this.logger.error('Watchdog timeout: A2UI_CATALOG not received within 5 seconds.');
               this._isHandshakeInProgress.set(false);
               this.watchdogTimerId = null;
             }, 5000);
@@ -230,7 +232,7 @@ export class CatalogManagement {
             if (!rawPayload || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
               const errorMsg = 'Invalid or malformed A2UI_CATALOG payload received.';
               this._catalogError.set(errorMsg);
-              console.error(errorMsg, rawPayload);
+              this.logger.error(errorMsg, rawPayload);
               this._isHandshakeInProgress.set(false);
               return of(null);
             }
@@ -244,7 +246,7 @@ export class CatalogManagement {
               const errorMsg =
                 errorObj.message || 'Unknown error occurred in preview bridge during handshake.';
               this._catalogError.set(errorMsg);
-              console.error('Handshake failed with bridge error:', errorMsg);
+              this.logger.error('Handshake failed with bridge error:', errorMsg);
               this._isHandshakeInProgress.set(false);
               return of(null);
             }
@@ -263,7 +265,7 @@ export class CatalogManagement {
             } catch (err: unknown) {
               const errorMsg = 'Failed to clone or serialize catalog payload.';
               this._catalogError.set(errorMsg);
-              console.error(errorMsg, err);
+              this.logger.error(errorMsg, err);
               this._isHandshakeInProgress.set(false);
               return of(null);
             }
@@ -272,14 +274,14 @@ export class CatalogManagement {
             if (!catalogId) {
               const errorMsg = 'Catalog is missing a valid identifier (catalogId or $id).';
               this._catalogError.set(errorMsg);
-              console.error(errorMsg, catalogObj);
+              this.logger.error(errorMsg, catalogObj);
               this._isHandshakeInProgress.set(false);
               return of(null);
             }
 
             let hashHexPromise: Promise<string>;
             if (!globalThis.crypto?.subtle) {
-              console.warn(
+              this.logger.warn(
                 'Web Crypto is not available in this insecure context. Falling back to synchronous checksum hash.',
               );
               const hashHex = simpleHash(catalogString);
@@ -329,7 +331,7 @@ export class CatalogManagement {
                 .catch((err: unknown) => {
                   const errorMsg = 'Failed to compute catalog hash or access storage.';
                   this._catalogError.set(errorMsg);
-                  console.error(errorMsg, err);
+                  this.logger.error(errorMsg, err);
                   this._isHandshakeInProgress.set(false);
                   return null;
                 }),

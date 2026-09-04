@@ -23,10 +23,10 @@ import {
   ChangeDetectorRef,
   inject,
 } from '@angular/core';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {DockviewComponent} from 'dockview';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
-
 import {ChatPanel} from '../../chat/chat-panel/chat-panel';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
@@ -48,6 +48,7 @@ export interface DockviewManagerInitOptions {
  */
 @Injectable()
 export class ComposerDockview {
+  private readonly logger = inject(ErrorLogger).withTag('[Shell]');
   private readonly storage = inject(LocalStorageInteractions);
   private readonly destroyRef = inject(DestroyRef);
   private readonly viewContainerRef = inject(ViewContainerRef);
@@ -283,7 +284,7 @@ export class ComposerDockview {
         this.dockviewApi.fromJSON(parsedLayout);
         layoutRestored = true;
       } catch (e) {
-        console.error('Failed to restore dockview layout');
+        this.logger.error('Failed to restore dockview layout');
       }
     }
 

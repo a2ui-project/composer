@@ -15,6 +15,7 @@
  */
 
 import {TestBed} from '@angular/core/testing';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {IndexedDbStorage} from './indexed-db-storage';
 import {CachedCatalogRecord} from '../models/catalog-storage.model';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
@@ -275,7 +276,7 @@ describe('IndexedDbStorage Storage Resilience', () => {
       configurable: true,
     });
 
-    const warnSpy = vi.spyOn(console, 'warn');
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
 
     const newRecord: CachedCatalogRecord = {
       rendererUrl: 'http://target:3000',
@@ -287,7 +288,9 @@ describe('IndexedDbStorage Storage Resilience', () => {
     await service.saveCatalogRecord(newRecord);
 
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('QuotaExceededError encountered during write transaction'),
+      expect.objectContaining({
+        message: expect.stringContaining('QuotaExceededError encountered during write transaction'),
+      }),
     );
     expect(storeMap.size).toBe(3);
     expect(storeMap.has('http://target:3000')).toBe(true);
@@ -312,7 +315,7 @@ describe('IndexedDbStorage Storage Resilience', () => {
       configurable: true,
     });
 
-    const errorSpy = vi.spyOn(console, 'error');
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
 
     const newRecord: CachedCatalogRecord = {
       rendererUrl: 'http://double:3000',
@@ -324,7 +327,9 @@ describe('IndexedDbStorage Storage Resilience', () => {
     await service.saveCatalogRecord(newRecord);
 
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Extreme second QuotaExceededError encountered'),
+      expect.objectContaining({
+        message: expect.stringContaining('Extreme second QuotaExceededError encountered'),
+      }),
     );
     expect(storeMap.size).toBe(1);
     expect(storeMap.has('http://double:3000')).toBe(true);

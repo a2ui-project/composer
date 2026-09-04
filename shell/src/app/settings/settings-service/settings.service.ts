@@ -15,6 +15,7 @@
  */
 
 import {Injectable, Signal, computed, inject, signal} from '@angular/core';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {
   StartupConfigStateService,
@@ -62,6 +63,7 @@ export declare interface RendererOption extends CustomRendererEntry {
   providedIn: 'root',
 })
 export class SettingsService {
+  private readonly logger = inject(ErrorLogger).withTag('[Settings]');
   private readonly startupResolution = inject(StartupResolution);
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly configProvider = inject(AppConfigProvider);
@@ -120,7 +122,7 @@ export class SettingsService {
       try {
         await this.syncEffectiveApiKeyToConfigProvider();
       } catch (err) {
-        console.warn('Failed to resolve effective API key during renderer selection:', err);
+        this.logger.warn('Failed to resolve effective API key during renderer selection:', err);
       }
     }
 
@@ -297,7 +299,7 @@ export class SettingsService {
       }
       return [];
     } catch (e) {
-      console.warn('Failed to parse custom renderers from LocalStorage:', e);
+      this.logger.warn('Failed to parse custom renderers from LocalStorage:', e);
       return [];
     }
   }

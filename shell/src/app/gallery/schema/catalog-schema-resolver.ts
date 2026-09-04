@@ -15,6 +15,7 @@
  */
 
 import {Catalog, CatalogComponentSchema} from '../../storage/models/catalog-storage.model';
+import {ErrorLogger, TaggedLogger} from '../../debug/error-logger.service';
 import {COMMON_TYPES_SCHEMA} from './common-types-schema';
 import {BASIC_CATALOG_SCHEMA} from './basic-catalog-schema';
 
@@ -44,7 +45,14 @@ interface ResolvedSchema {
  * handling references, inheritance, and validation rules.
  */
 export class CatalogSchemaResolver {
-  constructor(private readonly schema: Catalog | null) {}
+  private readonly logger: TaggedLogger;
+
+  constructor(
+    private readonly schema: Catalog | null,
+    private readonly errorLogger: ErrorLogger,
+  ) {
+    this.logger = this.errorLogger.withTag('[Catalog]');
+  }
 
   /**
    * Resolves and parses all properties for the specified component from the catalog schema.
@@ -209,7 +217,7 @@ export class CatalogSchemaResolver {
           );
           this.mergeResolvedSchemas(result, inherited);
         } else {
-          console.warn(`Failed to resolve schema reference: "${ref}"`);
+          this.logger.warn(`Failed to resolve schema reference: "${ref}"`);
         }
       }
     }
@@ -291,7 +299,7 @@ export class CatalogSchemaResolver {
 
     const resolved = this.resolveJsonPointer(rootSchema, ref);
     if (!resolved) {
-      console.warn(`Failed to resolve property schema reference: "${ref}"`);
+      this.logger.warn(`Failed to resolve property schema reference: "${ref}"`);
       return merged;
     }
 

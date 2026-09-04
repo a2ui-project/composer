@@ -37,7 +37,6 @@ import type * as monaco from 'monaco-editor';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
-
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 

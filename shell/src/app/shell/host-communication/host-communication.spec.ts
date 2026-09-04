@@ -892,6 +892,24 @@ describe('HostCommunication', () => {
           sourceTag: '[Previewer]',
         });
       });
+
+      it('dispatches CONSOLE_LOG to ErrorLogger when simulated via triggerMessageStreamForTesting', () => {
+        service.TEST_ONLY.triggerMessageStreamForTesting({
+          type: PreviewBridgeMessageType.CONSOLE_LOG,
+          payload: {
+            level: 'error',
+            message: 'Simulated error log',
+          },
+          origin: 'http://localhost',
+          timestamp: Date.now(),
+        });
+
+        expect(mockErrorLogger.log).toHaveBeenCalledWith({
+          level: 'error',
+          message: 'Simulated error log',
+          sourceTag: '[Previewer]',
+        });
+      });
     });
   });
 

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {Errors} from './errors';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
@@ -22,6 +22,8 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatTableModule} from '@angular/material/table';
 import {ErrorLogger, ErrorLogItem} from '../error-logger.service';
 import {Subject} from 'rxjs';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 
 describe('Errors Component', () => {
   let fixture: ComponentFixture<Errors>;
@@ -37,12 +39,104 @@ describe('Errors Component', () => {
 
     await TestBed.configureTestingModule({
       imports: [Errors, MatTableModule],
-      providers: [provideNoopAnimations(), {provide: ErrorLogger, useValue: mockErrorLogger}],
+      providers: [
+        provideNoopAnimations(),
+        {provide: ErrorLogger, useValue: mockErrorLogger},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Errors);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ErrorsHarness);
+  });
+
+  describe('trackComposerError telemetry', () => {
+    let usageService: UsageTrackingService;
+
+    beforeEach(async () => {
+      vi.useFakeTimers();
+      usageService = TestBed.inject(UsageTrackingService);
+      vi.spyOn(usageService, 'trackComposerError');
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('transmits mapped structural error events to the usage tracking service', () => {
+      errorStream$.next({
+        id: '1',
+        timestamp: Date.now(),
+        sourceTag: '[Monaco]',
+        level: 'error',
+        message: "Schema error: property 'missingProp'",
+        line: 5,
+        column: 10,
+      });
+
+      expect(usageService.trackComposerError).toHaveBeenCalledWith({
+        source_tag: '[Monaco]',
+        line: 5,
+        column: 10,
+        invalid_property: 'missingProp',
+        message: "Schema error: property 'missingProp'",
+      });
+    });
+
+    it('buffers and deduplicates repetitive error signatures for 5 seconds preventing flood', () => {
+      errorStream$.next({
+        id: '2',
+        timestamp: Date.now(),
+        sourceTag: '[Parser]',
+        level: 'warn',
+        message: 'SyntaxError at line 10',
+        line: 10,
+        column: 5,
+      });
+
+      errorStream$.next({
+        id: '3',
+        timestamp: Date.now(),
+        sourceTag: '[Parser]',
+        level: 'warn',
+        message: 'SyntaxError at line 10',
+        line: 10,
+        column: 5,
+      });
+
+      expect(usageService.trackComposerError).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(5000);
+
+      errorStream$.next({
+        id: '4',
+        timestamp: Date.now(),
+        sourceTag: '[Parser]',
+        level: 'error',
+        message: 'SyntaxError at line 10',
+        line: 10,
+        column: 5,
+      });
+
+      expect(usageService.trackComposerError).toHaveBeenCalledTimes(2);
+    });
+
+    it('extracts known structure keys replacing literals with extracted string', () => {
+      errorStream$.next({
+        id: '5',
+        timestamp: Date.now(),
+        sourceTag: '[Monaco]',
+        level: 'error',
+        message: 'Schema error: instance.components is not of a type',
+        line: 1,
+        column: 1,
+      });
+
+      expect(usageService.trackComposerError).toHaveBeenCalledWith(
+        expect.objectContaining({invalid_property: 'components'}),
+      );
+    });
   });
 
   it('creates the errors component via test harness', async () => {

@@ -15,6 +15,7 @@
  */
 
 import {TestBed} from '@angular/core/testing';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {signal, WritableSignal} from '@angular/core';
 import {SettingsService} from './settings.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
@@ -221,14 +222,17 @@ describe('SettingsService', () => {
 
   it('handles error gracefully when secureCredentialsStorage throws in selectProfile', async () => {
     mockSecureStorage.getCustomApiKeys.mockRejectedValue(new Error('Secure storage error'));
-    const warnSpy = vi.spyOn(console, 'warn');
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
 
     await service.selectRenderer('locked');
 
     expect(mockConfigProvider.setApiKeyFromConfig).not.toHaveBeenCalledWith('');
     expect(warnSpy).toHaveBeenCalledWith(
-      'Failed to resolve effective API key during renderer selection:',
-      expect.any(Error),
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'Failed to resolve effective API key during renderer selection:',
+        ),
+      }),
     );
   });
 
