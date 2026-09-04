@@ -15,6 +15,7 @@
  */
 
 import {TestBed} from '@angular/core/testing';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {ScreenshotCaptureService} from './screenshot-capture.service';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
@@ -150,7 +151,7 @@ describe('ScreenshotCaptureService', () => {
 
   it('logs a fallback warning when targetElement is provided but RestrictionTarget is unsupported', async () => {
     delete (globalThis as Record<string, unknown>)['RestrictionTarget'];
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
 
     Object.defineProperty(navigator, 'mediaDevices', {
       value: {getDisplayMedia: vi.fn().mockResolvedValue(mockStream)},
@@ -163,7 +164,13 @@ describe('ScreenshotCaptureService', () => {
     const result = await promise;
 
     expect(warnSpy).toHaveBeenCalledWith(
-      'RestrictionTarget API not supported, capturing full tab.',
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'RestrictionTarget API not supported, capturing full tab.',
+        ),
+        sourceTag: '[Shell]',
+        level: 'warn',
+      }),
     );
     expect(result).toBe('data:image/png;base64,mockScreenshot');
   });
@@ -206,7 +213,7 @@ describe('ScreenshotCaptureService', () => {
   });
 
   it('logs a fallback warning when targetElement is provided but capture throws or fails', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
     const error = new Error('Capture failed');
     Object.defineProperty(navigator, 'mediaDevices', {
       value: {getDisplayMedia: vi.fn().mockRejectedValue(error)},
@@ -219,7 +226,13 @@ describe('ScreenshotCaptureService', () => {
     // But captureScreenshot will throw early if target element is undefined or not connected.
     // Wait, let's just use undefined / no-args.
     await expect(service.captureScreenshot(sharedMockElement)).rejects.toThrow(error);
-    expect(warnSpy).toHaveBeenCalledWith('Capture canceled or failed:', error);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Capture canceled or failed:'),
+        sourceTag: '[Shell]',
+        level: 'warn',
+      }),
+    );
   });
 
   it('handles RestrictionTarget.fromElement rejection gracefully and captures full tab', async () => {
@@ -234,14 +247,19 @@ describe('ScreenshotCaptureService', () => {
       writable: true,
     });
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
     const promise = service.captureScreenshot(sharedMockElement);
     await vi.advanceTimersByTimeAsync(150);
     const result = await promise;
 
     expect(warnSpy).toHaveBeenCalledWith(
-      'Failed to restrict video track to element, falling back to full tab capture:',
-      expect.any(Error),
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'Failed to restrict video track to element, falling back to full tab capture:',
+        ),
+        sourceTag: '[Shell]',
+        level: 'warn',
+      }),
     );
     expect(result).toBe('data:image/png;base64,mockScreenshot');
   });
@@ -260,14 +278,19 @@ describe('ScreenshotCaptureService', () => {
       writable: true,
     });
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
     const promise = service.captureScreenshot(sharedMockElement);
     await vi.advanceTimersByTimeAsync(150);
     const result = await promise;
 
     expect(warnSpy).toHaveBeenCalledWith(
-      'Failed to restrict video track to element, falling back to full tab capture:',
-      expect.any(Error),
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'Failed to restrict video track to element, falling back to full tab capture:',
+        ),
+        sourceTag: '[Shell]',
+        level: 'warn',
+      }),
     );
     expect(result).toBe('data:image/png;base64,mockScreenshot');
   });

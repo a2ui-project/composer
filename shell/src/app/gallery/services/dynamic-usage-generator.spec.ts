@@ -21,6 +21,7 @@ import {DynamicUsageGenerator} from './dynamic-usage-generator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {CatalogSchemaResolver} from '../schema/catalog-schema-resolver';
 import {Catalog} from '../../storage/models/catalog-storage.model';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
@@ -29,6 +30,7 @@ class MockCatalogManagement {
 describe('DynamicUsageGenerator', () => {
   let generator: DynamicUsageGenerator;
   let catalogManagementMock: MockCatalogManagement;
+  let errorLogger: ErrorLogger;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -40,6 +42,7 @@ describe('DynamicUsageGenerator', () => {
 
     generator = TestBed.inject(DynamicUsageGenerator);
     catalogManagementMock = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
+    errorLogger = TestBed.inject(ErrorLogger);
   });
 
   it('generates fallback preset with required properties of all types', () => {
@@ -74,7 +77,7 @@ describe('DynamicUsageGenerator', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
-    const resolver = new CatalogSchemaResolver(mockCatalog);
+    const resolver = new CatalogSchemaResolver(mockCatalog, errorLogger);
 
     const preset = generator.generateFallbackPreset('CustomComp', '', resolver);
     expect(preset).toEqual([
@@ -110,7 +113,7 @@ describe('DynamicUsageGenerator', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
-    const resolver = new CatalogSchemaResolver(mockCatalog);
+    const resolver = new CatalogSchemaResolver(mockCatalog, errorLogger);
 
     const preset = generator.generateFallbackPreset('CustomComp', '', resolver);
     expect(preset).toEqual([
@@ -141,7 +144,7 @@ describe('DynamicUsageGenerator', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
-    const resolver = new CatalogSchemaResolver(mockCatalog);
+    const resolver = new CatalogSchemaResolver(mockCatalog, errorLogger);
 
     const preset = generator.generateFallbackPreset('MyImage', '', resolver);
     expect(preset).toEqual([
@@ -168,7 +171,7 @@ describe('DynamicUsageGenerator', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
-    const resolver = new CatalogSchemaResolver(mockCatalog);
+    const resolver = new CatalogSchemaResolver(mockCatalog, errorLogger);
 
     const preset = generator.generateFallbackPreset('CustomComp', '', resolver);
     expect(preset).toEqual([
@@ -196,7 +199,7 @@ describe('DynamicUsageGenerator', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
-    const resolver = new CatalogSchemaResolver(mockCatalog);
+    const resolver = new CatalogSchemaResolver(mockCatalog, errorLogger);
 
     const preset = generator.generateFallbackPreset('CustomComp', '', resolver);
     expect(preset).toEqual([
@@ -225,7 +228,7 @@ describe('DynamicUsageGenerator', () => {
       },
     };
     catalogManagementMock.activeCatalog.set(mockCatalog);
-    const resolver = new CatalogSchemaResolver(mockCatalog);
+    const resolver = new CatalogSchemaResolver(mockCatalog, errorLogger);
 
     const preset = generator.generateFallbackPreset('Container', '', resolver);
     expect(preset).toEqual([

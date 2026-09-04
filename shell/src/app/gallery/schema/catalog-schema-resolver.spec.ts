@@ -14,11 +14,23 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {CatalogSchemaResolver} from './catalog-schema-resolver';
 
 describe('CatalogSchemaResolver', () => {
+  let errorLogger: import('../../debug/error-logger.service').ErrorLogger;
+  beforeEach(() => {
+    errorLogger = {
+      log: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      withTag: vi.fn().mockReturnThis(),
+      info: vi.fn(),
+      withTag: vi.fn().mockReturnThis(),
+    } as unknown as import('../../debug/error-logger.service').ErrorLogger;
+  });
   it('parses simple properties correctly', () => {
     const mockSchema = {
       components: {
@@ -40,7 +52,7 @@ describe('CatalogSchemaResolver', () => {
       },
     };
 
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('SimpleComponent');
 
     expect(properties).toEqual([
@@ -82,7 +94,7 @@ describe('CatalogSchemaResolver', () => {
       },
     };
 
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('RefComponent');
 
     expect(properties).toEqual([
@@ -130,7 +142,7 @@ describe('CatalogSchemaResolver', () => {
       },
     };
 
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('AllOfComponent');
 
     expect(properties).toEqual([
@@ -164,7 +176,7 @@ describe('CatalogSchemaResolver', () => {
       },
     };
 
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('CircularComponent');
 
     expect(properties).toEqual([
@@ -197,7 +209,7 @@ describe('CatalogSchemaResolver', () => {
       },
     };
 
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('Component');
 
     expect(properties).toEqual([
@@ -226,7 +238,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toEqual([
       {
@@ -252,7 +264,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties[0].type).toBe('string | null');
   });
@@ -273,7 +285,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toContainEqual({
       name: 'constProp',
@@ -305,7 +317,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toContainEqual({
       name: 'oneOfProp',
@@ -322,11 +334,15 @@ describe('CatalogSchemaResolver', () => {
   });
 
   it('returns empty array when schema is not an object or component is not found', () => {
-    expect(new CatalogSchemaResolver(null).resolveComponentProperties('Component')).toEqual([]);
-    expect(new CatalogSchemaResolver('invalid').resolveComponentProperties('Component')).toEqual(
-      [],
-    );
-    expect(new CatalogSchemaResolver({}).resolveComponentProperties('Component')).toEqual([]);
+    expect(
+      new CatalogSchemaResolver(null, errorLogger).resolveComponentProperties('Component'),
+    ).toEqual([]);
+    expect(
+      new CatalogSchemaResolver('invalid', errorLogger).resolveComponentProperties('Component'),
+    ).toEqual([]);
+    expect(
+      new CatalogSchemaResolver({}, errorLogger).resolveComponentProperties('Component'),
+    ).toEqual([]);
   });
 
   it('merges local properties over inherited properties instead of overwriting them completely', () => {
@@ -354,7 +370,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('ChildComponent');
     expect(properties).toEqual([
       {
@@ -368,7 +384,6 @@ describe('CatalogSchemaResolver', () => {
   });
 
   it('logs warnings when references cannot be resolved', () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const mockSchema = {
       components: {
         TestComponent: {
@@ -382,15 +397,14 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     resolver.resolveComponentProperties('TestComponent');
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(errorLogger.warn).toHaveBeenCalledWith(
       'Failed to resolve schema reference: "#/$defs/MissingParent"',
     );
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(errorLogger.warn).toHaveBeenCalledWith(
       'Failed to resolve property schema reference: "#/$defs/MissingProp"',
     );
-    consoleWarnSpy.mockRestore();
   });
 
   it('resolves null const and enum properties correctly', () => {
@@ -409,7 +423,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toContainEqual({
       name: 'nullConst',
@@ -426,7 +440,6 @@ describe('CatalogSchemaResolver', () => {
   });
 
   it('returns undefined for references that do not start with #/', () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const mockSchema = {
       components: {
         Component: {
@@ -436,13 +449,12 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('Component');
     expect(properties).toEqual([{name: 'text', description: '', type: 'unknown', required: false}]);
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(errorLogger.warn).toHaveBeenCalledWith(
       'Failed to resolve property schema reference: "external_schema.json"',
     );
-    consoleWarnSpy.mockRestore();
   });
 
   it('merges colliding properties in mergeResolvedSchemas when multiple inherited schemas define the same property', () => {
@@ -461,7 +473,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     expect(resolver.resolveComponentProperties('Child')).toEqual([
       {
         name: 'prop',
@@ -489,7 +501,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     expect(resolver.resolveComponentProperties('Component')).toEqual([
       {
         name: 'text',
@@ -513,7 +525,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toEqual([
       {
@@ -536,7 +548,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     expect(resolver.resolveComponentProperties('CompA')).toEqual([]);
   });
 
@@ -546,7 +558,7 @@ describe('CatalogSchemaResolver', () => {
         InvalidComponent: 'not-an-object',
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     expect(resolver.resolveComponentProperties('InvalidComponent')).toEqual([]);
   });
 
@@ -566,7 +578,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     expect(resolver.resolveComponentProperties('Child')).toEqual([
       {
         name: 'prop',
@@ -580,15 +592,22 @@ describe('CatalogSchemaResolver', () => {
   it('returns empty array when components is not an object, is an array, or component is missing', () => {
     // components as string (non-object)
     expect(
-      new CatalogSchemaResolver({components: 'invalid'}).resolveComponentProperties('Component'),
+      new CatalogSchemaResolver({components: 'invalid'}, errorLogger).resolveComponentProperties(
+        'Component',
+      ),
     ).toEqual([]);
     // components as array
     expect(
-      new CatalogSchemaResolver({components: []}).resolveComponentProperties('Component'),
+      new CatalogSchemaResolver(
+        {components: []} as unknown as Catalog,
+        errorLogger,
+      ).resolveComponentProperties('Component'),
     ).toEqual([]);
     // componentName not found in components dict
     expect(
-      new CatalogSchemaResolver({components: {}}).resolveComponentProperties('Component'),
+      new CatalogSchemaResolver({components: {}}, errorLogger).resolveComponentProperties(
+        'Component',
+      ),
     ).toEqual([]);
   });
 
@@ -607,7 +626,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toEqual([
       {
@@ -635,7 +654,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('Child');
     expect(properties).toEqual([{name: 'prop', description: '', type: 'string', required: false}]);
   });
@@ -655,14 +674,13 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
+
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toEqual([{name: 'prop', description: '', type: 'unknown', required: false}]);
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(errorLogger.warn).toHaveBeenCalledWith(
       'Failed to resolve property schema reference: "#/components/Text/text/nested"',
     );
-    consoleWarnSpy.mockRestore();
   });
 
   it('returns empty object when resolving property schema that is a primitive or null', () => {
@@ -677,7 +695,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toContainEqual({
       name: 'nullProp',
@@ -706,7 +724,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties[0].type).toBe('number');
   });
@@ -722,7 +740,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     expect(resolver.resolveComponentProperties('TestComponent1')).toEqual([]);
     expect(resolver.resolveComponentProperties('TestComponent2')).toEqual([]);
   });
@@ -738,7 +756,7 @@ describe('CatalogSchemaResolver', () => {
         someStringConstant: 'just-a-string',
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     expect(resolver.resolveComponentProperties('TestComponent')).toEqual([]);
   });
 
@@ -754,7 +772,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties[0].required).toBe(true);
   });
@@ -774,7 +792,7 @@ describe('CatalogSchemaResolver', () => {
         PropB: {$ref: '#/$defs/PropA'},
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toEqual([
       {name: 'propA', description: '', type: 'unknown', required: false},
@@ -797,8 +815,8 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
+
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toContainEqual({
       name: 'invalidOneOf',
@@ -812,7 +830,6 @@ describe('CatalogSchemaResolver', () => {
       type: 'unknown',
       required: false,
     });
-    consoleWarnSpy.mockRestore();
   });
 
   it('resolves type unions from oneOf and anyOf schemas containing $ref references', () => {
@@ -833,7 +850,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties[0].type).toBe('string | number');
   });
@@ -854,7 +871,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('Child');
     expect(properties).toEqual([{name: 'prop', description: '', type: 'string', required: false}]);
   });
@@ -872,13 +889,12 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties[0].type).toBe('number');
   });
 
   it('prevents prototype pollution when resolving references', () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const mockSchema = {
       components: {
         TestComponent: {
@@ -891,7 +907,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema as unknown as Catalog);
+    const resolver = new CatalogSchemaResolver(mockSchema as unknown as Catalog, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toEqual([
       {
@@ -901,14 +917,13 @@ describe('CatalogSchemaResolver', () => {
         required: false,
       },
     ]);
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(errorLogger.warn).toHaveBeenCalledWith(
       'Failed to resolve property schema reference: "#/constructor/prototype/polluted"',
     );
-    consoleWarnSpy.mockRestore();
   });
 
   it('mergePropertySchemas performs a recursive deep merge on nested objects', () => {
-    const resolver = new CatalogSchemaResolver(null);
+    const resolver = new CatalogSchemaResolver(null, errorLogger);
     const a = {
       type: 'array',
       items: {
@@ -948,7 +963,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     expect(resolver.resolveComponentProperties('Component')).toEqual([
       {
         name: 'text',
@@ -973,7 +988,7 @@ describe('CatalogSchemaResolver', () => {
       },
     };
 
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('Component');
 
     expect(properties).toEqual([
@@ -1016,7 +1031,7 @@ describe('CatalogSchemaResolver', () => {
       },
     };
 
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const propertiesSchema = resolver.resolveComponentPropertiesSchema('ArrayComponent');
 
     expect(propertiesSchema['list']).toEqual({
@@ -1056,7 +1071,7 @@ describe('CatalogSchemaResolver', () => {
       },
     };
 
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const propertiesSchema = resolver.resolveComponentPropertiesSchema('ObjectComponent');
 
     expect(propertiesSchema['nested']).toEqual({
@@ -1085,7 +1100,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     expect(resolver.resolveComponentProperties('Component')).toEqual([
       {
         name: 'text',
@@ -1117,7 +1132,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const propertiesSchema = resolver.resolveComponentPropertiesSchema('MapComponent');
     expect(propertiesSchema['arguments']).toEqual({
       type: 'object',
@@ -1151,7 +1166,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const propertiesSchema = resolver.resolveComponentPropertiesSchema('MergedComponent');
     expect(propertiesSchema['sharedObject']).toEqual({
       properties: {
@@ -1173,14 +1188,13 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const resolver = new CatalogSchemaResolver(mockSchema);
+
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toEqual([{name: 'prop', description: '', type: 'unknown', required: false}]);
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(errorLogger.warn).toHaveBeenCalledWith(
       'Failed to resolve property schema reference: "my_common_types.json#/$defs/Type"',
     );
-    consoleWarnSpy.mockRestore();
   });
 
   it('does not resolve from catalog.json if the pointer only partially matches (e.g. my_cool_catalog.json)', () => {
@@ -1195,14 +1209,13 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const resolver = new CatalogSchemaResolver(mockSchema);
+
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('TestComponent');
     expect(properties).toEqual([{name: 'prop', description: '', type: 'unknown', required: false}]);
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(errorLogger.warn).toHaveBeenCalledWith(
       'Failed to resolve property schema reference: "my_cool_catalog.json#/$defs/anyFunction"',
     );
-    consoleWarnSpy.mockRestore();
   });
 
   it('resolves canonical full URL references to common_types.json', () => {
@@ -1220,7 +1233,7 @@ describe('CatalogSchemaResolver', () => {
         },
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema);
+    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
     const properties = resolver.resolveComponentProperties('Card');
     expect(properties).toContainEqual({
       name: 'child',

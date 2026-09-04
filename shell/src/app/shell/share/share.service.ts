@@ -15,6 +15,7 @@
  */
 
 import {DOCUMENT} from '@angular/common';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {Injectable, inject} from '@angular/core';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {StateSync} from '../../chat/state-sync/state-sync';
@@ -32,6 +33,7 @@ const SNACK_BAR_DURATION_MS = 5000;
  */
 @Injectable({providedIn: 'root'})
 export class ShareService {
+  private readonly logger = inject(ErrorLogger).withTag('[Shell]');
   private readonly document = inject(DOCUMENT);
   private readonly snackBar = inject(MatSnackBar);
   private readonly stateSync = inject(StateSync);
@@ -94,7 +96,7 @@ export class ShareService {
         status: ShareTrackingStatus.FAILURE,
         compressedLengthChars,
       });
-      console.error('Failed to copy shareable link:', err);
+      this.logger.error('Failed to copy shareable link:', err);
       this.snackBar.open('Failed to copy link to clipboard', 'Close', {
         duration: SNACK_BAR_DURATION_MS,
       });

@@ -1039,6 +1039,24 @@ describe('HostCommunication', () => {
         expect(history[0].type).toBe(PreviewBridgeMessageType.DATA_MODEL_CHANGE);
         expect(service.latestEnvelope()?.type).toBe(PreviewBridgeMessageType.DATA_MODEL_CHANGE);
       });
+
+      it('dispatches CONSOLE_LOG to ErrorLogger when simulated via triggerMessageStreamForTesting', () => {
+        service.TEST_ONLY.triggerMessageStreamForTesting({
+          type: PreviewBridgeMessageType.CONSOLE_LOG,
+          payload: {
+            level: 'error',
+            message: 'Simulated error log',
+          },
+          origin: 'http://localhost',
+          timestamp: Date.now(),
+        });
+
+        expect(mockErrorLogger.log).toHaveBeenCalledWith({
+          level: 'error',
+          message: 'Simulated error log',
+          sourceTag: '[Previewer]',
+        });
+      });
     });
   });
 

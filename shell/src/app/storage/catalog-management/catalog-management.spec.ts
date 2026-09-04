@@ -15,6 +15,7 @@
  */
 
 import {TestBed} from '@angular/core/testing';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {CatalogManagement} from './catalog-management';
 import {
   HostCommunication,
@@ -125,7 +126,7 @@ describe('CatalogManagement', () => {
   );
 
   it('logs a warning and ignores subsequent RENDERER_READY', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn').mockImplementation(() => {});
 
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.RENDERER_READY,
@@ -145,7 +146,11 @@ describe('CatalogManagement', () => {
     });
     TestBed.tick();
 
-    expect(warnSpy).toHaveBeenCalledWith('Handshake already in progress. Ignoring RENDERER_READY.');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Handshake already in progress. Ignoring RENDERER_READY.'),
+      }),
+    );
     expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
   });
 
@@ -180,7 +185,7 @@ describe('CatalogManagement', () => {
     'resets handshake lock and logs error on 5-second watchdog timeout if ' +
       'A2UI_CATALOG is not received',
     () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
 
       hostCommunicationMock.messageStream$.next({
         type: PreviewBridgeMessageType.RENDERER_READY,
@@ -192,7 +197,9 @@ describe('CatalogManagement', () => {
 
       vi.advanceTimersByTime(5000);
       expect(errorSpy).toHaveBeenCalledWith(
-        'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
+        expect.objectContaining({
+          message: expect.stringContaining('Watchdog timeout: A2UI_CATALOG'),
+        }),
       );
       expect(service.watchdogFired()).toBe(true);
       expect(service.catalogError()).toBe(
@@ -234,7 +241,7 @@ describe('CatalogManagement', () => {
   });
 
   it('rejects malformed A2UI_CATALOG payload and sets catalogError signal', () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
 
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -246,8 +253,9 @@ describe('CatalogManagement', () => {
 
     expect(service.catalogError()).toBe('Invalid or malformed A2UI_CATALOG payload received.');
     expect(errorSpy).toHaveBeenCalledWith(
-      'Invalid or malformed A2UI_CATALOG payload received.',
-      null,
+      expect.objectContaining({
+        message: expect.stringContaining('Invalid or malformed A2UI_CATALOG'),
+      }),
     );
   });
 
@@ -255,7 +263,7 @@ describe('CatalogManagement', () => {
     'handles flat catalog error payloads returned by the preview bridge, ' +
       'updating catalogError signal',
     async () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
 
       hostCommunicationMock.messageStream$.next({
         type: PreviewBridgeMessageType.RENDERER_READY,
@@ -279,13 +287,17 @@ describe('CatalogManagement', () => {
 
       expect(service.catalogError()).toBe('Bridge in-memory catalog processing crash');
       expect(service.isHandshakeInProgress()).toBe(false);
-      expect(errorSpy).toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Handshake failed with bridge error:'),
+        }),
+      );
       errorSpy.mockRestore();
     },
   );
 
   it('catches DataCloneError during catalog cloning and updates catalogError signal', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
 
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.RENDERER_READY,
@@ -313,7 +325,11 @@ describe('CatalogManagement', () => {
 
     expect(service.catalogError()).toBe('Failed to clone or serialize catalog payload.');
     expect(service.isHandshakeInProgress()).toBe(false);
-    expect(errorSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Failed to clone or serialize catalog'),
+      }),
+    );
     errorSpy.mockRestore();
   });
 
@@ -525,7 +541,7 @@ describe('CatalogManagement', () => {
       configurable: true,
     });
 
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
 
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -550,7 +566,7 @@ describe('CatalogManagement', () => {
   });
 
   it('handles cryptographic digest failures gracefully', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
     const digestSpy = vi
       .spyOn(crypto.subtle, 'digest')
       .mockRejectedValue(new Error('Digest failed'));
@@ -573,7 +589,7 @@ describe('CatalogManagement', () => {
   });
 
   it('handles IndexedDbStorage failures gracefully', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
     indexedDbStorageMock.getCatalogRecord.mockRejectedValue(new Error('Database read failure'));
 
     hostCommunicationMock.messageStream$.next({
@@ -647,7 +663,7 @@ describe('CatalogManagement', () => {
   });
 
   it('rejects A2UI_CATALOG payload if catalogId and $id are missing', () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
 
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.A2UI_CATALOG,
@@ -669,7 +685,7 @@ describe('CatalogManagement', () => {
   });
 
   it('ignores watchdog timeout execution if watchdogTimerId is manually cleared', () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
 
     // Trigger RENDERER_READY to start the watchdog timer
     hostCommunicationMock.messageStream$.next({
@@ -695,7 +711,7 @@ describe('CatalogManagement', () => {
   });
 
   it('handles flat catalog error payloads without message, using default error message', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error').mockImplementation(() => {});
 
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.RENDERER_READY,

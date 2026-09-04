@@ -20,6 +20,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {formatTimestamp} from '../../utils/date.utils';
 import {ErrorLogger, ErrorLogItem} from '../error-logger.service';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 
 /**
  * Represents a structured log entry specifically mapped for UI presentation
@@ -58,6 +59,8 @@ export interface DisplayErrorLogItem {
 })
 export class Errors {
   private readonly errorLogger = inject(ErrorLogger);
+  private readonly usageTrackingService = inject(UsageTrackingService);
+  private readonly recentErrors = new Set<string>();
 
   protected readonly errorsLog = signal<DisplayErrorLogItem[]>([]);
   protected readonly columnsToDisplay = ['time', 'level', 'source', 'message'];
@@ -72,6 +75,30 @@ export class Errors {
     );
 
     this.errorLogger.errorStream$.pipe(takeUntilDestroyed()).subscribe((item: ErrorLogItem) => {
+      if (item.level === 'error' || item.level === 'warn') {
+        let invalidProp: string | undefined;
+
+        const propMatch =
+          item.message.match(/property '([^']+)'/i) || item.message.match(/instance\.([^ ]+) /i);
+        if (propMatch) {
+          invalidProp = propMatch[1];
+        }
+
+        const signature = `${item.sourceTag}:${item.line}:${item.column}:${invalidProp}`;
+        if (!this.recentErrors.has(signature)) {
+          this.recentErrors.add(signature);
+          setTimeout(() => this.recentErrors.delete(signature), 5000);
+
+          this.usageTrackingService.trackComposerError({
+            source_tag: item.sourceTag,
+            message: item.message,
+            line: item.line,
+            column: item.column,
+            invalid_property: invalidProp,
+          });
+        }
+      }
+
       const mapped = this.mapToDisplayItem(item);
       this.errorsLog.update(logs => {
         const newLogs = [mapped, ...logs];

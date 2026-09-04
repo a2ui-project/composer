@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {Injectable, inject} from '@angular/core';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {LocalStorageKey} from '../models/local-storage-keys';
 
 /**
@@ -25,6 +26,7 @@ import {LocalStorageKey} from '../models/local-storage-keys';
   providedIn: 'root',
 })
 export class LocalStorageInteractions {
+  private readonly logger = inject(ErrorLogger).withTag('[Storage]');
   private readonly _isStorageAvailable: boolean;
 
   constructor() {
@@ -33,7 +35,7 @@ export class LocalStorageInteractions {
       available = typeof window !== 'undefined' && !!window.localStorage;
     } catch (e) {
       // Storage access might be denied in some iframe or sandbox contexts.
-      console.warn('Local storage access failed to initialize:', e);
+      this.logger.warn('Local storage access failed to initialize:', e);
     }
     this._isStorageAvailable = available;
   }
@@ -58,7 +60,7 @@ export class LocalStorageInteractions {
     try {
       return window.localStorage.getItem(key);
     } catch (e) {
-      console.warn(`Failed to read key "${key}" from local storage safely:`, e);
+      this.logger.warn(`Failed to read key "${key}" from local storage safely:`, e);
       return null;
     }
   }
@@ -76,7 +78,7 @@ export class LocalStorageInteractions {
     try {
       window.localStorage.setItem(key, value);
     } catch (e) {
-      console.warn(`Failed to write key "${key}" to local storage safely:`, e);
+      this.logger.warn(`Failed to write key "${key}" to local storage safely:`, e);
     }
   }
 
@@ -92,7 +94,7 @@ export class LocalStorageInteractions {
     try {
       window.localStorage.removeItem(key);
     } catch (e) {
-      console.warn(`Failed to remove key "${key}" from local storage safely:`, e);
+      this.logger.warn(`Failed to remove key "${key}" from local storage safely:`, e);
     }
   }
 }
