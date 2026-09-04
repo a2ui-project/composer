@@ -45,4 +45,57 @@ describe('CcBarChart', () => {
     expect(host.textContent).toContain('$305K');
     expect(host.textContent).toContain('Feb');
   });
+
+  it('clamps negative values to zero so no bar gets a negative SVG height', async () => {
+    const {host} = await renderSurface([
+      {
+        id: 'root',
+        component: 'BarChart',
+        data: [
+          {label: 'Jan', value: -50},
+          {label: 'Feb', value: 100},
+          {label: 'Mar', value: 25},
+        ],
+      },
+    ]);
+
+    const bars = host.querySelectorAll('rect.cc-bar__rect');
+    expect(bars.length).toBe(3);
+
+    // A negative height is invalid SVG geometry; every bar must be >= 0.
+    const heights = Array.from(bars).map(b => Number(b.getAttribute('height')));
+    heights.forEach(h => {
+      expect(Number.isFinite(h)).toBe(true);
+      expect(h).toBeGreaterThanOrEqual(0);
+    });
+
+    // The negative datum collapses to a zero-height bar, and the max used for
+    // scaling is the largest clamped value (Feb=100), which fills the plot.
+    expect(heights[0]).toBe(0);
+    expect(heights[1]).toBeGreaterThan(heights[2]);
+
+    // The clamped value is what gets labelled, not the raw negative.
+    const labels = Array.from(host.querySelectorAll('.cc-bar__value')).map(
+      el => el.textContent?.trim() ?? '',
+    );
+    expect(labels).toEqual(['0', '100', '25']);
+  });
+
+  it('renders a flat baseline when every value is negative', async () => {
+    const {host} = await renderSurface([
+      {
+        id: 'root',
+        component: 'BarChart',
+        data: [
+          {label: 'Jan', value: -10},
+          {label: 'Feb', value: -20},
+        ],
+      },
+    ]);
+
+    const heights = Array.from(host.querySelectorAll('rect.cc-bar__rect')).map(b =>
+      Number(b.getAttribute('height')),
+    );
+    expect(heights).toEqual([0, 0]);
+  });
 });

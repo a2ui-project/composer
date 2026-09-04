@@ -44,4 +44,60 @@ describe('CcPieChart', () => {
     expect(legend.length).toBe(4);
     expect(host.textContent).toContain('North');
   });
+
+  it('clamps negative values to zero so slice geometry stays valid', async () => {
+    const {host} = await renderSurface([
+      {
+        id: 'root',
+        component: 'PieChart',
+        data: [
+          {label: 'North', value: 50},
+          {label: 'South', value: -25},
+          {label: 'East', value: 50},
+        ],
+      },
+    ]);
+
+    const paths = host.querySelectorAll('svg path');
+    expect(paths.length).toBe(3);
+
+    // The negative datum must not corrupt the running cursor: every arc path
+    // is finite (no NaN coordinates) and the sweep never exceeds the circle.
+    paths.forEach(p => {
+      const d = p.getAttribute('d') ?? '';
+      expect(d.length).toBeGreaterThan(0);
+      expect(d).not.toContain('NaN');
+    });
+
+    // Total is computed from clamped values (50 + 0 + 50), so the negative
+    // datum contributes a zero-width sweep and does not advance the cursor:
+    // its arc starts and ends at the same point.
+    const southStart = (paths[1].getAttribute('d') ?? '').match(/^M ([\d.-]+) ([\d.-]+)/);
+    const southEnd = (paths[1].getAttribute('d') ?? '').match(/A 80 80 0 \d 1 ([\d.-]+) ([\d.-]+)/);
+    expect(southStart?.[1]).toBe(southEnd?.[1]);
+    expect(southStart?.[2]).toBe(southEnd?.[2]);
+
+    // The legend reports the clamped value, not the raw negative.
+    const values = Array.from(host.querySelectorAll('.cc-pie__legend-value')).map(
+      el => el.textContent?.trim() ?? '',
+    );
+    expect(values).toEqual(['50', '0', '50']);
+  });
+
+  it('renders no slices when every value is negative', async () => {
+    const {host} = await renderSurface([
+      {
+        id: 'root',
+        component: 'PieChart',
+        data: [
+          {label: 'North', value: -10},
+          {label: 'South', value: -5},
+        ],
+      },
+    ]);
+
+    // Clamped total is 0, so there is nothing to draw and no legend.
+    expect(host.querySelectorAll('svg path').length).toBe(0);
+    expect(host.querySelectorAll('.cc-pie__legend-item').length).toBe(0);
+  });
 });
