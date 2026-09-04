@@ -135,21 +135,27 @@ class TestIntersectionObserver {
 const STUB_CARD_HEIGHT = 320;
 
 /**
- * Pins each card's geometry so proximity ranking is deterministic.
+ * Pins each card's geometry so mount ranking is deterministic.
  *
  * jsdom reports every element at the origin with no size, which leaves every card
- * exactly as near the reader as every other; a test that cares which card is
- * nearest has to say where the cards are.
+ * exactly as near the reader as every other and none of them overlapping the
+ * viewport; a test that cares which card wins a slot has to say where the cards
+ * are and how tall they are.
  *
  * @param fixture The wall under test.
  * @param centreOffsets Signed pixel offset of each card's centre from the middle
  *     of the scrolling box, keyed by track key. Cards left out are parked far
  *     away.
+ * @param heights Height of individual cards, keyed by track key. Cards left out
+ *     get {@link STUB_CARD_HEIGHT}. Heights matter because a card's visibility
+ *     and its centre distance move independently once cards differ in size —
+ *     which is the situation the wall's ranking exists to get right.
  * @return The card host elements, keyed by track key.
  */
 function placeCards(
   fixture: ComponentFixture<Demos>,
   centreOffsets: Record<string, number>,
+  heights: Record<string, number> = {},
 ): Map<string, Element> {
   const viewportCentre = window.innerHeight / 2;
   const placed = new Map<string, Element>();
@@ -178,12 +184,13 @@ function placeCards(
   for (const card of Array.from(cards)) {
     const trackKey = card.getAttribute('data-demo-key') ?? '';
     const offset = centreOffsets[trackKey] ?? 100_000;
-    const top = viewportCentre + offset - STUB_CARD_HEIGHT / 2;
+    const height = heights[trackKey] ?? STUB_CARD_HEIGHT;
+    const top = viewportCentre + offset - height / 2;
     card.getBoundingClientRect = () =>
       ({
         top,
-        bottom: top + STUB_CARD_HEIGHT,
-        height: STUB_CARD_HEIGHT,
+        bottom: top + height,
+        height,
         left: 0,
         right: 400,
         width: 400,
@@ -194,6 +201,63 @@ function placeCards(
     placed.set(trackKey, card);
   }
   return placed;
+}
+
+/**
+ * Centre offset that puts a card of the default height wholly above the viewport.
+ *
+ * Its bottom edge lands half a card above the top of the scrolling box, so it is
+ * off screen by any measure, and its centre sits `viewport/2 + cardHeight` from
+ * the middle of the box.
+ */
+const OFF_SCREEN_OFFSET = -(window.innerHeight / 2 + STUB_CARD_HEIGHT);
+
+/**
+ * Centre offset that leaves a card of the default height showing a 24px sliver at
+ * the bottom of the viewport.
+ *
+ * This is the shape of card the wall used to blank: on screen, so the reader is
+ * looking at it, but with its centre well below the middle of the scrolling box
+ * because most of its height is past the fold. Against {@link OFF_SCREEN_OFFSET}
+ * it is nearer by `STUB_CARD_HEIGHT / 2 + 24` — 184px, inside the wall's 200px
+ * eviction hysteresis, and independent of the viewport jsdom happens to report.
+ */
+const ON_SCREEN_SLIVER_OFFSET = window.innerHeight / 2 + STUB_CARD_HEIGHT / 2 - 24;
+
+/**
+ * Resize observer stub the test can fire by hand.
+ *
+ * The wall re-runs its mount scheduling whenever a card resizes, because a card
+ * that mounts commits a measured height and shifts every card below it without
+ * anything crossing the intersection observer's boundary. Nothing resizes in
+ * jsdom, so a test that wants that path has to announce the reflow itself.
+ */
+class TestResizeObserver {
+  /** Every instance constructed since the current test began. */
+  static readonly instances: TestResizeObserver[] = [];
+
+  readonly targets = new Set<Element>();
+
+  constructor(private readonly callback: () => void) {
+    TestResizeObserver.instances.push(this);
+  }
+
+  observe(target: Element): void {
+    this.targets.add(target);
+  }
+
+  unobserve(target: Element): void {
+    this.targets.delete(target);
+  }
+
+  disconnect(): void {
+    this.targets.clear();
+  }
+
+  /** Announces that the observed cards changed size. */
+  report(): void {
+    this.callback();
+  }
 }
 
 /**
@@ -208,11 +272,24 @@ function wallObserver(): TestIntersectionObserver {
   return observer;
 }
 
+/**
+ * Retrieves the single resize observer the wall installs for its card hosts.
+ * @return The wall's resize observer.
+ */
+function wallResizeObserver(): TestResizeObserver {
+  const [observer] = TestResizeObserver.instances;
+  if (!observer) {
+    throw new Error('The wall installed no resize observer.');
+  }
+  return observer;
+}
+
 describe('Demos Component', () => {
   let fixture: ComponentFixture<Demos>;
   let harness: DemosHarness;
   let demosCatalogMock: MockDemosCatalog;
   let originalIntersectionObserver: typeof IntersectionObserver;
+  let originalResizeObserver: typeof ResizeObserver;
 
   /**
    * Lets {@link TestIntersectionObserver} deliver the entries it queues when a
@@ -230,6 +307,15 @@ describe('Demos Component', () => {
     const stub = TestIntersectionObserver as unknown as typeof IntersectionObserver;
     Object.defineProperty(window, 'IntersectionObserver', {value: stub, writable: true});
     Object.defineProperty(globalThis, 'IntersectionObserver', {value: stub, writable: true});
+
+    // The shared setup's resize stub reports on its own the moment a card is
+    // observed, which fires the wall's reflow path before a test has placed its
+    // cards. This one only reports when asked.
+    TestResizeObserver.instances.length = 0;
+    originalResizeObserver = window.ResizeObserver;
+    const resizeStub = TestResizeObserver as unknown as typeof ResizeObserver;
+    Object.defineProperty(window, 'ResizeObserver', {value: resizeStub, writable: true});
+    Object.defineProperty(globalThis, 'ResizeObserver', {value: resizeStub, writable: true});
 
     await TestBed.configureTestingModule({
       imports: [Demos],
@@ -258,6 +344,14 @@ describe('Demos Component', () => {
     });
     Object.defineProperty(globalThis, 'IntersectionObserver', {
       value: originalIntersectionObserver,
+      writable: true,
+    });
+    Object.defineProperty(window, 'ResizeObserver', {
+      value: originalResizeObserver,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      value: originalResizeObserver,
       writable: true,
     });
   });
@@ -461,7 +555,9 @@ describe('Demos Component', () => {
 
     // Every mounted card sits 300px from the reader and the challenger 150px:
     // nearer, but by less than the hysteresis, so nothing moves. Otherwise two
-    // near-equidistant cards would trade one slot on every reflow.
+    // near-equidistant cards would trade one slot on every reflow. All of them are
+    // on screen, which is what puts the hysteresis in charge — it damps churn
+    // within a visibility class and is not consulted across one.
     const offsets: Record<string, number> = {[lateKey]: 150};
     for (const key of mountedBefore) {
       offsets[key] = -300;
@@ -472,6 +568,81 @@ describe('Demos Component', () => {
     await fixture.whenStable();
 
     expect(fixture.componentInstance.mountedKeys().has(lateKey)).toBe(false);
+    expect([...fixture.componentInstance.mountedKeys()]).toEqual([...mountedBefore]);
+  });
+
+  it('gives a slot to a card on screen, taking it from one off screen it barely beats', async () => {
+    // The defect this covers: ranking was a single centre-to-centre order, so a
+    // card the reader could see competed with cards they could not on distance
+    // alone — and lost, because the eviction hysteresis is wider than the gap
+    // between them. A tall card mostly below the fold is fully on screen with its
+    // centre far from the middle of the scroller, which is how the wall came to
+    // show blank cards at 501px and 507px while cards at 633px and 685px, both off
+    // screen, held slots.
+    const demoCount = MAX_MOUNTED_CARDS + 4;
+    demosCatalogMock.demos.set(makeDemos(demoCount));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushIntersections();
+
+    const mountedBefore = new Set(fixture.componentInstance.mountedKeys());
+    const onScreenKey = `demo-${demoCount - 1}`;
+    expect(mountedBefore.has(onScreenKey)).toBe(false);
+
+    // Every held slot is off screen above the reader; the challenger shows a
+    // sliver at the bottom of the viewport and is nearer by only 184px, well
+    // inside the 200px hysteresis. Under a distance-only ranking nothing moves and
+    // the card the reader is looking at stays blank.
+    const offsets: Record<string, number> = {[onScreenKey]: ON_SCREEN_SLIVER_OFFSET};
+    for (const key of mountedBefore) {
+      offsets[key] = OFF_SCREEN_OFFSET;
+    }
+    const cards = placeCards(fixture, offsets);
+    wallObserver().report([{target: cards.get(onScreenKey)!, isIntersecting: true}]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const mountedAfter = fixture.componentInstance.mountedKeys();
+    expect(mountedAfter.has(onScreenKey)).toBe(true);
+    expect(mountedAfter.size).toBe(MAX_MOUNTED_CARDS);
+    // One off-screen card gave up its slot and no more: visibility decides the
+    // claim, it does not license a stampede.
+    const evicted = [...mountedBefore].filter(key => !mountedAfter.has(key));
+    expect(evicted).toHaveLength(1);
+  });
+
+  it('never lets a card off screen take the slot of one on screen, however near', async () => {
+    // The other half of the same invariant, and the reason the ranking cannot
+    // oscillate: visibility outranks distance in both directions. A short card
+    // just past the fold can be much nearer the middle of the scroller than a tall
+    // card the reader is reading, and must still lose to it.
+    const demoCount = MAX_MOUNTED_CARDS + 4;
+    demosCatalogMock.demos.set(makeDemos(demoCount));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushIntersections();
+
+    const mountedBefore = new Set(fixture.componentInstance.mountedKeys());
+    const offScreenKey = `demo-${demoCount - 1}`;
+    const halfViewport = window.innerHeight / 2;
+
+    // Held slots go to tall cards showing their top edge at the bottom of the
+    // viewport, centres 800px out. The challenger is a 40px card just above the
+    // fold, 424px out — nearer by 376px, nearly twice the hysteresis, and still
+    // not something the reader can see.
+    const tallHeight = 900;
+    const offsets: Record<string, number> = {[offScreenKey]: -(halfViewport + 40)};
+    const heights: Record<string, number> = {[offScreenKey]: 40};
+    for (const key of mountedBefore) {
+      offsets[key] = 800;
+      heights[key] = tallHeight;
+    }
+    const cards = placeCards(fixture, offsets, heights);
+    wallObserver().report([{target: cards.get(offScreenKey)!, isIntersecting: true}]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.mountedKeys().has(offScreenKey)).toBe(false);
     expect([...fixture.componentInstance.mountedKeys()]).toEqual([...mountedBefore]);
   });
 
@@ -489,6 +660,37 @@ describe('Demos Component', () => {
     await fixture.whenStable();
 
     expect(fixture.componentInstance.mountedKeys().has(leaving)).toBe(false);
+  });
+
+  it('re-ranks the wall when a reflow moves a card on screen without an entry', async () => {
+    // A card that wins a slot boots its frame, commits a measured height and shifts
+    // every card below it in its masonry column. Cards already inside the
+    // observer's margin cross no boundary as they shift, so no intersection entry
+    // is reported and the mount set would otherwise keep describing the layout as
+    // it was before the frames it mounted changed it.
+    const demoCount = MAX_MOUNTED_CARDS + 4;
+    demosCatalogMock.demos.set(makeDemos(demoCount));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushIntersections();
+
+    const mountedBefore = new Set(fixture.componentInstance.mountedKeys());
+    const arrivingKey = `demo-${demoCount - 1}`;
+    expect(mountedBefore.has(arrivingKey)).toBe(false);
+
+    // The reflow puts a card the reader can see where an off-screen one used to be.
+    // Nothing reports it, because every one of these cards was already in range.
+    const offsets: Record<string, number> = {[arrivingKey]: ON_SCREEN_SLIVER_OFFSET};
+    for (const key of mountedBefore) {
+      offsets[key] = OFF_SCREEN_OFFSET;
+    }
+    placeCards(fixture, offsets);
+
+    wallResizeObserver().report();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.mountedKeys().has(arrivingKey)).toBe(true);
   });
 
   it('shows the loading state while demos are unresolved, before any request is in flight', async () => {

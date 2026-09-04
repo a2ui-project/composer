@@ -43,25 +43,37 @@ import {StartupResolution} from '../shell/startup-resolution/startup-resolution'
  * dozens of demos, and dozens of simultaneously live renderer iframes would
  * exhaust the browser long before the reader reached the bottom of the wall.
  *
- * Its floor is set by what the reader can see rather than by taste: a card that
- * is on screen and holds no slot is a blank card, so the cap has to cover the
- * most cards that can share the viewport at once. Scrolling the basic catalog's
- * 43 demos end to end measures at most 11 cards overlapping the viewport at
- * 1280x800 (the e2e viewport, counted while cards still sat at their unmounted
- * placeholder height, which is the state slots are handed out in) and 12 at
- * 1920x1080. 12 is therefore the smallest value that leaves no visible card
- * unmountable at either size.
+ * 12 covers a screenful at the size the wall is usually read at. Sweeping the
+ * basic catalog's 43 demos end to end in 150px steps counts at most 12 cards
+ * overlapping the scrolling box at 1280x820, so every visible card holds a slot
+ * there. Counts are taken with cards at whatever height they are holding at the
+ * time, including the 260px placeholder an unmounted card sits at, because that
+ * is the state slots are handed out in and the state that fits the most cards on
+ * a screen.
  *
- * Its ceiling is what a slot costs. Loading N copies of the sample renderer
- * measures around 7MB of browser RSS each, so this cap prices the wall at
- * roughly 85MB of frames where letting all 43 demos mount would cost about
- * 300MB — which is the runaway this exists to prevent, and 12 is still a long
- * way from it.
+ * It does not cover a screenful at every size, and cannot be made to. The same
+ * sweep at 1920x1080 counts up to 15 — an earlier note here recorded 12 at that
+ * size, which measurement does not bear out — and a taller window would count
+ * more again. The number of cards that fit on a screen grows with the window
+ * without bound, so there is no value of this constant that guarantees a slot for
+ * every visible card at every size; raising it only moves the size at which the
+ * guarantee lapses. What that costs is real: loading the wall at 1920x1080 and
+ * summing RSS across the browser's process tree measures 555MB holding 12 frames
+ * against 571MB holding 15, around 5MB a frame and in line with the ~7MB a slot
+ * was originally priced at, so the wall runs at roughly 85MB of frames where
+ * letting all 43 demos mount would cost something like 300MB. That runaway is
+ * what this exists to prevent.
  *
- * A viewport taller than those measured can still show more cards than there are
- * slots, and the furthest of them will be blank until the reader scrolls: that is
- * the trade a fixed cap makes, and proximity ranking is what makes the blank one
- * the card furthest from the reader rather than an arbitrary one.
+ * So where more cards share the viewport than there are slots, the surplus are
+ * blank until the reader scrolls, and that is the trade a fixed cap makes rather
+ * than a defect in scheduling. What the cap must not do is decide *which* cards
+ * go blank. {@link Demos.reconcileMountedCards} owns that, and ranks cards the
+ * reader can see ahead of cards they cannot, so the blank ones are the cards
+ * furthest from the reader among those on screen and never a card the reader is
+ * looking at while an off-screen card holds a frame. Measured against the sweep
+ * above, the number of visible cards holding no slot is exactly
+ * `max(0, onScreen - 12)` at every scroll position at both sizes: zero wherever
+ * the cap is not binding, and never more than the shortfall where it is.
  */
 export const MAX_MOUNTED_CARDS = 12;
 
@@ -72,16 +84,21 @@ export const MAX_MOUNTED_CARDS = 12;
  * scrolling element (see {@link Demos.ensureIntersectionObserver} for why the
  * root has to be that element and not the window).
  *
- * Halved from a full viewport because the two jobs the margin used to do have
- * come apart. It no longer decides *which* cards win slots — {@link
- * Demos.reconcileMountedCards} ranks candidates by proximity now — so all it
- * still buys is lead time: how far ahead of the reader a card starts booting.
- * Half a scroller is 368px of that lead at 1280x800, a little over one card
- * height, and admits 14-16 candidates for the wall's 12 slots (19-23 at
- * 1920x1080), which leaves the ranking real competition to arbitrate while the
- * reader still arrives at cards that have finished rendering. A full viewport
- * bought lead time no card needs, over a candidate set twice the size of the
- * cap.
+ * All this buys is lead time: how far ahead of the reader a card starts booting.
+ * Half a scroller is 410px of that at 1280x820, a little over one card height, so
+ * the reader arrives at cards that have finished rendering rather than watching
+ * them boot.
+ *
+ * It deliberately does *not* decide which cards win slots, and the size of the
+ * candidate set it admits — around 18 for the wall's 12 slots — is no longer
+ * load-bearing. It used to be: while ranking was a single centre-distance order,
+ * a wide margin let an off-screen candidate outrank an on-screen one, so every
+ * extra candidate was another card that could take a slot from a card the reader
+ * was looking at. {@link Demos.reconcileMountedCards} now ranks on-screen cards
+ * ahead of off-screen ones outright, which makes off-screen candidates unable to
+ * hold a slot any on-screen card wants however many of them there are. Narrowing
+ * the margin would therefore buy no correctness and cost the lead time it exists
+ * for, so it stays where it is.
  */
 const MOUNT_ROOT_MARGIN = '50% 0px';
 
@@ -100,6 +117,13 @@ const MOUNT_ROOT_MARGIN = '50% 0px';
  * side of the two things it has to separate: far above the jitter of a reflow
  * settling, and far below a deliberate scroll, so a reader moving towards a card
  * still hands it the slot within a fifth of a screen.
+ *
+ * It applies only between cards of the same visibility, never across the boundary
+ * between an on-screen card and an off-screen one. Damping is for distinguishing
+ * a reflow from a scroll among cards that are equally worth showing; it has no
+ * business arbitrating between a card the reader can see and one they cannot,
+ * and letting it do so is exactly what left visible cards blank — see {@link
+ * Demos.reconcileMountedCards}.
  */
 const EVICTION_HYSTERESIS_PX = 200;
 
@@ -122,11 +146,13 @@ const DEMO_KEY_ATTRIBUTE = 'data-demo-key';
  * demos had arrived could never bootstrap: no frame, no handshake, no catalog, no
  * request, no demos. Mounting it hidden mirrors the `/gallery` idiom.
  *
- * Card mounting is driven by a single {@link IntersectionObserver} owned here
- * rather than one observer per card, and the frames it may keep alive are capped
- * at {@link MAX_MOUNTED_CARDS}; which cards hold those slots is decided by
- * distance from the reader rather than by position in the wall, see {@link
- * Demos.reconcileMountedCards}. The theme broadcast (`HostCommunication
+ * Card mounting is driven by two observers owned here rather than a pair per
+ * card — an {@link IntersectionObserver} for cards coming within range of the
+ * reader and a {@link ResizeObserver} for the wall reflowing under them (see
+ * {@link Demos.ensureResizeObserver} for why the second is needed) — and the
+ * frames they may keep alive are capped at {@link MAX_MOUNTED_CARDS}; which cards
+ * hold those slots is decided by what the reader can see rather than by position
+ * in the wall, see {@link Demos.reconcileMountedCards}. The theme broadcast (`HostCommunication
  * .sendTheme`) is not this component's concern: the mounted {@link
  * RenderedFrame} coordinator already runs that effect in its own constructor,
  * so the cost of a theme flip is one broadcast regardless of how many cards
@@ -193,10 +219,13 @@ export class Demos implements OnInit, OnDestroy {
    * Card hosts the observer currently reports as in range, keyed by track key.
    *
    * The elements are held rather than the keys alone because mount scheduling
-   * ranks candidates by their live distance from the reader, which has to be
+   * ranks candidates on live geometry — both whether they overlap the
+   * scrolling box and how far their centre sits from its middle — which has to be
    * read off the element at reconcile time: an intersection entry's
    * `boundingClientRect` describes where the card was when it crossed the
-   * observer's boundary, not where it is now.
+   * observer's boundary, not where it is now, and its `isIntersecting` is
+   * measured against the root widened by {@link MOUNT_ROOT_MARGIN} rather than
+   * against what the reader can see.
    */
   private readonly visibleCards = new Map<string, Element>();
 
@@ -204,6 +233,8 @@ export class Demos implements OnInit, OnDestroy {
   private readonly observedElements = new Set<Element>();
 
   private intersectionObserver: IntersectionObserver | null = null;
+
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor() {
     // Coordinator registration.
@@ -274,6 +305,8 @@ export class Demos implements OnInit, OnDestroy {
     this.demosCatalog.setCoordinator(null);
     this.intersectionObserver?.disconnect();
     this.intersectionObserver = null;
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.observedElements.clear();
     this.visibleCards.clear();
   }
@@ -311,6 +344,44 @@ export class Demos implements OnInit, OnDestroy {
   }
 
   /**
+   * Builds the observer that re-runs mount scheduling when the wall reflows.
+   *
+   * Intersection entries are not enough to keep the mount set true, because the
+   * wall moves under the reader without anything crossing the observer's
+   * boundary. A card that wins a slot boots its frame and commits a measured
+   * height — a demo card grows from its 260px placeholder to as much as 508px —
+   * and every card below it in that masonry column shifts by the difference. Cards
+   * already inside {@link MOUNT_ROOT_MARGIN} cross no boundary as they shift, so
+   * the observer stays silent and the mount set keeps describing the layout as it
+   * was before the frames it mounted changed it. Measured on the wall, that left
+   * two cards the reader could see holding no slot at one scroll position in three
+   * — the same symptom as a bad ranking, from a stale one.
+   *
+   * Re-running the ranking on reflow terminates rather than feeding back, because
+   * the growth that triggers it happens once per card: `DemoCard` keeps its
+   * measured height when its frame is unmounted (only a change of renderer clears
+   * it), so a card's height settles once and every later reconcile against it
+   * agrees with the last. Reconciling is also free when nothing has changed —
+   * {@link Demos.reconcileMountedCards} publishes nothing when the set it computes
+   * matches the one already live — so the steady state costs one rect read per
+   * candidate and no re-render.
+   *
+   * @return The wall's resize observer, or null where the platform has none.
+   */
+  private ensureResizeObserver(): ResizeObserver | null {
+    if (this.resizeObserver) {
+      return this.resizeObserver;
+    }
+    if (typeof ResizeObserver === 'undefined') {
+      return null;
+    }
+    // Entries are ignored: any card changing size invalidates the ranking for all
+    // of them, and the observer already coalesces a batch into one callback.
+    this.resizeObserver = new ResizeObserver(() => this.reconcileMountedCards());
+    return this.resizeObserver;
+  }
+
+  /**
    * Applies a batch of intersection entries and re-derives the mounted set.
    * @param entries Entries reported by the wall's single observer.
    */
@@ -330,18 +401,25 @@ export class Demos implements OnInit, OnDestroy {
   }
 
   /**
-   * Brings the observer's target set in line with the rendered card hosts.
+   * Brings both observers' target sets in line with the rendered card hosts.
+   *
+   * The two watch the same elements — one for when a card comes within range of
+   * the reader, the other for when the wall reflows under them — so they are
+   * synced together off one bookkeeping set.
+   *
    * @param observer The wall's single intersection observer.
    * @param elements Card host elements currently rendered by the wall.
    */
   private syncObservedElements(observer: IntersectionObserver, elements: HTMLElement[]): void {
     const live = new Set<Element>(elements);
+    const resizeObserver = this.ensureResizeObserver();
 
     for (const element of this.observedElements) {
       if (live.has(element)) {
         continue;
       }
       observer.unobserve(element);
+      resizeObserver?.unobserve(element);
       this.observedElements.delete(element);
       const trackKey = readTrackKey(element);
       if (trackKey) {
@@ -355,6 +433,7 @@ export class Demos implements OnInit, OnDestroy {
       }
       this.observedElements.add(element);
       observer.observe(element);
+      resizeObserver?.observe(element);
     }
 
     this.reconcileMountedCards();
@@ -363,37 +442,56 @@ export class Demos implements OnInit, OnDestroy {
   /**
    * Recomputes which cards hold a live renderer frame, honouring the mount cap.
    *
-   * Slots go to the cards nearest the reader, never to the cards that got here
-   * first. Filling the cap in document order — which is what this did — meant six
-   * early cards could hold every slot forever, and a card further down the wall
-   * could not mount even when the reader had scrolled to it and it was the only
-   * thing on screen. Two demos at the end of the basic catalog never mounted at
-   * all and rendered as permanently blank cards.
+   * Slots go to the cards the reader can see, and only then to the cards nearest
+   * them. Two earlier rules each failed on their own half of that.
    *
-   * Candidates are the cards the observer reports as in range, ranked by the
-   * distance between their centre and the viewport's. Ranking on the centre
-   * rather than on the gap to the nearest viewport edge is what keeps the order
-   * total: every card on screen would otherwise tie at zero and the tie-break
-   * would be back to deciding things.
+   * Filling the cap in document order meant six early cards could hold every slot
+   * forever, and a card further down the wall could not mount even once the
+   * reader had scrolled to it. Ranking purely by the distance between a card's
+   * centre and the scroller's then fixed that but introduced its own starvation:
+   * centre-to-centre distance is not a proxy for "the reader can see this". A
+   * tall card can sit entirely on screen with its centre 500px from the middle of
+   * the scroller, while a short card just past the fold sits nearer than it. With
+   * a candidate set drawn from {@link MOUNT_ROOT_MARGIN} — half a scroller beyond
+   * the fold in each direction — the wall measured on-screen cards at 501px and
+   * 507px held out of slots by off-screen cards at 578px, 633px and 685px: every
+   * gap smaller than {@link EVICTION_HYSTERESIS_PX}, so no eviction ever fired and
+   * two cards the reader was looking at stayed blank indefinitely. Every card
+   * caught blank that way was one of the wall's tall ones.
    *
-   * Retention and eviction then follow from that ranking:
+   * So visibility is the primary key and distance is only the tie-break within it:
    *
+   * - A candidate is on screen when its rect overlaps the scrolling root's at all,
+   *   measured live rather than taken from the observer, whose entries are
+   *   reported against the root *plus* its margin and describe where a card was
+   *   when it crossed that boundary rather than where it is now.
+   * - On-screen candidates outrank every off-screen one outright. Among cards of
+   *   the same visibility, the nearer centre wins, ties broken by wall position.
    * - Cards already mounted keep their slots, so scrolling back over ground the
    *   reader has covered costs nothing.
-   * - Free slots go to the nearest candidates that do not hold one.
-   * - Once the cap is full, a candidate takes a mounted card's slot only if it is
-   *   nearer by more than {@link EVICTION_HYSTERESIS_PX}, which is what stops two
-   *   near-equidistant cards trading a slot back and forth.
+   * - Free slots go to the best-ranked candidates that hold none.
+   * - Once the cap is full, a challenger takes the weakest held slot only if it
+   *   outranks it: across the visibility boundary that is enough on its own, and
+   *   within one visibility class it must additionally be nearer by more than
+   *   {@link EVICTION_HYSTERESIS_PX}.
    *
-   * No card can starve under this. A card the reader scrolls to sits at the
-   * viewport's centre, so the only thing that can hold it out is a full cap of
-   * cards that are themselves within {@link EVICTION_HYSTERESIS_PX} of that same
-   * centre — and the cap is set above the most cards that can share the viewport
-   * at once, so a card the reader is actually looking at always wins a slot.
+   * A visible card cannot starve while the cap exceeds the number of cards that
+   * can share the viewport. The only cards that can hold it out are ones that
+   * outrank it, and off-screen cards no longer can at any distance or hysteresis:
+   * the moment a slot is held by an off-screen card, a visible challenger takes
+   * it. So the slots a visible card competes for are contested only by other
+   * visible cards, of which there are at most a screenful.
+   *
+   * Nor can dropping the hysteresis across that boundary reintroduce thrash,
+   * because the crossing only runs one way. An off-screen challenger can never
+   * take a visible card's slot, so the visible card that wins a slot holds it
+   * until it either leaves the observer's range entirely or loses to another
+   * *visible* card — which still has to clear the hysteresis. There is no pair of
+   * states for a slot to oscillate between.
    */
   private reconcileMountedCards(): void {
     const previous = this.mountedKeysSignal();
-    const ranked = this.rankCandidatesByProximity();
+    const ranked = this.rankCandidates();
 
     const retained: RankedCard[] = [];
     const challengers: RankedCard[] = [];
@@ -402,7 +500,7 @@ export class Demos implements OnInit, OnDestroy {
     }
 
     // `retained` can only exceed the cap if the cap itself shrank, but truncating
-    // by distance rather than trusting the previous set keeps that honest.
+    // by rank rather than trusting the previous set keeps that honest.
     const next = retained.slice(0, MAX_MOUNTED_CARDS);
 
     let challenger = 0;
@@ -410,17 +508,19 @@ export class Demos implements OnInit, OnDestroy {
       next.push(challengers[challenger++]);
     }
 
-    // `challengers` is sorted nearest first, so the moment the nearest one left
-    // fails to clear the hysteresis, none of the rest can either.
+    // `challengers` is sorted best first, so the moment the best one left fails to
+    // displace the weakest held slot, none of the rest can either: a later
+    // challenger is either off screen against the same held card, or on screen and
+    // further away, and both lose wherever this one did.
     while (challenger < challengers.length) {
-      const furthest = indexOfFurthest(next);
-      if (furthest < 0) {
+      const weakest = indexOfWeakest(next);
+      if (weakest < 0) {
         break;
       }
-      if (next[furthest].distance <= challengers[challenger].distance + EVICTION_HYSTERESIS_PX) {
+      if (!canDisplace(next[weakest], challengers[challenger])) {
         break;
       }
-      next[furthest] = challengers[challenger++];
+      next[weakest] = challengers[challenger++];
     }
 
     const nextKeys = new Set(next.map(card => card.trackKey));
@@ -431,61 +531,76 @@ export class Demos implements OnInit, OnDestroy {
   }
 
   /**
-   * Orders the in-range cards by how close they are to the middle of the wall.
+   * Orders the in-range cards by whether the reader can see them, then by how
+   * close they are to the middle of the wall.
    *
-   * Distances are measured live off each card host, because the wall reflows as
+   * Both facts are measured live off each card host, because the wall reflows as
    * cards commit their measured heights and an intersection entry's geometry is
-   * only true of the instant it was recorded.
+   * only true of the instant it was recorded. The entry's `isIntersecting` is no
+   * use for the visibility question either: it is reported against the root
+   * widened by {@link MOUNT_ROOT_MARGIN}, so it is true of half a screen of cards
+   * the reader cannot see.
    *
-   * @return In-range cards, nearest first, ties broken by position in the wall.
+   * Overlap is treated as a yes/no rather than as an intersection ratio. A tall
+   * card three quarters off screen still has a top edge the reader is reading,
+   * and a ratio would rank it below a short card wholly on screen and let the cap
+   * blank it — which is a milder version of the bug this ordering exists to fix.
+   *
+   * @return In-range cards, best claim first: on-screen before off-screen, then
+   *     nearest first, ties broken by position in the wall.
    */
-  private rankCandidatesByProximity(): RankedCard[] {
+  private rankCandidates(): RankedCard[] {
     const wallOrder = new Map<string, number>();
     (this.demos() ?? []).forEach((demo, index) => wallOrder.set(demo.trackKey, index));
 
-    const viewportCentre = this.mountRootCentre();
+    const root = this.mountRootBounds();
+    const centre = (root.top + root.bottom) / 2;
     const ranked: RankedCard[] = [];
     for (const [trackKey, element] of this.visibleCards) {
       const rect = element.getBoundingClientRect();
       ranked.push({
         trackKey,
-        distance: Math.abs(rect.top + rect.height / 2 - viewportCentre),
+        onScreen: rect.bottom > root.top && rect.top < root.bottom,
+        distance: Math.abs(rect.top + rect.height / 2 - centre),
         wallIndex: wallOrder.get(trackKey) ?? Number.MAX_SAFE_INTEGER,
       });
     }
 
-    ranked.sort((a, b) => a.distance - b.distance || a.wallIndex - b.wallIndex);
+    ranked.sort(compareClaims);
     return ranked;
   }
 
   /**
-   * Locates the point cards are ranked by their distance from.
+   * Locates the box a card has to overlap to count as on screen, and whose middle
+   * cards are ranked by their distance from.
    *
-   * The scrolling element rather than the window, so the ranking measures against
-   * the same box the observer treats as its root: the wall sits below the app's
-   * header, so the middle of the window is not the middle of what the reader is
-   * reading.
+   * The scrolling element rather than the window, so both measurements are taken
+   * against the same box the observer treats as its root: the wall sits below the
+   * app's header, so neither the middle nor the extent of the window is the middle
+   * or the extent of what the reader is reading.
    *
-   * @return Distance in pixels from the top of the window to the middle of the
-   *     wall's scrolling box.
+   * @return The top and bottom of the wall's scrolling box, in pixels from the top
+   *     of the window.
    */
-  private mountRootCentre(): number {
+  private mountRootBounds(): {top: number; bottom: number} {
     const root = this.wallScroller()?.nativeElement;
     if (root) {
       const rect = root.getBoundingClientRect();
-      return rect.top + rect.height / 2;
+      return {top: rect.top, bottom: rect.bottom};
     }
     if (typeof window === 'undefined') {
-      return 0;
+      return {top: 0, bottom: 0};
     }
-    return (window.innerHeight || document.documentElement?.clientHeight || 0) / 2;
+    return {top: 0, bottom: window.innerHeight || document.documentElement?.clientHeight || 0};
   }
 }
 
-/** A candidate card paired with the proximity that decides its claim to a slot. */
+/** A candidate card paired with the measurements that decide its claim to a slot. */
 interface RankedCard {
   /** Shell-assigned track key identifying the demo. */
   readonly trackKey: string;
+  /** Whether the card's rect overlaps the wall's scrolling box at all. */
+  readonly onScreen: boolean;
   /** Pixels between the card's vertical centre and the middle of the wall. */
   readonly distance: number;
   /** Position in the wall, used only to break ties between equal distances. */
@@ -493,18 +608,59 @@ interface RankedCard {
 }
 
 /**
- * Finds the mounted candidate a challenger would displace.
- * @param cards Cards currently holding a slot.
- * @return Index of the card furthest from the reader, or -1 when there are none.
+ * Orders two candidates by how strong a claim each has on a mount slot.
+ *
+ * Visibility dominates: a card the reader can see outranks one they cannot at any
+ * distance. Distance only separates cards of the same visibility, and the wall
+ * position only separates cards at the same distance — which is what keeps the
+ * order total, so the set of cards that win slots does not depend on sort
+ * stability.
+ *
+ * @param a First candidate.
+ * @param b Second candidate.
+ * @return Negative when `a` has the stronger claim, positive when `b` does.
  */
-function indexOfFurthest(cards: readonly RankedCard[]): number {
-  let furthest = -1;
+function compareClaims(a: RankedCard, b: RankedCard): number {
+  if (a.onScreen !== b.onScreen) {
+    return a.onScreen ? -1 : 1;
+  }
+  return a.distance - b.distance || a.wallIndex - b.wallIndex;
+}
+
+/**
+ * Finds the held slot a challenger would displace.
+ * @param cards Cards currently holding a slot.
+ * @return Index of the card with the weakest claim, or -1 when there are none.
+ */
+function indexOfWeakest(cards: readonly RankedCard[]): number {
+  let weakest = -1;
   for (let index = 0; index < cards.length; index++) {
-    if (furthest < 0 || cards[index].distance > cards[furthest].distance) {
-      furthest = index;
+    if (weakest < 0 || compareClaims(cards[index], cards[weakest]) > 0) {
+      weakest = index;
     }
   }
-  return furthest;
+  return weakest;
+}
+
+/**
+ * Decides whether a challenger may take the slot a held card occupies.
+ *
+ * Across the visibility boundary the ranking decides it outright: a card the
+ * reader can see displaces one they cannot, and one they cannot never displaces
+ * one they can. {@link EVICTION_HYSTERESIS_PX} applies only between two cards of
+ * the same visibility, where the question really is whether the reader moved or
+ * the wall merely reflowed. Applying it across the boundary is what let off-screen
+ * cards hold slots against visible ones.
+ *
+ * @param held The weakest card currently holding a slot.
+ * @param challenger The best-ranked candidate holding none.
+ * @return Whether the challenger takes the slot.
+ */
+function canDisplace(held: RankedCard, challenger: RankedCard): boolean {
+  if (held.onScreen !== challenger.onScreen) {
+    return challenger.onScreen;
+  }
+  return held.distance > challenger.distance + EVICTION_HYSTERESIS_PX;
 }
 
 /**
