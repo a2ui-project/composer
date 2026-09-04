@@ -50,9 +50,16 @@
   } @else {
     <div class="demos-wall">
       @for (demo of demos() ?? []; track demo.trackKey) {
+        <!--
+          `--demo-card-enter-index` is the card's place in the entrance cascade; the
+          card's own stylesheet turns it into a delay. It is bound here rather than
+          read from the DOM because the cap belongs to this file: see
+          `Demos.entranceStep`.
+        -->
         <a2ui-composer-demo-card
           #cardHost
           [attr.data-demo-key]="demo.trackKey"
+          [style.--demo-card-enter-index]="entranceStep($index)"
           [demo]="demo"
           [mount]="mountedKeys().has(demo.trackKey)"
         ></a2ui-composer-demo-card>

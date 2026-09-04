@@ -51,6 +51,61 @@
   break-inside: avoid;
   -webkit-column-break-inside: avoid;
   page-break-inside: avoid;
+
+  /*
+   * Entrance.
+   *
+   * A CSS animation and not a transition, and driven by nothing but this element
+   * coming into existence, because that is what makes it play exactly once. The
+   * hazard here is real and specific: a card's height is not known when it is
+   * created and commits a second or so later, and again as its demo grows, so an
+   * entrance keyed on "the card has content now" would restart mid-wall and the
+   * reader would watch 43 cards flicker. An animation started by element creation
+   * cannot be restarted by a height landing on it, by the frame mounting, or by the
+   * masonry reflowing around it — only by the element being replaced.
+   *
+   * Which also settles what happens on scroll-back: nothing. The wall creates every
+   * card up front and mounts and unmounts their *frames* as the reader moves, so a
+   * card scrolled past and returned to is the same element it always was and has
+   * long since finished animating. There is no replay to suppress.
+   *
+   * `--demo-card-enter-index` is the card's place in the cascade, bound by the wall
+   * (see `Demos.entranceStep`) and capped there rather than here, because the cap is
+   * derived from MAX_MOUNTED_CARDS and that constant belongs to demos.ts. The
+   * fallback is 0, which degrades to every card entering together rather than to
+   * nothing entering at all.
+   *
+   * `both` matters: `backwards` is what holds the card at the start of the keyframes
+   * during its delay, so a card waiting its turn is invisible rather than visible,
+   * then briefly hidden, then faded in.
+   */
+  --demo-card-enter-step: 35ms;
+
+  animation: demo-card-enter 320ms cubic-bezier(0.2, 0, 0, 1) both;
+  animation-delay: calc(var(--demo-card-enter-index, 0) * var(--demo-card-enter-step));
+}
+
+@keyframes demo-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * Reduced motion removes the entrance outright rather than shortening it. There is
+ * nothing to communicate here — the cards are all going to be there either way — so
+ * the honest reduction is for them to simply be there.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :host {
+    animation: none;
+  }
 }
 
 .demo-card {

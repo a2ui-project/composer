@@ -244,6 +244,27 @@ export class Demos implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Position in the entrance cascade for the card at a given place in the wall.
+   *
+   * The wall's cards are all created in one pass — it is their *frames* that arrive
+   * lazily — so without a per-card offset all 43 would fade in on the same frame and
+   * the entrance would read as the page appearing rather than as the wall
+   * assembling. Multiplying by a step in the stylesheet turns this into a delay.
+   *
+   * Capped at the last index that can be on screen at once, which is what {@link
+   * MAX_MOUNTED_CARDS} already measures: past that point a card is below the fold,
+   * its delay would be time nobody is watching, and the reader who scrolls down
+   * would arrive at cards still waiting for their turn to appear. Everything from
+   * there on shares the last step and is finished before the reader reaches it.
+   *
+   * @param index Position of the card in the wall.
+   * @return The card's step in the cascade.
+   */
+  protected entranceStep(index: number): number {
+    return Math.min(index, MAX_MOUNTED_CARDS - 1);
+  }
+
   ngOnInit(): void {
     this.demosCatalog.setDemosActive(true);
   }
