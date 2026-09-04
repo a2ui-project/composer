@@ -23,6 +23,7 @@ import {
   PromptTurnType,
   ShareTrackingStatus,
   UsageTrackingService,
+  ComposerErrorTelemetryParams,
 } from './usage-tracking.service';
 import {generateUuid} from '../utils/uuid';
 
@@ -98,4 +99,5 @@ export class NoopUsageTrackingService extends UsageTrackingService {
   trackConversationView(): void {}
 
   trackConversationSessionEnd(_params: {durationSeconds: number; interfaceCount: number}): void {}
+  trackComposerError(params: ComposerErrorTelemetryParams): void {}
 }
