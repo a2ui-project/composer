@@ -18,6 +18,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -39,20 +40,88 @@ import {CrossFrameValidator} from '../shell/cross-frame-validator/cross-frame-va
 type DemoCardState = 'idle' | 'mounting' | 'ready' | 'error';
 
 /**
- * Smallest height a demo card's rendered surface is allowed to occupy.
+ * Phases a card's height measurement passes through for one attached frame.
  *
- * Must match the `--demo-card-min-h` custom property declared on `:host` in
- * demo-card.scss.
+ * `measuring` is the window opened by the frame's first usable report, during which the
+ * last report wins; `growing` follows it, during which only a larger report is
+ * information; `settled` is silence outlasting {@link GROWTH_SETTLE_MS}, after which the
+ * card ignores its frame entirely. See {@link DemoCard.applyReportedHeight}.
  */
-const MIN_CARD_HEIGHT_PX = 200;
+type MeasurementPhase = 'measuring' | 'growing' | 'settled';
+
+/**
+ * CSS height the renderer frame is held at until a measurement commits.
+ *
+ * This constant is not cosmetic — it is the *measurement floor*. The guest bridge
+ * reports `max(body.scrollHeight, documentElement.scrollHeight, body.offsetHeight,
+ * documentElement.offsetHeight)`, and `documentElement.scrollHeight` can never fall
+ * below the frame's own viewport, i.e. below this height. So every report the card
+ * receives is `max(trueContentHeight, MEASURE_HEIGHT_PX)`, and any demo shorter than
+ * this floor is indistinguishable from one exactly this tall.
+ *
+ * It is therefore deliberately far below any plausible rendered demo: the shortest
+ * demo in the basic catalog (Row Layout) measures 56px, so a 32px floor leaves every
+ * real demo measurable while still swallowing the empty pre-render document (whose
+ * body is nothing but its own 16px padding, exactly this height).
+ *
+ * Must match the `--demo-card-measure-h` custom property in demo-card.scss.
+ */
+const MEASURE_HEIGHT_PX = 32;
 
 /**
  * Largest height a demo card's rendered surface is allowed to occupy.
+ *
+ * A demo taller than this is committed at the clamp and scrolls inside its own frame
+ * rather than being truncated: the frame is a real viewport, so the guest document
+ * simply overflows it and the reader can scroll the demo in place. Only one demo in
+ * the basic catalog (Incremental, 672px) exceeds it; letting it through at full height
+ * would hand a single card more than twice the wall's median card height.
  *
  * Must match the `--demo-card-max-h` custom property declared on `:host` in
  * demo-card.scss.
  */
 const MAX_CARD_HEIGHT_PX = 560;
+
+/**
+ * How long a newly attached frame is measured before its height is committed.
+ *
+ * The window opens on that frame's first usable report and the last report to arrive
+ * before it closes is the one committed. It exists because the *first* report is not the
+ * demo: the renderer draws its own "waiting for a payload" screen while it boots, which
+ * against the Angular sample measures 166px, so committing on sight republished the old
+ * defect at a new number — every demo shorter than that idle screen would sit at the idle
+ * screen's height, since once the frame is sized to a committed height the reports are
+ * floored there and a shrink can no longer be seen.
+ *
+ * 1s is sized off measured report timings against the Angular sample renderer. A frame
+ * rendering on screen goes idle screen -> final demo within ~60ms (the widest observed
+ * burst is Login Form with Validation at 53ms: 166, 417, 465), so 1s is more than an
+ * order of magnitude of headroom, while still being short enough that the placeholder
+ * covering a card's very first measurement is gone before the reader — who is scrolling
+ * towards a card mounted a full viewport ahead — arrives at it.
+ *
+ * The window is armed once rather than restarted per report, which bounds measuring: a
+ * demo that never stops changing height still commits, instead of never resolving.
+ */
+const MEASURE_SETTLE_MS = 1000;
+
+/**
+ * Quiet period a committed card waits out before it stops listening for growth.
+ *
+ * A demo does not reach its final size in one report and not all of it arrives in the
+ * first burst: images decode late, and a frame that mounted off screen is render
+ * throttled by the browser and only finishes once it is scrolled into view. Recipe Card
+ * grows 228 -> 395 when its image lands, up to 5.1s after the report that preceded it in
+ * the runs this constant was measured from. 8s covers that with headroom.
+ *
+ * A long window is close to free, which is why it is set from the worst case rather than
+ * the typical one. Guest reports are deduplicated and floored at the frame's own height,
+ * so a card that has grown to fit its content is told nothing new and nothing moves; the
+ * window governs how long a card stays *willing* to grow, not how long it churns. What it
+ * does bound is a demo that animates its own height, which would otherwise reshuffle the
+ * masonry columns under the reader for as long as the wall is open.
+ */
+const GROWTH_SETTLE_MS = 8000;
 
 /**
  * Grace period allowed for a freshly mounted frame to report RENDERER_READY.
@@ -66,10 +135,14 @@ const READY_TIMEOUT_MS = 8000;
  *
  * The frame is only attached once {@link DemoCard.mount} turns true, which keeps
  * a wall of cards lazy, and the demo payload is dispatched exactly once per frame
- * load after that frame's own RENDERER_READY handshake. The first *rendered*
- * surface height is clamped and then frozen so the surrounding CSS-columns
- * masonry layout never reflows underneath the reader; see
- * {@link DemoCard.cardHeightFrozen} for why the first report alone is not enough.
+ * load after that frame's own RENDERER_READY handshake.
+ *
+ * Height is measured rather than assumed. Until a card has a height, its frame is held at
+ * {@link MEASURE_HEIGHT_PX} — far below any real demo — so the guest's reports carry the
+ * content's height rather than the frame's own; the card commits the last height reported
+ * inside a short window, then follows growth until the reports stop, which keeps the
+ * surrounding CSS-columns masonry from reflowing underneath the reader. See {@link
+ * DemoCard.applyReportedHeight} for why no single report can be trusted on its own.
  */
 @Component({
   selector: 'a2ui-composer-demo-card',
@@ -96,28 +169,20 @@ export class DemoCard {
   readonly state = this.stateSignal.asReadonly();
 
   private readonly cardHeightSignal = signal<number | null>(null);
-  /** Readonly frozen surface height in pixels, or null before the first resize report. */
+  /** Readonly measured surface height in pixels, or null before any rendered report. */
   readonly cardHeight = this.cardHeightSignal.asReadonly();
 
   /**
-   * Whether {@link DemoCard.cardHeight} has been locked to a rendered measurement.
-   *
-   * Deliberately not derived from `cardHeight() !== null`. The guest bridge's very
-   * first SURFACE_RESIZE is dispatched immediately after RENDERER_READY and before
-   * any content exists, so it measures an empty document whose `scrollHeight` is
-   * just the iframe's own CSS height — `--demo-card-min-h`, i.e. exactly
-   * MIN_CARD_HEIGHT_PX. Freezing on that report pinned every card in the wall to the
-   * minimum and clipped its content under `.demo-card-surface { overflow: hidden }`.
-   *
-   * {@link DemoCard.payloadSentForCurrentLoad} cannot tell that report apart either:
-   * the guest posts RENDERER_READY and the pre-render SURFACE_RESIZE back to back, so
-   * the flag is already true by the time the resize envelope is delivered. Only the
-   * measurement itself distinguishes them — a report that clamps to exactly
-   * MIN_CARD_HEIGHT_PX carries no evidence that content has rendered, so the freeze
-   * waits for one that clamps above it. A genuinely shorter demo lays out at the
-   * minimum either way, so continuing to listen costs it nothing.
+   * How this card is currently treating its frame's height reports. Reset to `measuring`
+   * every time a frame is attached, so a card the wall unmounts and remounts measures the
+   * demo again rather than living forever with whatever its first pass caught.
    */
-  private cardHeightFrozen = false;
+  private phase: MeasurementPhase = 'measuring';
+
+  /** Latest height reported inside the open measurement window, or null when none is. */
+  private pendingHeight: number | null = null;
+
+  private settleTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Whether the demo payload has already been sent for the frame's current document.
@@ -140,6 +205,19 @@ export class DemoCard {
     );
     return built ? this.sanitizer.bypassSecurityTrustResourceUrl(built) : null;
   });
+
+  /**
+   * Whether the loading placeholder should cover the surface.
+   *
+   * It covers an unmounted card, as it always has, and now also a mounted card that has
+   * not committed a height yet: during that window the frame is deliberately held at
+   * {@link MEASURE_HEIGHT_PX} so the guest's reports describe its content rather than
+   * its frame, and a stunted frame — showing the renderer's own pre-payload idle screen
+   * across the top of an otherwise blank surface — is not what the reader should see.
+   */
+  protected readonly showPlaceholder = computed(
+    () => this.cardHeight() === null || !this.mount() || !this.safeRendererUrl(),
+  );
 
   constructor() {
     // Mount gate: opening the gate starts the ready deadline for this card only.
@@ -184,6 +262,7 @@ export class DemoCard {
       onCleanup(() => {
         subscription?.unsubscribe();
         this.hostCommunication.unregisterSecondaryIframe(element);
+        this.endMeasurementForTornDownFrame();
       });
     });
 
@@ -202,7 +281,20 @@ export class DemoCard {
       this.safeRendererUrl();
       untracked(() => {
         this.payloadSentForCurrentLoad = false;
+        // A different renderer lays the same demo out differently, so the height measured
+        // for the outgoing one is not evidence about the incoming one. Dropping back to
+        // the measuring floor is what lets the new guest report its own content height
+        // instead of inheriting the old card's floor.
+        this.cardHeightSignal.set(null);
+        this.pendingHeight = null;
+        this.phase = 'measuring';
+        this.clearSettleTimeout();
       });
+    });
+
+    inject(DestroyRef).onDestroy(() => {
+      this.clearSettleTimeout();
+      this.clearReadyTimeout();
     });
   }
 
@@ -238,22 +330,16 @@ export class DemoCard {
         return;
       }
       case PreviewBridgeMessageType.SURFACE_RESIZE: {
-        if (this.cardHeightFrozen) {
-          // Height is frozen after the first rendered report so masonry columns stay stable.
+        if (this.phase === 'settled') {
+          // Reports stopped arriving a full settle window ago; the masonry is stable now
+          // and a late reflow would shuffle columns underneath the reader.
           return;
         }
         if (!CrossFrameValidator.validateIncomingMessage(envelope)) {
           return;
         }
         const {height} = envelope.payload as {height: number};
-        const clampedHeight = Math.min(
-          MAX_CARD_HEIGHT_PX,
-          Math.max(MIN_CARD_HEIGHT_PX, Math.round(height)),
-        );
-        this.cardHeightSignal.set(clampedHeight);
-        if (clampedHeight > MIN_CARD_HEIGHT_PX) {
-          this.cardHeightFrozen = true;
-        }
+        this.applyReportedHeight(height);
         return;
       }
       default:
@@ -275,6 +361,118 @@ export class DemoCard {
    */
   protected onFrameLoad(): void {
     this.payloadSentForCurrentLoad = false;
+  }
+
+  /**
+   * Folds a height the guest has just reported into this frame's measurement.
+   *
+   * Everything here follows from one fact about the report: the guest measures
+   * `max(body/documentElement scroll and offset heights)`, and
+   * `documentElement.scrollHeight` can never come back smaller than the frame's own
+   * viewport. Every report is therefore `max(trueContentHeight, currentFrameHeight)` —
+   * the frame's height is an input to its own measurement — which is what makes a
+   * measurement *window* necessary rather than a single trusted report.
+   *
+   * **Measuring.** The window opens on the first usable report and the last report inside
+   * it wins. It has to work that way because the first report is not the demo: the
+   * renderer draws its own "waiting for a payload" screen while it boots, which measures
+   * 166px against the Angular sample, and the demo that replaces it is very often shorter.
+   * On a card's first frame nothing is committed yet, so the frame is still held at {@link
+   * MEASURE_HEIGHT_PX} and reports carry the content's own height, free to move down as
+   * well as up. On a later frame the floor is instead the height already on screen, which
+   * is what keeps the card from flashing a placeholder every time the wall remounts it;
+   * the idle screen may briefly measure above that floor, but it is never the last report
+   * in the window.
+   *
+   * **Growing.** Past the window, only a larger report carries information: the frame now
+   * fills the committed height, so a shorter measurement is not observable and an equal
+   * one says only that the content still fits. Growth is real — a late image decode, a
+   * frame that finished rendering once the browser stopped throttling it — so the card
+   * follows it upwards, converging rather than oscillating, until {@link
+   * GROWTH_SETTLE_MS} of silence settles it.
+   *
+   * In both phases a report at or below {@link MEASURE_HEIGHT_PX} is discarded outright.
+   * It is the floor itself and carries no evidence that any content rendered: the guest
+   * posts RENDERER_READY and a SURFACE_RESIZE back to back, before content exists, so
+   * that first report measures an empty document and comes back as exactly the frame's
+   * CSS height. Committing it is the regression that pinned every card in the wall to one
+   * height and clipped its demo under `.demo-card-surface { overflow: hidden }`. {@link
+   * DemoCard.payloadSentForCurrentLoad} cannot screen it out either, since it is already
+   * true by the time the resize envelope is delivered — only the measurement distinguishes
+   * them.
+   *
+   * @param height Raw height in pixels as reported by this card's guest frame.
+   */
+  private applyReportedHeight(height: number): void {
+    const clampedHeight = Math.min(
+      MAX_CARD_HEIGHT_PX,
+      Math.max(MEASURE_HEIGHT_PX, Math.round(height)),
+    );
+    if (clampedHeight <= MEASURE_HEIGHT_PX) {
+      return;
+    }
+
+    if (this.phase === 'measuring') {
+      this.pendingHeight = clampedHeight;
+      // Armed once, not restarted per report, so that measuring terminates even for a
+      // demo whose height never stops moving.
+      if (this.settleTimeoutId === null) {
+        this.settleTimeoutId = setTimeout(() => {
+          this.settleTimeoutId = null;
+          this.closeMeasurementWindow();
+        }, MEASURE_SETTLE_MS);
+      }
+      return;
+    }
+
+    const committedHeight = this.cardHeightSignal();
+    if (committedHeight !== null && clampedHeight <= committedHeight) {
+      return;
+    }
+    this.cardHeightSignal.set(clampedHeight);
+    this.restartGrowthTimeout();
+  }
+
+  /** Commits the last height measured inside the window and opens the growth phase. */
+  private closeMeasurementWindow(): void {
+    this.phase = 'growing';
+    if (this.pendingHeight !== null) {
+      this.cardHeightSignal.set(this.pendingHeight);
+      this.pendingHeight = null;
+    }
+    this.restartGrowthTimeout();
+  }
+
+  /**
+   * Closes out the measurement of a frame the wall has just taken away.
+   *
+   * A frame torn down mid-window still measured something real, so that height is
+   * committed rather than discarded: it beats leaving the card as a bare placeholder, and
+   * costs nothing if it was a fragment, because the next frame this card is given opens
+   * its own window and measures the demo again from scratch.
+   */
+  private endMeasurementForTornDownFrame(): void {
+    this.clearSettleTimeout();
+    if (this.phase === 'measuring' && this.pendingHeight !== null) {
+      this.cardHeightSignal.set(this.pendingHeight);
+    }
+    this.pendingHeight = null;
+    this.phase = 'measuring';
+  }
+
+  private restartGrowthTimeout(): void {
+    this.clearSettleTimeout();
+    this.settleTimeoutId = setTimeout(() => {
+      this.settleTimeoutId = null;
+      this.phase = 'settled';
+    }, GROWTH_SETTLE_MS);
+  }
+
+  private clearSettleTimeout(): void {
+    if (this.settleTimeoutId !== null) {
+      clearTimeout(this.settleTimeoutId);
+      this.settleTimeoutId = null;
+    }
   }
 
   private clearReadyTimeout(): void {
