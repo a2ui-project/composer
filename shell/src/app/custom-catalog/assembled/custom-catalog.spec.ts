@@ -20,6 +20,7 @@ import {describe, it, expect, beforeEach} from 'vitest';
 import {A2uiRendererService} from '@a2ui/angular/v0_9';
 import {CustomCatalog} from './custom-catalog';
 import {MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
+import * as apis from '../catalog/apis';
 
 // Stub the Monaco editor: the real one loads the Monaco AMD bundle in
 // afterNextRender, which never resolves under jsdom. The stub mirrors the
@@ -42,9 +43,14 @@ interface CustomCatalogInternals {
   selectExample: (id: string) => void;
   selectState: (index: number) => void;
   onEdit: (text: string) => void;
+  viewMode: () => string;
+  sourceFiles: () => Array<{label: string; path: string; code: string}>;
+  selectedSource: () => {path: string; code: string} | undefined;
+  setViewMode: (mode: string) => void;
+  selectSource: (path: string) => void;
 }
 
-describe('CustomCatalog (Assembled Components)', () => {
+describe('CustomCatalog', () => {
   let fixture: ComponentFixture<CustomCatalog>;
   let component: CustomCatalogInternals;
   let renderer: A2uiRendererService;
@@ -100,5 +106,68 @@ describe('CustomCatalog (Assembled Components)', () => {
   it('ignores invalid JSON edits without throwing, and applies valid ones', () => {
     expect(() => component.onEdit('not valid json {')).not.toThrow();
     expect(() => component.onEdit('{"flights": []}')).not.toThrow();
+  });
+
+  it('opens on the assembled view', () => {
+    expect(component.viewMode()).toBe('assembled');
+  });
+
+  it('switches to the Definitions source view and auto-selects the first file', async () => {
+    component.setViewMode('definitions');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const files = component.sourceFiles();
+    expect(files.map(f => f.label)).toEqual(['apis.ts', 'dashboard-catalog.ts']);
+    expect(component.selectedSource()?.path).toBe(files[0].path);
+  });
+
+  it('switches to the Renderers source view and can select a file', async () => {
+    component.setViewMode('renderers');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const files = component.sourceFiles();
+    expect(files).toHaveLength(11);
+
+    const target = files.find(f => f.label === 'FlightCard');
+    expect(target).toBeDefined();
+    component.selectSource(target!.path);
+    fixture.detectChanges();
+    expect(component.selectedSource()?.path).toBe(target!.path);
+  });
+
+  it('shows the bundled source verbatim, not a transcription of it', async () => {
+    component.setViewMode('definitions');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const apisFile = component.sourceFiles().find(f => f.label === 'apis.ts');
+    // The bundle is generated from the same apis.ts the catalog is built from,
+    // so every ComponentApi name in the running catalog appears in the source.
+    expect(apisFile?.code).toContain('export const FlightCardApi');
+    expect(apisFile?.path).toBe('shell/src/app/custom-catalog/catalog/apis.ts');
+  });
+
+  it('bundles exactly one renderer file per component the catalog defines', () => {
+    // apis.ts exports one ComponentApi per catalog component; dashboard-catalog
+    // is assembled from these same objects, so their names are the catalog's.
+    // If a component is added or removed without re-running the codegen, this
+    // fails rather than letting the Renderers view drift out of sync.
+    const catalogNames = Object.values(apis)
+      .filter(
+        (v): v is {name: string} => !!v && typeof v === 'object' && 'name' in v && 'schema' in v,
+      )
+      .map(v => v.name)
+      .sort();
+
+    component.setViewMode('renderers');
+    fixture.detectChanges();
+    const rendererLabels = component
+      .sourceFiles()
+      .map(f => f.label)
+      .sort();
+
+    expect(rendererLabels).toEqual(catalogNames);
   });
 });

@@ -20,55 +20,109 @@
       <h1 class="cc-title">Custom Catalog</h1>
       <p class="cc-subtitle">
         Two example trees assembled from one custom A2UI v0.9 catalog (11 components), rendered
-        natively. Edit the data model on the right — the preview updates live.
+        natively. Edit the data model on the right — the preview updates live. The Definitions and
+        Renderers views show this catalog's own source.
       </p>
     </div>
     <mat-button-toggle-group
       class="cc-example-switch"
-      [value]="activeExampleId()"
-      (change)="selectExample($event.value)"
-      aria-label="Example tree"
+      [value]="viewMode()"
+      (change)="setViewMode($event.value)"
+      aria-label="Catalog view"
       hideSingleSelectionIndicator
     >
-      @for (ex of examples; track ex.id) {
-        <mat-button-toggle [value]="ex.id">
-          <mat-icon aria-hidden="true">{{ ex.icon }}</mat-icon>
-          <span class="cc-example-label">{{ ex.label }}</span>
-        </mat-button-toggle>
-      }
+      <mat-button-toggle value="assembled">
+        <mat-icon aria-hidden="true">widgets</mat-icon>
+        <span class="cc-example-label">Assembled</span>
+      </mat-button-toggle>
+      <mat-button-toggle value="definitions">
+        <mat-icon aria-hidden="true">data_object</mat-icon>
+        <span class="cc-example-label">Definitions</span>
+      </mat-button-toggle>
+      <mat-button-toggle value="renderers">
+        <mat-icon aria-hidden="true">code</mat-icon>
+        <span class="cc-example-label">Renderers</span>
+      </mat-button-toggle>
     </mat-button-toggle-group>
   </header>
 
-  <div class="cc-body">
-    <section class="cc-preview">
-      <div class="cc-pane-label">Assembled Components</div>
-      <div class="cc-surface-scroll">
-        <a2ui-v09-surface [surfaceId]="activeExampleId()"></a2ui-v09-surface>
-      </div>
-    </section>
+  @if (viewMode() !== 'assembled') {
+    <div class="cc-body cc-body--source">
+      <nav class="cc-source-nav" aria-label="Catalog source files">
+        <div class="cc-pane-label">
+          {{ viewMode() === 'renderers' ? 'Renderers' : 'Definitions' }}
+        </div>
+        <div class="cc-source-list">
+          @for (file of sourceFiles(); track file.path) {
+            <button
+              type="button"
+              class="cc-source-item"
+              [class.active]="file.path === selectedSource()?.path"
+              [attr.aria-current]="file.path === selectedSource()?.path ? 'true' : null"
+              (click)="selectSource(file.path)"
+            >
+              {{ file.label }}
+            </button>
+          }
+        </div>
+      </nav>
 
-    <section class="cc-data">
-      <div class="cc-pane-label">Component Data</div>
-      <div class="cc-data-tabs" role="tablist">
-        @for (state of activeStates(); track state.name; let i = $index) {
-          <button
-            type="button"
-            role="tab"
-            class="cc-data-tab"
-            [class.active]="i === activeStateIndex()"
-            [attr.aria-selected]="i === activeStateIndex()"
-            (click)="selectState(i)"
-          >
-            {{ state.name }}
-          </button>
+      @if (selectedSource(); as file) {
+        <section class="cc-source-view">
+          <div class="cc-pane-label cc-pane-label--path">{{ file.path }}</div>
+          <pre class="cc-source-code"><code>{{ file.code }}</code></pre>
+        </section>
+      }
+    </div>
+  } @else {
+    <div class="cc-assembled-switch">
+      <mat-button-toggle-group
+        class="cc-example-switch"
+        [value]="activeExampleId()"
+        (change)="selectExample($event.value)"
+        aria-label="Example tree"
+        hideSingleSelectionIndicator
+      >
+        @for (ex of examples; track ex.id) {
+          <mat-button-toggle [value]="ex.id">
+            <mat-icon aria-hidden="true">{{ ex.icon }}</mat-icon>
+            <span class="cc-example-label">{{ ex.label }}</span>
+          </mat-button-toggle>
         }
-      </div>
-      <div class="cc-editor">
-        <a2ui-composer-monaco-editor
-          [value]="editorValue()"
-          (valueChange)="onEdit($event)"
-        ></a2ui-composer-monaco-editor>
-      </div>
-    </section>
-  </div>
+      </mat-button-toggle-group>
+    </div>
+
+    <div class="cc-body">
+      <section class="cc-preview">
+        <div class="cc-pane-label">Assembled Components</div>
+        <div class="cc-surface-scroll">
+          <a2ui-v09-surface [surfaceId]="activeExampleId()"></a2ui-v09-surface>
+        </div>
+      </section>
+
+      <section class="cc-data">
+        <div class="cc-pane-label">Component Data</div>
+        <div class="cc-data-tabs" role="tablist">
+          @for (state of activeStates(); track state.name; let i = $index) {
+            <button
+              type="button"
+              role="tab"
+              class="cc-data-tab"
+              [class.active]="i === activeStateIndex()"
+              [attr.aria-selected]="i === activeStateIndex()"
+              (click)="selectState(i)"
+            >
+              {{ state.name }}
+            </button>
+          }
+        </div>
+        <div class="cc-editor">
+          <a2ui-composer-monaco-editor
+            [value]="editorValue()"
+            (valueChange)="onEdit($event)"
+          ></a2ui-composer-monaco-editor>
+        </div>
+      </section>
+    </div>
+  }
 </div>

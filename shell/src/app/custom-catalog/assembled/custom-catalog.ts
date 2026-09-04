@@ -28,12 +28,19 @@ import {MatIconModule} from '@angular/material/icon';
 import {A2uiRendererService, A2UI_RENDERER_CONFIG, SurfaceComponent} from '@a2ui/angular/v0_9';
 import {MonacoEditor} from '../../shared/monaco-editor/monaco-editor';
 import {buildDashboardCatalog} from '../catalog/dashboard-catalog';
+import {CATALOG_SOURCE, type CatalogSourceFile} from '../catalog/catalog-source.generated';
 import flightSchema from './examples/flight-schema.json';
 import flightData from './examples/flight-data.json';
 import salesSchema from './examples/sales-schema.json';
 import salesData from './examples/sales-data.json';
 
 const CATALOG_ID = 'copilotkit://app-dashboard-catalog';
+
+/**
+ * Which face of the page is showing: the assembled demos, or one of the two
+ * read-only views onto the catalog's own source.
+ */
+type CatalogView = 'assembled' | 'definitions' | 'renderers';
 
 /** One selectable state of a demo's data model (a right-pane tab). */
 interface DataState {
@@ -68,10 +75,17 @@ const EXAMPLES: Example[] = [
 ];
 
 /**
- * Assembled Components page. Renders one of two example trees natively via
+ * Custom Catalog page. Renders one of two example trees natively via
  * `@a2ui/angular` (no iframe) from a custom 11-component dashboard catalog, and
  * lets the user edit the bound data model live. Editing the Monaco JSON pushes
  * an `updateDataModel` so the surface re-renders through the library binder.
+ *
+ * Two further views show that same catalog's own source — Definitions (the zod
+ * contract + the Angular assembly) and Renderers (one file per component).
+ * Both are bundled from disk at build time by `generate-catalog-source.mjs`,
+ * so they are the files this page actually renders with, never a transcription
+ * of them. This is the shell's own native catalog; the Component Gallery
+ * covers whatever catalog the connected renderer advertises instead.
  */
 @Component({
   selector: 'a2ui-composer-custom-catalog',
@@ -108,6 +122,18 @@ export class CustomCatalog {
   );
   protected readonly activeStates = computed(() => this.activeExample().states);
 
+  protected readonly viewMode = signal<CatalogView>('assembled');
+
+  /** The bundled source files backing the active source view. */
+  protected readonly sourceFiles = computed<CatalogSourceFile[]>(() =>
+    this.viewMode() === 'renderers' ? CATALOG_SOURCE.renderers : CATALOG_SOURCE.definitions,
+  );
+  protected readonly selectedSourcePath = signal<string>('');
+  protected readonly selectedSource = computed<CatalogSourceFile | undefined>(() => {
+    const files = this.sourceFiles();
+    return files.find(file => file.path === this.selectedSourcePath()) ?? files[0];
+  });
+
   constructor() {
     // Re-render the surface whenever the selected example or data state changes,
     // and reset the editor to that state's data model. Writes here don't feed
@@ -140,6 +166,23 @@ export class CustomCatalog {
     this.renderer.processMessages([
       {updateDataModel: {surfaceId: example.id, path: '/', op: 'replace', value: data}},
     ] as never);
+  }
+
+  /**
+   * Switches between the assembled demos and the two source views, resetting
+   * the source selection to the first file of whichever list is now showing.
+   */
+  protected setViewMode(mode: CatalogView): void {
+    this.viewMode.set(mode);
+    if (mode !== 'assembled') {
+      const files = mode === 'renderers' ? CATALOG_SOURCE.renderers : CATALOG_SOURCE.definitions;
+      if (files[0]) this.selectedSourcePath.set(files[0].path);
+    }
+  }
+
+  /** Selects which bundled source file the source view shows. */
+  protected selectSource(path: string): void {
+    this.selectedSourcePath.set(path);
   }
 
   /** Selects a demo tree, resetting to its first data state. */
