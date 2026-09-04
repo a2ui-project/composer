@@ -28,12 +28,12 @@ describe('a2ui-payload-parser', () => {
   describe('attemptSyntaxHealing', () => {
     it('heals trailing commas', () => {
       const result = attemptSyntaxHealing('{"a":[1,]}') as unknown;
-      expect(result.a).toEqual([1]);
+      expect((result as Record<string, unknown>).a).toEqual([1]);
     });
 
     it('heals missing braces', () => {
       const result = attemptSyntaxHealing('{"a": {"b": 1') as unknown;
-      expect(result.a.b).toBe(1);
+      expect((result as Record<string, unknown>).a.b).toBe(1);
     });
 
     it('returns null if unable to heal', () => {
@@ -53,23 +53,41 @@ describe('a2ui-payload-parser', () => {
   });
 
   describe('parseAndHealJsonLines', () => {
-    it('returns empty blocks and wasHealed false when input is null or undefined', () => {
-      // @ts-expect-error - testing nullish input
-      expect(parseAndHealJsonLines(null)).toEqual({blocks: [], wasHealed: false});
-      // @ts-expect-error - testing undefined input
-      expect(parseAndHealJsonLines(undefined)).toEqual({blocks: [], wasHealed: false});
+    it('returns failure when input is null or undefined', () => {
+      // @ts-expect-error Types mismatch in tests
+      expect(parseAndHealJsonLines(null)).toEqual({
+        success: false,
+        error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+      });
+      // @ts-expect-error Types mismatch in tests
+      expect(parseAndHealJsonLines(undefined)).toEqual({
+        success: false,
+        error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+      });
     });
 
-    it('returns empty blocks and wasHealed false for empty content', () => {
-      expect(parseAndHealJsonLines('')).toEqual({blocks: [], wasHealed: false});
-      expect(parseAndHealJsonLines('   ')).toEqual({blocks: [], wasHealed: false});
-      expect(parseAndHealJsonLines('\n\t\n')).toEqual({blocks: [], wasHealed: false});
+    it('returns failure for empty content', () => {
+      expect(parseAndHealJsonLines('')).toEqual({
+        success: false,
+        error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+      });
+      expect(parseAndHealJsonLines('   ')).toEqual({
+        success: false,
+        error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+      });
+      expect(parseAndHealJsonLines('\n\t\n')).toEqual({
+        success: false,
+        error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+      });
     });
 
     it('parses single-line JSON arrays', () => {
-      const result = parseAndHealJsonLines('[{"a": 1}, {"b": 2}]');
+      const result = parseAndHealJsonLines('[{"a": 1}, {"b": 2}]') as {
+        blocks: unknown[];
+        success: boolean;
+      };
       expect(result.blocks).toEqual([{a: 1}, {b: 2}]);
-      expect(result.wasHealed).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it('parses valid multi-line JSON', () => {
@@ -78,29 +96,28 @@ describe('a2ui-payload-parser', () => {
         "a": 1
       }
       `;
-      const result = parseAndHealJsonLines(payload);
-      // Depending on implementation, it might parse as single large block or error out if not JSONLines
+      const result = parseAndHealJsonLines(payload) as {blocks: unknown[]; success: boolean};
       expect(result.blocks).toEqual([{a: 1}]);
-      expect(result.wasHealed).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it('parses valid json array', () => {
-      const result = parseAndHealJsonLines('[{"a": 1}]');
+      const result = parseAndHealJsonLines('[{"a": 1}]') as {blocks: unknown[]; success: boolean};
       expect(result.blocks).toEqual([{a: 1}]);
-      expect(result.wasHealed).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it('heals truncated or malformed JSON lines', () => {
-      // Missing braces and such
-      const result = parseAndHealJsonLines('{"a": 1\n{"b": 2');
+      const result = parseAndHealJsonLines('{"a": 1\n{"b": 2') as {
+        blocks: unknown[];
+        success: boolean;
+      };
       expect(result.blocks).toEqual([{a: 1}, {b: 2}]);
-      expect(result.wasHealed).toBe(true);
+      expect(result.success).toBe(true);
     });
 
-    it('throws when unhealable', () => {
-      expect(() => parseAndHealJsonLines('{"version": "v0.9" unhealable')).toThrowError(
-        /Syntax recovery failed/,
-      );
+    it('returns failure securely when unhealable', () => {
+      expect(parseAndHealJsonLines('{"version": "v0.9" unhealable').success).toBe(false);
     });
   });
 
@@ -129,7 +146,9 @@ describe('a2ui-payload-parser', () => {
       const healed = runCatalogComponentSchemaCheck(blocks, componentCatalog);
 
       expect(healed).toBe(true);
-      expect((blocks[0].updateComponents.components[0] as unknown).component).toBe('TextField');
+      expect(
+        (blocks[0].updateComponents.components[0] as unknown as Record<string, unknown>).component,
+      ).toBe('TextField');
     });
 
     it('throws on unregistered component', () => {

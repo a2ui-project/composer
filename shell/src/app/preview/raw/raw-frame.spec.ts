@@ -291,6 +291,7 @@ class MockStateSync {
 
 describe('RawFrame JSON Source Editor View', () => {
   let sendRenderA2UIMock: ReturnType<typeof vi.fn>;
+  let sendRenderErrorMock: ReturnType<typeof vi.fn>;
   let mockActiveCatalog: WritableSignal<Catalog | null>;
   let mockThemePreference: WritableSignal<ThemePreference>;
   let stateSyncMock: MockStateSync;
@@ -301,6 +302,7 @@ describe('RawFrame JSON Source Editor View', () => {
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
+    sendRenderErrorMock = vi.fn();
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
     mockThemePreference = signal<ThemePreference>(ThemePreference.LIGHT);
     snackBarMock = {
@@ -315,7 +317,6 @@ describe('RawFrame JSON Source Editor View', () => {
       dismiss: vi.fn(),
     };
     errorLoggerMock = {error: vi.fn()};
-    dockviewServiceMock = {openPanel: vi.fn()};
     messageStreamSubject = new Subject<unknown>();
 
     undoStack.length = 0;
@@ -350,6 +351,7 @@ describe('RawFrame JSON Source Editor View', () => {
           provide: HostCommunication,
           useValue: {
             sendRenderA2UI: sendRenderA2UIMock,
+            sendRenderError: sendRenderErrorMock,
             messageStream$: messageStreamSubject.asObservable(),
             isRendererReady: vi.fn().mockReturnValue(false),
           },

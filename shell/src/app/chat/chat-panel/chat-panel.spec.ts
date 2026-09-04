@@ -34,6 +34,11 @@ import {MatInputHarness} from '@angular/material/input/testing';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
+import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
+import {
+  parseAndHealJsonLines,
+  SuccessRenderParseResult,
+} from '../a2ui-payload-parser/a2ui-payload-parser';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -947,35 +952,38 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     });
   });
 
-  describe('getComponentCount', () => {
+  describe('ChatCleaner parse count logic', () => {
     it('counts components in JSON array of commands', () => {
-      const component = fixture.componentInstance;
+      const cleaner = TestBed.inject(ChatCleaner);
       const payload = '[{"createSurface": {}}, {"updateComponents": {"components": [{}, {}]}}]';
-      expect(component.getComponentCount(payload)).toBe(3);
+      const cleaned = cleaner.cleanPayload(payload);
+      const parsed = parseAndHealJsonLines(cleaned);
+      expect(parsed?.success).toBe(true);
+      expect((parsed as SuccessRenderParseResult).count).toBe(3);
     });
 
     it('counts components in multi-line JSONL commands', () => {
-      const component = fixture.componentInstance;
+      const cleaner = TestBed.inject(ChatCleaner);
       const payload = '{"createSurface": {}}\n{"updateComponents": {"components": [{}]}}';
-      expect(component.getComponentCount(payload)).toBe(2);
+      const cleaned = cleaner.cleanPayload(payload);
+      const parsed = parseAndHealJsonLines(cleaned);
+      expect(parsed?.count).toBe(2);
     });
 
     it('returns 0 for non-layout text or invalid JSON', () => {
-      const component = fixture.componentInstance;
-      expect(component.getComponentCount('invalid text')).toBe(0);
+      const cleaner = TestBed.inject(ChatCleaner);
+      const cleaned = cleaner.cleanPayload('invalid text');
+      const parsed = parseAndHealJsonLines(cleaned);
+      expect(parsed?.count).toBe(0);
     });
 
     it('ignores single-line parse failures in multi-line JSONL and counts valid lines', () => {
-      const component = fixture.componentInstance;
+      const cleaner = TestBed.inject(ChatCleaner);
       const payload =
         '{"createSurface": {}}\n{corrupted\n{"updateComponents": {"components": [{}, {}]}}';
-      expect(component.getComponentCount(payload)).toBe(3);
-    });
-
-    it('returns 0 when getComponentCount is called with empty or undefined text', () => {
-      const component = fixture.componentInstance;
-      expect(component.getComponentCount('')).toBe(0);
-      expect(component.getComponentCount(undefined)).toBe(0);
+      const cleaned = cleaner.cleanPayload(payload);
+      const parsed = parseAndHealJsonLines(cleaned);
+      expect(parsed?.success).toBe(false);
     });
   });
 });
