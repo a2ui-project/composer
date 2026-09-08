@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import {A2uiComponentInstance, RenderA2uiItem} from 'a2ui-bridge';
-import {tryParseJsonArray} from '../../utils/json';
+import {extractErrorDetails, tryParseJsonArray} from '../../utils/json';
 
 /**
  * The standardized output structure for JSON Lines payload parsing.
@@ -86,41 +86,41 @@ export function parseAndHealJsonLines(content?: string | null): ParseResult {
     }
   }
 
-  const lines = content
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0);
+  const rawLines = content.split('\n');
+  const lines = rawLines
+    .map((text, i) => ({text: (text || '').trim(), originalIndex: i}))
+    .filter(l => l.text.length > 0);
 
   const parsedBlocks: unknown[] = [];
   let looksLikeA2ui = false;
 
   for (const line of lines) {
-    if (line.startsWith('```') || (!line.startsWith('{') && !line.startsWith('['))) {
+    if (line.text.startsWith('```') || (!line.text.startsWith('{') && !line.text.startsWith('['))) {
       continue;
     }
     looksLikeA2ui = true;
 
     try {
-      parsedBlocks.push(JSON.parse(line));
+      parsedBlocks.push(JSON.parse(line.text));
     } catch (err) {
-      const healedObj = attemptSyntaxHealing(line);
+      const healedObj = attemptSyntaxHealing(line.text);
       if (healedObj !== null) {
         parsedBlocks.push(healedObj);
       } else {
-        const errDetails = parsedArray.error;
+        const errDetails = extractErrorDetails(err as Error, line.text);
         return {
           success: false,
-          error: errDetails?.message ?? 'Syntax recovery failed',
-          line: errDetails?.line,
-          column: errDetails?.column,
-          snippet: errDetails?.snippet,
+          error: (err as Error)?.message ?? 'Syntax recovery failed',
+          line: line.originalIndex + 1,
+          column: errDetails.column,
+          snippet: line.text,
         };
       }
     }
   }
 
   if (parsedBlocks.length === 0) {
-    if (looksLikeA2ui || content.includes('"version"') || content.includes('"createSurface"')) {
+    if (looksLikeA2ui) {
       const errDetails = parsedArray.error;
       return {
         success: false,

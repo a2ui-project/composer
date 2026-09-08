@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 
 import {
   parseAndHealJsonLines,
@@ -118,6 +118,50 @@ describe('a2ui-payload-parser', () => {
 
     it('returns failure securely when unhealable', () => {
       expect(parseAndHealJsonLines('{"version": "v0.9" unhealable').success).toBe(false);
+    });
+
+    it('reports 1-indexed line number of failing line in multi-line payload', () => {
+      const payload = `{"valid": 1}
+
+{"broken": [1, 2, invalid]}`;
+      const result = parseAndHealJsonLines(payload);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.line).toBe(3);
+        expect(result.snippet).toBe('{"broken": [1, 2, invalid]}');
+      }
+    });
+
+    it('treats conversational text mentioning version or createSurface as conversational', () => {
+      const conversationalText =
+        'Here is an explanation: the "version" and "createSurface" directives control UI.';
+      const result = parseAndHealJsonLines(conversationalText);
+      expect(result.success).toBe(true);
+      if (result.success && result.isConversational) {
+        expect(result.blocks).toEqual([]);
+        expect(result.count).toBe(0);
+      }
+    });
+
+    it('extracts column information when syntax error occurs on single line', () => {
+      const originalParse = JSON.parse;
+      const parseSpy = vi.spyOn(JSON, 'parse').mockImplementation((text, reviver) => {
+        if (typeof text === 'string' && text.includes('invalid_column_test')) {
+          throw new SyntaxError('Unexpected token at line 1 column 24');
+        }
+        return originalParse(text, reviver);
+      });
+
+      try {
+        const result = parseAndHealJsonLines('{"invalid_column_test": ');
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.column).toBe(24);
+          expect(result.line).toBe(1);
+        }
+      } finally {
+        parseSpy.mockRestore();
+      }
     });
   });
 

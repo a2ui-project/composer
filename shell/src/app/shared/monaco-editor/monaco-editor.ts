@@ -169,6 +169,88 @@ export class MonacoEditor {
       MonacoEditor.resolveAllOf(result, externalSchemas, rootDefinitions, visited, depth);
     }
 
+    if (
+      result['properties'] &&
+      typeof result['properties'] === 'object' &&
+      !Array.isArray(result['properties'])
+    ) {
+      const rawProps = result['properties'] as Record<string, unknown>;
+      const flattenedProps: Record<string, unknown> = {};
+      for (const [key, propSchema] of Object.entries(rawProps)) {
+        if (propSchema && typeof propSchema === 'object' && !Array.isArray(propSchema)) {
+          flattenedProps[key] = MonacoEditor.resolveAndFlattenSchemaForDraft07(
+            propSchema as Record<string, unknown>,
+            externalSchemas,
+            rootDefinitions,
+            visited,
+            false,
+            depth + 1,
+          );
+        } else {
+          flattenedProps[key] = propSchema;
+        }
+      }
+      result['properties'] = flattenedProps;
+    }
+
+    if (Array.isArray(result['items'])) {
+      result['items'] = (result['items'] as unknown[]).map(item =>
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? MonacoEditor.resolveAndFlattenSchemaForDraft07(
+              item as Record<string, unknown>,
+              externalSchemas,
+              rootDefinitions,
+              visited,
+              false,
+              depth + 1,
+            )
+          : item,
+      );
+    } else if (
+      result['items'] &&
+      typeof result['items'] === 'object' &&
+      !Array.isArray(result['items'])
+    ) {
+      result['items'] = MonacoEditor.resolveAndFlattenSchemaForDraft07(
+        result['items'] as Record<string, unknown>,
+        externalSchemas,
+        rootDefinitions,
+        visited,
+        false,
+        depth + 1,
+      );
+    }
+
+    if (Array.isArray(result['anyOf'])) {
+      result['anyOf'] = (result['anyOf'] as unknown[]).map(sub =>
+        sub && typeof sub === 'object' && !Array.isArray(sub)
+          ? MonacoEditor.resolveAndFlattenSchemaForDraft07(
+              sub as Record<string, unknown>,
+              externalSchemas,
+              rootDefinitions,
+              visited,
+              false,
+              depth + 1,
+            )
+          : sub,
+      );
+    }
+
+    if (Array.isArray(result['oneOf'])) {
+      result['oneOf'] = (result['oneOf'] as unknown[]).map(sub =>
+        sub && typeof sub === 'object' && !Array.isArray(sub)
+          ? MonacoEditor.resolveAndFlattenSchemaForDraft07(
+              sub as Record<string, unknown>,
+              externalSchemas,
+              rootDefinitions,
+              visited,
+              false,
+              depth + 1,
+            )
+          : sub,
+      );
+    }
+
     return result;
   }
 

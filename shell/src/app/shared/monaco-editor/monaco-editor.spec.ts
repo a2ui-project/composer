@@ -168,6 +168,102 @@ describe('MonacoEditor utilities', () => {
       // @ts-expect-error Types mismatch in tests
       expect(flattened['required']).toContain('b');
     });
+
+    it('recursively flattens allOf and refs inside properties', () => {
+      const externalSchemas = {
+        'common.json': {
+          definitions: {
+            address: {
+              type: 'object',
+              properties: {
+                street: {type: 'string'},
+              },
+            },
+          },
+        },
+      };
+
+      const raw = {
+        type: 'object',
+        properties: {
+          user: {
+            allOf: [{properties: {name: {type: 'string'}}}, {properties: {age: {type: 'number'}}}],
+          },
+          home: {
+            $ref: 'common.json#/definitions/address',
+          },
+        },
+      };
+
+      const rootDefinitions: Record<string, unknown> = {};
+      const flattened = MonacoEditor.resolveAndFlattenSchemaForDraft07(
+        raw,
+        externalSchemas,
+        rootDefinitions,
+      );
+
+      const properties = flattened['properties'] as Record<string, Record<string, unknown>>;
+      expect(properties['user']['allOf']).toBeUndefined();
+      expect(properties['user']['additionalProperties']).toBe(false);
+      const userProps = properties['user']['properties'] as Record<string, Record<string, unknown>>;
+      expect(userProps['name']['type']).toBe('string');
+      expect(userProps['age']['type']).toBe('number');
+
+      expect(properties['home']['$ref']).toBe('#/definitions/common_json__definitions_address');
+      const def = rootDefinitions['common_json__definitions_address'] as Record<string, unknown>;
+      expect(def).toBeDefined();
+      expect((def['properties'] as Record<string, Record<string, unknown>>)['street']['type']).toBe(
+        'string',
+      );
+    });
+
+    it('recursively flattens allOf inside array items', () => {
+      const raw = {
+        type: 'array',
+        items: {
+          allOf: [{properties: {id: {type: 'string'}}}, {properties: {active: {type: 'boolean'}}}],
+        },
+      };
+
+      const flattened = MonacoEditor.resolveAndFlattenSchemaForDraft07(raw);
+      const items = flattened['items'] as Record<string, unknown>;
+      expect(items['allOf']).toBeUndefined();
+      expect(items['additionalProperties']).toBe(false);
+      const itemProps = items['properties'] as Record<string, Record<string, unknown>>;
+      expect(itemProps['id']['type']).toBe('string');
+      expect(itemProps['active']['type']).toBe('boolean');
+    });
+
+    it('recursively flattens schemas inside anyOf and oneOf', () => {
+      const raw = {
+        anyOf: [
+          {
+            allOf: [
+              {properties: {kind: {type: 'string'}}},
+              {properties: {radius: {type: 'number'}}},
+            ],
+          },
+        ],
+        oneOf: [
+          {
+            allOf: [{properties: {kind: {type: 'string'}}}, {properties: {side: {type: 'number'}}}],
+          },
+        ],
+      };
+
+      const flattened = MonacoEditor.resolveAndFlattenSchemaForDraft07(raw);
+      const anyOf = flattened['anyOf'] as Array<Record<string, unknown>>;
+      expect(anyOf[0]['allOf']).toBeUndefined();
+      const anyOfProps = anyOf[0]['properties'] as Record<string, Record<string, unknown>>;
+      expect(anyOfProps['kind']['type']).toBe('string');
+      expect(anyOfProps['radius']['type']).toBe('number');
+
+      const oneOf = flattened['oneOf'] as Array<Record<string, unknown>>;
+      expect(oneOf[0]['allOf']).toBeUndefined();
+      const oneOfProps = oneOf[0]['properties'] as Record<string, Record<string, unknown>>;
+      expect(oneOfProps['kind']['type']).toBe('string');
+      expect(oneOfProps['side']['type']).toBe('number');
+    });
   });
 });
 
