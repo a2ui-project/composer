@@ -65,20 +65,17 @@ export class Errors {
   protected readonly expandedRows = signal<Set<string>>(new Set());
 
   constructor() {
+    this.errorsLog.set(
+      this.errorLogger
+        .getHistory()
+        .map(item => this.mapToDisplayItem(item))
+        .reverse(),
+    );
+
     this.errorLogger.errorStream$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((item: ErrorLogItem) => {
-        const mapped: DisplayErrorLogItem = {
-          id: item.id,
-          time: formatTimestamp(item.timestamp),
-          source: item.sourceTag,
-          level: item.level,
-          message: item.message,
-          line: item.line,
-          column: item.column,
-          stack: item.stack,
-          snippet: item.snippet,
-        };
+        const mapped = this.mapToDisplayItem(item);
         this.errorsLog.update(logs => {
           const newLogs = [mapped, ...logs];
           if (newLogs.length > 100) {
@@ -87,6 +84,20 @@ export class Errors {
           return newLogs;
         });
       });
+  }
+
+  private mapToDisplayItem(item: ErrorLogItem): DisplayErrorLogItem {
+    return {
+      id: item.id,
+      time: formatTimestamp(item.timestamp),
+      source: item.sourceTag,
+      level: item.level,
+      message: item.message,
+      line: item.line,
+      column: item.column,
+      stack: item.stack,
+      snippet: item.snippet,
+    };
   }
 
   protected toggleRow(element: DisplayErrorLogItem): void {
@@ -106,6 +117,7 @@ export class Errors {
   }
 
   clearLogs(): void {
+    this.errorLogger.clear();
     this.errorsLog.set([]);
     this.expandedRows.set(new Set());
   }

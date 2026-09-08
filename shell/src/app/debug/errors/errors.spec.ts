@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {Errors} from './errors';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
@@ -27,12 +27,23 @@ describe('Errors Component', () => {
   let fixture: ComponentFixture<Errors>;
   let harness: ErrorsHarness;
   let errorStream$: Subject<ErrorLogItem>;
+  let mockHistory: ErrorLogItem[];
+  let mockErrorLogger: {
+    errorStream$: Subject<ErrorLogItem>;
+    getHistory: ReturnType<typeof vi.fn>;
+    clear: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(async () => {
     errorStream$ = new Subject<ErrorLogItem>();
+    mockHistory = [];
 
-    const mockErrorLogger = {
+    mockErrorLogger = {
       errorStream$,
+      getHistory: vi.fn(() => [...mockHistory]),
+      clear: vi.fn(() => {
+        mockHistory.length = 0;
+      }),
     };
 
     await TestBed.configureTestingModule({
@@ -237,5 +248,42 @@ describe('Errors Component', () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
     expect(hiddenAttrs.length).toBe(1);
     expect(hiddenAttrs[0]).toBe('true');
+  });
+
+  it('hydrates errorsLog with pre-existing logs from ErrorLogger.getHistory() in reverse chronological order', async () => {
+    mockHistory.push(
+      {
+        id: 'hist-1',
+        timestamp: 1000,
+        level: 'info',
+        message: 'Older log',
+        sourceTag: '[Init]',
+      },
+      {
+        id: 'hist-2',
+        timestamp: 2000,
+        level: 'error',
+        message: 'Newer log',
+        sourceTag: '[Init]',
+      },
+    );
+
+    const freshFixture = TestBed.createComponent(Errors);
+    freshFixture.detectChanges();
+    const freshHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      freshFixture,
+      ErrorsHarness,
+    );
+
+    expect(await freshHarness.getRowsCount()).toBe(2);
+    const row0 = await freshHarness.getRowValuesAt(0);
+    const row1 = await freshHarness.getRowValuesAt(1);
+    expect(row0.message).toContain('Newer log');
+    expect(row1.message).toContain('Older log');
+  });
+
+  it('calls ErrorLogger.clear() when clearLogs() is invoked', () => {
+    fixture.componentInstance.clearLogs();
+    expect(mockErrorLogger.clear).toHaveBeenCalledTimes(1);
   });
 });

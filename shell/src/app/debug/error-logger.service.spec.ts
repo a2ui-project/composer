@@ -192,4 +192,52 @@ describe('ErrorLogger Service Tests', () => {
     const serialized = safeSerialize(mockElement);
     expect(serialized).toBe('"[Element: <button>]"');
   });
+
+  it('returns recorded logs in chronological order via getHistory', () => {
+    service.info('First log');
+    service.warn('Second log');
+    service.error('Third log');
+
+    const history = service.getHistory();
+    expect(history.length).toBe(3);
+    expect(history[0].message).toBe('First log');
+    expect(history[1].message).toBe('Second log');
+    expect(history[2].message).toBe('Third log');
+  });
+
+  it('caps historyBuffer at 100 items, shifting older logs when exceeded', () => {
+    for (let i = 0; i < 110; i++) {
+      service.info(`Message ${i}`);
+    }
+
+    const history = service.getHistory();
+    expect(history.length).toBe(100);
+    expect(history[0].message).toBe('Message 10');
+    expect(history[99].message).toBe('Message 109');
+  });
+
+  it('clears the history buffer when clear is invoked', () => {
+    service.info('Test log');
+    expect(service.getHistory().length).toBe(1);
+
+    service.clear();
+    expect(service.getHistory().length).toBe(0);
+  });
+
+  it('returns a shallow copy array preventing external mutation of internal history buffer', () => {
+    service.info('Initial log');
+    const history = service.getHistory();
+    expect(history.length).toBe(1);
+
+    history.push({
+      id: 'fake',
+      timestamp: Date.now(),
+      level: 'error',
+      message: 'Mutated log',
+      sourceTag: '[Fake]',
+    });
+
+    expect(service.getHistory().length).toBe(1);
+    expect(service.getHistory()[0].message).toBe('Initial log');
+  });
 });

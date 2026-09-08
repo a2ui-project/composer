@@ -149,6 +149,29 @@ export function safeSerialize(val: unknown): string {
 export class ErrorLogger {
   private readonly _errorStream = new Subject<ErrorLogItem>();
   readonly errorStream$: Observable<ErrorLogItem> = this._errorStream.asObservable();
+  private readonly historyBuffer: ErrorLogItem[] = [];
+
+  /**
+   * Returns a copy of the chronological log history.
+   */
+  getHistory(): ErrorLogItem[] {
+    return [...this.historyBuffer];
+  }
+
+  /**
+   * Clears the in-memory history buffer.
+   */
+  clear(): void {
+    this.historyBuffer.length = 0;
+  }
+
+  private emit(item: ErrorLogItem): void {
+    this.historyBuffer.push(item);
+    if (this.historyBuffer.length > 100) {
+      this.historyBuffer.shift();
+    }
+    this._errorStream.next(item);
+  }
 
   /**
    * Logs an entry at the 'error' level.
@@ -158,7 +181,7 @@ export class ErrorLogger {
   error(arg1: unknown, ...args: unknown[]): void {
     const item = this.normalizeItem('error', arg1, ...args);
     if (item) {
-      this._errorStream.next(item);
+      this.emit(item);
     }
   }
 
@@ -170,7 +193,7 @@ export class ErrorLogger {
   warn(arg1: unknown, ...args: unknown[]): void {
     const item = this.normalizeItem('warn', arg1, ...args);
     if (item) {
-      this._errorStream.next(item);
+      this.emit(item);
     }
   }
 
@@ -182,7 +205,7 @@ export class ErrorLogger {
   log(arg1: unknown, ...args: unknown[]): void {
     const item = this.normalizeItem('log', arg1, ...args);
     if (item) {
-      this._errorStream.next(item);
+      this.emit(item);
     }
   }
 
@@ -194,7 +217,7 @@ export class ErrorLogger {
   info(arg1: unknown, ...args: unknown[]): void {
     const item = this.normalizeItem('info', arg1, ...args);
     if (item) {
-      this._errorStream.next(item);
+      this.emit(item);
     }
   }
 
