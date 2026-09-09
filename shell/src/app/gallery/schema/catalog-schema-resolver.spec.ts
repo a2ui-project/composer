@@ -27,8 +27,6 @@ describe('CatalogSchemaResolver', () => {
       error: vi.fn(),
       info: vi.fn(),
       withTag: vi.fn().mockReturnThis(),
-      info: vi.fn(),
-      withTag: vi.fn().mockReturnThis(),
     } as unknown as import('../../debug/error-logger.service').ErrorLogger;
   });
   it('parses simple properties correctly', () => {

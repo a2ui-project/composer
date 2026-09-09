@@ -98,7 +98,9 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
 
     // Verify Errors tab consolidation & stack trace expansion
     await page.locator('.dv-tab', {hasText: /^Errors/}).click();
-    const errorRow = page.locator('.errors-container table tr.element-row');
+    const errorRow = page.locator('.errors-container table tr.element-row', {
+      hasText: 'E2E Exception trace',
+    });
     await expect(errorRow).toHaveCount(1);
     await expect(page.locator('.errors-container table')).toContainText('E2E Exception trace');
 
