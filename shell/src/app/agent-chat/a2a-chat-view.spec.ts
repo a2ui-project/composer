@@ -521,7 +521,7 @@ describe('A2aChatView', () => {
     );
   });
 
-  it('does not persist backendMode or agent URL if agent connection fails', async () => {
+  it('does not persist agent URL if agent connection fails while applying initial config', async () => {
     vi.clearAllMocks();
     mockA2aTransport.getAgentCard = vi.fn().mockRejectedValue(new Error('Connection failed'));
 
@@ -531,9 +531,9 @@ describe('A2aChatView', () => {
       A2aBackendMode.HTTP_JSONRPC,
     );
 
-    expect(mockConfigProvider.setA2aBackendMode).not.toHaveBeenCalled();
+    expect(mockConfigProvider.setA2aBackendMode).toHaveBeenCalledWith(A2aBackendMode.HTTP_JSONRPC);
+    expect(mockConfigProvider.setA2aTenantId).toHaveBeenCalledWith('test-tenant');
     expect(mockConfigProvider.setA2aAgentUrl).not.toHaveBeenCalled();
-    expect(mockConfigProvider.setA2aTenantId).not.toHaveBeenCalled();
   });
 
   it('persists backendMode and configuration when agent connection succeeds', async () => {

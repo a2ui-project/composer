@@ -174,16 +174,16 @@ export class A2aChatView implements OnInit {
     this.connectionError.set(null);
 
     try {
-      const card = await this.a2aTransport.getAgentCard(normalizedUrl);
-
-      this.configProvider.setA2aAgentUrl(normalizedUrl);
-      if (tenantId !== undefined) {
-        this.configProvider.setA2aTenantId((tenantId || '').trim());
-      }
       if (backendMode) {
         this.configProvider.setA2aBackendMode(backendMode);
       }
+      if (tenantId !== undefined) {
+        this.configProvider.setA2aTenantId((tenantId || '').trim());
+      }
 
+      const card = await this.a2aTransport.getAgentCard(normalizedUrl);
+
+      this.configProvider.setA2aAgentUrl(normalizedUrl);
       this.agentCard.set(card);
       const info = a2aCardToUiAgentInfo(card, normalizedUrl);
       this.agentInfo.set(info);
