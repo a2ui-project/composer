@@ -52,7 +52,7 @@ describe('ErrorLogger Service Tests', () => {
     expect(emitted[2].message).toBe('Partial msg info');
     expect(emitted[3].message).toBe('Partial msg log');
 
-    expect(emitted[4].message).toBe('Variadic error {"some":"data"}');
+    expect(emitted[4].message).toBe('Error: Variadic error {"some":"data"}');
     expect(emitted[5].message).toBe('Failed to load {"some":"data"}');
     expect(emitted[6].message).toBe('Info data {"some":"data"}');
     expect(emitted[7].message).toBe('Log data {"some":"data"}');
@@ -275,5 +275,28 @@ describe('ErrorLogger Service Tests', () => {
     expect(emitted[3].level).toBe('log');
     expect(emitted[4].level).toBe('error');
     expect(emitted[4].message).toBe('12345');
+  });
+
+  it('prefixes error name to message when logging Error instances', () => {
+    const emitted: ErrorLogItem[] = [];
+    service.errorStream$.subscribe(item => emitted.push(item));
+
+    const typeError = new TypeError('Invalid property type');
+    service.error(typeError);
+
+    const errorWithoutMessage = new RangeError('');
+    service.error(errorWithoutMessage);
+
+    const duckTypedError = {
+      name: 'CustomError',
+      message: 'Custom message',
+      stack: 'Custom stack',
+    };
+    service.error(duckTypedError);
+
+    expect(emitted.length).toBe(3);
+    expect(emitted[0].message).toBe('TypeError: Invalid property type');
+    expect(emitted[1].message).toBe('RangeError');
+    expect(emitted[2].message).toBe('CustomError: Custom message');
   });
 });
