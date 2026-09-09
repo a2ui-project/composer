@@ -100,6 +100,70 @@ jobs:
 
           touch deploy_dist/.nojekyll
 
+      # ---------------------------------------------------------------------
+      # Rewrite Renderer URLs (deploy_dist/config.json)
+      #
+      # `shell/src/config.json` ships absolute *production* renderer URLs
+      # (https://<host>/composer/samples/<name>/), which is correct for the
+      # deployment from `main` but wrong for a preview: the step above just built
+      # and staged this PR's own samples under `deploy_dist/samples/`, served at
+      # /composer/pr/<N>/samples/<name>/. Left alone, a preview's shell is the
+      # PR's but every renderer it can select is the one built from `main`, so
+      # any change to renderer code is invisible in its own preview.
+      #
+      # Only the deployed artifact is rewritten; the checked-in config is left
+      # untouched so production keeps pointing at production. The `*-dev`
+      # localhost entries carry no /composer/samples/ path and are deliberately
+      # left alone for local development.
+      # ---------------------------------------------------------------------
+      - name: Point Renderer URLs at This PR's Samples
+        env:
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          CONFIG="deploy_dist/config.json"
+          PROD_PATH="/composer/samples/"
+          PREVIEW_PATH="/composer/pr/${PR_NUM}/samples/"
+
+          if [ ! -f "$CONFIG" ]; then
+            echo "::error::${CONFIG} is missing; the shell build did not stage a runtime config."
+            exit 1
+          fi
+
+          # The rewrite is driven by the path already in the file rather than by a
+          # second hardcoded copy of the production URL, so the host stays whatever
+          # the checked-in config says.
+          EXPECTED=$(jq --arg from "$PROD_PATH" \
+            '[.renderers[].rendererUrl | select(contains($from))] | length' "$CONFIG")
+          if [ "$EXPECTED" -eq 0 ]; then
+            echo "::error::No renderer URL in ${CONFIG} contains ${PROD_PATH}; the config layout changed and this step would silently ship production renderers to the preview."
+            exit 1
+          fi
+
+          jq --arg from "$PROD_PATH" --arg to "$PREVIEW_PATH" \
+            '.renderers |= with_entries(.value.rendererUrl |= sub($from; $to))' \
+            "$CONFIG" > "${CONFIG}.tmp"
+
+          if ! jq -e . "${CONFIG}.tmp" > /dev/null; then
+            echo "::error::Rewriting ${CONFIG} produced invalid JSON."
+            exit 1
+          fi
+
+          REWRITTEN=$(jq --arg to "$PREVIEW_PATH" \
+            '[.renderers[].rendererUrl | select(contains($to))] | length' "${CONFIG}.tmp")
+          LEFTOVER=$(jq --arg from "$PROD_PATH" \
+            '[.renderers[].rendererUrl | select(contains($from))] | length' "${CONFIG}.tmp")
+          if [ "$REWRITTEN" -ne "$EXPECTED" ] || [ "$LEFTOVER" -ne 0 ]; then
+            echo "::error::Expected ${EXPECTED} renderer URL(s) rewritten to ${PREVIEW_PATH}, got ${REWRITTEN} with ${LEFTOVER} still on ${PROD_PATH}."
+            exit 1
+          fi
+
+          mv "${CONFIG}.tmp" "$CONFIG"
+
+          echo "Preview renderer URLs (${REWRITTEN} rewritten):"
+          jq -r '.renderers | to_entries[] | "  \(.key): \(.value.rendererUrl)"' "$CONFIG"
+
       - name: Generate PR Metadata
         env:
           PR_NUM: ${{ github.event.pull_request.number }}
