@@ -91,12 +91,14 @@ export function renderInlineMarkdown(text: string): string {
 
 /**
  * Parses markdown into sanitized HTML using Marked (GFM) and DOMPurify.
- * Supports headings, blockquotes, fenced code blocks, tables, task lists, and inline formatting.
+ * Supports headings, blockquotes, fenced code blocks, tables, task lists, and inline formatting,
+ * as well as multimedia audio/video elements with data URIs consistent with A2A inspector.
  */
 export function renderMarkdown(markdown: string): string {
   if (!markdown) return '';
   const rawHtml = marked.parse(markdown, {async: false}) as string;
   return DOMPurify.sanitize(rawHtml, {
-    ADD_ATTR: ['target', 'rel'],
+    ADD_ATTR: ['target', 'rel', 'controls'],
+    ADD_DATA_URI_TAGS: ['img', 'audio', 'video', 'source'],
   });
 }

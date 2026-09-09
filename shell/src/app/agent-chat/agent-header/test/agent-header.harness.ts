@@ -31,6 +31,7 @@ export class A2aAgentHeaderHarness extends ComponentHarness {
   private getNewSessionButton = this.locatorFor(
     MatButtonHarness.with({selector: '.new-session-btn'}),
   );
+  private getAvatarImage = this.locatorForOptional('.avatar-image');
 
   async getTitleText(): Promise<string> {
     const el = await this.getTitleElement();
@@ -65,5 +66,10 @@ export class A2aAgentHeaderHarness extends ComponentHarness {
   async clickReset(): Promise<void> {
     const btn = await this.getNewSessionButton();
     return btn.click();
+  }
+
+  async getAvatarImageSrc(): Promise<string | null> {
+    const el = await this.getAvatarImage();
+    return el ? el.getAttribute('src') : null;
   }
 }

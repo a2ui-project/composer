@@ -245,6 +245,16 @@ describe('A2aChatView', () => {
     });
 
     expect(mockA2aTransport.sendMessageStream).toHaveBeenCalled();
+    const sentMsg = vi.mocked(mockA2aTransport.sendMessageStream).mock.calls[0][1];
+    expect(sentMsg.parts?.[1].kind).toBe('file');
+    expect(sentMsg.parts?.[1].raw).toBe('base64imagedata');
+    expect(sentMsg.parts?.[1].mediaType).toBe('image/png');
+    expect(sentMsg.parts?.[1].file).toEqual({
+      bytes: 'base64imagedata',
+      mimeType: 'image/png',
+      name: 'screen.png',
+    });
+
     const messages = fixture.componentInstance['messages']();
     expect(messages.length).toBe(2);
     expect(messages[0].images?.length).toBe(1);

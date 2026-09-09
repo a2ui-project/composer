@@ -23,7 +23,7 @@ import {MatTooltipModule} from '@angular/material/tooltip';
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {renderMarkdown} from '../../utils/markdown';
-import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
+import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 import {CanvasArtifact, UiMessage} from './types';
 
 /**
@@ -47,7 +47,7 @@ export class A2aChatMessage {
   /** UI message object containing sender role, text, thinking trace, and optional A2UI payload. */
   readonly message = input.required<UiMessage>();
   /** URL for the agent's display avatar icon. */
-  readonly agentIconUrl = input<string>(DEFAULT_A2A_ICON_URL);
+  readonly agentIconUrl = input<string>(A2A_PROTOCOL_ICON_URL);
   /** Display name of the agent. */
   readonly agentName = input<string>('Agent');
   /** Whether the A2UI surface canvas is currently open. */

@@ -252,10 +252,15 @@ export class A2aChatView implements OnInit {
       parts.push({text});
     }
     for (const img of images || []) {
+      const base64Data = img.data.replace(/^data:[^;]+;base64,/, '');
       parts.push({
-        data: {
+        kind: 'file',
+        raw: base64Data,
+        mediaType: img.mimeType,
+        filename: img.name,
+        file: {
+          bytes: base64Data,
           mimeType: img.mimeType,
-          data: img.data,
           name: img.name,
         },
       });

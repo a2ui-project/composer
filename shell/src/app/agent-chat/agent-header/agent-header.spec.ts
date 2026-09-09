@@ -17,6 +17,7 @@
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 import {A2aAgentHeader} from './agent-header';
 import {A2aAgentHeaderHarness} from './test/agent-header.harness';
 
@@ -39,6 +40,7 @@ describe('A2aAgentHeader', () => {
     expect(await harness.getEndpointText()).toBe('Endpoint not configured');
     expect(await harness.getVersionText()).toBeNull();
     expect(await harness.getSessionText()).toBeNull();
+    expect(await harness.getAvatarImageSrc()).toBe(A2A_PROTOCOL_ICON_URL);
   });
 
   it('displays configured agent info and active session', async () => {
@@ -55,6 +57,7 @@ describe('A2aAgentHeader', () => {
     expect(await harness.getVersionText()).toBe('v2.1');
     expect(await harness.getEndpointText()).toBe('http://localhost:8080/agent');
     expect(await harness.getSessionText()).toContain('Session: session-12345');
+    expect(await harness.getAvatarImageSrc()).toBe('http://example.com/icon.svg');
   });
 
   it('emits event when inspector toggle button is clicked', async () => {
@@ -75,12 +78,12 @@ describe('A2aAgentHeader', () => {
     expect(spy).toHaveBeenCalled();
   });
 
-  it('falls back to default icon url on image loading error', () => {
+  it('falls back to default icon url on image loading error', async () => {
     const img = fixture.nativeElement.querySelector('.avatar-image') as HTMLImageElement;
     img.src = 'https://invalid-url.broken/avatar.png';
     img.dispatchEvent(new Event('error'));
     fixture.detectChanges();
 
-    expect(img.src).toContain('fonts.gstatic.com');
+    expect(await harness.getAvatarImageSrc()).toBe(A2A_PROTOCOL_ICON_URL);
   });
 });

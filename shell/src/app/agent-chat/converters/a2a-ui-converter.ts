@@ -14,32 +14,37 @@
  * limitations under the License.
  */
 
-import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
+import {
+  A2aMessage,
+  AgentCard,
+  TaskStatusUpdateEvent,
+  normalizeTaskState,
+} from '../../chat/a2a/a2a-types';
 import {generateUuid as uuid} from '../../utils/uuid';
 import {UiAgentInfo} from '../agent-header/types';
 import {MessageInspectorEvent} from '../message-inspector/message-inspector-event';
+import {inferMessageKind, validateMessage} from '../../chat/a2a/a2a-validators';
+import {getModalityIcon, renderBase64Data, renderMultimediaContent} from '../../chat/a2a/a2a-media';
 import {A2aStreamEventParser, type ParsedA2aStreamEvent} from './a2a-stream-event-parser.service';
 
-/**
- * Default fallback icon URL for A2A Agents.
- */
-export const DEFAULT_A2A_ICON_URL =
-  'https://fonts.gstatic.com/s/i/short-term/release/googlegsymbol/smart_toy/default/24px.svg';
+export {getModalityIcon, renderBase64Data, renderMultimediaContent};
 
 /**
  * Brand asset icon URL for A2A Protocol representations.
  */
 export const A2A_PROTOCOL_ICON_URL =
-  'https://storage.googleapis.com/gweb-developer-goog-blog-assets/images/Untitled_design.original.png';
+  'https://raw.githubusercontent.com/google-a2a/A2A/refs/heads/main/docs/assets/a2a-logo-black.svg';
 
 /**
  * Converts a raw A2A AgentCard and endpoint URL into a UI Agent Info model.
+ * Supports both v0.3 (top-level 'url') and v1.0 ('supportedInterfaces') schemas.
  */
 export function a2aCardToUiAgentInfo(card: AgentCard | null, url: string | null): UiAgentInfo {
   const samplePrompts: string[] = [];
+  const rawPrompts = card?.samplePrompts || card?.sample_prompts;
 
-  if (card?.samplePrompts && Array.isArray(card.samplePrompts) && card.samplePrompts.length > 0) {
-    samplePrompts.push(...card.samplePrompts);
+  if (rawPrompts && Array.isArray(rawPrompts) && rawPrompts.length > 0) {
+    samplePrompts.push(...rawPrompts);
   } else if (card?.skills) {
     for (const skill of card.skills) {
       if (skill.name) {
@@ -55,12 +60,19 @@ export function a2aCardToUiAgentInfo(card: AgentCard | null, url: string | null)
     );
   }
 
+  const resolvedEndpoint =
+    url ||
+    card?.url ||
+    card?.supportedInterfaces?.[0]?.url ||
+    card?.supported_interfaces?.[0]?.url ||
+    '';
+
   return {
     name: card?.name || 'A2A Agent',
     description: card?.description || 'Connected autonomous Agent-to-Agent service endpoint.',
     version: card?.version || '',
-    endpoint: url || '',
-    iconUrl: card?.iconUrl || DEFAULT_A2A_ICON_URL,
+    endpoint: resolvedEndpoint,
+    iconUrl: card?.iconUrl || card?.icon_url || A2A_PROTOCOL_ICON_URL,
     skills: card?.skills,
     capabilities: card?.capabilities,
     samplePrompts: samplePrompts.slice(0, 4),
@@ -76,6 +88,7 @@ export function createSentMessageEvent(msg: A2aMessage): MessageInspectorEvent {
     id: uuid(),
     timestamp: Date.now(),
     direction: 'sent',
+    kind: 'message',
     summary: `Sent [${msg.role}]: ${textSummary}`,
     payload: msg,
   };
@@ -89,27 +102,38 @@ export function createSentActionEvent(taskId: string, action: unknown): MessageI
     id: uuid(),
     timestamp: Date.now(),
     direction: 'sent',
+    kind: 'message',
     summary: `Sent Action (Task ${taskId || 'active'})`,
     payload: {taskId, action},
   };
 }
 
 /**
- * Creates an InspectorEvent recording an incoming streaming event chunk.
+ * Creates an InspectorEvent recording an incoming streaming event chunk with validation.
  */
 export function createReceivedEvent(event: TaskStatusUpdateEvent): MessageInspectorEvent {
-  const taskId = event.taskId || event.contextId || 'event';
-  let summary = `Received Event (${taskId})`;
+  const eventRecord = event as Record<string, unknown>;
+  const taskId =
+    event.taskId || event.task_id || event.contextId || event.context_id || event.id || 'event';
+
+  const kind = event.kind || inferMessageKind(eventRecord) || 'status-update';
+  const validationErrors = validateMessage(event);
+
+  let summary = `Received [${kind}] (${taskId})`;
   if (event.status) {
-    const st = typeof event.status === 'string' ? event.status : event.status.state || 'status';
-    summary = `Received [${st}] (${taskId})`;
+    const rawStatus =
+      typeof event.status === 'object' && event.status !== null
+        ? (event.status as Record<string, unknown>)['state']
+        : event.status;
+    const st = normalizeTaskState(rawStatus);
+    summary = `Received [${kind}: ${st}] (${taskId})`;
   } else if (event.message?.parts) {
     const hasText = event.message.parts.some(p => p.text);
     const hasData = event.message.parts.some(p => p.data || p.artifact);
     if (hasData) {
-      summary = `Received A2UI Payload (${taskId})`;
+      summary = `Received [${kind}: A2UI Payload] (${taskId})`;
     } else if (hasText) {
-      summary = `Received Text Chunk (${taskId})`;
+      summary = `Received [${kind}: Text] (${taskId})`;
     }
   }
 
@@ -117,8 +141,10 @@ export function createReceivedEvent(event: TaskStatusUpdateEvent): MessageInspec
     id: uuid(),
     timestamp: Date.now(),
     direction: 'received',
+    kind,
     summary,
     payload: event,
+    validationErrors,
   };
 }
 
@@ -131,8 +157,10 @@ export function createErrorEvent(err: unknown): MessageInspectorEvent {
     id: uuid(),
     timestamp: Date.now(),
     direction: 'error',
+    kind: 'error',
     summary: `Transport Error: ${msg}`,
     payload: err instanceof Error ? {message: err.message, stack: err.stack, name: err.name} : err,
+    validationErrors: [msg],
   };
 }
 
