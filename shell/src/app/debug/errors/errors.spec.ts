@@ -148,6 +148,22 @@ describe('Errors Component', () => {
         expect.objectContaining({invalid_property: 'components'}),
       );
     });
+
+    it('requires a literal dot after instance to extract invalid property', () => {
+      errorStream$.next({
+        id: '6',
+        timestamp: Date.now(),
+        sourceTag: '[Monaco]',
+        level: 'error',
+        message: 'Schema error: instance_components is not of a type',
+        line: 1,
+        column: 1,
+      });
+
+      expect(usageService.trackComposerError).toHaveBeenCalledWith(
+        expect.objectContaining({invalid_property: undefined}),
+      );
+    });
   });
 
   it('creates the errors component via test harness', async () => {

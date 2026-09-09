@@ -427,7 +427,6 @@ for (const config of CONFIGS) {
       const searchButton = iframe.getByRole('button', {name: 'Search Cars'});
       await expect(searchButton).toBeVisible();
       await expect(searchButton).toBeEnabled();
-      await searchButton.scrollIntoViewIfNeeded();
       await searchButton.click();
 
       // Verify Event tab notification badge

@@ -21,7 +21,10 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {DataModelChangePayload, PreviewBridgeMessageType} from 'a2ui-bridge';
 import {debounceTime, distinctUntilChanged} from 'rxjs/operators';
-import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {formatJson} from '../../utils/json';
 
@@ -42,6 +45,7 @@ export class DataModel {
 
   private lastSurfaceId = 'sample-surface';
   private lastPath: string | undefined = undefined;
+  private readonly processedEnvelopes = new WeakSet<MessageEnvelope>();
 
   readonly latestModelValue = signal<unknown>(null);
 
@@ -65,9 +69,36 @@ export class DataModel {
   });
 
   constructor() {
+    const history = this.hostComm.getHistoryBuffer?.() || [];
+    for (const env of history) {
+      this.processedEnvelopes.add(env);
+    }
+    for (let i = history.length - 1; i >= 0; i--) {
+      const env = history[i];
+      if (env.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
+        const payload = env.payload as DataModelChangePayload | undefined;
+        const updateObj = payload?.['updateDataModel'];
+        if (updateObj) {
+          if (typeof updateObj['surfaceId'] === 'string') {
+            this.lastSurfaceId = updateObj['surfaceId'];
+          }
+          if (typeof updateObj['path'] === 'string') {
+            this.lastPath = updateObj['path'];
+          }
+          this.latestModelValue.set(updateObj['value']);
+          break;
+        }
+      }
+    }
+
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(streamValue => {
-      if (streamValue?.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
-        const payload = streamValue?.payload as DataModelChangePayload | undefined;
+      if (!streamValue || this.processedEnvelopes.has(streamValue)) {
+        return;
+      }
+      this.processedEnvelopes.add(streamValue);
+
+      if (streamValue.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
+        const payload = streamValue.payload as DataModelChangePayload | undefined;
         const updateObj = payload?.['updateDataModel'];
         if (updateObj) {
           if (typeof updateObj['surfaceId'] === 'string') {
@@ -80,7 +111,9 @@ export class DataModel {
           }
 
           const cleanValue = updateObj['value'];
-          this.latestModelValue.set(cleanValue);
+          if (JSON.stringify(cleanValue) !== JSON.stringify(this.latestModelValue())) {
+            this.latestModelValue.set(cleanValue);
+          }
         }
       }
     });

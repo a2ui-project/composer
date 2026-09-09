@@ -37,6 +37,7 @@ describe('DataModel', () => {
   let mockHostComm: {
     messageStream$: Subject<MessageEnvelope>;
     sendMessage: ReturnType<typeof vi.fn>;
+    getHistoryBuffer: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -45,6 +46,7 @@ describe('DataModel', () => {
     mockHostComm = {
       messageStream$: new Subject<MessageEnvelope>(),
       sendMessage: vi.fn(),
+      getHistoryBuffer: vi.fn().mockReturnValue([]),
     };
 
     await TestBed.configureTestingModule({
@@ -269,5 +271,107 @@ describe('DataModel', () => {
         },
       },
     });
+  });
+
+  it('initializes state synchronously from message history buffer on construction', async () => {
+    const historicalEnvelope: MessageEnvelope = {
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 'history-surface',
+          path: '/test',
+          value: {fromHistory: true},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    };
+
+    mockHostComm.getHistoryBuffer.mockReturnValue([historicalEnvelope]);
+
+    const newFixture = TestBed.createComponent(DataModel);
+    newFixture.detectChanges();
+    const newHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      newFixture,
+      DataModelHarness,
+    );
+
+    const text = await newHarness.getModelText();
+    expect(JSON.parse(text)).toEqual({fromHistory: true});
+  });
+
+  it('ignores replayed envelopes from history without resetting user edits', async () => {
+    const historicalEnvelope: MessageEnvelope = {
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 'history-surface',
+          value: {location: ''},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    };
+
+    mockHostComm.getHistoryBuffer.mockReturnValue([historicalEnvelope]);
+
+    const newFixture = TestBed.createComponent(DataModel);
+    newFixture.detectChanges();
+    const newHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      newFixture,
+      DataModelHarness,
+    );
+
+    await newHarness.setModelText(JSON.stringify({location: 'LAX'}));
+    TestBed.tick();
+    newFixture.detectChanges();
+
+    // Replay the historical envelope via messageStream$ (mimicking ReplaySubject)
+    mockHostComm.messageStream$.next(historicalEnvelope);
+    TestBed.tick();
+    newFixture.detectChanges();
+
+    const text = await newHarness.getModelText();
+    expect(JSON.parse(text)).toEqual({location: 'LAX'});
+  });
+
+  it('retains user edits when incoming message has identical data model value', async () => {
+    const initialEnvelope: MessageEnvelope = {
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 'surface-1',
+          value: {count: 1},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    };
+
+    mockHostComm.messageStream$.next(initialEnvelope);
+    TestBed.tick();
+    fixture.detectChanges();
+
+    await harness.setModelText(JSON.stringify({count: 1, userTyping: true}));
+    TestBed.tick();
+    fixture.detectChanges();
+
+    // Incoming message with identical value as latestModelValue
+    mockHostComm.messageStream$.next({
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 'surface-1',
+          value: {count: 1},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+    TestBed.tick();
+    fixture.detectChanges();
+
+    const text = await harness.getModelText();
+    expect(JSON.parse(text)).toEqual({count: 1, userTyping: true});
   });
 });

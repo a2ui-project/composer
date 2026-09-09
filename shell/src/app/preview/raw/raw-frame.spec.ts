@@ -302,7 +302,10 @@ describe('RawFrame JSON Source Editor View', () => {
   let chatStateMock: MockChatState;
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
   let messageStreamSubject: Subject<unknown>;
-  let errorLoggerMock: {error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>};
+  let errorLoggerMock: {
+    error: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
@@ -914,6 +917,7 @@ describe('RawFrame JSON Source Editor View', () => {
       vi.advanceTimersByTime(15000);
 
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
     });
 
     it('clears watchdog timer when render completion message arrives', async () => {
@@ -1018,6 +1022,7 @@ describe('RawFrame JSON Source Editor View', () => {
       component.TEST_ONLY.startWatchdog();
       vi.advanceTimersByTime(15000);
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
     });
 
     it('suspends watchdog when document is hidden', async () => {
@@ -1028,6 +1033,10 @@ describe('RawFrame JSON Source Editor View', () => {
       component.TEST_ONLY.startWatchdog();
       vi.advanceTimersByTime(15000);
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+
+      // Reset
+      Object.defineProperty(document, 'hidden', {value: false, configurable: true});
     });
   });
 
