@@ -17,7 +17,7 @@
 import {AgentCard, TaskStatusUpdateEvent} from './a2a-types';
 
 /**
- * Known A2A v1.0 SCREAMING_SNAKE_CASE task states (from protobuf enum mapping).
+ * Known A2A v1.0 task states (from protobuf enum mapping).
  */
 export const V1_TASK_STATES: ReadonlySet<string> = new Set([
   'TASK_STATE_UNSPECIFIED',
@@ -33,7 +33,7 @@ export const V1_TASK_STATES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Known A2A v0.3 lowercase task states.
+ * Known A2A v0.3 task states.
  */
 export const V03_TASK_STATES: ReadonlySet<string> = new Set([
   'unknown',

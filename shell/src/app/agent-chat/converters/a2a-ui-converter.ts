@@ -119,7 +119,7 @@ export function createReceivedEvent(event: TaskStatusUpdateEvent): MessageInspec
   const kind = event.kind || inferMessageKind(eventRecord) || 'status-update';
   const validationErrors = validateMessage(event);
 
-  let summary = `Received [${kind}] (${taskId})`;
+  let summary: string;
   if (event.status) {
     const rawStatus =
       typeof event.status === 'object' && event.status !== null
@@ -127,14 +127,12 @@ export function createReceivedEvent(event: TaskStatusUpdateEvent): MessageInspec
         : event.status;
     const st = normalizeTaskState(rawStatus);
     summary = `Received [${kind}: ${st}] (${taskId})`;
-  } else if (event.message?.parts) {
-    const hasText = event.message.parts.some(p => p.text);
-    const hasData = event.message.parts.some(p => p.data || p.artifact);
-    if (hasData) {
-      summary = `Received [${kind}: A2UI Payload] (${taskId})`;
-    } else if (hasText) {
-      summary = `Received [${kind}: Text] (${taskId})`;
-    }
+  } else if (event.message?.parts?.some(p => p.data || p.artifact)) {
+    summary = `Received [${kind}: A2UI Payload] (${taskId})`;
+  } else if (event.message?.parts?.some(p => p.text)) {
+    summary = `Received [${kind}: Text] (${taskId})`;
+  } else {
+    summary = `Received [${kind}] (${taskId})`;
   }
 
   return {
