@@ -46,6 +46,11 @@
       <mat-icon class="empty-icon">auto_awesome_mosaic</mat-icon>
       <h3 class="empty-title">No Demos Available</h3>
       <p class="empty-subtitle">This renderer doesn't provide demos yet.</p>
+      @if (resolvedRendererUrl(); as rendererUrl) {
+        <p class="empty-renderer">
+          Answered by <span class="empty-renderer-url">{{ rendererUrl }}</span>
+        </p>
+      }
     </div>
   } @else {
     <div class="demos-wall">

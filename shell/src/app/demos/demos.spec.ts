@@ -53,7 +53,9 @@ class MockHostCommunication {
 
 class MockStartupResolution {
   readonly resolvedUrl = signal<string | null>('http://localhost:3000/renderer');
-  getResolvedRendererUrl = vi.fn(() => 'http://localhost:3000/renderer');
+  // Delegates to the signal the way the real service does, so a test can move the
+  // resolved renderer by setting one thing.
+  getResolvedRendererUrl = vi.fn((): string | null => this.resolvedUrl());
 }
 
 class MockChatState {
@@ -288,6 +290,7 @@ describe('Demos Component', () => {
   let fixture: ComponentFixture<Demos>;
   let harness: DemosHarness;
   let demosCatalogMock: MockDemosCatalog;
+  let startupResolutionMock: MockStartupResolution;
   let originalIntersectionObserver: typeof IntersectionObserver;
   let originalResizeObserver: typeof ResizeObserver;
 
@@ -335,6 +338,7 @@ describe('Demos Component', () => {
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, DemosHarness);
 
     demosCatalogMock = TestBed.inject(DemosCatalog) as unknown as MockDemosCatalog;
+    startupResolutionMock = TestBed.inject(StartupResolution) as unknown as MockStartupResolution;
   });
 
   afterEach(() => {
@@ -456,6 +460,30 @@ describe('Demos Component', () => {
 
     expect(await harness.getCardCount()).toBe(0);
     expect(await harness.getEmptyStateSubtitleText()).toContain("doesn't provide demos yet");
+  });
+
+  it('names the renderer that answered in the empty state', async () => {
+    // Which renderer replied is the whole diagnosis when the wall is empty: a
+    // shell talking to a renderer that predates `getDemos` is answered with an
+    // empty list and looks identical to a renderer that simply ships no demos.
+    startupResolutionMock.resolvedUrl.set('https://example.test/composer/pr/1/samples/ng/');
+    demosCatalogMock.demos.set([]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(await harness.getEmptyStateRendererUrlText()).toBe(
+      'https://example.test/composer/pr/1/samples/ng/',
+    );
+  });
+
+  it('shows the empty state without a renderer line when no URL resolved', async () => {
+    startupResolutionMock.resolvedUrl.set(null);
+    demosCatalogMock.demos.set([]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(await harness.getEmptyStateSubtitleText()).toContain("doesn't provide demos yet");
+    expect(await harness.getEmptyStateRendererUrlText()).toBeNull();
   });
 
   it('never mounts more demo cards than the cap, however many are in range', async () => {

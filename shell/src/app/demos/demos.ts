@@ -199,6 +199,26 @@ export class Demos implements OnInit, OnDestroy {
    */
   protected readonly isResolving = computed(() => this.loadingDemos() || this.demos() === null);
 
+  /**
+   * Renderer URL the bridge is actually talking to, or null when startup has not
+   * resolved one.
+   *
+   * The empty state reports it because "this renderer has no demos" and "a
+   * different renderer than you think answered" are indistinguishable to a reader
+   * otherwise — which is exactly how a preview whose shell is new but whose
+   * renderers are the previously deployed build reads as a feature that does not
+   * work at all. `getResolvedRendererUrl` is the same source
+   * `HostCommunication.resolveExpectedRendererOrigin` checks frame traffic
+   * against, so it names the renderer that actually replied rather than a
+   * configured intent.
+   *
+   * Empty and whitespace-only values collapse to null so the empty state shows
+   * its message alone rather than a dangling label or the string "null".
+   */
+  protected readonly resolvedRendererUrl = computed(
+    () => this.startupResolution.getResolvedRendererUrl()?.trim() || null,
+  );
+
   private readonly coordinatorHost = viewChild.required<ElementRef<HTMLElement>>('coordinatorHost');
 
   private readonly wallScroller = viewChild<ElementRef<HTMLElement>>('wallScroller');
