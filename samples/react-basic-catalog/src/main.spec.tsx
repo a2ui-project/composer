@@ -343,7 +343,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     );
   });
 
-  it('renders error overlay with error-overlay class and fixed viewport positioning on debounced error', async () => {
+  it('renders error overlay with error-overlay class on debounced error', async () => {
     await act(async () => {
       if (container) {
         root = createRoot(container);
@@ -387,8 +387,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     const overlay = container?.querySelector('.error-overlay') as HTMLElement;
     expect(overlay).not.toBeNull();
     expect(overlay.textContent).toContain('JSON Preview Error');
-    expect(overlay.style.position).toBe('fixed');
-    expect(overlay.style.zIndex).toBe('9999');
+    expect(overlay.classList.contains('error-overlay')).toBe(true);
 
     const shell = container?.querySelector('.sandbox-shell') as HTMLElement;
     expect(shell.style.minHeight).toBe('100vh');

@@ -110,7 +110,7 @@ for (const config of CONFIGS) {
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
-      await page.locator('.raw-messages-container .message-envelope').first().hover({trial: true});
+      await expect(page.locator('.raw-messages-container')).toBeVisible();
       const envelopes = page.locator(
         '.raw-messages-container [data-testid="raw-message-envelope"], .raw-messages-container [data-testid="llm-log-panel"]',
       );
@@ -156,8 +156,10 @@ for (const config of CONFIGS) {
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
       const pickupInput = config.pickupDateLocator(iframe);
       await expect(pickupInput).toBeVisible();
+      await expect(pickupInput).toBeEnabled();
 
       await config.fillDate(pickupInput, '2026-05-30');
+      await pickupInput.dispatchEvent('change');
       await pickupInput.blur();
 
       await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
@@ -180,18 +182,17 @@ for (const config of CONFIGS) {
       const dataModelTextarea = page.locator('.data-model-field textarea');
 
       await expect(dataModelTextarea).not.toHaveValue(/^$/);
-
-      // Wait for initial DATA_MODEL_CHANGE sync from iframe to complete to avoid race condition
-      await page.waitForTimeout(1000);
+      await expect(dataModelTextarea).toHaveValue(/"location"/);
 
       const currentValue = await dataModelTextarea.inputValue();
       const parsedModel = JSON.parse(currentValue);
       parsedModel.booking.location = 'LAX';
 
       await dataModelTextarea.fill(JSON.stringify(parsedModel, null, 2));
-      await page.waitForTimeout(1000);
 
       const locationInput = config.pickupLocationLocator(iframe);
+      await expect(locationInput).toBeVisible();
+      await expect(locationInput).toBeEnabled();
       await expect(locationInput).toHaveValue('LAX');
     });
 
@@ -228,11 +229,11 @@ for (const config of CONFIGS) {
           model.setValue(val);
         }
       }, updatedRawJson);
-      await page.waitForTimeout(1000);
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       const searchButton = iframe.getByRole('button', {name: 'Search Rental Cars'});
       await expect(searchButton).toBeVisible();
+      await expect(searchButton).toBeEnabled();
     });
 
     test('captures telemetry actions and events updates upon search form click', async ({page}) => {
@@ -244,11 +245,17 @@ for (const config of CONFIGS) {
 
       const pickupInput = config.pickupDateLocator(iframe);
       await expect(pickupInput).toBeVisible();
+      await expect(pickupInput).toBeEnabled();
+
       await config.fillDate(pickupInput, '2026-05-05');
+      await pickupInput.dispatchEvent('change');
       await pickupInput.blur();
+      await expect(pickupInput).toHaveValue('2026-05-05');
 
       const searchButton = iframe.getByRole('button', {name: 'Search Cars'});
       await expect(searchButton).toBeVisible();
+      await expect(searchButton).toBeEnabled();
+      await searchButton.scrollIntoViewIfNeeded();
       await searchButton.click();
 
       // Verify Event tab notification badge
@@ -258,6 +265,7 @@ for (const config of CONFIGS) {
 
       // Verify event table details in Events tab
       await eventsTab.click();
+      await expect(page.locator('.events-container')).toBeVisible();
       await expect(page.locator('.events-container table tr.element-row')).toBeVisible();
       const eventRow = page.locator('.events-container table tr.element-row').first();
       await expect(eventRow).toBeVisible();
@@ -270,11 +278,11 @@ for (const config of CONFIGS) {
       // Verify SEND_TO_SERVER in Raw Messages tab
       await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
       await expect(page.locator('.raw-messages-container')).toBeVisible();
-      await page.locator('.raw-messages-container .message-envelope').first().hover({trial: true});
-      const latestEnvelope = page
-        .locator(
-          '.raw-messages-container [data-testid="raw-message-envelope"], .raw-messages-container [data-testid="llm-log-panel"]',
-        )
+      const envelopes = page.locator(
+        '.raw-messages-container [data-testid="raw-message-envelope"], .raw-messages-container [data-testid="llm-log-panel"]',
+      );
+      await expect.poll(async () => envelopes.count()).toBeGreaterThanOrEqual(1);
+      const latestEnvelope = envelopes
         .filter({hasText: PreviewBridgeMessageType.SEND_TO_SERVER})
         .first();
       await expect(latestEnvelope.locator('.message-type')).toHaveText(
