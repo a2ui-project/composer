@@ -298,7 +298,7 @@ export class RawFrame {
 
     this.watchdogTimer = setTimeout(() => {
       if (!this.hostCommunication.isRendererReady()) {
-        this.errorLogger.error({
+        this.errorLogger.warn({
           sourceTag: '[Previewer]',
           message: 'Preview frame did not respond within 15 seconds.',
         });

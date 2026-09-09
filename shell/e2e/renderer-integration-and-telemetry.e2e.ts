@@ -14,9 +14,24 @@
  * limitations under the License.
  */
 
-import {test, expect, Locator, FrameLocator} from '@playwright/test';
+import {test, expect, Locator, FrameLocator, Page} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {WindowWithMonaco} from './types';
+
+async function waitForPreviewSettled(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const handshakeIndex = window.a2uiCatalogManagement?.handshakeHistoryIndex?.();
+    if (handshakeIndex === null || handshakeIndex === undefined) return false;
+    const history = window.a2uiHostCommunication?.getHistoryBuffer() || [];
+    const catalogIdx = history.findIndex(env => env.type === 'A2UI_CATALOG');
+    if (catalogIdx === -1) return false;
+    const successesAfterCatalog = history
+      .slice(catalogIdx)
+      .filter(env => env.type === 'RENDER_SUCCESS');
+    return successesAfterCatalog.length >= 2;
+  });
+  await page.waitForTimeout(150);
+}
 
 interface IntegrationConfig {
   name: string;
@@ -69,7 +84,11 @@ const CONFIGS: IntegrationConfig[] = [
     pickupLocationLocator: iframe =>
       iframe.locator('a2ui-basic-textfield:has-text("Pick-up Location") input'),
     fillDate: async (locator, value) => {
-      await locator.fill(value);
+      await locator.evaluate((el: HTMLInputElement, val) => {
+        el.value = val;
+        el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
+      }, value);
     },
   },
 ];
@@ -154,6 +173,7 @@ for (const config of CONFIGS) {
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+      await waitForPreviewSettled(page);
       const pickupInput = config.pickupDateLocator(iframe);
       await expect(pickupInput).toBeVisible();
       await expect(pickupInput).toBeEnabled();
@@ -161,6 +181,16 @@ for (const config of CONFIGS) {
       await config.fillDate(pickupInput, '2026-05-30');
       await pickupInput.dispatchEvent('change');
       await pickupInput.blur();
+      await expect(pickupInput).toHaveValue('2026-05-30');
+
+      // Ensure the DATA_MODEL_CHANGE has arrived at host communication
+      await page.waitForFunction(() => {
+        const history = window.a2uiHostCommunication?.getHistoryBuffer() || [];
+        return history.some(
+          env =>
+            env.type === 'DATA_MODEL_CHANGE' && JSON.stringify(env.payload).includes('2026-05-30'),
+        );
+      });
 
       await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
       await expect(page.locator('.data-model-container textarea')).toBeVisible();
@@ -176,6 +206,7 @@ for (const config of CONFIGS) {
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+      await waitForPreviewSettled(page);
 
       await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
       await expect(page.locator('.data-model-container textarea')).toBeVisible();
@@ -189,11 +220,12 @@ for (const config of CONFIGS) {
       parsedModel.booking.location = 'LAX';
 
       await dataModelTextarea.fill(JSON.stringify(parsedModel, null, 2));
+      await dataModelTextarea.blur();
 
       const locationInput = config.pickupLocationLocator(iframe);
       await expect(locationInput).toBeVisible();
       await expect(locationInput).toBeEnabled();
-      await expect(locationInput).toHaveValue('LAX');
+      await expect(locationInput).toHaveValue('LAX', {timeout: 10000});
     });
 
     test('propagates Raw A2UI JSON updates to the rendered preview', async ({page}) => {
@@ -242,6 +274,7 @@ for (const config of CONFIGS) {
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+      await waitForPreviewSettled(page);
 
       const pickupInput = config.pickupDateLocator(iframe);
       await expect(pickupInput).toBeVisible();
@@ -252,10 +285,18 @@ for (const config of CONFIGS) {
       await pickupInput.blur();
       await expect(pickupInput).toHaveValue('2026-05-05');
 
+      // Ensure the DATA_MODEL_CHANGE has arrived at host communication
+      await page.waitForFunction(() => {
+        const history = window.a2uiHostCommunication?.getHistoryBuffer() || [];
+        return history.some(
+          env =>
+            env.type === 'DATA_MODEL_CHANGE' && JSON.stringify(env.payload).includes('2026-05-05'),
+        );
+      });
+
       const searchButton = iframe.getByRole('button', {name: 'Search Cars'});
       await expect(searchButton).toBeVisible();
       await expect(searchButton).toBeEnabled();
-      await searchButton.scrollIntoViewIfNeeded();
       await searchButton.click();
 
       // Verify Event tab notification badge

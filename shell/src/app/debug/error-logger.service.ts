@@ -231,7 +231,8 @@ export class ErrorLogger {
     const sourceTag = '[Shell]';
 
     if (isErrorLike(arg1)) {
-      message = arg1.message;
+      const name = arg1.name || 'Error';
+      message = arg1.message ? `${name}: ${arg1.message}` : name;
       stack = arg1.stack;
     } else if (typeof arg1 === 'string') {
       message = arg1;
