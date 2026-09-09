@@ -158,3 +158,24 @@
   font-size: 0.9rem;
   opacity: 0.8;
 }
+
+/*
+ * Which renderer answered, under the empty state's own message.
+ *
+ * Deliberately quieter than the subtitle above it: this is a diagnostic hint for
+ * a reader wondering *why* the wall is empty, not a second headline. The URL is
+ * arbitrary-length and untrusted by the layout, so it wraps mid-token —
+ * `overflow-wrap: anywhere` rather than `break-word`, which will not break a long
+ * unbroken path segment and would push the centred column wider than the page.
+ */
+.empty-renderer {
+  margin: 12px 0 0;
+  max-width: 100%;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.empty-renderer-url {
+  font-family: 'Roboto Mono', Consolas, monospace;
+  overflow-wrap: anywhere;
+}

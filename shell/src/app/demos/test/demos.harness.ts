@@ -29,6 +29,7 @@ export class DemosHarness extends ComponentHarness {
   );
   private readonly getCards = this.locatorForAll('a2ui-composer-demo-card');
   private readonly getEmptySubtitle = this.locatorForOptional('.empty-subtitle');
+  private readonly getEmptyRendererUrl = this.locatorForOptional('.empty-renderer-url');
   private readonly getLoading = this.locatorForOptional('.demos-loading');
   private readonly getMountedFrames = this.locatorForAll(
     'a2ui-composer-demo-card iframe.demo-card-frame',
@@ -65,6 +66,15 @@ export class DemosHarness extends ComponentHarness {
   async getEmptyStateSubtitleText(): Promise<string | null> {
     const subtitle = await this.getEmptySubtitle();
     return subtitle ? subtitle.text() : null;
+  }
+
+  /**
+   * Retrieves the renderer URL reported by the empty state, or null when the
+   * empty state is not showing one.
+   */
+  async getEmptyStateRendererUrlText(): Promise<string | null> {
+    const url = await this.getEmptyRendererUrl();
+    return url ? url.text() : null;
   }
 
   /**
