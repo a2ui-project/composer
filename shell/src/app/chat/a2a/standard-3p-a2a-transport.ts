@@ -101,9 +101,9 @@ export class Standard3pA2aTransport implements A2aTransport {
           const data = (await response.json()) as ({agentCard?: AgentCard} & AgentCard) | null;
           const card = data?.agentCard || data;
           if (card && typeof card === 'object' && typeof card.name === 'string') {
-            let cardUrl = typeof card.url === 'string' ? card.url.trim() : '';
+            let cardUrl = typeof card['url'] === 'string' ? card['url'].trim() : '';
             if (!cardUrl) {
-              const ifaces = (card.supportedInterfaces || card.supported_interfaces) as
+              const ifaces = (card['supportedInterfaces'] || card['supported_interfaces']) as
                 Array<Record<string, unknown>> | undefined;
               if (Array.isArray(ifaces) && ifaces.length > 0) {
                 const first = ifaces[0];

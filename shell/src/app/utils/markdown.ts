@@ -99,6 +99,6 @@ export function renderMarkdown(markdown: string): string {
   const rawHtml = marked.parse(markdown, {async: false}) as string;
   return DOMPurify.sanitize(rawHtml, {
     ADD_ATTR: ['target', 'rel', 'controls'],
-    ADD_DATA_URI_TAGS: ['img', 'audio', 'video', 'source'],
+    ADD_DATA_URI_TAGS: ['img', 'audio', 'video', 'source', 'a'],
   });
 }

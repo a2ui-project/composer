@@ -147,10 +147,12 @@ export function validateAgentCard(cardData: Record<string, unknown> | AgentCard 
     const fieldName = camel in raw ? camel : snake in raw ? snake : null;
     if (fieldName) {
       const val = raw[fieldName];
-      if (!Array.isArray(val)) {
-        errors.push(`Field '${fieldName}' must be an array of strings.`);
-      } else if (!val.every(item => typeof item === 'string')) {
-        errors.push(`All items in '${fieldName}' must be strings.`);
+      if (val !== undefined && val !== null) {
+        if (!Array.isArray(val)) {
+          errors.push(`Field '${fieldName}' must be an array of strings.`);
+        } else if (!val.every(item => typeof item === 'string')) {
+          errors.push(`All items in '${fieldName}' must be strings.`);
+        }
       }
     }
   }
