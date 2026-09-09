@@ -66,29 +66,9 @@ export function App() {
       )}
 
       {debouncedError && (
-        <div
-          className="error-overlay"
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            inset: 0,
-            zIndex: 9999,
-            backgroundColor:
-              'color-mix(in srgb, var(--a2ui-color-surface, canvas) 95%, transparent)',
-            color: 'var(--a2ui-color-error, #d32f2f)',
-            padding: '24px',
-            fontFamily: 'monospace',
-            overflow: 'auto',
-            boxSizing: 'border-box',
-          }}
-        >
+        <div className="error-overlay">
           <h3>JSON Preview Error</h3>
-          <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>
-            {debouncedError.message || String(debouncedError)}
-          </pre>
+          <pre>{debouncedError.message || String(debouncedError)}</pre>
         </div>
       )}
     </main>
