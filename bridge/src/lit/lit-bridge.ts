@@ -214,36 +214,30 @@ export class A2uiSandboxRoot extends LitElement {
     }
   }
 
+  private renderErrorOverlay(): TemplateResult | '' {
+    if (!this.debouncedError) {
+      return '';
+    }
+    return html`
+      <div class="error-overlay">
+        <h3>JSON Preview Error</h3>
+        <pre>${this.debouncedError.message || String(this.debouncedError)}</pre>
+      </div>
+    `;
+  }
+
   render(): TemplateResult {
     if (!this.surface) {
       return html`
         <p style="color: #666; padding: 24px; font-family: sans-serif; text-align: center;">
           A2UI Lit Sandbox active. Waiting for RENDER_A2UI...
         </p>
-        ${
-          this.debouncedError
-            ? html`
-                <div class="error-overlay">
-                  <h3>JSON Preview Error</h3>
-                  <pre>${this.debouncedError.message || String(this.debouncedError)}</pre>
-                </div>
-              `
-            : ''
-        }
+        ${this.renderErrorOverlay()}
       `;
     }
     return html`<main style="position: relative; width: 100%; height: 100%;">
       <a2ui-surface .surface=${this.surface}></a2ui-surface>
-      ${
-        this.debouncedError
-          ? html`
-              <div class="error-overlay">
-                <h3>JSON Preview Error</h3>
-                <pre>${this.debouncedError.message || String(this.debouncedError)}</pre>
-              </div>
-            `
-          : ''
-      }
+      ${this.renderErrorOverlay()}
     </main>`;
   }
 }
