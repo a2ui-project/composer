@@ -174,6 +174,8 @@ export class A2aChatView implements OnInit {
     this.connectionError.set(null);
 
     try {
+      // Configure backend mode and tenant ID prior to fetching the agent card so
+      // that the delegating transport routes the discovery request to the selected transport.
       if (backendMode) {
         this.configProvider.setA2aBackendMode(backendMode);
       }
