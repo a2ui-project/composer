@@ -24,10 +24,7 @@ import {generateUuid as uuid} from '../../utils/uuid';
 import {UiAgentInfo} from '../agent-header/types';
 import {MessageInspectorEvent} from '../message-inspector/message-inspector-event';
 import {inferMessageKind, validateMessage} from '../../chat/a2a/a2a-validators';
-import {getModalityIcon, renderBase64Data, renderMultimediaContent} from '../../chat/a2a/a2a-media';
 import {A2aStreamEventParser, type ParsedA2aStreamEvent} from './a2a-stream-event-parser.service';
-
-export {getModalityIcon, renderBase64Data, renderMultimediaContent};
 
 /**
  * Brand asset icon URL for A2A Protocol representations.
