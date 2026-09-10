@@ -44,7 +44,7 @@
     "react-dom": "19.2.8",
     "typescript": "6.0.3",
     "typescript-eslint": "8.65.0",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   },
   "peerDependencies": {
     "@angular/core": "22.0.7",
