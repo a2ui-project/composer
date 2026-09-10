@@ -788,19 +788,23 @@ describe('RawFrame JSON Source Editor View', () => {
         expect.objectContaining({
           message: 'Preview frame did not respond within 15 seconds.',
           sourceTag: '[Previewer]',
-          level: 'warn',
         }),
       );
     });
 
-    it('ignores watchdog trigger when renderer becomes ready', async () => {
+    it('logs IFRAME_UNRESPONSIVE_ERROR when renderer is ready but watchdog timeout fires', async () => {
       vi.useFakeTimers();
       const {component} = await setup(false);
       TestBed.inject(HostCommunication).isRendererReady.mockReturnValue(true);
       component.TEST_ONLY.startWatchdog();
 
       vi.advanceTimersByTime(15000);
-      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Preview frame failed to process payload within 15 seconds.',
+          sourceTag: '[Previewer]',
+        }),
+      );
     });
 
     it('clears watchdog timer when render completion message arrives', async () => {

@@ -237,7 +237,11 @@ export class RawFrame {
         this.errorLogger.error({
           sourceTag: '[Previewer]',
           message: 'Preview frame did not respond within 15 seconds.',
-          level: 'warn',
+        });
+      } else {
+        this.errorLogger.error({
+          sourceTag: '[Previewer]',
+          message: 'Preview frame failed to process payload within 15 seconds.',
         });
       }
     }, this.WATCHDOG_TIMEOUT_MS);
