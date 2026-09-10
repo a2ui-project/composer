@@ -24,10 +24,14 @@ export interface MessageInspectorEvent {
   timestamp: Date | number;
   /** Transport direction indicating whether the event was sent, received, or errored. */
   direction: 'sent' | 'received' | 'error';
+  /** Detected A2A protocol event kind ('task' | 'status-update' | 'artifact-update' | 'message'). */
+  kind?: string;
   /** Human-readable headline summarizing the event type and method. */
   summary: string;
   /** Full raw JSON payload or error object associated with the event. */
   payload: unknown;
+  /** Protocol compliance validation error strings, if any. */
+  validationErrors?: string[];
 }
 
 /**

@@ -195,4 +195,239 @@ describe('A2aStreamEventParser', () => {
     };
     expect(parser.parse(stringStatusEvent).isCompleted).toBe(true);
   });
+
+  it('recognizes v1.0 proto enum strings and integers as terminal states', () => {
+    expect(
+      parser.parse({
+        taskId: 'task-v1-1',
+        status: {state: 'TASK_STATE_COMPLETED'},
+      }).isCompleted,
+    ).toBe(true);
+
+    expect(
+      parser.parse({
+        taskId: 'task-v1-2',
+        status: {state: 3}, // 3 is completed
+      }).isCompleted,
+    ).toBe(true);
+
+    expect(
+      parser.parse({
+        taskId: 'task-v1-3',
+        status: {state: 'TASK_STATE_FAILED'},
+      }).isCompleted,
+    ).toBe(true);
+
+    expect(
+      parser.parse({
+        taskId: 'task-v1-4',
+        status: {state: 1}, // 1 is working -> not terminal
+      }).isCompleted,
+    ).toBe(false);
+  });
+
+  it('unwraps protobuf StreamResponse oneofs (task, statusUpdate, artifactUpdate, message)', () => {
+    const taskEvent = {
+      taskId: 'env-task-1',
+      contextId: 'env-ctx-1',
+      task: {
+        id: 'nested-task-1',
+        status: {state: 'working'},
+      },
+    };
+    const parsedTask = parser.parse(taskEvent as unknown as TaskStatusUpdateEvent);
+    expect(parsedTask.taskId).toBe('nested-task-1');
+    expect(parsedTask.contextId).toBe('env-ctx-1');
+    expect(parsedTask.isCompleted).toBe(false);
+
+    const statusUpdateEvent = {
+      taskId: 'env-task-2',
+      statusUpdate: {
+        status: {state: 'completed'},
+      },
+    };
+    const parsedStatus = parser.parse(statusUpdateEvent as unknown as TaskStatusUpdateEvent);
+    expect(parsedStatus.taskId).toBe('env-task-2');
+    expect(parsedStatus.isCompleted).toBe(true);
+
+    const artifactUpdateEvent = {
+      taskId: 'env-task-3',
+      artifactUpdate: {
+        artifact: {
+          parts: [{data: [{createSurface: {surfaceId: 'surf-art-oneof'}}]}],
+        },
+      },
+    };
+    const parsedArt = parser.parse(artifactUpdateEvent as unknown as TaskStatusUpdateEvent);
+    expect(parsedArt.taskId).toBe('env-task-3');
+    expect(parsedArt.a2uiItems.length).toBe(1);
+    expect(parsedArt.a2uiItems[0].createSurface?.surfaceId).toBe('surf-art-oneof');
+
+    const messageEvent = {
+      taskId: 'env-task-4',
+      message: {
+        role: 'agent',
+        parts: [{text: 'Oneof message'}],
+      },
+    };
+    const parsedMsg = parser.parse(messageEvent as unknown as TaskStatusUpdateEvent);
+    expect(parsedMsg.textChunk).toBe('Oneof message');
+  });
+
+  it('handles flat v1.0 and nested v0.3 multimedia parts', () => {
+    // Flat v1.0 url
+    const v1UrlEvent: TaskStatusUpdateEvent = {
+      taskId: 'media-1',
+      message: {
+        role: 'agent',
+        parts: [
+          {
+            url: 'https://example.com/photo.png',
+            mediaType: 'image/png',
+          },
+        ],
+      },
+    };
+    const parsedUrl = parser.parse(v1UrlEvent);
+    expect(parsedUrl.textChunk).toContain('<img src="https://example.com/photo.png"');
+    expect(parsedUrl.textChunk).toContain('class="media-image"');
+
+    // Flat v1.0 raw base64
+    const v1RawEvent: TaskStatusUpdateEvent = {
+      taskId: 'media-2',
+      message: {
+        role: 'agent',
+        parts: [
+          {
+            raw: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            media_type: 'image/png',
+            filename: 'pixel.png',
+          },
+        ],
+      },
+    };
+    const parsedRaw = parser.parse(v1RawEvent);
+    expect(parsedRaw.textChunk).toContain('data:image/png;base64,');
+    expect(parsedRaw.textChunk).toContain('alt="pixel.png"');
+
+    // v0.3 file part with bytes
+    const v03FileBytesEvent: TaskStatusUpdateEvent = {
+      taskId: 'media-3',
+      message: {
+        role: 'agent',
+        parts: [
+          {
+            file: {
+              bytes: 'AQID',
+              mimeType: 'audio/wav',
+              name: 'sound.wav',
+            },
+          },
+        ],
+      },
+    };
+    const parsedAudio = parser.parse(v03FileBytesEvent);
+    expect(parsedAudio.textChunk).toContain('<audio controls');
+    expect(parsedAudio.textChunk).toContain('data:audio/wav;base64,AQID');
+
+    // v0.3 file part with uri
+    const v03FileUriEvent: TaskStatusUpdateEvent = {
+      taskId: 'media-4',
+      message: {
+        role: 'agent',
+        parts: [
+          {
+            file: {
+              uri: 'https://example.com/video.mp4',
+              mimeType: 'video/mp4',
+            },
+          },
+        ],
+      },
+    };
+    const parsedVideo = parser.parse(v03FileUriEvent);
+    expect(parsedVideo.textChunk).toContain('<video controls');
+    expect(parsedVideo.textChunk).toContain('src="https://example.com/video.mp4"');
+  });
+
+  it('processes plural artifacts array', () => {
+    const event = {
+      taskId: 'task-arts',
+      artifacts: [
+        {
+          parts: [{data: [{createSurface: {surfaceId: 'art-1'}}]}],
+        },
+        {
+          parts: [{data: [{createSurface: {surfaceId: 'art-2'}}]}],
+        },
+      ],
+    };
+
+    const parsed = parser.parse(event as unknown as TaskStatusUpdateEvent);
+    expect(parsed.a2uiItems.length).toBe(2);
+    expect(parsed.a2uiItems[0].createSurface?.surfaceId).toBe('art-1');
+    expect(parsed.a2uiItems[1].createSurface?.surfaceId).toBe('art-2');
+  });
+
+  it('provides status text fallback when message is empty', () => {
+    const statusEvent: TaskStatusUpdateEvent = {
+      taskId: 'task-status-fallback',
+      status: {
+        state: 'working',
+        message: {parts: [{text: 'Working on your request...'}]},
+      },
+    };
+
+    const parsed = parser.parse(statusEvent);
+    expect(parsed.textChunk).toBe('Working on your request...');
+
+    // When status has no message but has a state, textChunk remains undefined so status transitions are not rendered in chat
+    const emptyStatusEvent: TaskStatusUpdateEvent = {
+      taskId: 'task-status-empty',
+      status: {
+        state: 'TASK_STATE_WORKING',
+      },
+    };
+    const parsedEmpty = parser.parse(emptyStatusEvent);
+    expect(parsedEmpty.textChunk).toBeUndefined();
+    expect(parsedEmpty.statusState).toBe('working');
+  });
+
+  it('safely handles null, undefined, or primitive events', () => {
+    const parsedNull = parser.parse(null as unknown as TaskStatusUpdateEvent);
+    expect(parsedNull.isCompleted).toBe(false);
+    expect(parsedNull.a2uiItems).toEqual([]);
+
+    const parsedString = parser.parse('invalid' as unknown as TaskStatusUpdateEvent);
+    expect(parsedString.isCompleted).toBe(false);
+    expect(parsedString.a2uiItems).toEqual([]);
+  });
+
+  it('detects completion from final or isCompleted flags', () => {
+    const finalEvent = parser.parse({final: true});
+    expect(finalEvent.isCompleted).toBe(true);
+
+    const isCompletedEvent = parser.parse({isCompleted: true});
+    expect(isCompletedEvent.isCompleted).toBe(true);
+
+    const terminalStatusEvent = parser.parse({
+      status: {state: 'TASK_STATE_COMPLETED'},
+    });
+    expect(terminalStatusEvent.isCompleted).toBe(true);
+  });
+
+  it('handles raw bytes file part', () => {
+    const rawEvent = parser.parse({
+      message: {
+        parts: [
+          {
+            raw: 'SGVsbG8gV29ybGQ=',
+            mediaType: 'text/plain',
+            filename: 'hello.txt',
+          },
+        ],
+      },
+    });
+    expect(rawEvent.textChunk).toContain('data:text/plain;base64,SGVsbG8gV29ybGQ=');
+  });
 });

@@ -126,19 +126,34 @@
                     <mat-icon class="dir-icon">arrow_upward</mat-icon>
                     <span>SENT</span>
                   </span>
-                  <span class="type-tag">message</span>
+                  <span class="type-tag kind-chip kind-chip-message">{{
+                    event.kind || 'message'
+                  }}</span>
                 } @else if (event.direction === 'received') {
                   <span class="dir-badge received-badge">
                     <mat-icon class="dir-icon">arrow_downward</mat-icon>
                     <span>RECEIVED</span>
                   </span>
-                  <span class="type-tag">event</span>
+                  <span class="type-tag kind-chip kind-chip-{{ event.kind || 'status-update' }}">{{
+                    event.kind || 'event'
+                  }}</span>
+                  @if (event.validationErrors && event.validationErrors.length > 0) {
+                    <span
+                      class="validation-badge invalid"
+                      matTooltip="Non-compliant with A2A schema"
+                      >⚠️ Invalid</span
+                    >
+                  } @else {
+                    <span class="validation-badge valid" matTooltip="A2A protocol compliant"
+                      >✅ Valid</span
+                    >
+                  }
                 } @else {
                   <span class="dir-badge error-badge">
                     <mat-icon class="dir-icon">error</mat-icon>
                     <span>ERROR</span>
                   </span>
-                  <span class="type-tag">error</span>
+                  <span class="type-tag kind-chip kind-chip-error">error</span>
                 }
               </mat-panel-title>
               <mat-panel-description class="event-meta">
@@ -161,6 +176,21 @@
             </mat-expansion-panel-header>
 
             <div class="event-body">
+              @if (event.validationErrors && event.validationErrors.length > 0) {
+                <div class="validation-errors-banner">
+                  <div class="banner-header">
+                    <mat-icon class="banner-icon">warning</mat-icon>
+                    <strong
+                      >A2A Schema Validation Errors ({{ event.validationErrors.length }})</strong
+                    >
+                  </div>
+                  <ul class="banner-list">
+                    @for (err of event.validationErrors; track err) {
+                      <li>{{ err }}</li>
+                    }
+                  </ul>
+                </div>
+              }
               <div class="json-code-table">
                 @for (line of getFormattedJsonLines(event.payload); track line.lineNum) {
                   <div class="code-line">

@@ -19,7 +19,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {AgentCard} from '../../chat/a2a/a2a-types';
-import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
+import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 import {UiAgentInfo} from './types';
 
 /**
@@ -66,13 +66,13 @@ export class A2aAgentHeader {
   });
 
   protected readonly displayIconUrl = computed(() => {
-    return this.agentInfo()?.iconUrl || this.agentCard()?.iconUrl || DEFAULT_A2A_ICON_URL;
+    return this.agentInfo()?.iconUrl || this.agentCard()?.iconUrl || A2A_PROTOCOL_ICON_URL;
   });
 
   protected onAvatarError(event: Event): void {
     const img = event.target as HTMLImageElement;
-    if (img && img.src !== DEFAULT_A2A_ICON_URL) {
-      img.src = DEFAULT_A2A_ICON_URL;
+    if (img && img.src !== A2A_PROTOCOL_ICON_URL) {
+      img.src = A2A_PROTOCOL_ICON_URL;
     }
   }
 }

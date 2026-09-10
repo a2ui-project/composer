@@ -174,16 +174,18 @@ export class A2aChatView implements OnInit {
     this.connectionError.set(null);
 
     try {
-      const card = await this.a2aTransport.getAgentCard(normalizedUrl);
-
-      this.configProvider.setA2aAgentUrl(normalizedUrl);
-      if (tenantId !== undefined) {
-        this.configProvider.setA2aTenantId((tenantId || '').trim());
-      }
+      // Configure backend mode and tenant ID prior to fetching the agent card so
+      // that the delegating transport routes the discovery request to the selected transport.
       if (backendMode) {
         this.configProvider.setA2aBackendMode(backendMode);
       }
+      if (tenantId !== undefined) {
+        this.configProvider.setA2aTenantId((tenantId || '').trim());
+      }
 
+      const card = await this.a2aTransport.getAgentCard(normalizedUrl);
+
+      this.configProvider.setA2aAgentUrl(normalizedUrl);
       this.agentCard.set(card);
       const info = a2aCardToUiAgentInfo(card, normalizedUrl);
       this.agentInfo.set(info);
@@ -252,11 +254,16 @@ export class A2aChatView implements OnInit {
       parts.push({text});
     }
     for (const img of images || []) {
+      const base64Data = img.data.replace(/^data:[^;]+;base64,/, '');
       parts.push({
-        data: {
-          mimeType: img.mimeType,
-          data: img.data,
-          name: img.name,
+        kind: 'file',
+        raw: base64Data,
+        mediaType: img.mimeType,
+        filename: img.name,
+        file: {
+          ['bytes']: base64Data,
+          ['mimeType']: img.mimeType,
+          ['name']: img.name,
         },
       });
     }

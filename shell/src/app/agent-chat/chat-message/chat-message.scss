@@ -30,14 +30,39 @@
       background: var(--mat-sys-primary, #1a73e8);
       color: var(--mat-sys-on-primary, #ffffff);
       border-radius: 20px;
-      padding: 8px 18px;
+      padding: 10px 18px;
       font-size: var(--mat-sys-body-medium-size, 0.88rem);
       max-width: 80%;
       line-height: var(--mat-sys-body-medium-line-height, 1.4);
       word-break: break-word;
-      display: inline-flex;
-      align-items: center;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
       box-shadow: none;
+
+      .msg-images-tray {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        width: 100%;
+
+        .msg-image-thumb {
+          width: auto;
+          height: auto;
+          max-width: 320px;
+          max-height: 240px;
+          object-fit: cover;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+          cursor: pointer;
+          transition: transform 0.15s ease;
+
+          &:hover {
+            transform: scale(1.02);
+          }
+        }
+      }
     }
   }
 
@@ -95,6 +120,31 @@
         flex-direction: column;
         gap: 8px;
 
+        .msg-images-tray {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 8px;
+
+          .msg-image-thumb {
+            width: auto;
+            height: auto;
+            max-width: 360px;
+            max-height: 260px;
+            object-fit: contain;
+            border-radius: 12px;
+            border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+            background: var(--mat-sys-surface, #ffffff);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            cursor: pointer;
+            transition: transform 0.15s ease;
+
+            &:hover {
+              transform: scale(1.02);
+            }
+          }
+        }
+
         .agent-text-content {
           font-size: var(--mat-sys-body-medium-size, 0.88rem);
           color: var(--mat-sys-on-surface, #1f1f1f);
@@ -114,6 +164,18 @@
               &:last-child {
                 margin-bottom: 0;
               }
+            }
+
+            img {
+              max-width: 360px;
+              max-height: 260px;
+              width: auto;
+              height: auto;
+              object-fit: contain;
+              border-radius: 8px;
+              border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+              display: block;
+              margin: 8px 0;
             }
 
             ul,
@@ -420,5 +482,53 @@
   }
   50% {
     opacity: 0;
+  }
+}
+
+// Styles for multimedia file attachments (images, audio, video, downloadable files)
+// rendered into message HTML by a2a-media.ts consistent with A2A Inspector presentation rules.
+:host ::ng-deep {
+  .media-container {
+    margin: 8px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    .media-image {
+      max-width: 360px;
+      max-height: 260px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      border-radius: var(--mat-sys-corner-small, 8px);
+      box-shadow: var(--mat-sys-elevation-level1, 0 1px 3px rgba(0, 0, 0, 0.1));
+      border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+    }
+
+    .media-audio {
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .media-video {
+      max-width: 360px;
+      max-height: 260px;
+      width: auto;
+      height: auto;
+      border-radius: var(--mat-sys-corner-small, 8px);
+    }
+
+    .file-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--mat-sys-primary, #1a73e8);
+      text-decoration: none;
+      font-weight: var(--mat-sys-label-small-weight, 500);
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
   }
 }

@@ -609,4 +609,122 @@ describe('Standard3pA2aTransport', () => {
     expect(events.length).toBe(1);
     expect(events[0].taskId).toBe('task-trailing');
   });
+
+  it('extracts endpoint URL from supportedInterfaces when card.url is not present', async () => {
+    const mockCard = {
+      name: 'v1 Agent',
+      version: '1.0',
+      supportedInterfaces: [
+        {
+          protocolBinding: 'HTTP+JSON',
+          url: 'http://localhost:9000/custom-endpoint',
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url === 'http://localhost:8000/.well-known/agent-card.json') {
+        return new Response(JSON.stringify(mockCard), {
+          status: 200,
+          headers: {'Content-Type': 'application/json'},
+        });
+      }
+      return new Response(null, {status: 404});
+    });
+
+    const card = await transport.getAgentCard('http://localhost:8000');
+    expect(card.name).toBe('v1 Agent');
+  });
+
+  it('normalizes url, raw, and file parts to standard A2A schema in sendMessageStream', async () => {
+    let capturedBody: {params: {message: {parts: Array<Record<string, unknown>>}}} | null = null;
+
+    globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.body) {
+        capturedBody = JSON.parse(init.body as string);
+      }
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              'data: {"taskId": "task-parts", "status": {"state": "TASK_STATE_COMPLETED"}}\n\n',
+            ),
+          );
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: {'Content-Type': 'text/event-stream'},
+      });
+    });
+
+    const message: A2aMessage = {
+      role: 'user',
+      parts: [
+        {url: 'https://example.com/test.png', mediaType: 'image/png'},
+        {raw: 'AQID', media_type: 'audio/wav', filename: 'clip.wav'},
+        {file: {bytes: 'BAUG', mimeType: 'video/mp4'}},
+      ],
+    };
+
+    const events: TaskStatusUpdateEvent[] = [];
+    for await (const evt of transport.sendMessageStream('http://localhost:8000', message)) {
+      events.push(evt);
+    }
+
+    expect(events.length).toBe(1);
+    expect(capturedBody).toBeDefined();
+    const sentParts = capturedBody.params.message.parts;
+    expect(sentParts.length).toBe(3);
+    expect(sentParts[0]).toEqual({
+      kind: 'file',
+      url: 'https://example.com/test.png',
+      mediaType: 'image/png',
+    });
+    expect(sentParts[1]).toEqual({
+      kind: 'file',
+      raw: 'AQID',
+      mediaType: 'audio/wav',
+      filename: 'clip.wav',
+    });
+    expect(sentParts[2]).toEqual({
+      kind: 'file',
+      file: {bytes: 'BAUG', mimeType: 'video/mp4'},
+    });
+  });
+
+  it('terminates SSE stream when integer state 3 (completed) is received', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            'data: {"taskId": "task-int-state", "status": {"state": 3}}\n\n' +
+              'data: {"taskId": "task-should-not-reach", "message": {"parts": [{"text": "Late"}]}}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(stream, {
+        status: 200,
+        headers: {'Content-Type': 'text/event-stream'},
+      }),
+    );
+
+    const message: A2aMessage = {
+      role: 'user',
+      parts: [{text: 'Hello'}],
+    };
+
+    const events: TaskStatusUpdateEvent[] = [];
+    for await (const evt of transport.sendMessageStream('http://localhost:8000', message)) {
+      events.push(evt);
+    }
+
+    expect(events.length).toBe(1);
+    expect(events[0].taskId).toBe('task-int-state');
+  });
 });

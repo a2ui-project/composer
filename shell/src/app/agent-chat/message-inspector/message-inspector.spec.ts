@@ -265,4 +265,53 @@ describe('A2aMessageInspector', () => {
     expect(typeof formatted).toBe('string');
     expect(formatted.length).toBeGreaterThan(0);
   });
+
+  it('renders kind chip, validation badge, and validation errors banner for invalid events', () => {
+    fixture.componentRef.setInput('events', [
+      {
+        id: 'evt-invalid',
+        timestamp: Date.now(),
+        direction: 'received' as const,
+        kind: 'task',
+        summary: 'Received [task: working] (task-1)',
+        validationErrors: ["Task object missing required field: 'id'."],
+        payload: {status: {state: 'working'}},
+      },
+    ]);
+    fixture.detectChanges();
+
+    const kindChip = fixture.nativeElement.querySelector('.kind-chip-task');
+    expect(kindChip).toBeTruthy();
+    expect(kindChip.textContent).toContain('task');
+
+    const badge = fixture.nativeElement.querySelector('.validation-badge.invalid');
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toContain('Invalid');
+
+    const banner = fixture.nativeElement.querySelector('.validation-errors-banner');
+    expect(banner).toBeTruthy();
+    expect(banner.textContent).toContain("Task object missing required field: 'id'.");
+  });
+
+  it('renders valid badge when received event is compliant', () => {
+    fixture.componentRef.setInput('events', [
+      {
+        id: 'evt-valid',
+        timestamp: Date.now(),
+        direction: 'received' as const,
+        kind: 'message',
+        summary: 'Received [message: Text] (ctx-1)',
+        validationErrors: [],
+        payload: {role: 'agent', parts: [{text: 'Hello'}]},
+      },
+    ]);
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector('.validation-badge.valid');
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toContain('Valid');
+
+    const banner = fixture.nativeElement.querySelector('.validation-errors-banner');
+    expect(banner).toBeNull();
+  });
 });

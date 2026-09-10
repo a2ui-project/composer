@@ -30,7 +30,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {AgentCard} from '../../chat/a2a/a2a-types';
 import {A2aChatMessage} from '../chat-message/chat-message';
-import {DEFAULT_A2A_ICON_URL} from '../converters/a2a-ui-converter';
+import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 import {UiAgentInfo} from '../agent-header/types';
 import {UiMessage} from '../chat-message/types';
 
@@ -139,7 +139,7 @@ export class A2aChatHistory implements AfterViewChecked {
   }
 
   protected getAgentIconUrl(): string {
-    return this.agentInfo()?.iconUrl || this.agentCard()?.iconUrl || DEFAULT_A2A_ICON_URL;
+    return this.agentInfo()?.iconUrl || this.agentCard()?.iconUrl || A2A_PROTOCOL_ICON_URL;
   }
 
   protected getAgentDisplayName(): string {

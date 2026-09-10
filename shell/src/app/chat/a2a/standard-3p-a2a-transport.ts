@@ -21,6 +21,7 @@ import {
   A2aTransport,
   A2aTransportOptions,
   AgentCard,
+  isTerminalTaskState,
   TERMINAL_TASK_STATES,
   TaskStatusUpdateEvent,
 } from './a2a-types';
@@ -100,11 +101,19 @@ export class Standard3pA2aTransport implements A2aTransport {
           const data = (await response.json()) as ({agentCard?: AgentCard} & AgentCard) | null;
           const card = data?.agentCard || data;
           if (card && typeof card === 'object' && typeof card.name === 'string') {
-            if (card.url && typeof card.url === 'string') {
-              const cardUrl = card.url.trim();
-              if (/^https?:\/\//i.test(cardUrl)) {
-                this.endpointCache.set(baseUrl, cardUrl);
+            let cardUrl = typeof card['url'] === 'string' ? card['url'].trim() : '';
+            if (!cardUrl) {
+              const ifaces = (card['supportedInterfaces'] || card['supported_interfaces']) as
+                Array<Record<string, unknown>> | undefined;
+              if (Array.isArray(ifaces) && ifaces.length > 0) {
+                const first = ifaces[0];
+                if (first && typeof first['url'] === 'string') {
+                  cardUrl = (first['url'] as string).trim();
+                }
               }
+            }
+            if (cardUrl && /^https?:\/\//i.test(cardUrl)) {
+              this.endpointCache.set(baseUrl, cardUrl);
             }
             return card;
           }
@@ -143,14 +152,53 @@ export class Standard3pA2aTransport implements A2aTransport {
       'https://a2ui.org/a2a-extension/a2ui/v0.8',
     ];
 
-    // Normalize message parts to standard A2A schema (explicitly tagging text and data parts with kind).
+    // Normalize message parts to standard A2A schema (explicitly tagging text, data, and file parts with kind).
     // Note: Property keys use computed string literals to prevent Closure Compiler from renaming them during minification in google3.
     const messageObj: Record<string, unknown> = {
       ['messageId']: messageId,
       ['role']: message.role || 'user',
       ['parts']: message.parts?.map(p => {
-        if (p.text !== undefined) return {['kind']: 'text', ['text']: p.text};
-        if (p.data !== undefined) return {['kind']: 'data', ['data']: p.data};
+        if (p.text !== undefined) {
+          return {
+            ['kind']: 'text',
+            ['text']: p.text,
+            ...(p.metadata ? {['metadata']: p.metadata} : {}),
+          };
+        }
+        if (p.data !== undefined) {
+          return {
+            ['kind']: 'data',
+            ['data']: p.data,
+            ...(p.metadata ? {['metadata']: p.metadata} : {}),
+          };
+        }
+        if (p.url !== undefined) {
+          const mediaType = p.mediaType || p.media_type;
+          return {
+            ['kind']: 'file',
+            ['url']: p.url,
+            ...(mediaType ? {['mediaType']: mediaType} : {}),
+            ...(p.filename ? {['filename']: p.filename} : {}),
+            ...(p.metadata ? {['metadata']: p.metadata} : {}),
+          };
+        }
+        if (p.raw !== undefined) {
+          const mediaType = p.mediaType || p.media_type;
+          return {
+            ['kind']: 'file',
+            ['raw']: p.raw,
+            ...(mediaType ? {['mediaType']: mediaType} : {}),
+            ...(p.filename ? {['filename']: p.filename} : {}),
+            ...(p.metadata ? {['metadata']: p.metadata} : {}),
+          };
+        }
+        if (p.file !== undefined) {
+          return {
+            ['kind']: 'file',
+            ['file']: p.file,
+            ...(p.metadata ? {['metadata']: p.metadata} : {}),
+          };
+        }
         return p;
       }) || [{['kind']: 'text', ['text']: ''}],
       ['extensions']: supportedExtensions,
@@ -393,7 +441,11 @@ export class Standard3pA2aTransport implements A2aTransport {
           eventRecord['final'] !== undefined
             ? Boolean(eventRecord['final'])
             : Boolean((eventData as {final?: boolean}).final);
-        if (isFinal || TERMINAL_TASK_STATES.has(statusState)) {
+        if (
+          isFinal ||
+          isTerminalTaskState(rawState ?? rawStatus) ||
+          TERMINAL_TASK_STATES.has(statusState)
+        ) {
           return true;
         }
       }

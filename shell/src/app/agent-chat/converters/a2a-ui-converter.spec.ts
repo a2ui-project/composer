@@ -22,7 +22,7 @@ import {
   createReceivedEvent,
   createSentActionEvent,
   createSentMessageEvent,
-  DEFAULT_A2A_ICON_URL,
+  A2A_PROTOCOL_ICON_URL,
   parseA2aStreamEvent,
 } from './a2a-ui-converter';
 
@@ -61,10 +61,21 @@ describe('A2aUiConverter', () => {
       expect(info.samplePrompts).toEqual(['Prompt 1', 'Prompt 2']);
     });
 
+    it('uses snake_case sample_prompts and icon_url if provided on card', () => {
+      const card: AgentCard = {
+        name: 'Snake Agent',
+        icon_url: 'https://example.com/snake-icon.png',
+        sample_prompts: ['Snake Prompt 1', 'Snake Prompt 2'],
+      };
+      const info = a2aCardToUiAgentInfo(card, 'http://localhost:8080');
+      expect(info.iconUrl).toBe('https://example.com/snake-icon.png');
+      expect(info.samplePrompts).toEqual(['Snake Prompt 1', 'Snake Prompt 2']);
+    });
+
     it('handles null card and provides defaults', () => {
       const info = a2aCardToUiAgentInfo(null, null);
       expect(info.name).toBe('A2A Agent');
-      expect(info.iconUrl).toBe(DEFAULT_A2A_ICON_URL);
+      expect(info.iconUrl).toBe(A2A_PROTOCOL_ICON_URL);
       expect(info.endpoint).toBe('');
       expect(info.samplePrompts?.length).toBeGreaterThan(0);
     });
@@ -96,19 +107,26 @@ describe('A2aUiConverter', () => {
       };
       const event = createReceivedEvent(evt);
       expect(event.direction).toBe('received');
-      expect(event.summary).toContain('Received [COMPLETED] (t-1)');
+      expect(event.kind).toBe('status-update');
+      expect(event.summary).toBe('Received [status-update: completed] (t-1)');
+      expect(event.validationErrors).toBeDefined();
 
       const textEvt: TaskStatusUpdateEvent = {
         contextId: 'ctx-1',
         message: {role: 'agent', parts: [{text: 'Hello'}]},
       };
-      expect(createReceivedEvent(textEvt).summary).toContain('Received Text Chunk');
+      const textEvent = createReceivedEvent(textEvt);
+      expect(textEvent.kind).toBe('message');
+      expect(textEvent.summary).toBe('Received [message: Text] (ctx-1)');
+      expect(textEvent.validationErrors).toEqual([]);
 
       const dataEvt: TaskStatusUpdateEvent = {
         taskId: 't-2',
         message: {role: 'agent', parts: [{data: {a: 1}}]},
       };
-      expect(createReceivedEvent(dataEvt).summary).toContain('Received A2UI Payload');
+      const dataEvent = createReceivedEvent(dataEvt);
+      expect(dataEvent.kind).toBe('message');
+      expect(dataEvent.summary).toBe('Received [message: A2UI Payload] (t-2)');
     });
 
     it('creates error event for standard Error and string error', () => {
@@ -294,13 +312,31 @@ describe('A2aUiConverter', () => {
         taskId: 't-str',
         status: 'READY' as unknown as {state: string},
       };
-      expect(createReceivedEvent(evt1).summary).toBe('Received [READY] (t-str)');
+      expect(createReceivedEvent(evt1).summary).toBe('Received [status-update: ready] (t-str)');
 
       const evt2: TaskStatusUpdateEvent = {
         taskId: 't-obj',
         status: {} as {state: string},
       };
-      expect(createReceivedEvent(evt2).summary).toBe('Received [status] (t-obj)');
+      expect(createReceivedEvent(evt2).summary).toBe('Received [status-update: unknown] (t-obj)');
+    });
+
+    it('extracts transport, modes, and endpoint from v1.0 supportedInterfaces', () => {
+      const card: AgentCard = {
+        name: 'v1 Interface Agent',
+        description: 'Testing v1 interfaces',
+        supportedInterfaces: [
+          {
+            protocolBinding: 'HTTP+JSON',
+            url: 'http://localhost:9090/agent',
+          },
+        ],
+        defaultInputModes: ['text/plain', 'image/png'],
+        defaultOutputModes: ['text/plain', 'application/json'],
+      };
+
+      const info = a2aCardToUiAgentInfo(card, null);
+      expect(info.endpoint).toBe('http://localhost:9090/agent');
     });
   });
 });

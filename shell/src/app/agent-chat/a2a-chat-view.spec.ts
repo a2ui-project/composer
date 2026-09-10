@@ -245,6 +245,16 @@ describe('A2aChatView', () => {
     });
 
     expect(mockA2aTransport.sendMessageStream).toHaveBeenCalled();
+    const sentMsg = vi.mocked(mockA2aTransport.sendMessageStream).mock.calls[0][1];
+    expect(sentMsg.parts?.[1].kind).toBe('file');
+    expect(sentMsg.parts?.[1].raw).toBe('base64imagedata');
+    expect(sentMsg.parts?.[1].mediaType).toBe('image/png');
+    expect(sentMsg.parts?.[1].file).toEqual({
+      bytes: 'base64imagedata',
+      mimeType: 'image/png',
+      name: 'screen.png',
+    });
+
     const messages = fixture.componentInstance['messages']();
     expect(messages.length).toBe(2);
     expect(messages[0].images?.length).toBe(1);
@@ -511,7 +521,7 @@ describe('A2aChatView', () => {
     );
   });
 
-  it('does not persist backendMode or agent URL if agent connection fails', async () => {
+  it('does not persist agent URL if agent connection fails while applying initial config', async () => {
     vi.clearAllMocks();
     mockA2aTransport.getAgentCard = vi.fn().mockRejectedValue(new Error('Connection failed'));
 
@@ -521,9 +531,9 @@ describe('A2aChatView', () => {
       A2aBackendMode.HTTP_JSONRPC,
     );
 
-    expect(mockConfigProvider.setA2aBackendMode).not.toHaveBeenCalled();
+    expect(mockConfigProvider.setA2aBackendMode).toHaveBeenCalledWith(A2aBackendMode.HTTP_JSONRPC);
+    expect(mockConfigProvider.setA2aTenantId).toHaveBeenCalledWith('test-tenant');
     expect(mockConfigProvider.setA2aAgentUrl).not.toHaveBeenCalled();
-    expect(mockConfigProvider.setA2aTenantId).not.toHaveBeenCalled();
   });
 
   it('persists backendMode and configuration when agent connection succeeds', async () => {
