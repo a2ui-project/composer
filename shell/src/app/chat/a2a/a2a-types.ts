@@ -241,10 +241,25 @@ export enum A2aV03TaskState {
 }
 
 /**
- * Task state lifecycle status token in standard A2A specification.
- * Supports both v0.3 lowercase, v1.0 enum names, and integer enums.
+ * Known A2A Protobuf integer task state enum values.
  */
-export type TaskState = A2aV03TaskState | A2aV1TaskState | number | string;
+export enum A2aProtoTaskState {
+  UNSPECIFIED = 0,
+  SUBMITTED = 1,
+  WORKING = 2,
+  COMPLETED = 3,
+  FAILED = 4,
+  CANCELED = 5,
+  INPUT_REQUIRED = 6,
+  REJECTED = 7,
+  AUTH_REQUIRED = 8,
+}
+
+/**
+ * Task state lifecycle status token in standard A2A specification.
+ * Supports v0.3 lowercase, v1.0 enum names, and Protobuf integer enums.
+ */
+export type TaskState = A2aV03TaskState | A2aV1TaskState | A2aProtoTaskState | number | string;
 
 /**
  * Mapping from v1.0 protobuf enum names to standardized lowercase display strings.
@@ -266,19 +281,29 @@ export const TASK_STATE_DISPLAY: Record<string, string> = {
  * Mapping from protobuf integer enum values to standardized display strings.
  */
 export const TASK_STATE_INT_MAP: Record<number, string> = {
-  0: 'unknown',
-  1: 'submitted',
-  2: 'working',
-  3: 'completed',
-  4: 'failed',
-  5: 'canceled',
-  6: 'input-required',
-  7: 'rejected',
-  8: 'auth-required',
+  [A2aProtoTaskState.UNSPECIFIED]: 'unknown',
+  [A2aProtoTaskState.SUBMITTED]: 'submitted',
+  [A2aProtoTaskState.WORKING]: 'working',
+  [A2aProtoTaskState.COMPLETED]: 'completed',
+  [A2aProtoTaskState.FAILED]: 'failed',
+  [A2aProtoTaskState.CANCELED]: 'canceled',
+  [A2aProtoTaskState.INPUT_REQUIRED]: 'input-required',
+  [A2aProtoTaskState.REJECTED]: 'rejected',
+  [A2aProtoTaskState.AUTH_REQUIRED]: 'auth-required',
 };
 
 /**
- * Normalizes any TaskState representation (v1.0 enum name, int, or v0.3 lowercase)
+ * Terminal states that signal an A2A task or stream is completed in Protobuf enum integer representation.
+ */
+export const TERMINAL_PROTO_TASK_STATES: ReadonlySet<A2aProtoTaskState> = new Set([
+  A2aProtoTaskState.COMPLETED,
+  A2aProtoTaskState.FAILED,
+  A2aProtoTaskState.CANCELED,
+  A2aProtoTaskState.REJECTED,
+]);
+
+/**
+ * Normalizes any TaskState representation (v1.0 enum name, Protobuf integer, or v0.3 lowercase)
  * into a consistent lowercase string for UI display and status checks.
  */
 export function normalizeTaskState(state: unknown): string {
@@ -288,6 +313,10 @@ export function normalizeTaskState(state: unknown): string {
   }
   const str = String(state).trim();
   if (!str) return 'unknown';
+  const numericVal = Number(str);
+  if (!isNaN(numericVal) && numericVal in TASK_STATE_INT_MAP) {
+    return TASK_STATE_INT_MAP[numericVal];
+  }
   if (TASK_STATE_DISPLAY[str]) {
     return TASK_STATE_DISPLAY[str];
   }
@@ -318,6 +347,9 @@ export const TERMINAL_TASK_STATES: ReadonlySet<string> = new Set([
 
 /**
  * Checks whether a given task status, state, or event represents a terminal state.
+ *
+ * Robustly normalizes Protobuf enum integers, enum strings, and event objects
+ * into standardized terminal states without fragile hardcoded numbers.
  */
 export function isTerminalTaskState(stateOrEvent: unknown): boolean {
   if (stateOrEvent === undefined || stateOrEvent === null) return false;
@@ -335,9 +367,6 @@ export function isTerminalTaskState(stateOrEvent: unknown): boolean {
       return isTerminalTaskState(rawState);
     }
     return false;
-  }
-  if (typeof stateOrEvent === 'number') {
-    return stateOrEvent === 3 || stateOrEvent === 4 || stateOrEvent === 5 || stateOrEvent === 7;
   }
   const normalized = normalizeTaskState(stateOrEvent);
   return TERMINAL_TASK_STATES.has(normalized);

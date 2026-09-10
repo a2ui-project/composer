@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-import {A2aV03TaskState, A2aV1TaskState, AgentCard, TaskStatusUpdateEvent} from './a2a-types';
+import {
+  A2aV03TaskState,
+  A2aV1TaskState,
+  AgentCard,
+  TASK_STATE_INT_MAP,
+  TaskStatusUpdateEvent,
+} from './a2a-types';
 
 /**
  * Known A2A v1.0 task states (from protobuf enum mapping).
@@ -54,7 +60,7 @@ export const AGENT_CARD_MODE_FIELDS = [
  */
 export function isValidTaskState(state: unknown): boolean {
   if (typeof state === 'number') {
-    return Number.isInteger(state) && state >= 0 && state <= 8;
+    return Number.isInteger(state) && state in TASK_STATE_INT_MAP;
   }
   const str = String(state);
   return V1_TASK_STATES.has(str) || V03_TASK_STATES.has(str);
