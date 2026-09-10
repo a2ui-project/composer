@@ -541,6 +541,8 @@ export class MonacoEditor {
 
                 this.markersChange.emit(markers);
               } else {
+                // Deduplicating consecutive identical marker emissions via a composite signature
+                // prevents flooding the ErrorLogger and causing UI flashing in the Errors panel.
                 if (this.lastMarkersSignature === currentSignature) {
                   return;
                 }
