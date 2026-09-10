@@ -392,4 +392,42 @@ describe('A2aStreamEventParser', () => {
     expect(parsedEmpty.textChunk).toBeUndefined();
     expect(parsedEmpty.statusState).toBe('working');
   });
+
+  it('safely handles null, undefined, or primitive events', () => {
+    const parsedNull = parser.parse(null as unknown as TaskStatusUpdateEvent);
+    expect(parsedNull.isCompleted).toBe(false);
+    expect(parsedNull.a2uiItems).toEqual([]);
+
+    const parsedString = parser.parse('invalid' as unknown as TaskStatusUpdateEvent);
+    expect(parsedString.isCompleted).toBe(false);
+    expect(parsedString.a2uiItems).toEqual([]);
+  });
+
+  it('detects completion from final or isCompleted flags', () => {
+    const finalEvent = parser.parse({final: true});
+    expect(finalEvent.isCompleted).toBe(true);
+
+    const isCompletedEvent = parser.parse({isCompleted: true});
+    expect(isCompletedEvent.isCompleted).toBe(true);
+
+    const terminalStatusEvent = parser.parse({
+      status: {state: 'TASK_STATE_COMPLETED'},
+    });
+    expect(terminalStatusEvent.isCompleted).toBe(true);
+  });
+
+  it('handles raw bytes file part', () => {
+    const rawEvent = parser.parse({
+      message: {
+        parts: [
+          {
+            raw: 'SGVsbG8gV29ybGQ=',
+            mediaType: 'text/plain',
+            filename: 'hello.txt',
+          },
+        ],
+      },
+    });
+    expect(rawEvent.textChunk).toContain('data:text/plain;base64,SGVsbG8gV29ybGQ=');
+  });
 });

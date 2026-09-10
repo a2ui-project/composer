@@ -120,7 +120,7 @@ describe('a2a-validators', () => {
       expect(errors).toContain("Required field is missing: 'skills'.");
     });
 
-    it('flags missing url and supportedInterfaces', () => {
+    it('flags missing supportedInterfaces for v1.0 card without endpoints', () => {
       const card = {
         name: 'Agent',
         description: 'Desc',
@@ -128,7 +128,18 @@ describe('a2a-validators', () => {
         skills: [{id: '1', name: 'Skill'}],
       };
       const errors = validateAgentCard(card);
-      expect(errors).toContain("Required field is missing: 'url' or 'supportedInterfaces'.");
+      expect(errors).toContain("Required field is missing: 'supportedInterfaces'.");
+    });
+
+    it('flags missing url for v0.3 card without endpoints', () => {
+      const card = {
+        name: 'Agent',
+        description: 'Desc',
+        version: '0.3',
+        skills: [{id: '1', name: 'Skill'}],
+      };
+      const errors = validateAgentCard(card);
+      expect(errors).toContain("Required field is missing: 'url'.");
     });
 
     it('flags invalid url format', () => {

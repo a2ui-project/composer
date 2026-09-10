@@ -75,18 +75,17 @@ export class A2aStreamEventParser {
    */
   parse(event: TaskStatusUpdateEvent | Record<string, unknown>): ParsedA2aStreamEvent {
     const unwrapped = this.unwrapEventPayload(event);
-    const eventObj = unwrapped as Record<string, unknown>;
-    const statusState = this.extractStatusState(unwrapped, eventObj);
+    const statusState = this.extractStatusState(unwrapped);
 
     const result: ParsedA2aStreamEvent = {
-      contextId: this.extractContextId(unwrapped, eventObj),
-      taskId: this.extractTaskId(unwrapped, eventObj),
+      contextId: this.extractContextId(unwrapped),
+      taskId: this.extractTaskId(unwrapped),
       a2uiItems: [],
-      isCompleted: this.isCompletedStatus(unwrapped, eventObj),
+      isCompleted: this.isCompletedStatus(unwrapped),
       statusState,
     };
 
-    this.processMessageContent(unwrapped, eventObj, result);
+    this.processMessageContent(unwrapped, result);
     this.processTopLevelArtifacts(unwrapped, result);
 
     return result;
@@ -97,7 +96,9 @@ export class A2aStreamEventParser {
    *
    * A2A events arriving via HTTP SSE or JSON-RPC may be encapsulated in:
    * - JSON-RPC: `{ jsonrpc: "2.0", result: { ... } }`
-   * - Protobuf StreamResponse oneof: `{ task: ... }`, `{ status_update: ... }`, `{ artifact_update: ... }`, or `{ message: ... }`
+   * - Protobuf StreamResponse oneofs serialized via proto3 JSON mapping:
+   *   `{ task: ... }`, `{ statusUpdate: ... }` / `{ status_update: ... }`,
+   *   `{ artifactUpdate: ... }` / `{ artifact_update: ... }`, or `{ message: ... }`
    *
    * This method normalizes all representations into a standard TaskStatusUpdateEvent.
    */
@@ -105,7 +106,7 @@ export class A2aStreamEventParser {
     event: TaskStatusUpdateEvent | Record<string, unknown>,
   ): TaskStatusUpdateEvent {
     if (!event || typeof event !== 'object') {
-      return event as TaskStatusUpdateEvent;
+      return {};
     }
     const record = event as Record<string, unknown>;
 
@@ -118,7 +119,7 @@ export class A2aStreamEventParser {
       string | undefined;
     const envelopeContextId = (record['contextId'] || record['context_id']) as string | undefined;
 
-    // 2. Protobuf StreamResponse oneof payload unwrapping (stable camelCase & alpha snake_case SDKs)
+    // 2. Proto3 JSON mapping of StreamResponse oneof payloads (emitted by A2A Python SDK / gRPC bridges in camelCase or snake_case)
     const oneofConfigs = [
       {keys: ['task'], kind: 'task'},
       {keys: ['statusUpdate', 'status_update'], kind: 'status-update'},
@@ -187,11 +188,8 @@ export class A2aStreamEventParser {
     } as TaskStatusUpdateEvent;
   }
 
-  private extractStatusState(
-    unwrapped: TaskStatusUpdateEvent,
-    eventObj: Record<string, unknown>,
-  ): string | undefined {
-    const rawStatus = unwrapped.status ?? eventObj['status'];
+  private extractStatusState(unwrapped: TaskStatusUpdateEvent): string | undefined {
+    const rawStatus = unwrapped.status;
     if (typeof rawStatus === 'object' && rawStatus !== null) {
       const stateVal = (rawStatus as Record<string, unknown>)['state'];
       return stateVal !== undefined ? normalizeTaskState(stateVal) : undefined;
@@ -202,35 +200,20 @@ export class A2aStreamEventParser {
     return undefined;
   }
 
-  private extractContextId(
-    unwrapped: TaskStatusUpdateEvent,
-    eventObj: Record<string, unknown>,
-  ): string | undefined {
-    return (
-      unwrapped.contextId ||
-      unwrapped.context_id ||
-      (eventObj['contextId'] as string) ||
-      (eventObj['context_id'] as string)
-    );
+  private extractContextId(unwrapped: TaskStatusUpdateEvent): string | undefined {
+    return unwrapped.contextId || (unwrapped['context_id'] as string | undefined);
   }
 
-  private extractTaskId(
-    unwrapped: TaskStatusUpdateEvent,
-    eventObj: Record<string, unknown>,
-  ): string | undefined {
+  private extractTaskId(unwrapped: TaskStatusUpdateEvent): string | undefined {
     return (
       unwrapped.taskId ||
-      unwrapped.task_id ||
-      unwrapped.id ||
-      (eventObj['taskId'] as string) ||
-      (eventObj['task_id'] as string) ||
-      (eventObj['id'] as string)
+      (unwrapped['task_id'] as string | undefined) ||
+      (unwrapped['id'] as string | undefined)
     );
   }
 
   private processMessageContent(
     unwrapped: TaskStatusUpdateEvent,
-    eventObj: Record<string, unknown>,
     result: ParsedA2aStreamEvent,
   ): void {
     const msg =
@@ -239,8 +222,7 @@ export class A2aStreamEventParser {
         ? unwrapped.status.message
         : undefined) ||
       (Array.isArray(unwrapped.parts) ? unwrapped : undefined) ||
-      (Array.isArray(eventObj['parts']) ? (eventObj as unknown as A2aMessage) : undefined) ||
-      (eventObj['kind'] === 'message' ? (unwrapped as unknown as A2aMessage) : undefined);
+      (unwrapped['kind'] === 'message' ? (unwrapped as unknown as A2aMessage) : undefined);
 
     if (typeof msg === 'string') {
       result.textChunk = (result.textChunk || '') + msg;
@@ -316,6 +298,7 @@ export class A2aStreamEventParser {
         result.textChunk =
           (result.textChunk || '') + renderMultimediaContent(uri, 'application/octet-stream', name);
       }
+      return;
     }
 
     // 2. v1.0 File part (URI oneof): { url: string, mediaType?: string, filename?: string }
@@ -324,6 +307,7 @@ export class A2aStreamEventParser {
         part.mediaType || part.media_type || part.mimeType || 'application/octet-stream';
       result.textChunk =
         (result.textChunk || '') + renderMultimediaContent(part.url, mimeType, part.filename);
+      return;
     }
 
     // 3. v1.0 File part (raw bytes base64 oneof): { raw: string, mediaType?: string, filename?: string }
@@ -332,6 +316,7 @@ export class A2aStreamEventParser {
         part.mediaType || part.media_type || part.mimeType || 'application/octet-stream';
       result.textChunk =
         (result.textChunk || '') + renderBase64Data(part.raw, mimeType, part.filename);
+      return;
     }
   }
 
@@ -476,21 +461,7 @@ export class A2aStreamEventParser {
     }
   }
 
-  private isCompletedStatus(
-    unwrapped: TaskStatusUpdateEvent,
-    eventObj: Record<string, unknown>,
-  ): boolean {
-    const rawStatus = unwrapped.status ?? eventObj['status'];
-    const rawState =
-      typeof rawStatus === 'object' && rawStatus !== null
-        ? (rawStatus as Record<string, unknown>)['state']
-        : rawStatus;
-
-    return (
-      isTerminalTaskState(rawState) ||
-      unwrapped.final === true ||
-      eventObj['final'] === true ||
-      eventObj['isCompleted'] === true
-    );
+  private isCompletedStatus(unwrapped: TaskStatusUpdateEvent): boolean {
+    return isTerminalTaskState(unwrapped);
   }
 }

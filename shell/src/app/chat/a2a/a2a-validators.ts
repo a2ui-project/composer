@@ -14,39 +14,40 @@
  * limitations under the License.
  */
 
-import {AgentCard, TaskStatusUpdateEvent} from './a2a-types';
+import {A2aV03TaskState, A2aV1TaskState, AgentCard, TaskStatusUpdateEvent} from './a2a-types';
 
 /**
  * Known A2A v1.0 task states (from protobuf enum mapping).
  */
-export const V1_TASK_STATES: ReadonlySet<string> = new Set([
-  'TASK_STATE_UNSPECIFIED',
-  'TASK_STATE_SUBMITTED',
-  'TASK_STATE_WORKING',
-  'TASK_STATE_COMPLETED',
-  'TASK_STATE_FAILED',
-  'TASK_STATE_CANCELED',
-  'TASK_STATE_CANCELLED',
-  'TASK_STATE_INPUT_REQUIRED',
-  'TASK_STATE_REJECTED',
-  'TASK_STATE_AUTH_REQUIRED',
-]);
+export const V1_TASK_STATES: ReadonlySet<string> = new Set(Object.values(A2aV1TaskState));
 
 /**
  * Known A2A v0.3 task states.
  */
-export const V03_TASK_STATES: ReadonlySet<string> = new Set([
-  'unknown',
-  'submitted',
-  'working',
-  'completed',
-  'failed',
-  'canceled',
-  'cancelled',
-  'input-required',
-  'rejected',
-  'auth-required',
-]);
+export const V03_TASK_STATES: ReadonlySet<string> = new Set(Object.values(A2aV03TaskState));
+
+/**
+ * Recognized standard message kinds in A2A protocol.
+ */
+export const A2A_MESSAGE_KINDS = {
+  TASK: 'task',
+  STATUS_UPDATE: 'status-update',
+  ARTIFACT_UPDATE: 'artifact-update',
+  MESSAGE: 'message',
+} as const;
+
+/**
+ * Required AgentCard fields common to all versions.
+ */
+export const REQUIRED_AGENT_CARD_FIELDS = ['name', 'description', 'version', 'skills'] as const;
+
+/**
+ * Input and output mode list fields on AgentCard.
+ */
+export const AGENT_CARD_MODE_FIELDS = [
+  {camel: 'defaultInputModes', snake: 'default_input_modes'},
+  {camel: 'defaultOutputModes', snake: 'default_output_modes'},
+] as const;
 
 /**
  * Returns true if the state value is a recognized v0.3, v1.0, or protobuf integer task state.
@@ -59,39 +60,27 @@ export function isValidTaskState(state: unknown): boolean {
   return V1_TASK_STATES.has(str) || V03_TASK_STATES.has(str);
 }
 
-/**
- * Validates the structure and fields of an AgentCard according to the A2A Inspector implementation
- * (https://github.com/a2aproject/a2a-inspector).
- *
- * Accepts both v0.3 (top-level 'url') and v1.0 ('supportedInterfaces') formats.
- *
- * @param cardData Raw or parsed AgentCard object.
- * @returns Array of validation error messages (empty if compliant).
- */
-export function validateAgentCard(cardData: Record<string, unknown> | AgentCard | null): string[] {
-  const errors: string[] = [];
-  if (!cardData || typeof cardData !== 'object') {
-    return ['Agent card must be a non-null object.'];
-  }
-
-  const raw = cardData as Record<string, unknown>;
-
-  // --- Required fields (common to both v0.3 and v1.0) ---
-  const requiredAlways = ['name', 'description', 'version', 'skills'] as const;
-  for (const field of requiredAlways) {
+function validateRequiredCardFields(raw: Record<string, unknown>, errors: string[]): void {
+  for (const field of REQUIRED_AGENT_CARD_FIELDS) {
     if (!(field in raw) || raw[field] === undefined || raw[field] === null) {
       errors.push(`Required field is missing: '${field}'.`);
     }
   }
+}
 
-  // --- URL: v0.3 has top-level 'url', v1.0 uses 'supportedInterfaces' ---
+function validateEndpoints(raw: Record<string, unknown>, errors: string[]): void {
   const hasUrl = 'url' in raw && typeof raw['url'] === 'string' && raw['url'].trim().length > 0;
   const supportedInterfaces = (raw['supportedInterfaces'] ?? raw['supported_interfaces']) as
     unknown[] | undefined;
   const hasSupportedInterfaces = Array.isArray(supportedInterfaces);
 
   if (!hasUrl && !hasSupportedInterfaces) {
-    errors.push("Required field is missing: 'url' or 'supportedInterfaces'.");
+    const isV03 = typeof raw['version'] === 'string' && raw['version'].trim().startsWith('0.');
+    errors.push(
+      isV03
+        ? "Required field is missing: 'url'."
+        : "Required field is missing: 'supportedInterfaces'.",
+    );
   } else if (hasUrl) {
     const url = String(raw['url']).trim();
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -99,7 +88,6 @@ export function validateAgentCard(cardData: Record<string, unknown> | AgentCard 
     }
   }
 
-  // v1.0 supportedInterfaces validation
   if (hasSupportedInterfaces && supportedInterfaces) {
     if (supportedInterfaces.length === 0) {
       errors.push("Field 'supportedInterfaces' must be a non-empty array.");
@@ -125,8 +113,9 @@ export function validateAgentCard(cardData: Record<string, unknown> | AgentCard 
       });
     }
   }
+}
 
-  // --- capabilities ---
+function validateCapabilities(raw: Record<string, unknown>, errors: string[]): void {
   if ('capabilities' in raw && raw['capabilities'] !== undefined) {
     if (
       typeof raw['capabilities'] !== 'object' ||
@@ -136,14 +125,10 @@ export function validateAgentCard(cardData: Record<string, unknown> | AgentCard 
       errors.push("Field 'capabilities' must be an object.");
     }
   }
+}
 
-  // --- defaultInputModes / defaultOutputModes ---
-  const modeFields = [
-    {camel: 'defaultInputModes', snake: 'default_input_modes'},
-    {camel: 'defaultOutputModes', snake: 'default_output_modes'},
-  ] as const;
-
-  for (const {camel, snake} of modeFields) {
+function validateModeFields(raw: Record<string, unknown>, errors: string[]): void {
+  for (const {camel, snake} of AGENT_CARD_MODE_FIELDS) {
     const fieldName = camel in raw ? camel : snake in raw ? snake : null;
     if (fieldName) {
       const val = raw[fieldName];
@@ -156,8 +141,9 @@ export function validateAgentCard(cardData: Record<string, unknown> | AgentCard 
       }
     }
   }
+}
 
-  // --- skills ---
+function validateSkills(raw: Record<string, unknown>, errors: string[]): void {
   if ('skills' in raw && raw['skills'] !== undefined) {
     if (!Array.isArray(raw['skills'])) {
       errors.push("Field 'skills' must be an array of AgentSkill objects.");
@@ -167,6 +153,30 @@ export function validateAgentCard(cardData: Record<string, unknown> | AgentCard 
       );
     }
   }
+}
+
+/**
+ * Validates the structure and fields of an AgentCard according to the A2A Inspector implementation
+ * (https://github.com/a2aproject/a2a-inspector).
+ *
+ * Accepts both v0.3 (top-level 'url') and v1.0 ('supportedInterfaces') formats.
+ *
+ * @param cardData Raw or parsed AgentCard object.
+ * @returns Array of validation error messages (empty if compliant).
+ */
+export function validateAgentCard(cardData: Record<string, unknown> | AgentCard | null): string[] {
+  if (!cardData || typeof cardData !== 'object') {
+    return ['Agent card must be a non-null object.'];
+  }
+
+  const raw = cardData as Record<string, unknown>;
+  const errors: string[] = [];
+
+  validateRequiredCardFields(raw, errors);
+  validateEndpoints(raw, errors);
+  validateCapabilities(raw, errors);
+  validateModeFields(raw, errors);
+  validateSkills(raw, errors);
 
   return errors;
 }

@@ -49,9 +49,6 @@ export interface AgentCapability {
 }
 
 /**
- * Specification schema for an AgentCard manifest published by an A2A compliant service.
- */
-/**
  * Supported network interface exposed by an A2A Agent (v1.0 specification).
  */
 export interface AgentInterface {
@@ -212,31 +209,42 @@ export interface A2aMessage {
 }
 
 /**
- * Task state lifecycle status token in standard A2A specification.
- * Supports both v0.3 lowercase, v1.0 SCREAMING_SNAKE_CASE enum names, and integer enums.
+ * Known A2A v1.0 task states (from protobuf enum mapping).
  */
-export type TaskState =
-  | 'submitted'
-  | 'working'
-  | 'input-required'
-  | 'completed'
-  | 'canceled'
-  | 'failed'
-  | 'rejected'
-  | 'auth-required'
-  | 'unknown'
-  | 'TASK_STATE_UNSPECIFIED'
-  | 'TASK_STATE_SUBMITTED'
-  | 'TASK_STATE_WORKING'
-  | 'TASK_STATE_COMPLETED'
-  | 'TASK_STATE_FAILED'
-  | 'TASK_STATE_CANCELED'
-  | 'TASK_STATE_CANCELLED'
-  | 'TASK_STATE_INPUT_REQUIRED'
-  | 'TASK_STATE_REJECTED'
-  | 'TASK_STATE_AUTH_REQUIRED'
-  | number
-  | string;
+export enum A2aV1TaskState {
+  UNSPECIFIED = 'TASK_STATE_UNSPECIFIED',
+  SUBMITTED = 'TASK_STATE_SUBMITTED',
+  WORKING = 'TASK_STATE_WORKING',
+  COMPLETED = 'TASK_STATE_COMPLETED',
+  FAILED = 'TASK_STATE_FAILED',
+  CANCELED = 'TASK_STATE_CANCELED',
+  CANCELLED = 'TASK_STATE_CANCELLED',
+  INPUT_REQUIRED = 'TASK_STATE_INPUT_REQUIRED',
+  REJECTED = 'TASK_STATE_REJECTED',
+  AUTH_REQUIRED = 'TASK_STATE_AUTH_REQUIRED',
+}
+
+/**
+ * Known A2A v0.3 task states.
+ */
+export enum A2aV03TaskState {
+  UNKNOWN = 'unknown',
+  SUBMITTED = 'submitted',
+  WORKING = 'working',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  CANCELED = 'canceled',
+  CANCELLED = 'cancelled',
+  INPUT_REQUIRED = 'input-required',
+  REJECTED = 'rejected',
+  AUTH_REQUIRED = 'auth-required',
+}
+
+/**
+ * Task state lifecycle status token in standard A2A specification.
+ * Supports both v0.3 lowercase, v1.0 enum names, and integer enums.
+ */
+export type TaskState = A2aV03TaskState | A2aV1TaskState | number | string;
 
 /**
  * Mapping from v1.0 protobuf enum names to standardized lowercase display strings.
@@ -255,7 +263,7 @@ export const TASK_STATE_DISPLAY: Record<string, string> = {
 };
 
 /**
- * Mapping from protobuf integer enum values (0..8) to standardized display strings.
+ * Mapping from protobuf integer enum values to standardized display strings.
  */
 export const TASK_STATE_INT_MAP: Record<number, string> = {
   0: 'unknown',
@@ -270,7 +278,7 @@ export const TASK_STATE_INT_MAP: Record<number, string> = {
 };
 
 /**
- * Normalizes any TaskState representation (v1.0 SCREAMING_SNAKE_CASE, int, or v0.3 lowercase)
+ * Normalizes any TaskState representation (v1.0 enum name, int, or v0.3 lowercase)
  * into a consistent lowercase string for UI display and status checks.
  */
 export function normalizeTaskState(state: unknown): string {
@@ -309,13 +317,29 @@ export const TERMINAL_TASK_STATES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Checks whether a given task status/state represents a terminal state.
+ * Checks whether a given task status, state, or event represents a terminal state.
  */
-export function isTerminalTaskState(state: unknown): boolean {
-  if (typeof state === 'number') {
-    return state === 3 || state === 4 || state === 5 || state === 7;
+export function isTerminalTaskState(stateOrEvent: unknown): boolean {
+  if (stateOrEvent === undefined || stateOrEvent === null) return false;
+  if (typeof stateOrEvent === 'object') {
+    const obj = stateOrEvent as Record<string, unknown>;
+    if (obj['final'] === true || obj['isCompleted'] === true) {
+      return true;
+    }
+    if ('status' in obj) {
+      const rawStatus = obj['status'];
+      const rawState =
+        typeof rawStatus === 'object' && rawStatus !== null
+          ? (rawStatus as Record<string, unknown>)['state']
+          : rawStatus;
+      return isTerminalTaskState(rawState);
+    }
+    return false;
   }
-  const normalized = normalizeTaskState(state);
+  if (typeof stateOrEvent === 'number') {
+    return stateOrEvent === 3 || stateOrEvent === 4 || stateOrEvent === 5 || stateOrEvent === 7;
+  }
+  const normalized = normalizeTaskState(stateOrEvent);
   return TERMINAL_TASK_STATES.has(normalized);
 }
 
@@ -354,6 +378,7 @@ export interface TaskStatusUpdateEvent {
   statusUpdate?: Record<string, unknown>;
   artifact_update?: Record<string, unknown>;
   artifactUpdate?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 /**
