@@ -1,0 +1,93 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// Standalone fallbacks for the `--cpk-*` design tokens.
+//
+// The tokens themselves are defined by the shell theme layer. These pages are
+// authored against that layer, but each one has to render correctly on its own
+// when the theme layer is not present -- otherwise every padding, radius and
+// colour collapses and the page reviews as broken.
+//
+// Consumers reference a token as `var(--cpk-x, var(--cpk-fb-x))`, so the real
+// token always wins when it exists and these values apply only in its absence.
+// Nothing here shadows or overrides the theme.
+
+@mixin light {
+  // Spacing
+  --cpk-fb-space-1: 4px;
+  --cpk-fb-space-2: 8px;
+  --cpk-fb-space-3: 12px;
+  --cpk-fb-space-4: 16px;
+  --cpk-fb-space-5: 24px;
+
+  // Radii
+  --cpk-fb-radius-card: 8px;
+  --cpk-fb-radius-lg: 16px;
+  --cpk-fb-radius-pill: 9999px;
+
+  // Type
+  --cpk-fb-font-body: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --cpk-fb-font-mono: 'Spline Sans Mono', ui-monospace, monospace;
+
+  // Surfaces
+  --cpk-fb-surface-elevated: #ffffff;
+  --cpk-fb-surface-sunken: rgba(0, 0, 0, 0.04);
+  --cpk-fb-glass-bg-hover: rgba(255, 255, 255, 0.62);
+  --cpk-fb-shadow-card: 0px 6px 6px -2px rgba(1, 5, 7, 0.08);
+
+  // Lines
+  --cpk-fb-border: #cfcfe0;
+  --cpk-fb-divider: #dbdbe5;
+
+  // Text
+  --cpk-fb-text-primary: #010507;
+  --cpk-fb-text-secondary: #57575b;
+
+  // Accent
+  --cpk-fb-accent: #4355b9;
+  --cpk-fb-accent-bg: rgba(67, 85, 185, 0.1);
+
+  // Status
+  --cpk-fb-success: #1e7d4f;
+  --cpk-fb-success-bg: rgba(30, 125, 79, 0.12);
+  --cpk-fb-warning: #9a5b00;
+  --cpk-fb-warning-bg: rgba(154, 91, 0, 0.14);
+  --cpk-fb-critical: #ba1a1a;
+  --cpk-fb-critical-bg: rgba(186, 26, 26, 0.1);
+}
+
+@mixin dark {
+  --cpk-fb-surface-elevated: #201f20;
+  --cpk-fb-surface-sunken: rgba(255, 255, 255, 0.06);
+  --cpk-fb-glass-bg-hover: rgba(58, 58, 68, 0.6);
+  --cpk-fb-shadow-card: 0px 6px 10px -2px rgba(0, 0, 0, 0.5);
+
+  --cpk-fb-border: rgba(255, 255, 255, 0.16);
+  --cpk-fb-divider: rgba(255, 255, 255, 0.1);
+
+  --cpk-fb-text-primary: #f4f2f7;
+  --cpk-fb-text-secondary: #bcbbc6;
+
+  --cpk-fb-accent: #bac3ff;
+  --cpk-fb-accent-bg: rgba(186, 195, 255, 0.16);
+
+  --cpk-fb-success: #6fdfa0;
+  --cpk-fb-success-bg: rgba(111, 223, 160, 0.16);
+  --cpk-fb-warning: #ffc078;
+  --cpk-fb-warning-bg: rgba(255, 192, 120, 0.16);
+  --cpk-fb-critical: #ffb4ab;
+  --cpk-fb-critical-bg: rgba(255, 180, 171, 0.16);
+}

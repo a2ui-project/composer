@@ -27,6 +27,8 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/vite.config.ts',
       '**/vitest.config.ts',
+      '**/*.generated.ts',
+      'shell/scripts/**',
     ],
   },
 
