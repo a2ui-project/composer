@@ -77,8 +77,8 @@ export function isErrorLike(val: unknown): val is Error {
     'message' in val &&
     typeof (val as Record<string, unknown>)['message'] === 'string' &&
     'stack' in val &&
-    !('nodeType' in val) &&
-    !('component' in val)
+    typeof (val as Record<string, unknown>)['stack'] === 'string' &&
+    !('nodeType' in val)
   );
 }
 
@@ -179,10 +179,7 @@ export class ErrorLogger {
   error(item: Partial<ErrorLogItem>): void;
   error(messageOrError: unknown, ...optionalParams: unknown[]): void;
   error(arg1: unknown, ...args: unknown[]): void {
-    const item = this.normalizeItem('error', arg1, ...args);
-    if (item) {
-      this.emit(item);
-    }
+    this.emit(this.normalizeItem('error', arg1, ...args));
   }
 
   /**
@@ -191,10 +188,7 @@ export class ErrorLogger {
   warn(item: Partial<ErrorLogItem>): void;
   warn(messageOrError: unknown, ...optionalParams: unknown[]): void;
   warn(arg1: unknown, ...args: unknown[]): void {
-    const item = this.normalizeItem('warn', arg1, ...args);
-    if (item) {
-      this.emit(item);
-    }
+    this.emit(this.normalizeItem('warn', arg1, ...args));
   }
 
   /**
@@ -203,10 +197,7 @@ export class ErrorLogger {
   log(item: Partial<ErrorLogItem>): void;
   log(messageOrError: unknown, ...optionalParams: unknown[]): void;
   log(arg1: unknown, ...args: unknown[]): void {
-    const item = this.normalizeItem('log', arg1, ...args);
-    if (item) {
-      this.emit(item);
-    }
+    this.emit(this.normalizeItem('log', arg1, ...args));
   }
 
   /**
@@ -215,10 +206,7 @@ export class ErrorLogger {
   info(item: Partial<ErrorLogItem>): void;
   info(messageOrError: unknown, ...optionalParams: unknown[]): void;
   info(arg1: unknown, ...args: unknown[]): void {
-    const item = this.normalizeItem('info', arg1, ...args);
-    if (item) {
-      this.emit(item);
-    }
+    this.emit(this.normalizeItem('info', arg1, ...args));
   }
 
   /**
@@ -250,7 +238,7 @@ export class ErrorLogger {
     defaultLevel: ErrorLogLevel,
     arg1: unknown,
     ...args: unknown[]
-  ): ErrorLogItem | null {
+  ): ErrorLogItem {
     const timestamp = Date.now();
     const id = `${timestamp}-${Math.random().toString(36).substring(2, 9)}`;
 
@@ -269,12 +257,11 @@ export class ErrorLogger {
     args: unknown[],
   ): ErrorLogItem {
     const sourceTag = '[Shell]';
-    const message =
-      partialObj.message !== undefined
-        ? partialObj.message
-        : args.length > 0
-          ? args.map(a => (typeof a === 'string' ? a : safeSerialize(a))).join(' ')
-          : '';
+    let message = partialObj.message ?? '';
+    if (args.length > 0) {
+      const argsStr = args.map(a => (typeof a === 'string' ? a : safeSerialize(a))).join(' ');
+      message = message ? `${message} ${argsStr}` : argsStr;
+    }
     return {
       id: partialObj.id ?? id,
       timestamp: partialObj.timestamp ?? timestamp,
@@ -329,10 +316,6 @@ export class ErrorLogger {
     }
 
     if (typeof val !== 'object' || val === null) {
-      return false;
-    }
-
-    if ('startLineNumber' in val) {
       return false;
     }
 

@@ -218,6 +218,37 @@ export class HostCommunication implements OnDestroy {
         return;
       }
 
+      if (type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
+        const payload = data.payload as {validationErrors?: unknown} | undefined;
+        if (payload?.validationErrors) {
+          const validationErrors = payload.validationErrors;
+          const hasErrors = Array.isArray(validationErrors)
+            ? validationErrors.length > 0
+            : typeof validationErrors === 'object' && validationErrors !== null
+              ? Object.keys(validationErrors).length > 0
+              : !!validationErrors;
+
+          if (hasErrors) {
+            let msg = '';
+            if (Array.isArray(validationErrors)) {
+              msg = validationErrors
+                .map(e => (typeof e === 'string' ? e : JSON.stringify(e)))
+                .join(', ');
+            } else if (typeof validationErrors === 'object') {
+              msg = JSON.stringify(validationErrors);
+            } else {
+              msg = String(validationErrors);
+            }
+
+            this.errorLogger.log({
+              level: 'error',
+              message: msg,
+              sourceTag: '[Validation]',
+            });
+          }
+        }
+      }
+
       this.messageHistoryBuffer.push(envelope);
       if (this.messageHistoryBuffer.length > 100) {
         this.messageHistoryBuffer.shift();

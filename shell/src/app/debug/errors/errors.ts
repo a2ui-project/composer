@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {Component, inject, signal, DestroyRef} from '@angular/core';
+import {Component, inject, signal} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
@@ -58,7 +58,6 @@ export interface DisplayErrorLogItem {
 })
 export class Errors {
   private readonly errorLogger = inject(ErrorLogger);
-  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly errorsLog = signal<DisplayErrorLogItem[]>([]);
   protected readonly columnsToDisplay = ['time', 'level', 'source', 'message'];
@@ -72,18 +71,16 @@ export class Errors {
         .reverse(),
     );
 
-    this.errorLogger.errorStream$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((item: ErrorLogItem) => {
-        const mapped = this.mapToDisplayItem(item);
-        this.errorsLog.update(logs => {
-          const newLogs = [mapped, ...logs];
-          if (newLogs.length > 100) {
-            newLogs.length = 100;
-          }
-          return newLogs;
-        });
+    this.errorLogger.errorStream$.pipe(takeUntilDestroyed()).subscribe((item: ErrorLogItem) => {
+      const mapped = this.mapToDisplayItem(item);
+      this.errorsLog.update(logs => {
+        const newLogs = [mapped, ...logs];
+        if (newLogs.length > 100) {
+          newLogs.length = 100;
+        }
+        return newLogs;
       });
+    });
   }
 
   private mapToDisplayItem(item: ErrorLogItem): DisplayErrorLogItem {

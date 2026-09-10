@@ -892,6 +892,153 @@ describe('HostCommunication', () => {
           sourceTag: '[Previewer]',
         });
       });
+
+      it('forwards array validation errors in DATA_MODEL_CHANGE to ErrorLogger with [Validation] tag', () => {
+        const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+        service.registerIframe(mockIframeWindow);
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: mockIframeWindow,
+            origin: 'http://localhost:3000',
+            data: {
+              type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+              payload: {
+                updateDataModel: {surfaceId: 'surf1'},
+                validationErrors: ['field is required', {nested: 'error'}],
+              },
+            },
+          }),
+        );
+
+        expect(mockErrorLogger.log).toHaveBeenCalledWith({
+          level: 'error',
+          message: 'field is required, {"nested":"error"}',
+          sourceTag: '[Validation]',
+        });
+      });
+
+      it('forwards object validation errors in DATA_MODEL_CHANGE to ErrorLogger with [Validation] tag', () => {
+        const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+        service.registerIframe(mockIframeWindow);
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: mockIframeWindow,
+            origin: 'http://localhost:3000',
+            data: {
+              type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+              payload: {
+                updateDataModel: {surfaceId: 'surf1'},
+                validationErrors: {field: 'invalid'},
+              },
+            },
+          }),
+        );
+
+        expect(mockErrorLogger.log).toHaveBeenCalledWith({
+          level: 'error',
+          message: '{"field":"invalid"}',
+          sourceTag: '[Validation]',
+        });
+      });
+
+      it('forwards primitive validation errors in DATA_MODEL_CHANGE to ErrorLogger with [Validation] tag', () => {
+        const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+        service.registerIframe(mockIframeWindow);
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: mockIframeWindow,
+            origin: 'http://localhost:3000',
+            data: {
+              type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+              payload: {
+                updateDataModel: {surfaceId: 'surf1'},
+                validationErrors: 'Invalid schema',
+              },
+            },
+          }),
+        );
+
+        expect(mockErrorLogger.log).toHaveBeenCalledWith({
+          level: 'error',
+          message: 'Invalid schema',
+          sourceTag: '[Validation]',
+        });
+      });
+
+      it('ignores empty or missing validationErrors in DATA_MODEL_CHANGE', () => {
+        const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+        service.registerIframe(mockIframeWindow);
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: mockIframeWindow,
+            origin: 'http://localhost:3000',
+            data: {
+              type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+              payload: {
+                updateDataModel: {surfaceId: 'surf1'},
+                validationErrors: [],
+              },
+            },
+          }),
+        );
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: mockIframeWindow,
+            origin: 'http://localhost:3000',
+            data: {
+              type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+              payload: {
+                updateDataModel: {surfaceId: 'surf1'},
+                validationErrors: {},
+              },
+            },
+          }),
+        );
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: mockIframeWindow,
+            origin: 'http://localhost:3000',
+            data: {
+              type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+              payload: {
+                updateDataModel: {surfaceId: 'surf1'},
+              },
+            },
+          }),
+        );
+
+        expect(mockErrorLogger.log).not.toHaveBeenCalled();
+      });
+
+      it('preserves DATA_MODEL_CHANGE envelopes in history buffer and updates latestEnvelope', () => {
+        const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+        service.registerIframe(mockIframeWindow);
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: mockIframeWindow,
+            origin: 'http://localhost:3000',
+            data: {
+              type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+              payload: {
+                updateDataModel: {surfaceId: 'surf1'},
+                validationErrors: ['some error'],
+              },
+            },
+          }),
+        );
+
+        const history = service.getHistoryBuffer();
+        expect(history.length).toBe(1);
+        expect(history[0].type).toBe(PreviewBridgeMessageType.DATA_MODEL_CHANGE);
+        expect(service.latestEnvelope()?.type).toBe(PreviewBridgeMessageType.DATA_MODEL_CHANGE);
+      });
     });
   });
 

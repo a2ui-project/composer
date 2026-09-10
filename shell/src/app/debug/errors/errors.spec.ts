@@ -143,6 +143,23 @@ describe('Errors Component', () => {
     expect(row.level).toBe('warn');
   });
 
+  it('renders line number when column is omitted', async () => {
+    errorStream$.next({
+      id: '125',
+      timestamp: Date.now(),
+      level: 'warn',
+      message: 'Line only warning',
+      sourceTag: '[Editor]',
+      line: 42,
+    });
+    fixture.detectChanges();
+
+    const row = await harness.getRowValuesAt(0);
+    expect(row.message).toContain('Line only warning');
+    expect(row.message).toContain('Line 42');
+    expect(row.message).not.toContain('Col');
+  });
+
   it('prepends newer errors at index 0', async () => {
     errorStream$.next({
       id: '1',

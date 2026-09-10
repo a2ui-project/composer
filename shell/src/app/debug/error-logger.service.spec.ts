@@ -123,9 +123,9 @@ describe('ErrorLogger Service Tests', () => {
     expect(isErrorLike(crossRealmLikeError)).toBe(true);
 
     const a2uiNode = {
-      component: 'Button',
+      component: 'Stack',
       message: 'Click me',
-      stack: 'layout',
+      stack: ['item1', 'item2'],
     };
     expect(isErrorLike(a2uiNode)).toBe(false);
 
@@ -239,5 +239,40 @@ describe('ErrorLogger Service Tests', () => {
 
     expect(service.getHistory().length).toBe(1);
     expect(service.getHistory()[0].message).toBe('Initial log');
+  });
+
+  it('appends variadic arguments when partial item has message supplied', () => {
+    const emitted: ErrorLogItem[] = [];
+    service.errorStream$.subscribe(item => emitted.push(item));
+
+    service.error({message: 'Failed to process'}, 'extra details', {code: 500});
+
+    expect(emitted.length).toBe(1);
+    expect(emitted[0].message).toBe('Failed to process extra details {"code":500}');
+  });
+
+  it('unconditionally emits normalized ErrorLogItem for various inputs', () => {
+    const emitted: ErrorLogItem[] = [];
+    service.errorStream$.subscribe(item => emitted.push(item));
+
+    service.error({});
+    service.warn(null);
+    service.info(undefined);
+    service.log('');
+    service.error(12345);
+
+    expect(emitted.length).toBe(5);
+    for (const item of emitted) {
+      expect(item).toBeDefined();
+      expect(typeof item.id).toBe('string');
+      expect(typeof item.timestamp).toBe('number');
+      expect(typeof item.message).toBe('string');
+    }
+    expect(emitted[0].level).toBe('error');
+    expect(emitted[1].level).toBe('warn');
+    expect(emitted[2].level).toBe('info');
+    expect(emitted[3].level).toBe('log');
+    expect(emitted[4].level).toBe('error');
+    expect(emitted[4].message).toBe('12345');
   });
 });

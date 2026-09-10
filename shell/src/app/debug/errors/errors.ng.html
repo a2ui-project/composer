@@ -46,8 +46,14 @@
           <div class="message-cell">
             <span class="error-message-text">
               {{ element.message }}
-              @if (element.line !== undefined && element.column !== undefined) {
-                <span class="line-col"> (Line {{ element.line }}, Col {{ element.column }})</span>
+              @if (element.line !== undefined) {
+                <span class="line-col">
+                  (Line {{ element.line }}
+                  @if (element.column !== undefined) {
+                    , Col {{ element.column }}
+                  }
+                  )</span
+                >
               }
             </span>
             @if (element.stack || element.snippet) {
