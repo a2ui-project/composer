@@ -27,7 +27,14 @@ import {
 } from '../../settings/app-config-provider/app-config-provider';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
-const {mockGetModel, mockCreateModel, mockSetValue, mockEditorCreate} = vi.hoisted(() => {
+const {
+  mockGetModel,
+  mockCreateModel,
+  mockSetValue,
+  mockEditorCreate,
+  mockOnDidChangeMarkers,
+  mockGetModelMarkers,
+} = vi.hoisted(() => {
   const mockSetValue = vi.fn();
   const mockGetModel = vi.fn();
   const mockCreateModel = vi.fn((val: string, lang: string, uri: unknown) => ({
@@ -42,7 +49,16 @@ const {mockGetModel, mockCreateModel, mockSetValue, mockEditorCreate} = vi.hoist
     onDidChangeModelContent: vi.fn(() => ({dispose: vi.fn()})),
     dispose: vi.fn(),
   }));
-  return {mockGetModel, mockCreateModel, mockSetValue, mockEditorCreate};
+  const mockOnDidChangeMarkers = vi.fn(() => ({dispose: vi.fn()}));
+  const mockGetModelMarkers = vi.fn(() => []);
+  return {
+    mockGetModel,
+    mockCreateModel,
+    mockSetValue,
+    mockEditorCreate,
+    mockOnDidChangeMarkers,
+    mockGetModelMarkers,
+  };
 });
 
 vi.mock('@monaco-editor/loader', () => ({
@@ -56,8 +72,8 @@ vi.mock('@monaco-editor/loader', () => ({
         getModel: mockGetModel,
         createModel: mockCreateModel,
         create: mockEditorCreate,
-        onDidChangeMarkers: vi.fn(() => ({dispose: vi.fn()})),
-        getModelMarkers: vi.fn(() => []),
+        onDidChangeMarkers: mockOnDidChangeMarkers,
+        getModelMarkers: mockGetModelMarkers,
       },
       languages: {
         json: {
@@ -327,5 +343,60 @@ describe('MonacoEditor component', () => {
 
     expect(mockSetValue).toHaveBeenCalledWith('{"reused": true}');
     expect(mockCreateModel).not.toHaveBeenCalled();
+  });
+
+  it('handles empty uris array without throwing TypeError', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    fixture.componentRef.setInput('value', '{"test": true}');
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    expect(mockOnDidChangeMarkers).toHaveBeenCalled();
+    const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+      uris: readonly {toString: () => string}[],
+    ) => void;
+
+    expect(() => markerListener([])).not.toThrow();
+    expect(mockGetModelMarkers).not.toHaveBeenCalled();
+  });
+
+  it('handles multiple URIs and emits markers for matching model URI', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    fixture.componentRef.setInput('value', '{"test": true}');
+    const markersSpy = vi.fn();
+    fixture.componentInstance.markersChange.subscribe(markersSpy);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    expect(mockOnDidChangeMarkers).toHaveBeenCalled();
+    const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+      uris: readonly {toString: () => string}[],
+    ) => void;
+
+    const mockMarker = {
+      severity: 8,
+      message: 'Syntax error in JSON',
+      startLineNumber: 1,
+      startColumn: 5,
+    };
+    mockGetModelMarkers.mockReturnValue([mockMarker]);
+
+    const otherUri = {toString: () => 'inmemory://other/unrelated.json'};
+    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+
+    // Multi-URI array where modelUri is not at index 0
+    markerListener([otherUri, modelUri]);
+
+    expect(markersSpy).toHaveBeenCalledWith([mockMarker]);
+    expect(mockGetModelMarkers).toHaveBeenCalled();
+
+    // Consecutive event with identical marker signature is deduplicated
+    markersSpy.mockClear();
+    markerListener([modelUri]);
+    expect(markersSpy).not.toHaveBeenCalled();
   });
 });

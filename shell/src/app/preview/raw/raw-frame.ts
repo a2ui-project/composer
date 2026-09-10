@@ -104,7 +104,7 @@ export class RawFrame {
           envelope?.type === PreviewBridgeMessageType.RENDER_ERROR ||
           envelope?.type === PreviewBridgeMessageType.RENDERER_READY
         ) {
-          this.startWatchdog();
+          this.clearWatchdog();
         }
       });
 

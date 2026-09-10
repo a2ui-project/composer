@@ -493,10 +493,22 @@ export class MonacoEditor {
           }
         });
 
+        let lastMarkersSignature = '';
         const markersDisposable = monacoInstance.editor.onDidChangeMarkers(
-          ([uri]: readonly monaco.Uri[]) => {
-            if (uri.toString() === modelUri.toString()) {
-              const markers = monacoInstance.editor.getModelMarkers({resource: uri});
+          (uris: readonly monaco.Uri[]) => {
+            if (uris.some(u => u?.toString() === modelUri.toString())) {
+              const markers = monacoInstance.editor.getModelMarkers({resource: modelUri});
+              const currentSignature = markers
+                .map(
+                  (m: monaco.editor.IMarker) =>
+                    `${m.severity}:${m.message}:${m.startLineNumber}:${m.startColumn}`,
+                )
+                .sort()
+                .join('|');
+              if (lastMarkersSignature === currentSignature) {
+                return;
+              }
+              lastMarkersSignature = currentSignature;
 
               this.markersChange.emit(markers);
 

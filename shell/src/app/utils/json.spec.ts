@@ -15,7 +15,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {tryParseJsonArray, formatJson} from './json';
+import {tryParseJsonArray, formatJson, extractErrorDetails} from './json';
 
 describe('JSON Array Parser Utilities', () => {
   it('parses valid JSON array strings including whitespace trimming', () => {
@@ -103,5 +103,55 @@ describe('JSON Formatter Utilities', () => {
     expect(formatJson({hello: 'world'})).toBe('{\n  "hello": "world"\n}');
     expect(formatJson([1, 2])).toBe('[\n  1,\n  2\n]');
     expect(formatJson('test')).toBe('"test"');
+  });
+});
+
+describe('extractErrorDetails', () => {
+  it('extracts line and column from standard line/column error message format', () => {
+    const error = new SyntaxError('JSON Parse error: Unexpected identifier at line 3 column 12');
+    const result = extractErrorDetails(error, 'line1\nline2\nline3');
+    expect(result).toEqual({line: 3, column: 12});
+  });
+
+  it('extracts line and column from V8 position offset on a single line', () => {
+    const rawText = '{"key": "val",}';
+    // Position 14 points to '}'
+    const error = new SyntaxError("Unexpected token '}' at position 14");
+    const result = extractErrorDetails(error, rawText);
+    expect(result).toEqual({line: 1, column: 15});
+  });
+
+  it('calculates correct multiline line and column from V8 position offset', () => {
+    // "{\n  \"a\": 1,\n  \"b\": \n}"
+    // index 0: {
+    // index 1: \n
+    // index 2: ' ', 3: ' ', 4: '"', 5: 'a', 6: '"', 7: ':', 8: ' ', 9: '1', 10: ',', 11: '\n'
+    // index 12: ' ', 13: ' ', 14: '"', 15: 'b', 16: '"', 17: ':', 18: ' ', 19: '\n'
+    // position 19 is '\n' after "b: " -> line 3, column 8
+    const rawText = '{\n  "a": 1,\n  "b": \n}';
+    const error = new SyntaxError("Unexpected token '\\n' at position 19");
+    const result = extractErrorDetails(error, rawText);
+    expect(result).toEqual({line: 3, column: 8});
+  });
+
+  it('clamps V8 position offset when position exceeds text length', () => {
+    const rawText = '{"a": 1}';
+    // Length is 8, position 999 exceeds length
+    const error = new SyntaxError('Unexpected end of JSON input at position 999');
+    const result = extractErrorDetails(error, rawText);
+    expect(result).toEqual({line: 1, column: 9});
+  });
+
+  it('clamps V8 position offset at index 0 correctly', () => {
+    const rawText = 'invalid';
+    const error = new SyntaxError("Unexpected token 'i' at position 0");
+    const result = extractErrorDetails(error, rawText);
+    expect(result).toEqual({line: 1, column: 1});
+  });
+
+  it('returns empty object for unrecognized error formats', () => {
+    const error = new SyntaxError('Unexpected token');
+    const result = extractErrorDetails(error, 'some text');
+    expect(result).toEqual({});
   });
 });

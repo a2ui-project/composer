@@ -802,6 +802,21 @@ describe('RawFrame JSON Source Editor View', () => {
       vi.advanceTimersByTime(15000);
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
     });
+
+    it('clears watchdog timer when render completion message arrives', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      messageStreamSubject.next({
+        type: PreviewBridgeMessageType.RENDER_SUCCESS,
+        origin: 'http://test',
+        timestamp: Date.now(),
+      });
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
   });
 
   describe('notifySchemaErrors', () => {

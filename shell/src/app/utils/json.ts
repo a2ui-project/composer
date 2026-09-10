@@ -56,6 +56,20 @@ export function extractErrorDetails(
       column: parseInt(lineColMatch[2], 10),
     };
   }
+
+  const positionMatch = message.match(/at position (\d+)/i);
+  if (positionMatch) {
+    const rawPos = parseInt(positionMatch[1], 10);
+    const text = rawText ?? '';
+    const pos = Math.max(0, Math.min(rawPos, text.length));
+    const textBefore = text.slice(0, pos);
+    const lines = textBefore.split('\n');
+    return {
+      line: lines.length,
+      column: lines[lines.length - 1].length + 1,
+    };
+  }
+
   return {};
 }
 
