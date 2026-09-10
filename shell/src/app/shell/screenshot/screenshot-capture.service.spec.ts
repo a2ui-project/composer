@@ -169,7 +169,6 @@ describe('ScreenshotCaptureService', () => {
           'RestrictionTarget API not supported, capturing full tab.',
         ),
         sourceTag: '[Shell]',
-        level: 'warn',
       }),
     );
     expect(result).toBe('data:image/png;base64,mockScreenshot');
@@ -230,7 +229,6 @@ describe('ScreenshotCaptureService', () => {
       expect.objectContaining({
         message: expect.stringContaining('Capture canceled or failed:'),
         sourceTag: '[Shell]',
-        level: 'warn',
       }),
     );
   });
@@ -258,7 +256,6 @@ describe('ScreenshotCaptureService', () => {
           'Failed to restrict video track to element, falling back to full tab capture:',
         ),
         sourceTag: '[Shell]',
-        level: 'warn',
       }),
     );
     expect(result).toBe('data:image/png;base64,mockScreenshot');
@@ -289,7 +286,6 @@ describe('ScreenshotCaptureService', () => {
           'Failed to restrict video track to element, falling back to full tab capture:',
         ),
         sourceTag: '[Shell]',
-        level: 'warn',
       }),
     );
     expect(result).toBe('data:image/png;base64,mockScreenshot');

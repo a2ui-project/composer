@@ -168,13 +168,13 @@ export class ErrorLogger {
     };
     return {
       error: (message: string, ...args: unknown[]) =>
-        this.error({message: buildMessage(message, args), sourceTag, level: 'error'}),
+        this.error({message: buildMessage(message, args), sourceTag}),
       warn: (message: string, ...args: unknown[]) =>
-        this.warn({message: buildMessage(message, args), sourceTag, level: 'warn'}),
+        this.warn({message: buildMessage(message, args), sourceTag}),
       info: (message: string, ...args: unknown[]) =>
-        this.info({message: buildMessage(message, args), sourceTag, level: 'info'}),
+        this.info({message: buildMessage(message, args), sourceTag}),
       log: (message: string, ...args: unknown[]) =>
-        this.log({message: buildMessage(message, args), sourceTag, level: 'log'}),
+        this.log({message: buildMessage(message, args), sourceTag}),
     };
   }
 
