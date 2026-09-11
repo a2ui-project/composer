@@ -31,6 +31,8 @@ describe('SurfaceResizeObserver', () => {
     const docElRecord = document.documentElement as unknown as Record<string, unknown>;
     delete docElRecord['scrollHeight'];
     delete docElRecord['offsetHeight'];
+    delete docElRecord['scrollWidth'];
+    delete docElRecord['offsetWidth'];
     const bodyRecord = document.body as unknown as Record<string, unknown>;
     delete bodyRecord['scrollHeight'];
     delete bodyRecord['offsetHeight'];
@@ -189,6 +191,40 @@ describe('SurfaceResizeObserver', () => {
     expect(onResizeMock).toHaveBeenCalledTimes(1);
 
     observer.measureAndDispatch();
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('excludes documentElement.scrollWidth, which follows the frame', () => {
+    Object.defineProperty(document.body, 'scrollHeight', {value: 300, configurable: true});
+    Object.defineProperty(document.body, 'offsetHeight', {value: 300, configurable: true});
+    Object.defineProperty(document.documentElement, 'offsetHeight', {
+      value: 300,
+      configurable: true,
+    });
+    Object.defineProperty(document.body, 'scrollWidth', {value: 800, configurable: true});
+    Object.defineProperty(document.body, 'offsetWidth', {value: 800, configurable: true});
+    Object.defineProperty(document.documentElement, 'offsetWidth', {
+      value: 800,
+      configurable: true,
+    });
+    Object.defineProperty(document.documentElement, 'scrollWidth', {
+      value: 800,
+      configurable: true,
+    });
+
+    observer = new SurfaceResizeObserver(onResizeMock);
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenCalledTimes(1);
+    expect(onResizeMock).toHaveBeenLastCalledWith({height: 300, width: 800});
+
+    // The frame widens: the root scroll box is floored at the new viewport while
+    // the content boxes stay where they are.
+    Object.defineProperty(document.documentElement, 'scrollWidth', {
+      value: 1200,
+      configurable: true,
+    });
+
     observer.measureAndDispatch();
     expect(onResizeMock).toHaveBeenCalledTimes(1);
   });
