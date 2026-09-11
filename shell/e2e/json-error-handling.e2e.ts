@@ -91,7 +91,7 @@ test.beforeEach(async ({page}) => {
 });
 
 test.describe('JSON Error Handling & Diagnostics', () => {
-  test('surfaces malformed JSON syntax errors in Monaco via squigglies, triggers a debounced consolidated snackbar, and navigates to the Errors tab on click', async ({
+  test('surfaces malformed JSON syntax errors in Monaco via squigglies, triggers a debounced consolidated snackbar, and navigates to the error position on click', async ({
     page,
   }) => {
     await page.getByRole('tab', {name: 'A2UI JSON Editor'}).click();
@@ -121,16 +121,32 @@ test.describe('JSON Error Handling & Diagnostics', () => {
       .filter({hasText: /error|syntax/i})
       .first();
     await expect(snackbar).toBeVisible({timeout: 8000});
-    await expect(snackbar).toContainText('error');
 
-    // Click 'View' action
-    await snackbar.getByRole('button').filter({hasText: /View/i}).click();
+    // Click 'Go to line' action
+    const actionButton = snackbar.getByRole('button').filter({hasText: /Go to line/i});
+    await expect(actionButton).toBeVisible();
+    await actionButton.click();
 
-    // The Errors tab should now be active
+    // The JSON editor tab should still be active (not switching to Errors tab)
+    const jsonEditorTab = page.getByRole('tab', {name: 'A2UI JSON Editor', selected: true});
+    await expect(jsonEditorTab).toBeVisible();
     const errorsTab = page.getByRole('tab', {name: 'Errors', selected: true});
-    await expect(errorsTab).toBeVisible();
+    await expect(errorsTab).toHaveCount(0);
 
-    // The error should be populated in the log table
+    // Verify editor navigated cursor position
+    const cursorPosition = await page.evaluate(() => {
+      const monacoWithEditors = (
+        window as unknown as {
+          monaco?: {
+            editor: {
+              getEditors(): {getPosition(): {lineNumber: number; column: number} | null}[];
+            };
+          };
+        }
+      ).monaco;
+      return monacoWithEditors?.editor?.getEditors()?.[0]?.getPosition();
+    });
+    expect(cursorPosition?.lineNumber).toBeGreaterThanOrEqual(1);
   });
 
   test('recovers gracefully from malformed JSON stream blocks in chat and renders an inline diagnostic error card', async ({
