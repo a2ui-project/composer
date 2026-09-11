@@ -423,6 +423,7 @@ export class MonacoEditor {
       const jsonContrib = (monacoInstance.languages as unknown as {json: typeof monaco.json}).json;
       jsonContrib.jsonDefaults.setDiagnosticsOptions({
         validate: true,
+        schemaValidation: 'error',
         schemas: this.buildValidationSchemas(layoutSchema),
       });
     });
@@ -522,7 +523,7 @@ export class MonacoEditor {
                 .sort()
                 .join('|');
 
-              const hasErrors = markers.some(m => m.severity === 8);
+              const hasErrors = markers.some(m => m.severity === 8 || m.severity === 4);
               const hadPendingMarkers = this.pendingMarkers !== null;
 
               if (!hasErrors) {
@@ -578,6 +579,27 @@ export class MonacoEditor {
     this.editor.setPosition(position);
     this.editor.revealPositionInCenterIfOutsideViewport(position);
     this.editor.focus();
+  }
+
+  /**
+   * Retrieves line and column coordinates for the first active error or warning marker,
+   * or null if no diagnostics are present.
+   */
+  getFirstErrorMarker(): {line: number; column: number} | null {
+    const monacoInstance = this.monacoInstance();
+    if (!monacoInstance) {
+      return null;
+    }
+    const modelUri = monacoInstance.Uri.parse(MODEL_URI);
+    const markers = monacoInstance.editor.getModelMarkers({resource: modelUri});
+    const firstError = markers.find(m => m.severity === 8 || m.severity === 4);
+    if (!firstError) {
+      return null;
+    }
+    return {
+      line: firstError.startLineNumber,
+      column: firstError.startColumn,
+    };
   }
 
   private scheduleErrorMarkersDebounce(): void {

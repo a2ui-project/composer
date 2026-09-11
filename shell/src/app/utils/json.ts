@@ -109,6 +109,12 @@ export function tryParseJsonArray(content?: string | null): JsonParseResult<unkn
     } catch (e) {
       lastError = e as Error;
     }
+  } else if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      JSON.parse(trimmed);
+    } catch (e) {
+      lastError = e as Error;
+    }
   }
 
   // Try parsing as JSON Lines

@@ -63,6 +63,14 @@ describe('JSON Array Parser Utilities', () => {
     expect(tryParseJsonArray('{"a": 1}\n{ "syntax_error": }').success).toBe(false);
   });
 
+  it('captures SyntaxError when parsing unclosed JSON object text', () => {
+    const result = tryParseJsonArray('{"title": "Unclosed object');
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.message).toMatch(/Unterminated string|Unexpected end|Expected/i);
+    }
+  });
+
   it('parses a single JSON object as a single-element array', () => {
     expect(tryParseJsonArray('{"not": "an array"}')).toEqual({
       success: true,

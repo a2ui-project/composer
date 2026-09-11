@@ -79,11 +79,12 @@ export class RawFrame {
 
   private readonly WATCHDOG_TIMEOUT_MS = 15000;
   private readonly INVALID_JSON_TIMEOUT_MS = 3000;
-  private readonly SCHEMA_ERROR_DEBOUNCE_MS = 3000;
+  private readonly SCHEMA_ERROR_DEBOUNCE_MS = 50;
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private invalidJsonTimer: ReturnType<typeof setTimeout> | null = null;
   private lastErrorSignature: string | null = null;
   private lastSyntaxError: {line?: number; column?: number} | null = null;
+  private hasActiveSchemaErrors = false;
   private readonly markerSubject = new Subject<editor.IMarker[]>();
 
   /** Public lock indicator preventing typing deadlocks during generative LLM stream turns. */
@@ -108,7 +109,8 @@ export class RawFrame {
         if (
           envelope?.type === PreviewBridgeMessageType.RENDER_SUCCESS ||
           envelope?.type === PreviewBridgeMessageType.RENDER_ERROR ||
-          envelope?.type === PreviewBridgeMessageType.RENDERER_READY
+          envelope?.type === PreviewBridgeMessageType.RENDERER_READY ||
+          envelope?.type === PreviewBridgeMessageType.SURFACE_RESIZE
         ) {
           this.clearWatchdog();
         }
@@ -220,12 +222,17 @@ export class RawFrame {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((payload: unknown[]) => {
+        if (payload.length === 0 || this.hasActiveSchemaErrors) {
+          this.clearWatchdog();
+          return;
+        }
         this.hostCommunication.sendRenderA2UI(payload);
         this.startWatchdog();
       });
   }
 
   protected onLayoutChange(value: string): void {
+    this.clearWatchdog();
     this.layoutJson.set(value);
     this.layoutInput$.next(value);
     this.stateSync.updateDraft(value);
@@ -238,8 +245,11 @@ export class RawFrame {
   }
 
   protected onMarkersChange(markers: editor.IMarker[]): void {
-    if (markers.some(m => m.severity === 8)) {
+    if (markers.some(m => m.severity === 8 || m.severity === 4)) {
       this.clearWatchdog();
+      this.hasActiveSchemaErrors = true;
+    } else {
+      this.hasActiveSchemaErrors = false;
     }
     this.markerSubject.next(markers);
   }
@@ -272,6 +282,8 @@ export class RawFrame {
   private startWatchdog(): void {
     this.clearWatchdog();
     if (
+      this.isJsonInvalid() ||
+      this.hasActiveSchemaErrors ||
       this.chatState.isProgrammaticStreamActive() ||
       (typeof document !== 'undefined' && document.hidden)
     ) {
@@ -294,7 +306,7 @@ export class RawFrame {
   }
 
   private notifySchemaErrors(markers: editor.IMarker[]): void {
-    const errorMarkers = markers.filter(m => m.severity === 8);
+    const errorMarkers = markers.filter(m => m.severity === 8 || m.severity === 4);
     if (errorMarkers.length === 0) {
       this.lastErrorSignature = null;
       return;
@@ -357,18 +369,26 @@ export class RawFrame {
     if (this.isLocked()) {
       return;
     }
-    const errorCoords = this.lastSyntaxError;
-    const action = errorCoords
-      ? this.getNavigationActionLabel(errorCoords.line, errorCoords.column)
-      : undefined;
+    let line = this.lastSyntaxError?.line;
+    let column = this.lastSyntaxError?.column;
+
+    if (line === undefined) {
+      const marker = this.monacoEditor()?.getFirstErrorMarker();
+      if (marker) {
+        line = marker.line;
+        column = marker.column;
+      }
+    }
+
+    const action = this.getNavigationActionLabel(line, column);
 
     const snackBarRef = this.snackBar.open('Invalid JSON syntax detected.', action, {
       duration: 5000,
     });
 
-    if (action && errorCoords?.line) {
+    if (action && line !== undefined) {
       snackBarRef.onAction().subscribe(() => {
-        this.monacoEditor()?.navigateToPosition(errorCoords.line!, errorCoords.column ?? 1);
+        this.monacoEditor()?.navigateToPosition(line!, column ?? 1);
       });
     }
   }

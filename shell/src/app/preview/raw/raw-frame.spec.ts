@@ -542,7 +542,7 @@ describe('RawFrame JSON Source Editor View', () => {
 
     expect(snackBarMock.open).toHaveBeenCalledWith(
       'Invalid JSON syntax detected.',
-      undefined,
+      'Go to line 1, col 21',
       expect.any(Object),
     );
   });
@@ -564,7 +564,7 @@ describe('RawFrame JSON Source Editor View', () => {
 
     expect(snackBarMock.open).toHaveBeenCalledWith(
       'Invalid JSON syntax detected.',
-      undefined,
+      'Go to line 1, col 21',
       expect.any(Object),
     );
   });
@@ -612,7 +612,7 @@ describe('RawFrame JSON Source Editor View', () => {
     vi.advanceTimersByTime(1000);
     expect(snackBarMock.open).toHaveBeenCalledWith(
       'Invalid JSON syntax detected.',
-      undefined,
+      'Go to line 1, col 21',
       expect.any(Object),
     );
   });
@@ -944,6 +944,54 @@ describe('RawFrame JSON Source Editor View', () => {
       vi.advanceTimersByTime(15000);
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
     });
+
+    it('clears watchdog timer immediately when onLayoutChange is called', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      component['onLayoutChange']('{"changed": true}');
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('clears watchdog timer when SURFACE_RESIZE arrives from messageStream$', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      messageStreamSubject.next({
+        type: PreviewBridgeMessageType.SURFACE_RESIZE,
+        origin: 'http://test',
+        timestamp: Date.now(),
+      });
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('cancels watchdog timer and suppresses watchdog arming when schema error markers arrive', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      component['onMarkersChange']([
+        {
+          severity: 8,
+          message: 'Schema validation error',
+          startLineNumber: 2,
+          startColumn: 3,
+        } as monaco.editor.IMarker,
+      ]);
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+
+      component.TEST_ONLY.startWatchdog();
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
   });
 
   describe('notifySchemaErrors', () => {
@@ -969,6 +1017,33 @@ describe('RawFrame JSON Source Editor View', () => {
         expect.any(Object),
       );
       expect(navigateSpy).toHaveBeenCalledWith(4, 10);
+    });
+
+    it('displays schema error snackbar and provides navigation for severity 4 warning markers', async () => {
+      const {component} = await setup(false);
+      const editor = component.monacoEditor();
+      expect(editor).toBeTruthy();
+      const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
+
+      const warningMarkers: monaco.editor.IMarker[] = [
+        {
+          severity: 4,
+          message: 'Deprecated field used',
+          startLineNumber: 8,
+          startColumn: 15,
+        } as monaco.editor.IMarker,
+      ];
+
+      component.TEST_ONLY.notifySchemaErrors(warningMarkers);
+
+      expect(snackBarMock.open).toHaveBeenCalledWith(
+        'Schema error: Deprecated field used',
+        'Go to line 8, col 15',
+        expect.objectContaining({
+          panelClass: 'schema-error-snackbar',
+        }),
+      );
+      expect(navigateSpy).toHaveBeenCalledWith(8, 15);
     });
   });
 
@@ -1018,5 +1093,25 @@ describe('RawFrame JSON Source Editor View', () => {
       expect.any(Object),
     );
     expect(navigateSpy).toHaveBeenCalledWith(2, 1);
+  });
+
+  it('falls back to Monaco getFirstErrorMarker when syntax error coordinates are missing from V8', async () => {
+    const {component} = await setup(false);
+    const editor = component.monacoEditor();
+    expect(editor).toBeTruthy();
+    vi.spyOn(editor!, 'getFirstErrorMarker').mockReturnValue({line: 5, column: 12});
+    const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
+
+    component['lastSyntaxError'] = null;
+    component['showJsonSyntaxError']();
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      'Go to line 5, col 12',
+      expect.objectContaining({
+        duration: 5000,
+      }),
+    );
+    expect(navigateSpy).toHaveBeenCalledWith(5, 12);
   });
 });

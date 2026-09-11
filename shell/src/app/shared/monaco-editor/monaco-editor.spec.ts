@@ -18,9 +18,10 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ComponentHarness} from '@angular/cdk/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
-import {signal} from '@angular/core';
+import {signal, WritableSignal} from '@angular/core';
 import {MonacoEditor} from './monaco-editor';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 import {
   AppConfigProvider,
   ThemePreference,
@@ -47,6 +48,7 @@ const {
   mockCursorSelectionDisposable,
   mockKeyDownDisposable,
   mockMouseDownDisposable,
+  mockSetDiagnosticsOptions,
 } = vi.hoisted(() => {
   const mockSetValue = vi.fn();
   const mockGetModel = vi.fn();
@@ -59,6 +61,7 @@ const {
   const mockCursorSelectionDisposable = {dispose: vi.fn()};
   const mockKeyDownDisposable = {dispose: vi.fn()};
   const mockMouseDownDisposable = {dispose: vi.fn()};
+  const mockSetDiagnosticsOptions = vi.fn();
 
   const mockOnDidChangeModelContent = vi.fn(() => mockModelContentDisposable);
   const mockOnDidChangeCursorPosition = vi.fn(() => mockCursorPositionDisposable);
@@ -110,6 +113,7 @@ const {
     mockCursorSelectionDisposable,
     mockKeyDownDisposable,
     mockMouseDownDisposable,
+    mockSetDiagnosticsOptions,
   };
 });
 
@@ -130,7 +134,7 @@ vi.mock('@monaco-editor/loader', () => ({
       languages: {
         json: {
           jsonDefaults: {
-            setDiagnosticsOptions: vi.fn(),
+            setDiagnosticsOptions: mockSetDiagnosticsOptions,
           },
         },
       },
@@ -143,7 +147,7 @@ class MonacoEditorHarness extends ComponentHarness {
 }
 
 class MockCatalogManagement {
-  readonly activeCatalog = signal(null);
+  readonly activeCatalog = signal<Catalog | null>(null);
 }
 
 class MockAppConfigProvider {
@@ -340,6 +344,7 @@ describe('MonacoEditor component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetModelMarkers.mockReturnValue([]);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [MonacoEditor],
@@ -702,5 +707,79 @@ describe('MonacoEditor component', () => {
     // Advance timers after destroy
     vi.advanceTimersByTime(5000);
     expect(markersSpy).not.toHaveBeenCalled();
+  });
+
+  it('configures schemaValidation as error in jsonDefaults', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    const catalogService = TestBed.inject(CatalogManagement);
+    (catalogService.activeCatalog as WritableSignal<Catalog | null>).set({
+      catalogId: 'test-catalog',
+      components: {},
+    });
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(mockSetDiagnosticsOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        validate: true,
+        schemaValidation: 'error',
+      }),
+    );
+  });
+
+  it('returns line and column from getFirstErrorMarker when diagnostics are present', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    expect(fixture.componentInstance.getFirstErrorMarker()).toBeNull();
+
+    mockGetModelMarkers.mockReturnValue([
+      {
+        severity: 8,
+        message: 'Property not allowed',
+        startLineNumber: 7,
+        startColumn: 14,
+      },
+    ]);
+
+    expect(fixture.componentInstance.getFirstErrorMarker()).toEqual({line: 7, column: 14});
+  });
+
+  it('debounces and emits markers when warning markers (severity 4) are present', async () => {
+    vi.useFakeTimers();
+    fixture = TestBed.createComponent(MonacoEditor);
+    const markersSpy = vi.fn();
+    fixture.componentInstance.markersChange.subscribe(markersSpy);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+      uris: readonly {toString: () => string}[],
+    ) => void;
+
+    const warningMarker = {
+      severity: 4,
+      message: 'Schema warning',
+      startLineNumber: 3,
+      startColumn: 5,
+    };
+    mockGetModelMarkers.mockReturnValue([warningMarker]);
+    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+
+    markerListener([modelUri]);
+
+    vi.advanceTimersByTime(2000);
+    expect(markersSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1000);
+    expect(markersSpy).toHaveBeenCalledWith([warningMarker]);
   });
 });
