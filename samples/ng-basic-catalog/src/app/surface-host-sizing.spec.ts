@@ -20,13 +20,22 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
 /** Matches any viewport-relative length unit. */
-const VIEWPORT_UNIT = /\d+\s*(vh|dvh|svh|lvh)\b/;
+const VIEWPORT_UNIT = /\d+\s*(vh|dvh|svh|lvh|vmin|vmax|vb|vi)\b/i;
 
 /** Matches a full-height declaration that inherits the iframe viewport. */
-const FULL_HEIGHT = /height:\s*100%/;
+const FULL_HEIGHT = /height:\s*'?100%/i;
 
-/** Stylesheets applied to the guest document rendered inside the preview iframe. */
-const GUEST_STYLESHEETS = ['./app.component.scss', '../styles.scss'];
+/**
+ * Guest document, its stylesheets, and the surface host template. The template
+ * is included because it already carries an inline `style` attribute, so it is
+ * a plausible place for viewport sizing to reappear.
+ */
+const GUEST_SOURCES = [
+  './app.component.scss',
+  './app.component.ng.html',
+  '../styles.scss',
+  '../index.html',
+];
 
 /**
  * The host sizes the preview iframe to the height the guest reports, so any
@@ -35,12 +44,12 @@ const GUEST_STYLESHEETS = ['./app.component.scss', '../styles.scss'];
  * reporting a height larger than the frame it was just given.
  */
 describe('Angular sample guest sizing', () => {
-  for (const stylesheet of GUEST_STYLESHEETS) {
-    it(`keeps ${stylesheet} free of viewport-coupled sizing`, () => {
-      const css = readFileSync(fileURLToPath(new URL(stylesheet, import.meta.url)), 'utf8');
+  for (const source of GUEST_SOURCES) {
+    it(`keeps ${source} free of viewport-coupled sizing`, () => {
+      const contents = readFileSync(fileURLToPath(new URL(source, import.meta.url)), 'utf8');
 
-      expect(css).not.toMatch(VIEWPORT_UNIT);
-      expect(css).not.toMatch(FULL_HEIGHT);
+      expect(contents).not.toMatch(VIEWPORT_UNIT);
+      expect(contents).not.toMatch(FULL_HEIGHT);
     });
   }
 });

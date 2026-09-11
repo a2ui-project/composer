@@ -234,7 +234,7 @@ export class A2uiSandboxRoot extends LitElement {
         ${this.renderErrorOverlay()}
       `;
     }
-    return html`<main style="position: relative; width: 100%; height: 100%;">
+    return html`<main>
       <a2ui-surface .surface=${this.surface}></a2ui-surface>
       ${this.renderErrorOverlay()}
     </main>`;

@@ -431,4 +431,36 @@ describe('Lit Framework Adapter Spec', () => {
     element.remove();
     vi.useRealTimers();
   });
+
+  it('renders the surface host without viewport-coupled sizing', async () => {
+    bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root-host-sizing-test'});
+
+    const ctor = customElements.get('app-root-host-sizing-test');
+    const element = new ctor!() as HTMLElement & {
+      surface: unknown;
+      updateComplete: Promise<boolean>;
+    };
+    document.body.appendChild(element);
+
+    // Render the surface-present branch. Its markup comes from a template
+    // literal, which the static stylesheet assertion above cannot see and no
+    // sample-side guard reads, so it is the one place viewport sizing could
+    // reappear unnoticed. The stub carries only what a2ui-surface reads while
+    // updating.
+    element.surface = {
+      componentsModel: {
+        get: () => undefined,
+        onCreated: {subscribe: () => ({unsubscribe: () => {}})},
+      },
+    };
+    await element.updateComplete;
+
+    const markup = element.shadowRoot!.innerHTML;
+    expect(markup).toContain('<main>');
+    expect(markup).not.toMatch(/\d+\s*(vh|dvh|svh|lvh|vmin|vmax|vb|vi)\b/i);
+    expect(markup).not.toMatch(/height:\s*100%/i);
+    expect(markup).not.toMatch(/min-height:\s*\d+\s*(vh|dvh|svh|lvh)\b/i);
+
+    element.remove();
+  });
 });
