@@ -266,6 +266,13 @@ export function hasA2uiCanvasComponent(items: RenderA2uiItem[]): boolean {
 }
 
 /**
+ * The only A2UI protocol version Composer speaks.
+ *
+ * Stamped onto outgoing client events and used as the default for inbound items that omit it.
+ */
+export const A2UI_PROTOCOL_VERSION = 'v0.9';
+
+/**
  * Canonical MIME types for A2UI data parts across Google3 and A2A specs.
  * 'application/a2ui+json' is the primary standard (see SharedWeb A2UI pipeline).
  * 'application/json+a2ui' is supported as a backward-compatible alias.
@@ -279,9 +286,11 @@ export function isA2uiMimeType(mimeType?: string | null): boolean {
 }
 
 /**
- * Canonical server-to-client A2UI update keys for both v0.9 and v0.8 protocols.
- * Follows `isA2uiServerPart` from SharedWeb A2UI pipeline
- * (google3/java/com/google/learning/agents/ui/sharedweb/a2a/a2ui_helper.ts).
+ * Canonical server-to-client A2UI v0.9 update keys.
+ *
+ * Mirrors `isA2uiServerPart` from the SharedWeb A2UI pipeline
+ * (google3/java/com/google/learning/agents/ui/sharedweb/a2a/a2ui_helper.ts). Composer only
+ * supports v0.9, so the superseded v0.8 spellings are deliberately absent.
  */
 export const A2UI_SERVER_UPDATE_KEYS = [
   'createSurface',
@@ -289,8 +298,6 @@ export const A2UI_SERVER_UPDATE_KEYS = [
   'updateDataModel',
   'deleteSurface',
   'beginRendering',
-  'surfaceUpdate',
-  'dataModelUpdate',
 ] as const;
 
 /**
@@ -328,7 +335,9 @@ export function normalizeA2uiItems(items: readonly unknown[]): RenderA2uiItem[] 
     const itemObj = raw as Record<string, unknown>;
     const item = {
       version:
-        typeof itemObj['version'] === 'string' && itemObj['version'] ? itemObj['version'] : 'v0.9',
+        typeof itemObj['version'] === 'string' && itemObj['version']
+          ? itemObj['version']
+          : A2UI_PROTOCOL_VERSION,
       ...itemObj,
     } as RenderA2uiItem;
 
