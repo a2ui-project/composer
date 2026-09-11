@@ -45,10 +45,23 @@ import {
   createSentMessageEvent,
   parseA2aStreamEvent,
 } from './converters/a2a-ui-converter';
-import {mergeA2uiItems, partitionA2uiSurfacePayload} from './converters/surface-partitioner';
+import {
+  A2UI_MIME_TYPE,
+  A2UI_PROTOCOL_VERSION,
+  mergeA2uiItems,
+  partitionA2uiSurfacePayload,
+} from './converters/surface-partitioner';
 import {A2aInputArea, SendMessageEvent} from './input-area/input-area';
 import {A2aMessageInspector} from './message-inspector/message-inspector';
 import {MessageInspectorEvent} from './message-inspector/message-inspector-event';
+
+/**
+ * Blank line delimiting one reasoning step from the next within a message's thinking text.
+ *
+ * Agents do not tag step boundaries, so this is the only signal available for distinguishing a
+ * rewrite of the current step from the start of a new one.
+ */
+const THOUGHT_STEP_SEPARATOR = '\n\n';
 
 /**
  * Top-level view container managing end-to-end Agent-to-Agent (A2A) testing,
@@ -89,8 +102,13 @@ export class A2aChatView implements OnInit {
   protected readonly inspectorEvents = signal<MessageInspectorEvent[]>([]);
   /** Current active task ID from the agent server. */
   protected readonly activeTaskId = signal<string | null>(null);
-  /** Current active conversation context / session ID. */
-  protected readonly activeContextId = signal<string | null>(null);
+  /**
+   * Conversation context / session ID assigned by the agent.
+   *
+   * Undefined until the agent issues one on its first response, which is also the value sent on
+   * the wire to request a new context.
+   */
+  protected readonly activeContextId = signal<string | undefined>(undefined);
 
   /** Whether a connection handshake is currently in progress. */
   protected readonly isConnecting = signal<boolean>(false);
@@ -215,7 +233,7 @@ export class A2aChatView implements OnInit {
     this.messages.set([]);
     this.inspectorEvents.set([]);
     this.activeTaskId.set(null);
-    this.activeContextId.set(null);
+    this.activeContextId.set(undefined);
     this.activeCanvasPayload.set(null);
     this.isCanvasOpen.set(false);
   }
@@ -233,7 +251,7 @@ export class A2aChatView implements OnInit {
     // adopted from the stream in handleStreamEvent. Minting one here instead
     // would pin the conversation to an ID the agent never issued, so it would
     // treat each turn as an unknown context and drop prior history.
-    const contextId = this.activeContextId() ?? undefined;
+    const contextId = this.activeContextId();
 
     const userUiMessage: UiMessage = {
       id: userMessageId,
@@ -311,30 +329,20 @@ export class A2aChatView implements OnInit {
       this.cancelActiveGeneration();
     }
 
-    let actionData: Record<string, unknown>;
-    if (typeof action === 'object' && action !== null && !Array.isArray(action)) {
-      const obj = action as Record<string, unknown>;
-      const innerAction = obj['action'] ?? obj['userAction'] ?? obj;
-      actionData = {
-        version: 'v0.9',
-        action: innerAction,
-        userAction: innerAction,
-        ...obj,
-      };
-    } else {
-      actionData = {
-        version: 'v0.9',
-        action,
-        userAction: action,
-      };
-    }
+    // The v0.9 client-to-server schema accepts exactly two properties, `version` and `action`.
+    // `userAction` is the superseded v0.8 spelling and any extra key makes the payload invalid,
+    // so the action is forwarded verbatim under a minimal envelope.
+    const actionData: Record<string, unknown> = {
+      version: A2UI_PROTOCOL_VERSION,
+      action,
+    };
 
-    const contextId = this.activeContextId() ?? undefined;
+    const contextId = this.activeContextId();
 
     let actionText = 'User action triggered.';
     if (typeof action === 'object' && action !== null) {
       const obj = action as Record<string, unknown>;
-      const eventObj = (obj['event'] || obj['userAction'] || obj) as Record<string, unknown>;
+      const eventObj = (obj['event'] || obj) as Record<string, unknown>;
       if (typeof eventObj['name'] === 'string' && eventObj['name']) {
         actionText = `Action: ${eventObj['name']}`;
       } else if (typeof obj['name'] === 'string' && obj['name']) {
@@ -356,7 +364,7 @@ export class A2aChatView implements OnInit {
         {
           data: actionData,
           metadata: {
-            mimeType: 'application/a2ui+json',
+            mimeType: A2UI_MIME_TYPE,
             type: 'a2ui_action',
           },
         },
@@ -506,6 +514,56 @@ export class A2aChatView implements OnInit {
     );
   }
 
+  /**
+   * Accumulates a streamed text chunk onto the text received so far.
+   *
+   * Agents differ in what each chunk contains: some send only the delta, others resend the whole
+   * response every time. A chunk that repeats or extends what we already have therefore replaces
+   * it, and anything else is appended.
+   */
+  private appendStreamedText(existing: string | undefined, chunk: string): string {
+    if (!existing) return chunk;
+    if (chunk === existing || chunk.startsWith(existing)) return chunk;
+    return existing + chunk;
+  }
+
+  /**
+   * Accumulates a streamed thought chunk onto the reasoning received so far.
+   *
+   * Thought streams are noisier than text: agents commonly resend the current reasoning step in
+   * full on every event while occasionally emitting a brand new step. Reasoning steps are
+   * separated by a blank line, which is the only structure available to tell those two cases
+   * apart, so the last blank line marks where the in-progress step begins:
+   *
+   * - A chunk extending the whole accumulated text supersedes it (cumulative stream).
+   * - A chunk extending only the final step rewrites that step, preserving earlier ones.
+   * - Otherwise the chunk is a new step and is appended after a blank line, unless it is text we
+   *   have already recorded.
+   */
+  private appendStreamedThought(existing: string | undefined, chunk: string): string {
+    if (!existing) return chunk;
+    if (chunk === existing || chunk.startsWith(existing)) return chunk;
+
+    const lastStepStart = existing.lastIndexOf(THOUGHT_STEP_SEPARATOR);
+    const hasEarlierSteps = lastStepStart >= 0;
+    const lastStep = hasEarlierSteps
+      ? existing.substring(lastStepStart + THOUGHT_STEP_SEPARATOR.length)
+      : existing;
+
+    if (lastStep && chunk.startsWith(lastStep)) {
+      const completedSteps = hasEarlierSteps
+        ? existing.substring(0, lastStepStart + THOUGHT_STEP_SEPARATOR.length)
+        : '';
+      return completedSteps + chunk;
+    }
+
+    if (existing.includes(chunk.trim())) return existing;
+
+    // Avoid a triple newline when the accumulated text already ends in one.
+    const separator = existing.endsWith('\n') ? '\n' : THOUGHT_STEP_SEPARATOR;
+    return `${existing}${separator}${chunk}`;
+  }
+
   private handleStreamEvent(event: TaskStatusUpdateEvent, agentMessageId: string): void {
     const parsed = parseA2aStreamEvent(event);
 
@@ -520,44 +578,12 @@ export class A2aChatView implements OnInit {
       msgs.map(m => {
         if (m.id !== agentMessageId) return m;
 
-        let updatedText = m.text;
-        if (parsed.textChunk) {
-          if (!m.text) {
-            updatedText = parsed.textChunk;
-          } else if (parsed.textChunk === m.text) {
-            updatedText = m.text;
-          } else if (parsed.textChunk.startsWith(m.text)) {
-            updatedText = parsed.textChunk;
-          } else {
-            updatedText = m.text + parsed.textChunk;
-          }
-        }
-
-        let updatedThinking = m.thinking;
-        if (parsed.thoughtChunk) {
-          const chunk = parsed.thoughtChunk;
-          if (!m.thinking) {
-            updatedThinking = chunk;
-          } else if (chunk === m.thinking) {
-            updatedThinking = m.thinking;
-          } else if (chunk.startsWith(m.thinking)) {
-            updatedThinking = chunk;
-          } else {
-            const lastDoubleNewline = m.thinking.lastIndexOf('\n\n');
-            const lastStep =
-              lastDoubleNewline >= 0 ? m.thinking.substring(lastDoubleNewline + 2) : m.thinking;
-            if (lastStep && chunk.startsWith(lastStep)) {
-              const prefix = m.thinking.substring(
-                0,
-                lastDoubleNewline >= 0 ? lastDoubleNewline + 2 : 0,
-              );
-              updatedThinking = prefix + chunk;
-            } else if (!m.thinking.includes(chunk.trim())) {
-              const separator = m.thinking.endsWith('\n') ? '\n' : '\n\n';
-              updatedThinking = `${m.thinking}${separator}${chunk}`;
-            }
-          }
-        }
+        const updatedText = parsed.textChunk
+          ? this.appendStreamedText(m.text, parsed.textChunk)
+          : m.text;
+        const updatedThinking = parsed.thoughtChunk
+          ? this.appendStreamedThought(m.thinking, parsed.thoughtChunk)
+          : m.thinking;
         const updatedPayload =
           parsed.a2uiItems.length > 0
             ? mergeA2uiItems(m.a2uiPayload || [], parsed.a2uiItems)
@@ -628,7 +654,7 @@ export class A2aChatView implements OnInit {
     this.cancelActiveGeneration();
     this.messages.set([]);
     this.activeTaskId.set(null);
-    this.activeContextId.set(null);
+    this.activeContextId.set(undefined);
     this.activeCanvasPayload.set(null);
     this.isCanvasOpen.set(false);
   }
