@@ -105,6 +105,137 @@ describe('A2aChatMessage', () => {
     expect(await harness.isThinkingExpanded()).toBe(true);
   });
 
+  it('expands thinking by default while only thinking content has streamed', async () => {
+    fixture.componentRef.setInput('message', {
+      id: 'msg-3a',
+      sender: 'agent',
+      text: '',
+      thinking: 'Reasoning step 1...',
+      isStreaming: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    expect(await harness.isThinkingExpanded()).toBe(true);
+  });
+
+  it('collapses thinking as soon as non-thinking content streams in', async () => {
+    fixture.componentRef.setInput('message', {
+      id: 'msg-3b',
+      sender: 'agent',
+      text: '',
+      thinking: 'Reasoning step 1...',
+      isStreaming: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+    expect(await harness.isThinkingExpanded()).toBe(true);
+
+    fixture.componentRef.setInput('message', {
+      id: 'msg-3b',
+      sender: 'agent',
+      text: 'Here is the answer',
+      thinking: 'Reasoning step 1...',
+      isStreaming: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    expect(await harness.isThinkingExpanded()).toBe(false);
+  });
+
+  it('collapses thinking when only an A2UI surface streams in', async () => {
+    fixture.componentRef.setInput('message', {
+      id: 'msg-3c',
+      sender: 'agent',
+      text: '',
+      thinking: 'Reasoning step 1...',
+      isStreaming: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+    expect(await harness.isThinkingExpanded()).toBe(true);
+
+    fixture.componentRef.setInput('message', {
+      id: 'msg-3c',
+      sender: 'agent',
+      text: '',
+      thinking: 'Reasoning step 1...',
+      inlineA2uiPayload: [
+        {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1', component: 'Canvas'}},
+      ],
+      isStreaming: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    expect(await harness.isThinkingExpanded()).toBe(false);
+  });
+
+  it('discards a manual collapse once non-thinking content streams in', async () => {
+    fixture.componentRef.setInput('message', {
+      id: 'msg-3d',
+      sender: 'agent',
+      text: '',
+      thinking: 'Reasoning step 1...',
+      isStreaming: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+    expect(await harness.isThinkingExpanded()).toBe(true);
+
+    // The user collapses it manually while only thinking content exists.
+    await harness.clickThinking();
+    expect(await harness.isThinkingExpanded()).toBe(false);
+
+    // The first real chunk arrives: the content state changed, so the manual
+    // choice no longer applies and the default (collapsed) takes over.
+    fixture.componentRef.setInput('message', {
+      id: 'msg-3d',
+      sender: 'agent',
+      text: 'Here is the answer',
+      thinking: 'Reasoning step 1...',
+      isStreaming: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+    expect(await harness.isThinkingExpanded()).toBe(false);
+
+    // The user can still expand it explicitly afterwards.
+    await harness.clickThinking();
+    expect(await harness.isThinkingExpanded()).toBe(true);
+  });
+
+  it('keeps a manual expansion while the content state is unchanged', async () => {
+    fixture.componentRef.setInput('message', {
+      id: 'msg-3e',
+      sender: 'agent',
+      text: 'Here is the answer',
+      thinking: 'Reasoning step 1...',
+      isStreaming: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+    expect(await harness.isThinkingExpanded()).toBe(false);
+
+    await harness.clickThinking();
+    expect(await harness.isThinkingExpanded()).toBe(true);
+
+    // More text streams in; content state is still "has content", so the
+    // manual expansion survives.
+    fixture.componentRef.setInput('message', {
+      id: 'msg-3e',
+      sender: 'agent',
+      text: 'Here is the answer, continued',
+      thinking: 'Reasoning step 1...',
+      isStreaming: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    expect(await harness.isThinkingExpanded()).toBe(true);
+  });
+
   it('renders attached images', async () => {
     fixture.componentRef.setInput('message', {
       id: 'msg-4',

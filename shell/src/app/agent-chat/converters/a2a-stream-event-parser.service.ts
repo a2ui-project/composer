@@ -16,16 +16,17 @@
 
 import {Injectable} from '@angular/core';
 import {RenderA2uiItem} from 'a2ui-bridge';
+
+import {renderBase64Data, renderMultimediaContent} from '../../chat/a2a/a2a-media';
 import {
   A2aArtifact,
-  A2aMessage,
   A2aPart,
-  TaskStatusUpdateEvent,
   isTerminalTaskState,
   normalizeTaskState,
+  TaskStatusUpdateEvent,
 } from '../../chat/a2a/a2a-types';
 import {UiToolCall} from '../chat-message/types';
-import {renderBase64Data, renderMultimediaContent} from '../../chat/a2a/a2a-media';
+
 import {isA2uiItem, normalizeA2uiItems} from './surface-partitioner';
 
 /**
@@ -216,27 +217,107 @@ export class A2aStreamEventParser {
     unwrapped: TaskStatusUpdateEvent,
     result: ParsedA2aStreamEvent,
   ): void {
-    const msg =
-      unwrapped.message ||
-      (typeof unwrapped.status === 'object' && unwrapped.status !== null
-        ? unwrapped.status.message
-        : undefined) ||
-      (Array.isArray(unwrapped.parts) ? unwrapped : undefined) ||
-      (unwrapped['kind'] === 'message' ? (unwrapped as unknown as A2aMessage) : undefined);
+    const primaryMessage = this.extractPrimaryMessage(unwrapped);
+    if (!primaryMessage) return;
 
-    if (typeof msg === 'string') {
-      result.textChunk = (result.textChunk || '') + msg;
+    const isNonCompleted = this.isNonCompletedTaskEvent(unwrapped);
+
+    if (typeof primaryMessage === 'string') {
+      if (isNonCompleted) {
+        result.thoughtChunk = (result.thoughtChunk || '') + primaryMessage;
+      } else {
+        result.textChunk = (result.textChunk || '') + primaryMessage;
+      }
       return;
     }
 
-    if (typeof msg === 'object' && msg !== null && Array.isArray(msg.parts)) {
-      for (const part of msg.parts) {
-        this.processMessagePart(part, result);
+    if (Array.isArray(primaryMessage)) {
+      for (const part of primaryMessage) {
+        if (part && typeof part === 'object') {
+          this.processMessagePart(part as A2aPart, result, isNonCompleted);
+        }
       }
+      return;
+    }
+
+    if (typeof primaryMessage !== 'object' || primaryMessage === null) {
+      return;
+    }
+
+    const msgRecord = primaryMessage as Record<string, unknown>;
+    // Outside of non-completed status, filter out user messages.
+    if (this.isUserMessage(msgRecord, unwrapped) && !isNonCompleted) {
+      return;
+    }
+
+    const parts = msgRecord['parts'] ?? msgRecord['content'];
+    if (Array.isArray(parts)) {
+      for (const part of parts) {
+        if (part && typeof part === 'object') {
+          this.processMessagePart(part as A2aPart, result, isNonCompleted);
+        }
+      }
+    } else if (typeof msgRecord['text'] === 'string' || msgRecord['data'] !== undefined) {
+      this.processMessagePart(msgRecord as A2aPart, result, isNonCompleted);
     }
   }
 
-  private processMessagePart(part: A2aPart, result: ParsedA2aStreamEvent): void {
+  private isNonCompletedTaskEvent(unwrapped: TaskStatusUpdateEvent): boolean {
+    const statusState = this.extractStatusState(unwrapped);
+    return statusState === 'submitted' || statusState === 'working';
+  }
+
+  private extractPrimaryMessage(unwrapped: TaskStatusUpdateEvent): unknown {
+    if (unwrapped.message) {
+      return unwrapped.message;
+    }
+    if (
+      typeof unwrapped.status === 'object' &&
+      unwrapped.status !== null &&
+      unwrapped.status.message
+    ) {
+      return unwrapped.status.message;
+    }
+    const {status} = unwrapped;
+    if (typeof status === 'object' && status !== null && status['update']) {
+      return status['update'];
+    }
+    if (unwrapped['kind'] === 'message') {
+      return unwrapped;
+    }
+    if (Array.isArray(unwrapped.parts)) {
+      return unwrapped;
+    }
+    if (unwrapped['content']) {
+      return unwrapped['content'];
+    }
+    return undefined;
+  }
+
+  private isUserMessage(
+    msgRecord: Record<string, unknown>,
+    unwrapped: TaskStatusUpdateEvent,
+  ): boolean {
+    const role = String(msgRecord['role'] ?? unwrapped['role'] ?? '')
+      .trim()
+      .toUpperCase();
+
+    if (role === 'ROLE_USER' || role === 'USER') {
+      return true;
+    }
+    if (role === 'ROLE_AGENT' || role === 'AGENT' || role === 'ASSISTANT') {
+      return false;
+    }
+
+    const statusState = this.extractStatusState(unwrapped);
+    return statusState === 'submitted';
+  }
+
+  private processMessagePart(
+    part: A2aPart,
+    result: ParsedA2aStreamEvent,
+    isNonCompletedStatus = false,
+  ): void {
     const partObj = part as Record<string, unknown>;
 
     // 1. Model thoughts / reasoning
@@ -255,7 +336,11 @@ export class A2aStreamEventParser {
 
     // 2. Text (v0.3 / v1.0)
     if (part.text) {
-      result.textChunk = (result.textChunk || '') + part.text;
+      if (isNonCompletedStatus) {
+        result.thoughtChunk = (result.thoughtChunk || '') + part.text;
+      } else {
+        result.textChunk = (result.textChunk || '') + part.text;
+      }
     }
 
     // 3. File attachments & media (v0.3 nested file, v1.0 url, v1.0 raw bytes)
@@ -269,7 +354,9 @@ export class A2aStreamEventParser {
     // 5. Embedded artifact parts
     if (part.artifact?.parts) {
       for (const artPart of part.artifact.parts) {
-        this.processMessagePart(artPart, result);
+        if (artPart) {
+          this.processMessagePart(artPart, result, isNonCompletedStatus);
+        }
       }
     }
   }
@@ -321,11 +408,21 @@ export class A2aStreamEventParser {
   }
 
   private isThoughtPart(part: A2aPart, partObj: Record<string, unknown>): boolean {
+    const meta = (part.metadata || partObj['metadata']) as Record<string, unknown> | undefined;
+    const metaFields =
+      meta && typeof meta['fields'] === 'object' && meta['fields'] !== null
+        ? (meta['fields'] as Record<string, unknown>)
+        : undefined;
+    const adkThoughtVal = metaFields?.['adk_thought'] as Record<string, unknown> | undefined;
+    const thoughtVal = metaFields?.['thought'] as Record<string, unknown> | undefined;
+
     return (
-      part.metadata?.['adk_thought'] === true ||
-      part.metadata?.['adk_thought'] === 'true' ||
-      part.metadata?.['thought'] === true ||
-      part.metadata?.['thought'] === 'true' ||
+      meta?.['adk_thought'] === true ||
+      meta?.['adk_thought'] === 'true' ||
+      meta?.['thought'] === true ||
+      meta?.['thought'] === 'true' ||
+      adkThoughtVal?.['boolValue'] === true ||
+      thoughtVal?.['boolValue'] === true ||
       partObj['kind'] === 'thought' ||
       partObj['thought'] !== undefined
     );
@@ -452,10 +549,16 @@ export class A2aStreamEventParser {
       artifacts.push(...unwrapped.artifacts);
     }
 
+    const seenArtifacts = new Set<unknown>();
     for (const art of artifacts) {
+      if (!art || typeof art !== 'object' || seenArtifacts.has(art)) continue;
+      seenArtifacts.add(art);
+
       if (Array.isArray(art.parts)) {
         for (const artPart of art.parts) {
-          this.processMessagePart(artPart, result);
+          if (artPart) {
+            this.processMessagePart(artPart, result);
+          }
         }
       }
     }

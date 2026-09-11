@@ -14,26 +14,30 @@
  * limitations under the License.
  */
 
-import {Component, DestroyRef, OnInit, effect, inject, signal, untracked} from '@angular/core';
+import {Component, DestroyRef, effect, inject, OnInit, signal, untracked} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {PreviewBridgeMessageType, RenderA2uiItem} from 'a2ui-bridge';
+
 import {A2A_TRANSPORT} from '../chat/a2a/a2a-transport.token';
 import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../chat/a2a/a2a-types';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
-import {HostCommunication} from '../shell/host-communication/host-communication';
 import {
-  AppConfigProvider,
   A2aBackendMode,
+  AppConfigProvider,
 } from '../settings/app-config-provider/app-config-provider';
-import {generateUuid as uuid} from '../utils/uuid';
+import {HostCommunication} from '../shell/host-communication/host-communication';
 import {isValidEndpointUrl, normalizeHttpUrl} from '../utils/url';
+import {generateUuid as uuid} from '../utils/uuid';
+
 import {AgentConfigPanel, AgentConfigSaveEvent} from './agent-config-panel/agent-config-panel';
 import {A2aAgentHeader} from './agent-header/agent-header';
+import {UiAgentInfo} from './agent-header/types';
 import {A2aChatHistory} from './chat-history/chat-history';
+import {CanvasArtifact, UiMessage} from './chat-message/types';
 import {
   a2aCardToUiAgentInfo,
   createErrorEvent,
@@ -41,9 +45,7 @@ import {
   createSentMessageEvent,
   parseA2aStreamEvent,
 } from './converters/a2a-ui-converter';
-import {partitionA2uiSurfacePayload} from './converters/surface-partitioner';
-import {UiAgentInfo} from './agent-header/types';
-import {CanvasArtifact, UiMessage} from './chat-message/types';
+import {mergeA2uiItems, partitionA2uiSurfacePayload} from './converters/surface-partitioner';
 import {A2aInputArea, SendMessageEvent} from './input-area/input-area';
 import {A2aMessageInspector} from './message-inspector/message-inspector';
 import {MessageInspectorEvent} from './message-inspector/message-inspector-event';
@@ -174,8 +176,9 @@ export class A2aChatView implements OnInit {
     this.connectionError.set(null);
 
     try {
-      // Configure backend mode and tenant ID prior to fetching the agent card so
-      // that the delegating transport routes the discovery request to the selected transport.
+      // Configure backend mode and tenant ID prior to fetching the agent card
+      // so that the delegating transport routes the discovery request to the
+      // selected transport.
       if (backendMode) {
         this.configProvider.setA2aBackendMode(backendMode);
       }
@@ -225,8 +228,7 @@ export class A2aChatView implements OnInit {
 
     const userMessageId = uuid();
     const agentMessageId = uuid();
-    const contextId = this.activeContextId() || uuid();
-    this.activeContextId.set(contextId);
+    const contextId = this.activeContextId() ?? undefined;
 
     const userUiMessage: UiMessage = {
       id: userMessageId,
@@ -247,7 +249,7 @@ export class A2aChatView implements OnInit {
   private buildOutgoingA2aMessage(
     text: string,
     images: SendMessageEvent['images'],
-    contextId: string,
+    contextId?: string,
   ): A2aMessage {
     const parts: A2aMessage['parts'] = [];
     if (text) {
@@ -270,7 +272,7 @@ export class A2aChatView implements OnInit {
     return {
       role: 'user',
       parts,
-      contextId,
+      ...(contextId ? {contextId} : {}),
     };
   }
 
@@ -307,17 +309,22 @@ export class A2aChatView implements OnInit {
     let actionData: Record<string, unknown>;
     if (typeof action === 'object' && action !== null && !Array.isArray(action)) {
       const obj = action as Record<string, unknown>;
-      if ('userAction' in obj) {
-        actionData = {...obj, ['action']: obj['userAction']};
-      } else {
-        actionData = {...obj, ['userAction']: obj, ['action']: obj};
-      }
+      const innerAction = obj['action'] ?? obj['userAction'] ?? obj;
+      actionData = {
+        version: 'v0.9',
+        action: innerAction,
+        userAction: innerAction,
+        ...obj,
+      };
     } else {
-      actionData = {['userAction']: action, ['action']: action};
+      actionData = {
+        version: 'v0.9',
+        action,
+        userAction: action,
+      };
     }
 
-    const contextId = this.activeContextId() || uuid();
-    this.activeContextId.set(contextId);
+    const contextId = this.activeContextId() ?? undefined;
 
     let actionText = 'User action triggered.';
     if (typeof action === 'object' && action !== null) {
@@ -344,11 +351,12 @@ export class A2aChatView implements OnInit {
         {
           data: actionData,
           metadata: {
+            mimeType: 'application/a2ui+json',
             type: 'a2ui_action',
           },
         },
       ],
-      contextId,
+      ...(contextId ? {contextId} : {}),
     };
 
     this.recordInspectorEvent(createSentMessageEvent(a2aMsg));
@@ -520,12 +528,34 @@ export class A2aChatView implements OnInit {
           }
         }
 
-        const updatedThinking = parsed.thoughtChunk
-          ? (m.thinking || '') + parsed.thoughtChunk
-          : m.thinking;
+        let updatedThinking = m.thinking;
+        if (parsed.thoughtChunk) {
+          const chunk = parsed.thoughtChunk;
+          if (!m.thinking) {
+            updatedThinking = chunk;
+          } else if (chunk === m.thinking) {
+            updatedThinking = m.thinking;
+          } else if (chunk.startsWith(m.thinking)) {
+            updatedThinking = chunk;
+          } else {
+            const lastDoubleNewline = m.thinking.lastIndexOf('\n\n');
+            const lastStep =
+              lastDoubleNewline >= 0 ? m.thinking.substring(lastDoubleNewline + 2) : m.thinking;
+            if (lastStep && chunk.startsWith(lastStep)) {
+              const prefix = m.thinking.substring(
+                0,
+                lastDoubleNewline >= 0 ? lastDoubleNewline + 2 : 0,
+              );
+              updatedThinking = prefix + chunk;
+            } else if (!m.thinking.includes(chunk.trim())) {
+              const separator = m.thinking.endsWith('\n') ? '\n' : '\n\n';
+              updatedThinking = `${m.thinking}${separator}${chunk}`;
+            }
+          }
+        }
         const updatedPayload =
           parsed.a2uiItems.length > 0
-            ? [...(m.a2uiPayload || []), ...parsed.a2uiItems]
+            ? mergeA2uiItems(m.a2uiPayload || [], parsed.a2uiItems)
             : m.a2uiPayload;
         const updatedToolCalls =
           parsed.toolCalls && parsed.toolCalls.length > 0

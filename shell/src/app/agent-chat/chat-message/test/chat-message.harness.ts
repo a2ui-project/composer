@@ -22,7 +22,7 @@ export class A2aChatMessageHarness extends ComponentHarness {
 
   private getSenderName = this.locatorForOptional('.agent-badge-name');
   private getMessageText = this.locatorForOptional('.markdown-body, .user-message-bubble');
-  private getThinkingHeader = this.locatorForOptional('.thinking-header');
+  private getThinkingHeader = this.locatorForOptional('.toggle-show-thoughts-button');
   private getThinkingContent = this.locatorForOptional('.thinking-content');
   private getOpenCanvasButton = this.locatorForOptional(
     MatButtonHarness.with({selector: '.view-canvas-btn'}),

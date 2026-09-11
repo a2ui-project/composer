@@ -14,15 +14,31 @@
  * limitations under the License.
  */
 
+import {RenderA2uiItem} from 'a2ui-bridge';
 import {describe, it, expect} from 'vitest';
 import {
   hasA2uiCanvasComponent,
+  isA2uiItem,
+  isA2uiMimeType,
+  mergeA2uiItems,
   normalizeA2uiItems,
   partitionA2uiSurfacePayload,
   unwrapCanvasForRenderer,
+  A2UI_MIME_TYPE,
+  LEGACY_A2UI_MIME_TYPE,
 } from './surface-partitioner';
 
 describe('SurfacePartitioner', () => {
+  describe('isA2uiMimeType and MIME type constants', () => {
+    it('validates canonical and legacy A2UI MIME types', () => {
+      expect(isA2uiMimeType(A2UI_MIME_TYPE)).toBe(true);
+      expect(isA2uiMimeType(LEGACY_A2UI_MIME_TYPE)).toBe(true);
+      expect(isA2uiMimeType('application/json')).toBe(false);
+      expect(isA2uiMimeType(undefined)).toBe(false);
+      expect(isA2uiMimeType(null)).toBe(false);
+    });
+  });
+
   describe('normalizeA2uiItems and hasA2uiCanvasComponent', () => {
     it('normalizes items ensuring version v0.9', () => {
       const raw = [{createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
@@ -37,14 +53,59 @@ describe('SurfacePartitioner', () => {
       expect(normalizeA2uiItems([null, 'invalid', 123])).toEqual([]);
     });
 
-    it('filters out non-A2UI items such as tool calls', () => {
+    it('identifies server rendering commands and rejects client action echoes', () => {
+      expect(isA2uiItem({createSurface: {surfaceId: 's1'}})).toBe(true);
+      expect(isA2uiItem({updateComponents: {surfaceId: 's1', components: []}})).toBe(true);
+      expect(isA2uiItem({updateDataModel: {surfaceId: 's1', value: {}}})).toBe(true);
+      expect(isA2uiItem({deleteSurface: {surfaceId: 's1'}})).toBe(true);
+      expect(isA2uiItem({beginRendering: {surfaceId: 's1'}})).toBe(true);
+      expect(isA2uiItem({surfaceUpdate: {surfaceId: 's1'}})).toBe(true);
+      expect(isA2uiItem({dataModelUpdate: {surfaceId: 's1'}})).toBe(true);
+
+      // Rejects tool calls
+      expect(isA2uiItem({name: 'tool_fn', args: {}})).toBe(false);
+      // Rejects echoed client action messages without server update keys
+      expect(isA2uiItem({userAction: {name: 'submit'}})).toBe(false);
+      expect(isA2uiItem({action: {name: 'submit'}})).toBe(false);
+      expect(isA2uiItem({clientEvent: {name: 'click'}})).toBe(false);
+    });
+
+    it('filters out non-A2UI items such as tool calls and echoed client actions', () => {
       const mixed = [
         {createSurface: {surfaceId: 's1', catalogId: 'c1'}},
         {name: 'show_vacation_booking_form', args: {}, id: 'call_123'},
+        {userAction: {name: 'submit_clicked'}},
       ];
       const normalized = normalizeA2uiItems(mixed);
       expect(normalized.length).toBe(1);
       expect(normalized[0].createSurface).toBeDefined();
+    });
+
+    it('deduplicates redundant createSurface commands for the same surfaceId', () => {
+      const duplicateCreate = [
+        {createSurface: {surfaceId: 'surf_1', catalogId: 'c1'}},
+        {updateComponents: {surfaceId: 'surf_1', components: [{id: 'r', component: 'Text'}]}},
+        {createSurface: {surfaceId: 'surf_1', catalogId: 'c1'}},
+        {updateDataModel: {surfaceId: 'surf_1', value: {k: 'v'}}},
+      ];
+      const normalized = normalizeA2uiItems(duplicateCreate);
+      expect(normalized.length).toBe(3);
+      expect(normalized[0].createSurface?.surfaceId).toBe('surf_1');
+      expect(normalized[1].updateComponents?.surfaceId).toBe('surf_1');
+      expect(normalized[2].updateDataModel?.surfaceId).toBe('surf_1');
+    });
+
+    it('allows re-creating a surface after deleteSurface', () => {
+      const reCreate = [
+        {createSurface: {surfaceId: 'surf_1', catalogId: 'c1'}},
+        {deleteSurface: {surfaceId: 'surf_1'}},
+        {createSurface: {surfaceId: 'surf_1', catalogId: 'c2'}},
+      ];
+      const normalized = normalizeA2uiItems(reCreate);
+      expect(normalized.length).toBe(3);
+      expect(normalized[0].createSurface?.catalogId).toBe('c1');
+      expect(normalized[1].deleteSurface?.surfaceId).toBe('surf_1');
+      expect(normalized[2].createSurface?.catalogId).toBe('c2');
     });
 
     it('detects canvas components correctly', () => {
@@ -458,6 +519,43 @@ describe('SurfacePartitioner', () => {
       expect(
         partitioned.inlinePayload?.some(item => item.deleteSurface?.surfaceId === 'surf-old'),
       ).toBe(true);
+    });
+  });
+
+  describe('mergeA2uiItems', () => {
+    it('appends delta updates when new items do not recreate the surface', () => {
+      const existing = [
+        {createSurface: {surfaceId: 'surf_1', catalogId: 'c1'}},
+        {updateComponents: {surfaceId: 'surf_1', components: [{id: 'r', component: 'Card'}]}},
+      ];
+      const delta = [{updateDataModel: {surfaceId: 'surf_1', value: {count: 1}}}];
+      const merged = mergeA2uiItems(
+        existing as unknown as RenderA2uiItem[],
+        delta as unknown as RenderA2uiItem[],
+      );
+      expect(merged.length).toBe(3);
+      expect(merged[2].updateDataModel?.surfaceId).toBe('surf_1');
+    });
+
+    it('replaces prior surface items when new items re-declare the surface via createSurface', () => {
+      const existing = [
+        {createSurface: {surfaceId: 'surf_1', catalogId: 'c1'}},
+        {updateComponents: {surfaceId: 'surf_1', components: [{id: 'old', component: 'Card'}]}},
+      ];
+      const fullUpdate = [
+        {createSurface: {surfaceId: 'surf_1', catalogId: 'c1'}},
+        {updateComponents: {surfaceId: 'surf_1', components: [{id: 'new', component: 'Card'}]}},
+        {updateDataModel: {surfaceId: 'surf_1', value: {count: 2}}},
+      ];
+      const merged = mergeA2uiItems(
+        existing as unknown as RenderA2uiItem[],
+        fullUpdate as unknown as RenderA2uiItem[],
+      );
+      expect(merged.length).toBe(3);
+      expect(merged[0].createSurface?.surfaceId).toBe('surf_1');
+      const mergedComponents = merged[1].updateComponents?.components as
+        Array<{id: string}> | undefined;
+      expect(mergedComponents?.[0].id).toBe('new');
     });
   });
 });

@@ -542,6 +542,22 @@ export class PreviewBridge {
         }
         surfaceId = createSurface.surfaceId;
         if (surfaceId) {
+          // Proactively clear any pre-existing instance of this surface in the
+          // renderer processor to prevent "Surface <surfaceId> already exists"
+          // collisions upon recreate.
+          const deleteMessage: A2uiMessage = {
+            version: 'v0.9',
+            deleteSurface: {
+              surfaceId,
+            },
+          };
+          try {
+            this.activeRenderer.processor.processMessages([deleteMessage]);
+          } catch (err) {
+            // Surface might not exist yet; safe to proceed. Logged so genuine
+            // processor failures remain diagnosable.
+            console.debug('PreviewBridge: pre-delete of surface failed', surfaceId, err);
+          }
           // Track the surface BEFORE processing. If a subsequent command in
           // the payload has a typo and throws an error, we still want to
           // clean this surface up next time.

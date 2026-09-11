@@ -677,6 +677,7 @@ describe('A2aChatView', () => {
               userAction: actionPayload,
             }),
             metadata: {
+              mimeType: 'application/a2ui+json',
               type: 'a2ui_action',
             },
           }),
