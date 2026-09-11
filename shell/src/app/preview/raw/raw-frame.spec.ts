@@ -64,6 +64,10 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     pushUndoStop: vi.fn(),
     trigger: vi.fn(),
     onDidChangeModelContent: vi.fn(() => ({dispose: () => {}})),
+    onDidChangeCursorPosition: vi.fn(() => ({dispose: () => {}})),
+    onDidChangeCursorSelection: vi.fn(() => ({dispose: () => {}})),
+    onKeyDown: vi.fn(() => ({dispose: () => {}})),
+    onMouseDown: vi.fn(() => ({dispose: () => {}})),
     onDidChangeMarkers: vi.fn(() => ({dispose: () => {}})),
     getModelMarkers: vi.fn(() => []),
     updateOptions: vi.fn(),
@@ -526,6 +530,11 @@ describe('RawFrame JSON Source Editor View', () => {
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(3000);
+    fixture.detectChanges();
+
     expect(snackBarMock.open).toHaveBeenCalledWith(
       'Invalid JSON syntax detected.',
       undefined,
@@ -543,6 +552,11 @@ describe('RawFrame JSON Source Editor View', () => {
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(3000);
+    fixture.detectChanges();
+
     expect(snackBarMock.open).toHaveBeenCalledWith(
       'Invalid JSON syntax detected.',
       undefined,
@@ -561,10 +575,83 @@ describe('RawFrame JSON Source Editor View', () => {
     await harness.setJsonText('{"version": "v0.9", invalid_json...');
     fixture.detectChanges();
 
-    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(3300);
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+  });
+
+  it('resets invalid JSON error timeout upon user interaction', async () => {
+    const {fixture, harness, component} = await setup(false);
+    vi.useFakeTimers();
+    await harness.setJsonText('{"version": "v0.9", invalid_json...');
+    fixture.detectChanges();
+
+    // 300ms layout debounce expires and starts 3000ms invalid JSON timer
+    vi.advanceTimersByTime(300);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    // Advance 2000ms (1000ms remaining)
+    vi.advanceTimersByTime(2000);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    // User interaction occurs -> resets timer to 3000ms
+    component['onUserInteraction']();
+
+    // Advance 2000ms (4300ms total since typing, but only 2000ms since interaction)
+    vi.advanceTimersByTime(2000);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    // Advance remaining 1000ms
+    vi.advanceTimersByTime(1000);
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      undefined,
+      expect.any(Object),
+    );
+  });
+
+  it('cancels invalid JSON error timer immediately when valid JSON is restored', async () => {
+    const {fixture, harness, component} = await setup(false);
+    vi.useFakeTimers();
+    await harness.setJsonText('{"version": "v0.9", invalid_json...');
+    fixture.detectChanges();
+
+    // 300ms layout debounce expires and starts 3000ms timer
+    vi.advanceTimersByTime(300);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    // Advance 1500ms while invalid
+    vi.advanceTimersByTime(1500);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    // User restores valid JSON
+    await harness.setJsonText('[{"version": "v0.9", "createSurface": {"surfaceId": "valid"}}]');
+    fixture.detectChanges();
+
+    // Layout debounce expires (300ms) and parses valid JSON
+    vi.advanceTimersByTime(300);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+    expect(component['isJsonInvalid']()).toBe(false);
+
+    // Advancing well past the original timeout does not trigger error snackbar
+    vi.advanceTimersByTime(5000);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+  });
+
+  it('clears invalid JSON error timer on destroy', async () => {
+    const {fixture, harness} = await setup(false);
+    vi.useFakeTimers();
+    await harness.setJsonText('{"version": "v0.9", invalid_json...');
+    fixture.detectChanges();
+
+    vi.advanceTimersByTime(300);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    fixture.destroy();
+
+    vi.advanceTimersByTime(5000);
     expect(snackBarMock.open).not.toHaveBeenCalled();
   });
 
@@ -859,7 +946,7 @@ describe('RawFrame JSON Source Editor View', () => {
     fixture.componentInstance.onMarkersChange(
       markers as unknown as import('monaco-editor').editor.IMarker[],
     );
-    vi.advanceTimersByTime(1100);
+    vi.advanceTimersByTime(3100);
     fixture.detectChanges();
 
     expect(snackBarMock.open).toHaveBeenCalledWith(
@@ -870,7 +957,7 @@ describe('RawFrame JSON Source Editor View', () => {
 
     // Clear
     fixture.componentInstance.onMarkersChange([]);
-    vi.advanceTimersByTime(1100);
+    vi.advanceTimersByTime(3100);
     expect(snackBarMock.open).toHaveBeenCalledTimes(1); // not called again
     vi.useRealTimers();
   });

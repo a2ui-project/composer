@@ -34,6 +34,16 @@ const {
   mockEditorCreate,
   mockOnDidChangeMarkers,
   mockGetModelMarkers,
+  mockOnDidChangeModelContent,
+  mockOnDidChangeCursorPosition,
+  mockOnDidChangeCursorSelection,
+  mockOnKeyDown,
+  mockOnMouseDown,
+  mockModelContentDisposable,
+  mockCursorPositionDisposable,
+  mockCursorSelectionDisposable,
+  mockKeyDownDisposable,
+  mockMouseDownDisposable,
 } = vi.hoisted(() => {
   const mockSetValue = vi.fn();
   const mockGetModel = vi.fn();
@@ -41,12 +51,28 @@ const {
     setValue: mockSetValue,
     dispose: vi.fn(),
   }));
+  const mockModelContentDisposable = {dispose: vi.fn()};
+  const mockCursorPositionDisposable = {dispose: vi.fn()};
+  const mockCursorSelectionDisposable = {dispose: vi.fn()};
+  const mockKeyDownDisposable = {dispose: vi.fn()};
+  const mockMouseDownDisposable = {dispose: vi.fn()};
+
+  const mockOnDidChangeModelContent = vi.fn(() => mockModelContentDisposable);
+  const mockOnDidChangeCursorPosition = vi.fn(() => mockCursorPositionDisposable);
+  const mockOnDidChangeCursorSelection = vi.fn(() => mockCursorSelectionDisposable);
+  const mockOnKeyDown = vi.fn(() => mockKeyDownDisposable);
+  const mockOnMouseDown = vi.fn(() => mockMouseDownDisposable);
+
   const mockEditorCreate = vi.fn(() => ({
     getModel: vi.fn(() => null),
     getValue: vi.fn(() => ''),
     setValue: vi.fn(),
     updateOptions: vi.fn(),
-    onDidChangeModelContent: vi.fn(() => ({dispose: vi.fn()})),
+    onDidChangeModelContent: mockOnDidChangeModelContent,
+    onDidChangeCursorPosition: mockOnDidChangeCursorPosition,
+    onDidChangeCursorSelection: mockOnDidChangeCursorSelection,
+    onKeyDown: mockOnKeyDown,
+    onMouseDown: mockOnMouseDown,
     dispose: vi.fn(),
   }));
   const mockOnDidChangeMarkers = vi.fn(() => ({dispose: vi.fn()}));
@@ -58,6 +84,16 @@ const {
     mockEditorCreate,
     mockOnDidChangeMarkers,
     mockGetModelMarkers,
+    mockOnDidChangeModelContent,
+    mockOnDidChangeCursorPosition,
+    mockOnDidChangeCursorSelection,
+    mockOnKeyDown,
+    mockOnMouseDown,
+    mockModelContentDisposable,
+    mockCursorPositionDisposable,
+    mockCursorSelectionDisposable,
+    mockKeyDownDisposable,
+    mockMouseDownDisposable,
   };
 });
 
@@ -301,6 +337,8 @@ describe('MonacoEditor component', () => {
   });
 
   afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
     fixture?.destroy();
   });
 
@@ -363,6 +401,7 @@ describe('MonacoEditor component', () => {
   });
 
   it('handles multiple URIs and emits markers for matching model URI', async () => {
+    vi.useFakeTimers();
     fixture = TestBed.createComponent(MonacoEditor);
     fixture.componentRef.setInput('value', '{"test": true}');
     const markersSpy = vi.fn();
@@ -390,6 +429,7 @@ describe('MonacoEditor component', () => {
 
     // Multi-URI array where modelUri is not at index 0
     markerListener([otherUri, modelUri]);
+    vi.advanceTimersByTime(3000);
 
     expect(markersSpy).toHaveBeenCalledWith([mockMarker]);
     expect(mockGetModelMarkers).toHaveBeenCalled();
@@ -397,6 +437,212 @@ describe('MonacoEditor component', () => {
     // Consecutive event with identical marker signature is deduplicated
     markersSpy.mockClear();
     markerListener([modelUri]);
+    vi.advanceTimersByTime(3000);
+    expect(markersSpy).not.toHaveBeenCalled();
+  });
+
+  it('debounces error marker logging and emission by 3000ms', async () => {
+    vi.useFakeTimers();
+    fixture = TestBed.createComponent(MonacoEditor);
+    const markersSpy = vi.fn();
+    fixture.componentInstance.markersChange.subscribe(markersSpy);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+      uris: readonly {toString: () => string}[],
+    ) => void;
+
+    const errorMarker = {
+      severity: 8,
+      message: 'Unexpected token',
+      startLineNumber: 2,
+      startColumn: 3,
+    };
+    mockGetModelMarkers.mockReturnValue([errorMarker]);
+    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+
+    markerListener([modelUri]);
+
+    // Before 3000ms, nothing emitted or logged
+    vi.advanceTimersByTime(2999);
+    expect(markersSpy).not.toHaveBeenCalled();
+    const errorLogger = TestBed.inject(ErrorLogger);
+    expect(errorLogger.error).not.toHaveBeenCalled();
+
+    // At 3000ms, emitted and logged
+    vi.advanceTimersByTime(1);
+    expect(markersSpy).toHaveBeenCalledWith([errorMarker]);
+    expect(errorLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Unexpected token',
+        sourceTag: '[Editor]',
+        line: 2,
+        column: 3,
+      }),
+    );
+  });
+
+  it('resets error debounce timer when user types or repositions cursor', async () => {
+    vi.useFakeTimers();
+    fixture = TestBed.createComponent(MonacoEditor);
+    const markersSpy = vi.fn();
+    fixture.componentInstance.markersChange.subscribe(markersSpy);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+      uris: readonly {toString: () => string}[],
+    ) => void;
+    const contentListener = mockOnDidChangeModelContent.mock.calls[0][0] as () => void;
+    const cursorListener = mockOnDidChangeCursorPosition.mock.calls[0][0] as () => void;
+
+    const errorMarker = {
+      severity: 8,
+      message: 'Syntax error',
+      startLineNumber: 1,
+      startColumn: 1,
+    };
+    mockGetModelMarkers.mockReturnValue([errorMarker]);
+    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+
+    markerListener([modelUri]);
+
+    // Advance 2000ms
+    vi.advanceTimersByTime(2000);
+    expect(markersSpy).not.toHaveBeenCalled();
+
+    // User types (content changes) -> timer reset to 3000ms
+    contentListener();
+
+    // Advance 2000ms (total 4000ms elapsed since marker, but only 2000ms since reset)
+    vi.advanceTimersByTime(2000);
+    expect(markersSpy).not.toHaveBeenCalled();
+
+    // User moves cursor -> timer reset again
+    cursorListener();
+
+    // Advance 2500ms
+    vi.advanceTimersByTime(2500);
+    expect(markersSpy).not.toHaveBeenCalled();
+
+    // Complete remaining 500ms
+    vi.advanceTimersByTime(500);
+    expect(markersSpy).toHaveBeenCalledWith([errorMarker]);
+  });
+
+  it('flushes clean markers immediately and cancels pending error timer', async () => {
+    vi.useFakeTimers();
+    fixture = TestBed.createComponent(MonacoEditor);
+    const markersSpy = vi.fn();
+    fixture.componentInstance.markersChange.subscribe(markersSpy);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+      uris: readonly {toString: () => string}[],
+    ) => void;
+
+    const errorMarker = {
+      severity: 8,
+      message: 'Syntax error',
+      startLineNumber: 1,
+      startColumn: 1,
+    };
+    mockGetModelMarkers.mockReturnValue([errorMarker]);
+    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+
+    // Error marker arrives
+    markerListener([modelUri]);
+    vi.advanceTimersByTime(1500);
+    expect(markersSpy).not.toHaveBeenCalled();
+
+    // Clean markers arrive (error resolved)
+    mockGetModelMarkers.mockReturnValue([]);
+    markerListener([modelUri]);
+
+    // Flushed immediately without waiting for 3000ms
+    expect(markersSpy).toHaveBeenCalledWith([]);
+
+    // Advancing past original timer does not re-emit or crash
+    vi.advanceTimersByTime(3000);
+    expect(markersSpy).toHaveBeenCalledTimes(1);
+    const errorLogger = TestBed.inject(ErrorLogger);
+    expect(errorLogger.error).not.toHaveBeenCalled();
+  });
+
+  it('emits userInteraction on content change, cursor position, selection, keydown, and mousedown', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    const interactionSpy = vi.fn();
+    fixture.componentInstance.userInteraction.subscribe(interactionSpy);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    const contentListener = mockOnDidChangeModelContent.mock.calls[0][0] as () => void;
+    const cursorPositionListener = mockOnDidChangeCursorPosition.mock.calls[0][0] as () => void;
+    const cursorSelectionListener = mockOnDidChangeCursorSelection.mock.calls[0][0] as () => void;
+    const keyDownListener = mockOnKeyDown.mock.calls[0][0] as () => void;
+    const mouseDownListener = mockOnMouseDown.mock.calls[0][0] as () => void;
+
+    contentListener();
+    expect(interactionSpy).toHaveBeenCalledTimes(1);
+
+    cursorPositionListener();
+    expect(interactionSpy).toHaveBeenCalledTimes(2);
+
+    cursorSelectionListener();
+    expect(interactionSpy).toHaveBeenCalledTimes(3);
+
+    keyDownListener();
+    expect(interactionSpy).toHaveBeenCalledTimes(4);
+
+    mouseDownListener();
+    expect(interactionSpy).toHaveBeenCalledTimes(5);
+  });
+
+  it('cleans up debounce timer and Monaco disposables on destroy', async () => {
+    vi.useFakeTimers();
+    fixture = TestBed.createComponent(MonacoEditor);
+    const markersSpy = vi.fn();
+    fixture.componentInstance.markersChange.subscribe(markersSpy);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+      uris: readonly {toString: () => string}[],
+    ) => void;
+
+    const errorMarker = {
+      severity: 8,
+      message: 'Syntax error',
+      startLineNumber: 1,
+      startColumn: 1,
+    };
+    mockGetModelMarkers.mockReturnValue([errorMarker]);
+    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+
+    markerListener([modelUri]);
+
+    fixture.destroy();
+
+    expect(mockModelContentDisposable.dispose).toHaveBeenCalled();
+    expect(mockCursorPositionDisposable.dispose).toHaveBeenCalled();
+    expect(mockCursorSelectionDisposable.dispose).toHaveBeenCalled();
+    expect(mockKeyDownDisposable.dispose).toHaveBeenCalled();
+    expect(mockMouseDownDisposable.dispose).toHaveBeenCalled();
+
+    // Advance timers after destroy
+    vi.advanceTimersByTime(5000);
     expect(markersSpy).not.toHaveBeenCalled();
   });
 });

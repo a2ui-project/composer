@@ -77,7 +77,10 @@ export class RawFrame {
   private isDestroyed = false;
 
   private readonly WATCHDOG_TIMEOUT_MS = 15000;
+  private readonly INVALID_JSON_TIMEOUT_MS = 3000;
+  private readonly SCHEMA_ERROR_DEBOUNCE_MS = 3000;
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private invalidJsonTimer: ReturnType<typeof setTimeout> | null = null;
   private lastErrorSignature: string | null = null;
   private readonly markerSubject = new Subject<editor.IMarker[]>();
 
@@ -88,10 +91,11 @@ export class RawFrame {
     this.destroyRef.onDestroy(() => {
       this.isDestroyed = true;
       this.clearWatchdog();
+      this.cancelInvalidJsonTimer();
     });
 
     this.markerSubject
-      .pipe(debounceTime(1000), takeUntilDestroyed(this.destroyRef))
+      .pipe(debounceTime(this.SCHEMA_ERROR_DEBOUNCE_MS), takeUntilDestroyed(this.destroyRef))
       .subscribe(markers => {
         this.notifySchemaErrors(markers);
       });
@@ -164,13 +168,16 @@ export class RawFrame {
             try {
               const payload = this.parseLayoutString(activeDraftVal);
               if (payload !== null) {
+                this.cancelInvalidJsonTimer();
+                this.isJsonInvalid.set(false);
+                this.snackBar.dismiss();
                 this.hostCommunication.sendRenderA2UI(payload);
                 this.startWatchdog();
               } else {
-                this.showJsonSyntaxError();
+                this.scheduleInvalidJsonError();
               }
             } catch (err) {
-              this.showJsonSyntaxError();
+              this.scheduleInvalidJsonError();
             }
           });
         }
@@ -184,16 +191,16 @@ export class RawFrame {
           try {
             const payload = this.parseLayoutString(value);
             if (payload !== null) {
+              this.cancelInvalidJsonTimer();
+              this.isJsonInvalid.set(false);
               this.snackBar.dismiss();
               this.usageTrackingService.trackJsonEditorEdit({isValidJson: true});
               return payload;
             }
-            this.showJsonSyntaxError();
-            this.usageTrackingService.trackJsonEditorEdit({isValidJson: false});
+            this.scheduleInvalidJsonError();
             return null;
           } catch (err) {
-            this.showJsonSyntaxError();
-            this.usageTrackingService.trackJsonEditorEdit({isValidJson: false});
+            this.scheduleInvalidJsonError();
             return null;
           }
         }),
@@ -212,8 +219,31 @@ export class RawFrame {
     this.stateSync.updateDraft(value);
   }
 
+  protected onUserInteraction(): void {
+    if (this.invalidJsonTimer !== null) {
+      this.scheduleInvalidJsonError();
+    }
+  }
+
   protected onMarkersChange(markers: editor.IMarker[]): void {
     this.markerSubject.next(markers);
+  }
+
+  private scheduleInvalidJsonError(): void {
+    this.cancelInvalidJsonTimer();
+    this.invalidJsonTimer = setTimeout(() => {
+      this.invalidJsonTimer = null;
+      this.isJsonInvalid.set(true);
+      this.showJsonSyntaxError();
+      this.usageTrackingService.trackJsonEditorEdit({isValidJson: false});
+    }, this.INVALID_JSON_TIMEOUT_MS);
+  }
+
+  private cancelInvalidJsonTimer(): void {
+    if (this.invalidJsonTimer !== null) {
+      clearTimeout(this.invalidJsonTimer);
+      this.invalidJsonTimer = null;
+    }
   }
 
   private clearWatchdog(): void {

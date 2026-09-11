@@ -48,6 +48,7 @@ import {ErrorLogger, ErrorLogItem} from '../../debug/error-logger.service';
  * real-time schema validation and autocompletion for component properties.
  */
 const MODEL_URI = 'inmemory://model/layout.json';
+const ERROR_MARKER_DEBOUNCE_MS = 3000;
 
 @Component({
   selector: 'a2ui-composer-monaco-editor',
@@ -62,6 +63,7 @@ export class MonacoEditor {
   readonly readOnly = input<boolean>(false);
   readonly valueChange = output<string>();
   readonly markersChange = output<monaco.editor.IMarker[]>();
+  readonly userInteraction = output<void>();
 
   private editor?: monaco.editor.IStandaloneCodeEditor;
   private readonly monacoInstance = signal<typeof monaco | null>(null);
@@ -70,6 +72,11 @@ export class MonacoEditor {
   private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
   private readonly errorLogger = inject(ErrorLogger);
+
+  private markerDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingMarkers: monaco.editor.IMarker[] | null = null;
+  private pendingSignature = '';
+  private lastMarkersSignature = '';
 
   protected readonly isDarkTheme = computed(
     () => this.configProvider.themePreference() === ThemePreference.DARK,
@@ -443,6 +450,11 @@ export class MonacoEditor {
 
     this.destroyRef.onDestroy(() => {
       destroyed = true;
+      if (this.markerDebounceTimer) {
+        clearTimeout(this.markerDebounceTimer);
+        this.markerDebounceTimer = null;
+      }
+      this.pendingMarkers = null;
       if (this.editor) {
         const model = this.editor.getModel();
         if (model) {
@@ -486,14 +498,20 @@ export class MonacoEditor {
         });
         this.editor = editor;
 
-        editor.onDidChangeModelContent(() => {
-          const val = editor.getValue();
-          if (val !== this.value()) {
-            this.valueChange.emit(val);
-          }
-        });
+        const interactionDisposables: monaco.IDisposable[] = [
+          editor.onDidChangeModelContent(() => {
+            this.handleUserInteraction();
+            const val = editor.getValue();
+            if (val !== this.value()) {
+              this.valueChange.emit(val);
+            }
+          }),
+          editor.onDidChangeCursorPosition(() => this.handleUserInteraction()),
+          editor.onDidChangeCursorSelection(() => this.handleUserInteraction()),
+          editor.onKeyDown(() => this.handleUserInteraction()),
+          editor.onMouseDown(() => this.handleUserInteraction()),
+        ];
 
-        let lastMarkersSignature = '';
         const markersDisposable = monacoInstance.editor.onDidChangeMarkers(
           (uris: readonly monaco.Uri[]) => {
             if (uris.some(u => u?.toString() === modelUri.toString())) {
@@ -505,45 +523,107 @@ export class MonacoEditor {
                 )
                 .sort()
                 .join('|');
-              if (lastMarkersSignature === currentSignature) {
-                return;
+
+              const hasErrors = markers.some(m => m.severity === 8);
+              const hadPendingMarkers = this.pendingMarkers !== null;
+
+              if (!hasErrors) {
+                if (this.markerDebounceTimer) {
+                  clearTimeout(this.markerDebounceTimer);
+                  this.markerDebounceTimer = null;
+                }
+                this.pendingMarkers = null;
+                this.pendingSignature = '';
+
+                if (this.lastMarkersSignature === currentSignature && !hadPendingMarkers) {
+                  return;
+                }
+                this.lastMarkersSignature = currentSignature;
+
+                this.markersChange.emit(markers);
+                this.logMarkers(markers);
+              } else {
+                if (this.lastMarkersSignature === currentSignature) {
+                  return;
+                }
+                this.pendingMarkers = markers;
+                this.pendingSignature = currentSignature;
+                this.scheduleErrorMarkersDebounce();
               }
-              lastMarkersSignature = currentSignature;
-
-              this.markersChange.emit(markers);
-
-              const timestamp = Date.now();
-              markers.forEach((marker: monaco.editor.IMarker) => {
-                const item: Partial<ErrorLogItem> = {
-                  id: `${timestamp}-${Math.random().toString(36).substring(2, 9)}`,
-                  timestamp,
-                  level:
-                    marker.severity === 8
-                      ? 'error'
-                      : marker.severity === 4
-                        ? 'warn'
-                        : marker.severity === 2
-                          ? 'info'
-                          : 'log',
-                  message: marker.message,
-                  sourceTag: '[Editor]',
-                  line: marker.startLineNumber,
-                  column: marker.startColumn,
-                };
-                if (item.level === 'error') this.errorLogger.error(item);
-                else if (item.level === 'warn') this.errorLogger.warn(item);
-                else if (item.level === 'info') this.errorLogger.info(item);
-                else this.errorLogger.log(item);
-              });
             }
           },
         );
 
         this.destroyRef.onDestroy(() => {
           markersDisposable.dispose();
+          for (const d of interactionDisposables) {
+            d.dispose();
+          }
         });
       });
     });
+  }
+
+  private scheduleErrorMarkersDebounce(): void {
+    if (this.markerDebounceTimer) {
+      clearTimeout(this.markerDebounceTimer);
+      this.markerDebounceTimer = null;
+    }
+    this.markerDebounceTimer = setTimeout(() => {
+      this.flushPendingMarkers();
+    }, ERROR_MARKER_DEBOUNCE_MS);
+  }
+
+  private flushPendingMarkers(): void {
+    if (!this.pendingMarkers) {
+      return;
+    }
+    const markers = this.pendingMarkers;
+    const signature = this.pendingSignature;
+    this.pendingMarkers = null;
+    this.pendingSignature = '';
+    this.markerDebounceTimer = null;
+
+    if (this.lastMarkersSignature === signature) {
+      return;
+    }
+    this.lastMarkersSignature = signature;
+
+    this.markersChange.emit(markers);
+    this.logMarkers(markers);
+  }
+
+  private logMarkers(markers: monaco.editor.IMarker[]): void {
+    const timestamp = Date.now();
+    for (const marker of markers) {
+      const item: Partial<ErrorLogItem> = {
+        id: `${timestamp}-${Math.random().toString(36).substring(2, 9)}`,
+        timestamp,
+        level:
+          marker.severity === 8
+            ? 'error'
+            : marker.severity === 4
+              ? 'warn'
+              : marker.severity === 2
+                ? 'info'
+                : 'log',
+        message: marker.message,
+        sourceTag: '[Editor]',
+        line: marker.startLineNumber,
+        column: marker.startColumn,
+      };
+      if (item.level === 'error') this.errorLogger.error(item);
+      else if (item.level === 'warn') this.errorLogger.warn(item);
+      else if (item.level === 'info') this.errorLogger.info(item);
+      else this.errorLogger.log(item);
+    }
+  }
+
+  private handleUserInteraction(): void {
+    this.userInteraction.emit();
+    if (this.markerDebounceTimer !== null && this.pendingMarkers !== null) {
+      this.scheduleErrorMarkersDebounce();
+    }
   }
 
   /**
