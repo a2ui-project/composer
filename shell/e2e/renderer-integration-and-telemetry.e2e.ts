@@ -100,8 +100,39 @@ const MAX_SETTLED_FRAME_HEIGHT_PX = 1500;
  */
 const MAX_IDLE_RESIZE_MESSAGES = 10;
 
-/** Upper bound on consecutive growing heights, which characterise a ratchet. */
+/**
+ * Upper bound on consecutive growing heights, which characterise a ratchet.
+ *
+ * Measured longest strictly increasing run: healthy Angular 4, React 3, Lit 4;
+ * guest CSS reverted, Angular 9, React 5, Lit 9.
+ *
+ * NOTE: this bound has NO MARGIN - two of three renderers sit exactly on it,
+ * and the broken minimum is 5. It is kept because it is the only bound the
+ * host growth breaker cannot mask. The assertions carrying real margin are the
+ * cadence bound below and the frame-versus-content check at the end of the
+ * test. If this one ever flakes, delete it rather than raising it: raising it
+ * to 5 would stop detecting a broken React guest entirely.
+ */
 const MAX_INCREASING_RESIZE_RUN = 4;
+
+/**
+ * Gap below which two reports are treated as one burst, in milliseconds.
+ * The observed feedback loop runs at 6-35ms; ordinary re-render steps are
+ * hundreds of milliseconds apart, though a re-render does emit fast pairs.
+ */
+const LOOP_CADENCE_GAP_MS = 50;
+
+/**
+ * Upper bound on how many reports may arrive back to back at loop cadence.
+ *
+ * Measured longest burst: healthy Angular 2, React 2, Lit 3; guest CSS
+ * reverted, 8, 8 and 3. Cadence does not give the order of magnitude one might
+ * expect, because healthy renderers also emit sub-20ms pairs during their
+ * initial render; the useful signal is burst LENGTH, not gap size. A broken
+ * React guest is not caught by this bound, but is caught by the run-length and
+ * frame-versus-content bounds.
+ */
+const MAX_LOOP_CADENCE_RUN = 5;
 
 /**
  * Floor the host applies to the frame, mirroring the `min-height` on
@@ -119,6 +150,20 @@ function longestIncreasingRun(values: number[]): number {
   let current = 0;
   for (let i = 0; i < values.length; i++) {
     current = i > 0 && values[i] > values[i - 1] ? current + 1 : 1;
+    longest = Math.max(longest, current);
+  }
+  return longest;
+}
+
+/**
+ * Returns the largest number of entries in `times` that arrive back to back
+ * with no more than `maxGapMs` between consecutive entries.
+ */
+function longestBurstRun(times: number[], maxGapMs: number): number {
+  let longest = 0;
+  let current = 0;
+  for (let i = 0; i < times.length; i++) {
+    current = i > 0 && times[i] - times[i - 1] <= maxGapMs ? current + 1 : 1;
     longest = Math.max(longest, current);
   }
   return longest;
@@ -395,12 +440,25 @@ for (const config of CONFIGS) {
       );
       const reportedHeights = resizeLog.map((entry: SurfaceResizeLogEntry) => entry.height ?? 0);
 
+      // Tripwire. Every bound below is satisfied by an empty log, so without
+      // this the whole wire tap can die silently: a renamed message type, an
+      // added envelope, a clobbered __a2uiResizeLog, or a failed init script.
+      expect(resizeLog.length, 'SURFACE_RESIZE wire tap recorded nothing').toBeGreaterThan(0);
+
       expect
         .soft(resizeLog.length, `resize heights: ${reportedHeights}`)
         .toBeLessThan(MAX_IDLE_RESIZE_MESSAGES);
       expect
         .soft(longestIncreasingRun(reportedHeights), `resize heights: ${reportedHeights}`)
         .toBeLessThanOrEqual(MAX_INCREASING_RESIZE_RUN);
+
+      const arrivalTimes = resizeLog.map((entry: SurfaceResizeLogEntry) => entry.timeMs);
+      expect
+        .soft(
+          longestBurstRun(arrivalTimes, LOOP_CADENCE_GAP_MS),
+          `resize gaps: ${arrivalTimes.slice(1).map((t, i) => Math.round(t - arrivalTimes[i]))}`,
+        )
+        .toBeLessThanOrEqual(MAX_LOOP_CADENCE_RUN);
 
       // The guest document must fit its own viewport, so growing the frame can
       // never grow the reported height again.
@@ -413,15 +471,16 @@ for (const config of CONFIGS) {
 
       // Settling is not enough: the frame must settle ON THE CONTENT. Comparing
       // against the guest's own content box rather than a literal keeps this
-      // valid when the sample payload changes.
+      // valid when the sample payload changes. Hard, not soft: this is the
+      // assertion with real margin (off by 16-32px when the fix is reverted)
+      // and it cannot be satisfied by the 280px floor, by MAX_SURFACE_DIMENSION,
+      // by the host growth breaker, or by the panel geometry of the day.
       const settledHeight = heights[heights.length - 1];
       const expectedHeight = Math.max(MIN_FRAME_HEIGHT_PX, guest.contentHeight);
-      expect
-        .soft(
-          Math.abs(settledHeight - expectedHeight),
-          `frame: ${settledHeight}px, guest content: ${guest.contentHeight}px`,
-        )
-        .toBeLessThanOrEqual(FRAME_HEIGHT_TOLERANCE_PX);
+      expect(
+        Math.abs(settledHeight - expectedHeight),
+        `frame: ${settledHeight}px, guest content: ${guest.contentHeight}px`,
+      ).toBeLessThanOrEqual(FRAME_HEIGHT_TOLERANCE_PX);
     });
   });
 }
