@@ -15,7 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
-import {WindowWithMonaco} from './types';
+import {setMonacoContent, waitForMonacoEditor} from './helpers';
 import {ELECTRIC_CAR_CHARGING_UI, EV_CHARGE_CONTROL_A2UI} from './samples';
 
 test.beforeEach(async ({page}) => {
@@ -67,22 +67,11 @@ test.describe('E2E Workspace User Journey', () => {
     await page.waitForLoadState('load');
 
     // 7. Wait for Monaco to load and enter malformed JSON
-    const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
-    await expect(editorLocator).toBeVisible();
-
-    await page.waitForFunction(() => {
-      const monaco = (window as unknown as WindowWithMonaco).monaco;
-      return (monaco?.editor?.getModels()?.length ?? 0) > 0;
-    });
+    await waitForMonacoEditor(page);
 
     await page.waitForTimeout(500); // Give Monaco time to fully attach event listeners
 
-    await page.evaluate(() => {
-      const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
-      if (model) {
-        model.setValue('invalid json {');
-      }
-    });
+    await setMonacoContent(page, 'invalid json {');
 
     // 8. Assert that snackbar appears and no empty text bubbles are created in chat panel
     const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
@@ -91,14 +80,10 @@ test.describe('E2E Workspace User Journey', () => {
     await expect(page.locator('.chat-history-log .bubble-text')).toHaveCount(0);
 
     // 9. Correct JSON and verify snackbar disappears
-    await page.evaluate(() => {
-      const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
-      if (model) {
-        model.setValue(
-          '{"version": "v0.9", "createSurface": {"surfaceId": "test", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}',
-        );
-      }
-    });
+    await setMonacoContent(
+      page,
+      '{"version": "v0.9", "createSurface": {"surfaceId": "test", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}',
+    );
     // With dismissal logic, it should disappear immediately
     await expect(page.locator('.mat-mdc-snack-bar-label')).toHaveCount(0, {timeout: 3000});
   });
@@ -112,24 +97,13 @@ test.describe('E2E Workspace User Journey', () => {
     await page.goto('/');
 
     // Wait for Monaco to load
-    const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
-    await expect(editorLocator).toBeVisible();
-
-    await page.waitForFunction(() => {
-      const monaco = (window as unknown as WindowWithMonaco).monaco;
-      return (monaco?.editor?.getModels()?.length ?? 0) > 0;
-    });
+    await waitForMonacoEditor(page);
 
     // Wait for initial layout snapshot in chat history
     await expect(page.locator('.chat-history-log .bubble-layout')).toHaveCount(1);
 
     // Set invalid JSON
-    await page.evaluate(() => {
-      const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
-      if (model) {
-        model.setValue('invalid json {');
-      }
-    });
+    await setMonacoContent(page, 'invalid json {');
 
     // Wait for debounce period (300ms)
     await page.waitForTimeout(400);
@@ -147,17 +121,7 @@ test.describe('E2E Workspace User Journey', () => {
 
     await expect(page.locator('.header-title')).toContainText('A2UI Composer');
 
-    await page.waitForFunction(() => {
-      const monaco = (window as unknown as WindowWithMonaco).monaco;
-      return (monaco?.editor?.getModels()?.length ?? 0) > 0;
-    });
-
-    await page.evaluate(payload => {
-      const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
-      if (model) {
-        model.setValue(payload);
-      }
-    }, EV_CHARGE_CONTROL_A2UI);
+    await setMonacoContent(page, EV_CHARGE_CONTROL_A2UI);
 
     await expect(page.locator('.header-title')).toContainText('A2UI Composer');
     const shareButton = page.getByRole('button', {name: 'Share design'});
