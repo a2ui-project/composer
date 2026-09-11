@@ -17,7 +17,7 @@
 <div class="settings-container">
   <mat-card class="settings-card">
     <mat-card-header>
-      <mat-card-title>A2UI Composer Settings</mat-card-title>
+      <h2 mat-card-title>A2UI Composer Settings</h2>
     </mat-card-header>
     <mat-card-content>
       <form [formGroup]="settingsForm">
@@ -91,8 +91,8 @@
 
   <mat-card class="status-card">
     <mat-card-header>
-      <mat-card-title>Connection Status & Diagnostics</mat-card-title>
-      <mat-card-subtitle>Real-time monitoring bridge</mat-card-subtitle>
+      <h2 mat-card-title>Connection Status & Diagnostics</h2>
+      <h3 mat-card-subtitle>Real-time monitoring bridge</h3>
     </mat-card-header>
     <mat-card-content>
       <div class="status-badges">
@@ -125,11 +125,9 @@
             <code>[System] Active renderer updated to {{ activeRendererUrl() }}</code>
           }
           @if (catalogErrorMessage()) {
-            <code class="error-log" style="color: #f44336; font-weight: bold"
-              >[Catalog Error] {{ catalogErrorMessage() }}</code
-            >
+            <code class="error-log">[Catalog Error] {{ catalogErrorMessage() }}</code>
           } @else if (catalogStatus() === 'Connected') {
-            <code class="success-log" style="color: #4caf50"
+            <code class="success-log"
               >[System] Catalog handshake completed successfully. Active catalog ready.</code
             >
           } @else if (catalogStatus() === 'Indexing') {
