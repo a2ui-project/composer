@@ -97,13 +97,13 @@
           width: 24px;
           height: 24px;
           border-radius: 50%;
-          background: #feeed8;
-          color: #b05000;
+          background: var(--mat-sys-tertiary-container, #feeed8);
+          color: var(--mat-sys-on-tertiary-container, #b05000);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-weight: 600;
-          font-size: 13px;
+          font-weight: var(--mat-sys-title-small-weight, 600);
+          font-size: var(--mat-sys-label-large-size, 0.8125rem);
           user-select: none;
 
           .mini-avatar-letter {
@@ -112,8 +112,8 @@
         }
 
         .agent-badge-name {
-          font-size: 0.92rem;
-          font-weight: 600;
+          font-size: var(--mat-sys-title-small-size, 0.92rem);
+          font-weight: var(--mat-sys-title-small-weight, 600);
           color: var(--mat-sys-on-surface, #1f1f1f);
         }
       }
@@ -212,8 +212,8 @@
             background: transparent;
             border-radius: 6px;
             color: var(--mat-sys-on-surface-variant, #444746);
-            font-size: 0.88rem;
-            font-weight: 500;
+            font-size: var(--mat-sys-label-large-size, 0.88rem);
+            font-weight: var(--mat-sys-label-large-weight, 500);
             padding: 4px 6px;
             margin-left: -6px;
             cursor: pointer;
@@ -240,9 +240,9 @@
             width: 100%;
 
             .thinking-markdown-body {
-              font-size: 0.88rem;
+              font-size: var(--mat-sys-body-medium-size, 0.88rem);
               color: var(--mat-sys-on-surface-variant, #444746);
-              line-height: 1.5;
+              line-height: var(--mat-sys-body-medium-line-height, 1.5);
 
               p {
                 margin: 0 0 6px 0;
