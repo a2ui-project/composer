@@ -17,9 +17,16 @@
 <main class="sandbox-shell">
   @if (sandbox.surfaceId()) {
     <a2ui-v09-surface [surfaceId]="sandbox.surfaceId()"></a2ui-v09-surface>
-  } @else {
+  }
+  @if (!sandbox.surfaceId() && !debouncedError()) {
     <p style="padding: 24px; color: #666; font-family: sans-serif; text-align: center">
       A2UI Angular Sandbox active. Waiting for RENDER_A2UI payloads...
     </p>
+  }
+  @if (debouncedError()) {
+    <div class="error-overlay">
+      <h3>JSON Preview Error</h3>
+      <pre>{{ debouncedError()?.message || debouncedError() }}</pre>
+    </div>
   }
 </main>

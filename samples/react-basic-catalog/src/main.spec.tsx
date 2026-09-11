@@ -342,4 +342,54 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
       window.location.origin,
     );
   });
+
+  it('renders error overlay with error-overlay class on debounced error', async () => {
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    const invalidPayload = [
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'surf-err',
+          components: [
+            {
+              id: 'err-comp',
+              component: 'NonExistentComponentType',
+            },
+          ],
+        },
+      },
+    ];
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: invalidPayload,
+          },
+        }),
+      );
+    });
+
+    // Advance past the 350ms debounce window
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 400));
+    });
+
+    const overlay = container?.querySelector('.error-overlay') as HTMLElement;
+    expect(overlay).not.toBeNull();
+    expect(overlay.textContent).toContain('JSON Preview Error');
+    expect(overlay.classList.contains('error-overlay')).toBe(true);
+
+    const shell = container?.querySelector('.sandbox-shell') as HTMLElement;
+    expect(shell.style.minHeight).toBe('100vh');
+  });
 });

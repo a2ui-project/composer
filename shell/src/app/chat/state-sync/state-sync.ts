@@ -163,8 +163,13 @@ export class StateSync {
    */
   flushDraft(): void {
     this.isDraftModified = false;
+    this.previousCatalogId = null;
     const catalog = this.catalogManagement.activeCatalog();
-    const catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
+    let catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
+    const activeRenderer = this.startupConfigState.activeRenderer();
+    if (!activeRenderer?.samplePayload && !catalogId) {
+      catalogId = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
+    }
     const initial = this.getInitialDraft(catalogId);
     this._activeDraft.set(initial);
     this._draftInput.set(initial);
@@ -256,8 +261,8 @@ export class StateSync {
     }
 
     const parsed = tryParseJsonArray(trimmed);
-    if (parsed) {
-      const sanitized = parsed
+    if (parsed.success) {
+      const sanitized = parsed.data
         .map(block => {
           if (block && typeof block === 'object' && !Array.isArray(block)) {
             return this.sanitizeBlock(block as RenderA2uiItem);

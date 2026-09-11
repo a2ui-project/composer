@@ -85,6 +85,8 @@ export declare interface RendererConfig {
   onThemeChange?: (theme: ThemePreference) => void;
   /** Optional callback to retrieve component usage samples. */
   getComponentUsages?: () => Promise<ComponentUsages>;
+  /** Invoked with rendering errors (or null when cleared). */
+  onError?: (error: Error | null) => void;
 }
 
 /** A subscription handle to detach a renderer and clean up connections. */

@@ -38,6 +38,7 @@ describe('Events', () => {
     mockMessageStream = signal<MessageEnvelope | null>(null);
     mockHostComm = {
       messageStream: mockMessageStream.asReadonly(),
+      getHistoryBuffer: () => [],
     };
 
     await TestBed.configureTestingModule({
@@ -281,5 +282,84 @@ describe('Events', () => {
 
     expect(await harness.getRowsCount()).toBe(0);
     expect(await harness.hasPlaceholder()).toBe(true);
+  });
+
+  it('hydrates eventsLog with pre-existing SEND_TO_SERVER events from HostCommunication.getHistoryBuffer()', async () => {
+    const historicalTimestamp1 = new Date('2026-05-18T10:00:00.000Z').getTime();
+    const historicalTimestamp2 = new Date('2026-05-18T10:05:00.000Z').getTime();
+
+    const historicalEnvelopes: MessageEnvelope[] = [
+      {
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          action: {
+            name: 'action-first',
+            surfaceId: 'surf-first',
+            sourceComponentId: 'comp-first',
+            context: {step: 1},
+            timestamp: historicalTimestamp1,
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: historicalTimestamp1,
+      },
+      {
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {level: 'warn', message: 'Warning log'},
+        origin: 'http://localhost',
+        timestamp: historicalTimestamp1 + 1000,
+      },
+      {
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          action: {
+            name: 'action-second',
+            surfaceId: 'surf-second',
+            sourceComponentId: 'comp-second',
+            context: {step: 2},
+            timestamp: historicalTimestamp2,
+          },
+        },
+        origin: 'http://localhost',
+        timestamp: historicalTimestamp2,
+      },
+    ];
+
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [Events, MatTableModule],
+      providers: [
+        provideNoopAnimations(),
+        {
+          provide: HostCommunication,
+          useValue: {
+            messageStream: signal<MessageEnvelope | null>(null).asReadonly(),
+            getHistoryBuffer: () => historicalEnvelopes,
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const hydratedFixture = TestBed.createComponent(Events);
+    hydratedFixture.detectChanges();
+    const hydratedHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      hydratedFixture,
+      EventsHarness,
+    );
+
+    expect(await hydratedHarness.hasPlaceholder()).toBe(false);
+    expect(await hydratedHarness.getRowsCount()).toBe(2);
+
+    const row0 = await hydratedHarness.getRowValuesAt(0);
+    expect(row0.action).toBe('action-second');
+    expect(row0.surface).toBe('surf-second');
+    expect(row0.component).toBe('comp-second');
+    expect(JSON.parse(row0.context)).toEqual({step: 2});
+
+    const row1 = await hydratedHarness.getRowValuesAt(1);
+    expect(row1.action).toBe('action-first');
+    expect(row1.surface).toBe('surf-first');
+    expect(row1.component).toBe('comp-first');
+    expect(JSON.parse(row1.context)).toEqual({step: 1});
   });
 });

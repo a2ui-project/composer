@@ -152,6 +152,13 @@ export class ComposerDockview {
     return !!this.dockviewApi?.getGroupPanel(panelId)?.api.isVisible;
   }
 
+  openPanel(panelId: ComposerPanelId): void {
+    const panel = this.dockviewApi?.getGroupPanel(panelId);
+    if (panel && !panel.api.isActive) {
+      panel.api.setActive();
+    }
+  }
+
   setPanelTitle(panelId: ComposerPanelId, title: string): void {
     const panel = this.dockviewApi?.getGroupPanel(panelId);
     if (panel) {
