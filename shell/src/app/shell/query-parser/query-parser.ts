@@ -96,6 +96,42 @@ export class QueryParser {
   }
 
   /**
+   * Builds the URL hash fragment that carries a design between two loads of the app.
+   *
+   * The format lives here rather than at its call sites because it is the write side
+   * of {@link QueryParser.parseSharedA2ui}: the two have to agree on the parameter
+   * names, and they had already been written twice by the time a second producer
+   * (the demos wall's "Open" control) needed one. Every producer therefore states
+   * the payload and the renderer it was authored against, and nothing else decides
+   * the shape of the fragment.
+   *
+   * The renderer is carried alongside the payload because a design is only meaningful
+   * against the catalog that served it: a fragment naming the payload alone would
+   * reload into whichever renderer the recipient happened to have selected.
+   *
+   * @param compressedPayload A 'd1.'-prefixed payload from {@link
+   *     QueryParser.encodeSharedPayload}.
+   * @param rendererUrl Resolved renderer URL to reopen the design against, if known.
+   * @param rendererId Selected renderer id to reopen the design against, if known.
+   * @return The fragment body, without a leading '#'.
+   */
+  static buildSharedA2uiHash(
+    compressedPayload: string,
+    rendererUrl?: string | null,
+    rendererId?: string | null,
+  ): string {
+    const hashParams = new URLSearchParams();
+    if (rendererUrl) {
+      hashParams.set('renderer', rendererUrl);
+    }
+    if (rendererId) {
+      hashParams.set('rendererId', rendererId);
+    }
+    hashParams.set('a2ui', compressedPayload);
+    return hashParams.toString();
+  }
+
+  /**
    * Decompresses a 'd1.'-prefixed Base64URL string back into an A2UI JSON string.
    * Returns null if the format is invalid or decompression fails.
    */

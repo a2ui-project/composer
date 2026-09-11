@@ -276,7 +276,7 @@ describe('ComposerShell Layout', () => {
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(7);
+    expect(hiddenAttrs.length).toBe(8);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
@@ -284,16 +284,22 @@ describe('ComposerShell Layout', () => {
 
   it('renders Material icons inside navigation list items', async () => {
     const icons = await harness.getNavListIconsText();
-    expect(icons).toEqual(['construction', 'widgets', 'smart_toy', 'settings']);
+    expect(icons).toEqual([
+      'construction',
+      'widgets',
+      'auto_awesome_mosaic',
+      'smart_toy',
+      'settings',
+    ]);
   });
 
   it('enables tooltips on navigation items and hides labels when collapsed initially', async () => {
-    expect(await harness.getNavListTooltipsDisabled()).toEqual([false, false, false, false]);
+    expect(await harness.getNavListTooltipsDisabled()).toEqual([false, false, false, false, false]);
     expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(0);
     await harness.clickHamburgerButton();
     expect(await harness.isSidenavCollapsed()).toBe(false);
-    expect(await harness.getNavListTooltipsDisabled()).toEqual([true, true, true, true]);
-    expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(4);
+    expect(await harness.getNavListTooltipsDisabled()).toEqual([true, true, true, true, true]);
+    expect(fixture.nativeElement.querySelectorAll('.nav-label').length).toBe(5);
   });
 
   it('sets explicit aria-label attributes on navigation links and connects hamburger button to sidenav', () => {
@@ -304,6 +310,7 @@ describe('ComposerShell Layout', () => {
     expect(ariaLabels).toEqual([
       'Composer Workspace',
       'Components Gallery',
+      'A2UI Demos',
       'A2A Agent Testing',
       'Settings',
     ]);
@@ -325,10 +332,11 @@ describe('ComposerShell Layout', () => {
       'active-nav-item',
       'active-nav-item',
       'active-nav-item',
+      'active-nav-item',
     ]);
 
     const rlaDirectives = fixture.debugElement.queryAll(By.directive(RouterLinkActive));
-    expect(rlaDirectives.length).toBe(4);
+    expect(rlaDirectives.length).toBe(5);
     const rlaInstances = rlaDirectives.map(de => de.injector.get(RouterLinkActive));
     expect(rlaInstances[0].routerLinkActiveOptions).toEqual({exact: true});
 

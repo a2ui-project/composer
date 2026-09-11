@@ -48,6 +48,13 @@ $dark-theme: mat.define-theme(
 :root {
   @include mat.all-component-typographies($light-theme);
   @include mat.system-level-typography($light-theme);
+
+  // Defines --mat-sys-level0..level5, the Material elevation shadows. They were
+  // already being referenced (demo-card.scss) but never emitted, so every reference
+  // silently fell through to its hand-written fallback. The mixin's output is the
+  // same in either theme, so it belongs here rather than beside the colour
+  // overrides below.
+  @include mat.system-level-elevation($light-theme);
 }
 
 :root,

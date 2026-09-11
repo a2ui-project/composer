@@ -67,15 +67,7 @@ export class ShareService {
       const selectedId = this.startupConfigState.selectedRendererId() ?? null;
       const compressed = await QueryParser.encodeSharedPayload(activeDraft);
       const shareUrl = new URL(href);
-      const hashParams = new URLSearchParams();
-      if (rendererUrl) {
-        hashParams.set('renderer', rendererUrl);
-      }
-      if (selectedId) {
-        hashParams.set('rendererId', selectedId);
-      }
-      hashParams.set('a2ui', compressed);
-      shareUrl.hash = hashParams.toString();
+      shareUrl.hash = QueryParser.buildSharedA2uiHash(compressed, rendererUrl, selectedId);
       shareUrl.search = '';
 
       compressedLengthChars = compressed.length;

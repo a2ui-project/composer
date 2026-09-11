@@ -390,4 +390,24 @@ describe('Lit Framework Adapter Spec', () => {
 
     element.remove();
   });
+
+  it('passes getDemos option through sandbox configuration to attachRenderer', () => {
+    const getDemos = vi.fn();
+    bootstrapLitSandbox([dummyCatalog], {
+      elementTagName: 'app-root-demos-test',
+      getDemos,
+    });
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    const ctor = customElements.get('app-root-demos-test');
+    const element = new ctor!();
+    document.body.appendChild(element);
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.lastCall![1];
+    expect(configPassed.getDemos).toBe(getDemos);
+
+    element.remove();
+  });
 });

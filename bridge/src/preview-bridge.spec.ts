@@ -515,6 +515,111 @@ describe('PreviewBridge Core API Runtime', () => {
     errorSpy.mockRestore();
   });
 
+  it('responds with DEMOS containing demos from getDemos callback (async)', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const mockDemos = [
+      {
+        id: 'flight-status',
+        name: 'Flight Status',
+        description: 'Example of flight status demonstrating date formatting.',
+        a2ui: [{version: 'v0.9', createSurface: {surfaceId: 's', catalogId: 'c'}}],
+      },
+    ];
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      getDemos: async () => mockDemos,
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window.parent,
+        origin: window.location.origin,
+        data: {type: PreviewBridgeMessageType.GET_DEMOS},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.DEMOS,
+        payload: mockDemos,
+      },
+      window.location.origin,
+    );
+  });
+
+  it('responds with DEMOS containing an empty array if getDemos is missing', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window.parent,
+        origin: window.location.origin,
+        data: {type: PreviewBridgeMessageType.GET_DEMOS},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.DEMOS,
+        payload: [],
+      },
+      window.location.origin,
+    );
+  });
+
+  it('responds with DEMOS containing an empty array if getDemos throws an error', async () => {
+    const spy = vi.spyOn(window.parent, 'postMessage');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+    const processor = {processMessages: vi.fn()};
+
+    bridge.attachRenderer(processor, {
+      surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+      onSurfaceReady: vi.fn(),
+      getDemos: () => {
+        throw new Error('Callback failed');
+      },
+    });
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window.parent,
+        origin: window.location.origin,
+        data: {type: PreviewBridgeMessageType.GET_DEMOS},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(spy).toHaveBeenCalledWith(
+      {
+        type: PreviewBridgeMessageType.DEMOS,
+        payload: [],
+      },
+      window.location.origin,
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      'PreviewBridge: Error invoking getDemos:',
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
+  });
+
   it('triggers onCatalogResolved callback when createSurface command contains catalogId', async () => {
     const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
     const processor = {processMessages: vi.fn()};

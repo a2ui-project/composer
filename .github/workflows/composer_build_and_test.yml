@@ -43,6 +43,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
+      - name: Check generated demos
+        run: yarn generate:demos:check
+
       - name: Build
         run: yarn build
 

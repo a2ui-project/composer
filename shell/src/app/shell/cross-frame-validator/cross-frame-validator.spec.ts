@@ -203,6 +203,71 @@ describe('CrossFrameValidator', () => {
     });
   });
 
+  describe('GET_DEMOS', () => {
+    it('accepts valid GET_DEMOS with no payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_DEMOS,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid GET_DEMOS with undefined payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_DEMOS,
+          payload: undefined,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid GET_DEMOS with null payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_DEMOS,
+          payload: null,
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid GET_DEMOS with object payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_DEMOS,
+          payload: {},
+        }),
+      ).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects GET_DEMOS with non-object payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_DEMOS,
+          payload: 'invalid',
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Malformed payload for GET_DEMOS: must be an object, null, or undefined.',
+      );
+    });
+
+    it('rejects GET_DEMOS with array payload', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.GET_DEMOS,
+          payload: [],
+        }),
+      ).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Malformed payload for GET_DEMOS: must be an object, null, or undefined.',
+      );
+    });
+  });
+
   describe('RENDER_A2UI', () => {
     it('rejects RENDER_A2UI with missing payload', () => {
       expect(

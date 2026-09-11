@@ -40,6 +40,12 @@ export const routes: Routes = [
         canActivate: [startupGuard],
       },
       {
+        path: 'demos',
+        loadComponent: () => import('./demos/demos').then(m => m.Demos),
+        title: 'A2UI Demos',
+        canActivate: [startupGuard],
+      },
+      {
         path: 'a2a',
         loadComponent: () => import('./agent-chat/a2a-chat-view').then(m => m.A2aChatView),
         title: 'A2A Agent Testing',
