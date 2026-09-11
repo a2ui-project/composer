@@ -76,6 +76,24 @@ describe('A2aChatMessage', () => {
     expect(await harness.getMessageContent()).toContain('Hello, user!');
   });
 
+  it('derives the avatar initial from the agent name', async () => {
+    fixture.componentRef.setInput('agentName', 'flight booker');
+    fixture.detectChanges();
+
+    expect(await harness.getAgentInitial()).toBe('F');
+  });
+
+  it('keeps non-BMP avatar initials intact and falls back for blank agent names', async () => {
+    // charAt(0) would emit a lone surrogate here rather than the whole glyph.
+    fixture.componentRef.setInput('agentName', '🤖 Agent');
+    fixture.detectChanges();
+    expect(await harness.getAgentInitial()).toBe('🤖');
+
+    fixture.componentRef.setInput('agentName', '   ');
+    fixture.detectChanges();
+    expect(await harness.getAgentInitial()).toBe('A');
+  });
+
   it('renders user message', async () => {
     fixture.componentRef.setInput('message', {
       id: 'msg-2',

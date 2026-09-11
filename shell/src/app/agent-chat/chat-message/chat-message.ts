@@ -96,7 +96,9 @@ export class A2aChatMessage {
 
   protected readonly agentInitial = computed<string>(() => {
     const name = (this.agentName() || 'Agent').trim();
-    return name ? name.charAt(0).toUpperCase() : 'A';
+    // Iterate by code point so a leading emoji or other non-BMP character is
+    // not split into a lone surrogate.
+    return name ? [...name][0].toUpperCase() : 'A';
   });
 
   protected readonly formattedTime = computed<string>(() => {
