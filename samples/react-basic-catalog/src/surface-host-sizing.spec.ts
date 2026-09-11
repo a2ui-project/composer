@@ -20,7 +20,7 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
 /** Matches any viewport-relative length unit. */
-const VIEWPORT_UNIT = /\d+\s*(vh|dvh|svh|lvh)\b/i;
+const VIEWPORT_UNIT = /\d+\s*(vh|dvh|svh|lvh|vmin|vmax|vb|vi)\b/i;
 
 /** Matches a full-height declaration that inherits the iframe viewport. */
 const FULL_HEIGHT = /height:\s*'?100%/i;
