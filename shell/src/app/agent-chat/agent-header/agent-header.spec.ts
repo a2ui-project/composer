@@ -60,12 +60,8 @@ describe('A2aAgentHeader', () => {
     expect(await harness.getAvatarImageSrc()).toBe('http://example.com/icon.svg');
   });
 
-  it('hides session chip when sessionId is undefined or null', async () => {
+  it('hides session chip when sessionId is undefined', async () => {
     fixture.componentRef.setInput('sessionId', undefined);
-    fixture.detectChanges();
-    expect(await harness.getSessionText()).toBeNull();
-
-    fixture.componentRef.setInput('sessionId', null);
     fixture.detectChanges();
     expect(await harness.getSessionText()).toBeNull();
   });

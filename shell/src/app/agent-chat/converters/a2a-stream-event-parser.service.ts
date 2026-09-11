@@ -49,9 +49,9 @@ enum A2aPartKind {
 }
 
 /** Field names read off raw A2A events that are absent from {@link TaskStatusUpdateEvent}. */
-const A2A_EVENT_FIELD = {
-  KIND: 'kind',
-} as const;
+enum A2aEventField {
+  KIND = 'kind',
+}
 
 /**
  * Field names read off raw A2A parts.
@@ -59,10 +59,10 @@ const A2A_EVENT_FIELD = {
  * These are accessed through an index signature because they are absent from {@link A2aPart};
  * they only appear on payloads from agents that predate or extend the typed shape.
  */
-const A2A_PART_FIELD = {
-  KIND: 'kind',
-  THOUGHT: 'thought',
-} as const;
+enum A2aPartField {
+  KIND = 'kind',
+  THOUGHT = 'thought',
+}
 
 /**
  * Metadata keys that mark a part as model reasoning.
@@ -354,7 +354,7 @@ export class A2aStreamEventParser {
     if (typeof status === 'object' && status !== null && status['update']) {
       return status['update'];
     }
-    if (unwrapped[A2A_EVENT_FIELD.KIND] === A2aEventKind.MESSAGE) {
+    if (unwrapped[A2aEventField.KIND] === A2aEventKind.MESSAGE) {
       return unwrapped;
     }
     if (Array.isArray(unwrapped.parts)) {
@@ -486,8 +486,8 @@ export class A2aStreamEventParser {
    * protobuf `fields` map.
    */
   private isThoughtPart(part: A2aPart, partObj: Record<string, unknown>): boolean {
-    if (partObj[A2A_PART_FIELD.THOUGHT] !== undefined) return true;
-    if (partObj[A2A_PART_FIELD.KIND] === A2aPartKind.THOUGHT) return true;
+    if (partObj[A2aPartField.THOUGHT] !== undefined) return true;
+    if (partObj[A2aPartField.KIND] === A2aPartKind.THOUGHT) return true;
 
     const meta = (part.metadata || partObj['metadata']) as Record<string, unknown> | undefined;
     if (!meta) return false;
