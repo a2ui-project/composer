@@ -58,9 +58,9 @@ describe('SurfacePartitioner', () => {
       expect(isA2uiItem({updateComponents: {surfaceId: 's1', components: []}})).toBe(true);
       expect(isA2uiItem({updateDataModel: {surfaceId: 's1', value: {}}})).toBe(true);
       expect(isA2uiItem({deleteSurface: {surfaceId: 's1'}})).toBe(true);
-      expect(isA2uiItem({beginRendering: {surfaceId: 's1'}})).toBe(true);
 
       // Rejects superseded v0.8 update spellings, which Composer does not support
+      expect(isA2uiItem({beginRendering: {surfaceId: 's1'}})).toBe(false);
       expect(isA2uiItem({surfaceUpdate: {surfaceId: 's1'}})).toBe(false);
       expect(isA2uiItem({dataModelUpdate: {surfaceId: 's1'}})).toBe(false);
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {RenderA2uiItem} from 'a2ui-bridge';
+import {A2UI_UPDATE_KEYS, RenderA2uiItem} from 'a2ui-bridge';
 import {CanvasArtifact} from '../chat-message/types';
 
 interface ExtractedCanvasInfo {
@@ -286,25 +286,10 @@ export function isA2uiMimeType(mimeType?: string | null): boolean {
 }
 
 /**
- * Canonical server-to-client A2UI v0.9 update keys.
- *
- * Mirrors `isA2uiServerPart` from the SharedWeb A2UI pipeline
- * (google3/java/com/google/learning/agents/ui/sharedweb/a2a/a2ui_helper.ts). Composer only
- * supports v0.9, so the superseded v0.8 spellings are deliberately absent.
- */
-export const A2UI_SERVER_UPDATE_KEYS = [
-  'createSurface',
-  'updateComponents',
-  'updateDataModel',
-  'deleteSurface',
-  'beginRendering',
-] as const;
-
-/**
  * Checks if a candidate object is a valid A2UI server-to-client update specification item.
  *
  * An object is recognized as an A2UI item if it contains at least one of the canonical
- * update operation keys ({@link A2UI_SERVER_UPDATE_KEYS}) with a defined non-null value.
+ * update operation keys ({@link A2UI_UPDATE_KEYS}) with a defined non-null value.
  * Used during streaming ingestion to partition genuine A2UI UI payloads from
  * non-A2UI messages (such as agent tool/function calls or echoed client actions) so they are preserved
  * without causing canvas dispatch errors.
@@ -315,9 +300,7 @@ export const A2UI_SERVER_UPDATE_KEYS = [
 export function isA2uiItem(item: unknown): boolean {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
   const obj = item as Record<string, unknown>;
-  return A2UI_SERVER_UPDATE_KEYS.some(
-    key => key in obj && obj[key] !== undefined && obj[key] !== null,
-  );
+  return A2UI_UPDATE_KEYS.some(key => key in obj && obj[key] !== undefined && obj[key] !== null);
 }
 
 /**
