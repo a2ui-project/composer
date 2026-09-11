@@ -98,9 +98,12 @@ export class SurfaceResizeObserver {
     const body = document.body;
     const docEl = document.documentElement;
 
+    // `documentElement.scrollHeight` is floored at the guest viewport height, and
+    // the host derives that viewport from the height reported here, so including it
+    // makes the measurement monotonically non-decreasing. Measure the body box and
+    // the root element's border box only; both track real content in either direction.
     const height = Math.max(
       body?.scrollHeight || 0,
-      docEl?.scrollHeight || 0,
       body?.offsetHeight || 0,
       docEl?.offsetHeight || 0,
     );
