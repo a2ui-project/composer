@@ -16,15 +16,40 @@
 
 import {describe, it, expect} from 'vitest';
 import {
+  A2aMessageRole,
   A2aProtoTaskState,
   A2aV03TaskState,
   A2aV1TaskState,
   isTerminalTaskState,
+  normalizeMessageRole,
   normalizeTaskState,
   TERMINAL_PROTO_TASK_STATES,
 } from './a2a-types';
 
 describe('a2a-types', () => {
+  describe('normalizeMessageRole', () => {
+    it('maps user spellings across protocol revisions', () => {
+      expect(normalizeMessageRole('user')).toBe(A2aMessageRole.USER);
+      expect(normalizeMessageRole('ROLE_USER')).toBe(A2aMessageRole.USER);
+      expect(normalizeMessageRole('  User  ')).toBe(A2aMessageRole.USER);
+    });
+
+    it('maps agent spellings including assistant and model aliases', () => {
+      expect(normalizeMessageRole('agent')).toBe(A2aMessageRole.AGENT);
+      expect(normalizeMessageRole('ROLE_AGENT')).toBe(A2aMessageRole.AGENT);
+      expect(normalizeMessageRole('assistant')).toBe(A2aMessageRole.AGENT);
+      expect(normalizeMessageRole('model')).toBe(A2aMessageRole.AGENT);
+    });
+
+    it('returns undefined for absent, unrecognized, or non-string roles', () => {
+      expect(normalizeMessageRole(undefined)).toBeUndefined();
+      expect(normalizeMessageRole(null)).toBeUndefined();
+      expect(normalizeMessageRole('')).toBeUndefined();
+      expect(normalizeMessageRole('system')).toBeUndefined();
+      expect(normalizeMessageRole(42)).toBeUndefined();
+    });
+  });
+
   describe('normalizeTaskState', () => {
     it('returns unknown for null, undefined, or empty string', () => {
       expect(normalizeTaskState(null)).toBe('unknown');

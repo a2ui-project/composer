@@ -266,12 +266,32 @@ export function hasA2uiCanvasComponent(items: RenderA2uiItem[]): boolean {
 }
 
 /**
- * Checks if a candidate object is a valid A2UI v0.9 update specification item.
+ * The only A2UI protocol version Composer speaks.
+ *
+ * Stamped onto outgoing client events and used as the default for inbound items that omit it.
+ */
+export const A2UI_PROTOCOL_VERSION = 'v0.9';
+
+/**
+ * Canonical MIME types for A2UI data parts across Google3 and A2A specs.
+ * 'application/a2ui+json' is the primary standard (see SharedWeb A2UI pipeline).
+ * 'application/json+a2ui' is supported as a backward-compatible alias.
+ */
+export const A2UI_MIME_TYPE = 'application/a2ui+json';
+export const LEGACY_A2UI_MIME_TYPE = 'application/json+a2ui';
+
+/** Returns whether the MIME type identifies an A2UI data part. */
+export function isA2uiMimeType(mimeType?: string | null): boolean {
+  return mimeType === A2UI_MIME_TYPE || mimeType === LEGACY_A2UI_MIME_TYPE;
+}
+
+/**
+ * Checks if a candidate object is a valid A2UI server-to-client update specification item.
  *
  * An object is recognized as an A2UI item if it contains at least one of the canonical
  * update operation keys ({@link A2UI_UPDATE_KEYS}) with a defined non-null value.
  * Used during streaming ingestion to partition genuine A2UI UI payloads from
- * non-A2UI messages (such as agent tool/function calls) so they are preserved
+ * non-A2UI messages (such as agent tool/function calls or echoed client actions) so they are preserved
  * without causing canvas dispatch errors.
  *
  * @param item The candidate object or chunk to inspect.
@@ -285,19 +305,74 @@ export function isA2uiItem(item: unknown): boolean {
 
 /**
  * Normalizes an array of raw layout updates into valid `RenderA2uiItem` specifications,
- * filtering out any non-A2UI objects.
+ * filtering out any non-A2UI objects and deduplicating redundant createSurface commands.
  */
-export function normalizeA2uiItems(items: unknown[]): RenderA2uiItem[] {
+export function normalizeA2uiItems(items: readonly unknown[]): RenderA2uiItem[] {
   if (!items || !Array.isArray(items)) return [];
 
-  return items.filter(isA2uiItem).map(item => {
-    const itemObj = item as Record<string, unknown>;
-    return {
+  const seenSurfaces = new Set<string>();
+  const normalized: RenderA2uiItem[] = [];
+
+  for (const raw of items) {
+    if (!isA2uiItem(raw)) continue;
+    const itemObj = raw as Record<string, unknown>;
+    const item = {
       version:
-        typeof itemObj['version'] === 'string' && itemObj['version'] ? itemObj['version'] : 'v0.9',
+        typeof itemObj['version'] === 'string' && itemObj['version']
+          ? itemObj['version']
+          : A2UI_PROTOCOL_VERSION,
       ...itemObj,
     } as RenderA2uiItem;
-  });
+
+    if (item.createSurface?.surfaceId) {
+      const surfaceId = item.createSurface.surfaceId;
+      if (seenSurfaces.has(surfaceId)) {
+        continue;
+      }
+      seenSurfaces.add(surfaceId);
+    } else if (item.deleteSurface?.surfaceId) {
+      seenSurfaces.delete(item.deleteSurface.surfaceId);
+    }
+
+    normalized.push(item);
+  }
+
+  return normalized;
+}
+
+/**
+ * Merges newly received A2UI items into an existing payload across streaming chunks.
+ * If newItems re-declares an existing surface via `createSurface`, prior messages for that
+ * surface in existingItems are replaced rather than duplicated.
+ */
+export function mergeA2uiItems(
+  existingItems: readonly RenderA2uiItem[],
+  newItems: readonly RenderA2uiItem[],
+): RenderA2uiItem[] {
+  const normalizedNew = normalizeA2uiItems(newItems);
+  if (!existingItems || existingItems.length === 0) return normalizedNew;
+  if (!normalizedNew || normalizedNew.length === 0) return [...existingItems];
+
+  const newCreateSurfaces = new Set<string>();
+  for (const item of normalizedNew) {
+    if (item.createSurface?.surfaceId) {
+      newCreateSurfaces.add(item.createSurface.surfaceId);
+    }
+  }
+
+  const filteredExisting =
+    newCreateSurfaces.size > 0
+      ? existingItems.filter(item => {
+          const surfaceId =
+            item.createSurface?.surfaceId ??
+            item.updateComponents?.surfaceId ??
+            item.updateDataModel?.surfaceId ??
+            item.deleteSurface?.surfaceId;
+          return surfaceId == null || !newCreateSurfaces.has(surfaceId);
+        })
+      : existingItems;
+
+  return [...filteredExisting, ...normalizedNew];
 }
 
 /**

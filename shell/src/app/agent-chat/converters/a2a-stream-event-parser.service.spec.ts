@@ -369,7 +369,7 @@ describe('A2aStreamEventParser', () => {
     expect(parsed.a2uiItems[1].createSurface?.surfaceId).toBe('art-2');
   });
 
-  it('provides status text fallback when message is empty', () => {
+  it('routes in-progress status text to thinking and leaves empty status silent', () => {
     const statusEvent: TaskStatusUpdateEvent = {
       taskId: 'task-status-fallback',
       status: {
@@ -378,8 +378,11 @@ describe('A2aStreamEventParser', () => {
       },
     };
 
+    // Non-terminal status text belongs in the thinking panel, not the main
+    // transcript, so it is surfaced as a thought chunk.
     const parsed = parser.parse(statusEvent);
-    expect(parsed.textChunk).toBe('Working on your request...');
+    expect(parsed.textChunk).toBeUndefined();
+    expect(parsed.thoughtChunk).toBe('Working on your request...');
 
     // When status has no message but has a state, textChunk remains undefined so status transitions are not rendered in chat
     const emptyStatusEvent: TaskStatusUpdateEvent = {
@@ -429,5 +432,87 @@ describe('A2aStreamEventParser', () => {
       },
     });
     expect(rawEvent.textChunk).toContain('data:text/plain;base64,SGVsbG8gV29ybGQ=');
+  });
+
+  it('routes non-completed TASK_STATE_WORKING text to thoughtChunk without duplication', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-dup',
+      contextId: 'ctx-dup',
+      message: {
+        role: 'ROLE_AGENT',
+        parts: [{text: 'Hello, how can I help?'}],
+      },
+      status: {
+        state: 'TASK_STATE_WORKING',
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{text: 'Hello, how can I help?'}],
+        },
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.thoughtChunk).toBe('Hello, how can I help?');
+    expect(parsed.textChunk).toBeUndefined();
+  });
+
+  it('routes completed TASK_STATE_COMPLETED text to textChunk without duplication', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-comp-dup',
+      contextId: 'ctx-comp-dup',
+      message: {
+        role: 'ROLE_AGENT',
+        parts: [{text: 'Here is the final redlined contract.'}],
+      },
+      status: {
+        state: 'TASK_STATE_COMPLETED',
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{text: 'Here is the final redlined contract.'}],
+        },
+      },
+      final: true,
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.textChunk).toBe('Here is the final redlined contract.');
+    expect(parsed.thoughtChunk).toBeUndefined();
+    expect(parsed.isCompleted).toBe(true);
+  });
+
+  it('routes echoed user prompt in TASK_STATE_SUBMITTED to thoughtChunk so agent does not duplicate user text on main canvas', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-user-echo',
+      contextId: 'ctx-user-echo',
+      message: {
+        role: 'ROLE_USER',
+        content: [{text: 'hi'}],
+      },
+      status: {
+        state: 'TASK_STATE_SUBMITTED',
+        message: {
+          role: 'ROLE_USER',
+          content: [{text: 'hi'}],
+        },
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.textChunk).toBeUndefined();
+    expect(parsed.thoughtChunk).toBe('hi');
+  });
+
+  it('filters out user messages with role user outside of task submission', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-user-case',
+      message: {
+        role: 'user',
+        parts: [{text: 'show me contracts'}],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.textChunk).toBeUndefined();
+    expect(parsed.thoughtChunk).toBeUndefined();
   });
 });

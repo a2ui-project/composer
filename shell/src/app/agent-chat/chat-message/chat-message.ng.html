@@ -34,7 +34,7 @@
     >
       <div class="agent-header-badge">
         <div class="mini-avatar">
-          <mat-icon class="mini-avatar-icon">smart_toy</mat-icon>
+          <span class="mini-avatar-letter">{{ agentInitial() }}</span>
         </div>
         <span class="agent-badge-name">{{ agentName() }}</span>
       </div>
@@ -49,27 +49,23 @@
         }
 
         @if (message().thinking) {
-          <div class="thinking-accordion">
-            <div
-              class="thinking-header"
-              role="button"
-              tabindex="0"
-              [attr.aria-expanded]="isThinkingExpanded()"
-              aria-label="Toggle thinking reasoning process"
+          <div class="thinking-container">
+            <button
+              class="toggle-show-thoughts-button"
+              type="button"
               (click)="toggleThinkingExpansion()"
-              (keydown.enter)="toggleThinkingExpansion()"
-              (keydown.space)="toggleThinkingExpansion()"
+              [attr.aria-expanded]="isThinkingExpanded()"
+              [attr.aria-label]="thinkingLabel()"
             >
-              <mat-icon class="thinking-icon">psychology</mat-icon>
-              <span class="thinking-label">
-                {{ thinkingLabel() }}
-              </span>
-              <mat-icon class="expand-arrow">
+              {{ thinkingLabel() }}
+              <mat-icon class="thinking-arrow-icon">
                 {{ thinkingExpandIcon() }}
               </mat-icon>
-            </div>
+            </button>
             @if (isThinkingExpanded()) {
-              <div class="thinking-content" [innerHTML]="formattedThinking()"></div>
+              <div class="thinking-content">
+                <div class="thinking-markdown-body" [innerHTML]="formattedThinking()"></div>
+              </div>
             }
           </div>
         }
@@ -132,6 +128,39 @@
               <span class="dot"></span>
               <span class="dot"></span>
             </div>
+          </div>
+        }
+
+        @if (showMessageActions()) {
+          <div class="message-actions-bar">
+            <button
+              mat-icon-button
+              type="button"
+              class="action-btn"
+              matTooltip="Good response"
+              aria-label="Good response"
+            >
+              <mat-icon class="action-icon">thumb_up</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              type="button"
+              class="action-btn"
+              matTooltip="Bad response"
+              aria-label="Bad response"
+            >
+              <mat-icon class="action-icon">thumb_down</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              type="button"
+              class="action-btn"
+              matTooltip="Copy text"
+              aria-label="Copy text"
+              (click)="copyMessageText()"
+            >
+              <mat-icon class="action-icon">content_copy</mat-icon>
+            </button>
           </div>
         }
       </div>

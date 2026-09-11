@@ -672,11 +672,13 @@ describe('A2aChatView', () => {
         parts: expect.arrayContaining([
           {text: 'Action: select_demo'},
           expect.objectContaining({
-            data: expect.objectContaining({
+            // The v0.9 schema permits exactly `version` and `action`.
+            data: {
+              version: 'v0.9',
               action: actionPayload,
-              userAction: actionPayload,
-            }),
+            },
             metadata: {
+              mimeType: 'application/a2ui+json',
               type: 'a2ui_action',
             },
           }),

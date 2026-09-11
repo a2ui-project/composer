@@ -27,6 +27,15 @@ import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 import {CanvasArtifact, UiMessage} from './types';
 
 /**
+ * A user's explicit expand/collapse choice for the thinking accordion, tagged with the
+ * content state the choice was made under.
+ */
+interface ManualThinkingToggle {
+  readonly hadContent: boolean;
+  readonly expanded: boolean;
+}
+
+/**
  * Message bubble item rendering textual responses, markdown, thinking blocks,
  * tool calls, attachments, and embedded inline A2UI surfaces.
  */
@@ -62,7 +71,16 @@ export class A2aChatMessage {
   /** Emitted when the user clicks to open the protocol message inspector. */
   readonly openInspector = output<void>();
 
-  protected readonly isThinkingExpanded = signal<boolean>(false);
+  /**
+   * Records the user's last manual expand/collapse action along with the content state
+   * (`hadContent`) it was performed under.
+   *
+   * Storing the content state alongside the choice lets the accordion automatically revert to
+   * the default behaviour whenever the message transitions from thinking-only to having visible
+   * content (i.e. the first non-thinking chunk streams in), while still honouring the manual
+   * choice for as long as the content state is unchanged.
+   */
+  private readonly manualThinkingToggle = signal<ManualThinkingToggle | null>(null);
 
   protected readonly formattedContent = computed<string>(() => {
     const rawText = this.message().text || '';
@@ -74,6 +92,13 @@ export class A2aChatMessage {
     const raw = this.message().thinking || '';
     if (!raw.trim()) return '';
     return renderMarkdown(raw);
+  });
+
+  protected readonly agentInitial = computed<string>(() => {
+    const name = (this.agentName() || 'Agent').trim();
+    // Iterate by code point so a leading emoji or other non-BMP character is
+    // not split into a lone surrogate.
+    return name ? [...name][0].toUpperCase() : 'A';
   });
 
   protected readonly formattedTime = computed<string>(() => {
@@ -108,12 +133,48 @@ export class A2aChatMessage {
     return Boolean(this.message().images?.length);
   });
 
+  /**
+   * Whether the message has streamed any user-visible, non-thinking content yet.
+   *
+   * Covers rendered text as well as A2UI surfaces (inline or Canvas), since both represent an
+   * actual agent response rather than intermediate reasoning.
+   */
+  protected readonly hasNonThinkingContent = computed<boolean>(() => {
+    const message = this.message();
+    return Boolean(
+      message.text?.trim() ||
+      message.inlineA2uiPayload?.length ||
+      message.a2uiPayload?.length ||
+      message.canvasArtifacts?.length,
+    );
+  });
+
+  /**
+   * Whether the thinking accordion is currently expanded.
+   *
+   * Defaults to expanded while the message contains only thinking content, and automatically
+   * collapses as soon as the first non-thinking chunk streams in. A manual toggle by the user
+   * overrides this default until the content state changes again.
+   */
+  protected readonly isThinkingExpanded = computed<boolean>(() => {
+    const hasContent = this.hasNonThinkingContent();
+    const manual = this.manualThinkingToggle();
+    if (manual && manual.hadContent === hasContent) {
+      return manual.expanded;
+    }
+    return !hasContent;
+  });
+
   protected readonly thinkingLabel = computed<string>(() => {
-    return this.message().isStreaming ? 'Thinking...' : 'Reasoning Process';
+    const message = this.message();
+    if (message.isStreaming && !message.thinking) {
+      return 'Thinking...';
+    }
+    return this.isThinkingExpanded() ? 'Hide thinking' : 'Show thinking';
   });
 
   protected readonly thinkingExpandIcon = computed<string>(() => {
-    return this.isThinkingExpanded() ? 'expand_less' : 'expand_more';
+    return this.isThinkingExpanded() ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
   });
 
   protected readonly isPending = computed<boolean>(() => {
@@ -144,6 +205,12 @@ export class A2aChatMessage {
     return Boolean(this.canvasArtifacts().length);
   });
 
+  /** Whether the feedback/copy action bar is shown under a finished agent turn. */
+  protected readonly showMessageActions = computed<boolean>(() => {
+    if (this.message().isStreaming) return false;
+    return Boolean(this.message().text || this.hasInlineSurface() || this.hasCanvasArtifacts());
+  });
+
   protected isArtifactActive(artifact: CanvasArtifact): boolean {
     if (!this.isCanvasOpen()) return false;
     const active = this.activeCanvasPayload();
@@ -154,7 +221,20 @@ export class A2aChatMessage {
   }
 
   protected toggleThinkingExpansion(): void {
-    this.isThinkingExpanded.update(v => !v);
+    this.manualThinkingToggle.set({
+      hadContent: this.hasNonThinkingContent(),
+      expanded: !this.isThinkingExpanded(),
+    });
+  }
+
+  protected copyMessageText(): void {
+    const text = this.message().text;
+    if (!text || typeof navigator === 'undefined' || !navigator.clipboard) {
+      return;
+    }
+    navigator.clipboard.writeText(text).catch((err: unknown) => {
+      console.warn('Failed to copy message text to clipboard', err);
+    });
   }
 
   protected openCanvasArtifact(payload: RenderA2uiItem[]): void {

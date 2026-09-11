@@ -16,17 +16,76 @@
 
 import {Injectable} from '@angular/core';
 import {RenderA2uiItem} from 'a2ui-bridge';
+
+import {renderBase64Data, renderMultimediaContent} from '../../chat/a2a/a2a-media';
 import {
   A2aArtifact,
-  A2aMessage,
+  A2aMessageRole,
   A2aPart,
-  TaskStatusUpdateEvent,
+  A2aV03TaskState,
   isTerminalTaskState,
+  normalizeMessageRole,
   normalizeTaskState,
+  TaskStatusUpdateEvent,
 } from '../../chat/a2a/a2a-types';
 import {UiToolCall} from '../chat-message/types';
-import {renderBase64Data, renderMultimediaContent} from '../../chat/a2a/a2a-media';
+
 import {isA2uiItem, normalizeA2uiItems} from './surface-partitioner';
+
+/**
+ * Values of the `kind` discriminator on A2A stream events.
+ */
+enum A2aEventKind {
+  /** The event is a bare message rather than a task status update. */
+  MESSAGE = 'message',
+}
+
+/**
+ * Values of the `kind` discriminator on A2A parts.
+ */
+enum A2aPartKind {
+  /** The part holds model reasoning that belongs in the thinking panel. */
+  THOUGHT = 'thought',
+}
+
+/** Field names read off raw A2A events that are absent from {@link TaskStatusUpdateEvent}. */
+enum A2aEventField {
+  KIND = 'kind',
+}
+
+/**
+ * Field names read off raw A2A parts.
+ *
+ * These are accessed through an index signature because they are absent from {@link A2aPart};
+ * they only appear on payloads from agents that predate or extend the typed shape.
+ */
+enum A2aPartField {
+  KIND = 'kind',
+  THOUGHT = 'thought',
+}
+
+/**
+ * Metadata keys that mark a part as model reasoning.
+ *
+ * `adk_thought` is emitted by ADK-based agents; `thought` is the generic spelling. Either may
+ * appear at the top level of `metadata` or nested inside its protobuf `fields` map.
+ */
+const THOUGHT_METADATA_KEYS = ['adk_thought', 'thought'] as const;
+
+/**
+ * Interprets the many encodings agents use for a boolean metadata flag.
+ *
+ * Accepts a native boolean, the string `'true'`, and the protobuf Struct wrapper
+ * (`{boolValue: true}`) produced by proto3 JSON mapping.
+ */
+function isThoughtFlagSet(value: unknown): boolean {
+  if (value === true || value === 'true') return true;
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Record<string, unknown>)['boolValue'] === true
+  );
+}
 
 /**
  * Extracts a UiToolCall structure if an object represents a function or tool call invocation.
@@ -216,27 +275,120 @@ export class A2aStreamEventParser {
     unwrapped: TaskStatusUpdateEvent,
     result: ParsedA2aStreamEvent,
   ): void {
-    const msg =
-      unwrapped.message ||
-      (typeof unwrapped.status === 'object' && unwrapped.status !== null
-        ? unwrapped.status.message
-        : undefined) ||
-      (Array.isArray(unwrapped.parts) ? unwrapped : undefined) ||
-      (unwrapped['kind'] === 'message' ? (unwrapped as unknown as A2aMessage) : undefined);
+    const primaryMessage = this.extractPrimaryMessage(unwrapped);
+    if (!primaryMessage) return;
 
-    if (typeof msg === 'string') {
-      result.textChunk = (result.textChunk || '') + msg;
+    const isNonCompleted = this.isNonCompletedTaskEvent(unwrapped);
+
+    if (typeof primaryMessage === 'string') {
+      if (isNonCompleted) {
+        result.thoughtChunk = (result.thoughtChunk || '') + primaryMessage;
+      } else {
+        result.textChunk = (result.textChunk || '') + primaryMessage;
+      }
       return;
     }
 
-    if (typeof msg === 'object' && msg !== null && Array.isArray(msg.parts)) {
-      for (const part of msg.parts) {
-        this.processMessagePart(part, result);
+    if (Array.isArray(primaryMessage)) {
+      for (const part of primaryMessage) {
+        if (part && typeof part === 'object') {
+          this.processMessagePart(part as A2aPart, result, isNonCompleted);
+        }
       }
+      return;
+    }
+
+    if (typeof primaryMessage !== 'object' || primaryMessage === null) {
+      return;
+    }
+
+    const msgRecord = primaryMessage as Record<string, unknown>;
+    // Outside of non-completed status, filter out user messages.
+    if (this.isUserMessage(msgRecord, unwrapped) && !isNonCompleted) {
+      return;
+    }
+
+    const parts = msgRecord['parts'] ?? msgRecord['content'];
+    if (Array.isArray(parts)) {
+      for (const part of parts) {
+        if (part && typeof part === 'object') {
+          this.processMessagePart(part as A2aPart, result, isNonCompleted);
+        }
+      }
+    } else if (typeof msgRecord['text'] === 'string' || msgRecord['data'] !== undefined) {
+      this.processMessagePart(msgRecord as A2aPart, result, isNonCompleted);
     }
   }
 
-  private processMessagePart(part: A2aPart, result: ParsedA2aStreamEvent): void {
+  /**
+   * Whether the event reports a task that is still in flight.
+   *
+   * Text emitted while a task is `submitted` or `working` is progress narration rather than the
+   * final answer, so callers route it to the thinking panel instead of the main transcript.
+   */
+  private isNonCompletedTaskEvent(unwrapped: TaskStatusUpdateEvent): boolean {
+    const statusState = this.extractStatusState(unwrapped);
+    return statusState === A2aV03TaskState.SUBMITTED || statusState === A2aV03TaskState.WORKING;
+  }
+
+  /**
+   * Locates the message payload within an event, checking the known shapes in priority order.
+   *
+   * Depending on the agent and transport the content may sit on `message`, on `status.message`,
+   * on the legacy `status.update`, or directly on the event itself when it is a bare message.
+   *
+   * @returns The message, its parts array, or undefined when the event carries no content.
+   */
+  private extractPrimaryMessage(unwrapped: TaskStatusUpdateEvent): unknown {
+    if (unwrapped.message) {
+      return unwrapped.message;
+    }
+    if (
+      typeof unwrapped.status === 'object' &&
+      unwrapped.status !== null &&
+      unwrapped.status.message
+    ) {
+      return unwrapped.status.message;
+    }
+    const {status} = unwrapped;
+    if (typeof status === 'object' && status !== null && status['update']) {
+      return status['update'];
+    }
+    if (unwrapped[A2aEventField.KIND] === A2aEventKind.MESSAGE) {
+      return unwrapped;
+    }
+    if (Array.isArray(unwrapped.parts)) {
+      return unwrapped;
+    }
+    if (unwrapped['content']) {
+      return unwrapped['content'];
+    }
+    return undefined;
+  }
+
+  /**
+   * Determines whether a message was authored by the user rather than the agent.
+   *
+   * Agents echo the submitted prompt back on the `submitted` status event, so those messages must
+   * be recognized and skipped to avoid duplicating the user's text in the transcript. When the
+   * payload carries no usable role, authorship is inferred from the task state.
+   */
+  private isUserMessage(
+    msgRecord: Record<string, unknown>,
+    unwrapped: TaskStatusUpdateEvent,
+  ): boolean {
+    const role = normalizeMessageRole(msgRecord['role'] ?? unwrapped['role']);
+    if (role) {
+      return role === A2aMessageRole.USER;
+    }
+    return this.extractStatusState(unwrapped) === A2aV03TaskState.SUBMITTED;
+  }
+
+  private processMessagePart(
+    part: A2aPart,
+    result: ParsedA2aStreamEvent,
+    isNonCompletedStatus = false,
+  ): void {
     const partObj = part as Record<string, unknown>;
 
     // 1. Model thoughts / reasoning
@@ -255,7 +407,11 @@ export class A2aStreamEventParser {
 
     // 2. Text (v0.3 / v1.0)
     if (part.text) {
-      result.textChunk = (result.textChunk || '') + part.text;
+      if (isNonCompletedStatus) {
+        result.thoughtChunk = (result.thoughtChunk || '') + part.text;
+      } else {
+        result.textChunk = (result.textChunk || '') + part.text;
+      }
     }
 
     // 3. File attachments & media (v0.3 nested file, v1.0 url, v1.0 raw bytes)
@@ -269,7 +425,9 @@ export class A2aStreamEventParser {
     // 5. Embedded artifact parts
     if (part.artifact?.parts) {
       for (const artPart of part.artifact.parts) {
-        this.processMessagePart(artPart, result);
+        if (artPart) {
+          this.processMessagePart(artPart, result, isNonCompletedStatus);
+        }
       }
     }
   }
@@ -320,14 +478,26 @@ export class A2aStreamEventParser {
     }
   }
 
+  /**
+   * Whether a part carries model reasoning rather than user-visible output.
+   *
+   * Agents signal this inconsistently, so every known spelling is accepted: a `thought` payload
+   * field, a `kind` discriminator, or a metadata flag either at the top level or nested under the
+   * protobuf `fields` map.
+   */
   private isThoughtPart(part: A2aPart, partObj: Record<string, unknown>): boolean {
-    return (
-      part.metadata?.['adk_thought'] === true ||
-      part.metadata?.['adk_thought'] === 'true' ||
-      part.metadata?.['thought'] === true ||
-      part.metadata?.['thought'] === 'true' ||
-      partObj['kind'] === 'thought' ||
-      partObj['thought'] !== undefined
+    if (partObj[A2aPartField.THOUGHT] !== undefined) return true;
+    if (partObj[A2aPartField.KIND] === A2aPartKind.THOUGHT) return true;
+
+    const meta = (part.metadata || partObj['metadata']) as Record<string, unknown> | undefined;
+    if (!meta) return false;
+    const metaFields =
+      typeof meta['fields'] === 'object' && meta['fields'] !== null
+        ? (meta['fields'] as Record<string, unknown>)
+        : undefined;
+
+    return THOUGHT_METADATA_KEYS.some(
+      key => isThoughtFlagSet(meta[key]) || isThoughtFlagSet(metaFields?.[key]),
     );
   }
 
@@ -452,10 +622,16 @@ export class A2aStreamEventParser {
       artifacts.push(...unwrapped.artifacts);
     }
 
+    const seenArtifacts = new Set<unknown>();
     for (const art of artifacts) {
+      if (!art || typeof art !== 'object' || seenArtifacts.has(art)) continue;
+      seenArtifacts.add(art);
+
       if (Array.isArray(art.parts)) {
         for (const artPart of art.parts) {
-          this.processMessagePart(artPart, result);
+          if (artPart) {
+            this.processMessagePart(artPart, result);
+          }
         }
       }
     }

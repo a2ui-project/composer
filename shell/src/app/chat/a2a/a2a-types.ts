@@ -209,6 +209,48 @@ export interface A2aMessage {
 }
 
 /**
+ * Author of an A2A message, normalized across protocol revisions.
+ *
+ * The wire format varies by transport: v0.3 JSON uses the lowercase spellings, the protobuf
+ * mapping uses the `ROLE_`-prefixed enum names, and some agents emit the OpenAI-style
+ * `assistant`. Use {@link normalizeMessageRole} to collapse those spellings onto this enum.
+ *
+ * This is deliberately separate from the `MessageRole` used by the design-generation chat
+ * pipeline: that enum models our internal LLM conversation (system/user/model/error), whereas
+ * this one mirrors what the A2A protocol puts on the wire.
+ */
+export enum A2aMessageRole {
+  USER = 'user',
+  AGENT = 'agent',
+}
+
+/** Wire spellings that identify a user-authored message. */
+const USER_ROLE_TOKENS: ReadonlySet<string> = new Set(['user', 'role_user']);
+
+/** Wire spellings that identify an agent-authored message. */
+const AGENT_ROLE_TOKENS: ReadonlySet<string> = new Set([
+  'agent',
+  'role_agent',
+  'assistant',
+  'model',
+]);
+
+/**
+ * Maps a raw protocol role onto {@link A2aMessageRole}.
+ *
+ * @param role The role token as it appeared on the wire, in any casing.
+ * @returns The normalized role, or undefined when the value is absent or unrecognized, in which
+ *     case callers should fall back to task state to infer authorship.
+ */
+export function normalizeMessageRole(role: unknown): A2aMessageRole | undefined {
+  if (typeof role !== 'string') return undefined;
+  const token = role.trim().toLowerCase();
+  if (USER_ROLE_TOKENS.has(token)) return A2aMessageRole.USER;
+  if (AGENT_ROLE_TOKENS.has(token)) return A2aMessageRole.AGENT;
+  return undefined;
+}
+
+/**
  * Known A2A v1.0 task states (from protobuf enum mapping).
  */
 export enum A2aV1TaskState {

@@ -60,6 +60,12 @@ describe('A2aAgentHeader', () => {
     expect(await harness.getAvatarImageSrc()).toBe('http://example.com/icon.svg');
   });
 
+  it('hides session chip when sessionId is undefined', async () => {
+    fixture.componentRef.setInput('sessionId', undefined);
+    fixture.detectChanges();
+    expect(await harness.getSessionText()).toBeNull();
+  });
+
   it('emits event when inspector toggle button is clicked', async () => {
     const spy = vi.spyOn(fixture.componentInstance.toggleInspector, 'emit');
     await harness.clickInspector();

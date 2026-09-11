@@ -1193,11 +1193,18 @@ describe('PreviewBridge Core API Runtime', () => {
       ]);
       expect(onSurfaceClearedSpy).toHaveBeenCalledTimes(1);
 
-      // Step 2: Advance timer tick to trigger deferred render payload
+      // Step 2: Advance timer tick to trigger deferred render payload. The incoming
+      // surface is pre-deleted first so a recreate cannot collide with a stale instance.
       vi.advanceTimersByTime(0);
 
-      expect(processMessagesSpy).toHaveBeenCalledTimes(2);
-      expect(processMessagesSpy).toHaveBeenNthCalledWith(2, payload as A2uiMessage[]);
+      expect(processMessagesSpy).toHaveBeenCalledTimes(3);
+      expect(processMessagesSpy).toHaveBeenNthCalledWith(2, [
+        {
+          version: 'v0.9',
+          deleteSurface: {surfaceId: 'sample-surface'},
+        } as A2uiMessage,
+      ]);
+      expect(processMessagesSpy).toHaveBeenNthCalledWith(3, payload as A2uiMessage[]);
 
       conn.unsubscribe();
       vi.useRealTimers();
@@ -1404,11 +1411,15 @@ describe('PreviewBridge Core API Runtime', () => {
 
       vi.runAllTimers();
 
-      // Ensure second payload is processed after clearing first
+      // Ensure second payload is processed after clearing first. Only the surviving
+      // payload runs, preceded by its defensive pre-delete dispatch.
       expect(processSpy).toHaveBeenLastCalledWith([
         {version: 'v0.9', createSurface: {surfaceId: 'surf-2'}},
       ]);
-      expect(processSpy).toHaveBeenCalledTimes(1);
+      expect(processSpy).toHaveBeenCalledTimes(2);
+      expect(processSpy).toHaveBeenNthCalledWith(1, [
+        {version: 'v0.9', deleteSurface: {surfaceId: 'surf-2'}} as A2uiMessage,
+      ]);
 
       conn.unsubscribe();
       vi.useRealTimers();

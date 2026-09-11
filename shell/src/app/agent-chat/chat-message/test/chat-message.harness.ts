@@ -21,8 +21,9 @@ export class A2aChatMessageHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-chat-message';
 
   private getSenderName = this.locatorForOptional('.agent-badge-name');
+  private getAvatarLetter = this.locatorForOptional('.mini-avatar-letter');
   private getMessageText = this.locatorForOptional('.markdown-body, .user-message-bubble');
-  private getThinkingHeader = this.locatorForOptional('.thinking-header');
+  private getThinkingHeader = this.locatorForOptional('.toggle-show-thoughts-button');
   private getThinkingContent = this.locatorForOptional('.thinking-content');
   private getOpenCanvasButton = this.locatorForOptional(
     MatButtonHarness.with({selector: '.view-canvas-btn'}),
@@ -53,6 +54,11 @@ export class A2aChatMessageHarness extends ComponentHarness {
 
   async getSenderNameText(): Promise<string | null> {
     const el = await this.getSenderName();
+    return el ? el.text() : null;
+  }
+
+  async getAgentInitial(): Promise<string | null> {
+    const el = await this.getAvatarLetter();
     return el ? el.text() : null;
   }
 
