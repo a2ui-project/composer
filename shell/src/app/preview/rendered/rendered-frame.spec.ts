@@ -338,6 +338,34 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(component['frameHeightPx']()).toBeUndefined();
   });
 
+  it('lowers dynamicHeight when a smaller SURFACE_RESIZE arrives', () => {
+    const messageStreamSignal = signal<unknown>({
+      type: 'SURFACE_RESIZE',
+      payload: {height: 3224, width: 800},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
+      value: messageStreamSignal,
+      writable: true,
+    });
+
+    const newFixture = TestBed.createComponent(RenderedFrame);
+    newFixture.detectChanges();
+
+    expect(newFixture.componentInstance.dynamicHeight()).toBe(3224);
+
+    messageStreamSignal.set({
+      type: 'SURFACE_RESIZE',
+      payload: {height: 264, width: 800},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+    newFixture.detectChanges();
+
+    expect(newFixture.componentInstance.dynamicHeight()).toBe(264);
+  });
+
   it('re-dispatches sendRenderA2UI when RENDERER_READY or A2UI_CATALOG arrives from bridge', () => {
     const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
     const messageStreamSignal = signal<unknown>(null);

@@ -93,6 +93,16 @@ const MAX_IDLE_RESIZE_MESSAGES = 25;
 /** Upper bound on consecutive growing heights, which characterise a ratchet. */
 const MAX_INCREASING_RESIZE_RUN = 4;
 
+/**
+ * Floor the host applies to the frame, mirroring the `min-height` on
+ * `.preview-iframe` in rendered-frame.scss. Guest content shorter than this
+ * still renders at this height.
+ */
+const MIN_FRAME_HEIGHT_PX = 280;
+
+/** Allowance for sub-pixel rounding between guest and host measurements. */
+const FRAME_HEIGHT_TOLERANCE_PX = 2;
+
 /** Returns the length of the longest strictly increasing run in `values`. */
 function longestIncreasingRun(values: number[]): number {
   let longest = 0;
@@ -387,8 +397,21 @@ for (const config of CONFIGS) {
       const guest = await iframe.locator('body').evaluate(() => ({
         scrollHeight: document.documentElement.scrollHeight,
         clientHeight: document.documentElement.clientHeight,
+        contentHeight: document.body.scrollHeight,
       }));
       expect.soft(guest.scrollHeight).toBeLessThanOrEqual(guest.clientHeight + 1);
+
+      // Settling is not enough: the frame must settle ON THE CONTENT. Comparing
+      // against the guest's own content box rather than a literal keeps this
+      // valid when the sample payload changes.
+      const settledHeight = heights[heights.length - 1];
+      const expectedHeight = Math.max(MIN_FRAME_HEIGHT_PX, guest.contentHeight);
+      expect
+        .soft(
+          Math.abs(settledHeight - expectedHeight),
+          `frame: ${settledHeight}px, guest content: ${guest.contentHeight}px`,
+        )
+        .toBeLessThanOrEqual(FRAME_HEIGHT_TOLERANCE_PX);
     });
   });
 }
