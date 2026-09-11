@@ -6,7 +6,7 @@
   "scripts": {
     "start": "vite --port 3457",
     "dev": "vite --port 3457",
-    "build": "yarn lint && tsc && vite build",
+    "build": "yarn lint && tsc && tsc -p tsconfig.spec.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "prettier": "prettier --ignore-path ../../.prettierignore --write . | grep -v '(unchanged)'",
