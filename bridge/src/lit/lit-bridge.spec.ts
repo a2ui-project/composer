@@ -21,6 +21,19 @@ import {a2uiBridge} from '../preview-bridge';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {TemplateResult} from 'lit';
 
+/**
+ * Matches any viewport-relative length unit.
+ *
+ * This pattern and FULL_HEIGHT are repeated byte for byte in the three sample
+ * guest guards, each named surface-host-sizing.spec.ts. Those are separate
+ * packages with no shared test-only module between them, so a change to
+ * either pattern has to be made in all four places by hand.
+ */
+const VIEWPORT_UNIT = /\d+\s*(vh|dvh|svh|lvh|vmin|vmax|vb|vi)\b/i;
+
+/** Matches a full-height declaration that inherits the iframe viewport. */
+const FULL_HEIGHT = /height:\s*['"`]?100%/i;
+
 describe('Lit Framework Adapter Spec', () => {
   const dummyCatalog = {
     id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
@@ -396,13 +409,11 @@ describe('Lit Framework Adapter Spec', () => {
     // The host sizes the preview iframe to the height this guest reports, so a
     // viewport-derived host height feeds the host's last decision back into the
     // next measurement, producing a SURFACE_RESIZE feedback loop.
-    // Same property the sample guest guards assert; keep the patterns in step
-    // with samples/*/surface-host-sizing.spec.ts.
-    expect(cssText).not.toMatch(/\d+\s*(vh|dvh|svh|lvh|vmin|vmax|vb|vi)\b/i);
-    // Bans `height: 100%` and `min-height: 100%`, both of which resolve
-    // against the frame the host just applied. A pixel min-height is derived
-    // from content, not from the frame, so it stays allowed.
-    expect(cssText).not.toMatch(/height:\s*100%/i);
+    expect(cssText).not.toMatch(VIEWPORT_UNIT);
+    // FULL_HEIGHT bans `height: 100%` and `min-height: 100%`, both of which
+    // resolve against the frame the host just applied. A pixel min-height is
+    // derived from content, not from the frame, so it stays allowed.
+    expect(cssText).not.toMatch(FULL_HEIGHT);
     expect(cssText).toContain('.error-overlay');
     expect(cssText).toContain('position: fixed');
     expect(cssText).toContain('z-index: 9999');
@@ -462,8 +473,8 @@ describe('Lit Framework Adapter Spec', () => {
 
     const markup = element.shadowRoot!.innerHTML;
     expect(markup).toContain('<main>');
-    expect(markup).not.toMatch(/\d+\s*(vh|dvh|svh|lvh|vmin|vmax|vb|vi)\b/i);
-    expect(markup).not.toMatch(/height:\s*100%/i);
+    expect(markup).not.toMatch(VIEWPORT_UNIT);
+    expect(markup).not.toMatch(FULL_HEIGHT);
 
     element.remove();
   });
