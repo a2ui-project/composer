@@ -396,8 +396,13 @@ describe('Lit Framework Adapter Spec', () => {
     // The host sizes the preview iframe to the height this guest reports, so a
     // viewport-derived host height feeds the host's last decision back into the
     // next measurement, producing a SURFACE_RESIZE feedback loop.
-    expect(cssText).not.toMatch(/\d+\s*(vh|dvh|svh|lvh)\b/);
-    expect(cssText).not.toContain('min-height');
+    // Same property the sample guest guards assert; keep the patterns in step
+    // with samples/*/surface-host-sizing.spec.ts.
+    expect(cssText).not.toMatch(/\d+\s*(vh|dvh|svh|lvh|vmin|vmax|vb|vi)\b/i);
+    // Bans `height: 100%` and `min-height: 100%`, both of which resolve
+    // against the frame the host just applied. A pixel min-height is derived
+    // from content, not from the frame, so it stays allowed.
+    expect(cssText).not.toMatch(/height:\s*100%/i);
     expect(cssText).toContain('.error-overlay');
     expect(cssText).toContain('position: fixed');
     expect(cssText).toContain('z-index: 9999');
@@ -459,7 +464,6 @@ describe('Lit Framework Adapter Spec', () => {
     expect(markup).toContain('<main>');
     expect(markup).not.toMatch(/\d+\s*(vh|dvh|svh|lvh|vmin|vmax|vb|vi)\b/i);
     expect(markup).not.toMatch(/height:\s*100%/i);
-    expect(markup).not.toMatch(/min-height:\s*\d+\s*(vh|dvh|svh|lvh)\b/i);
 
     element.remove();
   });

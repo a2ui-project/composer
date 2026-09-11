@@ -15,7 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
-import {WindowWithMonaco} from './types';
+import {RENDERER_URLS, setMonacoContent} from './helpers';
 
 function generateSurfacePayload(rowCount: number): string {
   const children: string[] = [];
@@ -56,23 +56,6 @@ function generateSurfacePayload(rowCount: number): string {
   ]);
 }
 
-async function setMonacoContent(page: import('@playwright/test').Page, jsonString: string) {
-  const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
-  await expect(editorLocator).toBeVisible();
-
-  await page.waitForFunction(() => {
-    const monaco = (window as unknown as WindowWithMonaco).monaco;
-    return (monaco?.editor?.getModels()?.length ?? 0) > 0;
-  });
-
-  await page.evaluate(val => {
-    const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
-    if (model) {
-      model.setValue(val);
-    }
-  }, jsonString);
-}
-
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
@@ -85,11 +68,11 @@ test.beforeEach(async ({page}) => {
   });
 });
 
-/** Renderer dev servers hosting the guest samples. */
-const RENDERER_URLS: ReadonlyArray<{name: string; url: string}> = [
-  {name: 'Angular', url: 'http://localhost:3456'},
-  {name: 'Lit', url: 'http://localhost:3457'},
-  {name: 'React', url: 'http://localhost:3458'},
+/** Guest samples this file exercises, one per renderer. */
+const RENDERERS: ReadonlyArray<{name: string; url: string}> = [
+  {name: 'Angular', url: RENDERER_URLS.angular},
+  {name: 'Lit', url: RENDERER_URLS.lit},
+  {name: 'React', url: RENDERER_URLS.react},
 ];
 
 /** Row counts for the tall and short surfaces the tests render. */
@@ -120,7 +103,7 @@ const FRAME_HEIGHT_TOLERANCE_PX = 2;
 test.describe('Surface Auto-Resize & Height Latch Prevention', () => {
   // The latch lives in shared bridge code, but each guest brings its own
   // sizing CSS, so each one has to be shown shrinking back to its content.
-  for (const renderer of RENDERER_URLS) {
+  for (const renderer of RENDERERS) {
     test(`shrinks the ${renderer.name} preview frame when the surface content shrinks`, async ({
       page,
     }) => {
@@ -172,7 +155,7 @@ test.describe('Surface Auto-Resize & Height Latch Prevention', () => {
   test('renders tall surface content without clipping', async ({page}) => {
     test.setTimeout(60_000);
 
-    await page.goto(`/?renderer=${RENDERER_URLS[0].url}`);
+    await page.goto(`/?renderer=${RENDERER_URLS.angular}`);
     await expect(page.locator('.workspace-container')).toBeVisible();
 
     const container = page.locator('.rendered-frame-container');
