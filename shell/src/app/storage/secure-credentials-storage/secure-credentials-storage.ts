@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {Injectable, inject} from '@angular/core';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {AbstractIndexedDbStorage} from '../abstract-indexed-db';
 import {SecureCredentialsKey} from '../models/secure-credentials-keys';
 
@@ -57,6 +58,7 @@ export type StorageRecord = CredentialRecord | MasterKeyRecord;
  */
 @Injectable({providedIn: 'root'})
 export class SecureCredentialsStorage extends AbstractIndexedDbStorage {
+  private readonly logger = inject(ErrorLogger).withTag('[Storage]');
   protected readonly dbName = 'a2ui_secure_credentials_db';
   protected readonly dbVersion = 2;
   private readonly storeName = 'credentials';
@@ -70,11 +72,11 @@ export class SecureCredentialsStorage extends AbstractIndexedDbStorage {
   protected onUpgradeNeeded(db: IDBDatabase, event: IDBVersionChangeEvent): void {
     if (!db.objectStoreNames.contains(this.storeName)) {
       db.createObjectStore(this.storeName, {keyPath: 'key'});
-      console.log(`Initialized secure credentials object store: ${this.storeName}`);
+      this.logger.info(`Initialized secure credentials object store: ${this.storeName}`);
     }
     if (!db.objectStoreNames.contains(this.keysStoreName)) {
       db.createObjectStore(this.keysStoreName, {keyPath: 'key'});
-      console.log(`Initialized master keys object store: ${this.keysStoreName}`);
+      this.logger.info(`Initialized master keys object store: ${this.keysStoreName}`);
     }
   }
 
@@ -122,7 +124,10 @@ export class SecureCredentialsStorage extends AbstractIndexedDbStorage {
       } catch (err) {
         this.masterKeyPromise = null;
         this.dbPromise = null;
-        console.error('Failed to synthesize or persist unextractable Web Crypto master key', err);
+        this.logger.error(
+          'Failed to synthesize or persist unextractable Web Crypto master key',
+          err,
+        );
         throw new Error('Cryptographic master key generation failed.');
       }
     })();
@@ -154,7 +159,7 @@ export class SecureCredentialsStorage extends AbstractIndexedDbStorage {
       );
       return new TextDecoder().decode(decryptedBuffer);
     } catch (err) {
-      console.warn(`Cryptographic decryption failed for key: ${key}`, err);
+      this.logger.warn(`Cryptographic decryption failed for key: ${key}`, err);
       return null;
     }
   }
@@ -176,7 +181,7 @@ export class SecureCredentialsStorage extends AbstractIndexedDbStorage {
         encodedValue as BufferSource,
       );
     } catch (err) {
-      console.error(
+      this.logger.error(
         `Cryptographic encryption failed during token persistence for key: ${key}`,
         err,
       );
@@ -214,7 +219,7 @@ export class SecureCredentialsStorage extends AbstractIndexedDbStorage {
         );
       }
     } catch (err) {
-      console.warn('Failed to retrieve custom API keys from SecureCredentialsStorage', err);
+      this.logger.warn('Failed to retrieve custom API keys from SecureCredentialsStorage', err);
     }
     return [];
   }

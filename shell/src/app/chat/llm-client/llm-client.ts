@@ -79,6 +79,7 @@ export declare interface LlmMessage {
 
   /** Optional user-facing actionable tip for error messages. */
   readonly errorTip?: string;
+  readonly parseError?: unknown;
 }
 
 /**

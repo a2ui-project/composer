@@ -37,6 +37,7 @@ import type * as monaco from 'monaco-editor';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() => {
   const undoStack: string[] = [];
@@ -60,15 +61,23 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     executeEdits: vi.fn(),
     pushUndoStop: vi.fn(),
     trigger: vi.fn(),
+    setPosition: vi.fn(),
+    revealPositionInCenterIfOutsideViewport: vi.fn(),
+    revealPositionInCenter: vi.fn(),
+    focus: vi.fn(),
     onDidChangeModelContent: vi.fn(() => ({dispose: () => {}})),
+    onDidChangeCursorPosition: vi.fn(() => ({dispose: () => {}})),
+    onDidChangeCursorSelection: vi.fn(() => ({dispose: () => {}})),
+    onKeyDown: vi.fn(() => ({dispose: () => {}})),
+    onMouseDown: vi.fn(() => ({dispose: () => {}})),
+    onDidChangeMarkers: vi.fn(() => ({dispose: () => {}})),
+    getModelMarkers: vi.fn(() => []),
     updateOptions: vi.fn(),
     dispose: vi.fn(),
     getModel: vi.fn(() => ({
       getFullModelRange: vi.fn(() => ({})),
       dispose: vi.fn(),
     })),
-    pushUndoStop: vi.fn(),
-    executeEdits: vi.fn(),
   };
 
   const create = vi.fn(
@@ -148,6 +157,7 @@ vi.mock('@monaco-editor/loader', () => {
         editor: {
           create: createMock,
           getModel: vi.fn(() => null),
+          onDidChangeMarkers: vi.fn(() => ({dispose: vi.fn()})),
           createModel: vi.fn((value, language, uri) => ({
             value,
             language,
@@ -155,6 +165,8 @@ vi.mock('@monaco-editor/loader', () => {
             setValue: vi.fn(),
             dispose: vi.fn(),
           })),
+          onDidChangeMarkers: vi.fn(() => ({dispose: () => {}})),
+          getModelMarkers: vi.fn(() => []),
         },
         languages: {
           json: {
@@ -283,18 +295,35 @@ class MockStateSync {
 
 describe('RawFrame JSON Source Editor View', () => {
   let sendRenderA2UIMock: ReturnType<typeof vi.fn>;
+  let sendRenderErrorMock: ReturnType<typeof vi.fn>;
   let mockActiveCatalog: WritableSignal<Catalog | null>;
   let mockThemePreference: WritableSignal<ThemePreference>;
   let stateSyncMock: MockStateSync;
   let chatStateMock: MockChatState;
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
   let messageStreamSubject: Subject<unknown>;
+  let errorLoggerMock: {
+    error: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
+    sendRenderErrorMock = vi.fn();
     mockActiveCatalog = signal<Catalog | null>({title: 'Sample Catalog'});
     mockThemePreference = signal<ThemePreference>(ThemePreference.LIGHT);
-    snackBarMock = {open: vi.fn(), dismiss: vi.fn()};
+    snackBarMock = {
+      open: vi.fn().mockReturnValue({
+        onAction: () => ({
+          subscribe: cb => {
+            cb();
+            return {unsubscribe: () => {}};
+          },
+        }),
+      }),
+      dismiss: vi.fn(),
+    };
+    errorLoggerMock = {error: vi.fn(), warn: vi.fn()};
     messageStreamSubject = new Subject<unknown>();
 
     undoStack.length = 0;
@@ -308,6 +337,10 @@ describe('RawFrame JSON Source Editor View', () => {
     mockEditor.dispose.mockClear();
     mockEditor.getModel.mockClear();
     mockEditor.getModel.mockReturnValue(mockModel as unknown as monaco.editor.ITextModel);
+    mockEditor.setPosition.mockClear();
+    mockEditor.revealPositionInCenterIfOutsideViewport.mockClear();
+    mockEditor.revealPositionInCenter.mockClear();
+    mockEditor.focus.mockClear();
     mockModel.getFullModelRange.mockClear();
     mockModel.setValue.mockClear();
     createMock.mockClear();
@@ -329,7 +362,9 @@ describe('RawFrame JSON Source Editor View', () => {
           provide: HostCommunication,
           useValue: {
             sendRenderA2UI: sendRenderA2UIMock,
+            sendRenderError: sendRenderErrorMock,
             messageStream$: messageStreamSubject.asObservable(),
+            isRendererReady: vi.fn().mockReturnValue(false),
           },
         },
         {
@@ -348,6 +383,7 @@ describe('RawFrame JSON Source Editor View', () => {
         {provide: ChatState, useClass: MockChatState},
         {provide: MatSnackBar, useValue: snackBarMock},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
+        {provide: ErrorLogger, useValue: errorLoggerMock},
       ],
     }).compileComponents();
 
@@ -501,9 +537,14 @@ describe('RawFrame JSON Source Editor View', () => {
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(3000);
+    fixture.detectChanges();
+
     expect(snackBarMock.open).toHaveBeenCalledWith(
       'Invalid JSON syntax detected.',
-      undefined,
+      'Go to line 1, col 21',
       expect.any(Object),
     );
   });
@@ -518,9 +559,14 @@ describe('RawFrame JSON Source Editor View', () => {
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(3000);
+    fixture.detectChanges();
+
     expect(snackBarMock.open).toHaveBeenCalledWith(
       'Invalid JSON syntax detected.',
-      undefined,
+      'Go to line 1, col 21',
       expect.any(Object),
     );
   });
@@ -536,10 +582,83 @@ describe('RawFrame JSON Source Editor View', () => {
     await harness.setJsonText('{"version": "v0.9", invalid_json...');
     fixture.detectChanges();
 
-    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(3300);
     fixture.detectChanges();
 
     expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+  });
+
+  it('resets invalid JSON error timeout upon user interaction', async () => {
+    const {fixture, harness, component} = await setup(false);
+    vi.useFakeTimers();
+    await harness.setJsonText('{"version": "v0.9", invalid_json...');
+    fixture.detectChanges();
+
+    // 300ms layout debounce expires and starts 3000ms invalid JSON timer
+    vi.advanceTimersByTime(300);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    // Advance 2000ms (1000ms remaining)
+    vi.advanceTimersByTime(2000);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    // User interaction occurs -> resets timer to 3000ms
+    component['onUserInteraction']();
+
+    // Advance 2000ms (4300ms total since typing, but only 2000ms since interaction)
+    vi.advanceTimersByTime(2000);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    // Advance remaining 1000ms
+    vi.advanceTimersByTime(1000);
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      'Go to line 1, col 21',
+      expect.any(Object),
+    );
+  });
+
+  it('cancels invalid JSON error timer immediately when valid JSON is restored', async () => {
+    const {fixture, harness, component} = await setup(false);
+    vi.useFakeTimers();
+    await harness.setJsonText('{"version": "v0.9", invalid_json...');
+    fixture.detectChanges();
+
+    // 300ms layout debounce expires and starts 3000ms timer
+    vi.advanceTimersByTime(300);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    // Advance 1500ms while invalid
+    vi.advanceTimersByTime(1500);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    // User restores valid JSON
+    await harness.setJsonText('[{"version": "v0.9", "createSurface": {"surfaceId": "valid"}}]');
+    fixture.detectChanges();
+
+    // Layout debounce expires (300ms) and parses valid JSON
+    vi.advanceTimersByTime(300);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+    expect(component['isJsonInvalid']()).toBe(false);
+
+    // Advancing well past the original timeout does not trigger error snackbar
+    vi.advanceTimersByTime(5000);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+  });
+
+  it('clears invalid JSON error timer on destroy', async () => {
+    const {fixture, harness} = await setup(false);
+    vi.useFakeTimers();
+    await harness.setJsonText('{"version": "v0.9", invalid_json...');
+    fixture.detectChanges();
+
+    vi.advanceTimersByTime(300);
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+
+    fixture.destroy();
+
+    vi.advanceTimersByTime(5000);
     expect(snackBarMock.open).not.toHaveBeenCalled();
   });
 
@@ -720,9 +839,21 @@ describe('RawFrame JSON Source Editor View', () => {
     expect(component['isDestroyed']).toBe(true);
   });
 
-  it('handles SyntaxError gracefully when parsing invalid layout JSON string', async () => {
+  it('handles SyntaxError gracefully incorporating structured JsonParseResult metadata on failure', async () => {
     const {component} = await setup(false);
-    expect(() => component['parseLayoutString']('{invalid json}')).toThrow(SyntaxError);
+
+    let caughtError: (Error & {line?: number; column?: number; snippet?: string}) | undefined;
+    try {
+      component['parseLayoutString']('{\n  "invalid": json\n}');
+    } catch (e) {
+      caughtError = e as Error;
+    }
+
+    expect(caughtError!.message).toMatch(/Unexpected token/);
+    // V8 node tests output this pattern
+    expect(caughtError?.message).toMatch(/Unexpected token/);
+    expect('line' in caughtError!).toBe(true);
+    expect('snippet' in caughtError!).toBe(true);
   });
 
   it('aborts microtask execution and signal update guard when component is destroyed before microtask runs', async () => {
@@ -738,5 +869,294 @@ describe('RawFrame JSON Source Editor View', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(component.TEST_ONLY.layoutJson()()).toBe(initialLayout);
+  });
+
+  describe('watchdog timer', () => {
+    it('logs warning when renderer is unresponsive after watchdog timeout', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Preview frame did not respond within 15 seconds.',
+          sourceTag: '[Previewer]',
+        }),
+      );
+    });
+
+    it('logs IFRAME_UNRESPONSIVE_ERROR when renderer is ready but watchdog timeout fires', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      TestBed.inject(HostCommunication).isRendererReady.mockReturnValue(true);
+      component.TEST_ONLY.startWatchdog();
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Preview frame failed to process payload within 15 seconds.',
+          sourceTag: '[Previewer]',
+        }),
+      );
+    });
+
+    it('clears watchdog on RENDER_SUCCESS ping', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      TestBed.inject(HostCommunication).isRendererReady.mockReturnValue(true);
+
+      component.TEST_ONLY.startWatchdog();
+      vi.advanceTimersByTime(10000);
+
+      // Emit RENDER_SUCCESS
+      messageStreamSubject.next({type: 'RENDER_SUCCESS'});
+
+      // Wait remaining 15s to ensure timer is fully cleared (not restarted)
+      vi.advanceTimersByTime(15000);
+
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+    });
+
+    it('clears watchdog timer when render completion message arrives', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      messageStreamSubject.next({
+        type: PreviewBridgeMessageType.RENDER_SUCCESS,
+        origin: 'http://test',
+        timestamp: Date.now(),
+      });
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('cancels watchdog timer when invalid JSON syntax is detected in editor', async () => {
+      vi.useFakeTimers();
+      const {component, harness, fixture} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      await harness.setJsonText('{"version": "v0.9", invalid_json...');
+      fixture.detectChanges();
+      vi.advanceTimersByTime(300);
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('cancels watchdog timer when error markers are received', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      component['onMarkersChange']([
+        {
+          severity: 8,
+          message: 'Syntax error',
+          startLineNumber: 2,
+          startColumn: 5,
+        } as monaco.editor.IMarker,
+      ]);
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('clears watchdog timer immediately when onLayoutChange is called', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      component['onLayoutChange']('{"changed": true}');
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('clears watchdog timer when SURFACE_RESIZE arrives from messageStream$', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      messageStreamSubject.next({
+        type: PreviewBridgeMessageType.SURFACE_RESIZE,
+        origin: 'http://test',
+        timestamp: Date.now(),
+      });
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('cancels watchdog timer and suppresses watchdog arming when schema error markers arrive', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      component.TEST_ONLY.startWatchdog();
+
+      component['onMarkersChange']([
+        {
+          severity: 8,
+          message: 'Schema validation error',
+          startLineNumber: 2,
+          startColumn: 3,
+        } as monaco.editor.IMarker,
+      ]);
+
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+
+      component.TEST_ONLY.startWatchdog();
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+    });
+
+    it('suspends watchdog when generative streaming is active', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      chatStateMock.isProgrammaticStreamActive.set(true);
+
+      component.TEST_ONLY.startWatchdog();
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+    });
+
+    it('suspends watchdog when document is hidden', async () => {
+      vi.useFakeTimers();
+      const {component} = await setup(false);
+      Object.defineProperty(document, 'hidden', {value: true, configurable: true});
+
+      component.TEST_ONLY.startWatchdog();
+      vi.advanceTimersByTime(15000);
+      expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+
+      // Reset
+      Object.defineProperty(document, 'hidden', {value: false, configurable: true});
+    });
+  });
+
+  describe('notifySchemaErrors', () => {
+    it('opens snackbar with schema error information and navigates to position upon action', async () => {
+      const {component} = await setup(false);
+      const markers = [
+        {
+          severity: 8,
+          message: 'Invalid field',
+          startLineNumber: 4,
+          startColumn: 10,
+        },
+      ];
+
+      const editor = component.monacoEditor();
+      const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
+
+      component.TEST_ONLY.notifySchemaErrors(markers as unknown[] as monaco.editor.IMarker[]);
+
+      expect(snackBarMock.open).toHaveBeenCalledWith(
+        'Schema error: Invalid field',
+        'Go to line 4, col 10',
+        expect.any(Object),
+      );
+      expect(navigateSpy).toHaveBeenCalledWith(4, 10);
+    });
+
+    it('displays schema error snackbar and provides navigation for severity 4 warning markers', async () => {
+      const {component} = await setup(false);
+      const editor = component.monacoEditor();
+      expect(editor).toBeTruthy();
+      const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
+
+      const warningMarkers: monaco.editor.IMarker[] = [
+        {
+          severity: 4,
+          message: 'Deprecated field used',
+          startLineNumber: 8,
+          startColumn: 15,
+        } as monaco.editor.IMarker,
+      ];
+
+      component.TEST_ONLY.notifySchemaErrors(warningMarkers);
+
+      expect(snackBarMock.open).toHaveBeenCalledWith(
+        'Schema error: Deprecated field used',
+        'Go to line 8, col 15',
+        expect.objectContaining({
+          panelClass: 'schema-error-snackbar',
+        }),
+      );
+      expect(navigateSpy).toHaveBeenCalledWith(8, 15);
+    });
+  });
+
+  it('handles schema marker changes and shows snackbar for errors', async () => {
+    const {fixture} = await setup(false);
+    vi.useFakeTimers();
+    const markers = [
+      {severity: 8, message: 'Invalid property a', startLineNumber: 3, startColumn: 7},
+      {severity: 8, message: 'Invalid property b', startLineNumber: 6, startColumn: 2},
+    ];
+    fixture.componentInstance['onMarkersChange'](
+      markers as unknown as import('monaco-editor').editor.IMarker[],
+    );
+    vi.advanceTimersByTime(3100);
+    fixture.detectChanges();
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Found 2 schema errors in JSON.',
+      'Go to line 3, col 7',
+      expect.any(Object),
+    );
+
+    // Clear
+    fixture.componentInstance['onMarkersChange']([]);
+    vi.advanceTimersByTime(3100);
+    expect(snackBarMock.open).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('navigates to syntax error position when snackbar action is triggered', async () => {
+    const {fixture, harness, component} = await setup(false);
+    vi.useFakeTimers();
+
+    const editor = component.monacoEditor();
+    const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
+
+    await harness.setJsonText('{"a": 1}\n{"syntax_error": }');
+    fixture.detectChanges();
+
+    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(3000);
+    fixture.detectChanges();
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      'Go to line 2',
+      expect.any(Object),
+    );
+    expect(navigateSpy).toHaveBeenCalledWith(2, 1);
+  });
+
+  it('falls back to Monaco getFirstErrorMarker when syntax error coordinates are missing from V8', async () => {
+    const {component} = await setup(false);
+    const editor = component.monacoEditor();
+    expect(editor).toBeTruthy();
+    vi.spyOn(editor!, 'getFirstErrorMarker').mockReturnValue({line: 5, column: 12});
+    const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
+
+    component['lastSyntaxError'] = null;
+    component['showJsonSyntaxError']();
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Invalid JSON syntax detected.',
+      'Go to line 5, col 12',
+      expect.objectContaining({
+        duration: 5000,
+      }),
+    );
+    expect(navigateSpy).toHaveBeenCalledWith(5, 12);
   });
 });

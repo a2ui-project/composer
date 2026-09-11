@@ -13,9 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {TestBed} from '@angular/core/testing';
-import {ErrorLogger, ErrorLogItem, isErrorLike, safeSerialize} from './error-logger.service';
+import {ErrorLogger, ErrorLogItem, isErrorLike} from './error-logger.service';
+import {safeSerialize} from 'a2ui-bridge';
 
 describe('ErrorLogger Service Tests', () => {
   let service: ErrorLogger;
@@ -51,7 +52,7 @@ describe('ErrorLogger Service Tests', () => {
     expect(emitted[2].message).toBe('Partial msg info');
     expect(emitted[3].message).toBe('Partial msg log');
 
-    expect(emitted[4].message).toBe('Variadic error {"some":"data"}');
+    expect(emitted[4].message).toBe('Error: Variadic error {"some":"data"}');
     expect(emitted[5].message).toBe('Failed to load {"some":"data"}');
     expect(emitted[6].message).toBe('Info data {"some":"data"}');
     expect(emitted[7].message).toBe('Log data {"some":"data"}');
@@ -274,5 +275,68 @@ describe('ErrorLogger Service Tests', () => {
     expect(emitted[3].level).toBe('log');
     expect(emitted[4].level).toBe('error');
     expect(emitted[4].message).toBe('12345');
+  });
+
+  it('prefixes error name to message when logging Error instances', () => {
+    const emitted: ErrorLogItem[] = [];
+    service.errorStream$.subscribe(item => emitted.push(item));
+
+    const typeError = new TypeError('Invalid property type');
+    service.error(typeError);
+
+    const errorWithoutMessage = new RangeError('');
+    service.error(errorWithoutMessage);
+
+    const duckTypedError = {
+      name: 'CustomError',
+      message: 'Custom message',
+      stack: 'Custom stack',
+    };
+    service.error(duckTypedError);
+
+    expect(emitted.length).toBe(3);
+    expect(emitted[0].message).toBe('TypeError: Invalid property type');
+    expect(emitted[1].message).toBe('RangeError');
+    expect(emitted[2].message).toBe('CustomError: Custom message');
+  });
+
+  it('delegates withTag calls without passing an explicit level property in the payload', () => {
+    const errorSpy = vi.spyOn(service, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(service, 'warn').mockImplementation(() => {});
+    const infoSpy = vi.spyOn(service, 'info').mockImplementation(() => {});
+    const logSpy = vi.spyOn(service, 'log').mockImplementation(() => {});
+
+    const tagged = service.withTag('[CustomTag]');
+    tagged.error('Error msg', {detail: 1});
+    tagged.warn('Warn msg');
+    tagged.info('Info msg');
+    tagged.log('Log msg');
+
+    expect(errorSpy).toHaveBeenCalledWith({
+      message: 'Error msg {"detail":1}',
+      sourceTag: '[CustomTag]',
+    });
+    expect(warnSpy).toHaveBeenCalledWith({
+      message: 'Warn msg',
+      sourceTag: '[CustomTag]',
+    });
+    expect(infoSpy).toHaveBeenCalledWith({
+      message: 'Info msg',
+      sourceTag: '[CustomTag]',
+    });
+    expect(logSpy).toHaveBeenCalledWith({
+      message: 'Log msg',
+      sourceTag: '[CustomTag]',
+    });
+
+    const errorArg = errorSpy.mock.calls[0]?.[0];
+    const warnArg = warnSpy.mock.calls[0]?.[0];
+    const infoArg = infoSpy.mock.calls[0]?.[0];
+    const logArg = logSpy.mock.calls[0]?.[0];
+
+    expect(errorArg && typeof errorArg === 'object' && 'level' in errorArg).toBe(false);
+    expect(warnArg && typeof warnArg === 'object' && 'level' in warnArg).toBe(false);
+    expect(infoArg && typeof infoArg === 'object' && 'level' in infoArg).toBe(false);
+    expect(logArg && typeof logArg === 'object' && 'level' in logArg).toBe(false);
   });
 });

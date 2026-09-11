@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {signal} from '@angular/core';
 import {ComponentHarness} from '@angular/cdk/testing';
@@ -316,7 +317,7 @@ describe('StartupResolution', () => {
 
   it('falls back to storage when config fetch fails or times out', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Timeout'));
-    const warnSpy = vi.spyOn(console, 'warn');
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
 
     localStorage.setItem(
       LocalStorageKey.CUSTOM_RENDERERS,
@@ -328,15 +329,16 @@ describe('StartupResolution', () => {
 
     const url = await service.resolveStartupConfiguration();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Watchdog timeout or failure fetching config.json'),
-      expect.any(Error),
+      expect.objectContaining({
+        message: expect.stringContaining('Watchdog timeout or failure fetching config.json'),
+      }),
     );
     expect(url).toBe('http://fallback-storage:3000');
   });
 
   it('handles malformed JSON response gracefully and falls back to local storage', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('invalid json payload'));
-    const warnSpy = vi.spyOn(console, 'warn');
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
 
     localStorage.setItem(
       LocalStorageKey.CUSTOM_RENDERERS,
@@ -348,8 +350,9 @@ describe('StartupResolution', () => {
 
     const url = await service.resolveStartupConfiguration();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Watchdog timeout or failure fetching config.json'),
-      expect.any(SyntaxError),
+      expect.objectContaining({
+        message: expect.stringContaining('Watchdog timeout or failure fetching config.json'),
+      }),
     );
     expect(url).toBe('http://fallback-storage:3000');
   });
@@ -725,13 +728,17 @@ describe('StartupResolution', () => {
         },
       });
 
-      const warnSpy = vi.spyOn(console, 'warn');
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
       vi.spyOn(service, 'getWindowSearch').mockReturnValue('?rendererId=invalid');
 
       const url = await service.resolveStartupConfiguration();
       expect(url).toBe('http://default-renderer:3000');
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Requested renderer 'invalid' not found in static configuration."),
+        expect.objectContaining({
+          message: expect.stringContaining(
+            "Requested renderer 'invalid' not found in static configuration.",
+          ),
+        }),
       );
     });
 
@@ -778,15 +785,15 @@ describe('StartupResolution', () => {
         },
       });
 
-      const warnSpy = vi.spyOn(console, 'warn');
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
       vi.spyOn(service, 'getWindowSearch').mockReturnValue('?rendererId=constructor');
 
       const url = await service.resolveStartupConfiguration();
       expect(url).toBe('http://base:3000');
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "Requested renderer 'constructor' not found in static configuration.",
-        ),
+        expect.objectContaining({
+          message: expect.stringContaining('not found in static configuration.'),
+        }),
       );
     });
 
@@ -1147,7 +1154,7 @@ describe('StartupResolution', () => {
     });
 
     it('fetches runtime configuration from custom CONFIG_URL when overridden in injector', async () => {
-      const logSpy = vi.spyOn(console, 'log');
+      const logSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'info');
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(
           JSON.stringify({
@@ -1162,7 +1169,11 @@ describe('StartupResolution', () => {
 
       const url = await customService.resolveStartupConfiguration();
 
-      expect(logSpy).toHaveBeenCalledWith('Fetching /custom/config.json configuration...');
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Fetching /custom/config.json configuration'),
+        }),
+      );
       expect(fetchSpy).toHaveBeenCalledWith(
         '/custom/config.json',
         expect.objectContaining({signal: expect.any(AbortSignal)}),
@@ -1172,7 +1183,7 @@ describe('StartupResolution', () => {
 
     it('handles fetch failure gracefully when using custom CONFIG_URL', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'));
-      const warnSpy = vi.spyOn(console, 'warn');
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
 
       localStorage.setItem(
         LocalStorageKey.CUSTOM_RENDERERS,
@@ -1189,8 +1200,11 @@ describe('StartupResolution', () => {
         expect.objectContaining({signal: expect.any(AbortSignal)}),
       );
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Watchdog timeout or failure fetching /custom/config.json'),
-        expect.any(Error),
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'Watchdog timeout or failure fetching /custom/config.json',
+          ),
+        }),
       );
       expect(url).toBe('http://fallback-storage:3000');
     });
@@ -1527,27 +1541,29 @@ describe('StartupResolution', () => {
     });
 
     it('handles malformed JSON in ALLOWED_ORIGINS local storage gracefully', async () => {
-      const warnSpy = vi.spyOn(console, 'warn');
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
       vi.spyOn(service, 'confirmOrigin').mockResolvedValue(false);
       localStorage.setItem(LocalStorageKey.ALLOWED_ORIGINS, 'invalid-json');
 
       const allowed = await service.isOriginAllowed('https://test.example.com');
       expect(allowed).toBe(false);
       expect(warnSpy).toHaveBeenCalledWith(
-        'Failed to parse ALLOWED_ORIGINS from local storage:',
-        expect.any(Error),
+        expect.objectContaining({
+          message: expect.stringContaining('Failed to parse ALLOWED_ORIGINS from local storage:'),
+        }),
       );
     });
 
     it('handles malformed JSON in CUSTOM_RENDERERS local storage gracefully', () => {
-      const warnSpy = vi.spyOn(console, 'warn');
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
       localStorage.setItem(LocalStorageKey.CUSTOM_RENDERERS, 'invalid-json');
 
       const result = service.getCustomRenderers();
       expect(result).toEqual([]);
       expect(warnSpy).toHaveBeenCalledWith(
-        'Failed to parse custom renderers from local storage:',
-        expect.any(Error),
+        expect.objectContaining({
+          message: expect.stringContaining('Failed to parse custom renderers from local storage:'),
+        }),
       );
     });
 

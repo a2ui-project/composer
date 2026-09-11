@@ -113,11 +113,32 @@ export class HostCommunication implements OnDestroy {
     this.latestCatalogEnvelope = null;
   }
 
+  private handleConsoleLog(payload: unknown): void {
+    const payloadObj = payload as {level?: string; message?: string; stack?: string} | undefined;
+    const levelStr = payloadObj?.level || 'log';
+    const msg = payloadObj?.message || '';
+    const stackStr = payloadObj?.stack;
+    let level: ErrorLogLevel = 'log';
+    if (levelStr === 'error') level = 'error';
+    else if (levelStr === 'warn') level = 'warn';
+    else if (levelStr === 'info') level = 'info';
+
+    this.errorLogger.log({
+      level,
+      message: msg,
+      sourceTag: '[Previewer]',
+      ...(stackStr !== undefined ? {stack: stackStr} : {}),
+    });
+  }
+
   /**
    * Triggers a message stream envelope update. Primarily exposed for testing specifications
    * to safely simulate incoming guest frame postMessages without unsafe casting bypasses.
    */
   private triggerMessageStreamForTesting(envelope: MessageEnvelope): void {
+    if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+      this.handleConsoleLog(envelope.payload);
+    }
     this.messageStreamSubject.next(envelope);
   }
 
@@ -199,21 +220,7 @@ export class HostCommunication implements OnDestroy {
         }
       }
       if (type === PreviewBridgeMessageType.CONSOLE_LOG) {
-        const payloadObj = data.payload as {level?: string; message?: string; stack?: string};
-        const levelStr = payloadObj?.level || 'log';
-        const msg = payloadObj?.message || '';
-        const stackStr = payloadObj?.stack;
-        let level: ErrorLogLevel = 'log';
-        if (levelStr === 'error') level = 'error';
-        else if (levelStr === 'warn') level = 'warn';
-        else if (levelStr === 'info') level = 'info';
-
-        this.errorLogger.log({
-          level,
-          message: msg,
-          sourceTag: '[Previewer]',
-          ...(stackStr !== undefined ? {stack: stackStr} : {}),
-        });
+        this.handleConsoleLog(data.payload);
         this.messageStreamSubject.next(envelope);
         return;
       }

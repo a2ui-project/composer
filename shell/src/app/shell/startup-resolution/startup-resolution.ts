@@ -15,6 +15,7 @@
  */
 
 import {EnvironmentContextService} from './state/environment-context.service';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {
   StartupConfigStateService,
   RendererConfig,
@@ -39,6 +40,7 @@ import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-conf
  * Orchestrates application startup configuration and environment resolution.
  */
 export class StartupResolution {
+  private readonly logger = inject(ErrorLogger).withTag('[Shell]');
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
   private readonly configUrl = inject(CONFIG_URL);
@@ -124,11 +126,11 @@ export class StartupResolution {
     }
     const {payload, error} = await QueryParser.parseSharedA2ui(rawParam);
     if (payload) {
-      console.log('Using shared A2UI payload from URL.');
+      this.logger.info('Using shared A2UI payload from URL.');
       this.startupConfigState.setSharedA2uiPayload(payload);
       this.cleanSharedA2uiUrl();
     } else if (error) {
-      console.warn('Shared A2UI payload error:', error);
+      this.logger.warn('Shared A2UI payload error:', error);
       this.startupConfigState.setSharedA2uiError(error);
       this.cleanSharedA2uiUrl();
     } else if (queryRendererUrl || queryRendererId) {
@@ -142,7 +144,7 @@ export class StartupResolution {
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     try {
-      console.log(`Fetching ${this.configUrl} configuration...`);
+      this.logger.info(`Fetching ${this.configUrl} configuration...`);
       const response = await fetch(this.configUrl, {signal: controller.signal});
       if (response.ok) {
         // Although we *expect* JSON, it's possible that the response includes
@@ -156,7 +158,7 @@ export class StartupResolution {
         staticConfig = JSON.parse(cleanText);
       }
     } catch (err) {
-      console.warn(`Watchdog timeout or failure fetching ${this.configUrl}`, err);
+      this.logger.warn(`Watchdog timeout or failure fetching ${this.configUrl}`, err);
     } finally {
       clearTimeout(timeoutId);
     }
@@ -182,7 +184,7 @@ export class StartupResolution {
         await this.syncStoredCredentialsToConfigProvider(staticConfig);
       }
     } catch (err) {
-      console.warn('Failed to apply config-provided API key to AppConfigProvider:', err);
+      this.logger.warn('Failed to apply config-provided API key to AppConfigProvider:', err);
     }
   }
 
@@ -214,7 +216,7 @@ export class StartupResolution {
         }
       }
     } catch (err) {
-      console.warn('Failed to restore stored credentials in StartupResolution:', err);
+      this.logger.warn('Failed to restore stored credentials in StartupResolution:', err);
     }
   }
 
@@ -251,7 +253,7 @@ export class StartupResolution {
         }
       }
     } catch (e) {
-      console.warn('Failed to parse custom renderers from local storage:', e);
+      this.logger.warn('Failed to parse custom renderers from local storage:', e);
     }
     return [];
   }
@@ -297,7 +299,7 @@ export class StartupResolution {
     if (queryRendererUrl) {
       const isAllowed = await this.isOriginAllowed(queryRendererUrl);
       if (isAllowed) {
-        console.log('Using renderer parameter.');
+        this.logger.info('Using renderer parameter.');
         const requestedId =
           QueryParser.parseRendererId(this.getWindowHash()) ||
           QueryParser.parseRendererId(this.getWindowSearch());
@@ -356,7 +358,7 @@ export class StartupResolution {
         this.configProvider?.setRendererUrl?.(queryRendererUrl);
         return queryRendererUrl;
       } else {
-        console.warn('Renderer parameter origin not allowed by user.');
+        this.logger.warn('Renderer parameter origin not allowed by user.');
       }
     }
 
@@ -367,7 +369,7 @@ export class StartupResolution {
     if (requestedId) {
       const candidate = this.getRendererById(requestedId, staticRenderers);
       if (candidate) {
-        console.log(`Using renderer ID '${requestedId}' from query param.`);
+        this.logger.info(`Using renderer ID '${requestedId}' from query param.`);
         this.startupConfigState.setSelectedRendererId(requestedId);
         this.localStorageInteractions.setItem(LocalStorageKey.SELECTED_RENDERER, requestedId);
         if (config) {
@@ -379,7 +381,7 @@ export class StartupResolution {
           return candidate.rendererUrl;
         }
       } else {
-        console.warn(`Requested renderer '${requestedId}' not found in static configuration.`);
+        this.logger.warn(`Requested renderer '${requestedId}' not found in static configuration.`);
       }
     }
 
@@ -388,7 +390,7 @@ export class StartupResolution {
     if (storedId) {
       const candidate = this.getRendererById(storedId, staticRenderers);
       if (candidate) {
-        console.log(`Using stored selected renderer ID '${storedId}'.`);
+        this.logger.info(`Using stored selected renderer ID '${storedId}'.`);
         this.startupConfigState.setSelectedRendererId(storedId);
         if (config) {
           await this.applyApiKeyFromConfig(config, storedId);
@@ -398,14 +400,14 @@ export class StartupResolution {
           return candidate.rendererUrl;
         }
       } else {
-        console.warn(`Stored selected renderer ID '${storedId}' not found.`);
+        this.logger.warn(`Stored selected renderer ID '${storedId}' not found.`);
       }
     }
 
     // Tier 5: 'default' renderer from config.json.renderers
     const defaultCandidate = this.getRendererById('default', staticRenderers);
     if (defaultCandidate?.rendererUrl) {
-      console.log("Using 'default' renderer from static config.");
+      this.logger.info("Using 'default' renderer from static config.");
       if (!this.startupConfigState.selectedRendererId()) {
         this.startupConfigState.setSelectedRendererId('default');
         if (config) {
@@ -479,7 +481,7 @@ export class StartupResolution {
         }
       }
     } catch (e) {
-      console.warn('Failed to parse ALLOWED_ORIGINS from local storage:', e);
+      this.logger.warn('Failed to parse ALLOWED_ORIGINS from local storage:', e);
     }
 
     if (allowedOrigins.includes(origin)) {
@@ -550,7 +552,7 @@ export class StartupResolution {
       try {
         await this.configProvider.purgeGeminiApiKey();
       } catch (err) {
-        console.warn('Failed to purge Gemini API key in 1P environment:', err);
+        this.logger.warn('Failed to purge Gemini API key in 1P environment:', err);
       }
     }
   }

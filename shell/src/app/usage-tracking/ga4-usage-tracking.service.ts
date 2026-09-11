@@ -32,6 +32,7 @@ import {
   PromptTurnType,
   ShareTrackingStatus,
   UsageType,
+  ComposerErrorTelemetryParams,
   USAGE_TRACKING_CONFIG,
   UsageTrackingService,
 } from './usage-tracking.service';
@@ -138,7 +139,14 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ...(params || {}),
     };
 
-    windowObj.gtag('event', name, payload);
+    try {
+      windowObj.gtag('event', name, payload);
+    } catch {
+      // Suppress runtime exceptions silently. Otherwise, we could get into an
+      // infinite loop where this throws, and we want to log an error somewhere
+      // which sends the error back to the trackComposerError() method, which
+      // calls this method, which then fails, etc...
+    }
   }
 
   trackPageView(params: {pagePath: string}): void {
@@ -295,5 +303,23 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ['duration_seconds']: params.durationSeconds,
       ['interface_count']: params.interfaceCount,
     });
+  }
+
+  trackComposerError(params: ComposerErrorTelemetryParams): void {
+    if (!this.config.enabled) return;
+    const customParams = {
+      ['event_category']: 'error',
+      ['event_label']: params.error_category || 'UNKNOWN_ERROR',
+      ['source_tag']: params.source_tag,
+      ['error_type']: params.error_category || 'UNKNOWN_ERROR',
+      ['error_category']: params.error_category || 'UNKNOWN_ERROR',
+      ['message']: params.message || '',
+      ['line']: params.line || -1,
+      ['column']: params.column || -1,
+      ['invalid_property']: params.invalid_property || 'none',
+    };
+    try {
+      this.dispatchGtagEvent('composer_error', customParams);
+    } catch (e) {}
   }
 }

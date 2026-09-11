@@ -62,6 +62,8 @@ export class A2uiSandboxConnection implements OnDestroy {
    * this value to the HTML template.
    */
   readonly surfaceId = signal('');
+  /** The parsing / processing error encountered validating layouts. */
+  readonly error = signal<Error | null>(null);
 
   /** Resolves the central rendering service provider from the injector context. */
   private readonly rendererService: A2uiRendererService = inject(A2uiRendererService);
@@ -105,6 +107,9 @@ export class A2uiSandboxConnection implements OnDestroy {
       },
       onSurfaceCleared: () => {
         this.surfaceId.set('');
+      },
+      onError: (err: Error | null) => {
+        this.error.set(err);
       },
       catalogJson: catalogJson,
       getComponentUsages: getComponentUsages,

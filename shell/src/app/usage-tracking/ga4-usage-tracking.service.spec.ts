@@ -456,4 +456,74 @@ describe('Ga4UsageTrackingService', () => {
       }),
     );
   });
+
+  describe('trackComposerError', () => {
+    it('sends nothing if gtagEnabled is false', () => {
+      // Simulate disabled
+      (service as unknown as {config: unknown}).config = {enabled: false, measurementId: 'G-TEST'};
+      service.trackComposerError({
+        source_tag: 'test',
+        error_category: 'SCHEMA_VALIDATION_ERROR',
+        message: '',
+      });
+      expect(mockWindow.gtag).not.toHaveBeenCalled();
+    });
+
+    it('sends composer_error event with strict structured parameters', () => {
+      service.trackComposerError({
+        source_tag: '[Monaco]',
+        error_category: 'SCHEMA_VALIDATION_ERROR',
+        message: '',
+        line: 10,
+        column: 5,
+        invalid_property: 'components',
+      });
+
+      expect(mockWindow.gtag).toHaveBeenCalledWith(
+        'event',
+        'composer_error',
+        expect.objectContaining({
+          event_category: 'error',
+          event_label: 'SCHEMA_VALIDATION_ERROR',
+          source_tag: '[Monaco]',
+          error_category: 'SCHEMA_VALIDATION_ERROR',
+          message: '',
+          line: 10,
+          column: 5,
+          invalid_property: 'components',
+        }),
+      );
+    });
+
+    it('sends default placeholders for missing optional structural coordinates', () => {
+      service.trackComposerError({
+        source_tag: '[ChatParser]',
+        error_category: 'CHAT_PARSER_ERROR',
+      });
+
+      expect(mockWindow.gtag).toHaveBeenCalledWith(
+        'event',
+        'composer_error',
+        expect.objectContaining({
+          event_category: 'error',
+          event_label: 'CHAT_PARSER_ERROR',
+          source_tag: '[ChatParser]',
+          error_category: 'CHAT_PARSER_ERROR',
+          line: -1,
+          column: -1,
+          invalid_property: 'none',
+        }),
+      );
+    });
+
+    it('catches and suppresses internal gtag runtime exceptions silently', () => {
+      mockWindow.gtag = vi.fn().mockImplementation(() => {
+        throw new Error('Global GTAM failure');
+      });
+
+      expect(() => {
+        service.trackComposerError({source_tag: 'test', error_category: 'error'});
+      }).not.toThrow();
+    });
+  });
 });

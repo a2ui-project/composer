@@ -40,7 +40,7 @@ describe('QueryParser', () => {
     const url = QueryParser.parseRendererUrl('?renderer=not-a-url');
     expect(url).toBeNull();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Malformed renderer parameter string encountered'),
+      "Malformed renderer parameter string encountered: 'not-a-url'. Stripping invalid URI.",
     );
   });
 
@@ -56,7 +56,7 @@ describe('QueryParser', () => {
     const url = QueryParser.parseRendererUrl('?renderer=samples/ng-basic-catalog/index.html');
     expect(url).toBeNull();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Malformed renderer parameter string encountered'),
+      "Malformed renderer parameter string encountered: 'samples/ng-basic-catalog/index.html'. Stripping invalid URI.",
     );
   });
 

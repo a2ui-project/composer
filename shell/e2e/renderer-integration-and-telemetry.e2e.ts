@@ -14,9 +14,24 @@
  * limitations under the License.
  */
 
-import {test, expect, Locator, FrameLocator} from '@playwright/test';
+import {test, expect, Locator, FrameLocator, Page} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {WindowWithMonaco} from './types';
+
+async function waitForPreviewSettled(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const handshakeIndex = window.a2uiCatalogManagement?.handshakeHistoryIndex?.();
+    if (handshakeIndex === null || handshakeIndex === undefined) return false;
+    const history = window.a2uiHostCommunication?.getHistoryBuffer() || [];
+    const catalogIdx = history.findIndex(env => env.type === 'A2UI_CATALOG');
+    if (catalogIdx === -1) return false;
+    const successesAfterCatalog = history
+      .slice(catalogIdx)
+      .filter(env => env.type === 'RENDER_SUCCESS');
+    return successesAfterCatalog.length >= 2;
+  });
+  await page.waitForTimeout(150);
+}
 
 interface IntegrationConfig {
   name: string;
@@ -69,7 +84,11 @@ const CONFIGS: IntegrationConfig[] = [
     pickupLocationLocator: iframe =>
       iframe.locator('a2ui-basic-textfield:has-text("Pick-up Location") input'),
     fillDate: async (locator, value) => {
-      await locator.fill(value);
+      await locator.evaluate((el: HTMLInputElement, val) => {
+        el.value = val;
+        el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
+      }, value);
     },
   },
 ];
@@ -110,7 +129,7 @@ for (const config of CONFIGS) {
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
-      await page.locator('.raw-messages-container .message-envelope').first().hover({trial: true});
+      await expect(page.locator('.raw-messages-container')).toBeVisible();
       const envelopes = page.locator(
         '.raw-messages-container [data-testid="raw-message-envelope"], .raw-messages-container [data-testid="llm-log-panel"]',
       );
@@ -154,11 +173,24 @@ for (const config of CONFIGS) {
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+      await waitForPreviewSettled(page);
       const pickupInput = config.pickupDateLocator(iframe);
       await expect(pickupInput).toBeVisible();
+      await expect(pickupInput).toBeEnabled();
 
       await config.fillDate(pickupInput, '2026-05-30');
+      await pickupInput.dispatchEvent('change');
       await pickupInput.blur();
+      await expect(pickupInput).toHaveValue('2026-05-30');
+
+      // Ensure the DATA_MODEL_CHANGE has arrived at host communication
+      await page.waitForFunction(() => {
+        const history = window.a2uiHostCommunication?.getHistoryBuffer() || [];
+        return history.some(
+          env =>
+            env.type === 'DATA_MODEL_CHANGE' && JSON.stringify(env.payload).includes('2026-05-30'),
+        );
+      });
 
       await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
       await expect(page.locator('.data-model-container textarea')).toBeVisible();
@@ -174,25 +206,26 @@ for (const config of CONFIGS) {
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+      await waitForPreviewSettled(page);
 
       await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
       await expect(page.locator('.data-model-container textarea')).toBeVisible();
       const dataModelTextarea = page.locator('.data-model-field textarea');
 
       await expect(dataModelTextarea).not.toHaveValue(/^$/);
-
-      // Wait for initial DATA_MODEL_CHANGE sync from iframe to complete to avoid race condition
-      await page.waitForTimeout(1000);
+      await expect(dataModelTextarea).toHaveValue(/"location"/);
 
       const currentValue = await dataModelTextarea.inputValue();
       const parsedModel = JSON.parse(currentValue);
       parsedModel.booking.location = 'LAX';
 
       await dataModelTextarea.fill(JSON.stringify(parsedModel, null, 2));
-      await page.waitForTimeout(1000);
+      await dataModelTextarea.blur();
 
       const locationInput = config.pickupLocationLocator(iframe);
-      await expect(locationInput).toHaveValue('LAX');
+      await expect(locationInput).toBeVisible();
+      await expect(locationInput).toBeEnabled();
+      await expect(locationInput).toHaveValue('LAX', {timeout: 10000});
     });
 
     test('propagates Raw A2UI JSON updates to the rendered preview', async ({page}) => {
@@ -228,11 +261,11 @@ for (const config of CONFIGS) {
           model.setValue(val);
         }
       }, updatedRawJson);
-      await page.waitForTimeout(1000);
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       const searchButton = iframe.getByRole('button', {name: 'Search Rental Cars'});
       await expect(searchButton).toBeVisible();
+      await expect(searchButton).toBeEnabled();
     });
 
     test('captures telemetry actions and events updates upon search form click', async ({page}) => {
@@ -241,14 +274,29 @@ for (const config of CONFIGS) {
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+      await waitForPreviewSettled(page);
 
       const pickupInput = config.pickupDateLocator(iframe);
       await expect(pickupInput).toBeVisible();
+      await expect(pickupInput).toBeEnabled();
+
       await config.fillDate(pickupInput, '2026-05-05');
+      await pickupInput.dispatchEvent('change');
       await pickupInput.blur();
+      await expect(pickupInput).toHaveValue('2026-05-05');
+
+      // Ensure the DATA_MODEL_CHANGE has arrived at host communication
+      await page.waitForFunction(() => {
+        const history = window.a2uiHostCommunication?.getHistoryBuffer() || [];
+        return history.some(
+          env =>
+            env.type === 'DATA_MODEL_CHANGE' && JSON.stringify(env.payload).includes('2026-05-05'),
+        );
+      });
 
       const searchButton = iframe.getByRole('button', {name: 'Search Cars'});
       await expect(searchButton).toBeVisible();
+      await expect(searchButton).toBeEnabled();
       await searchButton.click();
 
       // Verify Event tab notification badge
@@ -258,6 +306,7 @@ for (const config of CONFIGS) {
 
       // Verify event table details in Events tab
       await eventsTab.click();
+      await expect(page.locator('.events-container')).toBeVisible();
       await expect(page.locator('.events-container table tr.element-row')).toBeVisible();
       const eventRow = page.locator('.events-container table tr.element-row').first();
       await expect(eventRow).toBeVisible();
@@ -270,11 +319,11 @@ for (const config of CONFIGS) {
       // Verify SEND_TO_SERVER in Raw Messages tab
       await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
       await expect(page.locator('.raw-messages-container')).toBeVisible();
-      await page.locator('.raw-messages-container .message-envelope').first().hover({trial: true});
-      const latestEnvelope = page
-        .locator(
-          '.raw-messages-container [data-testid="raw-message-envelope"], .raw-messages-container [data-testid="llm-log-panel"]',
-        )
+      const envelopes = page.locator(
+        '.raw-messages-container [data-testid="raw-message-envelope"], .raw-messages-container [data-testid="llm-log-panel"]',
+      );
+      await expect.poll(async () => envelopes.count()).toBeGreaterThanOrEqual(1);
+      const latestEnvelope = envelopes
         .filter({hasText: PreviewBridgeMessageType.SEND_TO_SERVER})
         .first();
       await expect(latestEnvelope.locator('.message-type')).toHaveText(

@@ -42,6 +42,7 @@ import {
 import {ChatPromptFactoryService} from '../chat-prompt-factory/chat-prompt-factory.service';
 import {ChatErrorFormatterService} from '../chat-error-formatter/chat-error-formatter.service';
 import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 /**
  * Dynamic chat panel coordinator managing system prompt generation using
@@ -58,6 +59,7 @@ export class ChatCoordinator {
   private readonly stateSync = inject(StateSync);
   private readonly chatState = inject(ChatState);
   private readonly llmClient = inject(LlmClient);
+  private readonly errorLogger = inject(ErrorLogger);
   private readonly chatCleaner = inject(ChatCleaner);
   private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly promptFactory = inject(ChatPromptFactoryService);
@@ -198,7 +200,6 @@ export class ChatCoordinator {
     this.chatState.setProgrammaticStreamActive(true);
     this.chatState.setPipelineStatus(PipelineStatus.RECEIVING_STREAM);
 
-    // Append user prompt text turn to chat history
     this.chatState.updateChatHistory(h => [
       ...h,
       {
@@ -212,7 +213,6 @@ export class ChatCoordinator {
     // Construct system-prepended context matching conversational bounds
     const fullContext = this.getFullMessageContext();
 
-    // Log the raw LLM request telemetry
     this.chatState.addRawLlmLog(LlmLogType.REQUEST, fullContext);
 
     // Push initial model turn placeholder with loading pulse indicator to history
@@ -282,7 +282,7 @@ export class ChatCoordinator {
       });
 
       this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
-      await this.processRawLlmPayload(finalRawText);
+      await this.processRawLlmPayload(finalRawText, promptId);
     } catch (err: unknown) {
       // If it was cancelled, don't show an error. Just leave what was generated or remove the bubble.
       // But we probably want to just reset the UI lock.
@@ -312,7 +312,7 @@ export class ChatCoordinator {
   /**
    * Post-processes, extracts, syntax heals, and validates raw JSON lines.
    */
-  private async processRawLlmPayload(rawText: string): Promise<void> {
+  private async processRawLlmPayload(rawText: string, promptId?: string): Promise<void> {
     // Stage 1: Parse and Syntax Healing
     let parsedBlocks: unknown[] = [];
     try {
@@ -321,11 +321,36 @@ export class ChatCoordinator {
       }
       const cleanedText = this.chatCleaner.cleanPayload(rawText);
       const parseResult = parseAndHealJsonLines(cleanedText);
-      parsedBlocks = parseResult.blocks;
-      if (parseResult.wasHealed) this.chatState.setPipelineStatus(PipelineStatus.HEALING);
-      if (parsedBlocks.length === 0) {
-        throw new Error('No valid A2UI JSON layout command block could be parsed or recovered.');
+
+      if (parseResult.success && parseResult.isConversational) {
+        this.chatState.setPipelineStatus(PipelineStatus.IDLE);
+        this.chatState.setProgrammaticStreamActive(false);
+        return;
       }
+
+      if (!parseResult.success) {
+        this.errorLogger.error({
+          sourceTag: '[ChatParser]',
+          message: parseResult.error,
+          line: parseResult.line,
+          column: parseResult.column,
+          snippet: parseResult.snippet,
+        });
+
+        this.chatState.updateChatHistory(history => {
+          const updated = [...history];
+          const lastIdx = updated.length - 1;
+          if (updated[lastIdx]?.role === MessageRole.MODEL) {
+            updated[lastIdx] = {...updated[lastIdx], parseError: parseResult};
+          }
+          return updated;
+        });
+        this.chatState.setPipelineStatus(PipelineStatus.IDLE);
+        this.chatState.setProgrammaticStreamActive(false);
+        return;
+      }
+
+      parsedBlocks = parseResult.blocks;
     } catch (err: unknown) {
       this.chatState.setPipelineStatus(PipelineStatus.FAILED);
       this.chatState.setProgrammaticStreamActive(false);
