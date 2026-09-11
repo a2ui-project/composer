@@ -36,4 +36,15 @@ export class RenderedFrameHarness extends ComponentHarness {
     const container = await this.locatorFor('.rendered-frame-container')();
     return await container.hasClass('is-locked');
   }
+
+  /**
+   * Height the template applies to the frame container, as CSS: `520px` when a
+   * guest height is in effect, `100%` when none is. The host sizes the iframe
+   * from this value and the guest measures itself inside it, so it is the
+   * observable that matters, not the signal behind it.
+   */
+  async getFrameHeight(): Promise<string> {
+    const container = await this.locatorFor('.rendered-frame-container')();
+    return await container.getCssValue('height');
+  }
 }
