@@ -20,6 +20,7 @@ import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {EMPTY} from 'rxjs';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {
@@ -53,6 +54,7 @@ describe('A2aChatMessage', () => {
             sendTheme: vi.fn(),
             sendRenderA2UI: vi.fn(),
             messageStream: signal(null),
+            messageStream$: EMPTY,
           },
         },
         {

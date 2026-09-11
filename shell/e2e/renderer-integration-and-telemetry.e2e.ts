@@ -87,8 +87,18 @@ const HEIGHT_SAMPLE_INTERVAL_MS = 250;
  */
 const MAX_SETTLED_FRAME_HEIGHT_PX = 1500;
 
-/** Upper bound on SURFACE_RESIZE messages emitted while the preview is idle. */
-const MAX_IDLE_RESIZE_MESSAGES = 25;
+/**
+ * Upper bound on SURFACE_RESIZE messages recorded for one preview session.
+ *
+ * Measured at 1280x800, from the postMessage wire:
+ *   healthy   Angular 4, React 5, Lit 7  (Lit re-renders twice: 32,148,288,312,148,288,312)
+ *   reverted guest CSS, host breaker active   13 and 15
+ *   reverted guest CSS, no host breaker       212 and 239
+ * The bound has to clear the healthy maximum with margin, so it cannot sit
+ * below the breaker's 8-report latch; 10 still separates healthy from broken
+ * by three messages on either side.
+ */
+const MAX_IDLE_RESIZE_MESSAGES = 10;
 
 /** Upper bound on consecutive growing heights, which characterise a ratchet. */
 const MAX_INCREASING_RESIZE_RUN = 4;
