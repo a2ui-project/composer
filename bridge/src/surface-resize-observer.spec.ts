@@ -28,6 +28,14 @@ describe('SurfaceResizeObserver', () => {
   afterEach(() => {
     observer?.destroy();
     vi.restoreAllMocks();
+    const docElRecord = document.documentElement as unknown as Record<string, unknown>;
+    delete docElRecord['scrollHeight'];
+    delete docElRecord['offsetHeight'];
+    const bodyRecord = document.body as unknown as Record<string, unknown>;
+    delete bodyRecord['scrollHeight'];
+    delete bodyRecord['offsetHeight'];
+    delete bodyRecord['scrollWidth'];
+    delete bodyRecord['offsetWidth'];
   });
 
   it('measures dimensions and invokes callback when content height > 0', () => {
@@ -99,5 +107,89 @@ describe('SurfaceResizeObserver', () => {
     expect(removeEventSpy).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function));
 
     Object.defineProperty(document, 'readyState', {value: originalReadyState, configurable: true});
+  });
+
+  it('reports content height when documentElement.scrollHeight is inflated by the viewport', () => {
+    Object.defineProperty(document.body, 'scrollHeight', {value: 264, configurable: true});
+    Object.defineProperty(document.body, 'offsetHeight', {value: 264, configurable: true});
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      value: 3224,
+      configurable: true,
+    });
+    Object.defineProperty(document.documentElement, 'offsetHeight', {
+      value: 264,
+      configurable: true,
+    });
+    Object.defineProperty(document.body, 'scrollWidth', {value: 800, configurable: true});
+
+    observer = new SurfaceResizeObserver(onResizeMock);
+    observer.measureAndDispatch();
+
+    expect(onResizeMock).toHaveBeenCalledWith({height: 264, width: 800});
+  });
+
+  it('reports a smaller height after the surface content shrinks', () => {
+    Object.defineProperty(document.body, 'scrollHeight', {value: 3224, configurable: true});
+    Object.defineProperty(document.body, 'offsetHeight', {value: 3224, configurable: true});
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      value: 3224,
+      configurable: true,
+    });
+    Object.defineProperty(document.documentElement, 'offsetHeight', {
+      value: 3224,
+      configurable: true,
+    });
+    Object.defineProperty(document.body, 'scrollWidth', {value: 800, configurable: true});
+
+    observer = new SurfaceResizeObserver(onResizeMock);
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenCalledTimes(1);
+    expect(onResizeMock).toHaveBeenLastCalledWith({height: 3224, width: 800});
+
+    // Content shrinks: body terms and docEl.offsetHeight drop to 264,
+    // but docEl.scrollHeight stays latched at 3224 (as happens in the real viewport).
+    Object.defineProperty(document.body, 'scrollHeight', {value: 264, configurable: true});
+    Object.defineProperty(document.body, 'offsetHeight', {value: 264, configurable: true});
+    Object.defineProperty(document.documentElement, 'offsetHeight', {
+      value: 264,
+      configurable: true,
+    });
+
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenCalledTimes(2);
+    expect(onResizeMock).toHaveBeenLastCalledWith({height: 264, width: 800});
+  });
+
+  it('includes body margins that escape through the root element', () => {
+    Object.defineProperty(document.body, 'scrollHeight', {value: 290, configurable: true});
+    Object.defineProperty(document.body, 'offsetHeight', {value: 290, configurable: true});
+    Object.defineProperty(document.documentElement, 'offsetHeight', {
+      value: 390,
+      configurable: true,
+    });
+    Object.defineProperty(document.body, 'scrollWidth', {value: 800, configurable: true});
+
+    observer = new SurfaceResizeObserver(onResizeMock);
+    observer.measureAndDispatch();
+
+    expect(onResizeMock).toHaveBeenCalledWith({height: 390, width: 800});
+  });
+
+  it('stops dispatching once the reported height matches the content', () => {
+    Object.defineProperty(document.body, 'scrollHeight', {value: 300, configurable: true});
+    Object.defineProperty(document.body, 'offsetHeight', {value: 300, configurable: true});
+    Object.defineProperty(document.documentElement, 'offsetHeight', {
+      value: 300,
+      configurable: true,
+    });
+    Object.defineProperty(document.body, 'scrollWidth', {value: 800, configurable: true});
+
+    observer = new SurfaceResizeObserver(onResizeMock);
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenCalledTimes(1);
+
+    observer.measureAndDispatch();
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenCalledTimes(1);
   });
 });
