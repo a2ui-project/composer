@@ -228,6 +228,11 @@ export class A2aChatView implements OnInit {
 
     const userMessageId = uuid();
     const agentMessageId = uuid();
+    // Context IDs are owned by the agent, not the client. The first turn is sent
+    // without one so the server can mint it; subsequent turns replay the ID
+    // adopted from the stream in handleStreamEvent. Minting one here instead
+    // would pin the conversation to an ID the agent never issued, so it would
+    // treat each turn as an unknown context and drop prior history.
     const contextId = this.activeContextId() ?? undefined;
 
     const userUiMessage: UiMessage = {
