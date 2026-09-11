@@ -8,7 +8,8 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "sourceMap": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": []
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"]
 }
