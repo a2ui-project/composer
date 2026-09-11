@@ -16,7 +16,7 @@
 
 import {test, expect, Locator, FrameLocator} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {WindowWithMonaco} from './types';
+import {SurfaceResizeLogEntry, WindowWithMonaco, WindowWithResizeLog} from './types';
 
 interface IntegrationConfig {
   name: string;
@@ -74,6 +74,36 @@ const CONFIGS: IntegrationConfig[] = [
   },
 ];
 
+/** Number of frame height samples taken while observing an idle preview. */
+const HEIGHT_SAMPLE_COUNT = 12;
+
+/** Delay between consecutive frame height samples, in milliseconds. */
+const HEIGHT_SAMPLE_INTERVAL_MS = 250;
+
+/**
+ * Upper bound for a settled preview frame. The sample content is roughly 280px
+ * tall and the test viewport is 800px, so anything beyond this means the frame
+ * is still growing under its own resize traffic.
+ */
+const MAX_SETTLED_FRAME_HEIGHT_PX = 1500;
+
+/** Upper bound on SURFACE_RESIZE messages emitted while the preview is idle. */
+const MAX_IDLE_RESIZE_MESSAGES = 25;
+
+/** Upper bound on consecutive growing heights, which characterise a ratchet. */
+const MAX_INCREASING_RESIZE_RUN = 4;
+
+/** Returns the length of the longest strictly increasing run in `values`. */
+function longestIncreasingRun(values: number[]): number {
+  let longest = 0;
+  let current = 0;
+  for (let i = 0; i < values.length; i++) {
+    current = i > 0 && values[i] > values[i - 1] ? current + 1 : 1;
+    longest = Math.max(longest, current);
+  }
+  return longest;
+}
+
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
@@ -99,6 +129,25 @@ test.beforeEach(async ({page}) => {
       );
     } catch (e) {}
   });
+
+  // Record SURFACE_RESIZE traffic directly off the postMessage wire. The Raw
+  // Messages drawer folds consecutive rows together and caps its history, so
+  // counts sourced from its DOM cannot observe a resize feedback loop.
+  await page.addInitScript((resizeType: string) => {
+    const win = window as unknown as WindowWithResizeLog;
+    const log: SurfaceResizeLogEntry[] = [];
+    win.__a2uiResizeLog = log;
+    window.addEventListener(
+      'message',
+      event => {
+        const data = event.data as {type?: string; payload?: {height?: number}} | null;
+        if (data?.type === resizeType) {
+          log.push({height: data.payload?.height, timeMs: performance.now()});
+        }
+      },
+      true,
+    );
+  }, PreviewBridgeMessageType.SURFACE_RESIZE);
 });
 
 for (const config of CONFIGS) {
@@ -292,6 +341,54 @@ for (const config of CONFIGS) {
       await expect(latestEnvelope.locator('pre')).toContainText(
         '"sourceComponentId": "book_button"',
       );
+    });
+
+    test('settles preview frame height without a SURFACE_RESIZE feedback loop', async ({page}) => {
+      test.setTimeout(60_000);
+
+      await page.goto(`/?renderer=${config.rendererUrl}`);
+      await expect(page.locator('.workspace-container')).toBeVisible();
+
+      const iframe = page.frameLocator('iframe.preview-iframe');
+      await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+
+      const frameContainer = page.locator('.rendered-frame-container');
+      const heights: number[] = [];
+      for (let i = 0; i < HEIGHT_SAMPLE_COUNT; i++) {
+        heights.push(await frameContainer.evaluate(el => (el as HTMLElement).offsetHeight));
+        await page.waitForTimeout(HEIGHT_SAMPLE_INTERVAL_MS);
+      }
+
+      // The frame must come to rest. Its resting value is deliberately not
+      // pinned, only bounded, because it depends on how the guest measures.
+      // Soft assertions keep every violated property visible in one run.
+      const settled = heights.slice(-6);
+      expect
+        .soft(Math.max(...settled) - Math.min(...settled), `heights: ${heights}`)
+        .toBeLessThanOrEqual(1);
+      expect
+        .soft(heights[heights.length - 1], `heights: ${heights}`)
+        .toBeLessThan(MAX_SETTLED_FRAME_HEIGHT_PX);
+
+      const resizeLog = await page.evaluate(
+        () => (window as unknown as WindowWithResizeLog).__a2uiResizeLog ?? [],
+      );
+      const reportedHeights = resizeLog.map((entry: SurfaceResizeLogEntry) => entry.height ?? 0);
+
+      expect
+        .soft(resizeLog.length, `resize heights: ${reportedHeights}`)
+        .toBeLessThan(MAX_IDLE_RESIZE_MESSAGES);
+      expect
+        .soft(longestIncreasingRun(reportedHeights), `resize heights: ${reportedHeights}`)
+        .toBeLessThanOrEqual(MAX_INCREASING_RESIZE_RUN);
+
+      // The guest document must fit its own viewport, so growing the frame can
+      // never grow the reported height again.
+      const guest = await iframe.locator('body').evaluate(() => ({
+        scrollHeight: document.documentElement.scrollHeight,
+        clientHeight: document.documentElement.clientHeight,
+      }));
+      expect.soft(guest.scrollHeight).toBeLessThanOrEqual(guest.clientHeight + 1);
     });
   });
 }

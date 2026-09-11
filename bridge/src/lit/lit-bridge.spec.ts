@@ -391,9 +391,13 @@ describe('Lit Framework Adapter Spec', () => {
     element.remove();
   });
 
-  it('defines static styles containing full-height host and fixed error overlay rules', () => {
+  it('defines static styles without viewport-coupled host sizing and with a fixed error overlay', () => {
     const cssText = A2uiSandboxRoot.styles.cssText;
-    expect(cssText).toContain('min-height: 100vh');
+    // The host sizes the preview iframe to the height this guest reports, so a
+    // viewport-derived host height feeds the host's last decision back into the
+    // next measurement, producing a SURFACE_RESIZE feedback loop.
+    expect(cssText).not.toMatch(/\d+\s*(vh|dvh|svh|lvh)\b/);
+    expect(cssText).not.toContain('min-height');
     expect(cssText).toContain('.error-overlay');
     expect(cssText).toContain('position: fixed');
     expect(cssText).toContain('z-index: 9999');

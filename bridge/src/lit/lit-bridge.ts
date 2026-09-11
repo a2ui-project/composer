@@ -83,7 +83,6 @@ export class A2uiSandboxRoot extends LitElement {
     :host {
       display: block;
       width: 100%;
-      min-height: 100vh;
     }
 
     .error-overlay {
