@@ -22,15 +22,15 @@ import {fileURLToPath} from 'node:url';
 /**
  * Matches any viewport-relative length unit.
  *
- * This pattern and FULL_HEIGHT are repeated in the other sample workspaces and
- * in bridge/src/lit/lit-bridge.spec.ts. The samples are separate packages with
- * no shared test-only module between them, so the copies have to be kept in
- * step by hand.
+ * This pattern and FULL_HEIGHT are repeated byte for byte in the other sample
+ * workspaces and in bridge/src/lit/lit-bridge.spec.ts. The samples are
+ * separate packages with no shared test-only module between them, so a change
+ * to either pattern has to be made in all four places by hand.
  */
 const VIEWPORT_UNIT = /\d+\s*(vh|dvh|svh|lvh|vmin|vmax|vb|vi)\b/i;
 
 /** Matches a full-height declaration that inherits the iframe viewport. */
-const FULL_HEIGHT = /height:\s*'?100%/i;
+const FULL_HEIGHT = /height:\s*['"`]?100%/i;
 
 /**
  * Guest document, its stylesheets, and the surface host template. The template
