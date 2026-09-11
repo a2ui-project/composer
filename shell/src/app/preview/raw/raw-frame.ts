@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 import {
   Component,
   inject,
@@ -23,6 +22,7 @@ import {
   effect,
   untracked,
   WritableSignal,
+  viewChild,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Subject} from 'rxjs';
@@ -52,6 +52,7 @@ import type {editor} from 'monaco-editor';
   styleUrl: './raw-frame.scss',
 })
 export class RawFrame {
+  readonly monacoEditor = viewChild(MonacoEditor);
   protected readonly isExtensionMode = inject(IS_EXTENSION_MODE);
   /** The current JSON layout representation reflecting the active draft. */
   protected readonly layoutJson: WritableSignal<string>;
@@ -82,6 +83,7 @@ export class RawFrame {
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private invalidJsonTimer: ReturnType<typeof setTimeout> | null = null;
   private lastErrorSignature: string | null = null;
+  private lastSyntaxError: {line?: number; column?: number} | null = null;
   private readonly markerSubject = new Subject<editor.IMarker[]>();
 
   /** Public lock indicator preventing typing deadlocks during generative LLM stream turns. */
@@ -168,15 +170,20 @@ export class RawFrame {
             try {
               const payload = this.parseLayoutString(activeDraftVal);
               if (payload !== null) {
+                this.lastSyntaxError = null;
                 this.cancelInvalidJsonTimer();
                 this.isJsonInvalid.set(false);
                 this.snackBar.dismiss();
                 this.hostCommunication.sendRenderA2UI(payload);
                 this.startWatchdog();
               } else {
+                this.clearWatchdog();
+                this.lastSyntaxError = null;
                 this.scheduleInvalidJsonError();
               }
             } catch (err) {
+              this.clearWatchdog();
+              this.lastSyntaxError = this.extractCoordinatesFromError(err);
               this.scheduleInvalidJsonError();
             }
           });
@@ -191,15 +198,20 @@ export class RawFrame {
           try {
             const payload = this.parseLayoutString(value);
             if (payload !== null) {
+              this.lastSyntaxError = null;
               this.cancelInvalidJsonTimer();
               this.isJsonInvalid.set(false);
               this.snackBar.dismiss();
               this.usageTrackingService.trackJsonEditorEdit({isValidJson: true});
               return payload;
             }
+            this.clearWatchdog();
+            this.lastSyntaxError = null;
             this.scheduleInvalidJsonError();
             return null;
           } catch (err) {
+            this.clearWatchdog();
+            this.lastSyntaxError = this.extractCoordinatesFromError(err);
             this.scheduleInvalidJsonError();
             return null;
           }
@@ -226,10 +238,14 @@ export class RawFrame {
   }
 
   protected onMarkersChange(markers: editor.IMarker[]): void {
+    if (markers.some(m => m.severity === 8)) {
+      this.clearWatchdog();
+    }
     this.markerSubject.next(markers);
   }
 
   private scheduleInvalidJsonError(): void {
+    this.clearWatchdog();
     this.cancelInvalidJsonTimer();
     this.invalidJsonTimer = setTimeout(() => {
       this.invalidJsonTimer = null;
@@ -295,15 +311,21 @@ export class RawFrame {
         ? `Schema error: ${errorMarkers[0].message}`
         : `Found ${errorMarkers.length} schema errors in JSON.`;
 
-    this.snackBar
-      .open(message, 'View in Errors Tab', {
-        duration: 5000,
-        panelClass: 'schema-error-snackbar',
-      })
-      .onAction()
-      .subscribe(() => {
-        window.dispatchEvent(new OpenPanelEvent(ComposerPanelId.Errors));
+    const firstMarker = errorMarkers[0];
+    const line = firstMarker.startLineNumber;
+    const col = firstMarker.startColumn;
+    const action = this.getNavigationActionLabel(line, col);
+
+    const snackBarRef = this.snackBar.open(message, action, {
+      duration: 5000,
+      panelClass: 'schema-error-snackbar',
+    });
+
+    if (action && line !== undefined) {
+      snackBarRef.onAction().subscribe(() => {
+        this.monacoEditor()?.navigateToPosition(line, col ?? 1);
       });
+    }
   }
 
   /**
@@ -335,8 +357,40 @@ export class RawFrame {
     if (this.isLocked()) {
       return;
     }
-    this.snackBar.open('Invalid JSON syntax detected.', undefined, {
+    const errorCoords = this.lastSyntaxError;
+    const action = errorCoords
+      ? this.getNavigationActionLabel(errorCoords.line, errorCoords.column)
+      : undefined;
+
+    const snackBarRef = this.snackBar.open('Invalid JSON syntax detected.', action, {
       duration: 5000,
     });
+
+    if (action && errorCoords?.line) {
+      snackBarRef.onAction().subscribe(() => {
+        this.monacoEditor()?.navigateToPosition(errorCoords.line!, errorCoords.column ?? 1);
+      });
+    }
+  }
+
+  private extractCoordinatesFromError(err: unknown): {line?: number; column?: number} | null {
+    if (err && typeof err === 'object') {
+      const line = 'line' in err && typeof err.line === 'number' ? err.line : undefined;
+      const column = 'column' in err && typeof err.column === 'number' ? err.column : undefined;
+      if (line !== undefined || column !== undefined) {
+        return {line, column};
+      }
+    }
+    return null;
+  }
+
+  private getNavigationActionLabel(line?: number, column?: number): string | undefined {
+    if (line !== undefined && column !== undefined) {
+      return `Go to line ${line}, col ${column}`;
+    }
+    if (line !== undefined) {
+      return `Go to line ${line}`;
+    }
+    return undefined;
   }
 }

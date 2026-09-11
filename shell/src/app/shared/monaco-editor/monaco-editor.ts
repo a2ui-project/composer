@@ -37,7 +37,6 @@ import {
 } from '../../settings/app-config-provider/app-config-provider';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
-import {ErrorLogger, ErrorLogItem} from '../../debug/error-logger.service';
 
 /**
  * A standalone Angular component that wraps the Monaco Editor.
@@ -71,7 +70,6 @@ export class MonacoEditor {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly errorLogger = inject(ErrorLogger);
 
   private markerDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingMarkers: monaco.editor.IMarker[] | null = null;
@@ -541,7 +539,6 @@ export class MonacoEditor {
                 this.lastMarkersSignature = currentSignature;
 
                 this.markersChange.emit(markers);
-                this.logMarkers(markers);
               } else {
                 if (this.lastMarkersSignature === currentSignature) {
                   return;
@@ -562,6 +559,25 @@ export class MonacoEditor {
         });
       });
     });
+  }
+
+  /**
+   * Moves the editor cursor to the designated line and column, scrolling the viewport
+   * if necessary and focusing the editor instance.
+   *
+   * @param line - 1-indexed target line number.
+   * @param column - 1-indexed target column number (defaults to 1).
+   */
+  navigateToPosition(line: number, column = 1): void {
+    if (!this.editor) {
+      return;
+    }
+    const targetLine = Math.max(1, Math.floor(line) || 1);
+    const targetColumn = Math.max(1, Math.floor(column) || 1);
+    const position = {lineNumber: targetLine, column: targetColumn};
+    this.editor.setPosition(position);
+    this.editor.revealPositionInCenterIfOutsideViewport(position);
+    this.editor.focus();
   }
 
   private scheduleErrorMarkersDebounce(): void {
@@ -590,33 +606,6 @@ export class MonacoEditor {
     this.lastMarkersSignature = signature;
 
     this.markersChange.emit(markers);
-    this.logMarkers(markers);
-  }
-
-  private logMarkers(markers: monaco.editor.IMarker[]): void {
-    const timestamp = Date.now();
-    for (const marker of markers) {
-      const item: Partial<ErrorLogItem> = {
-        id: `${timestamp}-${Math.random().toString(36).substring(2, 9)}`,
-        timestamp,
-        level:
-          marker.severity === 8
-            ? 'error'
-            : marker.severity === 4
-              ? 'warn'
-              : marker.severity === 2
-                ? 'info'
-                : 'log',
-        message: marker.message,
-        sourceTag: '[Editor]',
-        line: marker.startLineNumber,
-        column: marker.startColumn,
-      };
-      if (item.level === 'error') this.errorLogger.error(item);
-      else if (item.level === 'warn') this.errorLogger.warn(item);
-      else if (item.level === 'info') this.errorLogger.info(item);
-      else this.errorLogger.log(item);
-    }
   }
 
   private handleUserInteraction(): void {

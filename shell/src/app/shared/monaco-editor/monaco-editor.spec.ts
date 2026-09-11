@@ -39,6 +39,9 @@ const {
   mockOnDidChangeCursorSelection,
   mockOnKeyDown,
   mockOnMouseDown,
+  mockSetPosition,
+  mockRevealPositionInCenterIfOutsideViewport,
+  mockFocus,
   mockModelContentDisposable,
   mockCursorPositionDisposable,
   mockCursorSelectionDisposable,
@@ -63,11 +66,20 @@ const {
   const mockOnKeyDown = vi.fn(() => mockKeyDownDisposable);
   const mockOnMouseDown = vi.fn(() => mockMouseDownDisposable);
 
+  const mockSetPosition = vi.fn();
+  const mockRevealPositionInCenterIfOutsideViewport = vi.fn();
+  const mockRevealPositionInCenter = vi.fn();
+  const mockFocus = vi.fn();
+
   const mockEditorCreate = vi.fn(() => ({
     getModel: vi.fn(() => null),
     getValue: vi.fn(() => ''),
     setValue: vi.fn(),
     updateOptions: vi.fn(),
+    setPosition: mockSetPosition,
+    revealPositionInCenterIfOutsideViewport: mockRevealPositionInCenterIfOutsideViewport,
+    revealPositionInCenter: mockRevealPositionInCenter,
+    focus: mockFocus,
     onDidChangeModelContent: mockOnDidChangeModelContent,
     onDidChangeCursorPosition: mockOnDidChangeCursorPosition,
     onDidChangeCursorSelection: mockOnDidChangeCursorSelection,
@@ -82,6 +94,10 @@ const {
     mockCreateModel,
     mockSetValue,
     mockEditorCreate,
+    mockSetPosition,
+    mockRevealPositionInCenterIfOutsideViewport,
+    mockRevealPositionInCenter,
+    mockFocus,
     mockOnDidChangeMarkers,
     mockGetModelMarkers,
     mockOnDidChangeModelContent,
@@ -441,7 +457,7 @@ describe('MonacoEditor component', () => {
     expect(markersSpy).not.toHaveBeenCalled();
   });
 
-  it('debounces error marker logging and emission by 3000ms', async () => {
+  it('debounces error marker emission by 3000ms', async () => {
     vi.useFakeTimers();
     fixture = TestBed.createComponent(MonacoEditor);
     const markersSpy = vi.fn();
@@ -466,23 +482,65 @@ describe('MonacoEditor component', () => {
 
     markerListener([modelUri]);
 
-    // Before 3000ms, nothing emitted or logged
+    // Before 3000ms, nothing emitted
     vi.advanceTimersByTime(2999);
     expect(markersSpy).not.toHaveBeenCalled();
-    const errorLogger = TestBed.inject(ErrorLogger);
-    expect(errorLogger.error).not.toHaveBeenCalled();
 
-    // At 3000ms, emitted and logged
+    // At 3000ms, emitted
     vi.advanceTimersByTime(1);
     expect(markersSpy).toHaveBeenCalledWith([errorMarker]);
-    expect(errorLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Unexpected token',
-        sourceTag: '[Editor]',
-        line: 2,
-        column: 3,
-      }),
-    );
+  });
+
+  it('does not log error markers to ErrorLogger when diagnostics change', async () => {
+    vi.useFakeTimers();
+    fixture = TestBed.createComponent(MonacoEditor);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+      uris: readonly {toString: () => string}[],
+    ) => void;
+
+    const errorMarker = {
+      severity: 8,
+      message: 'Syntax error',
+      startLineNumber: 1,
+      startColumn: 1,
+    };
+    mockGetModelMarkers.mockReturnValue([errorMarker]);
+    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+
+    markerListener([modelUri]);
+    vi.advanceTimersByTime(3000);
+
+    const errorLogger = TestBed.inject(ErrorLogger);
+    expect(errorLogger.error).not.toHaveBeenCalled();
+  });
+
+  it('navigates to specified line and column and focuses editor when navigateToPosition is called', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    fixture.componentInstance.navigateToPosition(5, 12);
+
+    expect(mockSetPosition).toHaveBeenCalledWith({lineNumber: 5, column: 12});
+    expect(mockRevealPositionInCenterIfOutsideViewport).toHaveBeenCalledWith({
+      lineNumber: 5,
+      column: 12,
+    });
+    expect(mockFocus).toHaveBeenCalledTimes(1);
+
+    fixture.componentInstance.navigateToPosition(0, -3);
+    expect(mockSetPosition).toHaveBeenCalledWith({lineNumber: 1, column: 1});
+    expect(mockRevealPositionInCenterIfOutsideViewport).toHaveBeenCalledWith({
+      lineNumber: 1,
+      column: 1,
+    });
   });
 
   it('resets error debounce timer when user types or repositions cursor', async () => {
