@@ -18,18 +18,104 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
   overflow: hidden;
+  background-color: var(--cpk-page-bg, #dedee9);
+  font-family: var(--cpk-font-body, 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif);
+  color: var(--cpk-text-primary, #010507);
+}
+
+/* Signature CopilotKit depth cue: six soft blur circles behind all content. */
+.composer-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.blur-circle {
+  position: absolute;
+  border-radius: 50%;
+  // A 103px gaussian on six 450-600px elements is extremely expensive to paint,
+  // and promoting them with translateZ(0) makes it worse on software-rendered
+  // (GPU-less) machines such as CI runners -- six large blurred compositor
+  // layers instead of one. A radial-gradient reproduces the same soft wash at
+  // effectively zero paint cost. Each element is grown by the old blur radius
+  // on every side so the visual extent and centre are unchanged.
+  background: radial-gradient(
+    circle closest-side,
+    var(--circle-color) 0%,
+    var(--circle-color) 30%,
+    transparent 85%
+  );
+}
+
+.blur-circle--1 {
+  width: 652px;
+  height: 652px;
+  left: 937px;
+  top: -92px;
+  --circle-color: var(--cpk-blur-warm);
+}
+
+.blur-circle--2 {
+  width: 815px;
+  height: 815px;
+  left: 1236px;
+  top: 522px;
+  --circle-color: var(--cpk-blur-cool);
+}
+
+.blur-circle--3 {
+  width: 815px;
+  height: 815px;
+  left: 567px;
+  top: -468px;
+  --circle-color: var(--cpk-blur-cool);
+}
+
+.blur-circle--4 {
+  width: 815px;
+  height: 815px;
+  left: 405px;
+  top: 599px;
+  --circle-color: var(--cpk-blur-bright);
+}
+
+.blur-circle--5 {
+  width: 652px;
+  height: 652px;
+  left: 25px;
+  top: 228px;
+  --circle-color: var(--cpk-blur-gold);
+}
+
+.blur-circle--6 {
+  width: 652px;
+  height: 652px;
+  left: -308px;
+  top: 700px;
+  --circle-color: var(--cpk-blur-warm);
 }
 
 .composer-header {
   position: relative;
   z-index: 2;
   flex-shrink: 0;
-  background-color: var(--mat-sys-surface-container);
-  color: var(--mat-sys-on-surface);
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
-  --mat-toolbar-container-background-color: var(--mat-sys-surface-container);
-  --mat-toolbar-container-text-color: var(--mat-sys-on-surface);
+  // Solid fallback keeps text contrast WCAG-compliant where backdrop-filter is
+  // unsupported/disabled; the translucent glass is layered on only when supported.
+  background-color: var(--cpk-surface-elevated);
+  color: var(--cpk-text-primary);
+  border-bottom: 1px solid var(--cpk-glass-border);
+  --mat-toolbar-container-background-color: transparent;
+  --mat-toolbar-container-text-color: var(--cpk-text-primary);
+
+  @supports (backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px)) {
+    background-color: var(--cpk-glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
 }
 .spacer {
   flex: 1 1 auto;
@@ -39,7 +125,12 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
   display: flex;
+  // Let the lavender page + blur circles show through the drawer container.
+  background-color: transparent;
+  --mat-sidenav-container-background-color: transparent;
 
   > ::ng-deep .mat-drawer {
     position: relative !important;
@@ -56,13 +147,21 @@
 
 .composer-sidenav {
   width: 250px;
-  background-color: var(--mat-sys-surface-container);
-  border-right: 1px solid var(--mat-sys-outline-variant);
+  // Solid fallback for readability where backdrop-filter is unsupported.
+  background-color: var(--cpk-surface-elevated);
+  border-right: 1px solid var(--cpk-glass-border);
   --mat-sidenav-container-shape: 0px;
   --mat-drawer-container-shape: 0px;
-  border-radius: 0;
-  --mat-sidenav-background-color: var(--mat-sys-surface-container);
+  border-radius: 0px;
+  --mat-sidenav-background-color: var(--cpk-surface-elevated);
   transition: width 200ms ease-in-out;
+
+  @supports (backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px)) {
+    background-color: var(--cpk-glass-bg);
+    --mat-sidenav-background-color: var(--cpk-glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
 
   ::ng-deep .mat-drawer-inner-container {
     border-radius: 0;
