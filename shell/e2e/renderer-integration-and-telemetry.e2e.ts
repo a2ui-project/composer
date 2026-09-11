@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {test, expect, Locator, FrameLocator} from '@playwright/test';
+import {test, expect, Locator, FrameLocator, Page} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {SurfaceResizeLogEntry, WindowWithMonaco, WindowWithResizeLog} from './types';
 
@@ -74,11 +74,23 @@ const CONFIGS: IntegrationConfig[] = [
   },
 ];
 
-/** Number of frame height samples taken while observing an idle preview. */
+/**
+ * Number of frame height samples taken after the preview has been given a
+ * chance to settle. The samples describe the resting frame; the SURFACE_RESIZE
+ * log asserted alongside them covers the whole session from navigation on,
+ * including the startup burst, because the wire tap is installed before the
+ * page loads.
+ */
 const HEIGHT_SAMPLE_COUNT = 12;
 
 /** Delay between consecutive frame height samples, in milliseconds. */
 const HEIGHT_SAMPLE_INTERVAL_MS = 250;
+
+/** Bound on how long to wait for the frame to stop moving before sampling. */
+const HEIGHT_STABILITY_TIMEOUT_MS = 5_000;
+
+/** Delay between height readings while waiting for the frame to stop moving. */
+const HEIGHT_STABILITY_POLL_MS = 100;
 
 /**
  * Upper bound for a settled preview frame. The sample content is roughly 280px
@@ -167,6 +179,25 @@ function longestBurstRun(times: number[], maxGapMs: number): number {
     longest = Math.max(longest, current);
   }
   return longest;
+}
+
+/**
+ * Waits until `locator` reports the same height on two consecutive readings,
+ * bounded by HEIGHT_STABILITY_TIMEOUT_MS.
+ *
+ * Returns quietly when the deadline passes instead of throwing: a frame that
+ * never stops moving is the condition under test, and it has to be judged by
+ * the samples and bounds in the test body, not hidden behind a timeout here.
+ */
+async function waitForStableHeight(page: Page, locator: Locator): Promise<void> {
+  const deadline = Date.now() + HEIGHT_STABILITY_TIMEOUT_MS;
+  let previous = -1;
+  while (Date.now() < deadline) {
+    const height = await locator.evaluate(el => (el as HTMLElement).offsetHeight);
+    if (height === previous) return;
+    previous = height;
+    await page.waitForTimeout(HEIGHT_STABILITY_POLL_MS);
+  }
 }
 
 test.beforeEach(async ({page}) => {
@@ -418,6 +449,22 @@ for (const config of CONFIGS) {
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
 
       const frameContainer = page.locator('.rendered-frame-container');
+
+      // The bounds below were measured at the configured 1280x800 viewport,
+      // where the preview panel starts SHORTER than the ~312px of sample
+      // content, so a frame tracking the guest is distinguishable from one
+      // merely filling its panel. That geometry is not a constant: the dockview
+      // layout is restored from persisted JSON for real users, while each
+      // Playwright context starts with empty storage and therefore the default
+      // layout. Changing the viewport invalidates the measured bounds rather
+      // than just shifting the numbers.
+      //
+      // Icon and text webfonts swap in after first paint and can move the
+      // content by more than the 1px settle tolerance, so wait for the swap and
+      // for one repeated reading before sampling.
+      await iframe.locator('body').evaluate(() => document.fonts.ready.then(() => true));
+      await waitForStableHeight(page, frameContainer);
+
       const heights: number[] = [];
       for (let i = 0; i < HEIGHT_SAMPLE_COUNT; i++) {
         heights.push(await frameContainer.evaluate(el => (el as HTMLElement).offsetHeight));
@@ -462,10 +509,20 @@ for (const config of CONFIGS) {
 
       // The guest document must fit its own viewport, so growing the frame can
       // never grow the reported height again.
+      //
+      // `contentHeight` mirrors measureAndDispatch() in
+      // bridge/src/surface-resize-observer.ts. Deriving it from
+      // body.scrollHeight alone diverges whenever the root element is the
+      // taller box: body margins escape through it, which the bridge unit test
+      // pins at body 290 against documentElement.offsetHeight 390.
       const guest = await iframe.locator('body').evaluate(() => ({
         scrollHeight: document.documentElement.scrollHeight,
         clientHeight: document.documentElement.clientHeight,
-        contentHeight: document.body.scrollHeight,
+        contentHeight: Math.max(
+          document.body.scrollHeight,
+          document.body.offsetHeight,
+          document.documentElement.offsetHeight,
+        ),
       }));
       expect.soft(guest.scrollHeight).toBeLessThanOrEqual(guest.clientHeight + 1);
 
