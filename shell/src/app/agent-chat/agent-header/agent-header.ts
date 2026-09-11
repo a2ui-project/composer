@@ -42,7 +42,7 @@ export class A2aAgentHeader {
   /** Active A2A task identifier returned by the server, if any. */
   readonly activeTaskId = input<string | null>(null);
   /** Active context or session conversation identifier. */
-  readonly sessionId = input<string | null>(null);
+  readonly sessionId = input<string | null | undefined>(null);
   /** Whether the message inspector side drawer is currently open. */
   readonly isInspectorOpen = input<boolean>(false);
 
