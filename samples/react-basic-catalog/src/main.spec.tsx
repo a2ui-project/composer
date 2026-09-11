@@ -390,6 +390,10 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     expect(overlay.classList.contains('error-overlay')).toBe(true);
 
     const shell = container?.querySelector('.sandbox-shell') as HTMLElement;
-    expect(shell.style.minHeight).toBe('100vh');
+    // The host sizes the preview iframe to the height this guest reports, so
+    // viewport-coupled sizing on the surface host feeds the host's last
+    // decision back into the next measurement (SURFACE_RESIZE feedback loop).
+    expect(shell.style.minHeight).toBe('');
+    expect(shell.style.height).toBe('');
   });
 });

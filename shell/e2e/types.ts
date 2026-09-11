@@ -26,3 +26,16 @@ export interface WindowWithMonaco extends Window {
     };
   };
 }
+
+/** A single SURFACE_RESIZE message observed on the postMessage wire. */
+export interface SurfaceResizeLogEntry {
+  /** Height reported by the guest, in CSS pixels. */
+  height?: number;
+  /** `performance.now()` timestamp of the observation. */
+  timeMs: number;
+}
+
+/** Window carrying the SURFACE_RESIZE wire log installed by the e2e init script. */
+export interface WindowWithResizeLog extends Window {
+  __a2uiResizeLog?: SurfaceResizeLogEntry[];
+}
