@@ -21,6 +21,7 @@ import {
   SurfaceGroupLike,
   SurfaceInstance,
   RendererConfig,
+  safeSerialize,
 } from './index';
 import {PreviewBridgeMessageType, ThemePreference} from './bridge-message';
 import type {A2uiMessage} from '@a2ui/web_core/v0_9';
@@ -2321,5 +2322,53 @@ describe('PreviewBridge Core API Runtime', () => {
       bridge.destroy();
       expect(destroySpy).toHaveBeenCalled();
     });
+  });
+});
+
+describe('safeSerialize', () => {
+  it('serializes simple values accurately', () => {
+    expect(safeSerialize('test')).toBe('"test"');
+    expect(safeSerialize(123)).toBe('123');
+    expect(safeSerialize(null)).toBe('null');
+    expect(safeSerialize({a: 1})).toBe('{"a":1}');
+  });
+
+  it('handles circular references gracefully', () => {
+    const obj: Record<string, unknown> = {a: 1};
+    obj['self'] = obj;
+    expect(safeSerialize(obj)).toBe('{"a":1,"self":"[Circular]"}');
+  });
+
+  it('serializes BigInt values', () => {
+    expect(safeSerialize({big: BigInt(9007199254740991)})).toBe('{"big":"9007199254740991n"}');
+  });
+
+  it('serializes Error objects securely', () => {
+    const err = new Error('Test error');
+    const result = JSON.parse(safeSerialize(err));
+    expect(result.name).toBe('Error');
+    expect(result.message).toBe('Test error');
+    expect(result.stack).toBeDefined();
+  });
+
+  it('sanitizes DOM elements', () => {
+    const fakeElement = {
+      nodeType: 1,
+      nodeName: 'DIV',
+      tagName: 'DIV',
+      id: 'test-id',
+      className: 'test-class',
+      appendChild: () => {},
+    };
+    expect(safeSerialize(fakeElement)).toBe('"[Element: <div>]"');
+  });
+
+  it('returns [Unserializable] if JSON.stringify still throws', () => {
+    const badObj = {
+      get a() {
+        throw new Error('Getter threw');
+      },
+    };
+    expect(safeSerialize(badObj)).toBe('[Unserializable]');
   });
 });

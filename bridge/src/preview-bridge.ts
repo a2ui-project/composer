@@ -46,6 +46,72 @@ import type {
 } from './render-config';
 
 /**
+ * Safely serializes an unknown value to a JSON string.
+ * Handles cyclical structures and complex objects gracefully without throwing.
+ *
+ * @param val - The value to serialize.
+ * @returns A JSON string representation, or a fallback string on failure.
+ */
+export function safeSerialize(val: unknown): string {
+  function sanitize(v: unknown, seen: WeakSet<object>): unknown {
+    if (typeof v === 'bigint') return `${v.toString()}n`;
+
+    if (v !== null && typeof v === 'object') {
+      // Use WeakSet to detect and skip cyclic structures without creating
+      // memory leaks or strict reference loops during serialization.
+      if (seen.has(v)) return '[Circular]';
+
+      seen.add(v);
+      let result: unknown;
+
+      const isErrorLike =
+        v instanceof Error ||
+        Object.prototype.toString.call(v) === '[object Error]' ||
+        ('message' in v &&
+          typeof (v as Record<string, unknown>)['message'] === 'string' &&
+          'stack' in v &&
+          !('nodeType' in v) &&
+          !('component' in v));
+
+      if (isErrorLike) {
+        result = {
+          name: (v as unknown as Record<string, unknown>)['name'] || 'Error',
+          message: (v as Record<string, unknown>)['message'],
+          stack: (v as Record<string, unknown>)['stack'],
+        };
+      } else if (
+        'nodeType' in v &&
+        (v as Record<string, unknown>)['nodeType'] === 1 &&
+        typeof (v as Record<string, unknown>)['tagName'] === 'string'
+      ) {
+        // Assert nodeType === 1 to prevent property access crashes when
+        // serializing cross-realm DOM elements.
+        result = `[Element: <${((v as Record<string, unknown>)['tagName'] as string).toLowerCase()}>]`;
+      } else if (Array.isArray(v)) {
+        result = v.map(curr => sanitize(curr, seen));
+      } else {
+        const objResult: Record<string, unknown> = {};
+        for (const k of Object.keys(v)) {
+          objResult[k] = sanitize((v as Record<string, unknown>)[k], seen);
+        }
+        result = objResult;
+      }
+
+      seen.delete(v);
+      return result;
+    }
+    return v;
+  }
+
+  try {
+    const res = JSON.stringify(sanitize(val, new WeakSet()));
+    return res === undefined ? 'undefined' : res;
+  } catch {
+    return '[Unserializable]';
+  }
+}
+
+/**
  * A framework-agnostic processor interface that handles A2UI protocol payloads.
  * Exposes a single method to process raw incoming action arrays.
  */

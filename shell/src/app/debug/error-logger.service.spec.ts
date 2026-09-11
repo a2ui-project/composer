@@ -15,7 +15,8 @@
  */
 import {describe, it, expect, beforeEach} from 'vitest';
 import {TestBed} from '@angular/core/testing';
-import {ErrorLogger, ErrorLogItem, isErrorLike, safeSerialize} from './error-logger.service';
+import {ErrorLogger, ErrorLogItem, isErrorLike} from './error-logger.service';
+import {safeSerialize} from 'a2ui-bridge';
 
 describe('ErrorLogger Service Tests', () => {
   let service: ErrorLogger;

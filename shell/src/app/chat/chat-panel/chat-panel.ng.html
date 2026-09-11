@@ -171,6 +171,18 @@
                   </div>
                 }
                 <p class="bubble-text-content">{{ turn.content }}</p>
+                @if (turn.parseError && !turn.isStreaming) {
+                  <div class="parse-error-card">
+                    <mat-icon color="warn">error_outline</mat-icon>
+                    <span class="error-notice"
+                      ><strong>JSON Syntax Error:</strong>
+                      {{ getParseErrorMessage(turn.parseError) }}</span
+                    >
+                    <button mat-flat-button color="warn" (click)="viewParseErrorDetails()">
+                      View in Errors Tab
+                    </button>
+                  </div>
+                }
                 @if (turn.isRetryable) {
                   <div class="retry-action-container">
                     <button
