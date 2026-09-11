@@ -48,6 +48,16 @@ class MockChatState {
   }
 }
 
+/** Builds a SURFACE_RESIZE envelope in the shape HostCommunication delivers. */
+function surfaceResize(height: number, timestamp = Date.now()): MessageEnvelope {
+  return {
+    type: 'SURFACE_RESIZE',
+    payload: {height, width: 800},
+    origin: 'http://localhost:3000',
+    timestamp,
+  };
+}
+
 describe('RenderedFrame Live Preview Viewport', () => {
   let fixture: ComponentFixture<RenderedFrame>;
   let harness: RenderedFrameHarness;
@@ -315,64 +325,48 @@ describe('RenderedFrame Live Preview Viewport', () => {
       expect.anything(),
     );
   });
-  it('updates dynamicHeight when SURFACE_RESIZE message arrives', () => {
-    const mockEnvelope = {
-      type: 'SURFACE_RESIZE',
-      payload: {height: 520, width: 800},
-      origin: 'http://localhost:3000',
-      timestamp: Date.now(),
-    };
-    const messageStreamSignal = signal(mockEnvelope);
-    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
-      value: messageStreamSignal,
-      writable: true,
-    });
+  it('applies a reported surface height to the frame container', async () => {
+    messageStreamSignal.set(surfaceResize(520));
+    fixture.detectChanges();
 
-    const newFixture = TestBed.createComponent(RenderedFrame);
-    newFixture.detectChanges();
-
-    expect(newFixture.componentInstance.dynamicHeight()).toBe(520);
-    expect(newFixture.componentInstance.frameHeight()).toBe(520);
+    expect(fixture.componentInstance.dynamicHeight()).toBe(520);
+    expect(await harness.getFrameHeight()).toBe('520px');
   });
 
-  it('exposes a reported height as a CSS length and none otherwise', () => {
-    const component = fixture.componentInstance;
-    expect(component['frameHeightPx']()).toBeUndefined();
+  it('lowers the applied height when a smaller SURFACE_RESIZE arrives', async () => {
+    messageStreamSignal.set(surfaceResize(3224));
+    fixture.detectChanges();
+    expect(await harness.getFrameHeight()).toBe('3224px');
 
-    component.dynamicHeight.set(320);
-    expect(component['frameHeightPx']()).toBe('320px');
+    messageStreamSignal.set(surfaceResize(264));
+    fixture.detectChanges();
 
-    // A guest reporting no usable height must not pin the container's height.
-    component.dynamicHeight.set(0);
-    expect(component['frameHeightPx']()).toBeUndefined();
+    expect(fixture.componentInstance.dynamicHeight()).toBe(264);
+    expect(await harness.getFrameHeight()).toBe('264px');
   });
 
-  it('lowers dynamicHeight when a smaller SURFACE_RESIZE arrives', () => {
-    const messageStreamSignal = signal<unknown>({
-      type: 'SURFACE_RESIZE',
-      payload: {height: 3224, width: 800},
-      origin: 'http://localhost:3000',
-      timestamp: Date.now(),
-    });
-    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
-      value: messageStreamSignal,
-      writable: true,
-    });
+  it('keeps the frame at panel height when the guest reports zero', async () => {
+    // CrossFrameValidator admits 0 as a valid dimension, so this component is
+    // what stops a zero report from collapsing the frame: with no usable
+    // height the container falls back to filling its panel.
+    messageStreamSignal.set(surfaceResize(0));
+    fixture.detectChanges();
 
-    const newFixture = TestBed.createComponent(RenderedFrame);
-    newFixture.detectChanges();
+    expect(fixture.componentInstance.frameHeight()).toBeNull();
+    expect(await harness.getFrameHeight()).toBe('100%');
+  });
 
-    expect(newFixture.componentInstance.dynamicHeight()).toBe(3224);
+  it('holds the last applied height when a report exceeds the dimension cap', async () => {
+    messageStreamSignal.set(surfaceResize(520));
+    fixture.detectChanges();
 
-    messageStreamSignal.set({
-      type: 'SURFACE_RESIZE',
-      payload: {height: 264, width: 800},
-      origin: 'http://localhost:3000',
-      timestamp: Date.now(),
-    });
-    newFixture.detectChanges();
+    // Above MAX_SURFACE_DIMENSION in CrossFrameValidator, which is the ceiling
+    // the frame was pinned to during the resize feedback loop. The report is
+    // dropped before it reaches the container, leaving the last good height.
+    messageStreamSignal.set(surfaceResize(20_001));
+    fixture.detectChanges();
 
-    expect(newFixture.componentInstance.dynamicHeight()).toBe(264);
+    expect(await harness.getFrameHeight()).toBe('520px');
   });
 
   it('re-dispatches sendRenderA2UI when RENDERER_READY or A2UI_CATALOG arrives from bridge', () => {
@@ -549,15 +543,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
     const BASE_HEIGHT_PX = 300;
     const START_TIME = 1_700_000_000_000;
 
-    function resizeEnvelope(height: number, timestamp: number): MessageEnvelope {
-      return {
-        type: 'SURFACE_RESIZE',
-        payload: {height, width: 800},
-        origin: 'http://localhost:3000',
-        timestamp,
-      };
-    }
-
     /** Emits through both the uncoalesced stream and the coalesced signal, as the host does. */
     function emit(envelope: MessageEnvelope): void {
       messageStreamSubject.next(envelope);
@@ -577,7 +562,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
 
       let frozenHeight: number | null = null;
       for (let i = 0; i < 20; i++) {
-        emit(resizeEnvelope(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
         fixture.detectChanges();
         const applied = fixture.componentInstance.dynamicHeight();
         if (frozenHeight === null && applied !== BASE_HEIGHT_PX + i * LOOP_STEP_PX) {
@@ -594,7 +579,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     });
 
     it('latches when reports arrive faster than change detection runs', () => {
-      emit(resizeEnvelope(BASE_HEIGHT_PX, START_TIME));
+      emit(surfaceResize(BASE_HEIGHT_PX, START_TIME));
       fixture.detectChanges();
       expect(fixture.componentInstance.dynamicHeight()).toBe(BASE_HEIGHT_PX);
 
@@ -602,7 +587,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
       // The Angular effect coalesces these into one run for the final value only,
       // so a counter living inside the effect would never see the ramp.
       for (let i = 1; i <= 15; i++) {
-        emit(resizeEnvelope(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
       }
       fixture.detectChanges();
 
@@ -615,7 +600,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
 
       const slowIntervalMs = 600;
       for (let i = 0; i < 20; i++) {
-        emit(resizeEnvelope(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * slowIntervalMs));
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * slowIntervalMs));
         fixture.detectChanges();
       }
 
@@ -627,17 +612,17 @@ describe('RenderedFrame Live Preview Viewport', () => {
       let time = START_TIME;
       for (let cycle = 0; cycle < 4; cycle++) {
         for (let i = 0; i < 6; i++) {
-          emit(resizeEnvelope(BASE_HEIGHT_PX + i * LOOP_STEP_PX, time));
+          emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, time));
           time += LOOP_CADENCE_MS;
           fixture.detectChanges();
         }
         // A single non-growing report ends the run before it reaches the limit.
-        emit(resizeEnvelope(BASE_HEIGHT_PX, time));
+        emit(surfaceResize(BASE_HEIGHT_PX, time));
         time += LOOP_CADENCE_MS;
         fixture.detectChanges();
       }
 
-      emit(resizeEnvelope(BASE_HEIGHT_PX + LOOP_STEP_PX, time));
+      emit(surfaceResize(BASE_HEIGHT_PX + LOOP_STEP_PX, time));
       fixture.detectChanges();
 
       expect(fixture.componentInstance.dynamicHeight()).toBe(BASE_HEIGHT_PX + LOOP_STEP_PX);
@@ -645,13 +630,13 @@ describe('RenderedFrame Live Preview Viewport', () => {
 
     it('applies shrinking heights after the breaker latches', () => {
       for (let i = 0; i < 20; i++) {
-        emit(resizeEnvelope(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
         fixture.detectChanges();
       }
       const latchedHeight = fixture.componentInstance.dynamicHeight();
       expect(latchedHeight).toBeLessThan(BASE_HEIGHT_PX + 19 * LOOP_STEP_PX);
 
-      emit(resizeEnvelope(264, START_TIME + 20 * LOOP_CADENCE_MS));
+      emit(surfaceResize(264, START_TIME + 20 * LOOP_CADENCE_MS));
       fixture.detectChanges();
 
       expect(fixture.componentInstance.dynamicHeight()).toBe(264);
@@ -659,7 +644,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
 
     it('clears the latch when the renderer signals that it is ready again', () => {
       for (let i = 0; i < 20; i++) {
-        emit(resizeEnvelope(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
         fixture.detectChanges();
       }
       expect(fixture.componentInstance.dynamicHeight()).toBeLessThan(
@@ -674,7 +659,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
       });
       fixture.detectChanges();
 
-      emit(resizeEnvelope(1024, START_TIME + 21 * LOOP_CADENCE_MS));
+      emit(surfaceResize(1024, START_TIME + 21 * LOOP_CADENCE_MS));
       fixture.detectChanges();
 
       expect(fixture.componentInstance.dynamicHeight()).toBe(1024);
