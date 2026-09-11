@@ -53,7 +53,7 @@ export function App() {
   const debouncedError = useDebouncedValue(error, 350);
 
   return (
-    <main className="sandbox-shell" style={{position: 'relative'}}>
+    <main className="sandbox-shell">
       {surface ? (
         <A2uiSurface surface={surface} />
       ) : (
