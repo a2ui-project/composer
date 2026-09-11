@@ -117,14 +117,18 @@ const MAX_IDLE_RESIZE_MESSAGES = 10;
  * Upper bound on consecutive growing heights, which characterise a ratchet.
  *
  * Measured longest strictly increasing run: healthy Angular 4, React 3, Lit 4;
- * guest CSS reverted, Angular 9, React 5, Lit 9.
+ * guest CSS reverted, Angular 9, Lit 9, React 4 to 6 depending on the run.
  *
- * NOTE: this bound has NO MARGIN - two of three renderers sit exactly on it,
- * and the broken minimum is 5. It is kept because it is the only bound the
- * host growth breaker cannot mask. The assertions carrying real margin are the
- * cadence bound below and the frame-versus-content check at the end of the
- * test. If this one ever flakes, delete it rather than raising it: raising it
- * to 5 would stop detecting a broken React guest entirely.
+ * So this bound detects a broken Angular or Lit guest decisively (9 against a
+ * healthy 4) and does NOT reliably detect a broken React guest at all, whose
+ * run length straddles the bound from one run to the next. React detection
+ * rests on the hard frame-versus-content assertion at the end of the test.
+ *
+ * NOTE: there is NO MARGIN here - healthy Angular and Lit sit exactly on the
+ * bound. It is kept because it is the only bound the host growth breaker
+ * cannot mask for those two renderers. If it ever flakes, DELETE it rather
+ * than raising it: raising it to 5 would give up Angular and Lit as well, and
+ * would buy nothing for React, which it does not catch either way.
  */
 const MAX_INCREASING_RESIZE_RUN = 4;
 
@@ -142,8 +146,8 @@ const LOOP_CADENCE_GAP_MS = 50;
  * reverted, 8, 8 and 3. Cadence does not give the order of magnitude one might
  * expect, because healthy renderers also emit sub-20ms pairs during their
  * initial render; the useful signal is burst LENGTH, not gap size. A broken
- * React guest is not caught by this bound, but is caught by the run-length and
- * frame-versus-content bounds.
+ * React guest is caught by neither this bound nor the run-length bound above,
+ * only by the frame-versus-content assertion.
  */
 const MAX_LOOP_CADENCE_RUN = 5;
 
@@ -515,6 +519,11 @@ for (const config of CONFIGS) {
       // assertion with real margin (off by 16-32px when the fix is reverted)
       // and it cannot be satisfied by the 280px floor, by MAX_SURFACE_DIMENSION,
       // by the host growth breaker, or by the panel geometry of the day.
+      //
+      // It is also the only thing standing between React and no coverage at
+      // all: on a reverted React guest, the message count, run-length and
+      // cadence bounds above ALL PASSED, and this assertion alone failed.
+      // Making it soft, or comparing against a literal, gives up React.
       const settledHeight = heights[heights.length - 1];
       const expectedHeight = Math.max(MIN_FRAME_HEIGHT_PX, guest.contentHeight);
       expect(
