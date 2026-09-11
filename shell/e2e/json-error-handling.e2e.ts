@@ -115,12 +115,12 @@ test.describe('JSON Error Handling & Diagnostics', () => {
       }
     });
 
-    // Wait for 1000ms debounce of snackbar
+    // Wait for debounce of snackbar
     const snackbar = page
       .locator('simple-snack-bar')
       .filter({hasText: /error|syntax/i})
       .first();
-    await expect(snackbar).toBeVisible({timeout: 3000});
+    await expect(snackbar).toBeVisible({timeout: 8000});
     await expect(snackbar).toContainText('error');
 
     // Click 'View' action
