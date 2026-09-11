@@ -16,7 +16,8 @@
 
 import {test, expect, Locator, FrameLocator, Page} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {SurfaceResizeLogEntry, WindowWithMonaco, WindowWithResizeLog} from './types';
+import {SurfaceResizeLogEntry, WindowWithResizeLog} from './types';
+import {RENDERER_URLS, getMonacoContent, setMonacoContent} from './helpers';
 
 interface IntegrationConfig {
   name: string;
@@ -29,7 +30,7 @@ interface IntegrationConfig {
 const CONFIGS: IntegrationConfig[] = [
   {
     name: 'Angular',
-    rendererUrl: 'http://localhost:3456',
+    rendererUrl: RENDERER_URLS.angular,
     pickupDateLocator: iframe =>
       iframe.locator('.a2ui-date-time-container:has-text("Pick-up Date") input'),
     pickupLocationLocator: iframe =>
@@ -44,7 +45,7 @@ const CONFIGS: IntegrationConfig[] = [
   },
   {
     name: 'React',
-    rendererUrl: 'http://localhost:3458',
+    rendererUrl: RENDERER_URLS.react,
     pickupDateLocator: iframe => iframe.locator('label:has-text("Pick-up Date") + input'),
     pickupLocationLocator: iframe => iframe.locator('label:has-text("Pick-up Location") + input'),
     fillDate: async (locator, value) => {
@@ -63,7 +64,7 @@ const CONFIGS: IntegrationConfig[] = [
   },
   {
     name: 'Lit',
-    rendererUrl: 'http://localhost:3457',
+    rendererUrl: RENDERER_URLS.lit,
     pickupDateLocator: iframe =>
       iframe.locator('a2ui-datetimeinput:has-text("Pick-up Date") input'),
     pickupLocationLocator: iframe =>
@@ -345,35 +346,13 @@ for (const config of CONFIGS) {
       await page.goto(`/?renderer=${config.rendererUrl}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
 
-      const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
-      await expect(editorLocator).toBeVisible();
-
-      await page.waitForFunction(() => {
-        const monaco = (window as unknown as WindowWithMonaco).monaco;
-        return (monaco?.editor?.getModels()?.length ?? 0) > 0;
-      });
-
-      let rawJson = '';
-      await expect
-        .poll(async () => {
-          rawJson = await page.evaluate(() => {
-            const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
-            return model ? model.getValue() : '';
-          });
-          return rawJson;
-        })
-        .not.toBe('');
+      const rawJson = await getMonacoContent(page);
 
       const updatedRawJson = rawJson.replace(
         '"text": "Search Cars"',
         '"text": "Search Rental Cars"',
       );
-      await page.evaluate(val => {
-        const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
-        if (model) {
-          model.setValue(val);
-        }
-      }, updatedRawJson);
+      await setMonacoContent(page, updatedRawJson);
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       const searchButton = iframe.getByRole('button', {name: 'Search Rental Cars'});
@@ -381,6 +360,10 @@ for (const config of CONFIGS) {
       await expect(searchButton).toBeEnabled();
     });
 
+    // Depends on full-suite ordering. Run alone or under -g, the date input
+    // comes back empty and this fails on two of three renderers; it passes
+    // every time in the full suite. Reproduced on a clean tree, so it is
+    // pre-existing rather than a side effect of the resize work.
     test('captures telemetry actions and events updates upon search form click', async ({page}) => {
       await page.goto(`/?renderer=${config.rendererUrl}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
