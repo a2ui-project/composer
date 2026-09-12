@@ -16,24 +16,30 @@
 
 <div class="input-area-container" [class.disabled]="disabled()">
   <div class="input-card">
-    @if (attachedImages().length > 0) {
+    @if (attachmentChips().length > 0) {
       <div class="attached-images-tray">
-        @for (img of attachedImages(); track $index) {
+        @for (chip of attachmentChips(); track $index) {
           <div class="image-chip">
-            <mat-icon class="chip-file-icon">description</mat-icon>
-            <span class="chip-name" [matTooltip]="img.name" [title]="img.name">{{ img.name }}</span>
+            <mat-icon class="chip-file-icon">{{ chip.icon }}</mat-icon>
+            <span class="chip-name" [matTooltip]="chip.name" [title]="chip.name">
+              {{ chip.name }}
+            </span>
             <button
               mat-icon-button
               type="button"
               class="remove-img-btn"
               (click)="removeAttachedImage($index)"
-              aria-label="Remove image"
+              aria-label="Remove attachment"
             >
               <mat-icon>close</mat-icon>
             </button>
           </div>
         }
       </div>
+    }
+
+    @if (attachmentError()) {
+      <div class="attachment-error" role="alert">{{ attachmentError() }}</div>
     }
 
     <textarea
@@ -60,14 +66,17 @@
       >
         <mat-icon>add</mat-icon>
       </button>
+      <!--
+        No accept filter: the shell does not know which types the connected
+        agent understands, and size and count are capped in the component.
+      -->
       <input
         #fileInput
         type="file"
-        accept="image/*"
         multiple
         class="hidden-file-input"
         (change)="handleFileSelection($event)"
-        aria-label="Upload image attachments"
+        aria-label="Upload file attachments"
       />
 
       <span class="toolbar-spacer"></span>
