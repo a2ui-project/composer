@@ -49,6 +49,19 @@ export interface RawLogEntry {
 }
 
 /**
+ * Message types the panel never logs.
+ *
+ * Both carry high-frequency traffic that would evict the protocol messages
+ * this view exists to show: `CONSOLE_LOG` is already surfaced by the errors
+ * panel, and a guest reports `SURFACE_RESIZE` on every reflow of its content,
+ * once per rendered surface.
+ */
+const EXCLUDED_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+  PreviewBridgeMessageType.CONSOLE_LOG,
+  PreviewBridgeMessageType.SURFACE_RESIZE,
+]);
+
+/**
  * A debug drawer component presenting a scrolling diagnostic view
  * of raw postMessage traffic across the iframe boundary.
  */
@@ -74,7 +87,7 @@ export class RawMessages {
   };
 
   private readonly postMessageListener = (envelope: MessageEnvelope) => {
-    if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+    if (EXCLUDED_MESSAGE_TYPES.has(envelope.type)) {
       return;
     }
     this.addLogEntry({
@@ -89,7 +102,7 @@ export class RawMessages {
   constructor() {
     const historyBuffer = this.hostComm.getHistoryBuffer();
     const initialHosts: RawLogEntry[] = historyBuffer
-      .filter(env => env.type !== PreviewBridgeMessageType.CONSOLE_LOG)
+      .filter(env => !EXCLUDED_MESSAGE_TYPES.has(env.type))
       .map(env => ({
         type: env.type,
         payload: env.payload,

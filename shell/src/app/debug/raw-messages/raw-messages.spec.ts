@@ -156,6 +156,26 @@ describe('RawMessages', () => {
     expect(await harness.hasPlaceholder()).toBe(true);
   });
 
+  it('ignores SURFACE_RESIZE messages completely', async () => {
+    // A guest reports these on every reflow, which would evict real traffic.
+    emitMessage({
+      type: PreviewBridgeMessageType.SURFACE_RESIZE,
+      payload: {height: 420, width: 640},
+      origin: 'http://localhost',
+      timestamp: 1715940000000,
+    });
+    emitMessage({
+      type: 'KEPT_MSG',
+      payload: {},
+      origin: 'http://localhost',
+      timestamp: 1715940000001,
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getLoggedMessagesCount()).toBe(1);
+    expect(await harness.getMessageTextAt(0)).toContain('KEPT_MSG');
+  });
+
   it('formats timestamps as HH:mm:ss.SSS correctly', async () => {
     const epoch = new Date();
     epoch.setHours(12);
@@ -277,6 +297,41 @@ describe('RawMessages', () => {
     expect(await newHarness.getMessageTextAt(1)).toContain('POST_MSG_3');
     expect(await newHarness.getMessageTextAt(2)).toContain('LLM_REQUEST');
     expect(await newHarness.getMessageTextAt(3)).toContain('POST_MSG_1');
+  });
+
+  it('drops excluded types from the seeded postMessage history', async () => {
+    vi.spyOn(hostCommMock, 'getHistoryBuffer').mockReturnValue([
+      {
+        type: PreviewBridgeMessageType.SURFACE_RESIZE,
+        payload: {height: 420},
+        origin: 'http://localhost',
+        timestamp: 1000,
+      },
+      {
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {msg: 'hello'},
+        origin: 'http://localhost',
+        timestamp: 2000,
+      },
+      {
+        type: 'POST_MSG_1',
+        payload: {},
+        origin: 'http://localhost',
+        timestamp: 3000,
+      },
+    ]);
+
+    // Recreate the fixture so the constructor reads the seeded history.
+    fixture.destroy();
+    const newFixture = TestBed.createComponent(RawMessages);
+    newFixture.detectChanges();
+    const newHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      newFixture,
+      RawMessagesHarness,
+    );
+
+    expect(await newHarness.getLoggedMessagesCount()).toBe(1);
+    expect(await newHarness.getMessageTextAt(0)).toContain('POST_MSG_1');
   });
 
   it('filters out duplicate entries matching timestamp and type', async () => {
