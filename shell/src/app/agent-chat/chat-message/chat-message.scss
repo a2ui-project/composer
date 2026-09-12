@@ -23,6 +23,67 @@
   width: 100%;
   box-sizing: border-box;
 
+  // The attachment tray is shared by user and agent bubbles, so its download
+  // chips are styled once here instead of once per sender.
+  .msg-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 6px 12px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 10px;
+    background: var(--mat-sys-surface-container);
+    // Undo the user agent's button styling.
+    appearance: none;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
+
+    &:hover {
+      background: var(--mat-sys-surface-container-high);
+      border-color: var(--mat-sys-primary);
+    }
+
+    .msg-file-icon {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      // Material Symbols are sized in px, matching the box they occupy.
+      font-size: 20px;
+      color: var(--mat-sys-primary);
+    }
+
+    .msg-file-name {
+      overflow: hidden;
+      font-size: var(--mat-sys-label-medium-size);
+      font-weight: var(--mat-sys-label-medium-weight);
+      color: var(--mat-sys-on-surface);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .msg-file-download-icon {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      margin-left: 2px;
+      font-size: 16px;
+      color: var(--mat-sys-on-surface-variant);
+      opacity: 0.6;
+    }
+
+    &:hover .msg-file-download-icon,
+    &:focus-visible .msg-file-download-icon {
+      color: var(--mat-sys-primary);
+      opacity: 1;
+    }
+  }
+
   &.user {
     justify-content: flex-end;
 

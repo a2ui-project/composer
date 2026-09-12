@@ -18,16 +18,19 @@ import {RenderA2uiItem} from 'a2ui-bridge';
 import {A2aMessage} from '../../chat/a2a/a2a-types';
 
 /**
- * Image attachment payload attached to a chat message.
+ * File attached to a chat message.
+ *
+ * Named for images for historical reasons; it carries attachments of any kind,
+ * and only images have a `previewUrl`.
  */
 export interface UiAttachedImage {
-  /** Name of the attached image file. */
+  /** Name of the attached file. */
   name: string;
-  /** MIME content type of the image (e.g. 'image/png'). */
+  /** MIME content type of the file (e.g. 'application/pdf'). */
   mimeType: string;
-  /** Base64-encoded raw binary data of the image. */
+  /** Base64-encoded raw binary content of the file. */
   data: string;
-  /** Optional object URL or data URI used for local image preview. */
+  /** Optional object URL or data URI used for a local image preview. */
   previewUrl?: string;
 }
 

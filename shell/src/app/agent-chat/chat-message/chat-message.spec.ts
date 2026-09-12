@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {DOCUMENT} from '@angular/common';
 import {signal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
@@ -265,6 +266,148 @@ describe('A2aChatMessage', () => {
     fixture.detectChanges();
 
     expect(await harness.getImageCount()).toBe(1);
+    expect(await harness.getFileChipCount()).toBe(0);
+  });
+
+  it('renders non-image attachments as download chips', async () => {
+    fixture.componentRef.setInput('message', {
+      id: 'msg-files',
+      sender: 'user',
+      text: 'Here are the docs',
+      timestamp: Date.now(),
+      images: [
+        {name: 'document.pdf', mimeType: 'application/pdf', data: 'cGRm'},
+        {
+          name: 'contract.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          data: 'ZG9jeA==',
+        },
+        {name: 'notes.txt', mimeType: 'text/plain', data: 'dHh0'},
+      ],
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getFileChipCount()).toBe(3);
+    expect(await harness.getImageCount()).toBe(0);
+  });
+
+  it('renders the same attachment tray for user and agent messages', async () => {
+    const images = [{name: 'document.pdf', mimeType: 'application/pdf', data: 'cGRm'}];
+    for (const sender of ['user', 'agent']) {
+      fixture.componentRef.setInput('message', {
+        id: `msg-${sender}`,
+        sender,
+        text: 'See attached',
+        timestamp: Date.now(),
+        images,
+      });
+      fixture.detectChanges();
+
+      expect(await harness.getFileChipCount()).toBe(1);
+    }
+  });
+
+  it('does not preview an image attachment under a non-image MIME type', async () => {
+    fixture.componentRef.setInput('message', {
+      id: 'msg-spoofed',
+      sender: 'agent',
+      text: 'Done',
+      timestamp: Date.now(),
+      images: [{name: 'photo.png', mimeType: 'text/html', data: 'PGI+aGk8L2I+'}],
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getImageCount()).toBe(0);
+    expect(await harness.getFileChipCount()).toBe(1);
+  });
+
+  it('reuses a locally generated preview and skips previews without data', () => {
+    fixture.componentRef.setInput('message', {
+      id: 'msg-preview',
+      sender: 'user',
+      text: 'See attached',
+      timestamp: Date.now(),
+      images: [
+        {name: 'local.png', mimeType: 'image/png', data: 'aW1n', previewUrl: 'blob:local-preview'},
+        {
+          name: 'inline.png',
+          mimeType: 'image/png',
+          data: 'aW1n',
+          previewUrl: 'data:image/png;base64,aW1n',
+        },
+        {
+          name: 'remote.png',
+          mimeType: 'image/png',
+          data: 'aW1n',
+          previewUrl: 'https://example.test/remote.png',
+        },
+        {name: 'empty.png', mimeType: 'image/png', data: ''},
+      ],
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['attachments']().map(a => a.previewSrc)).toEqual([
+      'blob:local-preview',
+      'data:image/png;base64,aW1n',
+      // A preview URL the component did not build is ignored in favour of the
+      // attachment's own payload.
+      'data:image/png;base64,aW1n',
+      '',
+    ]);
+  });
+
+  it('downloads an attachment as an opaque blob under a sanitized name', async () => {
+    const injectedDocument = TestBed.inject(DOCUMENT);
+    const anchor = injectedDocument.createElement('a');
+    const clickSpy = vi.spyOn(anchor, 'click').mockImplementation(() => {});
+    const createElementSpy = vi
+      .spyOn(injectedDocument, 'createElement')
+      .mockImplementation(() => anchor);
+    const createObjectUrlSpy = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:fake-object-url');
+    const revokeObjectUrlSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    vi.useFakeTimers();
+
+    try {
+      fixture.componentInstance['downloadAttachment']({
+        name: '../../etc/report.pdf',
+        mimeType: 'text/html',
+        data: 'cGRmZGF0YQ==',
+      });
+
+      expect(clickSpy).toHaveBeenCalled();
+      expect(anchor.download).toBe('report.pdf');
+      // The agent's MIME type must not reach the blob.
+      const blob = createObjectUrlSpy.mock.calls[0][0] as Blob;
+      expect(blob.type).toBe('application/octet-stream');
+      // The URL has to outlive the click for the download to start.
+      expect(revokeObjectUrlSpy).not.toHaveBeenCalled();
+
+      vi.runAllTimers();
+      expect(revokeObjectUrlSpy).toHaveBeenCalledWith('blob:fake-object-url');
+    } finally {
+      vi.useRealTimers();
+      createElementSpy.mockRestore();
+      createObjectUrlSpy.mockRestore();
+      revokeObjectUrlSpy.mockRestore();
+    }
+  });
+
+  it('does nothing when an attachment has no decodable content', () => {
+    const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL');
+
+    try {
+      fixture.componentInstance['downloadAttachment']({
+        name: 'empty.pdf',
+        mimeType: 'application/pdf',
+        data: '',
+      });
+
+      expect(createObjectUrlSpy).not.toHaveBeenCalled();
+    } finally {
+      createObjectUrlSpy.mockRestore();
+    }
   });
 
   it('emits openCanvas and closeCanvas when canvas button is clicked on A2UI payload with hasCanvas', async () => {

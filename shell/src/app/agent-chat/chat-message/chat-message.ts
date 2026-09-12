@@ -14,17 +14,26 @@
  * limitations under the License.
  */
 
-import {Component, computed, input, output, signal} from '@angular/core';
+import {DOCUMENT, NgTemplateOutlet} from '@angular/common';
+import {Component, computed, inject, input, output, signal} from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {RenderA2uiItem} from 'a2ui-bridge';
+import {objectUrlFromSafeSource, setAnchorHref} from 'safevalues/dom';
+import {
+  decodeBase64,
+  getMaterialFileIcon,
+  inferMimeType,
+  isImageAttachment,
+  sanitizeDownloadFileName,
+} from '../../chat/a2a/a2a-attachments';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {renderMarkdown} from '../../utils/markdown';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
-import {CanvasArtifact, UiMessage} from './types';
+import {CanvasArtifact, UiAttachedImage, UiMessage} from './types';
 
 /**
  * A user's explicit expand/collapse choice for the thinking accordion, tagged with the
@@ -33,6 +42,62 @@ import {CanvasArtifact, UiMessage} from './types';
 interface ManualThinkingToggle {
   readonly hadContent: boolean;
   readonly expanded: boolean;
+}
+
+/** One attachment of a message, prepared for rendering. */
+interface AttachmentView {
+  /** The attachment itself, passed back when the user downloads it. */
+  readonly file: UiAttachedImage;
+  /** Stable key for `@for` tracking. */
+  readonly key: string;
+  /** `src` of the inline preview, or '' when the attachment is not previewable. */
+  readonly previewSrc: string;
+  /** Material Symbols glyph shown on the download chip. */
+  readonly icon: string;
+}
+
+/**
+ * MIME type given to every downloaded attachment.
+ *
+ * The attachment's own type is agent controlled, and letting it decide how the
+ * browser treats the file would allow, say, an HTML payload to be opened in
+ * the page's origin rather than saved.
+ */
+const DOWNLOAD_MIME_TYPE = 'application/octet-stream';
+
+/** Prefix of MIME types that may be previewed inline. */
+const IMAGE_MIME_PREFIX = 'image/';
+
+/**
+ * Delay before a download's object URL is released.
+ *
+ * Browsers resolve the URL asynchronously after the click, so releasing it in
+ * the same task cancels the download in some of them.
+ */
+const OBJECT_URL_REVOKE_DELAY_MS = 100;
+
+/** URL prefixes accepted for a locally generated image preview. */
+const LOCAL_PREVIEW_PREFIXES: readonly string[] = ['data:image/', 'blob:'];
+
+/**
+ * Returns the `src` of an attachment's inline preview, or '' if it has none.
+ *
+ * Only images are previewed, and only under an image MIME type, so an agent
+ * cannot get an attachment rendered as something other than a picture.
+ */
+function imagePreviewSrc(file: UiAttachedImage): string {
+  if (!isImageAttachment(file.mimeType, file.name)) {
+    return '';
+  }
+  const previewUrl = file.previewUrl ?? '';
+  if (LOCAL_PREVIEW_PREFIXES.some(prefix => previewUrl.startsWith(prefix))) {
+    return previewUrl;
+  }
+  const mimeType = inferMimeType(file.name, file.mimeType);
+  if (!file.data || !mimeType.startsWith(IMAGE_MIME_PREFIX)) {
+    return '';
+  }
+  return `data:${mimeType};base64,${file.data}`;
 }
 
 /**
@@ -47,12 +112,15 @@ interface ManualThinkingToggle {
     MatExpansionModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
+    NgTemplateOutlet,
     RenderedFrame,
   ],
   templateUrl: './chat-message.ng.html',
   styleUrl: './chat-message.scss',
 })
 export class A2aChatMessage {
+  private readonly document = inject(DOCUMENT);
+
   /** UI message object containing sender role, text, thinking trace, and optional A2UI payload. */
   readonly message = input.required<UiMessage>();
   /** URL for the agent's display avatar icon. */
@@ -129,9 +197,21 @@ export class A2aChatMessage {
     return m.inlineA2uiPayload || (!m.hasCanvas ? m.a2uiPayload : undefined);
   });
 
-  protected readonly hasImages = computed<boolean>(() => {
-    return Boolean(this.message().images?.length);
-  });
+  /**
+   * Attachments of this message, prepared for rendering.
+   *
+   * Classifying attachments here rather than in the template keeps the work
+   * off the change detection path, where it would rerun for every attachment
+   * on every cycle.
+   */
+  protected readonly attachments = computed<AttachmentView[]>(() =>
+    (this.message().images ?? []).map((file, index) => ({
+      file,
+      key: `${index}:${file.name}`,
+      previewSrc: imagePreviewSrc(file),
+      icon: getMaterialFileIcon(file.mimeType, file.name),
+    })),
+  );
 
   /**
    * Whether the message has streamed any user-visible, non-thinking content yet.
@@ -240,6 +320,35 @@ export class A2aChatMessage {
   protected openCanvasArtifact(payload: RenderA2uiItem[]): void {
     if (payload?.length) {
       this.openCanvas.emit(payload);
+    }
+  }
+
+  /**
+   * Saves an attachment to the user's machine.
+   *
+   * The payload is decoded and handed to the browser as an opaque binary blob
+   * so that neither the file's contents nor its agent-supplied MIME type can
+   * cause it to be rendered in this origin instead of saved.
+   */
+  protected downloadAttachment(file: UiAttachedImage): void {
+    const bytes = decodeBase64(file.data);
+    if (!bytes) {
+      console.warn('Attachment has no decodable content to download', file.name);
+      return;
+    }
+
+    const objectUrl = objectUrlFromSafeSource(new Blob([bytes], {type: DOWNLOAD_MIME_TYPE}));
+    try {
+      const link = this.document.createElement('a');
+      setAnchorHref(link, objectUrl);
+      link.download = sanitizeDownloadFileName(file.name);
+      link.click();
+    } finally {
+      // The blob stays alive until the URL is released. `URL` is the same
+      // global that safevalues created the object URL from.
+      setTimeout(() => {
+        URL.revokeObjectURL(objectUrl.toString());
+      }, OBJECT_URL_REVOKE_DELAY_MS);
     }
   }
 }

@@ -17,13 +17,7 @@
 <div class="message-row" [class]="message().sender">
   @if (message().sender === 'user') {
     <div class="user-message-bubble">
-      @if (hasImages()) {
-        <div class="msg-images-tray">
-          @for (img of message().images; track img.name || img.previewUrl || $index) {
-            <img [src]="img.previewUrl || img.data" [alt]="img.name" class="msg-image-thumb" />
-          }
-        </div>
-      }
+      <ng-container [ngTemplateOutlet]="attachmentTray"></ng-container>
       {{ message().text }}
     </div>
   } @else {
@@ -40,13 +34,7 @@
       </div>
 
       <div class="agent-message-body">
-        @if (hasImages()) {
-          <div class="msg-images-tray">
-            @for (img of message().images; track img.name || img.previewUrl || $index) {
-              <img [src]="img.previewUrl || img.data" [alt]="img.name" class="msg-image-thumb" />
-            }
-          </div>
-        }
+        <ng-container [ngTemplateOutlet]="attachmentTray"></ng-container>
 
         @if (message().thinking) {
           <div class="thinking-container">
@@ -167,3 +155,29 @@
     </div>
   }
 </div>
+
+<ng-template #attachmentTray>
+  @if (attachments().length > 0) {
+    <div class="msg-images-tray">
+      @for (attachment of attachments(); track attachment.key) {
+        @if (attachment.previewSrc) {
+          <img [src]="attachment.previewSrc" [alt]="attachment.file.name" class="msg-image-thumb" />
+        } @else {
+          <button
+            type="button"
+            class="msg-file-chip"
+            (click)="downloadAttachment(attachment.file)"
+            [attr.aria-label]="'Download ' + attachment.file.name"
+            [matTooltip]="'Download ' + attachment.file.name"
+          >
+            <mat-icon class="msg-file-icon">{{ attachment.icon }}</mat-icon>
+            <span class="msg-file-name" [title]="attachment.file.name">
+              {{ attachment.file.name }}
+            </span>
+            <mat-icon class="msg-file-download-icon">download</mat-icon>
+          </button>
+        }
+      }
+    </div>
+  }
+</ng-template>
