@@ -323,21 +323,22 @@
           }
         }
 
+        // The A2UI payload draws its own cards. Framing the surface here would
+        // put a second border and shadow around every one of them, so the host
+        // is only a sizing slot.
         .inline-surface-card {
           width: 100%;
           min-width: 320px;
           max-width: 800px;
-          background: #ffffff;
-          border: 1px solid #dadce0;
-          border-radius: 12px;
-          overflow: hidden;
           margin-top: 8px;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 
           a2ui-composer-rendered-frame {
             display: block;
             width: 100%;
-            min-height: 280px;
+
+            ::ng-deep .rendered-frame-container {
+              background-color: transparent;
+            }
           }
         }
 

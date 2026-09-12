@@ -65,6 +65,19 @@ export class RenderedFrame {
     return h && h > 0 ? h : null;
   });
 
+  /**
+   * `frameHeight` as a CSS length, or undefined when the guest has not
+   * reported one.
+   *
+   * Applied as both `height` and `min-height` so that a reported height wins
+   * over the stylesheet's minimum, which would otherwise leave a tall empty
+   * area below a short surface.
+   */
+  protected readonly frameHeightPx = computed<string | undefined>(() => {
+    const height = this.frameHeight();
+    return height === null ? undefined : `${height}px`;
+  });
+
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
