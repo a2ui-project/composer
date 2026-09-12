@@ -32,6 +32,7 @@ export class A2aChatMessageHarness extends ComponentHarness {
     MatButtonHarness.with({selector: '.close-canvas-btn'}),
   );
   private getImageElements = this.locatorForAll('.msg-image-thumb');
+  private getFileChips = this.locatorForAll('.msg-file-chip');
   private getToolChips = this.locatorForAll('.tool-call-chip');
   private getPendingIndicator = this.locatorForOptional('.pending-response-indicator');
   private getStreamingCursor = this.locatorForOptional('.streaming-cursor');
@@ -101,6 +102,16 @@ export class A2aChatMessageHarness extends ComponentHarness {
   async getImageCount(): Promise<number> {
     const images = await this.getImageElements();
     return images.length;
+  }
+
+  async getFileChipCount(): Promise<number> {
+    const chips = await this.getFileChips();
+    return chips.length;
+  }
+
+  async clickFileChip(index: number): Promise<void> {
+    const chips = await this.getFileChips();
+    return chips[index].click();
   }
 
   async getToolCallCount(): Promise<number> {
