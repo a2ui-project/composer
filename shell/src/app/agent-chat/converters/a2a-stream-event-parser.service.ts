@@ -29,6 +29,7 @@ import {
   TaskStatusUpdateEvent,
 } from '../../chat/a2a/a2a-types';
 import {UiToolCall} from '../chat-message/types';
+import {asRecord} from '../../utils/json';
 
 import {isA2uiItem, normalizeA2uiItems} from './surface-partitioner';
 
@@ -104,6 +105,39 @@ export function extractToolCall(item: unknown): UiToolCall | null {
     };
   }
   return null;
+}
+
+/**
+ * Fields that only an A2UI action carries.
+ *
+ * An action is identified by its `name` plus at least one of these, which
+ * distinguishes it from the many other payloads that happen to have a `name`.
+ */
+const A2UI_ACTION_MARKER_FIELDS: readonly string[] = ['context', 'sourceComponentId', 'surfaceId'];
+
+/** Key under which an A2UI action may be nested in a data part. */
+const A2UI_ACTION_WRAPPER_FIELD = 'action';
+
+/**
+ * Whether a data part is an A2UI client action echoed back by the agent.
+ *
+ * Actions describe what the user did on a surface. They are part of the
+ * protocol rather than something the agent said, so they must not be rendered
+ * into the transcript.
+ */
+function isA2uiActionEcho(data: unknown): boolean {
+  const record = asRecord(data);
+  if (!record) {
+    return false;
+  }
+  const nestedAction = asRecord(record[A2UI_ACTION_WRAPPER_FIELD]);
+  if (nestedAction) {
+    return isA2uiActionEcho(nestedAction);
+  }
+  return (
+    typeof record['name'] === 'string' &&
+    A2UI_ACTION_MARKER_FIELDS.some(field => record[field] !== undefined)
+  );
 }
 
 /**
@@ -303,8 +337,9 @@ export class A2aStreamEventParser {
     }
 
     const msgRecord = primaryMessage as Record<string, unknown>;
-    // Outside of non-completed status, filter out user messages.
-    if (this.isUserMessage(msgRecord, unwrapped) && !isNonCompleted) {
+    // Agents echo the prompt back while a task is in flight. The chat view
+    // already shows the user's turn, so never repeat it in the agent's.
+    if (this.isUserMessage(msgRecord, unwrapped)) {
       return;
     }
 
@@ -522,6 +557,13 @@ export class A2aStreamEventParser {
       result.a2uiItems.push(...a2uiNormalized);
     }
 
+    // An action echo reports what the user did on a surface. It is protocol
+    // traffic rather than agent output, so it is neither a tool call nor
+    // something to print, however closely it resembles one.
+    if (isA2uiActionEcho(unwrappedData)) {
+      return;
+    }
+
     // Extract tool calls
     const toolCalls = this.extractToolCallsFromItems(items);
     if (toolCalls.length > 0) {
@@ -562,11 +604,17 @@ export class A2aStreamEventParser {
 
     const envelope = data as {mimeType?: string; data?: unknown; name?: string};
 
-    // Case 1: Stringified JSON array (e.g. serialized A2UI component list)
-    if (typeof envelope.data === 'string' && envelope.data.trim().startsWith('[')) {
-      try {
-        return {unwrappedData: JSON.parse(envelope.data), isMedia: false};
-      } catch {}
+    // Case 1: Stringified JSON (e.g. a serialized A2UI component list or action)
+    if (typeof envelope.data === 'string') {
+      const trimmed = envelope.data.trim();
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        try {
+          return {unwrappedData: JSON.parse(trimmed), isMedia: false};
+        } catch {
+          // Not JSON after all; fall through to the remaining cases. The
+          // stream must keep flowing whatever a payload turns out to be.
+        }
+      }
     }
 
     // Case 2: Base64 media data payload (image, audio, video, PDF)

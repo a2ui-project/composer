@@ -480,7 +480,7 @@ describe('A2aStreamEventParser', () => {
     expect(parsed.isCompleted).toBe(true);
   });
 
-  it('routes echoed user prompt in TASK_STATE_SUBMITTED to thoughtChunk so agent does not duplicate user text on main canvas', () => {
+  it('drops the echoed user prompt in TASK_STATE_SUBMITTED from the agent transcript', () => {
     const event: TaskStatusUpdateEvent = {
       taskId: 'task-user-echo',
       contextId: 'ctx-user-echo',
@@ -499,7 +499,114 @@ describe('A2aStreamEventParser', () => {
 
     const parsed = parser.parse(event);
     expect(parsed.textChunk).toBeUndefined();
-    expect(parsed.thoughtChunk).toBe('hi');
+    expect(parsed.thoughtChunk).toBeUndefined();
+  });
+
+  it('does not render A2UI action echoes into the transcript', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-action-data',
+      message: {
+        role: 'ROLE_AGENT',
+        parts: [
+          {
+            data: {
+              version: 'v0.9',
+              action: {
+                name: 'select_legal_team',
+                surfaceId: 'coco_contract_form',
+                sourceComponentId: 'submit_button',
+                context: {team_id: '25'},
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.textChunk).toBeUndefined();
+    expect(parsed.a2uiItems.length).toBe(0);
+    expect(parsed.toolCalls ?? []).toEqual([]);
+  });
+
+  it('does not render A2UI action echoes sent as stringified JSON', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-action-string',
+      message: {
+        role: 'ROLE_AGENT',
+        parts: [
+          {
+            data: {
+              data: JSON.stringify({
+                name: 'select_legal_team',
+                surfaceId: 'coco_contract_form',
+                context: {team_id: '25'},
+              }),
+            },
+          },
+        ],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.textChunk).toBeUndefined();
+    // The action's `name` must not be mistaken for a tool invocation.
+    expect(parsed.toolCalls ?? []).toEqual([]);
+  });
+
+  it('recognises an action echo from any single marker field', () => {
+    for (const marker of ['surfaceId', 'sourceComponentId', 'context']) {
+      const event: TaskStatusUpdateEvent = {
+        taskId: `task-action-${marker}`,
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{data: {name: 'select_legal_team', [marker]: 'coco_contract_form'}}],
+        },
+      };
+
+      const parsed = parser.parse(event);
+      expect(parsed.textChunk, marker).toBeUndefined();
+      expect(parsed.toolCalls ?? [], marker).toEqual([]);
+    }
+  });
+
+  it('still reports a named payload that carries no action markers as a tool call', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-tool-call',
+      message: {
+        role: 'ROLE_AGENT',
+        parts: [{data: {name: 'lookup_weather', args: {city: 'Zurich'}}}],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.toolCalls?.map(call => call.name)).toEqual(['lookup_weather']);
+  });
+
+  it('still renders generic structured data as a JSON code block', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-generic-data',
+      message: {
+        role: 'ROLE_AGENT',
+        parts: [{data: {temperature: 21, unit: 'C'}}],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.textChunk).toContain('"temperature": 21');
+  });
+
+  it('still renders data whose nested action carries no protocol markers', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-nested-action-data',
+      message: {
+        role: 'ROLE_AGENT',
+        parts: [{data: {action: {status: 'pending'}}}],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.textChunk).toContain('"status": "pending"');
   });
 
   it('filters out user messages with role user outside of task submission', () => {
