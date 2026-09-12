@@ -326,6 +326,18 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(newFixture.componentInstance.frameHeight()).toBe(520);
   });
 
+  it('exposes a reported height as a CSS length and none otherwise', () => {
+    const component = fixture.componentInstance;
+    expect(component['frameHeightPx']()).toBeUndefined();
+
+    component.dynamicHeight.set(320);
+    expect(component['frameHeightPx']()).toBe('320px');
+
+    // A guest reporting no usable height must not pin the container's height.
+    component.dynamicHeight.set(0);
+    expect(component['frameHeightPx']()).toBeUndefined();
+  });
+
   it('re-dispatches sendRenderA2UI when RENDERER_READY or A2UI_CATALOG arrives from bridge', () => {
     const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
     const messageStreamSignal = signal<unknown>(null);
