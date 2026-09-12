@@ -114,6 +114,13 @@
       }
     }
 
+    .attachment-error {
+      margin-bottom: 10px;
+      font-size: var(--mat-sys-label-small-size, 0.78rem);
+      line-height: var(--mat-sys-label-small-line-height, 1.2);
+      color: var(--mat-sys-error, #ea4335);
+    }
+
     .prompt-textarea {
       border: none;
       outline: none;
