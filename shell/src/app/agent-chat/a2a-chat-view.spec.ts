@@ -662,7 +662,7 @@ describe('A2aChatView', () => {
     // User turn
     const userMsg = messages[0];
     expect(userMsg.sender).toBe('user');
-    expect(userMsg.text).toBe('Action: select_demo');
+    expect(userMsg.text).toBe('User action triggered.');
 
     // Transport call verification
     expect(mockA2aTransport.sendMessageStream).toHaveBeenCalledWith(
@@ -670,7 +670,7 @@ describe('A2aChatView', () => {
       expect.objectContaining({
         role: 'user',
         parts: expect.arrayContaining([
-          {text: 'Action: select_demo'},
+          {text: 'User action triggered.'},
           expect.objectContaining({
             // The v0.9 schema permits exactly `version` and `action`.
             data: {
@@ -691,6 +691,79 @@ describe('A2aChatView', () => {
     const agentMsg = messages[1];
     expect(agentMsg.sender).toBe('agent');
     expect(agentMsg.text).toBe('Hello from mock streaming!');
+  });
+
+  it('shows context.prompt as the user turn when the action supplies one', async () => {
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: 'v0.9',
+        action: {
+          name: 'select_demo',
+          context: {prompt: '  Select Material Demo  ', demoId: 'material_gallery'},
+        },
+      },
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    await fixture.whenStable();
+
+    const messages = fixture.componentInstance['messages']();
+    const userMsg = messages[messages.length - 2];
+    expect(userMsg.sender).toBe('user');
+    expect(userMsg.text).toBe('Select Material Demo');
+
+    expect(mockA2aTransport.sendMessageStream).toHaveBeenCalledWith(
+      'http://localhost:8000',
+      expect.objectContaining({
+        role: 'user',
+        parts: expect.arrayContaining([{text: 'Select Material Demo'}]),
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('reads context.prompt from an action nested under event', async () => {
+    mockMessageStream$.next({
+      type: PreviewBridgeMessageType.SEND_TO_SERVER,
+      payload: {
+        version: 'v0.9',
+        action: {event: {name: 'submit', context: {prompt: 'Review my contract'}}},
+      },
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+
+    await fixture.whenStable();
+
+    const messages = fixture.componentInstance['messages']();
+    expect(messages[messages.length - 2].text).toBe('Review my contract');
+  });
+
+  it('falls back to generic action text for blank or non-string prompts', async () => {
+    for (const context of [{prompt: '   '}, {prompt: 42}, {}]) {
+      mockMessageStream$.next({
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {version: 'v0.9', action: {name: 'submit', context}},
+        origin: 'http://localhost:3000',
+        timestamp: Date.now(),
+      });
+
+      await fixture.whenStable();
+
+      const messages = fixture.componentInstance['messages']();
+      expect(messages[messages.length - 2].text).toBe('User action triggered.');
+    }
+  });
+
+  it('falls back to generic action text when the action is not an object', async () => {
+    fixture.componentInstance['handleSendToServerAction']('not an action object');
+
+    await fixture.whenStable();
+
+    const messages = fixture.componentInstance['messages']();
+    expect(messages[messages.length - 2].text).toBe('User action triggered.');
   });
 
   it('handles falsy actions like boolean false or number 0 in handleSendToServerAction without dropping them', async () => {

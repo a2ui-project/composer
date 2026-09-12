@@ -30,6 +30,7 @@ import {
   AppConfigProvider,
 } from '../settings/app-config-provider/app-config-provider';
 import {HostCommunication} from '../shell/host-communication/host-communication';
+import {asRecord} from '../utils/json';
 import {isValidEndpointUrl, normalizeHttpUrl} from '../utils/url';
 import {generateUuid as uuid} from '../utils/uuid';
 
@@ -62,6 +63,40 @@ import {MessageInspectorEvent} from './message-inspector/message-inspector-event
  * rewrite of the current step from the start of a new one.
  */
 const THOUGHT_STEP_SEPARATOR = '\n\n';
+
+/** Text shown for a surface action that does not describe itself. */
+const DEFAULT_USER_ACTION_TEXT = 'User action triggered.';
+
+/**
+ * Key under which a surface may nest the action proper.
+ *
+ * The caller has already unwrapped the v0.9 `{version, action}` envelope, so
+ * only the surface's own `event` wrapper remains to be peeled.
+ */
+const ACTION_WRAPPER_FIELD = 'event';
+
+/**
+ * Returns the chat text for a user action submitted from a surface.
+ *
+ * Surfaces may supply `context.prompt`, which reads as something the user
+ * would have typed. Anything else, including the action's internal `name`, is
+ * an implementation detail, so it falls back to a generic phrase rather than
+ * exposing the wire format to the user.
+ */
+function resolveUserActionText(action: unknown): string {
+  const outer = asRecord(action);
+  if (!outer) {
+    return DEFAULT_USER_ACTION_TEXT;
+  }
+
+  const inner = asRecord(outer[ACTION_WRAPPER_FIELD]) ?? outer;
+  const context = asRecord(inner['context']) ?? asRecord(outer['context']);
+  const prompt = context?.['prompt'];
+  if (typeof prompt !== 'string') {
+    return DEFAULT_USER_ACTION_TEXT;
+  }
+  return prompt.trim() || DEFAULT_USER_ACTION_TEXT;
+}
 
 /**
  * Top-level view container managing end-to-end Agent-to-Agent (A2A) testing,
@@ -339,16 +374,7 @@ export class A2aChatView implements OnInit {
 
     const contextId = this.activeContextId();
 
-    let actionText = 'User action triggered.';
-    if (typeof action === 'object' && action !== null) {
-      const obj = action as Record<string, unknown>;
-      const eventObj = (obj['event'] || obj) as Record<string, unknown>;
-      if (typeof eventObj['name'] === 'string' && eventObj['name']) {
-        actionText = `Action: ${eventObj['name']}`;
-      } else if (typeof obj['name'] === 'string' && obj['name']) {
-        actionText = `Action: ${obj['name']}`;
-      }
-    }
+    const actionText = resolveUserActionText(action);
 
     const userUiMessage: UiMessage = {
       id: uuid(),
