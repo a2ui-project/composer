@@ -190,7 +190,7 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     await expect(errorCard).toContainText('JSON Syntax Error');
 
     // The "View in Errors Tab" action inside the error card navigates automatically
-    await errorCard.getByRole('button', {name: 'View in Errors Tab'}).click();
+    await errorCard.getByRole('button', {name: /Errors Tab/i}).click();
     await expect(page.getByRole('tab', {name: 'Errors', selected: true})).toBeVisible();
   });
 
