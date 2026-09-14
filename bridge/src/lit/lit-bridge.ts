@@ -31,6 +31,7 @@ import {
   ThemePreference,
   SurfaceStateSubscription,
   CatalogDetails,
+  ERROR_OVERLAY_DEBOUNCE_MS,
   type ComponentUsages,
 } from '../index.js';
 
@@ -136,9 +137,6 @@ export class A2uiSandboxRoot extends LitElement {
   private surface?: SurfaceModel;
 
   @state()
-  private error: Error | null = null;
-
-  @state()
   private debouncedError: Error | null = null;
 
   private debounceTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -188,17 +186,16 @@ export class A2uiSandboxRoot extends LitElement {
         this.requestUpdate();
       },
       onError: (err: Error | null) => {
-        this.error = err;
         if (!err) {
           this.debouncedError = null;
           if (this.debounceTimeout) clearTimeout(this.debounceTimeout);
         } else {
           if (this.debounceTimeout) clearTimeout(this.debounceTimeout);
-          // Buffer overlay triggers by 350ms to prevent visual flicker cascades
+          // Buffer overlay triggers by ERROR_OVERLAY_DEBOUNCE_MS to prevent visual flicker cascades
           // during rapid keystrokes or streaming layout replacements.
           this.debounceTimeout = setTimeout(() => {
             this.debouncedError = err;
-          }, 350);
+          }, ERROR_OVERLAY_DEBOUNCE_MS);
         }
       },
     });
@@ -207,6 +204,10 @@ export class A2uiSandboxRoot extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this.removeEventListener('context-request', this.contextRequestListener);
+    if (this.debounceTimeout) {
+      clearTimeout(this.debounceTimeout);
+      this.debounceTimeout = null;
+    }
     if (this.rendererConnection) {
       this.rendererConnection.unsubscribe();
       this.rendererConnection = null;

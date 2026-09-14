@@ -35,6 +35,7 @@ vi.mock('a2ui-bridge', () => ({
     sendMessage: vi.fn(),
     sendAction: vi.fn(),
   },
+  ERROR_OVERLAY_DEBOUNCE_MS: 350,
 }));
 
 describe('A2uiSandbox', () => {

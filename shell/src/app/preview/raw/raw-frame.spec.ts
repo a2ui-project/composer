@@ -15,7 +15,7 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {RawFrame} from './raw-frame';
+import {RawFrame, IFRAME_UNRESPONSIVE_ERROR} from './raw-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
@@ -303,7 +303,7 @@ describe('RawFrame JSON Source Editor View', () => {
   let chatStateMock: MockChatState;
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
   let messageStreamSubject: Subject<unknown>;
-  let errorLoggerMock: {error: ReturnType<typeof vi.fn>};
+  let errorLoggerMock: {error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
@@ -321,7 +321,7 @@ describe('RawFrame JSON Source Editor View', () => {
       }),
       dismiss: vi.fn(),
     };
-    errorLoggerMock = {error: vi.fn()};
+    errorLoggerMock = {error: vi.fn(), warn: vi.fn()};
     messageStreamSubject = new Subject<unknown>();
 
     undoStack.length = 0;
@@ -347,6 +347,7 @@ describe('RawFrame JSON Source Editor View', () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+    Object.defineProperty(document, 'hidden', {value: false, configurable: true});
   });
 
   async function setup(isExtension: boolean) {
@@ -870,7 +871,7 @@ describe('RawFrame JSON Source Editor View', () => {
   });
 
   describe('watchdog timer', () => {
-    it('logs error when renderer is unresponsive after watchdog timeout', async () => {
+    it('logs warning when renderer is unresponsive after watchdog timeout', async () => {
       vi.useFakeTimers();
       const {component} = await setup(false);
       component.TEST_ONLY.startWatchdog();
@@ -893,7 +894,7 @@ describe('RawFrame JSON Source Editor View', () => {
       vi.advanceTimersByTime(15000);
       expect(errorLoggerMock.error).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: 'Preview frame failed to process payload within 15 seconds.',
+          message: `${IFRAME_UNRESPONSIVE_ERROR}: Preview frame failed to process payload within 15 seconds.`,
           sourceTag: '[Previewer]',
         }),
       );
@@ -1028,9 +1029,6 @@ describe('RawFrame JSON Source Editor View', () => {
       component.TEST_ONLY.startWatchdog();
       vi.advanceTimersByTime(15000);
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
-
-      // Reset
-      Object.defineProperty(document, 'hidden', {value: false, configurable: true});
     });
   });
 
@@ -1110,7 +1108,6 @@ describe('RawFrame JSON Source Editor View', () => {
     fixture.componentInstance['onMarkersChange']([]);
     vi.advanceTimersByTime(3100);
     expect(snackBarMock.open).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
   });
 
   it('navigates to syntax error position when snackbar action is triggered', async () => {

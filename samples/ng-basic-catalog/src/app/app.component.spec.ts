@@ -22,6 +22,8 @@ import {BasicCatalog} from '@a2ui/angular/v0_9';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideZonelessChangeDetection, WritableSignal} from '@angular/core';
+import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
+import {AppComponentHarness} from './test/app.component.harness';
 
 vi.mock('a2ui-bridge', () => ({
   a2uiBridge: {
@@ -29,20 +31,18 @@ vi.mock('a2ui-bridge', () => ({
     sendMessage: vi.fn(),
     sendAction: vi.fn(),
   },
+  ERROR_OVERLAY_DEBOUNCE_MS: 350,
 }));
 
 describe('AppComponent', () => {
   let fixture: ComponentFixture<AppComponent>;
   let component: AppComponent;
   let sandbox: A2uiSandboxConnection;
-  let hostElement: HTMLElement;
+  let harness: AppComponentHarness;
 
   beforeEach(async () => {
     vi.useFakeTimers();
     vi.restoreAllMocks();
-
-    hostElement = document.createElement('app-root');
-    document.body.appendChild(hostElement);
 
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
@@ -57,51 +57,47 @@ describe('AppComponent', () => {
     fixture = TestBed.createComponent(AppComponent);
     component = fixture.componentInstance;
     sandbox = fixture.debugElement.injector.get(A2uiSandboxConnection);
+    harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, AppComponentHarness);
     fixture.detectChanges();
   });
 
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
-    hostElement.remove();
-    document.body.innerHTML = '';
+    fixture.destroy();
   });
 
   it('creates the component successfully', () => {
     expect(component).toBeTruthy();
   });
 
-  it('renders waiting placeholder initially when surfaceId is empty and no error exists', () => {
-    const waitingText = document.querySelector('.sandbox-shell p');
-    expect(waitingText).not.toBeNull();
-    expect(waitingText?.textContent).toContain('Waiting for RENDER_A2UI payloads');
-    expect(document.querySelector('.error-overlay')).toBeNull();
-    expect(document.querySelector('a2ui-v09-surface')).toBeNull();
+  it('renders waiting placeholder initially when surfaceId is empty and no error exists', async () => {
+    expect(await harness.hasWaitingPlaceholder()).toBe(true);
+    expect(await harness.hasErrorOverlay()).toBe(false);
+    expect(await harness.hasSurface()).toBe(false);
   });
 
   it('renders surface and hides waiting placeholder when surfaceId is present', async () => {
     (sandbox.surfaceId as WritableSignal<string>).set('surface-123');
     fixture.detectChanges();
 
-    expect(document.querySelector('a2ui-v09-surface')).not.toBeNull();
-    expect(document.querySelector('.sandbox-shell p')).toBeNull();
-    expect(document.querySelector('.error-overlay')).toBeNull();
+    expect(await harness.hasSurface()).toBe(true);
+    expect(await harness.hasWaitingPlaceholder()).toBe(false);
+    expect(await harness.hasErrorOverlay()).toBe(false);
   });
 
   it('renders error overlay and hides waiting placeholder when error is debounced', async () => {
     (sandbox.error as WritableSignal<Error | null>).set(new Error('Syntax validation failed'));
     fixture.detectChanges();
 
-    // Before debounce interval passes, debouncedError is still null
-    expect(document.querySelector('.error-overlay')).toBeNull();
+    expect(await harness.hasErrorOverlay()).toBe(false);
 
     vi.advanceTimersByTime(350);
     fixture.detectChanges();
 
-    const overlay = document.querySelector('.error-overlay');
-    expect(overlay).not.toBeNull();
-    expect(overlay?.textContent).toContain('Syntax validation failed');
-    expect(document.querySelector('.sandbox-shell p')).toBeNull();
+    expect(await harness.hasErrorOverlay()).toBe(true);
+    expect(await harness.getErrorText()).toContain('Syntax validation failed');
+    expect(await harness.hasWaitingPlaceholder()).toBe(false);
   });
 
   it('renders surface and error overlay simultaneously when surfaceId is present and error occurs', async () => {
@@ -112,11 +108,10 @@ describe('AppComponent', () => {
     vi.advanceTimersByTime(350);
     fixture.detectChanges();
 
-    expect(document.querySelector('a2ui-v09-surface')).not.toBeNull();
-    const overlay = document.querySelector('.error-overlay');
-    expect(overlay).not.toBeNull();
-    expect(overlay?.textContent).toContain('Runtime component failure');
-    expect(document.querySelector('.sandbox-shell p')).toBeNull();
+    expect(await harness.hasSurface()).toBe(true);
+    expect(await harness.hasErrorOverlay()).toBe(true);
+    expect(await harness.getErrorText()).toContain('Runtime component failure');
+    expect(await harness.hasWaitingPlaceholder()).toBe(false);
   });
 
   it('restores waiting placeholder when error is cleared and surfaceId is absent', async () => {
@@ -125,12 +120,12 @@ describe('AppComponent', () => {
     vi.advanceTimersByTime(350);
     fixture.detectChanges();
 
-    expect(document.querySelector('.error-overlay')).not.toBeNull();
+    expect(await harness.hasErrorOverlay()).toBe(true);
 
     (sandbox.error as WritableSignal<Error | null>).set(null);
     fixture.detectChanges();
 
-    expect(document.querySelector('.error-overlay')).toBeNull();
-    expect(document.querySelector('.sandbox-shell p')).not.toBeNull();
+    expect(await harness.hasErrorOverlay()).toBe(false);
+    expect(await harness.hasWaitingPlaceholder()).toBe(true);
   });
 });

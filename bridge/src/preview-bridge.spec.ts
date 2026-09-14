@@ -2429,6 +2429,28 @@ describe('PreviewBridge Core API Runtime', () => {
       );
       expect(onErrorMock).toHaveBeenCalledWith(null);
     });
+
+    it('clears active errors via onError(null) on successful render when isStreaming is true', async () => {
+      const payload = {
+        isStreaming: true,
+        payload: [{version: 'v0.9', updateComponents: {surfaceId: 's1', components: []}}],
+      };
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {type: PreviewBridgeMessageType.RENDER_A2UI, ...payload},
+          source: window.parent,
+          origin: window.location.origin,
+        }),
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(onErrorMock).toHaveBeenCalledWith(null);
+      expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({type: PreviewBridgeMessageType.RENDER_SUCCESS}),
+        expect.anything(),
+      );
+    });
   });
 });
 
