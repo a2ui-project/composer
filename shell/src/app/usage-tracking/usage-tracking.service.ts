@@ -88,12 +88,11 @@ export const USAGE_TRACKING_CONFIG = new InjectionToken<UsageTrackingConfig>(
  * Encapsulates necessary details for emitting structured error telemetry events.
  */
 export interface ComposerErrorTelemetryParams {
-  source_tag: string;
-  message: string;
+  sourceTag: string;
+  errorCategory: string;
   line?: number;
   column?: number;
-  invalid_property?: string;
-  error_category?: string;
+  invalidProperty?: string;
 }
 
 export abstract class UsageTrackingService {

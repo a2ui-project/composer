@@ -87,11 +87,11 @@ describe('Errors Component', () => {
       });
 
       expect(usageService.trackComposerError).toHaveBeenCalledWith({
-        source_tag: '[Monaco]',
+        sourceTag: '[Monaco]',
+        errorCategory: 'UNKNOWN_ERROR',
         line: 5,
         column: 10,
-        invalid_property: 'missingProp',
-        message: "Schema error: property 'missingProp'",
+        invalidProperty: 'missingProp',
       });
     });
 
@@ -145,7 +145,7 @@ describe('Errors Component', () => {
       });
 
       expect(usageService.trackComposerError).toHaveBeenCalledWith(
-        expect.objectContaining({invalid_property: 'components'}),
+        expect.objectContaining({invalidProperty: 'components'}),
       );
     });
 
@@ -161,7 +161,7 @@ describe('Errors Component', () => {
       });
 
       expect(usageService.trackComposerError).toHaveBeenCalledWith(
-        expect.objectContaining({invalid_property: undefined}),
+        expect.objectContaining({invalidProperty: undefined}),
       );
     });
   });
