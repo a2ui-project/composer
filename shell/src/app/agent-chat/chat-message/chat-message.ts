@@ -14,17 +14,27 @@
  * limitations under the License.
  */
 
-import {Component, computed, input, output, signal} from '@angular/core';
+import {DOCUMENT, NgTemplateOutlet} from '@angular/common';
+import {Component, computed, inject, input, output, signal} from '@angular/core';
 import {MatButtonModule} from '@angular/material/button';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {RenderA2uiItem} from 'a2ui-bridge';
+import {objectUrlFromSafeSource, setAnchorHref} from 'safevalues/dom';
+import {
+  decodeBase64,
+  getMaterialFileIcon,
+  inferMimeType,
+  isImageAttachment,
+  sanitizeDownloadFileName,
+} from '../../chat/a2a/a2a-attachments';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {renderMarkdown} from '../../utils/markdown';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
-import {CanvasArtifact, UiMessage} from './types';
+import {CanvasArtifact, UiAttachedImage, UiMessage} from './types';
 
 /**
  * A user's explicit expand/collapse choice for the thinking accordion, tagged with the
@@ -33,6 +43,66 @@ import {CanvasArtifact, UiMessage} from './types';
 interface ManualThinkingToggle {
   readonly hadContent: boolean;
   readonly expanded: boolean;
+}
+
+/** One attachment of a message, prepared for rendering. */
+interface AttachmentView {
+  /** The attachment itself, passed back when the user downloads it. */
+  readonly file: UiAttachedImage;
+  /** `src` of the inline preview, or '' when the attachment is not previewable. */
+  readonly previewSrc: string;
+  /** Material Symbols glyph shown on the download chip. */
+  readonly icon: string;
+}
+
+/**
+ * MIME type given to every downloaded attachment.
+ *
+ * The attachment's own type is agent controlled, and letting it decide how the
+ * browser treats the file would allow, say, an HTML payload to be opened in
+ * the page's origin rather than saved.
+ */
+const DOWNLOAD_MIME_TYPE = 'application/octet-stream';
+
+/** Prefix of MIME types that may be previewed inline. */
+const IMAGE_MIME_PREFIX = 'image/';
+
+/**
+ * Delay before a download's object URL is released.
+ *
+ * Clicking the link only queues the download; the browser reads the object URL
+ * in a later task. Revoking it in the same task as the click therefore races
+ * that read, and losing the race means no file is saved at all. Deferring the
+ * release yields to the click first, so the length of the delay does not
+ * matter, only that it is not zero.
+ */
+const OBJECT_URL_REVOKE_DELAY_MS = 100;
+
+/** How long a failed-download notice stays on screen. */
+const SNACK_BAR_DURATION_MS = 5000;
+
+/** URL prefixes accepted for a locally generated image preview. */
+const LOCAL_PREVIEW_PREFIXES: readonly string[] = ['data:image/', 'blob:'];
+
+/**
+ * Returns the `src` of an attachment's inline preview, or '' if it has none.
+ *
+ * Only images are previewed, and only under an image MIME type, so an agent
+ * cannot get an attachment rendered as something other than a picture.
+ */
+function imagePreviewSrc(file: UiAttachedImage): string {
+  if (!isImageAttachment(file.mimeType, file.name)) {
+    return '';
+  }
+  const previewUrl = file.previewUrl ?? '';
+  if (LOCAL_PREVIEW_PREFIXES.some(prefix => previewUrl.startsWith(prefix))) {
+    return previewUrl;
+  }
+  const mimeType = inferMimeType(file.name, file.mimeType);
+  if (!file.data || !mimeType.startsWith(IMAGE_MIME_PREFIX)) {
+    return '';
+  }
+  return `data:${mimeType};base64,${file.data}`;
 }
 
 /**
@@ -47,12 +117,16 @@ interface ManualThinkingToggle {
     MatExpansionModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
+    NgTemplateOutlet,
     RenderedFrame,
   ],
   templateUrl: './chat-message.ng.html',
   styleUrl: './chat-message.scss',
 })
 export class A2aChatMessage {
+  private readonly document = inject(DOCUMENT);
+  private readonly snackBar = inject(MatSnackBar);
+
   /** UI message object containing sender role, text, thinking trace, and optional A2UI payload. */
   readonly message = input.required<UiMessage>();
   /** URL for the agent's display avatar icon. */
@@ -129,9 +203,20 @@ export class A2aChatMessage {
     return m.inlineA2uiPayload || (!m.hasCanvas ? m.a2uiPayload : undefined);
   });
 
-  protected readonly hasImages = computed<boolean>(() => {
-    return Boolean(this.message().images?.length);
-  });
+  /**
+   * Attachments of this message, prepared for rendering.
+   *
+   * Classifying attachments here rather than in the template keeps the work
+   * off the change detection path, where it would rerun for every attachment
+   * on every cycle.
+   */
+  protected readonly attachments = computed<AttachmentView[]>(() =>
+    (this.message().images ?? []).map(file => ({
+      file,
+      previewSrc: imagePreviewSrc(file),
+      icon: getMaterialFileIcon(file.mimeType, file.name),
+    })),
+  );
 
   /**
    * Whether the message has streamed any user-visible, non-thinking content yet.
@@ -240,6 +325,49 @@ export class A2aChatMessage {
   protected openCanvasArtifact(payload: RenderA2uiItem[]): void {
     if (payload?.length) {
       this.openCanvas.emit(payload);
+    }
+  }
+
+  /**
+   * Saves an attachment to the user's machine.
+   *
+   * The payload is decoded and handed to the browser as an opaque binary blob
+   * so that neither the file's contents nor its agent-supplied MIME type can
+   * cause it to be rendered in this origin instead of saved.
+   */
+  protected downloadAttachment(file: UiAttachedImage): void {
+    const bytes = decodeBase64(file.data);
+    if (!bytes) {
+      // The attachment came from the agent, so a payload that is missing or
+      // not base64 is a plausible outcome the user has to be told about;
+      // otherwise the download button would simply appear to do nothing.
+      this.snackBar.open(
+        `"${sanitizeDownloadFileName(file.name)}" could not be downloaded: ` +
+          `the agent sent no readable content for it.`,
+        'Close',
+        {duration: SNACK_BAR_DURATION_MS},
+      );
+      return;
+    }
+
+    const objectUrl = objectUrlFromSafeSource(new Blob([bytes], {type: DOWNLOAD_MIME_TYPE}));
+    try {
+      const link = this.document.createElement('a');
+      setAnchorHref(link, objectUrl);
+      link.download = sanitizeDownloadFileName(file.name);
+      link.click();
+    } finally {
+      // An object URL pins its blob in memory until it is revoked or the
+      // document is unloaded, so a long chat of downloads would otherwise
+      // retain every file the user saved.
+      //
+      // `objectUrlFromSafeSource` returns the URL wrapped in a safevalues
+      // type, and safevalues offers no revoke helper; it produced the URL
+      // with this same global `URL`, so unwrapping it here releases exactly
+      // the URL that was created.
+      setTimeout(() => {
+        URL.revokeObjectURL(objectUrl.toString());
+      }, OBJECT_URL_REVOKE_DELAY_MS);
     }
   }
 }
