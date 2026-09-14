@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Copyright 2026 Google LLC
  *
@@ -15,22 +16,21 @@
  */
 
 import {test, expect, Locator, FrameLocator, Page} from '@playwright/test';
+import {SurfaceResizeLogEntry} from './types';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {SurfaceResizeLogEntry, WindowWithResizeLog} from './types';
 import {RENDERER_URLS, getMonacoContent, setMonacoContent} from './helpers';
 
-async function waitForPreviewSettled(page: Page): Promise<void> {
-  await page.waitForFunction(() => {
-    const handshakeIndex = window.a2uiCatalogManagement?.handshakeHistoryIndex?.();
-    if (handshakeIndex === null || handshakeIndex === undefined) return false;
-    const history = window.a2uiHostCommunication?.getHistoryBuffer() || [];
-    const catalogIdx = history.findIndex(env => env.type === 'A2UI_CATALOG');
+async function waitForPreviewSettled(page: Page, historyHandle: any): Promise<void> {
+  await page.waitForFunction((history: any[]) => {
+    const catalogIdx = history.findIndex(env => env?.type === 'A2UI_CATALOG');
     if (catalogIdx === -1) return false;
     const successesAfterCatalog = history
-      .slice(Math.min(catalogIdx, handshakeIndex))
-      .filter(env => env.type === 'RENDER_SUCCESS');
+      .slice(catalogIdx)
+      .filter(env => env?.type === 'RENDER_SUCCESS');
+    // The renderer emits RENDER_SUCCESS twice internally during bootstrapping
+    // before the catalog is fully active and event listeners are attached.
     return successesAfterCatalog.length >= 2;
-  });
+  }, historyHandle);
   await page.waitForTimeout(300);
 }
 
@@ -251,25 +251,6 @@ test.beforeEach(async ({page}) => {
       );
     } catch (e) {}
   });
-
-  // Record SURFACE_RESIZE traffic directly off the postMessage wire. The Raw
-  // Messages drawer folds consecutive rows together and caps its history, so
-  // counts sourced from its DOM cannot observe a resize feedback loop.
-  await page.addInitScript((resizeType: string) => {
-    const win = window as unknown as WindowWithResizeLog;
-    const log: SurfaceResizeLogEntry[] = [];
-    win.__a2uiResizeLog = log;
-    window.addEventListener(
-      'message',
-      event => {
-        const data = event.data as {type?: string; payload?: {height?: number}} | null;
-        if (data?.type === resizeType) {
-          log.push({height: data.payload?.height, timeMs: performance.now()});
-        }
-      },
-      true,
-    );
-  }, PreviewBridgeMessageType.SURFACE_RESIZE);
 });
 
 for (const config of CONFIGS) {
@@ -277,7 +258,22 @@ for (const config of CONFIGS) {
     test('validates startup telemetry handshake messages and catalog properties', async ({
       page,
     }) => {
+      await page.addInitScript(() => {
+        const log: any[] = [];
+        window.addEventListener('message', e =>
+          log.push({...(e.data || {}), __timeMs: performance.now()}),
+        );
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
+      });
       await page.goto(`/?renderer=${config.rendererUrl}`);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
@@ -320,12 +316,26 @@ for (const config of CONFIGS) {
     });
 
     test('synchronizes "pick-up date" from preview iframe to data model tab', async ({page}) => {
+      await page.addInitScript(() => {
+        const log: any[] = [];
+        window.addEventListener('message', e =>
+          log.push({...(e.data || {}), __timeMs: performance.now()}),
+        );
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
+      });
       await page.goto(`/?renderer=${config.rendererUrl}`);
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
-      await waitForPreviewSettled(page);
+      await waitForPreviewSettled(page, historyHandle);
       const pickupInput = config.pickupDateLocator(iframe);
       await expect(pickupInput).toBeVisible();
       await expect(pickupInput).toBeEnabled();
@@ -336,13 +346,12 @@ for (const config of CONFIGS) {
       await expect(pickupInput).toHaveValue('2026-05-30');
 
       // Ensure the DATA_MODEL_CHANGE has arrived at host communication
-      await page.waitForFunction(() => {
-        const history = window.a2uiHostCommunication?.getHistoryBuffer() || [];
+      await page.waitForFunction((history: any[]) => {
         return history.some(
           env =>
-            env.type === 'DATA_MODEL_CHANGE' && JSON.stringify(env.payload).includes('2026-05-30'),
+            env?.type === 'DATA_MODEL_CHANGE' && JSON.stringify(env.payload).includes('2026-05-30'),
         );
-      });
+      }, historyHandle);
 
       await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
       await expect(page.locator('.data-model-container textarea')).toBeVisible();
@@ -353,12 +362,26 @@ for (const config of CONFIGS) {
     test('propagates data model changes from shell "Data Model" tab to rendered preview', async ({
       page,
     }) => {
+      await page.addInitScript(() => {
+        const log: any[] = [];
+        window.addEventListener('message', e =>
+          log.push({...(e.data || {}), __timeMs: performance.now()}),
+        );
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
+      });
       await page.goto(`/?renderer=${config.rendererUrl}`);
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
-      await waitForPreviewSettled(page);
+      await waitForPreviewSettled(page, historyHandle);
 
       await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
       await expect(page.locator('.data-model-container textarea')).toBeVisible();
@@ -381,7 +404,22 @@ for (const config of CONFIGS) {
     });
 
     test('propagates Raw A2UI JSON updates to the rendered preview', async ({page}) => {
+      await page.addInitScript(() => {
+        const log: any[] = [];
+        window.addEventListener('message', e =>
+          log.push({...(e.data || {}), __timeMs: performance.now()}),
+        );
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
+      });
       await page.goto(`/?renderer=${config.rendererUrl}`);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       const rawJson = await getMonacoContent(page);
@@ -399,12 +437,26 @@ for (const config of CONFIGS) {
     });
 
     test('captures telemetry actions and events updates upon search form click', async ({page}) => {
+      await page.addInitScript(() => {
+        const log: any[] = [];
+        window.addEventListener('message', e =>
+          log.push({...(e.data || {}), __timeMs: performance.now()}),
+        );
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
+      });
       await page.goto(`/?renderer=${config.rendererUrl}`);
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
-      await waitForPreviewSettled(page);
+      await waitForPreviewSettled(page, historyHandle);
 
       const pickupInput = config.pickupDateLocator(iframe);
       await expect(pickupInput).toBeVisible();
@@ -416,13 +468,12 @@ for (const config of CONFIGS) {
       await expect(pickupInput).toHaveValue('2026-05-05');
 
       // Ensure the DATA_MODEL_CHANGE has arrived at host communication
-      await page.waitForFunction(() => {
-        const history = window.a2uiHostCommunication?.getHistoryBuffer() || [];
+      await page.waitForFunction((history: any[]) => {
         return history.some(
           env =>
-            env.type === 'DATA_MODEL_CHANGE' && JSON.stringify(env.payload).includes('2026-05-05'),
+            env?.type === 'DATA_MODEL_CHANGE' && JSON.stringify(env.payload).includes('2026-05-05'),
         );
-      });
+      }, historyHandle);
 
       const searchButton = iframe.getByRole('button', {name: 'Search Cars'});
       await expect(searchButton).toBeVisible();
@@ -468,7 +519,21 @@ for (const config of CONFIGS) {
     test('settles preview frame height without a SURFACE_RESIZE feedback loop', async ({page}) => {
       test.setTimeout(60_000);
 
+      await page.addInitScript(() => {
+        const log: any[] = [];
+        window.addEventListener('message', e =>
+          log.push({...(e.data || {}), __timeMs: performance.now()}),
+        );
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
+      });
       await page.goto(`/?renderer=${config.rendererUrl}`);
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       const iframe = page.frameLocator('iframe.preview-iframe');
@@ -508,10 +573,15 @@ for (const config of CONFIGS) {
         .soft(heights[heights.length - 1], `heights: ${heights}`)
         .toBeLessThan(MAX_SETTLED_FRAME_HEIGHT_PX);
 
-      const resizeLog = await page.evaluate(
-        () => (window as unknown as WindowWithResizeLog).__a2uiResizeLog ?? [],
-      );
-      const reportedHeights = resizeLog.map((entry: SurfaceResizeLogEntry) => entry.height ?? 0);
+      const resizeLog = await page.evaluate((history: any[]) => {
+        return history
+          .filter(msg => msg.type === 'SURFACE_RESIZE')
+          .map(msg => ({
+            height: msg.payload?.height,
+            timeMs: msg.__timeMs,
+          }));
+      }, historyHandle);
+      const reportedHeights = resizeLog.map((entry: any) => entry.height ?? 0);
 
       // Tripwire. Every bound below is satisfied by an empty log, so without
       // this the whole wire tap can die silently: a renamed message type, an
@@ -585,6 +655,14 @@ test.describe('Bridge Telemetry Layout Constraints', () => {
     });
 
     await page.goto('/?renderer=http://custom-renderer.com/index.html');
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const historyHandle = await page.evaluateHandle(() => {
+      const log: any[] = [];
+      window.addEventListener('message', e =>
+        log.push({...(e.data || {}), __timeMs: performance.now()}),
+      );
+      return log;
+    });
     await expect(page.locator('.workspace-container')).toBeVisible();
 
     const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');

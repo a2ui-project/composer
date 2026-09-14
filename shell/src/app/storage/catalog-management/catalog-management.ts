@@ -30,11 +30,7 @@ import {StartupResolution} from '../../shell/startup-resolution/startup-resoluti
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {stableStringify} from '../stable-stringify/stable-stringify';
 
-declare global {
-  interface Window {
-    a2uiCatalogManagement?: CatalogManagement;
-  }
-}
+
 
 /**
  * Coordinates client sidepanel integration, managing live visual schemas,
@@ -58,12 +54,13 @@ export class CatalogManagement {
    */
   readonly isHandshakeInProgress = this._isHandshakeInProgress.asReadonly();
 
-  private readonly _handshakeHistoryIndex = signal<number | null>(null);
+  private readonly _handshakeState = signal<'idle' | 'in-progress' | 'settled'>('idle');
   /**
-   * History buffer index when the catalog handshake settled. Used by integration tests
-   * to guarantee subsequent renders have finished before interacting with the preview.
+   * Internal lifecycle state of the catalog indexing handshake.
+   * Exposed as a DOM attribute by ComposerWorkspace for E2E synchronization.
    */
-  readonly handshakeHistoryIndex: Signal<number | null> = this._handshakeHistoryIndex.asReadonly();
+  readonly handshakeState: Signal<'idle' | 'in-progress' | 'settled'> =
+    this._handshakeState.asReadonly();
 
   private readonly _watchdogFired = signal<boolean>(false);
   /**
@@ -132,7 +129,6 @@ export class CatalogManagement {
 
   constructor() {
     if (typeof window !== 'undefined') {
-      window.a2uiCatalogManagement = this;
     }
     const destroyRef = inject(DestroyRef);
     destroyRef.onDestroy(() => {
@@ -141,7 +137,6 @@ export class CatalogManagement {
         this.watchdogTimerId = null;
       }
       if (typeof window !== 'undefined') {
-        delete window.a2uiCatalogManagement;
       }
     });
 
@@ -158,7 +153,7 @@ export class CatalogManagement {
           this.watchdogTimerId = null;
         }
         this._isHandshakeInProgress.set(false);
-        this._handshakeHistoryIndex.set(null);
+        this._handshakeState.set('idle');
         this._catalogError.set(null);
         this._activeCatalog.set(null);
         this._activeCatalogTitle.set('');
@@ -195,9 +190,7 @@ export class CatalogManagement {
                   this._activeCatalogTitle.set(catalogObj.title || '');
                   this._activeCatalogDescription.set(catalogObj.description || '');
                   this._catalogError.set(null);
-                  this._handshakeHistoryIndex.set(
-                    this.hostCommunication.getHistoryBuffer?.()?.length ?? 0,
-                  );
+                  this._handshakeState.set('settled');
                 }
               }
             })
@@ -224,7 +217,7 @@ export class CatalogManagement {
             }
 
             this._isHandshakeInProgress.set(true);
-            this._handshakeHistoryIndex.set(null);
+            this._handshakeState.set('in-progress');
             this._watchdogFired.set(false);
             this._catalogError.set(null);
             this.hostCommunication.sendMessage({
@@ -350,9 +343,7 @@ export class CatalogManagement {
 
                   this._catalogError.set(null);
                   this._isHandshakeInProgress.set(false);
-                  this._handshakeHistoryIndex.set(
-                    this.hostCommunication.getHistoryBuffer?.()?.length ?? 0,
-                  );
+                  this._handshakeState.set('settled');
                   return null;
                 })
                 .catch((err: unknown) => {

@@ -36,6 +36,3 @@ export interface SurfaceResizeLogEntry {
 }
 
 /** Window carrying the SURFACE_RESIZE wire log installed by the e2e init script. */
-export interface WindowWithResizeLog extends Window {
-  __a2uiResizeLog?: SurfaceResizeLogEntry[];
-}

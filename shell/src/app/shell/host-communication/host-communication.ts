@@ -43,11 +43,7 @@ export declare interface MessageEnvelope {
   sourceWindow?: Window | null;
 }
 
-declare global {
-  interface Window {
-    a2uiHostCommunication?: HostCommunication;
-  }
-}
+
 
 /**
  * Core service managing cross-frame message passing and event dispatching
@@ -93,16 +89,10 @@ export class HostCommunication implements OnDestroy {
    * Retrieves a snapshot copy of the recent message history buffer.
    * @return Array of stored message envelopes
    */
-  getHistoryBuffer(): MessageEnvelope[] {
-    return [...this.messageHistoryBuffer];
-  }
-
-  /**
-   * Retrieves the most recent catalog message envelope received from the preview frame.
-   * @return Latest catalog envelope or null if none received
-   */
-  getLatestCatalog(): MessageEnvelope | null {
-    return this.latestCatalogEnvelope;
+  consumeEnvelopeHistory(): MessageEnvelope[] {
+    const records = [...this.messageHistoryBuffer];
+    this.messageHistoryBuffer.length = 0;
+    return records;
   }
 
   /**
@@ -110,7 +100,6 @@ export class HostCommunication implements OnDestroy {
    */
   clearHistoryBuffer(): void {
     this.messageHistoryBuffer.length = 0;
-    this.latestCatalogEnvelope = null;
   }
 
   private handleConsoleLog(payload: unknown): void {
@@ -269,7 +258,6 @@ export class HostCommunication implements OnDestroy {
   constructor() {
     if (typeof window !== 'undefined') {
       window.addEventListener('message', this.messageListener);
-      window.a2uiHostCommunication = this;
     }
   }
 
@@ -458,7 +446,6 @@ export class HostCommunication implements OnDestroy {
     this.messageStreamSubject.complete();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
-      delete window.a2uiHostCommunication;
     }
   }
 }

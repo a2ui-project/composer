@@ -551,7 +551,6 @@ describe('HostCommunication', () => {
     service.ngOnDestroy();
 
     expect(removeEventListenerSpy).toHaveBeenCalledWith('message', expect.any(Function));
-    expect(window.a2uiHostCommunication).toBeUndefined();
 
     removeEventListenerSpy.mockRestore();
   });
