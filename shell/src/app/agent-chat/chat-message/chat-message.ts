@@ -20,6 +20,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {objectUrlFromSafeSource, setAnchorHref} from 'safevalues/dom';
@@ -48,8 +49,6 @@ interface ManualThinkingToggle {
 interface AttachmentView {
   /** The attachment itself, passed back when the user downloads it. */
   readonly file: UiAttachedImage;
-  /** Stable key for `@for` tracking. */
-  readonly key: string;
   /** `src` of the inline preview, or '' when the attachment is not previewable. */
   readonly previewSrc: string;
   /** Material Symbols glyph shown on the download chip. */
@@ -71,10 +70,16 @@ const IMAGE_MIME_PREFIX = 'image/';
 /**
  * Delay before a download's object URL is released.
  *
- * Browsers resolve the URL asynchronously after the click, so releasing it in
- * the same task cancels the download in some of them.
+ * Clicking the link only queues the download; the browser reads the object URL
+ * in a later task. Revoking it in the same task as the click therefore races
+ * that read, and losing the race means no file is saved at all. Deferring the
+ * release yields to the click first, so the length of the delay does not
+ * matter, only that it is not zero.
  */
 const OBJECT_URL_REVOKE_DELAY_MS = 100;
+
+/** How long a failed-download notice stays on screen. */
+const SNACK_BAR_DURATION_MS = 5000;
 
 /** URL prefixes accepted for a locally generated image preview. */
 const LOCAL_PREVIEW_PREFIXES: readonly string[] = ['data:image/', 'blob:'];
@@ -120,6 +125,7 @@ function imagePreviewSrc(file: UiAttachedImage): string {
 })
 export class A2aChatMessage {
   private readonly document = inject(DOCUMENT);
+  private readonly snackBar = inject(MatSnackBar);
 
   /** UI message object containing sender role, text, thinking trace, and optional A2UI payload. */
   readonly message = input.required<UiMessage>();
@@ -205,9 +211,8 @@ export class A2aChatMessage {
    * on every cycle.
    */
   protected readonly attachments = computed<AttachmentView[]>(() =>
-    (this.message().images ?? []).map((file, index) => ({
+    (this.message().images ?? []).map(file => ({
       file,
-      key: `${index}:${file.name}`,
       previewSrc: imagePreviewSrc(file),
       icon: getMaterialFileIcon(file.mimeType, file.name),
     })),
@@ -333,7 +338,15 @@ export class A2aChatMessage {
   protected downloadAttachment(file: UiAttachedImage): void {
     const bytes = decodeBase64(file.data);
     if (!bytes) {
-      console.warn('Attachment has no decodable content to download', file.name);
+      // The attachment came from the agent, so a payload that is missing or
+      // not base64 is a plausible outcome the user has to be told about;
+      // otherwise the download button would simply appear to do nothing.
+      this.snackBar.open(
+        `"${sanitizeDownloadFileName(file.name)}" could not be downloaded: ` +
+          `the agent sent no readable content for it.`,
+        'Close',
+        {duration: SNACK_BAR_DURATION_MS},
+      );
       return;
     }
 
@@ -344,8 +357,14 @@ export class A2aChatMessage {
       link.download = sanitizeDownloadFileName(file.name);
       link.click();
     } finally {
-      // The blob stays alive until the URL is released. `URL` is the same
-      // global that safevalues created the object URL from.
+      // An object URL pins its blob in memory until it is revoked or the
+      // document is unloaded, so a long chat of downloads would otherwise
+      // retain every file the user saved.
+      //
+      // `objectUrlFromSafeSource` returns the URL wrapped in a safevalues
+      // type, and safevalues offers no revoke helper; it produced the URL
+      // with this same global `URL`, so unwrapping it here releases exactly
+      // the URL that was created.
       setTimeout(() => {
         URL.revokeObjectURL(objectUrl.toString());
       }, OBJECT_URL_REVOKE_DELAY_MS);

@@ -18,6 +18,7 @@ import {DOCUMENT} from '@angular/common';
 import {signal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -32,11 +33,14 @@ import {A2aChatMessageHarness} from './test/chat-message.harness';
 describe('A2aChatMessage', () => {
   let fixture: ComponentFixture<A2aChatMessage>;
   let harness: A2aChatMessageHarness;
+  let mockSnackBar: {open: ReturnType<typeof vi.fn>};
 
   beforeEach(async () => {
+    mockSnackBar = {open: vi.fn()};
     await TestBed.configureTestingModule({
       imports: [A2aChatMessage],
       providers: [
+        {provide: MatSnackBar, useValue: mockSnackBar},
         {
           provide: StartupResolution,
           useValue: {resolvedUrl: signal('http://localhost:3000/renderer')},
@@ -394,7 +398,7 @@ describe('A2aChatMessage', () => {
     }
   });
 
-  it('does nothing when an attachment has no decodable content', () => {
+  it('tells the user when an attachment has no decodable content', () => {
     const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL');
 
     try {
@@ -405,6 +409,11 @@ describe('A2aChatMessage', () => {
       });
 
       expect(createObjectUrlSpy).not.toHaveBeenCalled();
+      expect(mockSnackBar.open).toHaveBeenCalledWith(
+        expect.stringContaining('"empty.pdf" could not be downloaded'),
+        'Close',
+        {duration: 5000},
+      );
     } finally {
       createObjectUrlSpy.mockRestore();
     }
