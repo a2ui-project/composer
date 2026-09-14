@@ -46,6 +46,35 @@ import type {
 } from './render-config';
 
 /**
+ * Debounce duration in milliseconds before rendering an error overlay.
+ * Suppresses transient syntax error popups during rapid typing.
+ */
+export const ERROR_OVERLAY_DEBOUNCE_MS = 350;
+
+/**
+ * Determines whether a given value resembles an Error object.
+ * Checks for the presence of standard Error properties like 'message' and 'stack'.
+ *
+ * @param val - The value to inspect.
+ * @returns True if the value is shaped like an Error, false otherwise.
+ */
+export function isErrorLike(val: unknown): val is Error {
+  if (val instanceof Error || Object.prototype.toString.call(val) === '[object Error]') {
+    return true;
+  }
+  return (
+    typeof val === 'object' &&
+    val !== null &&
+    'message' in val &&
+    typeof (val as Record<string, unknown>)['message'] === 'string' &&
+    'stack' in val &&
+    typeof (val as Record<string, unknown>)['stack'] === 'string' &&
+    !('nodeType' in val) &&
+    !('component' in val)
+  );
+}
+
+/**
  * Safely serializes an unknown value to a JSON string.
  * Handles cyclical structures and complex objects gracefully without throwing.
  *
@@ -64,20 +93,11 @@ export function safeSerialize(val: unknown): string {
       seen.add(v);
       let result: unknown;
 
-      const isErrorLike =
-        v instanceof Error ||
-        Object.prototype.toString.call(v) === '[object Error]' ||
-        ('message' in v &&
-          typeof (v as Record<string, unknown>)['message'] === 'string' &&
-          'stack' in v &&
-          !('nodeType' in v) &&
-          !('component' in v));
-
-      if (isErrorLike) {
+      if (isErrorLike(v)) {
         result = {
-          name: (v as unknown as Record<string, unknown>)['name'] || 'Error',
-          message: (v as Record<string, unknown>)['message'],
-          stack: (v as Record<string, unknown>)['stack'],
+          name: v.name || 'Error',
+          message: v.message,
+          stack: v.stack,
         };
       } else if (
         'nodeType' in v &&
@@ -188,7 +208,6 @@ interface ActiveRenderer {
  * fully cleanses the runtime space: removing window listeners, canceling pending macro-task timers,
  * destroying overlays, and invoking connection unsubscriptions to guarantee a clean slate.
  */
-
 export class PreviewBridge {
   /** The single active framework rendering stack connection hook. */
   private activeRenderer: ActiveRenderer | null = null;
@@ -638,17 +657,19 @@ export class PreviewBridge {
         }
       }
 
+      let rendered = false;
       try {
         this.activeRenderer.processor.processMessages(payload as A2uiMessage[]);
+        rendered = true;
 
-        // Suppresses the onError callback during active streaming when processMessages
-        // might throw. This strict check avoids crashing the view while receiving transient,
-        // incomplete JSON chunks before the payload finalizes.
-        if (this.activeRenderer.config.onError && !isStreaming) {
+        // Clears any stale error overlay as soon as a frame renders successfully,
+        // even during active streaming.
+        if (this.activeRenderer.config.onError) {
           this.activeRenderer.config.onError(null);
         }
         this.sendMessage({type: PreviewBridgeMessageType.RENDER_SUCCESS});
       } catch (err: unknown) {
+        console.error('PreviewBridge: Error during message processing:', err);
         if (!isStreaming && this.activeRenderer.config.onError) {
           this.activeRenderer.config.onError(err instanceof Error ? err : new Error(String(err)));
         }
@@ -658,7 +679,7 @@ export class PreviewBridge {
         });
       }
 
-      if (hasCreateSurface && surfaceId) {
+      if (rendered && hasCreateSurface && surfaceId) {
         this.activeRenderer.config.onSurfaceReady(surfaceId);
       }
 
