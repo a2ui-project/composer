@@ -62,9 +62,7 @@ test.beforeEach(async ({page}) => {
   });
 
   await page.addInitScript(() => {
-    try {
-      localStorage.setItem('a2ui_composer_force_1p', 'true');
-    } catch (e) {}
+    localStorage.setItem('a2ui_composer_force_1p', 'true');
   });
 });
 

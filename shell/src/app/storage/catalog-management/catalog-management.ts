@@ -30,8 +30,6 @@ import {StartupResolution} from '../../shell/startup-resolution/startup-resoluti
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {stableStringify} from '../stable-stringify/stable-stringify';
 
-
-
 /**
  * Coordinates client sidepanel integration, managing live visual schemas,
  * remote catalog assets, and establishing active rendering contexts.

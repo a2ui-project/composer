@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {Errors} from './errors';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';

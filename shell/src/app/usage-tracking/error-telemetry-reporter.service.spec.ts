@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
+import {TestBed} from '@angular/core/testing';
 import {ErrorLogger, ErrorLogItem} from '../debug/error-logger.service';
 import {UsageTrackingService} from './usage-tracking.service';
-import {ErrorTelemetryReporter, CATEGORY_BY_TAG} from './error-telemetry-reporter.service';
+import {ErrorTelemetryReporter} from './error-telemetry-reporter.service';
 import {Subject} from 'rxjs';
 import {vi, describe, it, expect, beforeEach, afterEach} from 'vitest';
 
 describe('ErrorTelemetryReporter', () => {
   let reporter: ErrorTelemetryReporter;
   let usageTrackingService: UsageTrackingService;
-  let errorLogger: ErrorLogger;
   let errorStream$: Subject<ErrorLogItem>;
 
   beforeEach(() => {
@@ -45,7 +45,6 @@ describe('ErrorTelemetryReporter', () => {
 
     reporter = TestBed.inject(ErrorTelemetryReporter);
     usageTrackingService = TestBed.inject(UsageTrackingService);
-    errorLogger = TestBed.inject(ErrorLogger);
   });
 
   it('subscribes to errorStream immediately when start is called', () => {
@@ -117,7 +116,8 @@ describe('ErrorTelemetryReporter', () => {
       } as ErrorLogItem);
     }
     // Expected to not throw or leak, we could assert the internal map size via cast
-    const cacheMap = (reporter as unknown as {recentErrors: Map<string, number>}).recentErrors as Map<string, number>;
+    const cacheMap = (reporter as unknown as {recentErrors: Map<string, number>})
+      .recentErrors as Map<string, number>;
     expect(cacheMap.size).toBeLessThanOrEqual(1000);
   });
 

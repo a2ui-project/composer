@@ -26,8 +26,6 @@ import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {DockviewComponent} from 'dockview';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {ErrorLogger, ErrorLogItem} from '../../debug/error-logger.service';
-import {Subject} from 'rxjs';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {LlmClient, LlmMessage} from '../../chat/llm-client/llm-client';
 import {StateSync} from '../../chat/state-sync/state-sync';
@@ -221,8 +219,6 @@ describe('ComposerWorkspace Dashboard', () => {
 
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(1);
     });
-
-
   });
 
   it('sets isExtensionMode correctly', async () => {
@@ -562,4 +558,3 @@ describe('ComposerWorkspace Dashboard', () => {
     });
   });
 });
-

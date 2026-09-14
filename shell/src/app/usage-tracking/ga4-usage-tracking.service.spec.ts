@@ -119,27 +119,6 @@ describe('Ga4UsageTrackingService', () => {
     expect(lastPushed).toEqual(['event', 'test_event', {key: 'value'}]);
   });
 
-  it('does not dispatch events when tracking is disabled', () => {
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [
-        Ga4UsageTrackingService,
-        {
-          provide: USAGE_TRACKING_CONFIG,
-          useValue: {enabled: false, measurementId: ''},
-        },
-        {provide: StartupResolution, useValue: mockStartupResolution},
-        {provide: StartupConfigStateService, useValue: mockStartupConfigState},
-        {provide: AppConfigProvider, useValue: mockAppConfigProvider},
-        {provide: CatalogManagement, useValue: mockCatalogManagement},
-        {provide: DOCUMENT, useValue: mockDocument},
-      ],
-    });
-    const disabledService = TestBed.inject(Ga4UsageTrackingService);
-    disabledService.trackPageView({pagePath: '/test'});
-    expect(mockWindow.gtag).not.toHaveBeenCalled();
-  });
-
   it('resets session uuid when resetSession is called', () => {
     const initialSession = service.composerSessionId;
     service.resetSession();
@@ -557,5 +536,38 @@ describe('Ga4UsageTrackingService', () => {
         service.trackComposerError({sourceTag: 'test', errorCategory: 'error'});
       }).not.toThrow();
     });
+  });
+});
+
+describe('Ga4UsageTrackingService (Disabled)', () => {
+  it('does not dispatch events when tracking is disabled', () => {
+    const mockWindow = {
+      dataLayer: [],
+      gtag: vi.fn(),
+    } as unknown as WindowWithGtag;
+    const mockDocument = {
+      defaultView: mockWindow,
+      querySelector: vi.fn(),
+      createElement: vi.fn(),
+      head: {appendChild: vi.fn()},
+    } as unknown as Document;
+
+    TestBed.configureTestingModule({
+      providers: [
+        Ga4UsageTrackingService,
+        {
+          provide: USAGE_TRACKING_CONFIG,
+          useValue: {enabled: false, measurementId: ''},
+        },
+        {provide: StartupResolution, useValue: {resolvedComponentUrl: signal('')}},
+        {provide: StartupConfigStateService, useValue: {activeCatalogId: signal('')}},
+        {provide: AppConfigProvider, useValue: {themePreference: signal('system')}},
+        {provide: CatalogManagement, useValue: {activeCatalogTitle: signal('')}},
+        {provide: DOCUMENT, useValue: mockDocument},
+      ],
+    });
+    const disabledService = TestBed.inject(Ga4UsageTrackingService);
+    disabledService.trackPageView({pagePath: '/test'});
+    expect(mockWindow.gtag).not.toHaveBeenCalled();
   });
 });

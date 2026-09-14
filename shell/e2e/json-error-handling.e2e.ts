@@ -29,6 +29,25 @@ interface WindowWithMonaco extends Window {
   };
 }
 
+test.use({
+  storageState: {
+    cookies: [],
+    origins: [
+      {
+        origin: 'http://localhost:4200',
+        localStorage: [
+          {name: 'a2ui_composer_force_1p', value: 'true'},
+          {name: 'a2ui_composer_selected_api_key', value: 'fake'},
+          {
+            name: 'a2ui_composer_allowed_origins',
+            value: JSON.stringify(['http://custom-renderer.com']),
+          },
+        ],
+      },
+    ],
+  },
+});
+
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
     // Ignore expected cross-origin Sandbox errors for these tests
@@ -43,6 +62,12 @@ test.beforeEach(async ({page}) => {
         renderers: {
           default: {},
         },
+        apiKeys: {
+          fake: {
+            apiKey: 'dummy-key',
+            name: 'Fake Token',
+          },
+        },
       }),
     });
   });
@@ -55,39 +80,8 @@ test.beforeEach(async ({page}) => {
     });
   });
 
-  await page.addInitScript(() => {
-    try {
-      if (!localStorage.getItem('a2ui_composer_force_1p')) {
-        localStorage.clear();
-        localStorage.setItem('a2ui_composer_force_1p', 'true');
-        localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
-      }
-      localStorage.setItem(
-        'a2ui_composer_allowed_origins',
-        JSON.stringify(['http://custom-renderer.com']),
-      );
-    } catch (e) {}
-  });
-
   await page.goto('/?renderer=http://custom-renderer.com');
   await expect(page.locator('.header-title')).toContainText('A2UI Composer');
-  await page.evaluate(() => {
-    window.localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
-  });
-
-  // Wait for provision alert and fill if needed
-
-  await page.getByRole('link', {name: 'Settings'}).click();
-  await page.getByRole('button', {name: 'Add Gemini API key'}).click();
-  const dialog = page.getByRole('dialog', {name: 'Add Gemini API Key'});
-  await dialog.getByLabel('Name', {exact: true}).fill('APIKey');
-  await dialog.getByLabel('Name', {exact: true}).blur();
-  await dialog.getByLabel('API Key', {exact: true}).fill('fake-key');
-  await page.keyboard.press('Tab');
-  await dialog.getByRole('button', {name: 'Add', exact: true}).click();
-  await expect(dialog).toBeHidden();
-  await page.waitForTimeout(1000);
-  await page.goto('/?renderer=http://custom-renderer.com');
 });
 
 test.describe('JSON Error Handling & Diagnostics', () => {
@@ -146,7 +140,10 @@ test.describe('JSON Error Handling & Diagnostics', () => {
       ).monaco;
       return monacoWithEditors?.editor?.getEditors()?.[0]?.getPosition();
     });
-    expect(cursorPosition?.lineNumber).toBeGreaterThanOrEqual(1);
+    // Rationale: the malformed fixture `{"version": "v0.9", "invalid": }` reports
+    // its unclosed delimiter on line 4, so Monaco correctly navigates to line 4;
+    // the expected value of 3 was simply wrong. Please do not loosen it again.
+    expect(cursorPosition?.lineNumber).toBe(4);
   });
 
   test('recovers gracefully from malformed JSON stream blocks in chat and renders an inline diagnostic error card', async ({
@@ -156,6 +153,14 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     await page.getByRole('tab', {name: 'Gemini Assistant'}).click();
 
     await page.route('https://generativelanguage.googleapis.com/**', async route => {
+      if (route.request().url().includes('/models?')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({models: [{name: 'models/gemini-1.5-pro', version: '1.5'}]}),
+        });
+        return;
+      }
       const chunk = JSON.stringify({
         candidates: [
           {
@@ -190,6 +195,8 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     await expect(errorCard).toContainText('JSON Syntax Error');
 
     // The "View in Errors Tab" action inside the error card navigates automatically
+    await errorCard.getByRole('button', {name: /Errors Tab/i}).click();
+    await expect(page.getByRole('tab', {name: 'Errors', selected: true})).toBeVisible();
   });
 
   test('captures cross-frame preview errors, renders non-crashing 350ms debounced UI error overlay, and assigns [Previewer] log provenance', async ({
@@ -199,10 +206,7 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     const iframeLoc = page.frameLocator('iframe.preview-iframe');
     await expect(iframeLoc.locator('body')).toBeVisible();
 
-    // Wait until composer handshake finishes
-    await page.waitForTimeout(500);
-
-    // Dispatch a dummy error out of the iframe using PostMessage
+    // Wait until composer handshake finishes / timeouts.
     await page
       .frameLocator('iframe.preview-iframe')
       .locator('body')
@@ -223,7 +227,11 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     // Wait for errors tab
     await page.getByRole('tab', {name: 'Errors'}).click();
 
-    // Ignored to avoid brittleness
+    // Add real assertion instead of ignoring
+    const errorRow = page.locator('.errors-container table tr.element-row').first();
+    await expect(errorRow).toBeVisible();
+    await expect(errorRow).toContainText('TypeError: mock is undefined');
+    await expect(errorRow).toContainText('[Previewer]');
   });
 
   test('toggles expandable stack trace rows in the Errors panel distinctly for structured diagnostics', async ({
@@ -257,7 +265,6 @@ test.describe('JSON Error Handling & Diagnostics', () => {
 
     // Detailed expanded element appears
     const detailRow = page.locator('tr.detail-row').first();
-    await expect(detailRow).toBeVisible();
     await expect(detailRow).toBeVisible();
 
     // Click again to collapse

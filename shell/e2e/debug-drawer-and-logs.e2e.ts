@@ -42,14 +42,12 @@ test.beforeEach(async ({page}) => {
   });
 
   await page.addInitScript(() => {
-    try {
-      localStorage.clear();
-      localStorage.setItem('a2ui_composer_force_1p', 'true');
-      localStorage.setItem(
-        'a2ui_composer_allowed_origins',
-        JSON.stringify(['http://custom-renderer.com']),
-      );
-    } catch (e) {}
+    localStorage.clear();
+    localStorage.setItem('a2ui_composer_force_1p', 'true');
+    localStorage.setItem(
+      'a2ui_composer_allowed_origins',
+      JSON.stringify(['http://custom-renderer.com']),
+    );
   });
   await page.goto('/?renderer=http://custom-renderer.com/index.html');
 });
@@ -58,7 +56,6 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
   test('verifies diagnostic logs routing', async ({page}) => {
     const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
     await expect(iframeBody).toBeVisible();
-    await page.waitForTimeout(1000);
 
     const clickMsg = {
       type: PreviewBridgeMessageType.SEND_TO_SERVER,
@@ -75,8 +72,6 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     await iframeBody.evaluate((_, msg) => {
       window.parent.postMessage(msg, '*');
     }, clickMsg);
-
-    await page.waitForTimeout(100);
 
     const errorMsg = {
       type: PreviewBridgeMessageType.CONSOLE_LOG,
@@ -122,7 +117,6 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
   test('verifies console log warning routing from preview frame to Errors tab', async ({page}) => {
     const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
     await expect(iframeBody).toBeVisible();
-    await page.waitForTimeout(1000);
 
     const logMsg = {
       type: PreviewBridgeMessageType.CONSOLE_LOG,
@@ -151,7 +145,6 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
 
     const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
     await expect(iframeBody).toBeVisible();
-    await page.waitForTimeout(1000);
 
     const unreadClickMsg = {
       type: PreviewBridgeMessageType.SEND_TO_SERVER,
@@ -166,8 +159,6 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     await iframeBody.evaluate((_, msg) => {
       window.parent.postMessage(msg, '*');
     }, unreadClickMsg);
-
-    await page.waitForTimeout(100);
 
     const crashMsg = {
       type: PreviewBridgeMessageType.CONSOLE_LOG,
@@ -191,9 +182,7 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
 
   test('verifies New Session reset button clears localStorage session cache', async ({page}) => {
     await page.evaluate(() => {
-      try {
-        localStorage.setItem('a2ui_composer_session_state', 'test_value');
-      } catch (e) {}
+      localStorage.setItem('a2ui_composer_session_state', 'test_value');
     });
 
     await page.evaluate(() => {
