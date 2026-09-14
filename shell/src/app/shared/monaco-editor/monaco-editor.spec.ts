@@ -15,7 +15,6 @@
  */
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {ComponentHarness} from '@angular/cdk/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {signal, WritableSignal} from '@angular/core';
@@ -27,6 +26,7 @@ import {
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {MonacoEditorHarness} from './test/monaco-editor.harness';
 
 const {
   mockGetModel,
@@ -142,10 +142,6 @@ vi.mock('@monaco-editor/loader', () => ({
   },
 }));
 
-class MonacoEditorHarness extends ComponentHarness {
-  static hostSelector = 'a2ui-composer-monaco-editor';
-}
-
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
 }
@@ -183,7 +179,8 @@ describe('MonacoEditor utilities', () => {
   });
 
   describe('resolveAndFlattenSchemaForDraft07', () => {
-    it('halts recursion when depth > 50', () => {
+    it('halts recursion and returns empty schema when depth > 50', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const result = MonacoEditor['resolveAndFlattenSchemaForDraft07'](
         {},
         {},
@@ -192,7 +189,11 @@ describe('MonacoEditor utilities', () => {
         true,
         51,
       );
-      expect(result['error']).toBe('Max schema recursion depth exceeded');
+      expect(result).toEqual({});
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Max schema recursion depth exceeded'),
+      );
+      warnSpy.mockRestore();
     });
 
     it('scopes definitions strictly to root', () => {
@@ -230,14 +231,12 @@ describe('MonacoEditor utilities', () => {
 
       const flattened = MonacoEditor['resolveAndFlattenSchemaForDraft07'](raw);
       expect(flattened['allOf']).toBeUndefined();
-      expect(flattened['additionalProperties']).toBe(false);
+      expect(flattened['additionalProperties']).toBeUndefined();
       // @ts-expect-error Types mismatch in tests
       expect(flattened['properties']['a']['type']).toBe('string');
       // @ts-expect-error Types mismatch in tests
       expect(flattened['properties']['b']['type']).toBe('number');
-      // @ts-expect-error Types mismatch in tests
       expect(flattened['required']).toContain('a');
-      // @ts-expect-error Types mismatch in tests
       expect(flattened['required']).toContain('b');
     });
 
@@ -276,7 +275,7 @@ describe('MonacoEditor utilities', () => {
 
       const properties = flattened['properties'] as Record<string, Record<string, unknown>>;
       expect(properties['user']['allOf']).toBeUndefined();
-      expect(properties['user']['additionalProperties']).toBe(false);
+      expect(properties['user']['additionalProperties']).toBeUndefined();
       const userProps = properties['user']['properties'] as Record<string, Record<string, unknown>>;
       expect(userProps['name']['type']).toBe('string');
       expect(userProps['age']['type']).toBe('number');
@@ -293,6 +292,7 @@ describe('MonacoEditor utilities', () => {
       const raw = {
         type: 'array',
         items: {
+          additionalProperties: false,
           allOf: [{properties: {id: {type: 'string'}}}, {properties: {active: {type: 'boolean'}}}],
         },
       };
@@ -304,6 +304,32 @@ describe('MonacoEditor utilities', () => {
       const itemProps = items['properties'] as Record<string, Record<string, unknown>>;
       expect(itemProps['id']['type']).toBe('string');
       expect(itemProps['active']['type']).toBe('boolean');
+    });
+
+    it('preserves open additionalProperties when source does not disallow them', () => {
+      const raw = {
+        allOf: [{properties: {a: {type: 'string'}}}],
+      };
+      const flattened = MonacoEditor.resolveAndFlattenSchemaForDraft07(raw);
+      expect(flattened['additionalProperties']).toBeUndefined();
+    });
+
+    it('sets additionalProperties to false when source declares additionalProperties false', () => {
+      const raw = {
+        additionalProperties: false,
+        allOf: [{properties: {a: {type: 'string'}}}],
+      };
+      const flattened = MonacoEditor.resolveAndFlattenSchemaForDraft07(raw);
+      expect(flattened['additionalProperties']).toBe(false);
+    });
+
+    it('sets additionalProperties to false when source declares unevaluatedProperties false', () => {
+      const raw = {
+        unevaluatedProperties: false,
+        allOf: [{properties: {a: {type: 'string'}}}],
+      };
+      const flattened = MonacoEditor.resolveAndFlattenSchemaForDraft07(raw);
+      expect(flattened['additionalProperties']).toBe(false);
     });
 
     it('recursively flattens schemas inside anyOf and oneOf', () => {
@@ -446,7 +472,7 @@ describe('MonacoEditor component', () => {
     mockGetModelMarkers.mockReturnValue([mockMarker]);
 
     const otherUri = {toString: () => 'inmemory://other/unrelated.json'};
-    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+    const modelUri = {toString: () => fixture.componentInstance['modelUri']};
 
     // Multi-URI array where modelUri is not at index 0
     markerListener([otherUri, modelUri]);
@@ -483,7 +509,7 @@ describe('MonacoEditor component', () => {
       startColumn: 3,
     };
     mockGetModelMarkers.mockReturnValue([errorMarker]);
-    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+    const modelUri = {toString: () => fixture.componentInstance['modelUri']};
 
     markerListener([modelUri]);
 
@@ -515,7 +541,7 @@ describe('MonacoEditor component', () => {
       startColumn: 1,
     };
     mockGetModelMarkers.mockReturnValue([errorMarker]);
-    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+    const modelUri = {toString: () => fixture.componentInstance['modelUri']};
 
     markerListener([modelUri]);
     vi.advanceTimersByTime(3000);
@@ -571,7 +597,7 @@ describe('MonacoEditor component', () => {
       startColumn: 1,
     };
     mockGetModelMarkers.mockReturnValue([errorMarker]);
-    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+    const modelUri = {toString: () => fixture.componentInstance['modelUri']};
 
     markerListener([modelUri]);
 
@@ -619,7 +645,7 @@ describe('MonacoEditor component', () => {
       startColumn: 1,
     };
     mockGetModelMarkers.mockReturnValue([errorMarker]);
-    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+    const modelUri = {toString: () => fixture.componentInstance['modelUri']};
 
     // Error marker arrives
     markerListener([modelUri]);
@@ -692,7 +718,7 @@ describe('MonacoEditor component', () => {
       startColumn: 1,
     };
     mockGetModelMarkers.mockReturnValue([errorMarker]);
-    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+    const modelUri = {toString: () => fixture.componentInstance['modelUri']};
 
     markerListener([modelUri]);
 
@@ -772,7 +798,7 @@ describe('MonacoEditor component', () => {
       startColumn: 5,
     };
     mockGetModelMarkers.mockReturnValue([warningMarker]);
-    const modelUri = {toString: () => 'inmemory://model/layout.json'};
+    const modelUri = {toString: () => fixture.componentInstance['modelUri']};
 
     markerListener([modelUri]);
 

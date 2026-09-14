@@ -14,34 +14,12 @@
  * limitations under the License.
  */
 
-import React, {useState, useEffect} from 'react';
+import React from 'react';
 import {useA2uiSandbox} from 'a2ui-bridge/react';
+import {ERROR_OVERLAY_DEBOUNCE_MS} from 'a2ui-bridge';
 import {COMPONENT_USAGES} from './usages.js';
 import {A2uiSurface, basicCatalog} from '@a2ui/react/v0_9';
-
-/**
- * Hook that defers propagating a value until a delay has passed without updates.
- *
- * @param value The reactive value to buffer.
- * @param delayMs The stabilization window duration in milliseconds.
- * @returns The stabilized value.
- */
-export function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    if (!value) {
-      setDebouncedValue(value);
-      return;
-    }
-    // Buffer overlay triggers to prevent UI flicker cascades during rapid
-    // keypresses or continuous layout state transitions in the editor.
-    const handler = setTimeout(() => setDebouncedValue(value), delayMs);
-    return () => clearTimeout(handler);
-  }, [value, delayMs]);
-
-  return debouncedValue;
-}
+import {useDebouncedValue} from './hooks/use-debounced-value.js';
 
 export function App() {
   const {surface, error} = useA2uiSandbox([basicCatalog], {
@@ -50,7 +28,7 @@ export function App() {
 
   // Buffer overlay triggers to prevent flicker cascades during rapid
   // keypresses or layout changes as JSON arrays stream across the bridge.
-  const debouncedError = useDebouncedValue(error, 350);
+  const debouncedError = useDebouncedValue(error, ERROR_OVERLAY_DEBOUNCE_MS);
 
   return (
     <main className="sandbox-shell">

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, inject, signal, effect, untracked, DestroyRef} from '@angular/core';
+import {Component, inject, signal, DestroyRef} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatTableModule} from '@angular/material/table';
 import {JsonPipe} from '@angular/common';
@@ -70,36 +70,23 @@ export class Events {
 
   protected readonly eventsLog = signal<DisplayEventLogItem[]>([]);
   protected readonly displayedColumns = ['time', 'action', 'surface', 'component', 'context'];
-  private readonly processedEnvelopes = new WeakSet<MessageEnvelope>();
 
   constructor() {
     // The Events tab specifically captures SEND_TO_SERVER messages, which represent
     // interactive user actions and component event payloads destined for the server/backend.
     // Other message types (CONSOLE_LOG, DATA_MODEL_CHANGE, RENDERER_READY, SURFACE_RESIZE)
     // are routed to their dedicated tabs: Errors, Data Model, and Raw Messages.
-    const initialEvents = (this.hostComm.getHistoryBuffer?.() || [])
+    const initialEvents = (this.hostComm.getHistoryBuffer() || [])
       .filter(env => env.type === PreviewBridgeMessageType.SEND_TO_SERVER)
-      .map(env => {
-        this.processedEnvelopes.add(env);
-        return this.mapEnvelopeToEvent(env);
-      })
+      .map(env => this.mapEnvelopeToEvent(env))
       .filter((item): item is DisplayEventLogItem => item !== null)
       .reverse();
     if (initialEvents.length > 0) {
       this.eventsLog.set(initialEvents.slice(0, 100));
     }
 
-    if (this.hostComm.messageStream$) {
-      this.hostComm.messageStream$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(envelope => {
-        this.handleIncomingEnvelope(envelope);
-      });
-    }
-
-    effect(() => {
-      const envelope = this.hostComm.messageStream();
-      if (envelope) {
-        this.handleIncomingEnvelope(envelope);
-      }
+    this.hostComm.messageStream$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(envelope => {
+      this.handleIncomingEnvelope(envelope);
     });
   }
 
@@ -107,23 +94,17 @@ export class Events {
     // Only capture SEND_TO_SERVER messages; other message types (such as CONSOLE_LOG,
     // DATA_MODEL_CHANGE, RENDERER_READY, SURFACE_RESIZE) are handled by dedicated tabs
     // (Errors, Data Model, Raw Messages).
-    if (
-      envelope.type !== PreviewBridgeMessageType.SEND_TO_SERVER ||
-      this.processedEnvelopes.has(envelope)
-    ) {
+    if (envelope.type !== PreviewBridgeMessageType.SEND_TO_SERVER) {
       return;
     }
-    this.processedEnvelopes.add(envelope);
     const mappedItem = this.mapEnvelopeToEvent(envelope);
     if (mappedItem) {
-      untracked(() => {
-        this.eventsLog.update(logs => {
-          const newLogs = [mappedItem, ...logs];
-          if (newLogs.length > 100) {
-            newLogs.length = 100;
-          }
-          return newLogs;
-        });
+      this.eventsLog.update(logs => {
+        const newLogs = [mappedItem, ...logs];
+        if (newLogs.length > 100) {
+          newLogs.length = 100;
+        }
+        return newLogs;
       });
     }
   }

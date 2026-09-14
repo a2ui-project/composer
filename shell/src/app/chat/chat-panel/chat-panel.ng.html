@@ -172,13 +172,18 @@
                 }
                 <p class="bubble-text-content">{{ turn.content }}</p>
                 @if (turn.parseError && !turn.isStreaming) {
-                  <div class="parse-error-card">
-                    <mat-icon color="warn">error_outline</mat-icon>
+                  <div class="parse-error-card" role="alert" aria-live="assertive">
+                    <mat-icon color="warn" aria-hidden="true">error_outline</mat-icon>
                     <span class="error-notice"
                       ><strong>JSON Syntax Error:</strong>
                       {{ getParseErrorMessage(turn.parseError) }}</span
                     >
-                    <button mat-flat-button color="warn" (click)="viewParseErrorDetails()">
+                    <button
+                      mat-flat-button
+                      color="warn"
+                      aria-label="View parse error details in Errors tab"
+                      (click)="viewParseErrorDetails()"
+                    >
                       View in Errors Tab
                     </button>
                   </div>

@@ -40,7 +40,10 @@ import {StartupResolution} from '../../shell/startup-resolution/startup-resoluti
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {doesCatalogSupportMcp} from '../../storage/models/catalog-storage.model';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
-import {parseAndHealJsonLines} from '../a2ui-payload-parser/a2ui-payload-parser';
+import {
+  FailureParseResult,
+  parseAndHealJsonLines,
+} from '../a2ui-payload-parser/a2ui-payload-parser';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 import {ChatCoordinator} from '../chat-coordinator/chat-coordinator';
 import {ChatState} from '../chat-state/chat-state';
@@ -172,6 +175,22 @@ export class ChatPanel {
       .map(m => {
         const isStreaming =
           m.role === MessageRole.MODEL && this.chatState.isProgrammaticStreamActive();
+        if (isStreaming) {
+          return {
+            ...m,
+            isSnapshot: false,
+            isStreaming: true,
+            componentCount: null,
+          };
+        }
+        if (m.isSnapshot !== undefined) {
+          return {
+            ...m,
+            isSnapshot: m.isSnapshot,
+            isStreaming: false,
+            componentCount: m.componentCount ?? null,
+          };
+        }
         const cleaned = m.content ? this.chatCleaner.cleanPayload(m.content) : '';
         const parseResult = cleaned ? parseAndHealJsonLines(cleaned) : null;
         let isSnapshot = false;
@@ -182,14 +201,14 @@ export class ChatPanel {
           return {
             ...m,
             isSnapshot: true,
-            isStreaming: !!isStreaming,
+            isStreaming: false,
             componentCount: parseResult?.success ? parseResult.count : 0,
           };
         }
         return {
           ...m,
           isSnapshot: false,
-          isStreaming: !!isStreaming,
+          isStreaming: false,
           componentCount: null,
         };
       });
@@ -306,12 +325,8 @@ export class ChatPanel {
   /**
    * Type-safe helper to extract the parser syntax error message from the structured payload.
    */
-  getParseErrorMessage(parseError: unknown): string {
-    if (!parseError || typeof parseError !== 'object') {
-      return 'Unknown formatting failure';
-    }
-    const result = parseError as Record<string, unknown>;
-    return typeof result['error'] === 'string' ? result['error'] : 'Invalid JSON layout structure';
+  getParseErrorMessage(parseError?: FailureParseResult): string {
+    return parseError?.error ?? 'Invalid JSON layout structure';
   }
 
   viewParseErrorDetails(): void {

@@ -40,6 +40,19 @@ describe('a2ui-payload-parser', () => {
       expect(attemptSyntaxHealing('unhealable {')).toBeNull();
     });
 
+    it('returns null when input exceeds 256KB', () => {
+      const hugeInput = '{"a": ' + 'x'.repeat(256 * 1024 + 1);
+      expect(attemptSyntaxHealing(hugeInput)).toBeNull();
+    });
+
+    it('heals arrays nested in objects and objects nested in arrays', () => {
+      const objInArr = attemptSyntaxHealing('[{"a": 1');
+      expect(objInArr).toEqual([{a: 1}]);
+
+      const arrInObj = attemptSyntaxHealing('{"a": [1, 2');
+      expect(arrInObj).toEqual({a: [1, 2]});
+    });
+
     it('returns null when input is null or undefined', () => {
       expect(attemptSyntaxHealing(null)).toBeNull();
       expect(attemptSyntaxHealing(undefined)).toBeNull();
@@ -53,31 +66,41 @@ describe('a2ui-payload-parser', () => {
   });
 
   describe('parseAndHealJsonLines', () => {
-    it('returns failure when input is null or undefined', () => {
+    it('returns conversational result when input is null or undefined', () => {
       // @ts-expect-error Types mismatch in tests
       expect(parseAndHealJsonLines(null)).toEqual({
-        success: false,
-        error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+        success: true,
+        isConversational: true,
+        blocks: [],
+        count: 0,
       });
       // @ts-expect-error Types mismatch in tests
       expect(parseAndHealJsonLines(undefined)).toEqual({
-        success: false,
-        error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+        success: true,
+        isConversational: true,
+        blocks: [],
+        count: 0,
       });
     });
 
-    it('returns failure for empty content', () => {
+    it('returns conversational result for empty content', () => {
       expect(parseAndHealJsonLines('')).toEqual({
-        success: false,
-        error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+        success: true,
+        isConversational: true,
+        blocks: [],
+        count: 0,
       });
       expect(parseAndHealJsonLines('   ')).toEqual({
-        success: false,
-        error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+        success: true,
+        isConversational: true,
+        blocks: [],
+        count: 0,
       });
       expect(parseAndHealJsonLines('\n\t\n')).toEqual({
-        success: false,
-        error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
+        success: true,
+        isConversational: true,
+        blocks: [],
+        count: 0,
       });
     });
 
@@ -121,7 +144,7 @@ describe('a2ui-payload-parser', () => {
     });
 
     it('reports 1-indexed line number of failing line in multi-line payload', () => {
-      const payload = `{"valid": 1}
+      const payload = `some explanatory markdown header
 
 {"broken": [1, 2, invalid]}`;
       const result = parseAndHealJsonLines(payload);
@@ -129,6 +152,39 @@ describe('a2ui-payload-parser', () => {
       if (!result.success) {
         expect(result.line).toBe(3);
         expect(result.snippet).toBe('{"broken": [1, 2, invalid]}');
+      }
+    });
+
+    it('counts components in JSON array of commands', () => {
+      const payload = '[{"createSurface": {}}, {"updateComponents": {"components": [{}, {}]}}]';
+      const parsed = parseAndHealJsonLines(payload);
+      expect(parsed?.success).toBe(true);
+      if (parsed.success && !parsed.isConversational) {
+        expect(parsed.count).toBe(3);
+      }
+    });
+
+    it('counts components in multi-line JSONL commands', () => {
+      const payload = '{"createSurface": {}}\n{"updateComponents": {"components": [{}]}}';
+      const parsed = parseAndHealJsonLines(payload);
+      expect(parsed?.success).toBe(true);
+      if (parsed.success && !parsed.isConversational) {
+        expect(parsed.count).toBe(2);
+      }
+    });
+
+    it('returns 0 for non-layout text', () => {
+      const parsed = parseAndHealJsonLines('invalid text');
+      expect(parsed?.count).toBe(0);
+    });
+
+    it('ignores single-line parse failures in multi-line JSONL and counts valid lines', () => {
+      const payload =
+        '{"createSurface": {}}\n{corrupted\n{"updateComponents": {"components": [{}, {}]}}';
+      const parsed = parseAndHealJsonLines(payload);
+      expect(parsed?.success).toBe(true);
+      if (parsed.success && !parsed.isConversational) {
+        expect(parsed.count).toBe(3);
       }
     });
 

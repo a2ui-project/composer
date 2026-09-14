@@ -19,6 +19,7 @@ import {Events} from './events';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {EventsHarness} from './test/events.harness';
 import {describe, it, expect, beforeEach} from 'vitest';
+import {Subject} from 'rxjs';
 import {
   HostCommunication,
   MessageEnvelope,
@@ -35,9 +36,19 @@ describe('Events', () => {
   let mockHostComm: Partial<HostCommunication>;
 
   beforeEach(async () => {
+    const messageStreamSubject = new Subject<MessageEnvelope>();
     mockMessageStream = signal<MessageEnvelope | null>(null);
+    const originalSet = mockMessageStream.set.bind(mockMessageStream);
+    mockMessageStream.set = (val: MessageEnvelope | null) => {
+      originalSet(val);
+      if (val) {
+        messageStreamSubject.next(val);
+      }
+    };
+
     mockHostComm = {
       messageStream: mockMessageStream.asReadonly(),
+      messageStream$: messageStreamSubject.asObservable(),
       getHistoryBuffer: () => [],
     };
 
@@ -334,6 +345,7 @@ describe('Events', () => {
           provide: HostCommunication,
           useValue: {
             messageStream: signal<MessageEnvelope | null>(null).asReadonly(),
+            messageStream$: new Subject<MessageEnvelope>().asObservable(),
             getHistoryBuffer: () => historicalEnvelopes,
           },
         },

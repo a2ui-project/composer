@@ -20,6 +20,7 @@ import {toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {debounceTime, filter} from 'rxjs/operators';
 import {merge} from 'rxjs';
 import {A2uiSandboxConnection} from 'a2ui-bridge/angular';
+import {ERROR_OVERLAY_DEBOUNCE_MS} from 'a2ui-bridge';
 
 /**
  * The component for the sandboxed renderer client application.
@@ -45,7 +46,7 @@ export class AppComponent {
       this.error$.pipe(filter(e => e === null)),
       this.error$.pipe(
         filter(e => e !== null),
-        debounceTime(350),
+        debounceTime(ERROR_OVERLAY_DEBOUNCE_MS),
       ),
     ),
     {initialValue: null},
