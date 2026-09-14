@@ -462,21 +462,19 @@ describe('Ga4UsageTrackingService', () => {
       // Simulate disabled
       (service as unknown as {config: unknown}).config = {enabled: false, measurementId: 'G-TEST'};
       service.trackComposerError({
-        source_tag: 'test',
-        error_category: 'SCHEMA_VALIDATION_ERROR',
-        message: '',
+        sourceTag: 'test',
+        errorCategory: 'SCHEMA_VALIDATION_ERROR',
       });
       expect(mockWindow.gtag).not.toHaveBeenCalled();
     });
 
     it('sends composer_error event with strict structured parameters', () => {
       service.trackComposerError({
-        source_tag: '[Monaco]',
-        error_category: 'SCHEMA_VALIDATION_ERROR',
-        message: '',
+        sourceTag: '[Monaco]',
+        errorCategory: 'SCHEMA_VALIDATION_ERROR',
         line: 10,
         column: 5,
-        invalid_property: 'components',
+        invalidProperty: 'components',
       });
 
       expect(mockWindow.gtag).toHaveBeenCalledWith(
@@ -487,7 +485,6 @@ describe('Ga4UsageTrackingService', () => {
           event_label: 'SCHEMA_VALIDATION_ERROR',
           source_tag: '[Monaco]',
           error_category: 'SCHEMA_VALIDATION_ERROR',
-          message: '',
           line: 10,
           column: 5,
           invalid_property: 'components',
@@ -497,8 +494,8 @@ describe('Ga4UsageTrackingService', () => {
 
     it('sends default placeholders for missing optional structural coordinates', () => {
       service.trackComposerError({
-        source_tag: '[ChatParser]',
-        error_category: 'CHAT_PARSER_ERROR',
+        sourceTag: '[ChatParser]',
+        errorCategory: 'CHAT_PARSER_ERROR',
       });
 
       expect(mockWindow.gtag).toHaveBeenCalledWith(
@@ -511,9 +508,44 @@ describe('Ga4UsageTrackingService', () => {
           error_category: 'CHAT_PARSER_ERROR',
           line: -1,
           column: -1,
-          invalid_property: 'none',
+          invalid_property: 'none_or_redacted',
         }),
       );
+    });
+
+    it('sanitizes invalidProperty if it contains invalid characters', () => {
+      service.trackComposerError({
+        sourceTag: '[Monaco]',
+        errorCategory: 'SCHEMA_VALIDATION_ERROR',
+        invalidProperty: 'invalid propert!>',
+      });
+
+      expect(mockWindow.gtag).toHaveBeenCalledWith(
+        'event',
+        'composer_error',
+        expect.objectContaining({
+          invalid_property: 'none_or_redacted',
+        }),
+      );
+    });
+
+    it('prevents PII leakage by stripping full JSON blobs and untrusted text', () => {
+      const adversarialText = 'JDoe123';
+      service.trackComposerError({
+        sourceTag: adversarialText,
+        errorCategory: 'SOME_ERROR_CATEGORY',
+        line: 99,
+        column: 99,
+        invalidProperty: adversarialText,
+      });
+
+      const gtagCallArgs = mockWindow.gtag as ReturnType<typeof vi.fn>;
+      const lastCallObj = gtagCallArgs.mock.calls[0][2] as Record<string, unknown>;
+
+      const payloadString = JSON.stringify(lastCallObj);
+      expect(payloadString).not.toContain(adversarialText);
+      expect(lastCallObj['invalid_property']).toBe('none_or_redacted');
+      expect(lastCallObj['source_tag']).toBe('[Unknown]');
     });
 
     it('catches and suppresses internal gtag runtime exceptions silently', () => {
@@ -522,7 +554,7 @@ describe('Ga4UsageTrackingService', () => {
       });
 
       expect(() => {
-        service.trackComposerError({source_tag: 'test', error_category: 'error'});
+        service.trackComposerError({sourceTag: 'test', errorCategory: 'error'});
       }).not.toThrow();
     });
   });

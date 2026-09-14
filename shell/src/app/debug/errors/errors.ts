@@ -90,11 +90,11 @@ export class Errors {
           setTimeout(() => this.recentErrors.delete(signature), 5000);
 
           this.usageTrackingService.trackComposerError({
-            source_tag: item.sourceTag,
-            message: item.message,
+            sourceTag: item.sourceTag,
+            errorCategory: 'UNKNOWN_ERROR', // Temporarily fallback until CATEGORY_BY_TAG is introduced in Commit 2
             line: item.line,
             column: item.column,
-            invalid_property: invalidProp,
+            invalidProperty: invalidProp,
           });
         }
       }

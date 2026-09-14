@@ -307,19 +307,21 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
 
   trackComposerError(params: ComposerErrorTelemetryParams): void {
     if (!this.config.enabled) return;
+    const sanitizedInvalidProperty =
+      params.invalidProperty && /^[a-z0-9_$-]{1,64}$/.test(params.invalidProperty)
+        ? params.invalidProperty
+        : 'none_or_redacted';
+
     const customParams = {
       ['event_category']: 'error',
-      ['event_label']: params.error_category || 'UNKNOWN_ERROR',
-      ['source_tag']: params.source_tag,
-      ['error_type']: params.error_category || 'UNKNOWN_ERROR',
-      ['error_category']: params.error_category || 'UNKNOWN_ERROR',
-      ['message']: params.message || '',
-      ['line']: params.line || -1,
-      ['column']: params.column || -1,
-      ['invalid_property']: params.invalid_property || 'none',
+      ['event_label']: params.errorCategory,
+      ['source_tag']: params.sourceTag && /^\[[a-zA-Z0-9_-]+\]$/.test(params.sourceTag) ? params.sourceTag : '[Unknown]',
+      ['error_type']: params.errorCategory,
+      ['error_category']: params.errorCategory,
+      ['line']: params.line ?? -1,
+      ['column']: params.column ?? -1,
+      ['invalid_property']: sanitizedInvalidProperty,
     };
-    try {
-      this.dispatchGtagEvent('composer_error', customParams);
-    } catch (e) {}
+    this.dispatchGtagEvent('composer_error', customParams);
   }
 }
