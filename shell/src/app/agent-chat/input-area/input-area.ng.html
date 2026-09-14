@@ -17,25 +17,19 @@
 <div class="input-area-container" [class.disabled]="disabled()">
   <div class="input-card">
     @if (attachmentChips().length > 0) {
-      <div class="attached-images-tray">
+      <mat-chip-set class="attachment-tray" aria-label="Attachments">
         @for (chip of attachmentChips(); track $index) {
-          <div class="image-chip">
-            <mat-icon class="chip-file-icon">{{ chip.icon }}</mat-icon>
+          <mat-chip class="attachment-chip" (removed)="removeAttachedImage($index)">
+            <mat-icon matChipAvatar class="chip-file-icon">{{ chip.icon }}</mat-icon>
             <span class="chip-name" [matTooltip]="chip.name" [title]="chip.name">
               {{ chip.name }}
             </span>
-            <button
-              mat-icon-button
-              type="button"
-              class="remove-img-btn"
-              (click)="removeAttachedImage($index)"
-              aria-label="Remove attachment"
-            >
+            <button matChipRemove type="button" [attr.aria-label]="'Remove ' + chip.name">
               <mat-icon>close</mat-icon>
             </button>
-          </div>
+          </mat-chip>
         }
-      </div>
+      </mat-chip-set>
     }
 
     @if (attachmentError()) {

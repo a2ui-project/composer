@@ -16,6 +16,7 @@
 
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {A2aInputArea} from './input-area';
 import {A2aInputAreaHarness} from './test/input-area.harness';
@@ -27,6 +28,7 @@ describe('A2aInputArea', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [A2aInputArea],
+      providers: [provideNoopAnimations()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(A2aInputArea);
@@ -92,12 +94,13 @@ describe('A2aInputArea', () => {
     ]);
     fixture.detectChanges();
 
-    expect(await harness.getImageChipCount()).toBe(1);
+    expect(await harness.getAttachmentChipCount()).toBe(1);
 
-    fixture.componentInstance['removeAttachedImage'](0);
+    await harness.removeAttachmentChip(0);
     fixture.detectChanges();
 
-    expect(await harness.getImageChipCount()).toBe(0);
+    expect(fixture.componentInstance['attachedImages']()).toEqual([]);
+    expect(await harness.getAttachmentChipCount()).toBe(0);
   });
 
   it('triggers file input click on attach button click', async () => {
@@ -176,7 +179,7 @@ describe('A2aInputArea', () => {
     expect(fixture.componentInstance['attachmentError']()).toContain('huge.pdf');
   });
 
-  it('caps the number of attachments and reports the overflow', async () => {
+  it('caps the number of attachments and names the ones left out', async () => {
     const files = Array.from(
       {length: 12},
       (_, i) => new File(['x'], `file-${i}.txt`, {type: 'text/plain'}),
@@ -185,7 +188,12 @@ describe('A2aInputArea', () => {
     await fixture.componentInstance['handleFileSelection'](fileSelectionEvent(files));
 
     expect(fixture.componentInstance['attachedImages']().length).toBe(10);
-    expect(fixture.componentInstance['attachmentError']()).toContain('at most 10');
+    const error = fixture.componentInstance['attachmentError']();
+    expect(error).toContain('at most 10 attachments');
+    // The message must name the rejected files, not imply the whole
+    // selection was dropped.
+    expect(error).toContain('"file-10.txt", "file-11.txt" were not attached');
+    expect(error).not.toContain('file-9.txt');
   });
 
   it('clears attachments and errors after sending', async () => {
