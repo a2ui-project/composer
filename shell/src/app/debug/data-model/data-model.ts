@@ -21,12 +21,10 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {DataModelChangePayload, PreviewBridgeMessageType} from 'a2ui-bridge';
 import {debounceTime, distinctUntilChanged} from 'rxjs/operators';
-import {
-  HostCommunication,
-  MessageEnvelope,
-} from '../../shell/host-communication/host-communication';
+import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {formatJson} from '../../utils/json';
+import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 
 /**
  * A debug drawer component presenting a reactive, nested JSON tree explorer
@@ -45,7 +43,6 @@ export class DataModel {
 
   private lastSurfaceId = 'sample-surface';
   private lastPath: string | undefined = undefined;
-  private readonly processedEnvelopes = new WeakSet<MessageEnvelope>();
 
   readonly latestModelValue = signal<unknown>(null);
 
@@ -69,10 +66,7 @@ export class DataModel {
   });
 
   constructor() {
-    const history = this.hostComm.getHistoryBuffer?.() || [];
-    for (const env of history) {
-      this.processedEnvelopes.add(env);
-    }
+    const history = this.hostComm.consumeEnvelopeHistory() || [];
     for (let i = history.length - 1; i >= 0; i--) {
       const env = history[i];
       if (env.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
@@ -92,10 +86,9 @@ export class DataModel {
     }
 
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(streamValue => {
-      if (!streamValue || this.processedEnvelopes.has(streamValue)) {
+      if (!streamValue) {
         return;
       }
-      this.processedEnvelopes.add(streamValue);
 
       if (streamValue.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
         const payload = streamValue.payload as DataModelChangePayload | undefined;
@@ -111,7 +104,7 @@ export class DataModel {
           }
 
           const cleanValue = updateObj['value'];
-          if (JSON.stringify(cleanValue) !== JSON.stringify(this.latestModelValue())) {
+          if (stableStringify(cleanValue) !== stableStringify(this.latestModelValue())) {
             this.latestModelValue.set(cleanValue);
           }
         }
@@ -126,8 +119,8 @@ export class DataModel {
           const parsed = JSON.parse(jsonStr);
           isValid = true;
           const currentIncoming = this.latestModelValue();
-          const incomingStr = currentIncoming ? JSON.stringify(currentIncoming) : '';
-          const localStr = JSON.stringify(parsed);
+          const incomingStr = currentIncoming ? stableStringify(currentIncoming) : '';
+          const localStr = stableStringify(parsed);
           if (incomingStr !== localStr) {
             // prettier-ignore
             this.hostComm.sendMessage({

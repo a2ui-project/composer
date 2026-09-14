@@ -95,19 +95,17 @@ export class HostCommunication implements OnDestroy {
     message: {type: PreviewBridgeMessageType; payload?: unknown};
     target?: HTMLIFrameElement | Window | null;
   }> = [];
+  private latestCatalogEnvelope: MessageEnvelope | null = null;
 
   /**
    * Retrieves a snapshot copy of the recent message history buffer.
    * @return Array of stored message envelopes
    */
-  getHistoryBuffer(): MessageEnvelope[] {
-    return [...this.messageHistoryBuffer];
+  consumeEnvelopeHistory(): MessageEnvelope[] {
+    const records = [...this.messageHistoryBuffer];
+    this.messageHistoryBuffer.length = 0;
+    return records;
   }
-
-  /**
-   * Retrieves the most recent catalog message envelope received from the preview frame.
-   * @return Latest catalog envelope or null if none received
-   */
 
   /**
    * Clears the historical message buffer and resets the tracked catalog state.

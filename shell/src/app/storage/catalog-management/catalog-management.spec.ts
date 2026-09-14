@@ -781,8 +781,8 @@ describe('CatalogManagement', () => {
     expect(service.catalogError()).toBeNull();
   });
 
-  it('exposes handshakeHistoryIndex and cleans up window reference on destroy', async () => {
-    expect(service.handshakeHistoryIndex()).toBeNull();
+  it('exposes handshakeState', async () => {
+    expect(service.handshakeState()).toBe('idle');
 
     hostCommunicationMock.getHistoryBuffer = vi.fn().mockReturnValue([
       {
@@ -820,7 +820,7 @@ describe('CatalogManagement', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     vi.useFakeTimers();
 
-    expect(service.handshakeHistoryIndex()).toBe(2);
+    expect(service.handshakeState()).toBe('settled');
 
     TestBed.resetTestingModule();
   });

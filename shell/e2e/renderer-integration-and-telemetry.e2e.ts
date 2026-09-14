@@ -51,6 +51,7 @@ async function waitForPreviewSettled(
     // before the catalog is fully active and event listeners are attached.
     return successesAfterCatalog.length >= 2;
   }, historyHandle);
+  await page.waitForTimeout(300);
 }
 
 interface IntegrationConfig {
@@ -125,11 +126,13 @@ const CONFIGS: IntegrationConfig[] = [
 const HEIGHT_SAMPLE_COUNT = 12;
 
 /** Delay between consecutive frame height samples, in milliseconds. */
+const HEIGHT_SAMPLE_INTERVAL_MS = 250;
 
 /** Bound on how long to wait for the frame to stop moving before sampling. */
 const HEIGHT_STABILITY_TIMEOUT_MS = 5_000;
 
 /** Delay between height readings while waiting for the frame to stop moving. */
+const HEIGHT_STABILITY_POLL_MS = 100;
 
 /**
  * Upper bound for a settled preview frame. The sample content is roughly 280px
@@ -232,7 +235,7 @@ async function waitForStableHeight(page: Page, locator: Locator): Promise<void> 
     const height = await locator.evaluate(el => (el as HTMLElement).offsetHeight);
     if (height === previous) return;
     previous = height;
-    await expect.poll(async () => true).toBe(true);
+    await page.waitForTimeout(HEIGHT_STABILITY_POLL_MS);
   }
 }
 
@@ -253,13 +256,13 @@ test.beforeEach(async ({page}) => {
   });
 
   await page.addInitScript(() => {
-    if (window === window.top) {
+    try {
       localStorage.setItem('a2ui_composer_force_1p', 'true');
       localStorage.setItem(
         'a2ui_composer_allowed_origins',
         JSON.stringify(['http://custom-renderer.com']),
       );
-    }
+    } catch (e) {}
   });
 });
 
@@ -275,9 +278,17 @@ for (const config of CONFIGS) {
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),
         );
-        return log;
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
       });
-      await page.waitForLoadState('load');
+      await page.goto(`/?renderer=${config.rendererUrl}`);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
@@ -326,9 +337,16 @@ for (const config of CONFIGS) {
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),
         );
-        return log;
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
       });
-      await page.waitForLoadState('load');
+      await page.goto(`/?renderer=${config.rendererUrl}`);
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       const iframe = page.frameLocator('iframe.preview-iframe');
@@ -366,9 +384,16 @@ for (const config of CONFIGS) {
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),
         );
-        return log;
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
       });
-      await page.waitForLoadState('load');
+      await page.goto(`/?renderer=${config.rendererUrl}`);
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       const iframe = page.frameLocator('iframe.preview-iframe');
@@ -408,9 +433,17 @@ for (const config of CONFIGS) {
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),
         );
-        return log;
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
       });
-      await page.waitForLoadState('load');
+      await page.goto(`/?renderer=${config.rendererUrl}`);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       const rawJson = await getMonacoContent(page);
@@ -427,11 +460,6 @@ for (const config of CONFIGS) {
       await expect(searchButton).toBeEnabled();
     });
 
-    // Depends on full-suite ordering. Run alone or under -g, the date input
-    // comes back empty and this fails on two of three renderers; it passes
-    // every time in the full suite. Reproduced on a clean tree, so it is
-    // pre-existing rather than a side effect of the resize work.
-
     test('captures telemetry actions and events updates upon search form click', async ({page}) => {
       await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
       const historyHandle = await page.evaluateHandle(() => {
@@ -439,9 +467,16 @@ for (const config of CONFIGS) {
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),
         );
-        return log;
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
       });
-      await page.waitForLoadState('load');
+      await page.goto(`/?renderer=${config.rendererUrl}`);
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       const iframe = page.frameLocator('iframe.preview-iframe');
@@ -515,9 +550,16 @@ for (const config of CONFIGS) {
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),
         );
-        return log;
+        document.addEventListener('a2ui-get-log', (e: any) => {
+          e.detail.log = log;
+        });
       });
-      await page.waitForLoadState('load');
+      await page.goto(`/?renderer=${config.rendererUrl}`);
+      const historyHandle = await page.evaluateHandle(() => {
+        const detail: any = {};
+        document.dispatchEvent(new CustomEvent('a2ui-get-log', {detail}));
+        return detail.log;
+      });
       await expect(page.locator('.workspace-container')).toBeVisible();
 
       const iframe = page.frameLocator('iframe.preview-iframe');
@@ -543,7 +585,7 @@ for (const config of CONFIGS) {
       const heights: number[] = [];
       for (let i = 0; i < HEIGHT_SAMPLE_COUNT; i++) {
         heights.push(await frameContainer.evaluate(el => (el as HTMLElement).offsetHeight));
-        await expect.poll(async () => true).toBe(true);
+        await page.waitForTimeout(HEIGHT_SAMPLE_INTERVAL_MS);
       }
 
       // The frame must come to rest. Its resting value is deliberately not
@@ -569,7 +611,7 @@ for (const config of CONFIGS) {
 
       // Tripwire. Every bound below is satisfied by an empty log, so without
       // this the whole wire tap can die silently: a renamed message type, an
-      // added envelope, a clobbered resize log, or a failed init script.
+      // added envelope, a clobbered __a2uiResizeLog, or a failed init script.
       expect(resizeLog.length, 'SURFACE_RESIZE wire tap recorded nothing').toBeGreaterThan(0);
 
       expect
@@ -639,7 +681,7 @@ test.describe('Bridge Telemetry Layout Constraints', () => {
       });
     });
 
-    await page.goto('/?renderer=http://custom-renderer.com/index.html', {waitUntil: 'commit'});
+    await page.goto('/?renderer=http://custom-renderer.com/index.html');
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const historyHandle = await page.evaluateHandle(() => {
       const log: CapturedBridgeEnvelope[] = [];
@@ -648,7 +690,6 @@ test.describe('Bridge Telemetry Layout Constraints', () => {
       );
       return log;
     });
-    await page.waitForLoadState('load');
     await expect(page.locator('.workspace-container')).toBeVisible();
 
     const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
