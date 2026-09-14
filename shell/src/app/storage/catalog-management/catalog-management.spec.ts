@@ -34,6 +34,7 @@ describe('CatalogManagement', () => {
     latestEnvelope: WritableSignal<MessageEnvelope | null>;
     messageStream$: Subject<MessageEnvelope>;
     sendMessage: ReturnType<typeof vi.fn>;
+    getHistoryBuffer?: ReturnType<typeof vi.fn>;
   };
   let indexedDbStorageMock: {
     getCatalogRecord: ReturnType<typeof vi.fn>;
@@ -762,5 +763,51 @@ describe('CatalogManagement', () => {
     expect(service.activeCatalog()).toBeNull();
     expect(service.activeCatalogTitle()).toBe('');
     expect(service.catalogError()).toBeNull();
+  });
+
+  it('exposes handshakeHistoryIndex and cleans up window reference on destroy', async () => {
+    expect(window.a2uiCatalogManagement).toBe(service);
+    expect(service.handshakeHistoryIndex()).toBeNull();
+
+    hostCommunicationMock.getHistoryBuffer = vi.fn().mockReturnValue([
+      {
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        origin: 'http://localhost',
+        timestamp: 1000,
+      },
+      {
+        type: PreviewBridgeMessageType.A2UI_CATALOG,
+        origin: 'http://localhost',
+        timestamp: 1001,
+      },
+    ]);
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: 1000,
+    });
+    TestBed.tick();
+
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.A2UI_CATALOG,
+      origin: 'http://localhost',
+      payload: {
+        catalogId: 'test-cat',
+        title: 'Test Catalog',
+        components: {},
+      },
+      timestamp: 1001,
+    });
+    TestBed.tick();
+
+    vi.useRealTimers();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    vi.useFakeTimers();
+
+    expect(service.handshakeHistoryIndex()).toBe(2);
+
+    TestBed.resetTestingModule();
+    expect(window.a2uiCatalogManagement).toBeUndefined();
   });
 });
