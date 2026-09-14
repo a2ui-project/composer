@@ -27,6 +27,9 @@
 /** MIME type reported for files whose type the browser cannot determine. */
 const GENERIC_MIME_TYPE = 'application/octet-stream';
 
+/** MIME type prefix shared by every image format. */
+const IMAGE_MIME_PREFIX = 'image/';
+
 /** Filename extensions that always denote an image attachment. */
 const IMAGE_EXTENSIONS: readonly string[] = [
   'bmp',
@@ -38,6 +41,83 @@ const IMAGE_EXTENSIONS: readonly string[] = [
   'svg',
   'webp',
 ];
+
+/** MIME type of a PDF document. */
+const PDF_MIME_TYPES: readonly string[] = ['application/pdf'];
+
+/** Filename extension of a PDF document. */
+const PDF_EXTENSIONS: readonly string[] = ['pdf'];
+
+/** MIME types of the word-processor formats the composer recognises. */
+const DOCUMENT_MIME_TYPES: readonly string[] = [
+  'application/msword',
+  'application/rtf',
+  'application/vnd.oasis.opendocument.text',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
+/** Filename extensions of the word-processor formats. */
+const DOCUMENT_EXTENSIONS: readonly string[] = ['doc', 'docx', 'odt', 'rtf'];
+
+/** MIME types of the spreadsheet formats the composer recognises. */
+const SPREADSHEET_MIME_TYPES: readonly string[] = [
+  'application/vnd.ms-excel',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+
+/** Filename extensions of the spreadsheet formats. */
+const SPREADSHEET_EXTENSIONS: readonly string[] = ['ods', 'xls', 'xlsx'];
+
+/** MIME type prefix shared by every audio format. */
+const AUDIO_MIME_PREFIX = 'audio/';
+
+/** Filename extensions that denote an audio attachment. */
+const AUDIO_EXTENSIONS: readonly string[] = ['aac', 'flac', 'm4a', 'mp3', 'ogg', 'wav'];
+
+/** MIME type prefix shared by every video format. */
+const VIDEO_MIME_PREFIX = 'video/';
+
+/** Filename extensions that denote a video attachment. */
+const VIDEO_EXTENSIONS: readonly string[] = ['avi', 'mkv', 'mov', 'mp4', 'webm'];
+
+/** MIME types of the structured-text formats shown as source code. */
+const CODE_MIME_TYPES: readonly string[] = [
+  'application/json',
+  'application/xml',
+  'text/html',
+  'text/xml',
+];
+
+/** Filename extensions of the source files the composer recognises. */
+const CODE_EXTENSIONS: readonly string[] = [
+  'css',
+  'html',
+  'java',
+  'js',
+  'json',
+  'py',
+  'ts',
+  'xml',
+  'yaml',
+  'yml',
+];
+
+/** MIME types of the archive formats the composer recognises. */
+const ARCHIVE_MIME_TYPES: readonly string[] = [
+  'application/gzip',
+  'application/x-tar',
+  'application/zip',
+];
+
+/** Filename extensions of the archive formats. */
+const ARCHIVE_EXTENSIONS: readonly string[] = ['7z', 'gz', 'rar', 'tar', 'zip'];
+
+/** MIME type prefix shared by every plain-text format. */
+const TEXT_MIME_PREFIX = 'text/';
+
+/** Filename extensions that denote a plain-text attachment. */
+const TEXT_EXTENSIONS: readonly string[] = ['csv', 'log', 'md', 'txt'];
 
 /**
  * Canonical MIME type for each filename extension the composer recognises.
@@ -89,52 +169,15 @@ interface FileIconRule {
 
 /** Attachment icon rules, evaluated in order; the first match wins. */
 const FILE_ICON_RULES: readonly FileIconRule[] = [
-  {icon: 'image', mimePrefixes: ['image/'], extensions: IMAGE_EXTENSIONS},
-  {icon: 'picture_as_pdf', mimeTypes: ['application/pdf'], extensions: ['pdf']},
-  {
-    icon: 'article',
-    mimeTypes: [
-      'application/msword',
-      'application/rtf',
-      'application/vnd.oasis.opendocument.text',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ],
-    extensions: ['doc', 'docx', 'odt', 'rtf'],
-  },
-  {
-    icon: 'table_chart',
-    mimeTypes: [
-      'application/vnd.ms-excel',
-      'application/vnd.oasis.opendocument.spreadsheet',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ],
-    extensions: ['ods', 'xls', 'xlsx'],
-  },
-  {
-    icon: 'audio_file',
-    mimePrefixes: ['audio/'],
-    extensions: ['aac', 'flac', 'm4a', 'mp3', 'ogg', 'wav'],
-  },
-  {
-    icon: 'video_file',
-    mimePrefixes: ['video/'],
-    extensions: ['avi', 'mkv', 'mov', 'mp4', 'webm'],
-  },
-  {
-    icon: 'code',
-    mimeTypes: ['application/json', 'application/xml', 'text/html', 'text/xml'],
-    extensions: ['css', 'html', 'java', 'js', 'json', 'py', 'ts', 'xml', 'yaml', 'yml'],
-  },
-  {
-    icon: 'folder_zip',
-    mimeTypes: ['application/gzip', 'application/x-tar', 'application/zip'],
-    extensions: ['7z', 'gz', 'rar', 'tar', 'zip'],
-  },
-  {
-    icon: DEFAULT_FILE_ICON,
-    mimePrefixes: ['text/'],
-    extensions: ['csv', 'log', 'md', 'txt'],
-  },
+  {icon: 'image', mimePrefixes: [IMAGE_MIME_PREFIX], extensions: IMAGE_EXTENSIONS},
+  {icon: 'picture_as_pdf', mimeTypes: PDF_MIME_TYPES, extensions: PDF_EXTENSIONS},
+  {icon: 'article', mimeTypes: DOCUMENT_MIME_TYPES, extensions: DOCUMENT_EXTENSIONS},
+  {icon: 'table_chart', mimeTypes: SPREADSHEET_MIME_TYPES, extensions: SPREADSHEET_EXTENSIONS},
+  {icon: 'audio_file', mimePrefixes: [AUDIO_MIME_PREFIX], extensions: AUDIO_EXTENSIONS},
+  {icon: 'video_file', mimePrefixes: [VIDEO_MIME_PREFIX], extensions: VIDEO_EXTENSIONS},
+  {icon: 'code', mimeTypes: CODE_MIME_TYPES, extensions: CODE_EXTENSIONS},
+  {icon: 'folder_zip', mimeTypes: ARCHIVE_MIME_TYPES, extensions: ARCHIVE_EXTENSIONS},
+  {icon: DEFAULT_FILE_ICON, mimePrefixes: [TEXT_MIME_PREFIX], extensions: TEXT_EXTENSIONS},
 ];
 
 /** Header of a base64 data URL, such as `data:application/pdf;base64,`. */
@@ -225,7 +268,7 @@ export function getMaterialFileIcon(mimeType: string, fileName?: string): string
  * @param fileName Name of the attachment, used when the MIME type is generic.
  */
 export function isImageAttachment(mimeType: string, fileName?: string): boolean {
-  if (normalizeMimeType(mimeType).startsWith('image/')) {
+  if (normalizeMimeType(mimeType).startsWith(IMAGE_MIME_PREFIX)) {
     return true;
   }
   return IMAGE_EXTENSIONS.includes(extractFileExtension(fileName));
