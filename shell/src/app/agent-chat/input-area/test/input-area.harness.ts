@@ -16,6 +16,7 @@
 
 import {ComponentHarness} from '@angular/cdk/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
+import {MatChipHarness} from '@angular/material/chips/testing';
 
 export class A2aInputAreaHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-input-area';
@@ -28,7 +29,7 @@ export class A2aInputAreaHarness extends ComponentHarness {
     MatButtonHarness.with({selector: '.stop-circle-btn'}),
   );
   private getAddButton = this.locatorFor(MatButtonHarness.with({selector: '.add-btn'}));
-  private getImageChips = this.locatorForAll('.image-chip');
+  private getAttachmentChips = this.locatorForAll(MatChipHarness);
 
   async setInputValue(value: string): Promise<void> {
     const el = await this.getTextarea();
@@ -75,8 +76,14 @@ export class A2aInputAreaHarness extends ComponentHarness {
     return btn ? btn.isDisabled() : true;
   }
 
-  async getImageChipCount(): Promise<number> {
-    const chips = await this.getImageChips();
+  async getAttachmentChipCount(): Promise<number> {
+    const chips = await this.getAttachmentChips();
     return chips.length;
+  }
+
+  /** Clicks the remove button on the chip at `index`. */
+  async removeAttachmentChip(index: number): Promise<void> {
+    const chips = await this.getAttachmentChips();
+    return chips[index].remove();
   }
 }

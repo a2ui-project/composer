@@ -17,6 +17,7 @@
 import {Component, ElementRef, computed, input, output, signal, viewChild} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
+import {MatChipsModule} from '@angular/material/chips';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {
@@ -32,16 +33,16 @@ export interface SendMessageEvent {
 }
 
 /**
- * Largest attachment accepted, in bytes.
+ * Largest attachment accepted, in mebibytes.
  *
  * Attachments are base64 encoded and held in memory until the message is sent,
  * so an unbounded file would cost roughly 4/3 of its size on the client and
  * again on every hop to the agent.
  */
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_MIB = 10;
 
-/** `MAX_ATTACHMENT_BYTES` in mebibytes, for use in messages to the user. */
-const MAX_ATTACHMENT_MIB = MAX_ATTACHMENT_BYTES / (1024 * 1024);
+/** `MAX_ATTACHMENT_MIB` as bytes, to compare against `File.size`. */
+const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MIB * 1024 * 1024;
 
 /** Largest number of attachments a single message may carry. */
 const MAX_ATTACHMENTS = 10;
@@ -58,7 +59,13 @@ interface AttachmentChip {
 interface AcceptedFiles {
   /** Files that passed the size and count limits. */
   readonly files: readonly File[];
-  /** One message per rejected file, for display to the user. */
+  /**
+   * Why the remaining files were rejected, empty when none were.
+   *
+   * Rejected files have no chip to carry a message, so the messages are shown
+   * as one banner above the prompt and each names the files it concerns. The
+   * list is therefore not parallel to `files`.
+   */
   readonly errors: readonly string[];
 }
 
@@ -66,7 +73,12 @@ interface AcceptedFiles {
 interface ReadAttachments {
   /** Attachments the browser could read. */
   readonly attachments: readonly UiAttachedImage[];
-  /** One message per unreadable file, for display to the user. */
+  /**
+   * Why the remaining files could not be read, empty when all could.
+   *
+   * As in `AcceptedFiles`, each message names the file it concerns rather
+   * than relying on its position in the list.
+   */
   readonly errors: readonly string[];
 }
 
@@ -76,7 +88,7 @@ interface ReadAttachments {
  */
 @Component({
   selector: 'a2ui-composer-input-area',
-  imports: [FormsModule, MatButtonModule, MatIconModule, MatTooltipModule],
+  imports: [FormsModule, MatButtonModule, MatChipsModule, MatIconModule, MatTooltipModule],
   templateUrl: './input-area.ng.html',
   styleUrl: './input-area.scss',
 })
@@ -191,8 +203,15 @@ export class A2aInputArea {
     });
 
     const freeSlots = Math.max(0, MAX_ATTACHMENTS - this.attachedImages().length);
-    if (smallEnough.length > freeSlots) {
-      errors.push(`A message can carry at most ${MAX_ATTACHMENTS} attachments.`);
+    const overflow = smallEnough.slice(freeSlots);
+    if (overflow.length > 0) {
+      // Name the files that were left out: the ones before them are attached,
+      // so a bare "too many attachments" would misdescribe the outcome.
+      const names = overflow.map(file => `"${file.name}"`).join(', ');
+      errors.push(
+        `A message can carry at most ${MAX_ATTACHMENTS} attachments, so ` +
+          `${names} ${overflow.length === 1 ? 'was' : 'were'} not attached.`,
+      );
     }
     return {files: smallEnough.slice(0, freeSlots), errors};
   }
