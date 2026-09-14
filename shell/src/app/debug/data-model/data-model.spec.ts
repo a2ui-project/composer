@@ -37,7 +37,7 @@ describe('DataModel', () => {
   let mockHostComm: {
     messageStream$: Subject<MessageEnvelope>;
     sendMessage: ReturnType<typeof vi.fn>;
-    getHistoryBuffer: ReturnType<typeof vi.fn>;
+    consumeEnvelopeHistory: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -46,7 +46,7 @@ describe('DataModel', () => {
     mockHostComm = {
       messageStream$: new Subject<MessageEnvelope>(),
       sendMessage: vi.fn(),
-      getHistoryBuffer: vi.fn().mockReturnValue([]),
+      consumeEnvelopeHistory: vi.fn().mockReturnValue([]),
     };
 
     await TestBed.configureTestingModule({
@@ -287,7 +287,7 @@ describe('DataModel', () => {
       timestamp: Date.now(),
     };
 
-    mockHostComm.getHistoryBuffer.mockReturnValue([historicalEnvelope]);
+    mockHostComm.consumeEnvelopeHistory.mockReturnValue([historicalEnvelope]);
 
     const newFixture = TestBed.createComponent(DataModel);
     newFixture.detectChanges();
@@ -313,7 +313,7 @@ describe('DataModel', () => {
       timestamp: Date.now(),
     };
 
-    mockHostComm.getHistoryBuffer.mockReturnValue([historicalEnvelope]);
+    mockHostComm.consumeEnvelopeHistory.mockReturnValue([historicalEnvelope]);
 
     const newFixture = TestBed.createComponent(DataModel);
     newFixture.detectChanges();
