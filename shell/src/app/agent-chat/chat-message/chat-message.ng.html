@@ -159,7 +159,7 @@
 <ng-template #attachmentTray>
   @if (attachments().length > 0) {
     <div class="msg-images-tray">
-      @for (attachment of attachments(); track attachment.key) {
+      @for (attachment of attachments(); track attachment.file) {
         @if (attachment.previewSrc) {
           <img [src]="attachment.previewSrc" [alt]="attachment.file.name" class="msg-image-thumb" />
         } @else {
