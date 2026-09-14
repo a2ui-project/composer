@@ -30,13 +30,11 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
       });
     });
     await page.addInitScript(() => {
-      try {
-        localStorage.setItem('a2ui_composer_force_1p', 'true');
-        localStorage.setItem(
-          'a2ui_composer_allowed_origins',
-          JSON.stringify(['http://custom-renderer.com']),
-        );
-      } catch (e) {}
+      localStorage.setItem('a2ui_composer_force_1p', 'true');
+      localStorage.setItem(
+        'a2ui_composer_allowed_origins',
+        JSON.stringify(['http://custom-renderer.com']),
+      );
     });
   });
 
@@ -47,9 +45,9 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
       await route.fulfill({
         contentType: 'text/html',
         body: `<!DOCTYPE html><html><body><script>
-          try {
+          
             window.top.location.href = "https://example.com";
-          } catch (e) {}
+          
         </script></body></html>`,
       });
     });

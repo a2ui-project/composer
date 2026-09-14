@@ -315,7 +315,10 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     const customParams = {
       ['event_category']: 'error',
       ['event_label']: params.errorCategory,
-      ['source_tag']: params.sourceTag && /^\[[a-zA-Z0-9_-]+\]$/.test(params.sourceTag) ? params.sourceTag : '[Unknown]',
+      ['source_tag']:
+        params.sourceTag && /^\[[a-zA-Z0-9_-]+\]$/.test(params.sourceTag)
+          ? params.sourceTag
+          : '[Unknown]',
       ['error_type']: params.errorCategory,
       ['error_category']: params.errorCategory,
       ['line']: params.line ?? -1,
