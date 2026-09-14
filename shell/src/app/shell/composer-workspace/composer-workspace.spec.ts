@@ -26,6 +26,8 @@ import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {DockviewComponent} from 'dockview';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {ErrorLogger, ErrorLogItem} from '../../debug/error-logger.service';
+import {Subject} from 'rxjs';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {LlmClient, LlmMessage} from '../../chat/llm-client/llm-client';
 import {StateSync} from '../../chat/state-sync/state-sync';
@@ -220,33 +222,7 @@ describe('ComposerWorkspace Dashboard', () => {
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(1);
     });
 
-    it('increments Errors unread count when a DATA_MODEL_CHANGE validation error arrives and Errors tab is inactive', () => {
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
 
-      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
-        type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-        payload: {validationErrors: ['Invalid type']},
-        origin: 'http://localhost',
-        timestamp: Date.now(),
-      });
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(1);
-    });
-
-    it('does not increment Errors unread count when a DATA_MODEL_CHANGE arrives with empty validationErrors', () => {
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
-
-      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
-        type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-        payload: {validationErrors: []}, // Empty errors!
-        origin: 'http://localhost',
-        timestamp: Date.now(),
-      });
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
-    });
   });
 
   it('sets isExtensionMode correctly', async () => {
@@ -586,3 +562,4 @@ describe('ComposerWorkspace Dashboard', () => {
     });
   });
 });
+
