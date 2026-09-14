@@ -40,7 +40,7 @@ import {tryParseJsonArray} from '../../utils/json';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import type {editor} from 'monaco-editor';
 
-export const IFRAME_UNRESPONSIVE_ERROR = 'IFRAME_UNRESPONSIVE_ERROR';
+export const IFRAME_UNRESPONSIVE_ERROR_PREFIX = 'IFRAME_UNRESPONSIVE_ERROR: ';
 
 /**
  * Hosts the raw JSON view of active surface models, allowing direct source editing
@@ -300,14 +300,14 @@ export class RawFrame {
 
     this.watchdogTimer = setTimeout(() => {
       if (!this.hostCommunication.isRendererReady()) {
-        this.errorLogger.error({
+        this.errorLogger.warn({
           sourceTag: '[Previewer]',
           message: 'Preview frame did not respond within 15 seconds.',
         });
       } else {
-        this.errorLogger.error({
+        this.errorLogger.warn({
           sourceTag: '[Previewer]',
-          message: `${IFRAME_UNRESPONSIVE_ERROR}: Preview frame failed to process payload within 15 seconds.`,
+          message: `${IFRAME_UNRESPONSIVE_ERROR_PREFIX}Preview frame failed to process payload within 15 seconds.`,
         });
       }
     }, this.WATCHDOG_TIMEOUT_MS);

@@ -131,7 +131,7 @@ export class IndexedDbStorage extends AbstractIndexedDbStorage {
     await this.executeTransaction<void>(this.storeName, 'readwrite', tx => {
       tx.objectStore(this.storeName).clear();
     });
-    this.logger.warn('Successfully flushed all catalog records from storage.');
+    this.logger.info('Successfully flushed all catalog records from storage.');
   }
 
   private isQuotaError(err: unknown): boolean {

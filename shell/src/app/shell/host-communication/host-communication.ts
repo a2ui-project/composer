@@ -163,7 +163,7 @@ export class HostCommunication implements OnDestroy {
         event.data &&
         typeof event.data === 'object' &&
         Object.values(PreviewBridgeMessageType).includes(event.data.type);
-      if (!isBridgeMessage || event.data.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+      if (!isBridgeMessage) {
         return;
       }
       this.earlyMessageBuffer.push(event);

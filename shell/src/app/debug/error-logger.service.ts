@@ -209,7 +209,7 @@ export class ErrorLogger {
     const sourceTag = '[Shell]';
 
     if (isErrorLike(arg1)) {
-      const name = arg1.name || 'Error';
+      const name = String(arg1.name || 'Error').slice(0, 100);
       message = arg1.message ? `${name}: ${arg1.message}` : name;
       stack = arg1.stack;
     } else if (typeof arg1 === 'string') {

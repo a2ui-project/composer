@@ -84,8 +84,10 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
 
   constructor() {
     this.errorLogger.errorStream$.pipe(takeUntilDestroyed()).subscribe(log => {
-      if (!this.composerDockview.isPanelVisible(ComposerPanelId.Errors)) {
-        this.unreadErrorsCount.update(count => count + 1);
+      if (log.level === 'warn' || log.level === 'error') {
+        if (!this.composerDockview.isPanelVisible(ComposerPanelId.Errors)) {
+          this.unreadErrorsCount.update(count => count + 1);
+        }
       }
     });
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
@@ -96,20 +98,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
       if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.action) {
         if (!this.composerDockview.isPanelVisible(ComposerPanelId.Events)) {
           this.unreadEventsCount.update(count => count + 1);
-        }
-      } else if (
-        envelope.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE &&
-        payload?.validationErrors
-      ) {
-        const validationErrors = payload.validationErrors;
-        const hasErrors = Array.isArray(validationErrors)
-          ? validationErrors.length > 0
-          : typeof validationErrors === 'object' && validationErrors !== null
-            ? Object.keys(validationErrors).length > 0
-            : !!validationErrors;
-
-        if (hasErrors && !this.composerDockview.isPanelVisible(ComposerPanelId.Errors)) {
-          this.unreadErrorsCount.update(count => count + 1);
         }
       }
     });
