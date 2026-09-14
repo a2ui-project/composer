@@ -55,7 +55,7 @@ export class ErrorTelemetryReporter {
     let invalidProp: string | undefined;
 
     const propMatch =
-      item.message.match(/property '([^']+)'/i) || item.message.match(/instance\.([^ ]+) /i);
+      item.message.match(/property '([^']+)'/i) || item.message.match(/instance\.([^ ]+)(?: |$)/i);
     if (propMatch) {
       invalidProp = propMatch[1];
     }

@@ -15,7 +15,7 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {RawFrame, IFRAME_UNRESPONSIVE_ERROR} from './raw-frame';
+import {RawFrame, IFRAME_UNRESPONSIVE_ERROR_PREFIX} from './raw-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
@@ -879,7 +879,7 @@ describe('RawFrame JSON Source Editor View', () => {
       component.TEST_ONLY.startWatchdog();
 
       vi.advanceTimersByTime(15000);
-      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+      expect(errorLoggerMock.warn).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Preview frame did not respond within 15 seconds.',
           sourceTag: '[Previewer]',
@@ -887,16 +887,16 @@ describe('RawFrame JSON Source Editor View', () => {
       );
     });
 
-    it('logs IFRAME_UNRESPONSIVE_ERROR when renderer is ready but watchdog timeout fires', async () => {
+    it('logs warning with prefix when renderer is ready but watchdog timeout fires', async () => {
       vi.useFakeTimers();
       const {component} = await setup(false);
       TestBed.inject(HostCommunication).isRendererReady.mockReturnValue(true);
       component.TEST_ONLY.startWatchdog();
 
       vi.advanceTimersByTime(15000);
-      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+      expect(errorLoggerMock.warn).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: `${IFRAME_UNRESPONSIVE_ERROR}: Preview frame failed to process payload within 15 seconds.`,
+          message: `${IFRAME_UNRESPONSIVE_ERROR_PREFIX}Preview frame failed to process payload within 15 seconds.`,
           sourceTag: '[Previewer]',
         }),
       );

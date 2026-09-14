@@ -21,6 +21,9 @@ import {CatalogSchemaResolver} from './catalog-schema-resolver';
 describe('CatalogSchemaResolver', () => {
   let errorLogger: import('../../debug/error-logger.service').ErrorLogger;
   beforeEach(() => {
+    // By mocking withTag to return 'this' (the root logger object), we forward chained
+    // calls like errorLogger.withTag('...').warn(...) directly to the base spies,
+    // avoiding the need for nested spy objects and duplicate function declarations.
     errorLogger = {
       log: vi.fn(),
       warn: vi.fn(),
