@@ -93,3 +93,16 @@ export function tryParseJsonArray(content?: string | null): unknown[] | null {
 export function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
+
+/**
+ * Narrows a parsed JSON value to an indexable object.
+ *
+ * @param value The value to narrow, typically decoded from an agent payload.
+ * @return The value as a record, or null if it is not a plain object.
+ */
+export function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
