@@ -396,7 +396,7 @@ describe('HostCommunication', () => {
       origin: 'http://localhost:3000',
       data: {
         type: PreviewBridgeMessageType.CONSOLE_LOG,
-        payload: {level: 'log', message: 'Early crash data'}
+        payload: {level: 'log', message: 'Early crash data'},
       },
     });
 
@@ -571,7 +571,7 @@ describe('HostCommunication', () => {
 
     window.dispatchEvent(event);
 
-    const history = service.getHistoryBuffer();
+    const history = service.consumeEnvelopeHistory();
     expect(history.length).toBe(1);
     expect(history[0].type).toBe(PreviewBridgeMessageType.A2UI_CATALOG);
   });
@@ -687,7 +687,7 @@ describe('HostCommunication', () => {
       origin: 'http://localhost:3000',
       data: {
         type: PreviewBridgeMessageType.CONSOLE_LOG,
-        payload: {level: 'log', message: 'Early crash data'}
+        payload: {level: 'log', message: 'Early crash data'},
       },
     });
 

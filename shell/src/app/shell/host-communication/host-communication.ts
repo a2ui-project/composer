@@ -166,6 +166,20 @@ export class HostCommunication implements OnDestroy {
         event.data &&
         typeof event.data === 'object' &&
         Object.values(PreviewBridgeMessageType).includes(event.data.type);
+
+      if (event.data?.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+        const envelope: MessageEnvelope = {
+          type: event.data.type,
+          payload: event.data.payload,
+          origin: event.origin,
+          timestamp: Date.now(),
+          sourceWindow: (event.source as Window) ?? null,
+        };
+        this.handleConsoleLog(event.data.payload);
+        this.messageStreamSubject.next(envelope);
+        return;
+      }
+
       if (!isBridgeMessage) {
         return;
       }

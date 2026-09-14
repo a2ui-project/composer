@@ -92,9 +92,7 @@ test.describe('Startup Resolution & Redirection', () => {
 test.describe('Workspace Navigation & Layout Modes', () => {
   test.beforeEach(async ({page}) => {
     await page.addInitScript(() => {
-      try {
-        localStorage.setItem('a2ui_composer_force_1p', 'true');
-      } catch (e) {}
+      localStorage.setItem('a2ui_composer_force_1p', 'true');
     });
   });
 
@@ -137,12 +135,10 @@ test.describe('Workspace Navigation & Layout Modes', () => {
     page,
   }) => {
     await page.addInitScript(() => {
-      try {
-        localStorage.setItem(
-          'a2ui_composer_allowed_origins',
-          JSON.stringify(['http://custom-renderer.com']),
-        );
-      } catch (e) {}
+      localStorage.setItem(
+        'a2ui_composer_allowed_origins',
+        JSON.stringify(['http://custom-renderer.com']),
+      );
     });
     await page.goto('/?renderer=http://custom-renderer.com');
     await expect(page).toHaveTitle(/A2UI Composer/);

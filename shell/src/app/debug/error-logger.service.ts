@@ -234,6 +234,9 @@ export class ErrorLogger {
   }
 
   private isPartialErrorLogItem(val: unknown): val is Partial<ErrorLogItem> {
+    if (typeof val === 'object' && val !== null && 'sourceTag' in val) {
+      return Object.keys(val).length > 0;
+    }
     if (isErrorLike(val)) {
       return false;
     }
