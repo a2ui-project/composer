@@ -1,0 +1,77 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Regenerates baseline PNGs for Playwright visual regression tests (`*.visual.ts`).
+#
+# Because screenshot comparisons require identical OS font rendering and browser
+# binaries, baselines generated on a local developer machine (e.g. macOS) will
+# fail in Linux CI due to font anti-aliasing differences. This workflow runs
+# `yarn test:visual:update` inside the same pinned Playwright Docker container
+# used by CI (`composer_build_and_test.yml`) and uploads the updated PNGs as a
+# downloadable artifact.
+#
+# Usage:
+#   1. Trigger via GitHub CLI:
+#        gh workflow run visual_baselines.yml --ref <branch>
+#      Or push to any branch matching `visual-baselines/**`.
+#   2. Download the updated snapshots into `shell/src`:
+#        gh run download <run-id> --name visual-baselines --dir shell/src
+#   3. Commit and push the updated PNG files.
+name: Visual Baselines
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "visual-baselines/**"
+
+permissions: read-all
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: "yarn"
+          cache-dependency-path: "yarn.lock"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build
+        run: yarn build
+
+      - name: Regenerate baselines
+        run: yarn --cwd shell test:visual:update
+
+      - name: Report what changed
+        run: git -c safe.directory='*' status --porcelain 'shell/src/**/__snapshots__/*.png'
+
+      - name: Upload baselines
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-baselines
+          path: shell/src/**/__snapshots__/*.png
+          if-no-files-found: error
+          retention-days: 7

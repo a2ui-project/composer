@@ -51,3 +51,56 @@ jobs:
 
       - name: e2e tests
         run: yarn --cwd shell e2e-headless
+
+      - name: Upload e2e test results
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-test-results
+          path: shell/e2e/test-results
+          retention-days: 7
+
+  # Runs Playwright visual regression tests (`*.visual.ts`), which compare UI
+  # component screenshots against baseline PNGs in `shell/src/**/__snapshots__`.
+  #
+  # Because screenshot diffs are sensitive to OS font rendering (e.g. Linux
+  # FreeType vs. macOS CoreText) and exact browser versions, this job executes
+  # inside a pinned Playwright Docker container. This guarantees a consistent
+  # Linux environment, font stack, and Chromium binary across all CI runs.
+  #
+  # To update baseline screenshots after an intentional UI change, trigger the
+  # `Visual Baselines` workflow (`.github/workflows/visual_baselines.yml`),
+  # which regenerates the PNGs inside this exact same container image.
+  visual-regression:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: "yarn"
+          cache-dependency-path: "yarn.lock"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build
+        run: yarn build
+
+      - name: Visual regression tests
+        run: yarn --cwd shell test:visual
+
+      - name: Upload visual diffs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-diffs
+          path: shell/e2e/test-results
+          retention-days: 7

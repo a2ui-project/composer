@@ -186,6 +186,30 @@ yarn test
 yarn --cwd shell e2e-headless
 ```
 
+### Visual regression baselines
+
+The shell's `*.visual.ts` tests compare rendered components against the PNGs in
+`shell/src/**/__snapshots__`, and CI fails on any difference. Because a
+screenshot only matches one taken by the same browser build and font set, those
+baselines are generated in a pinned Playwright container rather than on a
+developer machine:
+
+```bash
+# Compare against the committed baselines. Expect differences purely from
+# fonts unless you are on the same image CI uses.
+yarn --cwd shell test:visual
+```
+
+When a change is meant to alter the UI, refresh the baselines through the
+`Visual Baselines` workflow, which runs in that container:
+
+```bash
+gh workflow run visual_baselines.yml --ref <your-branch>
+gh run download <run-id> --name visual-baselines --dir shell/src
+```
+
+Commit the PNGs it produces alongside the change.
+
 ## License
 
 This software is distributed under the **Apache 2.0 License**. See

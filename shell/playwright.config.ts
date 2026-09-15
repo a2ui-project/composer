@@ -18,8 +18,6 @@ import {defineConfig, devices} from '@playwright/test';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['e2e/**/*.e2e.ts', 'src/**/*.visual.ts'],
-  testIgnore: process.env['VISUAL_TESTS'] ? [] : ['**/*.visual.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 2 : 0,
@@ -51,10 +49,32 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'chrome',
+      // Behavioural E2E user journeys (`*.e2e.ts`). These assert on DOM state
+      // and interactions rather than pixel output, so they can run against any
+      // standard Chrome installation on a developer machine or CI runner.
+      name: 'e2e',
+      testMatch: 'e2e/**/*.e2e.ts',
       use: {
         ...devices['Desktop Chrome'],
         channel: 'chrome',
+      },
+    },
+    {
+      // Visual regression tests (`*.visual.ts`). These compare component
+      // screenshots against committed baseline PNGs. To prevent false positives
+      // from environmental differences, all rendering variables are pinned:
+      // bundled Chromium, light color scheme, US English locale, and UTC timezone.
+      // In CI, these run inside a pinned Playwright Docker container to lock down
+      // the Linux OS and font rendering stack.
+      name: 'visual',
+      testMatch: 'src/**/*.visual.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+        colorScheme: 'light',
+        locale: 'en-US',
+        timezoneId: 'UTC',
+        // Required when running Chromium as root inside the CI Docker container.
+        launchOptions: {args: ['--no-sandbox', '--disable-dev-shm-usage']},
       },
     },
   ],
