@@ -78,7 +78,9 @@
           </button>
         </div>
         <div class="side-canvas-viewport">
-          <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
+          <a2ui-composer-rendered-frame
+            [payload]="activeCanvasPayload()"
+          ></a2ui-composer-rendered-frame>
         </div>
       </div>
     }

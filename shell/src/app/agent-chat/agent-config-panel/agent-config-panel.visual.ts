@@ -15,6 +15,7 @@
  */
 
 import {test, expect, type Locator} from '@playwright/test';
+import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 
 async function waitForImageLoad(locator: Locator): Promise<void> {
   await locator.evaluate((img: HTMLImageElement) =>
@@ -46,7 +47,7 @@ test.describe('AgentConfigPanel Visual Regression & Layout', () => {
 
     // Verify DOM structure, avatar logo, titles, and button states
     const avatar = panel.locator('.avatar-image');
-    await expect(avatar).toHaveAttribute('src', /Untitled_design\.original\.png/);
+    await expect(avatar).toHaveAttribute('src', A2A_PROTOCOL_ICON_URL);
     await waitForImageLoad(avatar);
 
     const title = panel.locator('.config-title');
@@ -80,7 +81,7 @@ test.describe('AgentConfigPanel Visual Regression & Layout', () => {
     await expect(panel).toBeVisible();
 
     const avatar = panel.locator('.avatar-image');
-    await expect(avatar).toHaveAttribute('src', /Untitled_design\.original\.png/);
+    await expect(avatar).toHaveAttribute('src', A2A_PROTOCOL_ICON_URL);
     await waitForImageLoad(avatar);
 
     await panel.getByLabel('Agent Endpoint URL').fill('http://mock-failing-agent.local');
@@ -104,7 +105,7 @@ test.describe('AgentConfigPanel Visual Regression & Layout', () => {
     await expect(panel).toBeVisible();
 
     const avatar = panel.locator('.avatar-image');
-    await expect(avatar).toHaveAttribute('src', /Untitled_design\.original\.png/);
+    await expect(avatar).toHaveAttribute('src', A2A_PROTOCOL_ICON_URL);
     await waitForImageLoad(avatar);
 
     await panel.getByLabel('Agent Endpoint URL').fill('http://localhost:8088');

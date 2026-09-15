@@ -35,7 +35,10 @@ test.describe('A2aChatView Full Orchestration Visual Regression & Layout', () =>
     const textarea = page.locator('.prompt-textarea');
     await textarea.fill('Find non-stop flights from SFO to NRT next month');
     await textarea.press('Enter');
-    await expect(page.locator('.agent-message-container')).toContainText('Flight NH007');
+    // Wait for the A2UI surface to be fully rendered inside the side canvas viewport iframe
+    const canvasFrame = page.frameLocator('.side-canvas-viewport iframe.preview-iframe');
+    await expect(canvasFrame.getByText('Available Non-Stop Flights')).toBeVisible();
+    await expect(canvasFrame.getByText('Select ANA NH007 & Continue')).toBeVisible();
 
     // Open inspector drawer
     await page.locator('.inspector-toggle-btn').click();

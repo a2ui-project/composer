@@ -55,8 +55,15 @@ export const flightA2uiPayload = [
       components: [
         {
           id: 'root',
-          component: 'Column',
-          children: ['header_text', 'flight_card_ana', 'flight_card_jal', 'confirm_btn'],
+          component: {
+            Canvas: {
+              cardTitle: 'Flight Options',
+              cardDescription: 'Review and select non-stop flights',
+              cardIcon: 'flight',
+              autoOpen: true,
+              children: ['header_text', 'flight_card_ana', 'flight_card_jal', 'confirm_btn'],
+            },
+          },
         },
         {
           id: 'header_text',

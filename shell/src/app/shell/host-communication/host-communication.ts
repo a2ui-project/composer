@@ -83,9 +83,23 @@ export class HostCommunication implements OnDestroy {
 
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
   private readonly earlyMessageBuffer: MessageEvent[] = [];
+  /**
+   * Messages we tried to send before the guest renderer was ready to receive
+   * them. They are replayed once it announces itself with RENDERER_READY.
+   *
+   * Each entry also records which frame the message was meant for, because
+   * several renderer iframes can be open at once (for example an inline
+   * surface in the chat plus the side canvas), and a replayed message must
+   * still reach the frame it was originally addressed to.
+   *
+   * The frame is stored next to the message instead of as a property on it:
+   * `sendMessage` hands the message object straight to `postMessage`, and the
+   * browser cannot copy a DOM element across frames, so an iframe reference
+   * inside the message would make the send throw.
+   */
   private readonly outboundMessageBuffer: Array<{
-    type: PreviewBridgeMessageType;
-    payload?: unknown;
+    message: {type: PreviewBridgeMessageType; payload?: unknown};
+    target?: HTMLIFrameElement | Window | null;
   }> = [];
   private latestCatalogEnvelope: MessageEnvelope | null = null;
 
@@ -194,8 +208,8 @@ export class HostCommunication implements OnDestroy {
         this.sendTheme(this.configProvider.themePreference());
         const pending = [...this.outboundMessageBuffer];
         this.outboundMessageBuffer.length = 0;
-        for (const msg of pending) {
-          this.sendMessage(msg);
+        for (const pendingMessage of pending) {
+          this.sendMessage(pendingMessage.message, pendingMessage.target);
         }
       }
       if (type === PreviewBridgeMessageType.CONSOLE_LOG) {
@@ -362,7 +376,7 @@ export class HostCommunication implements OnDestroy {
 
     if (!this.isRendererReady()) {
       console.debug('Queueing outbound message; renderer is not yet ready.', message);
-      this.outboundMessageBuffer.push(message);
+      this.outboundMessageBuffer.push({message, target});
       return;
     }
 

@@ -1148,5 +1148,69 @@ describe('HostCommunication', () => {
       );
       expect(defaultWindow.postMessage).not.toHaveBeenCalled();
     });
+
+    it('routes a message buffered before the handshake to its original target rather than the newest frame', () => {
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
+
+      const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
+      const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;
+
+      service.registerIframe(canvasIframe);
+      // The inline surface mounts last, making it the default dispatch target.
+      service.registerIframe(inlineIframe);
+
+      // The handshake has not completed, so this is buffered rather than sent.
+      const payload = [{version: 'v0.9', createSurface: {surfaceId: 'canvas', catalogId: 'c1'}}];
+      service.sendRenderA2UI(payload, canvasIframe);
+      expect(canvasWindow.postMessage).not.toHaveBeenCalled();
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: inlineWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      const renderMessage = {type: PreviewBridgeMessageType.RENDER_A2UI, payload};
+      expect(canvasWindow.postMessage).toHaveBeenCalledWith(renderMessage, 'http://localhost:3000');
+      expect(inlineWindow.postMessage).not.toHaveBeenCalledWith(
+        renderMessage,
+        'http://localhost:3000',
+      );
+    });
+
+    it('omits the buffered target from the message posted to the guest frame', () => {
+      const iframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      const iframeElement = {contentWindow: iframeWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(iframeElement);
+
+      const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+      service.sendRenderA2UI(payload, iframeElement);
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: iframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      // The browser cannot copy a DOM element across frames, so an iframe
+      // reference left inside the message would make postMessage throw and the
+      // payload would never arrive.
+      const renderCall = vi
+        .mocked(iframeWindow.postMessage)
+        .mock.calls.find(
+          call => (call[0] as {type?: string})?.type === PreviewBridgeMessageType.RENDER_A2UI,
+        );
+      expect(renderCall).toBeDefined();
+      expect(renderCall?.[0]).toEqual({
+        type: PreviewBridgeMessageType.RENDER_A2UI,
+        payload,
+      });
+      expect(Object.keys(renderCall?.[0] as object)).not.toContain('target');
+    });
   });
 });

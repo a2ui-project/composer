@@ -1,0 +1,91 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Regenerates baseline PNGs for Playwright visual regression tests (`*.visual.ts`).
+#
+# Because screenshot comparisons require identical OS font rendering and browser
+# binaries, baselines generated on a local developer machine (e.g. macOS) will
+# fail in Linux CI due to font anti-aliasing differences. This workflow runs
+# `yarn test:visual:update` inside the same pinned Playwright Docker container
+# used by CI (`composer_build_and_test.yml`) and uploads the updated PNGs as a
+# downloadable artifact.
+#
+# Usage:
+#   1. Trigger via GitHub CLI:
+#        gh workflow run visual_baselines.yml --ref <branch>
+#      Or push to any branch matching `visual-baselines/**`.
+#   2. Resolve the run that was queued, since `gh workflow run` returns before
+#      GitHub registers it:
+#        sleep 5
+#        RUN_ID=$(gh run list --workflow=visual_baselines.yml --branch <branch> \
+#          --limit 1 --json databaseId --jq '.[0].databaseId')
+#   3. Wait for it to finish and download the updated snapshots into `shell/src`:
+#        gh run watch "$RUN_ID" --exit-status
+#        gh run download "$RUN_ID" --name visual-baselines --dir shell/src
+#   4. Commit and push the updated PNG files.
+name: Visual Baselines
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "visual-baselines/**"
+
+# Least-privilege token scope required by the repository's zizmor security scan.
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Do not write GITHUB_TOKEN to .git/config (zizmor artipacked rule).
+          persist-credentials: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: "yarn"
+          cache-dependency-path: "yarn.lock"
+
+      - name: Install dependencies
+        # Yarn 4.5.0 on Node 24 can crash with an unhandled `onCancel` error
+        # if a registry request times out instead of retrying. A second pass
+        # finishes the install from the partially populated cache.
+        run: yarn install --immutable || yarn install --immutable
+
+      - name: Build
+        run: yarn build
+
+      - name: Regenerate baselines
+        run: yarn --cwd shell test:visual:update
+
+      - name: Report what changed
+        run: git -c safe.directory='*' status --porcelain 'shell/src/**/__snapshots__/*.png'
+
+      - name: Upload baselines
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-baselines
+          path: shell/src/**/__snapshots__/*.png
+          if-no-files-found: error
+          retention-days: 7
