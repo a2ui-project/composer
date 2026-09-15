@@ -536,6 +536,15 @@ describe('Ga4UsageTrackingService', () => {
         service.trackComposerError({sourceTag: 'test', errorCategory: 'error'});
       }).not.toThrow();
     });
+    it('limits sourceTag length to 64 chars', () => {
+      const validTag = '[Shell-Plugin-123]';
+      const longTag = '[' + 'a'.repeat(65) + ']'; // length 65
+      service.trackComposerError({sourceTag: validTag, errorCategory: 'TEST'});
+      service.trackComposerError({sourceTag: longTag, errorCategory: 'TEST'});
+      const calls = mockWindow.gtag.mock.calls;
+      expect(calls[0][2]['source_tag']).toEqual(validTag);
+      expect(calls[1][2]['source_tag']).toEqual('[Unknown]');
+    });
   });
 });
 
