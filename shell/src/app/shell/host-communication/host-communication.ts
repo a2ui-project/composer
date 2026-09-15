@@ -95,7 +95,6 @@ export class HostCommunication implements OnDestroy {
     message: {type: PreviewBridgeMessageType; payload?: unknown};
     target?: HTMLIFrameElement | Window | null;
   }> = [];
-  private latestCatalogEnvelope: MessageEnvelope | null = null;
 
   /**
    * Retrieves a snapshot copy of the recent message history buffer.
