@@ -16,7 +16,8 @@
 
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {A2aInputArea} from './input-area';
 import {A2aInputAreaHarness} from './test/input-area.harness';
 
@@ -27,11 +28,16 @@ describe('A2aInputArea', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [A2aInputArea],
+      providers: [provideNoopAnimations()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(A2aInputArea);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, A2aInputAreaHarness);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('disables send button when text is empty', async () => {
@@ -88,12 +94,13 @@ describe('A2aInputArea', () => {
     ]);
     fixture.detectChanges();
 
-    expect(await harness.getImageChipCount()).toBe(1);
+    expect(await harness.getAttachmentChipCount()).toBe(1);
 
-    fixture.componentInstance['removeAttachedImage'](0);
+    await harness.removeAttachmentChip(0);
     fixture.detectChanges();
 
-    expect(await harness.getImageChipCount()).toBe(0);
+    expect(fixture.componentInstance['attachedImages']()).toEqual([]);
+    expect(await harness.getAttachmentChipCount()).toBe(0);
   });
 
   it('triggers file input click on attach button click', async () => {
@@ -105,28 +112,153 @@ describe('A2aInputArea', () => {
     }
   });
 
-  it('handles file selection for image files and ignores non-images', async () => {
-    const imgFile = new File(['image-content'], 'sample.png', {type: 'image/png'});
-    const txtFile = new File(['text-content'], 'sample.txt', {type: 'text/plain'});
-    const event = {
-      target: {
-        files: [imgFile, txtFile],
-        value: '',
-      },
-    } as unknown as Event;
+  it('attaches files of any type and infers missing MIME types', async () => {
+    const files = [
+      new File(['image-content'], 'sample.png', {type: 'image/png'}),
+      new File(['%PDF-content'], 'document.pdf', {type: 'application/pdf'}),
+      // Several platforms report no type at all for .docx.
+      new File(['docx-content'], 'word.docx', {type: ''}),
+      new File(['text-content'], 'notes.txt', {type: 'text/plain'}),
+    ];
 
-    await fixture.componentInstance['handleFileSelection'](event);
-    expect(fixture.componentInstance['attachedImages']().length).toBe(1);
-    expect(fixture.componentInstance['attachedImages']()[0].name).toBe('sample.png');
+    await fixture.componentInstance['handleFileSelection'](fileSelectionEvent(files));
 
-    // Handle empty file selection
-    const emptyEvent = {
-      target: {
-        files: [],
-        value: '',
-      },
-    } as unknown as Event;
-    await fixture.componentInstance['handleFileSelection'](emptyEvent);
-    expect(fixture.componentInstance['attachedImages']().length).toBe(1);
+    const attachments = fixture.componentInstance['attachedImages']();
+    expect(attachments.map(a => a.name)).toEqual([
+      'sample.png',
+      'document.pdf',
+      'word.docx',
+      'notes.txt',
+    ]);
+    expect(attachments.map(a => a.mimeType)).toEqual([
+      'image/png',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+    ]);
+    // Only images get an inline preview.
+    expect(attachments[0].previewUrl).toContain('data:image/png;base64,');
+    expect(attachments.slice(1).map(a => a.previewUrl)).toEqual([undefined, undefined, undefined]);
+    expect(fixture.componentInstance['attachmentError']()).toBe('');
+  });
+
+  it('shows an icon per attachment type', async () => {
+    const files = [
+      new File(['a'], 'sample.png', {type: 'image/png'}),
+      new File(['b'], 'document.pdf', {type: 'application/pdf'}),
+      new File(['c'], 'word.docx', {type: ''}),
+      new File(['d'], 'notes.txt', {type: 'text/plain'}),
+    ];
+
+    await fixture.componentInstance['handleFileSelection'](fileSelectionEvent(files));
+
+    expect(fixture.componentInstance['attachmentChips']().map(chip => chip.icon)).toEqual([
+      'image',
+      'picture_as_pdf',
+      'article',
+      'description',
+    ]);
+  });
+
+  it('ignores an empty selection', async () => {
+    await fixture.componentInstance['handleFileSelection'](fileSelectionEvent([]));
+    expect(fixture.componentInstance['attachedImages']()).toEqual([]);
+    expect(fixture.componentInstance['attachmentError']()).toBe('');
+  });
+
+  it('rejects files above the size limit and reports them', async () => {
+    const oversized = new File(['x'], 'huge.pdf', {type: 'application/pdf'});
+    Object.defineProperty(oversized, 'size', {value: 10 * 1024 * 1024 + 1});
+    const allowed = new File(['ok'], 'small.pdf', {type: 'application/pdf'});
+
+    await fixture.componentInstance['handleFileSelection'](
+      fileSelectionEvent([oversized, allowed]),
+    );
+
+    expect(fixture.componentInstance['attachedImages']().map(a => a.name)).toEqual(['small.pdf']);
+    expect(fixture.componentInstance['attachmentError']()).toContain('huge.pdf');
+  });
+
+  it('caps the number of attachments and names the ones left out', async () => {
+    const files = Array.from(
+      {length: 12},
+      (_, i) => new File(['x'], `file-${i}.txt`, {type: 'text/plain'}),
+    );
+
+    await fixture.componentInstance['handleFileSelection'](fileSelectionEvent(files));
+
+    // The first 10 of the selection are kept, in the order they were picked.
+    expect(fixture.componentInstance['attachedImages']().map(a => a.name)).toEqual(
+      Array.from({length: 10}, (_, i) => `file-${i}.txt`),
+    );
+    const error = fixture.componentInstance['attachmentError']();
+    expect(error).toContain('at most 10 attachments');
+    // The message must name the rejected files, not imply the whole
+    // selection was dropped.
+    expect(error).toContain('"file-10.txt", "file-11.txt" were not attached');
+    expect(error).not.toContain('file-9.txt');
+  });
+
+  it('clears attachments and errors after sending', async () => {
+    const oversized = new File(['x'], 'huge.pdf', {type: 'application/pdf'});
+    Object.defineProperty(oversized, 'size', {value: 10 * 1024 * 1024 + 1});
+    await fixture.componentInstance['handleFileSelection'](
+      fileSelectionEvent([oversized, new File(['ok'], 'small.txt', {type: 'text/plain'})]),
+    );
+    expect(fixture.componentInstance['attachmentError']()).not.toBe('');
+
+    await harness.setInputValue('Please review');
+    await harness.clickSend();
+
+    expect(fixture.componentInstance['attachedImages']()).toEqual([]);
+    expect(fixture.componentInstance['attachmentError']()).toBe('');
+  });
+
+  it('reports files the browser cannot read', async () => {
+    // A FileReader that always fails, so the read-error branch is exercised.
+    class FailingFileReader {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      readAsDataURL(): void {
+        this.onerror?.();
+      }
+    }
+    vi.stubGlobal('FileReader', FailingFileReader);
+
+    await fixture.componentInstance['handleFileSelection'](
+      fileSelectionEvent([new File(['x'], 'unreadable.pdf', {type: 'application/pdf'})]),
+    );
+
+    expect(fixture.componentInstance['attachedImages']()).toEqual([]);
+    expect(fixture.componentInstance['attachmentError']()).toBe(
+      '"unreadable.pdf" could not be read.',
+    );
+  });
+
+  it('reports reads that complete without a data URL', async () => {
+    // A FileReader that loads a buffer rather than the requested data URL.
+    class BufferFileReader {
+      readonly result: ArrayBuffer = new ArrayBuffer(1);
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      readAsDataURL(): void {
+        this.onload?.();
+      }
+    }
+    vi.stubGlobal('FileReader', BufferFileReader);
+
+    await fixture.componentInstance['handleFileSelection'](
+      fileSelectionEvent([new File(['x'], 'buffered.pdf', {type: 'application/pdf'})]),
+    );
+
+    expect(fixture.componentInstance['attachedImages']()).toEqual([]);
+    expect(fixture.componentInstance['attachmentError']()).toBe(
+      '"buffered.pdf" could not be read.',
+    );
   });
 });
+
+/** Builds the change event the file picker emits for `files`. */
+function fileSelectionEvent(files: File[]): Event {
+  return {target: {files, value: 'C:\\fakepath\\selection'}} as unknown as Event;
+}

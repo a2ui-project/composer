@@ -73,9 +73,9 @@ test.describe('A2aInputArea Visual Regression & Layout', () => {
       ),
     });
 
-    const tray = inputArea.locator('.attached-images-tray');
+    const tray = inputArea.locator('.attachment-tray');
     await expect(tray).toBeVisible();
-    await expect(tray.locator('.image-chip')).toBeVisible();
+    await expect(tray.locator('.attachment-chip')).toBeVisible();
     await expect(tray.locator('.chip-name')).toContainText('very-long-flight-itinerary');
 
     const sendBtn = inputArea.locator('.send-circle-btn');

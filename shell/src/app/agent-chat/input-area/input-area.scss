@@ -42,76 +42,37 @@
       border-color: var(--mat-sys-primary, #1a73e8);
     }
 
-    .attached-images-tray {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+    .attachment-tray {
       margin-bottom: 10px;
-      align-items: center;
 
-      .image-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: var(--mat-sys-surface-container, #f1f3f4);
-        border: 1px solid var(--mat-sys-outline-variant, #dadce0);
-        border-radius: 8px;
-        padding: 4px 6px 4px 8px;
+      .attachment-chip {
         max-width: 260px;
-        box-sizing: border-box;
 
+        // `matChipAvatar` lands in the chip's primary-icon slot, which
+        // Material already sizes from `--mat-chip-with-icon-icon-size`
+        // (18px). Only the colour is overridden: the chip's default icon
+        // colour matches the label, and the glyph should read as
+        // secondary next to the file name.
         .chip-file-icon {
-          font-size: 16px;
-          width: 16px;
-          height: 16px;
-          line-height: 16px;
           color: var(--mat-sys-on-surface-variant, #5f6368);
-          flex-shrink: 0;
         }
 
+        // The chip label is a flex row, so the name needs its own bounds to
+        // ellipsize rather than stretch the chip past its max width.
         .chip-name {
-          font-size: var(--mat-sys-label-small-size, 0.78rem);
-          font-weight: var(--mat-sys-label-small-weight, 500);
-          color: var(--mat-sys-on-surface, #3c4043);
+          display: block;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          flex: 1;
-          min-width: 0;
-          line-height: var(--mat-sys-label-small-line-height, 1.2);
-        }
-
-        .remove-img-btn {
-          width: 18px;
-          height: 18px;
-          min-width: 18px;
-          padding: 0;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          color: var(--mat-sys-on-surface-variant, #5f6368);
-          border-radius: 50%;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-          transition:
-            background 0.15s ease,
-            color 0.15s ease;
-
-          mat-icon {
-            font-size: 14px;
-            width: 14px;
-            height: 14px;
-            line-height: 14px;
-          }
-
-          &:hover {
-            color: var(--mat-sys-on-surface, #202124);
-            background: rgba(0, 0, 0, 0.1);
-          }
         }
       }
+    }
+
+    .attachment-error {
+      margin-bottom: 10px;
+      font-size: var(--mat-sys-label-small-size, 0.78rem);
+      line-height: var(--mat-sys-label-small-line-height, 1.2);
+      color: var(--mat-sys-error, #ea4335);
     }
 
     .prompt-textarea {
