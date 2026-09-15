@@ -49,6 +49,21 @@ declare global {
   }
 }
 
+/** Maximum number of envelopes retained in the message history buffer. */
+const MAX_HISTORY_BUFFER_SIZE = 100;
+
+/**
+ * Message types that are broadcast but never retained in the history buffer.
+ *
+ * `SURFACE_RESIZE` is emitted by every inline surface on every layout change,
+ * so buffering it evicts the entire history within seconds. `CONSOLE_LOG` is
+ * also unbuffered, but its handler returns before reaching the buffer because
+ * it is routed to the error logger instead.
+ */
+const UNBUFFERED_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+  PreviewBridgeMessageType.SURFACE_RESIZE,
+]);
+
 /**
  * Core service managing cross-frame message passing and event dispatching
  * between the primary workspace shell and rendering client frames.
@@ -81,6 +96,14 @@ export class HostCommunication implements OnDestroy {
     initialValue: null,
   });
 
+  /**
+   * Recent envelopes retained to seed the raw messages panel when it opens.
+   *
+   * Capped at `MAX_HISTORY_BUFFER_SIZE`, so a high-frequency type would evict
+   * everything else within seconds. Those types are listed in
+   * `UNBUFFERED_MESSAGE_TYPES` and skipped here, but are still broadcast on
+   * `messageStream$`.
+   */
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
   private readonly earlyMessageBuffer: MessageEvent[] = [];
   private readonly outboundMessageBuffer: Array<{
@@ -249,9 +272,11 @@ export class HostCommunication implements OnDestroy {
         }
       }
 
-      this.messageHistoryBuffer.push(envelope);
-      if (this.messageHistoryBuffer.length > 100) {
-        this.messageHistoryBuffer.shift();
+      if (!UNBUFFERED_MESSAGE_TYPES.has(type)) {
+        this.messageHistoryBuffer.push(envelope);
+        if (this.messageHistoryBuffer.length > MAX_HISTORY_BUFFER_SIZE) {
+          this.messageHistoryBuffer.shift();
+        }
       }
 
       this.latestEnvelopeSignal.set(envelope);
