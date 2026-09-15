@@ -42,6 +42,7 @@ on:
     branches:
       - "visual-baselines/**"
 
+# Least-privilege token scope required by the repository's zizmor security scan.
 permissions:
   contents: read
 
@@ -53,6 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          # Do not write GITHUB_TOKEN to .git/config (zizmor artipacked rule).
           persist-credentials: false
 
       - name: Enable Corepack
@@ -66,6 +68,9 @@ jobs:
           cache-dependency-path: "yarn.lock"
 
       - name: Install dependencies
+        # Yarn 4.5.0 on Node 24 can crash with an unhandled `onCancel` error
+        # if a registry request times out instead of retrying. A second pass
+        # finishes the install from the partially populated cache.
         run: yarn install --immutable || yarn install --immutable
 
       - name: Build
