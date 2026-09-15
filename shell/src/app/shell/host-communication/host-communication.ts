@@ -86,6 +86,7 @@ export class HostCommunication implements OnDestroy {
   private readonly outboundMessageBuffer: Array<{
     type: PreviewBridgeMessageType;
     payload?: unknown;
+    target?: HTMLIFrameElement | Window | null;
   }> = [];
   private latestCatalogEnvelope: MessageEnvelope | null = null;
 
@@ -195,7 +196,7 @@ export class HostCommunication implements OnDestroy {
         const pending = [...this.outboundMessageBuffer];
         this.outboundMessageBuffer.length = 0;
         for (const msg of pending) {
-          this.sendMessage(msg);
+          this.sendMessage(msg, msg.target);
         }
       }
       if (type === PreviewBridgeMessageType.CONSOLE_LOG) {
@@ -362,7 +363,7 @@ export class HostCommunication implements OnDestroy {
 
     if (!this.isRendererReady()) {
       console.debug('Queueing outbound message; renderer is not yet ready.', message);
-      this.outboundMessageBuffer.push(message);
+      this.outboundMessageBuffer.push({...message, target});
       return;
     }
 

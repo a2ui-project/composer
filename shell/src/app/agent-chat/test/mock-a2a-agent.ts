@@ -45,7 +45,6 @@ export const flightA2uiPayload = [
     createSurface: {
       surfaceId: 'flight-options',
       catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-      component: 'Canvas',
       sendDataModel: true,
     },
   },
@@ -56,8 +55,15 @@ export const flightA2uiPayload = [
       components: [
         {
           id: 'root',
-          component: 'Column',
-          children: ['header_text', 'flight_card_ana', 'flight_card_jal', 'confirm_btn'],
+          component: {
+            Canvas: {
+              cardTitle: 'Flight Options',
+              cardDescription: 'Review and select non-stop flights',
+              cardIcon: 'flight',
+              autoOpen: true,
+              children: ['header_text', 'flight_card_ana', 'flight_card_jal', 'confirm_btn'],
+            },
+          },
         },
         {
           id: 'header_text',
