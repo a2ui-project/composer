@@ -336,6 +336,13 @@
             display: block;
             width: 100%;
 
+            // The frame paints its own background colour. That is right for
+            // the standalone preview pane, but inside a chat message it
+            // covers the bubble with a solid block, so turn it off here.
+            //
+            // Angular normally keeps one component's styles out of another
+            // component's markup. `::ng-deep` lifts that limit, which is
+            // needed here because the background is set inside the frame.
             ::ng-deep .rendered-frame-container {
               background-color: transparent;
             }
