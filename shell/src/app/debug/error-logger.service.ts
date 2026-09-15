@@ -15,7 +15,7 @@
  */
 import {Injectable} from '@angular/core';
 import {Subject, Observable} from 'rxjs';
-import {safeSerialize} from 'a2ui-bridge';
+import {safeSerialize, isErrorLike} from 'a2ui-bridge';
 
 /**
  * Defines the severity levels for log events.
@@ -59,28 +59,6 @@ export interface TaggedLogger {
   info(message: string, ...args: unknown[]): void;
   /** Logs a standard message with the bound tag. */
   log(message: string, ...args: unknown[]): void;
-}
-
-/**
- * Determines whether a given value resembles an Error object.
- * Checks for the presence of standard Error properties like 'message' and 'stack'.
- *
- * @param val - The value to inspect.
- * @returns True if the value is shaped like an Error, false otherwise.
- */
-export function isErrorLike(val: unknown): val is Error {
-  if (val instanceof Error || Object.prototype.toString.call(val) === '[object Error]') {
-    return true;
-  }
-  return (
-    typeof val === 'object' &&
-    val !== null &&
-    'message' in val &&
-    typeof (val as Record<string, unknown>)['message'] === 'string' &&
-    'stack' in val &&
-    typeof (val as Record<string, unknown>)['stack'] === 'string' &&
-    !('nodeType' in val)
-  );
 }
 
 /**
@@ -168,13 +146,13 @@ export class ErrorLogger {
     };
     return {
       error: (message: string, ...args: unknown[]) =>
-        this.error({message: buildMessage(message, args), sourceTag, level: 'error'}),
+        this.error({message: buildMessage(message, args), sourceTag}),
       warn: (message: string, ...args: unknown[]) =>
-        this.warn({message: buildMessage(message, args), sourceTag, level: 'warn'}),
+        this.warn({message: buildMessage(message, args), sourceTag}),
       info: (message: string, ...args: unknown[]) =>
-        this.info({message: buildMessage(message, args), sourceTag, level: 'info'}),
+        this.info({message: buildMessage(message, args), sourceTag}),
       log: (message: string, ...args: unknown[]) =>
-        this.log({message: buildMessage(message, args), sourceTag, level: 'log'}),
+        this.log({message: buildMessage(message, args), sourceTag}),
     };
   }
 
@@ -231,7 +209,8 @@ export class ErrorLogger {
     const sourceTag = '[Shell]';
 
     if (isErrorLike(arg1)) {
-      message = arg1.message;
+      const name = String(arg1.name || 'Error').slice(0, 100);
+      message = arg1.message ? `${name}: ${arg1.message}` : name;
       stack = arg1.stack;
     } else if (typeof arg1 === 'string') {
       message = arg1;
@@ -255,6 +234,9 @@ export class ErrorLogger {
   }
 
   private isPartialErrorLogItem(val: unknown): val is Partial<ErrorLogItem> {
+    if (typeof val === 'object' && val !== null && 'sourceTag' in val) {
+      return Object.keys(val).length > 0;
+    }
     if (isErrorLike(val)) {
       return false;
     }

@@ -119,27 +119,6 @@ describe('Ga4UsageTrackingService', () => {
     expect(lastPushed).toEqual(['event', 'test_event', {key: 'value'}]);
   });
 
-  it('does not dispatch events when tracking is disabled', () => {
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [
-        Ga4UsageTrackingService,
-        {
-          provide: USAGE_TRACKING_CONFIG,
-          useValue: {enabled: false, measurementId: ''},
-        },
-        {provide: StartupResolution, useValue: mockStartupResolution},
-        {provide: StartupConfigStateService, useValue: mockStartupConfigState},
-        {provide: AppConfigProvider, useValue: mockAppConfigProvider},
-        {provide: CatalogManagement, useValue: mockCatalogManagement},
-        {provide: DOCUMENT, useValue: mockDocument},
-      ],
-    });
-    const disabledService = TestBed.inject(Ga4UsageTrackingService);
-    disabledService.trackPageView({pagePath: '/test'});
-    expect(mockWindow.gtag).not.toHaveBeenCalled();
-  });
-
   it('resets session uuid when resetSession is called', () => {
     const initialSession = service.composerSessionId;
     service.resetSession();
@@ -455,5 +434,140 @@ describe('Ga4UsageTrackingService', () => {
         interface_count: 3,
       }),
     );
+  });
+
+  describe('trackComposerError', () => {
+    it('sends nothing if gtagEnabled is false', () => {
+      // Simulate disabled
+      (service as unknown as {config: unknown}).config = {enabled: false, measurementId: 'G-TEST'};
+      service.trackComposerError({
+        sourceTag: 'test',
+        errorCategory: 'SCHEMA_VALIDATION_ERROR',
+      });
+      expect(mockWindow.gtag).not.toHaveBeenCalled();
+    });
+
+    it('sends composer_error event with strict structured parameters', () => {
+      service.trackComposerError({
+        sourceTag: '[Monaco]',
+        errorCategory: 'SCHEMA_VALIDATION_ERROR',
+        line: 10,
+        column: 5,
+        invalidProperty: 'components',
+      });
+
+      expect(mockWindow.gtag).toHaveBeenCalledWith(
+        'event',
+        'composer_error',
+        expect.objectContaining({
+          event_category: 'error',
+          event_label: 'SCHEMA_VALIDATION_ERROR',
+          source_tag: '[Monaco]',
+          error_category: 'SCHEMA_VALIDATION_ERROR',
+          line: 10,
+          column: 5,
+          invalid_property: 'components',
+        }),
+      );
+    });
+
+    it('sends default placeholders for missing optional structural coordinates', () => {
+      service.trackComposerError({
+        sourceTag: '[ChatParser]',
+        errorCategory: 'CHAT_PARSER_ERROR',
+      });
+
+      expect(mockWindow.gtag).toHaveBeenCalledWith(
+        'event',
+        'composer_error',
+        expect.objectContaining({
+          event_category: 'error',
+          event_label: 'CHAT_PARSER_ERROR',
+          source_tag: '[ChatParser]',
+          error_category: 'CHAT_PARSER_ERROR',
+          line: -1,
+          column: -1,
+          invalid_property: 'none_or_redacted',
+        }),
+      );
+    });
+
+    it('sanitizes invalidProperty if it contains invalid characters', () => {
+      service.trackComposerError({
+        sourceTag: '[Monaco]',
+        errorCategory: 'SCHEMA_VALIDATION_ERROR',
+        invalidProperty: 'invalid propert!>',
+      });
+
+      expect(mockWindow.gtag).toHaveBeenCalledWith(
+        'event',
+        'composer_error',
+        expect.objectContaining({
+          invalid_property: 'none_or_redacted',
+        }),
+      );
+    });
+
+    it('prevents PII leakage by stripping full JSON blobs and untrusted text', () => {
+      const adversarialText = 'JDoe123';
+      service.trackComposerError({
+        sourceTag: adversarialText,
+        errorCategory: 'SOME_ERROR_CATEGORY',
+        line: 99,
+        column: 99,
+        invalidProperty: adversarialText,
+      });
+
+      const gtagCallArgs = mockWindow.gtag as ReturnType<typeof vi.fn>;
+      const lastCallObj = gtagCallArgs.mock.calls[0][2] as Record<string, unknown>;
+
+      const payloadString = JSON.stringify(lastCallObj);
+      expect(payloadString).not.toContain(adversarialText);
+      expect(lastCallObj['invalid_property']).toBe('none_or_redacted');
+      expect(lastCallObj['source_tag']).toBe('[Unknown]');
+    });
+
+    it('catches and suppresses internal gtag runtime exceptions silently', () => {
+      mockWindow.gtag = vi.fn().mockImplementation(() => {
+        throw new Error('Global GTAM failure');
+      });
+
+      expect(() => {
+        service.trackComposerError({sourceTag: 'test', errorCategory: 'error'});
+      }).not.toThrow();
+    });
+  });
+});
+
+describe('Ga4UsageTrackingService (Disabled)', () => {
+  it('does not dispatch events when tracking is disabled', () => {
+    const mockWindow = {
+      dataLayer: [],
+      gtag: vi.fn(),
+    } as unknown as WindowWithGtag;
+    const mockDocument = {
+      defaultView: mockWindow,
+      querySelector: vi.fn(),
+      createElement: vi.fn(),
+      head: {appendChild: vi.fn()},
+    } as unknown as Document;
+
+    TestBed.configureTestingModule({
+      providers: [
+        Ga4UsageTrackingService,
+        {
+          provide: USAGE_TRACKING_CONFIG,
+          useValue: {enabled: false, measurementId: ''},
+        },
+        {provide: StartupResolution, useValue: {resolvedComponentUrl: signal('')}},
+        {provide: StartupConfigStateService, useValue: {activeCatalogId: signal('')}},
+        {provide: AppConfigProvider, useValue: {themePreference: signal('system')}},
+        {provide: CatalogManagement, useValue: {activeCatalogTitle: signal('')}},
+        {provide: DOCUMENT, useValue: mockDocument},
+      ],
+    });
+    const disabledService = TestBed.inject(Ga4UsageTrackingService);
+    disabledService.trackPageView({pagePath: '/test'});
+    expect(mockWindow.gtag).not.toHaveBeenCalled();
   });
 });

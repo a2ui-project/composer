@@ -16,6 +16,12 @@
 
 import {defineConfig, devices} from '@playwright/test';
 
+/**
+ * Configuration for Playwright automated testing.
+ * Setting CI=true cleanly enforces deterministic environments by forbidding .only tests,
+ * adding retry policies, preventing trace viewers from automatically springing open,
+ * and avoiding stale dev server reuse which can corrupt headless testing outputs.
+ */
 export default defineConfig({
   testDir: '.',
   testMatch: ['e2e/**/*.e2e.ts', 'src/**/*.visual.ts'],

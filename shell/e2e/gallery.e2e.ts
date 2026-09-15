@@ -15,6 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {RENDERER_URLS} from './helpers';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -25,9 +26,7 @@ test.beforeEach(async ({page}) => {
 test.describe('Components Gallery User Journey', () => {
   test.beforeEach(async ({page}) => {
     await page.addInitScript(() => {
-      try {
-        localStorage.setItem('a2ui_composer_force_1p', 'true');
-      } catch (e) {}
+      localStorage.setItem('a2ui_composer_force_1p', 'true');
     });
   });
 
@@ -39,7 +38,7 @@ test.describe('Components Gallery User Journey', () => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
     // 1. Navigate to home with a valid renderer to trigger the catalog handshake
-    await page.goto('/?renderer=http://localhost:3456');
+    await page.goto(`/?renderer=${RENDERER_URLS.angular}`);
     await expect(page.locator('.workspace-container')).toBeVisible();
 
     // Wait for the workspace to load, indicating handshake completed
@@ -114,7 +113,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(copyButton).toBeVisible();
     await copyButton.click();
 
-    // Assert clipboard matches using expect.poll (avoiding waitForTimeout)
+    // Assert clipboard matches using expect.poll
     await expect
       .poll(async () => {
         const text = await page.evaluate(() => navigator.clipboard.readText());

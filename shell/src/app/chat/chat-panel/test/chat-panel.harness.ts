@@ -291,4 +291,29 @@ export class ChatPanelHarness extends ComponentHarness {
     if (!btn) throw new Error('Screenshot toggle button not found.');
     await btn.click();
   }
+
+  async hasParseErrorCard(): Promise<boolean> {
+    const card = await this.locatorForOptional('.parse-error-card')();
+    return card !== null;
+  }
+
+  async getParseErrorCardAttributes(): Promise<{role: string | null; ariaLive: string | null}> {
+    const card = await this.locatorForOptional('.parse-error-card')();
+    if (!card) return {role: null, ariaLive: null};
+    const role = await card.getAttribute('role');
+    const ariaLive = await card.getAttribute('aria-live');
+    return {role, ariaLive};
+  }
+
+  async getParseErrorText(): Promise<string | null> {
+    const card = await this.locatorForOptional('.parse-error-card')();
+    if (!card) return null;
+    return card.text();
+  }
+
+  async clickParseErrorDetailsButton(): Promise<void> {
+    const btn = await this.locatorForOptional('.parse-error-card button')();
+    if (!btn) throw new Error('Parse error details button not found.');
+    await btn.click();
+  }
 }

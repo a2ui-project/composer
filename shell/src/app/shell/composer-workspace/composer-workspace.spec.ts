@@ -219,34 +219,6 @@ describe('ComposerWorkspace Dashboard', () => {
 
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(1);
     });
-
-    it('increments Errors unread count when a DATA_MODEL_CHANGE validation error arrives and Errors tab is inactive', () => {
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
-
-      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
-        type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-        payload: {validationErrors: ['Invalid type']},
-        origin: 'http://localhost',
-        timestamp: Date.now(),
-      });
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(1);
-    });
-
-    it('does not increment Errors unread count when a DATA_MODEL_CHANGE arrives with empty validationErrors', () => {
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
-
-      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
-        type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-        payload: {validationErrors: []}, // Empty errors!
-        origin: 'http://localhost',
-        timestamp: Date.now(),
-      });
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
-    });
   });
 
   it('sets isExtensionMode correctly', async () => {

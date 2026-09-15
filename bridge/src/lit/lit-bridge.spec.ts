@@ -21,6 +21,19 @@ import {a2uiBridge} from '../preview-bridge';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {TemplateResult} from 'lit';
 
+/**
+ * Matches any viewport-relative length unit.
+ *
+ * This pattern and FULL_HEIGHT are repeated byte for byte in the three sample
+ * guest guards, each named surface-host-sizing.spec.ts. Those are separate
+ * packages with no shared test-only module between them, so a change to
+ * either pattern has to be made in all four places by hand.
+ */
+const VIEWPORT_UNIT = /\d+\s*(vh|dvh|svh|lvh|vmin|vmax|vb|vi)\b/i;
+
+/** Matches a full-height declaration that inherits the iframe viewport. */
+const FULL_HEIGHT = /height:\s*['"`]?100%/i;
+
 describe('Lit Framework Adapter Spec', () => {
   const dummyCatalog = {
     id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
@@ -387,6 +400,81 @@ describe('Lit Framework Adapter Spec', () => {
     expect(attachSpy).toHaveBeenCalled();
     const configPassed = attachSpy.mock.lastCall![1];
     expect(configPassed.onThemeChange).toBe(onThemeChange);
+
+    element.remove();
+  });
+
+  it('defines static styles without viewport-coupled host sizing and with a fixed error overlay', () => {
+    const cssText = A2uiSandboxRoot.styles.cssText;
+    // The host sizes the preview iframe to the height this guest reports, so a
+    // viewport-derived host height feeds the host's last decision back into the
+    // next measurement, producing a SURFACE_RESIZE feedback loop.
+    expect(cssText).not.toMatch(VIEWPORT_UNIT);
+    // FULL_HEIGHT bans `height: 100%` and `min-height: 100%`, both of which
+    // resolve against the frame the host just applied. A pixel min-height is
+    // derived from content, not from the frame, so it stays allowed.
+    expect(cssText).not.toMatch(FULL_HEIGHT);
+    expect(cssText).toContain('.error-overlay');
+    expect(cssText).toContain('position: fixed');
+    expect(cssText).toContain('z-index: 9999');
+    expect(cssText).not.toContain('--a2ui-color-error-overlay-bg');
+    expect(cssText).not.toContain('--a2ui-color-error-overlay-text');
+    expect(cssText).toContain('--a2ui-color-surface');
+    expect(cssText).toContain('--a2ui-color-error');
+  });
+
+  it('renders error overlay even when surface is absent when debounced error is present', () => {
+    vi.useFakeTimers();
+    bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root-error-test'});
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    const ctor = customElements.get('app-root-error-test');
+    const element = new ctor!();
+    document.body.appendChild(element);
+
+    const config = attachSpy.mock.lastCall![1];
+    config.onError!(new Error('Lit syntax error'));
+
+    vi.advanceTimersByTime(350);
+
+    const rendered = element.render() as unknown as TemplateResult;
+    const errorSubTemplate = rendered.values.find(
+      v => typeof v === 'object' && v !== null && 'strings' in v,
+    ) as TemplateResult | undefined;
+    expect(errorSubTemplate?.strings.join('')).toContain('error-overlay');
+    expect(errorSubTemplate?.strings.join('')).toContain('JSON Preview Error');
+
+    element.remove();
+    vi.useRealTimers();
+  });
+
+  it('renders the surface host without viewport-coupled sizing', async () => {
+    bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root-host-sizing-test'});
+
+    const ctor = customElements.get('app-root-host-sizing-test');
+    const element = new ctor!() as HTMLElement & {
+      surface: unknown;
+      updateComplete: Promise<boolean>;
+    };
+    document.body.appendChild(element);
+
+    // Render the surface-present branch. Its markup comes from a template
+    // literal, which the static stylesheet assertion above cannot see and no
+    // sample-side guard reads, so it is the one place viewport sizing could
+    // reappear unnoticed. The stub carries only what a2ui-surface reads while
+    // updating.
+    element.surface = {
+      componentsModel: {
+        get: () => undefined,
+        onCreated: {subscribe: () => ({unsubscribe: () => {}})},
+      },
+    };
+    await element.updateComplete;
+
+    const markup = element.shadowRoot!.innerHTML;
+    expect(markup).toContain('<main>');
+    expect(markup).not.toMatch(VIEWPORT_UNIT);
+    expect(markup).not.toMatch(FULL_HEIGHT);
 
     element.remove();
   });

@@ -41,6 +41,7 @@ test.describe('Settings and Client Configuration', () => {
       await expect(apiKeyDialog).toBeVisible();
       await apiKeyDialog.getByLabel('Name', {exact: true}).fill('Test Key');
       await apiKeyDialog.getByLabel('API Key', {exact: true}).fill('test-api-key');
+      await page.keyboard.press('Tab');
       await apiKeyDialog.getByRole('button', {name: 'Add', exact: true}).click();
       await expect(apiKeyDialog).toBeHidden();
 
@@ -49,6 +50,7 @@ test.describe('Settings and Client Configuration', () => {
       await expect(rendererDialog).toBeVisible();
       await rendererDialog.getByLabel('Name', {exact: true}).fill('Test Renderer');
       await rendererDialog.getByLabel('Renderer URL', {exact: true}).fill('http://localhost:9090');
+      await page.keyboard.press('Tab');
       await rendererDialog.getByRole('button', {name: 'Add', exact: true}).click();
       await expect(rendererDialog).toBeHidden();
 
@@ -80,6 +82,7 @@ test.describe('Settings and Client Configuration', () => {
       await expect(apiKeyDialog).toBeVisible();
       await apiKeyDialog.getByLabel('Name', {exact: true}).fill('Unique Key');
       await apiKeyDialog.getByLabel('API Key', {exact: true}).fill('new-unique-api-key');
+      await page.keyboard.press('Tab');
       await apiKeyDialog.getByRole('button', {name: 'Add', exact: true}).click();
       await expect(apiKeyDialog).toBeHidden();
 
