@@ -136,6 +136,48 @@ describe('ErrorTelemetryReporter', () => {
     );
   });
 
+  it('extracts invalidProperty from a message ending with a comma (instance.components,)', () => {
+    reporter.start();
+    errorStream$.next({
+      id: '2',
+      timestamp: Date.now(),
+      level: 'error',
+      sourceTag: '[Monaco]',
+      message: 'Schema error: instance.components, property is invalid',
+    } as ErrorLogItem);
+    expect(usageTrackingService.trackComposerError).toHaveBeenCalledWith(
+      expect.objectContaining({invalidProperty: 'components'}),
+    );
+  });
+
+  it('extracts invalidProperty from a message with no trailing text (instance.components)', () => {
+    reporter.start();
+    errorStream$.next({
+      id: '3',
+      timestamp: Date.now(),
+      level: 'error',
+      sourceTag: '[Monaco]',
+      message: 'Schema error: instance.components',
+    } as ErrorLogItem);
+    expect(usageTrackingService.trackComposerError).toHaveBeenCalledWith(
+      expect.objectContaining({invalidProperty: 'components'}),
+    );
+  });
+
+  it('extracts invalidProperty from a prefixed message (TypeError: Schema error: instance.componentId)', () => {
+    reporter.start();
+    errorStream$.next({
+      id: '4',
+      timestamp: Date.now(),
+      level: 'error',
+      sourceTag: '[Monaco]',
+      message: 'TypeError: Schema error: instance.componentId',
+    } as ErrorLogItem);
+    expect(usageTrackingService.trackComposerError).toHaveBeenCalledWith(
+      expect.objectContaining({invalidProperty: 'componentId'}),
+    );
+  });
+
   it('maps source tags to categories gracefully', () => {
     reporter.start();
     errorStream$.next({

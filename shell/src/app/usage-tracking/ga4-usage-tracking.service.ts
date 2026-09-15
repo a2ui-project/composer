@@ -316,7 +316,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ['event_category']: 'error',
       ['event_label']: params.errorCategory,
       ['source_tag']:
-        params.sourceTag && /^\[[a-zA-Z0-9_-]+\]$/.test(params.sourceTag)
+        params.sourceTag && /^\[[a-zA-Z0-9_-]{1,64}\]$/.test(params.sourceTag)
           ? params.sourceTag
           : '[Unknown]',
       ['error_type']: params.errorCategory,
