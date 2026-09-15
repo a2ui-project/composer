@@ -205,7 +205,18 @@ When a change is meant to alter the UI, refresh the baselines through the
 
 ```bash
 gh workflow run visual_baselines.yml --ref <your-branch>
-gh run download <run-id> --name visual-baselines --dir shell/src
+
+# The command above returns before GitHub registers the run, so pause briefly
+# and then resolve the run it queued.
+sleep 5
+RUN_ID=$(gh run list --workflow=visual_baselines.yml --branch <your-branch> \
+  --limit 1 --json databaseId --jq '.[0].databaseId')
+
+# Wait for that run to finish, then download the PNGs it produced. Passing the
+# run ID keeps the download pinned to your run rather than the newest artifact
+# in the repository.
+gh run watch "$RUN_ID" --exit-status
+gh run download "$RUN_ID" --name visual-baselines --dir shell/src
 ```
 
 Commit the PNGs it produces alongside the change.

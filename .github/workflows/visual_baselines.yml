@@ -25,9 +25,15 @@
 #   1. Trigger via GitHub CLI:
 #        gh workflow run visual_baselines.yml --ref <branch>
 #      Or push to any branch matching `visual-baselines/**`.
-#   2. Download the updated snapshots into `shell/src`:
-#        gh run download <run-id> --name visual-baselines --dir shell/src
-#   3. Commit and push the updated PNG files.
+#   2. Resolve the run that was queued, since `gh workflow run` returns before
+#      GitHub registers it:
+#        sleep 5
+#        RUN_ID=$(gh run list --workflow=visual_baselines.yml --branch <branch> \
+#          --limit 1 --json databaseId --jq '.[0].databaseId')
+#   3. Wait for it to finish and download the updated snapshots into `shell/src`:
+#        gh run watch "$RUN_ID" --exit-status
+#        gh run download "$RUN_ID" --name visual-baselines --dir shell/src
+#   4. Commit and push the updated PNG files.
 name: Visual Baselines
 
 on:
