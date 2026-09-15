@@ -17,17 +17,22 @@
 :host {
   display: block;
   height: 100%;
+  container-type: inline-size;
+  container-name: gallery;
 }
 
 .gallery-container {
+  --gallery-sidenav-width: 208px;
   height: 100%;
   width: 100%;
 }
 
 .gallery-sidenav {
-  width: 240px;
+  width: var(--gallery-sidenav-width);
+  border-radius: 0;
+  --mat-sidenav-container-shape: 0px;
   border-right: 1px solid var(--mat-sys-outline-variant);
-  background-color: var(--mat-sys-surface-container-low);
+  background-color: var(--mat-sys-surface);
 }
 
 .catalog-title {
@@ -42,7 +47,9 @@
     font: var(--mat-sys-typescale-label-medium);
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 1px;
+    font-size: 11px;
+    color: var(--cpk-text-secondary);
   }
 
   .component-nav-item {
@@ -51,7 +58,7 @@
     text-align: left;
     border: none;
     background: transparent;
-    border-radius: 20px;
+    border-radius: 10px;
     margin: 2px 12px;
     padding-left: 12px;
     width: calc(100% - 24px);
@@ -68,12 +75,14 @@
       background-color: var(--mat-sys-surface-container-low);
     }
 
+    &.mdc-list-item--activated,
     &.mat-mdc-list-item-activated,
     &[activated='true'] {
-      background-color: var(--mat-sys-surface-container-high);
+      background-color: var(--mat-sys-secondary-container);
 
       span[matListItemTitle] {
-        font-weight: 500;
+        color: var(--mat-sys-on-secondary-container);
+        font-weight: 600;
       }
     }
 
@@ -89,7 +98,9 @@
 .gallery-content {
   box-sizing: border-box;
   height: 100%;
-  padding: 24px;
+  // Keep this synchronized with the drawer when its container changes width.
+  margin-left: var(--gallery-sidenav-width) !important;
+  padding: 32px;
   background-color: var(--mat-sys-background, #fafafa);
   overflow-y: auto;
 }
@@ -125,21 +136,37 @@
   opacity: 0.8;
 }
 
-.details-panel {
-  display: flex;
-  flex-direction: column;
+.gallery-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.details-panel {
+  display: contents;
+}
+
+.preview-slot {
+  min-width: 0;
+}
+
+.properties-card,
+.empty-state {
+  grid-column: 1 / -1;
 }
 
 .details-header {
-  border-bottom: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
-  padding-bottom: 16px;
+  max-width: 1440px;
+  margin: 0 auto 28px;
 }
 
 .component-title {
   margin: 0 0 8px 0;
-  font-size: 1.75rem;
-  font-weight: 400;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.8px;
 }
 
 .component-description {
@@ -152,9 +179,25 @@
 .preview-card,
 .usage-card,
 .properties-card {
-  border-radius: 8px;
-  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
-  background-color: var(--mat-sys-surface, #ffffff);
+  min-width: 0;
+  align-self: start;
+  border-radius: var(--cpk-radius-card);
+  border: 1px solid var(--cpk-border);
+  background-color: var(--cpk-surface);
+  box-shadow: var(--cpk-shadow-card);
+
+  mat-card-header {
+    padding: 20px 24px 16px;
+  }
+
+  mat-card-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  mat-card-content {
+    padding: 0 24px 24px;
+  }
 }
 
 .preview-placeholder {
@@ -182,14 +225,15 @@
 
 .usage-code-block {
   margin: 0;
-  padding: 12px;
-  background-color: var(--mat-sys-surface-container-high, #f5f5f5);
-  border-radius: 4px;
+  padding: 20px;
+  background-color: var(--mat-sys-surface-container-low);
+  border-radius: 12px;
+  max-height: 360px;
   overflow-x: auto;
 }
 
 .usage-code {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--cpk-font-mono);
   font-size: 0.85rem;
   line-height: 1.5;
   color: var(--mat-sys-on-surface, #333);
@@ -257,4 +301,52 @@
   gap: 16px;
   color: var(--mat-sys-on-surface-variant, #666);
   font-size: 0.9rem;
+}
+
+.preview-card {
+  overflow: hidden;
+
+  mat-card-content {
+    padding: 0;
+  }
+}
+
+.properties-content {
+  overflow-x: auto;
+}
+
+@container gallery (min-width: 1000px) {
+  .gallery-cards {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
+}
+
+@container gallery (max-width: 680px) {
+  .gallery-container {
+    --gallery-sidenav-width: 144px;
+  }
+
+  .gallery-content {
+    padding: 16px;
+  }
+
+  .gallery-cards {
+    gap: 16px;
+  }
+
+  .preview-card,
+  .usage-card,
+  .properties-card {
+    mat-card-header {
+      padding: 16px;
+    }
+
+    mat-card-content {
+      padding: 0 16px 16px;
+    }
+  }
+
+  .preview-card mat-card-content {
+    padding: 0;
+  }
 }
