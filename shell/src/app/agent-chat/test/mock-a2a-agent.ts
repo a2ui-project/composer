@@ -45,6 +45,7 @@ export const flightA2uiPayload = [
     createSurface: {
       surfaceId: 'flight-options',
       catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      component: 'Canvas',
       sendDataModel: true,
     },
   },

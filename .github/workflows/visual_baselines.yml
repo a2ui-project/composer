@@ -60,7 +60,7 @@ jobs:
           cache-dependency-path: "yarn.lock"
 
       - name: Install dependencies
-        run: yarn install --immutable
+        run: yarn install --immutable || yarn install --immutable
 
       - name: Build
         run: yarn build
