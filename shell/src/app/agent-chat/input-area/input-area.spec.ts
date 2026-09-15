@@ -187,7 +187,10 @@ describe('A2aInputArea', () => {
 
     await fixture.componentInstance['handleFileSelection'](fileSelectionEvent(files));
 
-    expect(fixture.componentInstance['attachedImages']().length).toBe(10);
+    // The first 10 of the selection are kept, in the order they were picked.
+    expect(fixture.componentInstance['attachedImages']().map(a => a.name)).toEqual(
+      Array.from({length: 10}, (_, i) => `file-${i}.txt`),
+    );
     const error = fixture.componentInstance['attachmentError']();
     expect(error).toContain('at most 10 attachments');
     // The message must name the rejected files, not imply the whole
