@@ -164,16 +164,36 @@ describe('RawMessages', () => {
       origin: 'http://localhost',
       timestamp: 1715940000000,
     });
-    emitMessage({
-      type: 'KEPT_MSG',
-      payload: {},
-      origin: 'http://localhost',
-      timestamp: 1715940000001,
+    fixture.detectChanges();
+
+    expect(await harness.getLoggedMessagesCount()).toBe(0);
+    expect(await harness.hasPlaceholder()).toBe(true);
+  });
+
+  it('logs every bridge message type other than the two excluded ones', async () => {
+    const kept = Object.values(PreviewBridgeMessageType).filter(
+      type =>
+        type !== PreviewBridgeMessageType.CONSOLE_LOG &&
+        type !== PreviewBridgeMessageType.SURFACE_RESIZE,
+    );
+
+    kept.forEach((type, i) => {
+      emitMessage({
+        type,
+        payload: {},
+        origin: 'http://localhost',
+        timestamp: 1715940000000 + i,
+      });
     });
     fixture.detectChanges();
 
-    expect(await harness.getLoggedMessagesCount()).toBe(1);
-    expect(await harness.getMessageTextAt(0)).toContain('KEPT_MSG');
+    // A dropped type would shorten the list, so the count guards against a
+    // silent exclusion and the per-entry check pins which type landed where.
+    expect(await harness.getLoggedMessagesCount()).toBe(kept.length);
+    const newestFirst = [...kept].reverse();
+    for (const [i, type] of newestFirst.entries()) {
+      expect(await harness.getMessageTextAt(i)).toContain(type);
+    }
   });
 
   it('formats timestamps as HH:mm:ss.SSS correctly', async () => {
@@ -314,7 +334,7 @@ describe('RawMessages', () => {
         timestamp: 2000,
       },
       {
-        type: 'POST_MSG_1',
+        type: PreviewBridgeMessageType.RENDER_A2UI,
         payload: {},
         origin: 'http://localhost',
         timestamp: 3000,
@@ -331,7 +351,7 @@ describe('RawMessages', () => {
     );
 
     expect(await newHarness.getLoggedMessagesCount()).toBe(1);
-    expect(await newHarness.getMessageTextAt(0)).toContain('POST_MSG_1');
+    expect(await newHarness.getMessageTextAt(0)).toContain(PreviewBridgeMessageType.RENDER_A2UI);
   });
 
   it('filters out duplicate entries matching timestamp and type', async () => {
