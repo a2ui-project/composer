@@ -14,33 +14,11 @@
  * limitations under the License.
  */
 
-:host {
-  display: block;
-  width: 100%;
-}
+import {ComponentHarness} from '@angular/cdk/testing';
 
-.error-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  inset: 0;
-  z-index: 9999;
-  background-color: color-mix(in srgb, var(--a2ui-color-surface, canvas) 95%, transparent);
-  color: var(--a2ui-color-error, #d32f2f);
-  padding: 24px;
-  font-family: monospace;
-  overflow: auto;
-  box-sizing: border-box;
-
-  h3 {
-    margin-top: 0;
-  }
-
-  pre {
-    white-space: pre-wrap;
-    word-break: break-word;
-    margin: 0;
-  }
+/**
+ * Test harness for the monaco editor.
+ */
+export class MonacoEditorHarness extends ComponentHarness {
+  static hostSelector = 'a2ui-composer-monaco-editor';
 }

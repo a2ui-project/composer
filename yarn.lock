@@ -10120,6 +10120,7 @@ __metadata:
     "@angular-devkit/build-angular": "npm:22.0.7"
     "@angular/animations": "npm:22.0.7"
     "@angular/build": "npm:22.0.7"
+    "@angular/cdk": "npm:22.0.5"
     "@angular/cli": "npm:22.0.7"
     "@angular/common": "npm:22.0.7"
     "@angular/compiler": "npm:22.0.7"

@@ -59,13 +59,6 @@ export declare interface WorkspaceMessagePayload {
   styleUrl: './composer-workspace.scss',
 })
 export class ComposerWorkspace implements OnInit, AfterViewInit {
-  @HostListener('window:a2ui-open-panel', ['$event']) onOpenPanel(event: Event) {
-    const detail = (event as CustomEvent).detail;
-    const panelId = typeof detail === 'string' ? detail : detail?.panelId;
-    if (panelId) {
-      this.composerDockview.openPanel(panelId);
-    }
-  }
   private readonly startupResolution = inject(StartupResolution);
   private readonly hostComm = inject(HostCommunication);
   private readonly configProvider = inject(AppConfigProvider);
@@ -78,6 +71,14 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   unreadEventsCount = signal(0);
   unreadErrorsCount = signal(0);
   isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
+
+  @HostListener('window:a2ui-open-panel', ['$event']) onOpenPanel(event: Event) {
+    const detail = (event as CustomEvent).detail;
+    const panelId = typeof detail === 'string' ? detail : detail?.panelId;
+    if (panelId && Object.values(ComposerPanelId).includes(panelId as ComposerPanelId)) {
+      this.composerDockview.openPanel(panelId as ComposerPanelId);
+    }
+  }
 
   constructor() {
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
