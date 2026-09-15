@@ -1197,8 +1197,9 @@ describe('HostCommunication', () => {
         }),
       );
 
-      // A frame reference is not structured-cloneable, so leaking it into the
-      // posted message would make postMessage throw for the whole dispatch.
+      // The browser cannot copy a DOM element across frames, so an iframe
+      // reference left inside the message would make postMessage throw and the
+      // payload would never arrive.
       const renderCall = vi
         .mocked(iframeWindow.postMessage)
         .mock.calls.find(

@@ -84,10 +84,18 @@ export class HostCommunication implements OnDestroy {
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
   private readonly earlyMessageBuffer: MessageEvent[] = [];
   /**
-   * Messages awaiting the renderer handshake, each paired with the frame it was
-   * addressed to. The target is held alongside the message rather than inside
-   * it, because the message object is passed verbatim to `postMessage` and a
-   * frame reference is not structured-cloneable.
+   * Messages we tried to send before the guest renderer was ready to receive
+   * them. They are replayed once it announces itself with RENDERER_READY.
+   *
+   * Each entry also records which frame the message was meant for, because
+   * several renderer iframes can be open at once (for example an inline
+   * surface in the chat plus the side canvas), and a replayed message must
+   * still reach the frame it was originally addressed to.
+   *
+   * The frame is stored next to the message instead of as a property on it:
+   * `sendMessage` hands the message object straight to `postMessage`, and the
+   * browser cannot copy a DOM element across frames, so an iframe reference
+   * inside the message would make the send throw.
    */
   private readonly outboundMessageBuffer: Array<{
     message: {type: PreviewBridgeMessageType; payload?: unknown};
