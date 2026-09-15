@@ -227,7 +227,6 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     // Wait for errors tab
     await page.getByRole('tab', {name: 'Errors'}).click();
 
-    // Add real assertion instead of ignoring
     const errorRow = page.locator('.errors-container table tr.element-row').first();
     await expect(errorRow).toBeVisible();
     await expect(errorRow).toContainText('TypeError: mock is undefined');
