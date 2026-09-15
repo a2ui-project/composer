@@ -32,8 +32,13 @@
   </div>
 
   <header class="demos-header">
-    <h1 class="demos-title">Demos</h1>
-    <p class="demos-subtitle">Live demos served by the connected renderer.</p>
+    <div>
+      <h1 class="demos-title">Demos</h1>
+      <p class="demos-subtitle">Explore live examples. Open one in Composer to make it your own.</p>
+    </div>
+    @if (demos()?.length; as count) {
+      <p class="demos-count">{{ count }} {{ count === 1 ? 'example' : 'examples' }}</p>
+    }
   </header>
 
   @if (isResolving()) {

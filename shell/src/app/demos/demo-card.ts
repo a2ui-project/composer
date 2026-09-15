@@ -232,15 +232,8 @@ export class DemoCard {
   /** The frame's preview scale, published to the stylesheet as a custom property. */
   protected readonly previewScale = String(PREVIEW_SCALE);
 
-  /**
-   * Accessible name of this card's "Open" control.
-   *
-   * The visible label is one word, because the card has room for one word and the
-   * demo it belongs to is written directly above it. The accessible name cannot be:
-   * a screen reader listing the wall's controls would otherwise read 43 buttons all
-   * called "Open", which identifies none of them.
-   */
-  protected readonly openLabel = computed(() => `Open "${this.demo().name}" in the workspace`);
+  /** Names the demo when assistive technology lists the wall's launch controls. */
+  protected readonly openLabel = computed(() => `Open in Composer: ${this.demo().name}`);
 
   /**
    * Height the card's surface actually occupies on the wall, or null before a report.

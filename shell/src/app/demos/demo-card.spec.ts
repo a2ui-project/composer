@@ -174,10 +174,9 @@ describe('DemoCard sandboxed live demo frame', () => {
     const fixture = mountCard(true);
     const openButton = (fixture.nativeElement as HTMLElement).querySelector('.demo-card-open')!;
 
-    // The visible label is one word for every card on the wall; the accessible name is
-    // what tells a screen reader which of them this one opens.
+    // The accessible name tells a screen reader which demo this control opens.
     expect(openButton.textContent?.trim()).toContain('Open');
-    expect(openButton.getAttribute('aria-label')).toBe(`Open "${DEMO.name}" in the workspace`);
+    expect(openButton.getAttribute('aria-label')).toBe(`Open in Composer: ${DEMO.name}`);
   });
 
   it('sends its own demo to the workspace when the open control is activated', () => {
@@ -193,14 +192,12 @@ describe('DemoCard sandboxed live demo frame', () => {
     expect(openInWorkspaceSpy).toHaveBeenCalledWith(DEMO);
   });
 
-  it('keeps the open control focusable while it is visually withheld', () => {
+  it('keeps the open control available to keyboard users', () => {
     const fixture = mountCard(true);
     const openButton = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
       '.demo-card-open',
     )!;
 
-    // Withheld with opacity rather than `display`/`visibility`/`hidden`, all of which
-    // would take the control out of the tab order and make it mouse-only.
     expect(openButton.hidden).toBe(false);
     expect(openButton.hasAttribute('disabled')).toBe(false);
     expect(openButton.tabIndex).toBeGreaterThanOrEqual(0);
