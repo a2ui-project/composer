@@ -48,13 +48,12 @@
       .attachment-chip {
         max-width: 260px;
 
-        // `matChipAvatar` is the leading-icon slot; it is sized for photos, so
-        // scale it down to a glyph.
+        // `matChipAvatar` lands in the chip's primary-icon slot, which
+        // Material already sizes from `--mat-chip-with-icon-icon-size`
+        // (18px). Only the colour is overridden: the chip's default icon
+        // colour matches the label, and the glyph should read as
+        // secondary next to the file name.
         .chip-file-icon {
-          font-size: 18px;
-          width: 18px;
-          height: 18px;
-          line-height: 18px;
           color: var(--mat-sys-on-surface-variant, #5f6368);
         }
 
