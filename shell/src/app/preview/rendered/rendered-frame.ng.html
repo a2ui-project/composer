@@ -16,7 +16,8 @@
 <div
   class="rendered-frame-container"
   [class.is-locked]="isLocked()"
-  [style.height]="frameHeight() ? frameHeight() + 'px' : '100%'"
+  [style.height]="frameHeightPx() ?? '100%'"
+  [style.min-height]="frameHeightPx()"
 >
   @if (safeRendererUrl()) {
     <iframe
@@ -25,6 +26,7 @@
       sandbox="allow-scripts allow-same-origin allow-forms"
       class="preview-iframe"
       title="Rendered Preview"
+      [style.min-height]="frameHeightPx()"
       (load)="syncPayloadOnIframeLoad()"
     ></iframe>
   } @else {
