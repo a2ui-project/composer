@@ -36,7 +36,8 @@ on:
     branches:
       - "visual-baselines/**"
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   regenerate:
@@ -45,6 +46,8 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.61.1-noble
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Enable Corepack
         run: corepack enable
