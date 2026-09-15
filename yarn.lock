@@ -72,6 +72,23 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@a2ui/react@patch:@a2ui/react@npm%3A0.10.2#~/.yarn/patches/@a2ui-react-npm-0.10.2-877cbd9ad2.patch":
+  version: 0.10.2
+  resolution: "@a2ui/react@patch:@a2ui/react@npm%3A0.10.2#~/.yarn/patches/@a2ui-react-npm-0.10.2-877cbd9ad2.patch::version=0.10.2&hash=40a792"
+  dependencies:
+    "@a2ui/markdown-it": "npm:*"
+    "@a2ui/web_core": "npm:^0.10.5"
+    clsx: "npm:^2.1.1"
+    markdown-it: "npm:^14.2.0"
+    zod: "npm:^3.25.76"
+  peerDependencies:
+    react: ^19.2.7
+    react-dom: ^19.2.7
+    zod: ^3.25.76
+  checksum: 10c0/09b7f2bc0987b001d3b5ab7b37c1ebe0662f97c1fbd3e38f1c556df0781d2b9c28d0a6f3bb5544795d81e8cf1b41eb5a6986bfaff7e2b583799af89fce32c38e
+  languageName: node
+  linkType: hard
+
 "@a2ui/web_core@npm:0.10.5":
   version: 0.10.5
   resolution: "@a2ui/web_core@npm:0.10.5"
@@ -11126,7 +11143,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "react-basic-catalog@workspace:samples/react-basic-catalog"
   dependencies:
-    "@a2ui/react": "npm:0.10.2"
+    "@a2ui/react": "patch:@a2ui/react@npm%3A0.10.2#~/.yarn/patches/@a2ui-react-npm-0.10.2-877cbd9ad2.patch"
     "@a2ui/web_core": "npm:0.10.5"
     "@types/react": "npm:19.2.17"
     "@types/react-dom": "npm:19.2.3"
