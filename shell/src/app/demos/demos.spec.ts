@@ -34,6 +34,8 @@ import {ChatState} from '../chat/chat-state/chat-state';
 class MockDemosCatalog {
   readonly demos = signal<TrackedDemo[] | null>(null);
   readonly loadingDemos = signal(false);
+  readonly loadFailed = signal(false);
+  readonly retry = vi.fn();
   setDemosActive = vi.fn();
   setCoordinator = vi.fn();
 }
@@ -460,6 +462,16 @@ describe('Demos Component', () => {
 
     expect(await harness.getCardCount()).toBe(0);
     expect(await harness.getEmptyStateSubtitleText()).toContain("doesn't provide demos yet");
+  });
+
+  it('distinguishes a provider failure from an empty catalog and offers retry', async () => {
+    demosCatalogMock.demos.set([]);
+    demosCatalogMock.loadFailed.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(await harness.getEmptyStateSubtitleText()).toContain('could not provide its demos');
+    await harness.retry();
+    expect(demosCatalogMock.retry).toHaveBeenCalledOnce();
   });
 
   it('names the renderer that answered in the empty state', async () => {

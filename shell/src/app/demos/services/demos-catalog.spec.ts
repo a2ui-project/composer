@@ -138,6 +138,31 @@ describe('DemosCatalog', () => {
     expect(service.loadingDemos()).toBe(false);
   });
 
+  it('reports provider failures and clears them when retry succeeds', () => {
+    const coordinator = createCoordinator();
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+    const reply = (payload: unknown) =>
+      hostCommunicationMock.messageStream$.next({
+        type: PreviewBridgeMessageType.DEMOS,
+        payload,
+        origin: 'http://localhost',
+        timestamp: Date.now(),
+        sourceWindow: coordinator.contentWindow,
+      });
+    reply({error: 'DEMOS_PROVIDER_FAILED'});
+    expect(service.loadFailed()).toBe(true);
+    expect(service.loadingDemos()).toBe(false);
+    service.retry();
+    expect(service.loadFailed()).toBe(false);
+    expect(service.loadingDemos()).toBe(true);
+    reply([]);
+    expect(service.loadFailed()).toBe(false);
+    expect(service.demos()).toEqual([]);
+  });
+
   it('drops array entries from a DEMOS payload and leaves the array untouched', () => {
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);

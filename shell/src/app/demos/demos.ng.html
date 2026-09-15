@@ -46,6 +46,13 @@
       <mat-spinner diameter="32"></mat-spinner>
       <span>Loading demos...</span>
     </div>
+  } @else if (loadFailed()) {
+    <div class="empty-state" role="alert">
+      <mat-icon class="empty-icon">error_outline</mat-icon>
+      <h3 class="empty-title">Demos could not be loaded</h3>
+      <p class="empty-subtitle">The renderer could not provide its demos. Try again.</p>
+      <button mat-stroked-button type="button" (click)="retry()">Retry</button>
+    </div>
   } @else if (isEmpty()) {
     <div class="empty-state">
       <mat-icon class="empty-icon">auto_awesome_mosaic</mat-icon>

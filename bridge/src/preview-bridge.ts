@@ -989,6 +989,11 @@ export class PreviewBridge {
         demos = await this.activeRenderer.config.getDemos();
       } catch (error) {
         console.error('PreviewBridge: Error invoking getDemos:', error);
+        this.sendMessage({
+          type: PreviewBridgeMessageType.DEMOS,
+          payload: {error: 'DEMOS_PROVIDER_FAILED'},
+        });
+        return;
       }
     }
     this.sendMessage({

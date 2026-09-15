@@ -39,60 +39,75 @@ for (const renderer of [
     });
 
     test('populates the demos wall with live renderer content', async ({page}, testInfo) => {
-      await page.setViewportSize({width: 1440, height: 1000});
-      // 1. Navigate to home with a valid renderer to trigger the catalog handshake.
+      await page.setViewportSize({width: 1440, height: 1120});
       await page.goto(`/?renderer=http://localhost:${renderer.port}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
-
-      // Wait for the catalog handshake to complete (indicated by header title updating).
       await expect(page.locator('.header-title')).not.toHaveText('A2UI Composer');
-
-      // 2. Navigate to the demos wall via the sidebar link.
-      const demosLink = page.getByRole('link', {name: 'A2UI Demos'});
-      await expect(demosLink).toBeVisible();
-      await demosLink.click();
-
-      // 3. Redirected to /demos.
+      await page.getByRole('link', {name: 'A2UI Demos'}).click();
       await page.waitForURL('**/demos');
 
-      // 4. The wall mounts one card per demo returned by the renderer over the
-      // bridge (GET_DEMOS -> DEMOS), proving the request/reply round-trip worked
-      // against the real renderer rather than a mock.
       const cards = page.locator('a2ui-composer-demo-card');
-      await expect(cards.first()).toBeVisible();
-      const cardCount = await cards.count();
-      expect(cardCount).toBeGreaterThan(10);
+      await expect(cards).toHaveCount(47);
+      await expect(cards.nth(0).locator('.demo-card-title')).toHaveText('Flight status');
+      await expect(cards.nth(1).locator('.demo-card-title')).toHaveText('System dashboard');
+      await expect(cards.nth(2).locator('.demo-card-title')).toHaveText('Product checkout');
+      await expect(cards.nth(3).locator('.demo-card-title')).toHaveText('Optimization plan');
+      const flight = cards.nth(0).frameLocator('iframe');
+      const system = cards.nth(1).frameLocator('iframe');
+      const checkout = cards.nth(2).frameLocator('iframe');
+      const workflow = cards.nth(3).frameLocator('iframe');
+      await expect(flight.getByText('VIE', {exact: true})).toBeVisible();
+      await expect(flight.getByText('JFK', {exact: true})).toBeVisible();
+      await expect(flight.locator('body')).toHaveCSS('font-family', 'Arial, Helvetica, sans-serif');
+      await expect(flight.locator('svg')).toBeVisible();
+      await expect(checkout.locator('svg')).toBeVisible();
+      await expect(flight.getByText('VIE', {exact: true})).toHaveCSS('font-size', '32px');
+      await expect(checkout.getByRole('button', {name: 'Place order · $199.99'})).toHaveCSS(
+        'border-radius',
+        '24px',
+      );
+      await expect(system.getByRole('img', {name: 'CPU load: 65 percent'})).toBeVisible();
+      await expect(system.getByRole('img', {name: 'Memory usage: 82 percent'})).toBeVisible();
+      // The placeholder covers controls until the initial height measurement settles.
+      for (let index = 0; index < 4; index++) {
+        await expect(cards.nth(index).locator('.demo-card-placeholder')).toBeHidden();
+      }
+      const input = checkout.locator('input[type="text"]');
+      await input.fill('123 Market Street');
+      await workflow.getByRole('checkbox', {name: 'Generate campaign assets'}).check();
+      await expect(workflow.getByRole('button', {name: 'Start plan'})).toBeVisible();
 
-      // 5. The first card's own sandboxed iframe rendered real content, proving the
-      // per-card RENDER_A2UI reached the right frame (not just the primary one).
-      const firstCardFrame = cards.first().frameLocator('iframe');
-      await expect(firstCardFrame.getByText('User Profile Form', {exact: true})).toBeVisible();
-      await expect(cards.first().locator('.demo-card-surface')).toHaveClass(/is-measured/);
-
-      // Launch controls are discoverable before hover and preview controls remain live.
-      const open = cards.first().getByRole('button', {name: 'Open in Composer: Complex Layout'});
+      // All four showcase surfaces fit without clipping controls or fractional overflow.
+      for (let index = 0; index < 4; index++) {
+        await expect(cards.nth(index).locator('.demo-card-surface')).toHaveClass(/is-measured/);
+        await expect
+          .poll(() =>
+            cards
+              .nth(index)
+              .frameLocator('iframe')
+              .locator('html')
+              .evaluate(
+                el =>
+                  Math.ceil(el.querySelector('body')!.getBoundingClientRect().height) -
+                  el.clientHeight,
+              ),
+          )
+          .toBeLessThanOrEqual(1);
+      }
+      const positions = await cards.evaluateAll(elements =>
+        elements.slice(0, 4).map(el => {
+          const rect = el.getBoundingClientRect();
+          return {x: rect.x, y: rect.y};
+        }),
+      );
+      expect(positions[0].y).toBe(positions[1].y);
+      expect(positions[2].y).toBe(positions[3].y);
+      expect(positions[0].x).toBeLessThan(positions[1].x);
+      const open = cards.first().getByRole('button', {name: 'Open in Composer: Flight status'});
       await expect(open).toHaveCSS('opacity', '1');
       await open.focus();
       await expect(open).toBeFocused();
-      const input = firstCardFrame.locator('input').first();
-      await input.fill('Alex');
-
-      // All previews currently on screen should finish mounting before capture.
-      await expect
-        .poll(
-          () =>
-            cards.evaluateAll(elements => {
-              const scroller = document.querySelector('.demos-container')!.getBoundingClientRect();
-              return elements
-                .filter(element => {
-                  const rect = element.getBoundingClientRect();
-                  return rect.top < scroller.bottom && rect.bottom > scroller.top;
-                })
-                .every(element => !element.querySelector('.demo-card-placeholder'));
-            }),
-          {timeout: 15000},
-        )
-        .toBe(true);
+      await page.locator('.demos-container').evaluate(el => el.scrollTo(0, 0));
       await testInfo.attach('demos-desktop-light', {
         body: await page.screenshot({
           path: testInfo.outputPath('demos-desktop-light.png'),
@@ -101,11 +116,12 @@ for (const renderer of [
         contentType: 'image/png',
       });
 
-      // Theme changes should preserve the user's interaction with a live card.
       await page.getByRole('button', {name: 'Switch to dark theme'}).click();
-      await expect(input).toHaveValue('Alex');
-      await expect(page.locator('body')).toHaveClass(/dark-theme/);
-      await expect(firstCardFrame.locator('html')).toHaveAttribute('data-theme', 'dark');
+      await expect(input).toHaveValue('123 Market Street');
+      await expect(
+        workflow.getByRole('checkbox', {name: 'Generate campaign assets'}),
+      ).toBeChecked();
+      await expect(flight.locator('html')).toHaveAttribute('data-theme', 'dark');
       await testInfo.attach('demos-desktop-dark', {
         body: await page.screenshot({
           path: testInfo.outputPath('demos-desktop-dark.png'),
@@ -114,7 +130,6 @@ for (const renderer of [
         contentType: 'image/png',
       });
 
-      // A narrow wall must keep the full launch action reachable without page overflow.
       await page.setViewportSize({width: 560, height: 900});
       await expect(open).toBeInViewport();
       await expect(page.getByRole('button', {name: 'Switch to light theme'})).toBeInViewport();
@@ -123,17 +138,39 @@ for (const renderer of [
           page.locator('.demos-container').evaluate(el => el.scrollWidth - el.clientWidth),
         )
         .toBeLessThanOrEqual(1);
-      await expect(input).toHaveValue('Alex');
-
-      // Take screenshot for verification.
-      const screenshotBuffer = await page.screenshot({
-        path: testInfo.outputPath('demos-narrow.png'),
-        animations: 'disabled',
-      });
-      await testInfo.attach('demos-user-journey-success', {
-        body: screenshotBuffer,
+      await testInfo.attach('demos-narrow', {
+        body: await page.screenshot({
+          path: testInfo.outputPath('demos-narrow.png'),
+          animations: 'disabled',
+        }),
         contentType: 'image/png',
       });
+      await cards.nth(2).scrollIntoViewIfNeeded();
+      await expect(input).toHaveValue('123 Market Street');
+      await expect(checkout.getByRole('button', {name: 'Place order · $199.99'})).toBeVisible();
+    });
+
+    test('opens the checkout and sends edited values in its demo action', async ({page}) => {
+      await page.goto(`/?renderer=http://localhost:${renderer.port}`);
+      await expect(page.locator('.header-title')).not.toHaveText('A2UI Composer');
+      await page.getByRole('link', {name: 'A2UI Demos'}).click();
+      await page.getByRole('button', {name: 'Open in Composer: Product checkout'}).click();
+      await page.waitForURL(url => url.hash.includes('a2ui=d1.'));
+      const frame = page.frameLocator('iframe.preview-iframe');
+      await frame.locator('input[type="text"]').fill('456 Mission Street');
+      await frame.getByRole('checkbox', {name: 'Billing address same as shipping'}).uncheck();
+      await frame.getByRole('button', {name: 'Place order · $199.99'}).click();
+      const eventsTab = page.locator('.dv-tab', {hasText: /^Events/});
+      await expect(eventsTab).toContainText('(1)');
+      await eventsTab.click();
+      const event = page.locator('.events-container table tr.element-row').first();
+      await expect(event.locator('td.mat-column-component')).toHaveText('order');
+      await expect(event.locator('td.mat-column-context pre')).toContainText(
+        '"address": "456 Mission Street"',
+      );
+      await expect(event.locator('td.mat-column-context pre')).toContainText(
+        '"sameAddress": false',
+      );
     });
 
     test('opens a demo from its card into the composer workspace', async ({page}) => {

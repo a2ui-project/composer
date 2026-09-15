@@ -54,7 +54,7 @@ const MAX_CARD_HEIGHT_PX = 560;
  * Every height the card *reports* stays in the guest's unscaled space; only the box the
  * card occupies is scaled. The assertions below deliberately keep those two apart.
  */
-const PREVIEW_SCALE = 0.8;
+const PREVIEW_SCALE = 1;
 
 const DEMO: Demo = {
   id: 'weather-summary',
@@ -366,21 +366,15 @@ describe('DemoCard sandboxed live demo frame', () => {
     expect(surfaceOf(fixture).style.height).toBe(`${Math.floor(465 * PREVIEW_SCALE)}px`);
   });
 
-  it('floors the painted height so the frame can never grow itself', () => {
+  it('keeps full-size previews aligned with the renderer measurement', () => {
     vi.useFakeTimers();
     const fixture = mountCard(true);
 
-    // 331 * 0.8 = 264.8. The stylesheet derives the frame's layout height back out of
-    // the surface as calc(100% / scale), so rounding up here would give the frame a
-    // viewport of 265 / 0.8 = 331.25 — taller than the content the guest reported.
-    // Because a guest's report is floored at its own viewport, that comes back as a
-    // strictly larger height, which the growth phase accepts, and the card ratchets
-    // upwards a pixel at a time for the length of its growth window. Flooring keeps the
-    // derived viewport at or below the reported height, so the loop cannot start.
+    // Full-size previews keep the renderer's measured height without a scaling gap.
     emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 331, width: 480});
     advance(fixture, MEASURE_SETTLE_MS);
 
-    expect(surfaceOf(fixture).style.height).toBe('264px');
+    expect(surfaceOf(fixture).style.height).toBe('331px');
     expect(
       Number.parseInt(surfaceOf(fixture).style.height, 10) / PREVIEW_SCALE,
     ).toBeLessThanOrEqual(331);

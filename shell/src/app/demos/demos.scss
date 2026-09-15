@@ -96,15 +96,16 @@
   font-size: 0.8125rem;
 }
 
-// Columns preserve each preview's natural height without splitting its card.
+// Row order matches the renderer response and the keyboard reading order.
 .demos-wall {
-  column-count: 2;
-  column-gap: 28px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px 28px;
+  align-items: start;
 
   a2ui-composer-demo-card {
     display: block;
-    margin: 0 0 32px;
-    break-inside: avoid;
+    min-width: 0;
   }
 }
 
@@ -162,7 +163,7 @@
   }
 
   .demos-wall {
-    column-count: 1;
+    grid-template-columns: minmax(0, 1fr);
     max-width: 680px;
   }
 

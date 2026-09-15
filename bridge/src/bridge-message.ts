@@ -22,6 +22,7 @@ export enum PreviewBridgeMessageType {
   COMPONENT_USAGES = 'COMPONENT_USAGES',
   CONSOLE_LOG = 'CONSOLE_LOG',
   DATA_MODEL_CHANGE = 'DATA_MODEL_CHANGE',
+  /** Demo[] on success, or {error: 'DEMOS_PROVIDER_FAILED'} when the provider fails. */
   DEMOS = 'DEMOS',
   FORCE_UNBLOCK = 'FORCE_UNBLOCK',
   GET_CATALOG = 'GET_CATALOG',

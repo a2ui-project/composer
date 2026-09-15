@@ -115,7 +115,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
             {
               id: 'text-1',
               component: 'Text',
-              text: 'Welcome React User',
+              text: '**Welcome React User**',
             },
             {
               id: 'button-1',
@@ -152,7 +152,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     });
 
     // Verify dynamic child widget layout element paints resolved successfully!
-    expect(container?.innerHTML).toContain('Welcome React User');
+    expect(container?.querySelector('strong')?.textContent).toBe('Welcome React User');
     expect(container?.innerHTML).toContain('Submit Ticket');
     expect(container?.querySelector('button')).not.toBeNull();
   });

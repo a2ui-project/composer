@@ -30,6 +30,13 @@ export class DemosHarness extends ComponentHarness {
   private readonly getCards = this.locatorForAll('a2ui-composer-demo-card');
   private readonly getEmptySubtitle = this.locatorForOptional('.empty-subtitle');
   private readonly getEmptyRendererUrl = this.locatorForOptional('.empty-renderer-url');
+  private readonly getRetry = this.locatorFor('button');
+
+  /** Retries a failed demos request. */
+  async retry(): Promise<void> {
+    await (await this.getRetry()).click();
+  }
+
   private readonly getLoading = this.locatorForOptional('.demos-loading');
   private readonly getMountedFrames = this.locatorForAll(
     'a2ui-composer-demo-card iframe.demo-card-frame',

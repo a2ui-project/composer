@@ -22,12 +22,13 @@
 // renderer. Run with `yarn generate:demos`.
 //
 // Pass `--check` (`yarn generate:demos:check`) to verify that the committed
-// modules still match what this script would generate right now: nothing is
+// modules still match the local showcase and pinned upstream sources: nothing is
 // written, and the process exits non-zero naming every drifted output.
 
 import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {A2uiMessageListSchema, BASIC_COMPONENTS} from '@a2ui/web_core/v0_9';
 
 // `fileURLToPath` (rather than `new URL(...).pathname`) is required here:
 // the latter mangles paths containing spaces or other characters that need
@@ -51,6 +52,8 @@ const CHECK_MODE = process.argv.slice(2).includes('--check');
 const PKG_DIR = join(REPO_ROOT, 'node_modules/@a2ui/web_core');
 const EXAMPLES_SUBPATH = 'src/v0_9/schemas/catalogs/basic/examples';
 const EXAMPLES_DIR = join(PKG_DIR, EXAMPLES_SUBPATH);
+
+const SHOWCASE_DIR = join(REPO_ROOT, 'samples/shared/demos');
 
 const OUTPUT_PATHS = [
   'samples/ng-basic-catalog/src/demos.ts',
@@ -239,10 +242,47 @@ function buildDemos(filenames) {
   return demos;
 }
 
+/** Validates the hand-authored examples before they enter any renderer bundle. */
+function readShowcaseDemos() {
+  return readdirSync(SHOWCASE_DIR)
+    .filter(filename => filename.endsWith('.json'))
+    .sort(compareFilenames)
+    .map(filename => {
+      const example = readJsonFile(join(SHOWCASE_DIR, filename));
+      if (typeof example.name !== 'string' || typeof example.description !== 'string') {
+        throw new Error(`${filename}: showcase name and description must be strings.`);
+      }
+      A2uiMessageListSchema.parse(example.messages);
+      const components = example.messages.flatMap(
+        message => message.updateComponents?.components ?? [],
+      );
+      const ids = new Set(components.map(component => component.id));
+      if (!ids.has('root') || ids.size !== components.length) {
+        throw new Error(`${filename}: showcase needs a root and unique component ids.`);
+      }
+      for (const {id, component, ...props} of components) {
+        const api = BASIC_COMPONENTS.find(api => api.name === component);
+        if (!api) throw new Error(`${filename}: unknown basic component ${component}.`);
+        api.schema.strict().parse(props);
+        const children = [props.child, ...(Array.isArray(props.children) ? props.children : [])];
+        for (const child of children.filter(Boolean)) {
+          if (!ids.has(child))
+            throw new Error(`${filename}: ${id} references missing child ${child}.`);
+        }
+      }
+      return {
+        id: `showcase-${idFromFilename(filename)}`,
+        name: example.name,
+        description: example.description,
+        a2ui: example.messages,
+      };
+    });
+}
+
 function renderModule(demos, version) {
   const provenance = [
     '/**',
-    ` * Auto-generated from @a2ui/web_core@${version}'s basic-catalog examples`,
+    ` * Auto-generated from samples/shared/demos and @a2ui/web_core@${version}'s basic-catalog examples`,
     ` * (${EXAMPLES_SUBPATH}).`,
     ' *',
     ' * Regenerate with: yarn generate:demos',
@@ -299,7 +339,7 @@ function checkOutputs(moduleSource, demoCount, version) {
 
   if (drifted.length > 0) {
     console.error(
-      `The committed demo modules no longer match @a2ui/web_core@${version}'s basic-catalog ` +
+      `The committed demo modules no longer match local showcases and @a2ui/web_core@${version}'s basic-catalog ` +
         `examples (${demoCount} demos). Out of date:\n` +
         drifted.map(outputPath => `  - ${outputPath}`).join('\n') +
         '\nRun `yarn generate:demos` and commit the result.',
@@ -310,14 +350,14 @@ function checkOutputs(moduleSource, demoCount, version) {
 
   console.log(
     `up to date: ${OUTPUT_PATHS.length} generated demo modules match ` +
-      `@a2ui/web_core@${version} (${demoCount} demos)`,
+      `local showcases + @a2ui/web_core@${version} (${demoCount} demos)`,
   );
 }
 
 function main() {
   const version = readPackageVersion();
   const filenames = readExampleFiles();
-  const demos = buildDemos(filenames);
+  const demos = [...readShowcaseDemos(), ...buildDemos(filenames)];
   const moduleSource = renderModule(demos, version);
 
   if (CHECK_MODE) {

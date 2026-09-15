@@ -69,6 +69,10 @@ export class DemosCatalog {
   /** Whether a demos request is currently in flight. */
   readonly loadingDemos = this._loadingDemos.asReadonly();
 
+  private readonly _loadFailed = signal(false);
+  /** Whether the coordinator returned a failed or invalid demos response. */
+  readonly loadFailed = this._loadFailed.asReadonly();
+
   private readonly _demosActive = signal<boolean>(false);
   /** Whether the demos route/view is currently active. */
   readonly demosActive = this._demosActive.asReadonly();
@@ -168,6 +172,7 @@ export class DemosCatalog {
         this.requestDemos();
       } else {
         untracked(() => {
+          this._loadFailed.set(false);
           this._demos.set(null);
           this._loadingDemos.set(false);
         });
@@ -190,6 +195,7 @@ export class DemosCatalog {
           this.demosTimeoutId = undefined;
         }
         const payload = envelope.payload;
+        this._loadFailed.set(!Array.isArray(payload));
         const demos = Array.isArray(payload) ? sanitizeDemos(payload) : [];
         this._demos.set(demos);
         this._loadingDemos.set(false);
@@ -218,6 +224,7 @@ export class DemosCatalog {
     }
 
     untracked(() => {
+      this._loadFailed.set(false);
       this._demos.set(null);
       this._loadingDemos.set(true);
     });
@@ -245,6 +252,11 @@ export class DemosCatalog {
         }
       }, 2000);
     }
+  }
+
+  /** Retries the active coordinator after a failed response. */
+  retry(): void {
+    if (this._demosActive()) this.requestDemos();
   }
 
   /**

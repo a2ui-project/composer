@@ -76,14 +76,12 @@ const MEASURE_HEIGHT_PX = 32;
  *
  * A demo taller than this is committed at the clamp and scrolls inside its own frame
  * rather than being truncated: the frame is a real viewport, so the guest document
- * simply overflows it and the reader can scroll the demo in place. Only one demo in
- * the basic catalog (Incremental, 672px) exceeds it; letting it through at full height
- * would hand a single card more than twice the wall's median card height.
+ * simply overflows it and the reader can scroll the demo in place. Tall examples scroll internally so they do not dominate a row.
  *
  * Like every other height in this file it is stated in the guest's own coordinate
  * space, so the tallest card the reader actually sees is this many pixels times
  * {@link PREVIEW_SCALE}. The clamp is deliberately expressed before the scale rather
- * than after it, because what it bounds is a card's share of a masonry column — a ratio
+ * than after it, because what it bounds is a card's share of a grid column — a ratio
  * against its neighbours, which shrink by that same factor.
  *
  * Must match the `--demo-card-max-h` custom property declared on `:host` in
@@ -92,37 +90,10 @@ const MEASURE_HEIGHT_PX = 32;
 const MAX_CARD_HEIGHT_PX = 560;
 
 /**
- * Factor the renderer frame is visually scaled by so that a card reads as a preview.
- *
- * At 1:1 inside a ~345px masonry column a demo's own `<h1>` is set as large as the
- * page's own "Demos" heading, so every card competed with the shell's chrome instead of
- * previewing inside it. 0.8 is the largest reduction that answers that while keeping a
- * demo's body copy legible — 14px of guest text lands at ~11px on screen — and it widens
- * the guest's viewport to ~431px, enough that the demos lay themselves out roughly as
- * they were authored rather than collapsing into narrow-column wrapping.
- *
- * This constant is the single source of truth for the scale, and it has to be, because
- * the scale is applied in two places that would silently disagree if it were written
- * twice. It reaches the stylesheet as the `--demo-preview-scale` custom property, host
- * bound from {@link DemoCard.previewScale}, and reaches the layout through {@link
- * DemoCard.surfaceHeight}:
- *
- * - The stylesheet scales the frame with `transform` and compensates its layout box with
- *   `calc(100% / var(--demo-preview-scale))`, so the frame's *layout* size stays in the
- *   guest's coordinate space while its *painted* size fills the card.
- * - {@link DemoCard.surfaceHeight} scales the measured height by the same factor, so the
- *   card's box is the painted height. Sizing the card from the raw reported height
- *   instead is the whole hazard here: it would leave every card carrying
- *   `(1 - PREVIEW_SCALE)` of dead space under its demo.
- *
- * The transform is presentational and never reaches the guest, which measures itself in
- * its own unscaled viewport, so the scale cannot feed back into what it reports. {@link
- * DemoCard.surfaceHeight} floors rather than rounds to keep it that way: flooring
- * guarantees the frame's derived layout height never exceeds the height the guest
- * reported, so a committed card can never provoke a strictly larger report and ratchet
- * itself upwards a pixel at a time for the length of its growth phase.
+ * Keep controls and text at their authored size in the two-column wall.
+ * The shared constant keeps iframe dimensions and measured surface height aligned.
  */
-const PREVIEW_SCALE = 0.8;
+const PREVIEW_SCALE = 1;
 
 /**
  * How long a newly attached frame is measured before its height is committed.
@@ -161,7 +132,7 @@ const MEASURE_SETTLE_MS = 1000;
  * so a card that has grown to fit its content is told nothing new and nothing moves; the
  * window governs how long a card stays *willing* to grow, not how long it churns. What it
  * does bound is a demo that animates its own height, which would otherwise reshuffle the
- * masonry columns under the reader for as long as the wall is open.
+ * grid columns under the reader for as long as the wall is open.
  */
 const GROWTH_SETTLE_MS = 8000;
 
@@ -183,7 +154,7 @@ const READY_TIMEOUT_MS = 8000;
  * {@link MEASURE_HEIGHT_PX} — far below any real demo — so the guest's reports carry the
  * content's height rather than the frame's own; the card commits the last height reported
  * inside a short window, then follows growth until the reports stop, which keeps the
- * surrounding CSS-columns masonry from reflowing underneath the reader. See {@link
+ * surrounding grid from reflowing underneath the reader. See {@link
  * DemoCard.applyReportedHeight} for why no single report can be trusted on its own.
  */
 @Component({
@@ -416,7 +387,7 @@ export class DemoCard {
       }
       case PreviewBridgeMessageType.SURFACE_RESIZE: {
         if (this.phase === 'settled') {
-          // Reports stopped arriving a full settle window ago; the masonry is stable now
+          // Reports stopped arriving a full settle window ago; the grid is stable now
           // and a late reflow would shuffle columns underneath the reader.
           return;
         }

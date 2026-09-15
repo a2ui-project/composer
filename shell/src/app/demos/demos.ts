@@ -29,6 +29,7 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
+import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {DemosCatalog} from './services/demos-catalog';
@@ -165,7 +166,7 @@ const DEMO_KEY_ATTRIBUTE = 'data-demo-key';
 @Component({
   selector: 'a2ui-composer-demos',
   standalone: true,
-  imports: [MatIconModule, MatProgressSpinnerModule, RenderedFrame, DemoCard],
+  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, RenderedFrame, DemoCard],
   templateUrl: './demos.ng.html',
   styleUrl: './demos.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -176,6 +177,14 @@ export class Demos implements OnInit, OnDestroy {
 
   /** Demos served by the connected renderer, or null while unresolved. */
   protected readonly demos = this.demosCatalog.demos;
+
+  /** Whether the renderer could not return its demos. */
+  protected readonly loadFailed = this.demosCatalog.loadFailed;
+
+  /** Requests the demos again after a provider failure. */
+  protected retry(): void {
+    this.demosCatalog.retry();
+  }
 
   /** Whether a demos request is currently in flight. */
   protected readonly loadingDemos = this.demosCatalog.loadingDemos;

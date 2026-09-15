@@ -147,7 +147,7 @@ describe('AppRoot Lit Element', () => {
 
   it('serves the full basic-catalog demo set', async () => {
     const {DEMOS} = await import('./demos.js');
-    expect(DEMOS).toHaveLength(43);
+    expect(DEMOS).toHaveLength(47);
     for (const demo of DEMOS) {
       expect(demo.id).toBeTruthy();
       expect(demo.name).toBeTruthy();
@@ -178,7 +178,7 @@ describe('AppRoot Lit Element', () => {
       expect(rendererConfig.getDemos).toBeTypeOf('function');
 
       const served = await rendererConfig.getDemos!();
-      expect(served).toHaveLength(43);
+      expect(served).toHaveLength(47);
       expect(served).toBe(DEMOS);
     } finally {
       bootstrapped.remove();

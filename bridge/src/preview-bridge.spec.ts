@@ -583,7 +583,7 @@ describe('PreviewBridge Core API Runtime', () => {
     );
   });
 
-  it('responds with DEMOS containing an empty array if getDemos throws an error', async () => {
+  it('responds with DEMOS containing an explicit failure if getDemos throws', async () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
@@ -610,7 +610,7 @@ describe('PreviewBridge Core API Runtime', () => {
     expect(spy).toHaveBeenCalledWith(
       {
         type: PreviewBridgeMessageType.DEMOS,
-        payload: [],
+        payload: {error: 'DEMOS_PROVIDER_FAILED'},
       },
       window.location.origin,
     );
