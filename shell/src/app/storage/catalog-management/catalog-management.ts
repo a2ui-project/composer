@@ -29,12 +29,6 @@ import {StartupResolution} from '../../shell/startup-resolution/startup-resoluti
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {stableStringify} from '../stable-stringify/stable-stringify';
 
-declare global {
-  interface Window {
-    a2uiCatalogManagement?: CatalogManagement;
-  }
-}
-
 /**
  * Coordinates client sidepanel integration, managing live visual schemas,
  * remote catalog assets, and establishing active rendering contexts.
@@ -129,17 +123,11 @@ export class CatalogManagement {
   private previousUrl: string | null | undefined = this.startupResolution.resolvedUrl();
 
   constructor() {
-    if (typeof window !== 'undefined') {
-      window.a2uiCatalogManagement = this;
-    }
     const destroyRef = inject(DestroyRef);
     destroyRef.onDestroy(() => {
       if (this.watchdogTimerId !== null) {
         clearTimeout(this.watchdogTimerId);
         this.watchdogTimerId = null;
-      }
-      if (typeof window !== 'undefined') {
-        delete window.a2uiCatalogManagement;
       }
     });
 

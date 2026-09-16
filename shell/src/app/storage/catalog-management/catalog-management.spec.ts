@@ -766,7 +766,6 @@ describe('CatalogManagement', () => {
   });
 
   it('exposes handshakeHistoryIndex and cleans up window reference on destroy', async () => {
-    expect(window.a2uiCatalogManagement).toBe(service);
     expect(service.handshakeHistoryIndex()).toBeNull();
 
     hostCommunicationMock.getHistoryBuffer = vi.fn().mockReturnValue([
@@ -808,6 +807,5 @@ describe('CatalogManagement', () => {
     expect(service.handshakeHistoryIndex()).toBe(2);
 
     TestBed.resetTestingModule();
-    expect(window.a2uiCatalogManagement).toBeUndefined();
   });
 });

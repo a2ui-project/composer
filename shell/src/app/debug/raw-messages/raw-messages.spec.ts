@@ -56,7 +56,6 @@ describe('RawMessages', () => {
       messageStream$: mockMessageStreamSubject,
       messageStream: messageStreamSignal,
       getHistoryBuffer: vi.fn(() => []),
-      getLatestCatalog: vi.fn(() => null),
       clearHistoryBuffer: vi.fn(),
     };
     latestLlmLogSignal = signal<LlmLogEntry | null>(null);

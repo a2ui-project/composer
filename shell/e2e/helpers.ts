@@ -15,7 +15,19 @@
  */
 
 import {expect, Page} from '@playwright/test';
-import {WindowWithMonaco} from './types';
+
+interface MonacoModel {
+  getValue(): string;
+  setValue(value: string): void;
+}
+
+interface WindowWithMonaco extends Window {
+  monaco?: {
+    editor: {
+      getModels(): MonacoModel[];
+    };
+  };
+}
 
 /**
  * Renderer dev servers hosting the guest samples, started by the `webServer`
