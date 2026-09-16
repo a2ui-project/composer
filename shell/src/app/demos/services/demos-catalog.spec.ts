@@ -387,7 +387,7 @@ describe('DemosCatalog', () => {
     expect(service.demos()).toBeNull();
   });
 
-  it('falls back to an empty array once the 2 second timeout elapses, once the coordinator has been ready', () => {
+  it('reports failure once a ready coordinator does not answer GET_DEMOS before timeout', () => {
     vi.useFakeTimers();
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
@@ -413,6 +413,7 @@ describe('DemosCatalog', () => {
     vi.advanceTimersByTime(2000);
 
     expect(service.loadingDemos()).toBe(false);
+    expect(service.loadFailed()).toBe(true);
     expect(service.demos()).toEqual([]);
   });
 
@@ -469,12 +470,12 @@ describe('DemosCatalog', () => {
     );
     expect(service.loadingDemos()).toBe(true);
 
-    // The coordinator has already proven it can respond, so a renderer that
-    // never answers GET_DEMOS must still resolve to the empty state rather
-    // than spinning on "Loading demos..." forever.
+    // The coordinator has already proven it can respond, so a missing DEMOS
+    // reply is a provider/protocol failure rather than a valid empty catalog.
     vi.advanceTimersByTime(2000);
 
     expect(service.loadingDemos()).toBe(false);
+    expect(service.loadFailed()).toBe(true);
     expect(service.demos()).toEqual([]);
   });
 

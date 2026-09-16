@@ -248,6 +248,7 @@ export class DemosCatalog {
       this.demosTimeoutId = setTimeout(() => {
         if (this._loadingDemos()) {
           this._loadingDemos.set(false);
+          this._loadFailed.set(true);
           this._demos.set([]);
         }
       }, 2000);
