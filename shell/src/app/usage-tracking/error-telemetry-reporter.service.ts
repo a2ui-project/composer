@@ -54,8 +54,9 @@ export class ErrorTelemetryReporter {
   private processErrorLog(item: ErrorLogItem): void {
     let invalidProp: string | undefined;
 
-    const propMatch =
-      item.message.match(/property '([^']+)'/i) || item.message.match(/instance\.([\w.$-]+)/i);
+    // Context-bound to missing-property messages only to guarantee schema-authored keys.
+    // 'not-allowed' or 'instance.xxx' shapes are discarded as they represent user-authored keys (PII risk).
+    const propMatch = item.message.match(/property '([\w.$-]+)' is missing/i);
     if (propMatch) {
       invalidProp = propMatch[1];
     }

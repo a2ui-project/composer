@@ -308,7 +308,9 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   trackComposerError(params: ComposerErrorTelemetryParams): void {
     if (!this.config.enabled) return;
     const sanitizedInvalidProperty =
-      params.invalidProperty && /^[a-z0-9_$-]{1,64}$/.test(params.invalidProperty)
+      params.invalidProperty && // Second line of defense: bounds SHAPE and LENGTH only.
+      // Primary defense against PII is the context-bound extraction in ErrorTelemetryReporter.
+      /^[a-zA-Z0-9_$-]{1,64}$/.test(params.invalidProperty)
         ? params.invalidProperty
         : 'none_or_redacted';
 
