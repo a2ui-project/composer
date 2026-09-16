@@ -526,7 +526,6 @@ describe('HostCommunication', () => {
     service.ngOnDestroy();
 
     expect(removeEventListenerSpy).toHaveBeenCalledWith('message', expect.any(Function));
-    expect(window.a2uiHostCommunication).toBeUndefined();
 
     removeEventListenerSpy.mockRestore();
   });
@@ -546,15 +545,6 @@ describe('HostCommunication', () => {
     });
 
     window.dispatchEvent(event);
-
-    const latestCatalog = service.getLatestCatalog();
-    expect(latestCatalog).toEqual({
-      type: PreviewBridgeMessageType.A2UI_CATALOG,
-      payload: catalogPayload,
-      origin: 'http://localhost:3000',
-      timestamp: expect.any(Number),
-      sourceWindow: mockIframeWindow,
-    });
 
     const history = service.getHistoryBuffer();
     expect(history.length).toBe(1);

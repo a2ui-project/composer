@@ -43,12 +43,6 @@ export declare interface MessageEnvelope {
   sourceWindow?: Window | null;
 }
 
-declare global {
-  interface Window {
-    a2uiHostCommunication?: HostCommunication;
-  }
-}
-
 /**
  * Core service managing cross-frame message passing and event dispatching
  * between the primary workspace shell and rendering client frames.
@@ -101,7 +95,6 @@ export class HostCommunication implements OnDestroy {
     message: {type: PreviewBridgeMessageType; payload?: unknown};
     target?: HTMLIFrameElement | Window | null;
   }> = [];
-  private latestCatalogEnvelope: MessageEnvelope | null = null;
 
   /**
    * Retrieves a snapshot copy of the recent message history buffer.
@@ -115,16 +108,12 @@ export class HostCommunication implements OnDestroy {
    * Retrieves the most recent catalog message envelope received from the preview frame.
    * @return Latest catalog envelope or null if none received
    */
-  getLatestCatalog(): MessageEnvelope | null {
-    return this.latestCatalogEnvelope;
-  }
 
   /**
    * Clears the historical message buffer and resets the tracked catalog state.
    */
   clearHistoryBuffer(): void {
     this.messageHistoryBuffer.length = 0;
-    this.latestCatalogEnvelope = null;
   }
 
   /**
@@ -200,9 +189,6 @@ export class HostCommunication implements OnDestroy {
         timestamp: Date.now(),
         sourceWindow: (event.source as Window) ?? null,
       };
-      if (type === PreviewBridgeMessageType.A2UI_CATALOG) {
-        this.latestCatalogEnvelope = envelope;
-      }
       if (type === PreviewBridgeMessageType.RENDERER_READY) {
         this.isRendererReadySignal.set(true);
         this.sendTheme(this.configProvider.themePreference());
@@ -276,7 +262,6 @@ export class HostCommunication implements OnDestroy {
   constructor() {
     if (typeof window !== 'undefined') {
       window.addEventListener('message', this.messageListener);
-      window.a2uiHostCommunication = this;
     }
   }
 
@@ -465,7 +450,6 @@ export class HostCommunication implements OnDestroy {
     this.messageStreamSubject.complete();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
-      delete window.a2uiHostCommunication;
     }
   }
 }
