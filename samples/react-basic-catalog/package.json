@@ -15,7 +15,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@a2ui/react": "0.10.2",
+    "@a2ui/markdown-it": "0.1.0",
+    "@a2ui/react": "patch:@a2ui/react@npm%3A0.10.2#~/.yarn/patches/@a2ui-react-npm-0.10.2-877cbd9ad2.patch",
     "@a2ui/web_core": "0.10.5",
     "a2ui-bridge": "0.1.0",
     "react": "19.2.8",

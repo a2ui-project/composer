@@ -40,6 +40,16 @@ describe('SurfaceResizeObserver', () => {
     expect(onResizeMock).toHaveBeenCalledWith({height: 500, width: 900});
   });
 
+  it('rounds fractional content up without growing on identical measurements', () => {
+    Object.defineProperty(document.body, 'scrollHeight', {value: 320, configurable: true});
+    vi.spyOn(document.body, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 600, 320.4));
+    observer = new SurfaceResizeObserver(onResizeMock);
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenLastCalledWith(expect.objectContaining({height: 321}));
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenCalledTimes(1);
+  });
+
   it('deduplicates redundant measurements when dimensions have not changed', () => {
     Object.defineProperty(document.body, 'scrollHeight', {value: 400, configurable: true});
     Object.defineProperty(document.body, 'scrollWidth', {value: 800, configurable: true});

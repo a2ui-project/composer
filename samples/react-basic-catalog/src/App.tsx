@@ -16,17 +16,22 @@
 
 import {useA2uiSandbox} from 'a2ui-bridge/react';
 import {COMPONENT_USAGES} from './usages.js';
-import {A2uiSurface, basicCatalog} from '@a2ui/react/v0_9';
+import {DEMOS} from './demos.js';
+import {renderMarkdown} from '@a2ui/markdown-it';
+import {A2uiSurface, basicCatalog, MarkdownContext} from '@a2ui/react/v0_9';
 
 export function App() {
   const {surface} = useA2uiSandbox([basicCatalog], {
     getComponentUsages: async () => COMPONENT_USAGES,
+    getDemos: async () => DEMOS,
   });
 
   return (
     <main className="sandbox-shell">
       {surface ? (
-        <A2uiSurface surface={surface} />
+        <MarkdownContext.Provider value={renderMarkdown}>
+          <A2uiSurface surface={surface} />
+        </MarkdownContext.Provider>
       ) : (
         <p style={{padding: 24, color: '#666', fontFamily: 'sans-serif', textAlign: 'center'}}>
           A2UI React Sandbox active. Waiting for RENDER_A2UI payloads...

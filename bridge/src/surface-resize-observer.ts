@@ -99,6 +99,9 @@ export class SurfaceResizeObserver {
     const docEl = document.documentElement;
 
     const height = Math.max(
+      // Integer DOM dimensions can round down fractional line heights, leaving a
+      // fitted iframe fractionally too short and showing an unnecessary scrollbar.
+      Math.ceil(body?.getBoundingClientRect().height || 0),
       body?.scrollHeight || 0,
       docEl?.scrollHeight || 0,
       body?.offsetHeight || 0,
