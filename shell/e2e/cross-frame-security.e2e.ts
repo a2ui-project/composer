@@ -30,11 +30,13 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
       });
     });
     await page.addInitScript(() => {
-      localStorage.setItem('a2ui_composer_force_1p', 'true');
-      localStorage.setItem(
-        'a2ui_composer_allowed_origins',
-        JSON.stringify(['http://custom-renderer.com']),
-      );
+      if (window === window.top) {
+        localStorage.setItem('a2ui_composer_force_1p', 'true');
+        localStorage.setItem(
+          'a2ui_composer_allowed_origins',
+          JSON.stringify(['http://custom-renderer.com']),
+        );
+      }
     });
   });
 

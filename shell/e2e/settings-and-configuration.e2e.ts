@@ -26,10 +26,12 @@ test.describe('Settings and Client Configuration', () => {
   test.describe('Custom Config Modification & Persistence', () => {
     test.beforeEach(async ({page}) => {
       await page.addInitScript(() => {
-        if (!sessionStorage.getItem('init_cleared')) {
-          sessionStorage.setItem('init_cleared', 'true');
-          localStorage.clear();
-          localStorage.setItem('a2ui_composer_force_3p', 'true');
+        if (window === window.top) {
+          if (!sessionStorage.getItem('init_cleared')) {
+            sessionStorage.setItem('init_cleared', 'true');
+            localStorage.clear();
+            localStorage.setItem('a2ui_composer_force_3p', 'true');
+          }
         }
       });
       await page.goto('/settings');
@@ -145,7 +147,9 @@ test.describe('Settings and Client Configuration', () => {
       });
 
       await page.addInitScript(() => {
-        localStorage.setItem('a2ui_composer_force_3p', 'true');
+        if (window === window.top) {
+          localStorage.setItem('a2ui_composer_force_3p', 'true');
+        }
       });
       await page.goto('/settings');
 
@@ -199,8 +203,10 @@ test.describe('Settings and Client Configuration', () => {
         });
       });
       await page.addInitScript(() => {
-        localStorage.setItem('a2ui_composer_force_3p', 'true');
-        localStorage.removeItem('a2ui_composer_force_1p');
+        if (window === window.top) {
+          localStorage.setItem('a2ui_composer_force_3p', 'true');
+          localStorage.removeItem('a2ui_composer_force_1p');
+        }
       });
       await page.goto('/?renderer=http://localhost:3000');
       await expect(page.locator('.disabled-chat-panel')).toBeVisible();
@@ -213,7 +219,9 @@ test.describe('Settings and Client Configuration', () => {
       page,
     }) => {
       await page.addInitScript(() => {
-        localStorage.clear();
+        if (window === window.top) {
+          localStorage.clear();
+        }
       });
       await page.goto('/settings');
 
