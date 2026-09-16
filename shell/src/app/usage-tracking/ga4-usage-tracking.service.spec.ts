@@ -492,6 +492,17 @@ describe('Ga4UsageTrackingService', () => {
       );
     });
 
+    it('allows camelCase schema properties to reach GA4 unchanged', () => {
+      service.trackComposerError({
+        sourceTag: '[Monaco]',
+        errorCategory: 'SCHEMA_VALIDATION_ERROR',
+        invalidProperty: 'componentId',
+      });
+      const calls = (mockWindow.gtag as ReturnType<typeof vi.fn>).mock.calls;
+      expect((calls[0][2] as Record<string, unknown>)['invalid_property']).toEqual('componentId');
+      (mockWindow.gtag as ReturnType<typeof vi.fn>).mockClear();
+    });
+
     it('sanitizes invalidProperty if it contains invalid characters', () => {
       service.trackComposerError({
         sourceTag: '[Monaco]',
@@ -509,7 +520,7 @@ describe('Ga4UsageTrackingService', () => {
     });
 
     it('prevents PII leakage by stripping full JSON blobs and untrusted text', () => {
-      const adversarialText = 'JDoe123';
+      const adversarialText = '{JDoe123}'; // Shape violating input
       service.trackComposerError({
         sourceTag: adversarialText,
         errorCategory: 'SOME_ERROR_CATEGORY',

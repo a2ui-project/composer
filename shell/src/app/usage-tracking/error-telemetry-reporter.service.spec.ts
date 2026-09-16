@@ -136,42 +136,56 @@ describe('ErrorTelemetryReporter', () => {
     );
   });
 
-  it('extracts invalidProperty from a message ending with a comma (instance.components,)', () => {
+  it('does not extract user-authored property names from not-allowed messages', () => {
+    reporter.start();
+    errorStream$.next({
+      id: 'leak',
+      timestamp: Date.now(),
+      level: 'error',
+      sourceTag: '[Monaco]',
+      message: "Schema error: Property 'userEmail' is not allowed",
+    } as ErrorLogItem);
+    expect(usageTrackingService.trackComposerError).toHaveBeenCalledWith(
+      expect.objectContaining({invalidProperty: undefined}),
+    );
+  });
+
+  it('extracts invalidProperty from a missing-property message ending with a comma', () => {
     reporter.start();
     errorStream$.next({
       id: '2',
       timestamp: Date.now(),
       level: 'error',
       sourceTag: '[Monaco]',
-      message: 'Schema error: instance.components, property is invalid',
+      message: "Schema error: property 'components' is missing, wait no",
     } as ErrorLogItem);
     expect(usageTrackingService.trackComposerError).toHaveBeenCalledWith(
       expect.objectContaining({invalidProperty: 'components'}),
     );
   });
 
-  it('extracts invalidProperty from a message with no trailing text (instance.components)', () => {
+  it('extracts invalidProperty from a missing-property message with no trailing text', () => {
     reporter.start();
     errorStream$.next({
       id: '3',
       timestamp: Date.now(),
       level: 'error',
       sourceTag: '[Monaco]',
-      message: 'Schema error: instance.components',
+      message: "property 'components' is missing",
     } as ErrorLogItem);
     expect(usageTrackingService.trackComposerError).toHaveBeenCalledWith(
       expect.objectContaining({invalidProperty: 'components'}),
     );
   });
 
-  it('extracts invalidProperty from a prefixed message (TypeError: Schema error: instance.componentId)', () => {
+  it('extracts invalidProperty from a prefixed message', () => {
     reporter.start();
     errorStream$.next({
       id: '4',
       timestamp: Date.now(),
       level: 'error',
       sourceTag: '[Monaco]',
-      message: 'TypeError: Schema error: instance.componentId',
+      message: "TypeError: Schema error: property 'componentId' is missing",
     } as ErrorLogItem);
     expect(usageTrackingService.trackComposerError).toHaveBeenCalledWith(
       expect.objectContaining({invalidProperty: 'componentId'}),
