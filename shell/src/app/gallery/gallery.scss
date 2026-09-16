@@ -350,3 +350,109 @@
     padding: 0;
   }
 }
+
+.edit-heading {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.draft-help {
+  color: var(--cpk-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 8px 0 16px;
+}
+
+.simple-properties {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.simple-property {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+
+  input:not([type='checkbox']),
+  select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid var(--mat-sys-outline);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--mat-sys-surface-container-low);
+    color: var(--cpk-text-primary);
+    font: inherit;
+    font-weight: 400;
+  }
+
+  input[type='checkbox'] {
+    align-self: flex-start;
+    width: 20px;
+    height: 20px;
+    accent-color: var(--cpk-accent);
+  }
+}
+
+.draft-editor,
+.usage-details {
+  margin-top: 16px;
+  min-width: 0;
+
+  summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 0;
+  }
+}
+
+.draft-label {
+  display: block;
+  font-size: 12px;
+  margin: 8px 0;
+}
+
+.draft-json {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 240px;
+  max-height: 480px;
+  resize: vertical;
+  border: 1px solid var(--mat-sys-outline);
+  border-radius: 10px;
+  padding: 12px;
+  color: var(--cpk-text-primary);
+  background: var(--mat-sys-surface-container-low);
+  font-family: var(--cpk-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.draft-json:focus-visible,
+.simple-property input:focus-visible,
+.simple-property select:focus-visible {
+  outline: 2px solid var(--cpk-accent);
+  outline-offset: 2px;
+}
+
+.draft-error {
+  color: var(--mat-sys-error);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}

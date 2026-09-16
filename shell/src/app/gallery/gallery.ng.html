@@ -66,7 +66,8 @@
                 <button
                   mat-icon-button
                   (click)="copyToClipboard()"
-                  aria-label="Copy to Clipboard"
+                  aria-label="Copy JSON"
+                  [disabled]="!validPayloadJson()"
                   class="copy-button"
                 >
                   <mat-icon>content_copy</mat-icon>
@@ -80,9 +81,106 @@
                   <span>Loading usage samples...</span>
                 </div>
               } @else {
-                <pre
-                  class="usage-code-block"
-                ><code class="usage-code">{{ selectedComponentUsage() }}</code></pre>
+                @if (draft().preset) {
+                  <h3 class="edit-heading">Edit example</h3>
+                  <p id="gallery-draft-help" class="draft-help">
+                    Change properties below. Use JSON for nested properties and bound data.
+                  </p>
+                  @if (simpleProperties().length) {
+                    <div class="simple-properties">
+                      @for (prop of simpleProperties(); track prop.name) {
+                        <label class="simple-property">
+                          <span>{{ prop.name }}</span>
+                          @if (prop.options; as options) {
+                            <select
+                              [attr.aria-label]="prop.name"
+                              [attr.data-property]="prop.name"
+                              [ngModel]="prop.value"
+                              (ngModelChange)="editProperty(prop.name, $event)"
+                              [disabled]="!!draft().error"
+                            >
+                              @for (option of options; track option) {
+                                <option [ngValue]="option">{{ option }}</option>
+                              }
+                            </select>
+                          } @else if (prop.type === 'boolean') {
+                            <input
+                              type="checkbox"
+                              [attr.aria-label]="prop.name"
+                              [attr.data-property]="prop.name"
+                              [ngModel]="prop.value"
+                              (ngModelChange)="editProperty(prop.name, $event)"
+                              [disabled]="!!draft().error"
+                            />
+                          } @else if (prop.type === 'number') {
+                            <input
+                              matInput
+                              type="number"
+                              [attr.aria-label]="prop.name"
+                              [attr.data-property]="prop.name"
+                              [ngModel]="prop.value"
+                              (ngModelChange)="editProperty(prop.name, $event)"
+                              [disabled]="!!draft().error"
+                            />
+                          } @else {
+                            <input
+                              matInput
+                              type="text"
+                              [attr.aria-label]="prop.name"
+                              [attr.data-property]="prop.name"
+                              [ngModel]="prop.value"
+                              (ngModelChange)="editProperty(prop.name, $event)"
+                              [disabled]="!!draft().error"
+                            />
+                          }
+                        </label>
+                      }
+                    </div>
+                  }
+                  <details class="draft-editor" [open]="simpleProperties().length === 0">
+                    <summary>Example JSON</summary>
+                    <label class="draft-label" for="gallery-draft"
+                      >Components and optional data</label
+                    >
+                    <textarea
+                      matInput
+                      id="gallery-draft"
+                      class="draft-json"
+                      spellcheck="false"
+                      [ngModel]="draft().text"
+                      (ngModelChange)="editDraft($event)"
+                      [attr.aria-invalid]="!!draft().error"
+                      aria-describedby="gallery-draft-help gallery-draft-error"
+                    ></textarea>
+                  </details>
+                  @if (draft().error; as error) {
+                    <p id="gallery-draft-error" class="draft-error" role="alert">{{ error }}</p>
+                  }
+                  <div class="draft-actions">
+                    <button
+                      mat-flat-button
+                      color="primary"
+                      (click)="openInComposer()"
+                      [disabled]="!validPayloadJson() || !rendererUrl() || opening()"
+                    >
+                      Open in Composer
+                    </button>
+                    <button mat-button color="primary" (click)="resetDraft()">Reset example</button>
+                  </div>
+                  @if (actionMessage()) {
+                    <p class="draft-help" role="status">{{ actionMessage() }}</p>
+                  }
+                  <details class="usage-details">
+                    <summary>Current component JSON</summary>
+                    <pre
+                      class="usage-code-block"
+                    ><code class="usage-code">{{ currentUsage() }}</code></pre>
+                  </details>
+                } @else {
+                  <p class="draft-help" [class.draft-error]="draft().error" role="status">
+                    {{ draft().error || 'No example is available for this component.' }}
+                  </p>
+                }
               }
             </mat-card-content>
           </mat-card>

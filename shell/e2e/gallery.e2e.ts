@@ -80,6 +80,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(rows.first()).toBeVisible();
 
     // 8. Assert usage card renders the usage JSON block representing a raw components array
+    await page.locator('.usage-details summary').click();
     const usageCode = page.locator('pre code');
     await expect(usageCode).toBeVisible();
     await expect(usageCode).toContainText(`"component": "${firstComponentName!}"`);
@@ -254,5 +255,41 @@ test.describe('Components Gallery User Journey', () => {
     await toggle.click();
     await expect(page.locator('.gallery-sidenav')).toHaveCSS('width', '208px');
     await expect(page.locator('.gallery-content')).toHaveCSS('margin-left', '208px');
+  });
+  test('edits selected-catalog Text and opens the same valid example with its renderer', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.goto('/?renderer=http://localhost:3456');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await page.getByRole('link', {name: 'Components Gallery'}).click();
+    await page.locator('.catalog-list').getByRole('button', {name: 'Text', exact: true}).click();
+    const text = page.getByRole('textbox', {name: 'text', exact: true});
+    await expect(text).toBeVisible();
+    const edited = 'Ready to use from my selected catalog';
+    await text.fill(edited);
+    const preview = page.frameLocator('.preview-card iframe');
+    await expect(preview.getByText(edited, {exact: true})).toBeVisible();
+
+    await page.locator('.draft-editor summary').click();
+    const draft = page.getByLabel('Components and optional data');
+    await expect(draft).toHaveValue(new RegExp(edited));
+    await draft.fill('{invalid');
+    await expect(page.getByRole('alert').filter({hasText: 'last valid example'})).toBeVisible();
+    await expect(preview.getByText(edited, {exact: true})).toBeVisible();
+    await page.getByRole('button', {name: 'Copy JSON', exact: true}).click();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toContain(edited);
+    expect(JSON.parse(copied)[0].createSurface.catalogId).toBeTruthy();
+
+    await page.getByRole('button', {name: 'Open in Composer', exact: true}).click();
+    await page.waitForURL(url => !url.pathname.endsWith('/gallery') && url.hash.includes('a2ui='));
+    const renderer = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('renderer');
+    expect(new URL(renderer!).origin).toBe('http://localhost:3456');
+    await expect(page.locator('.workspace-container')).toBeVisible();
+    await expect(
+      page.frameLocator('.workspace-container iframe').getByText(edited, {exact: true}),
+    ).toBeVisible();
   });
 });
