@@ -68,6 +68,11 @@ export class RenderedFrame {
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
+  /** Mobile Lynx artifact exposed by the selected renderer, when available. */
+  protected readonly lynxBundleUrl = computed(
+    () => this.startupResolution.activeRenderer?.()?.artifacts?.lynxBundleUrl ?? null,
+  );
+
   protected iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('previewIframe');
 
   protected safeRendererUrl = computed(() => {

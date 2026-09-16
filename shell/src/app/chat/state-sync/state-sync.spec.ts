@@ -255,6 +255,10 @@ describe('StateSync Autosave Draft Integrations', () => {
   });
 
   it('commits layouts from LLM synchronously, suppressing history syncs', () => {
+    vi.advanceTimersByTime(300);
+    chatStateMock.setChatHistory.mockClear();
+    chatStateMock.updateChatHistory.mockClear();
+
     service.commitLayoutFromLlm('{"version": "v0.9", "from-llm": true}');
     TestBed.tick();
 
@@ -539,6 +543,36 @@ describe('StateSync Autosave Draft Integrations', () => {
   });
 
   describe('Dynamic Initial Draft Pre-population', () => {
+    it('loads the selected renderer sample when the service is created after startup', () => {
+      TestBed.resetTestingModule();
+      const startupState = new MockStartupConfigState();
+      const initialSample = '[{"version": "v0.9", "lynxSample": true}]';
+      startupState.activeRenderer.set({samplePayload: initialSample});
+      startupState.selectedRendererId.set('lynx-dev');
+
+      TestBed.configureTestingModule({
+        providers: [
+          StateSync,
+          {provide: ChatState, useClass: MockChatState},
+          {provide: CatalogManagement, useClass: MockCatalogManagement},
+          {provide: StartupConfigStateService, useValue: startupState},
+        ],
+      });
+
+      const initializedService = TestBed.inject(StateSync);
+      TestBed.tick();
+      vi.advanceTimersByTime(300);
+
+      expect(initializedService.activeDraft()).toBe(initialSample);
+      const initializedChatState = TestBed.inject(ChatState) as unknown as MockChatState;
+      expect(initializedChatState.setChatHistory).toHaveBeenCalledWith([
+        {
+          role: MessageRole.USER,
+          content: '[\n  {\n    "version": "v0.9",\n    "lynxSample": true\n  }\n]',
+        },
+      ]);
+    });
+
     it('populates default template on initial handshake when unmodified', () => {
       // Upon startup (handled in beforeEach), activeDraft is initialized with basic catalog (CAR_BOOKING)
       expect(service.activeDraft()).toBe(CAR_BOOKING);
