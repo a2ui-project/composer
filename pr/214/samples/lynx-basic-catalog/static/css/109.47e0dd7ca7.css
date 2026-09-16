@@ -1,0 +1,1751 @@
+:host, lynx-view {
+  contain: strict;
+  --rpx-unit: calc(1cqw / 7.5);
+  --ppx-unit: 1cqw;
+  --vw-unit: 1cqw;
+  --vh-unit: 1cqh;
+  width: 100%;
+  display: none;
+  container: lynx-view / inline-size;
+}
+
+:host([transform-vh]), lynx-view[transform-vh] {
+  container-type: size;
+}
+
+:host([ssr]), lynx-view[ssr] {
+  display: flex;
+}
+
+:host([width="auto"]), lynx-view[width="auto"] {
+  --lynx-view-width: 100%;
+  width: var(--lynx-view-width);
+  inline-size: var(--lynx-view-width);
+}
+
+:host([height="auto"]), :host([auto-height]), :host([width="auto"]), lynx-view[height="auto"], lynx-view[auto-height], lynx-view[width="auto"] {
+  contain: content;
+}
+
+[part="page"], lynx-view::part(page) {
+  --rpx-unit: inherit;
+  --ppx-unit: inherit;
+  --vw-unit: inherit;
+  --vh-unit: inherit;
+  width: 100%;
+  height: 100%;
+}
+
+@property --lynx-display {
+  syntax: "linear | flex";
+  inherits: false;
+  initial-value: linear;
+}
+
+@property --lynx-linear-weight-sum {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --lynx-linear-weight {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --justify-content-column {
+  syntax: "flex-start | flex-end | center | space-between | space-around";
+  inherits: false;
+  initial-value: flex-start;
+}
+
+@property --justify-content-column-reverse {
+  syntax: "flex-start | flex-end | center | space-between | space-around";
+  inherits: false;
+  initial-value: flex-start;
+}
+
+@property --justify-content-row {
+  syntax: "flex-start | flex-end | center | space-between | space-around";
+  inherits: false;
+  initial-value: flex-start;
+}
+
+@property --justify-content-row-reverse {
+  syntax: "flex-start | flex-end | center | space-between | space-around";
+  inherits: false;
+  initial-value: flex-start;
+}
+
+@property --align-self-row {
+  syntax: "start | end | center | stretch | auto";
+  inherits: false;
+  initial-value: auto;
+}
+
+@property --align-self-column {
+  syntax: "start | end | center | stretch | auto";
+  inherits: false;
+  initial-value: auto;
+}
+
+@property --lynx-linear-weight-basis {
+  syntax: "auto | <number> | <length>";
+  inherits: false;
+  initial-value: auto;
+}
+
+@property --lynx-linear-orientation {
+  syntax: "<custom-ident>";
+  inherits: false;
+  initial-value: vertical;
+}
+
+@property --flex-direction {
+  syntax: "*";
+  inherits: false
+}
+
+@property --flex-wrap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --flex-grow {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --flex-shrink {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --flex-basis {
+  syntax: "*";
+  inherits: false;
+  initial-value: auto;
+}
+
+@property --flex-value {
+  syntax: "*";
+  inherits: false
+}
+
+@property --flex {
+  syntax: "*";
+  inherits: false
+}
+
+@property --linear-justify-content {
+  syntax: "flex-start | flex-end | center | space-between | space-around";
+  inherits: false;
+  initial-value: flex-start;
+}
+
+@supports not ((content-visibility: auto) and (transition-behavior: allow-discrete) and (-webkit-box-reflect: above)) {
+  * {
+    --lynx-display: linear;
+    --lynx-linear-weight-sum: 1;
+    --lynx-linear-weight: 0;
+    --justify-content-column: flex-start;
+    --justify-content-column-reverse: flex-start;
+    --justify-content-row: flex-start;
+    --justify-content-row-reverse: flex-start;
+    --align-self-row: auto;
+    --align-self-column: auto;
+    --lynx-linear-weight-basis: auto;
+    --lynx-linear-orientation: vertical;
+    --flex-direction: row;
+    --flex-grow: 0;
+    --flex-shrink: 1;
+    --flex-basis: auto;
+    --justify-content: flex-start;
+    --flex-wrap: nowrap;
+    --align-self: auto;
+  }
+
+  [lynx-computed-display="linear"] {
+    flex-direction: column;
+    justify-content: flex-start;
+    flex-wrap: nowrap !important;
+  }
+
+  [lynx-computed-display="flex"] {
+    flex-direction: var(--flex-direction);
+    justify-content: var(--justify-content);
+    flex-wrap: var(--flex-wrap);
+  }
+
+  [lynx-computed-display="flex"] > *, [lynx-computed-display="flex"] > lynx-wrapper > * {
+    flex: var(--flex, var(--flex-grow) var(--flex-shrink) var(--flex-basis));
+  }
+
+  [lynx-computed-display="linear"] > *, [lynx-computed-display="linear"] > lynx-wrapper > * {
+    flex-shrink: 0 !important;
+    flex-grow: calc(var(--lynx-linear-weight) /
+        calc(var(--lynx-linear-weight-sum) +
+          (
+          1 - clamp(0, var(--lynx-linear-weight-sum) * 999999, 1)
+        ))) !important;
+    flex-basis: var(--lynx-linear-weight-basis) !important;
+  }
+
+  [lynx-computed-display="linear"][lynx-linear-orientation="vertical"] {
+    justify-content: var(--justify-content-column);
+    flex-direction: column !important;
+  }
+
+  [lynx-computed-display="linear"][lynx-linear-orientation="horizontal"] {
+    justify-content: var(--justify-content-row);
+    flex-direction: row !important;
+  }
+
+  [lynx-computed-display="linear"][lynx-linear-orientation="vertical-reverse"] {
+    justify-content: var(--justify-content-column-reverse);
+    flex-direction: column-reverse !important;
+  }
+
+  [lynx-computed-display="linear"][lynx-linear-orientation="horizontal-reverse"] {
+    justify-content: var(--justify-content-row-reverse);
+    flex-direction: row-reverse !important;
+  }
+
+  [lynx-computed-display="linear"][lynx-linear-orientation="vertical"] > *, [lynx-computed-display="linear"][lynx-linear-orientation="vertical-reverse"], [lynx-computed-display="linear"][lynx-linear-orientation="vertical"] > lynx-wrapper > *, [lynx-computed-display="linear"][lynx-linear-orientation="vertical-reverse"] > lynx-wrapper > * {
+    align-self: var(--align-self-column);
+  }
+
+  [lynx-computed-display="linear"][lynx-linear-orientation="horizontal"] > *, [lynx-computed-display="linear"][lynx-linear-orientation="horizontal-reverse"], [lynx-computed-display="linear"][lynx-linear-orientation="horizontal"] > lynx-wrapper > *, [lynx-computed-display="linear"][lynx-linear-orientation="horizontal-reverse"] > lynx-wrapper > * {
+    align-self: var(--align-self-row);
+  }
+}
+
+@property --lynx-display {
+  syntax: "linear | flex";
+  inherits: false;
+  initial-value: linear;
+}
+
+@property --lynx-linear-weight-sum {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --lynx-linear-weight {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --justify-content-column {
+  syntax: "flex-start | flex-end | center | space-between | space-around";
+  inherits: false;
+  initial-value: flex-start;
+}
+
+@property --justify-content-column-reverse {
+  syntax: "flex-start | flex-end | center | space-between | space-around";
+  inherits: false;
+  initial-value: flex-start;
+}
+
+@property --justify-content-row {
+  syntax: "flex-start | flex-end | center | space-between | space-around";
+  inherits: false;
+  initial-value: flex-start;
+}
+
+@property --justify-content-row-reverse {
+  syntax: "flex-start | flex-end | center | space-between | space-around";
+  inherits: false;
+  initial-value: flex-start;
+}
+
+@property --align-self-row {
+  syntax: "start | end | center | stretch | auto";
+  inherits: false;
+  initial-value: auto;
+}
+
+@property --align-self-column {
+  syntax: "start | end | center | stretch | auto";
+  inherits: false;
+  initial-value: auto;
+}
+
+@property --lynx-linear-weight-basis {
+  syntax: "auto | <number> | <length>";
+  inherits: false;
+  initial-value: auto;
+}
+
+@property --lynx-linear-orientation {
+  syntax: "<custom-ident>";
+  inherits: false;
+  initial-value: vertical;
+}
+
+@property --flex-direction {
+  syntax: "*";
+  inherits: false
+}
+
+@property --flex-wrap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --flex-grow {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --flex-shrink {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --flex-basis {
+  syntax: "*";
+  inherits: false;
+  initial-value: auto;
+}
+
+@property --flex-value {
+  syntax: "*";
+  inherits: false
+}
+
+@property --flex {
+  syntax: "*";
+  inherits: false
+}
+
+@property --linear-justify-content {
+  syntax: "flex-start | flex-end | center | space-between | space-around";
+  inherits: false;
+  initial-value: flex-start;
+}
+
+x-view, x-blur-view, scroll-view, x-foldview-ng, x-foldview-slot-ng, x-foldview-header-ng, x-foldview-toolbar-ng, x-foldview-drag-ng, x-text, inline-text, inline-image, inline-truncation, x-viewpager-ng, x-viewpager-item-ng, x-canvas, x-svg, x-image, filter-image, x-input, x-swiper, x-swiper-item, x-textarea, x-list, list-item {
+  box-sizing: border-box;
+  scrollbar-width: none;
+  border-style: solid;
+  border-width: 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  position: relative;
+  overflow: clip;
+}
+
+x-view::--webkit-scrollbar {
+  display: none;
+}
+
+x-view, scroll-view, x-foldview-header-ng, x-foldview-ng, x-foldview-slot-drag-ng, x-foldview-slot-ng, x-foldview-toolbar-ng, x-refresh-footer, x-refresh-header, x-refresh-view, x-swiper-item, x-viewpager-item-ng, x-viewpager-ng, list-item {
+  --lynx-display-toggle: var(--lynx-display-linear);
+  --lynx-display-linear: var(--lynx-display-toggle, );
+  --lynx-display-flex: var(--lynx-display-toggle, );
+  --lynx-linear-orientation-toggle: var(--lynx-linear-orientation-vertical);
+  --lynx-linear-orientation-horizontal: var(--lynx-linear-orientation-toggle, );
+  --lynx-linear-orientation-vertical: var(--lynx-linear-orientation-toggle, );
+  --lynx-linear-orientation-horizontal-reverse: var(--lynx-linear-orientation-toggle,
+  );
+  --lynx-linear-orientation-vertical-reverse: var(--lynx-linear-orientation-toggle,
+  );
+  --linear-flex-direction: var(--lynx-linear-orientation-horizontal, row) var(--lynx-linear-orientation-vertical, column) var(--lynx-linear-orientation-horizontal-reverse, row-reverse) var(--lynx-linear-orientation-vertical-reverse, column-reverse);
+  --linear-justify-content: var(--lynx-linear-orientation-horizontal, var(--justify-content-row)) var(--lynx-linear-orientation-vertical, var(--justify-content-column)) var(--lynx-linear-orientation-horizontal-reverse, var(--justify-content-row-reverse)) var(--lynx-linear-orientation-vertical-reverse, var(--justify-content-column-reverse));
+}
+
+x-view, x-foldview-header-ng, x-foldview-ng, x-foldview-slot-drag-ng, x-foldview-slot-ng, x-foldview-toolbar-ng, x-refresh-footer, x-refresh-header, x-refresh-view, x-swiper-item, x-viewpager-item-ng, x-viewpager-ng, list-item {
+  flex-wrap: var(--lynx-display-linear, nowrap)
+    var(--lynx-display-flex, var(--flex-wrap));
+  flex-direction: var(--lynx-display-linear, var(--linear-flex-direction))
+    var(--lynx-display-flex, var(--flex-direction));
+  justify-content: var(--lynx-display-linear, var(--linear-justify-content));
+}
+
+@supports (content-visibility: auto) and (transition-behavior: allow-discrete) and (-webkit-box-reflect: above) {
+  @container style(--lynx-display: linear) {
+    x-view, x-blur-view, scroll-view, x-foldview-ng, x-foldview-slot-ng, x-foldview-header-ng, x-foldview-toolbar-ng, x-foldview-drag-ng, x-text, inline-text, inline-image, inline-truncation, x-viewpager-ng, x-viewpager-item-ng, x-canvas, x-svg, x-image, filter-image, x-input, x-swiper, x-swiper-item, x-textarea, x-list, list-item {
+      flex-shrink: 0;
+      flex-grow: calc(var(--lynx-linear-weight) /
+          calc(var(--lynx-linear-weight-sum) +
+            (
+            1 - clamp(0, var(--lynx-linear-weight-sum) * 999999, 1)
+          )));
+      flex-basis: var(--lynx-linear-weight-basis);
+    }
+  }
+
+  @container not style(--lynx-display: linear) {
+    x-view, x-blur-view, scroll-view, x-foldview-ng, x-foldview-slot-ng, x-foldview-header-ng, x-foldview-toolbar-ng, x-foldview-drag-ng, x-text, inline-text, inline-image, inline-truncation, x-viewpager-ng, x-viewpager-item-ng, x-canvas, x-svg, x-image, filter-image, x-input, x-swiper, x-swiper-item, x-textarea, x-list, list-item {
+      flex: var(--flex, var(--flex-grow) var(--flex-shrink) var(--flex-basis));
+    }
+  }
+
+  @container style(--lynx-display: linear) and (style(--lynx-linear-orientation: vertical) or style(--lynx-linear-orientation: vertical-reverse)) {
+    x-view, x-blur-view, scroll-view, x-foldview-ng, x-foldview-slot-ng, x-foldview-header-ng, x-foldview-toolbar-ng, x-foldview-drag-ng, x-text, inline-text, inline-image, inline-truncation, x-viewpager-ng, x-viewpager-item-ng, x-canvas, x-svg, x-image, filter-image, x-input, x-swiper, x-swiper-item, x-textarea, x-list, list-item {
+      align-self: var(--align-self-column);
+    }
+  }
+
+  @container style(--lynx-display: linear) and (style(--lynx-linear-orientation: horizontal) or style(--lynx-linear-orientation: horizontal-reverse)) {
+    x-view, x-blur-view, scroll-view, x-foldview-ng, x-foldview-slot-ng, x-foldview-header-ng, x-foldview-toolbar-ng, x-foldview-drag-ng, x-text, inline-text, inline-image, inline-truncation, x-viewpager-ng, x-viewpager-item-ng, x-canvas, x-svg, x-image, filter-image, x-input, x-swiper, x-swiper-item, x-textarea, x-list, list-item {
+      align-self: var(--align-self-row);
+    }
+  }
+}
+
+lynx-wrapper {
+  --lynx-display: inherit;
+  --lynx-display-toggle: inherit;
+  --lynx-linear-orientation: inherit;
+  --lynx-linear-orientation-toggle: inherit;
+  display: contents !important;
+}
+
+x-text {
+  overflow-wrap: break-word;
+  background-image: var(--lynx-text-bg-color);
+  color: initial;
+  align-items: stretch;
+  display: flex;
+}
+
+x-text > x-text, x-text > lynx-wrapper > x-text {
+  color: inherit;
+}
+
+x-text:not(x-text > x-text):not(x-text > lynx-wrapper > x-text) {
+  --lynx-text-bg-color: initial;
+}
+
+x-text > * {
+  display: none;
+}
+
+x-text::part(inner-box) {
+  text-overflow: inherit;
+  --lynx-text-bg-color: inherit;
+}
+
+x-text > x-text::part(inner-box), x-text > lynx-wrapper > x-text::part(inner-box) {
+  display: contents !important;
+}
+
+x-text::part(inner-box), inline-text, x-text::part(slot) {
+  background-clip: inherit;
+  -webkit-background-clip: inherit;
+}
+
+inline-text, inline-image, inline-truncation {
+  display: none;
+}
+
+x-text > x-text, x-text > inline-text, inline-text > inline-text, inline-truncation > inline-text, inline-truncation > x-text, x-text > lynx-wrapper > x-text, x-text > lynx-wrapper > inline-text, x-text > lynx-wrapper > x-text, inline-text > lynx-wrapper > inline-text, x-text > lynx-wrapper > *, inline-truncation > lynx-wrapper > inline-text, inline-truncation > lynx-wrapper > x-text {
+  background-clip: inherit;
+  -webkit-background-clip: inherit;
+  display: inline;
+}
+
+x-text > inline-image, x-text > x-image, x-text > x-svg, inline-truncation > inline-image, inline-truncation > x-image, inline-truncation > x-svg, inline-text > inline-image, inline-text > x-image, inline-text > x-svg, x-text > lynx-wrapper > inline-image, x-text > lynx-wrapper > x-image, x-text > lynx-wrapper > x-svg, inline-truncation > lynx-wrapper > inline-image, inline-truncation > lynx-wrapper > x-image, inline-truncation > lynx-wrapper > x-svg, inline-text > lynx-wrapper > inline-image, inline-text > lynx-wrapper > x-image, inline-text > lynx-wrapper > x-svg {
+  display: contents !important;
+}
+
+x-text > x-view, x-text > lynx-wrapper > x-view {
+  display: inline-flex !important;
+}
+
+x-text > x-view, x-text[x-show-inline-truncation] > inline-truncation, x-text > lynx-wrapper > x-view, x-text[x-show-inline-truncation] > lynx-wrapper > inline-truncation {
+  display: inline-flex;
+}
+
+x-text > inline-truncation:first-child, x-text > lynx-wrapper > inline-truncation:first-child {
+  max-width: 100%;
+}
+
+inline-truncation ~ inline-truncation {
+  display: none;
+}
+
+inline-truncation[x-text-clipped] {
+  flex-direction: row;
+}
+
+inline-image::part(img) {
+  height: inherit;
+  width: inherit;
+  border: inherit;
+  border-radius: inherit;
+  background-color: inherit;
+  vertical-align: inherit;
+  margin: inherit;
+  display: inline-block;
+}
+
+x-text > x-image::part(img), x-text > x-svg::part(img), x-text > lynx-wrapper > x-image::part(img), x-text > lynx-wrapper > x-svg::part(img), inline-truncation > x-image::part(img), inline-truncation > x-svg::part(img), inline-truncation > lynx-wrapper > x-image::part(img), inline-truncation > lynx-wrapper > x-svg::part(img) {
+  border: inherit;
+  border-radius: inherit;
+  background-color: inherit;
+  vertical-align: inherit;
+  margin: inherit;
+  object-fit: inherit;
+  display: inline-block;
+  height: inherit !important;
+  width: inherit !important;
+  flex: inherit !important;
+  align-self: inherit !important;
+}
+
+x-text, inline-text, inline-image, inline-truncation {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+x-text::part(inner-box) {
+  width: 100%;
+  height: 100%;
+  overflow: inherit;
+}
+
+x-text[text-maxline] {
+  overflow: hidden;
+}
+
+x-text[text-selection], x-text[text-selection] > inline-text, x-text[text-selection] > x-text, x-text[text-selection] > inline-image, x-text[text-selection] > x-image, x-text[text-selection] > x-svg, x-text[text-selection] > inline-truncation, x-text[text-selection] > lynx-wrapper > inline-text, x-text[text-selection] > lynx-wrapper > x-text, x-text[text-selection] > lynx-wrapper > inline-image, x-text[text-selection] > lynx-wrapper > x-image, x-text[text-selection] > lynx-wrapper > x-svg, x-text[text-selection] > lynx-wrapper > inline-truncation {
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
+x-text[x-text-clipped] > [x-text-clipped]:not(inline-truncation), x-text[x-text-clipped] > lynx-wrapper > [x-text-clipped]:not(inline-truncation) {
+  display: none !important;
+}
+
+x-text[x-text-clipped]:not([tail-color-convert="false"])::part(inner-box):after, x-text[x-text-clipped]:not([tail-color-convert="false"])::part(inner-box):after {
+  content: "...";
+}
+
+x-text[x-text-clipped][x-text-custom-overflow]::part(inner-box):after, x-text[x-text-clipped][x-text-custom-overflow]::part(inner-box):after {
+  content: "" !important;
+}
+
+x-text[x-text-clipped]:has( > inline-truncation)::part(inner-box):after {
+  content: "" !important;
+}
+
+x-text[x-text-clipped]:has( > inline-truncation)::part(inner-box):after {
+  content: "" !important;
+}
+
+x-text[text-maxline]::part(inner-box) {
+  -webkit-box-orient: vertical;
+  display: -webkit-box;
+}
+
+x-text[text-maxline="0"] {
+  display: none;
+}
+
+@supports not selector(:has(> inline-truncation)) {
+  x-text[text-maxline="1"]:not([tail-color-convert="false"]):not([x-text-custom-overflow])::part(inner-box) {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+@supports selector(:has(> inline-truncation)) {
+  x-text[text-maxline="1"]:not([tail-color-convert="false"], :has( > inline-truncation))::part(inner-box) {
+    text-wrap: nowrap;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+x-text[text-maxline="1"] {
+  max-width: -moz-available;
+  max-width: -webkit-fill-available;
+}
+
+x-text[text-maxline="1"]:not([tail-color-convert="false"])::part(inner-box) {
+  display: block;
+}
+
+x-text[text-maxline][x-text-custom-overflow]::part(inner-box), x-text[text-maxline][tail-color-convert="false"]::part(inner-box) {
+  display: block !important;
+}
+
+x-text[text-maxline]:has( > inline-truncation)::part(inner-box) {
+  display: block !important;
+}
+
+raw-text {
+  white-space-collapse: preserve-breaks;
+  display: none;
+}
+
+x-text > raw-text, inline-text > raw-text, x-text > lynx-wrapper > raw-text, inline-text > lynx-wrapper > raw-text {
+  display: contents !important;
+}
+
+raw-text:not(:defined):before {
+  content: attr(text);
+  display: contents;
+}
+
+x-text:not(:has(x-text, raw-text)):not(:defined):before {
+  content: attr(text);
+  display: contents;
+}
+
+scroll-view {
+  --lynx-display-toggle: var(--lynx-display-linear);
+  flex-wrap: nowrap;
+  flex-direction: var(--linear-flex-direction);
+  justify-content: var(--linear-justify-content);
+  scroll-timeline: --scroll-view-timeline;
+  --lynx-display: linear !important;
+  display: flex !important;
+}
+
+scroll-view > *, scroll-view > lynx-wrapper > * {
+  flex-shrink: 0;
+  flex-grow: calc(var(--lynx-linear-weight) / var(--lynx-linear-weight-sum));
+  flex-basis: var(--lynx-linear-weight-basis);
+  align-self: var(--align-self-column);
+}
+
+scroll-view, scroll-view {
+  scrollbar-width: none;
+}
+
+scroll-view::-webkit-scrollbar {
+  display: none;
+}
+
+scroll-view::-webkit-scrollbar {
+  display: none;
+}
+
+scroll-view[enable-scrollbar], scroll-view[scroll-bar-enable] {
+  scrollbar-width: initial;
+}
+
+scroll-view[enable-scrollbar]::-webkit-scrollbar {
+  display: initial;
+}
+
+scroll-view[scroll-bar-enable]::-webkit-scrollbar {
+  display: initial;
+}
+
+scroll-view, scroll-view[scroll-y], scroll-view[scroll-orientation="vertical"] {
+  --lynx-linear-orientation-toggle: var(--lynx-linear-orientation-vertical);
+  --lynx-linear-orientation: vertical !important;
+  flex-direction: column !important;
+  overflow: clip scroll !important;
+}
+
+scroll-view[scroll-x], scroll-view[scroll-orientation="horizontal"] {
+  --lynx-linear-orientation-toggle: var(--lynx-linear-orientation-horizontal);
+  --lynx-linear-orientation: horizontal !important;
+  flex-direction: row !important;
+  overflow: scroll clip !important;
+}
+
+scroll-view[scroll-orientation="both"] {
+  overflow: scroll !important;
+}
+
+@supports not (overflow: clip) {
+  scroll-view[scroll-y], scroll-view[scroll-orientation="vertical"] {
+    overflow-x: hidden;
+  }
+
+  scroll-view[scroll-x], scroll-view[scroll-orientation="horizontal"] {
+    overflow-y: hidden;
+  }
+}
+
+scroll-view[scroll-y][enable-scroll="false"], scroll-view[scroll-orientation="vertical"][enable-scroll="false"] {
+  overflow-y: hidden !important;
+}
+
+scroll-view[scroll-x][enable-scroll="false"], scroll-view[scroll-orientation="horizontal"][enable-scroll="false"] {
+  overflow-x: hidden !important;
+}
+
+@supports (animation-timeline: --scroll-view-timeline) {
+  @keyframes scrollViewTopFading {
+    0% {
+      box-shadow: 0 0 #0000;
+    }
+
+    5% {
+      box-shadow: var(--scroll-view-bg-color) 0px 0px
+        var(--scroll-view-fading-edge-length)
+        var(--scroll-view-fading-edge-length);
+    }
+
+    100% {
+      box-shadow: var(--scroll-view-bg-color) 0px 0px
+        var(--scroll-view-fading-edge-length)
+        var(--scroll-view-fading-edge-length);
+    }
+  }
+
+  @keyframes scrollViewBotFading {
+    0% {
+      box-shadow: var(--scroll-view-bg-color) 0px 0px
+        var(--scroll-view-fading-edge-length)
+        var(--scroll-view-fading-edge-length);
+    }
+
+    95% {
+      box-shadow: var(--scroll-view-bg-color) 0px 0px
+        var(--scroll-view-fading-edge-length)
+        var(--scroll-view-fading-edge-length);
+    }
+
+    100% {
+      box-shadow: 0 0 #0000;
+    }
+  }
+
+  scroll-view[fading-edge-length]::part(top-fade-mask) {
+    animation-name: scrollViewTopFading;
+    top: 0;
+  }
+
+  scroll-view[fading-edge-length]::part(bot-fade-mask) {
+    animation-name: scrollViewBotFading;
+    bottom: 0;
+  }
+
+  scroll-view[fading-edge-length]::part(top-fade-mask), scroll-view[fading-edge-length]::part(bot-fade-mask) {
+    flex: none;
+    animation-duration: 1ms;
+    animation-timeline: --scroll-view-timeline;
+    display: flex;
+    left: 0;
+  }
+}
+
+scroll-view[x-enable-scrolltolower-event]::part(lower-threshold-observer), scroll-view[x-enable-scrolltoupper-event]::part(upper-threshold-observer) {
+  display: flex;
+}
+
+scroll-view[scroll-y][x-enable-scrolltolower-event]::part(lower-threshold-observer), scroll-view[scroll-orientation="vertical"][x-enable-scrolltolower-event]::part(lower-threshold-observer) {
+  flex-direction: column-reverse !important;
+}
+
+scroll-view[scroll-x][x-enable-scrolltolower-event]::part(lower-threshold-observer), scroll-view[scroll-orientation="horizontal"][x-enable-scrolltolower-event]::part(lower-threshold-observer) {
+  flex-direction: row-reverse !important;
+}
+
+x-foldview-ng {
+  overscroll-behavior: contain;
+  --foldview-header-height: 0px;
+  scrollbar-width: none;
+  display: flex;
+  overflow-x: hidden;
+  overflow-y: scroll !important;
+}
+
+x-foldview-ng::-webkit-scrollbar {
+  display: none;
+}
+
+x-foldview-ng[scroll-bar-enable] {
+  scrollbar-width: initial;
+}
+
+x-foldview-ng[scroll-bar-enable]::-webkit-scrollbar {
+  display: initial;
+}
+
+x-foldview-ng:not([scroll-bar-enable], [scroll-bar-enable="true"])::-webkit-scrollbar {
+  display: none;
+}
+
+x-foldview-ng[scroll-enable="false"] {
+  overflow-y: hidden;
+}
+
+x-foldview-ng > *, x-foldview-header-ng, x-foldview-slot-ng, x-foldview-toolbar-ng {
+  display: none;
+}
+
+x-foldview-ng > x-foldview-header-ng, x-foldview-ng > x-foldview-slot-ng, x-foldview-ng > x-foldview-toolbar-ng, x-foldview-ng > lynx-wrapper > x-foldview-header-ng, x-foldview-ng > lynx-wrapper > x-foldview-slot-ng, x-foldview-ng > lynx-wrapper > x-foldview-toolbar-ng {
+  display: flex;
+}
+
+x-foldview-toolbar-ng {
+  z-index: 1;
+  order: 1;
+  position: sticky;
+  top: 0;
+}
+
+x-foldview-header-ng {
+  flex: none;
+  order: 2;
+  width: 100%;
+  position: absolute;
+}
+
+x-foldview-ng[header-over-slot] > x-foldview-slot-ng, x-foldview-ng[header-over-slot] > lynx-wrapper > x-foldview-slot-ng {
+  z-index: 1;
+}
+
+x-foldview-slot-ng {
+  contain: strict;
+  order: 3;
+}
+
+x-foldview-slot-ng scroll-view {
+  overscroll-behavior-y: none;
+}
+
+x-viewpager-ng, x-viewpager-item-ng {
+  display: none;
+}
+
+x-viewpager-ng, x-viewpager-ng > x-viewpager-item-ng, x-viewpager-ng > lynx-wrapper > x-viewpager-item-ng {
+  display: flex;
+}
+
+x-viewpager-ng {
+  contain: content;
+  scrollbar-width: 0;
+  --lynx-linear-orientation: horizontal;
+  scroll-snap-type: x mandatory;
+  scroll-snap-stop: always;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+  overflow: scroll clip;
+}
+
+x-viewpager-ng[allow-horizontal-gesture="false"], x-viewpager-ng[enable-scroll="false"] {
+  overflow-x: hidden;
+}
+
+x-viewpager-ng::-webkit-scrollbar {
+  display: none;
+}
+
+x-viewpager-ng::part(content) {
+  scroll-snap-align: start;
+}
+
+x-viewpager-ng[bounces]::part(bounce-padding) {
+  display: flex;
+}
+
+@supports not (overflow: clip) {
+  x-viewpager-ng {
+    overflow-y: hidden;
+  }
+}
+
+x-viewpager-item-ng {
+  contain: content;
+  --flex-grow: 0;
+  --flex-shrink: 0;
+  --flex-basis: auto;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  flex: none;
+  width: 100%;
+  height: 100%;
+  position: relative !important;
+}
+
+x-viewpager-item-ng:nth-child(n+5) {
+  contain: strict;
+}
+
+x-canvas {
+  contain: strict;
+  flex-direction: column;
+}
+
+x-canvas > * {
+  display: none !important;
+}
+
+x-canvas::part(canvas) {
+  width: 100%;
+  height: 100%;
+}
+
+x-svg {
+  contain: content;
+  display: flex;
+}
+
+x-svg::part(img) {
+  width: inherit;
+  height: inherit;
+  flex: inherit;
+  min-width: inherit;
+  min-height: inherit;
+  border: inherit;
+  border-radius: inherit;
+  max-width: 100%;
+  max-height: 100%;
+  filter: inherit;
+}
+
+x-image, filter-image {
+  --justify-content: center;
+  contain: strict;
+  object-fit: fill;
+  justify-content: center;
+  align-items: center;
+  flex-direction: row !important;
+}
+
+x-image > *, filter-image > * {
+  display: none;
+}
+
+x-image[blur-radius]::part(img) {
+  --blur-radius: 0;
+  filter: blur(var(--blur-radius));
+}
+
+filter-image[blur-radius]::part(img), filter-image[drop-shadow]::part(img) {
+  --blur-radius: 0;
+  --drop-shadow: 0px 0px;
+  filter: blur(var(--blur-radius)) drop-shadow(var(--drop-shadow));
+}
+
+x-image:not([auto-size])::part(img), filter-image::part(img) {
+  object-fit: inherit;
+  flex: 0 0 100%;
+  align-self: stretch;
+  width: 100%;
+}
+
+x-image[mode="aspectFit"], filter-image[mode="aspectFit"] {
+  object-fit: contain;
+}
+
+x-image[mode="aspectFill"], filter-image[mode="aspectFill"] {
+  object-fit: cover;
+}
+
+x-image[mode="center"]:not([auto-size])::part(img), filter-image[mode="center"]::part(img) {
+  width: unset;
+  flex: unset;
+  align-self: unset;
+  margin: auto;
+  position: absolute;
+}
+
+x-image[auto-size] {
+  display: contents;
+}
+
+x-image[auto-size]::part(img) {
+  margin: inherit;
+  padding: inherit;
+  width: inherit;
+  height: inherit;
+  box-sizing: inherit;
+  flex: inherit;
+  min-width: inherit;
+  min-height: inherit;
+  border: inherit;
+  border-radius: inherit;
+  max-width: 100%;
+  max-height: 100%;
+  position: inherit;
+  top: inherit;
+  left: inherit;
+  right: inherit;
+  bottom: inherit;
+  transform: inherit;
+  opacity: inherit;
+  z-index: inherit;
+  filter: inherit;
+}
+
+x-input {
+  font-size: 14px;
+  display: contents !important;
+}
+
+x-input::part(form) {
+  display: contents;
+}
+
+x-input::part(input), x-input::part(form) {
+  box-sizing: inherit;
+  width: inherit;
+  height: inherit;
+  border: inherit;
+  border-radius: inherit;
+  align-self: inherit;
+  justify-self: inherit;
+  text-align: inherit;
+  direction: inherit;
+  caret-color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  flex: inherit;
+  background-color: inherit;
+  z-index: inherit;
+  margin: inherit;
+  padding: inherit;
+  color: inherit;
+}
+
+x-input::part(input) {
+  --placeholder-color: grey;
+  --placeholder-font-weight: normal;
+}
+
+x-input::part(input)::placeholder {
+  color: var(--placeholder-color);
+  font-family: var(--placeholder-font-family);
+  font-size: var(--placeholder-font-size, inherit);
+  font-weight: var(--placeholder-font-weight);
+}
+
+x-markdown {
+  color: inherit;
+  flex-direction: column;
+  align-items: stretch;
+  display: flex;
+}
+
+x-markdown::part(root) {
+  width: 100%;
+}
+
+x-overlay-ng::part(dialog) {
+  background: none;
+  border: 0;
+  outline: none;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+x-overlay-ng {
+  contain: strict;
+  width: 0;
+  max-width: 0;
+  max-height: 0;
+  display: contents;
+  position: fixed;
+  top: 0;
+  overflow: visible;
+}
+
+x-overlay-ng > :not(:first-child) {
+  display: none !important;
+}
+
+x-overlay-ng > :first-child, x-overlay-ng > lynx-wrapper > :first-child {
+  display: flex;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+x-overlay-ng [event-through] {
+  pointer-events: none;
+}
+
+x-overlay-ng:not([level]), x-overlay-ng[level="1"] {
+  z-index: 4;
+}
+
+x-overlay-ng[level="2"] {
+  z-index: 3;
+}
+
+x-overlay-ng[level="3"] {
+  z-index: 2;
+}
+
+x-overlay-ng[level="4"] {
+  z-index: 1;
+}
+
+x-refresh-header, x-refresh-footer {
+  display: none;
+}
+
+x-refresh-view {
+  box-sizing: border-box;
+  border-style: solid;
+  border-width: 0;
+  flex-direction: column;
+  flex-grow: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+x-refresh-view::part(container), x-refresh-view::part(content), x-refresh-view::part(slot) {
+  --lynx-display: inherit;
+}
+
+x-refresh-view:not([enable-refresh="false"]) > x-refresh-header:first-of-type {
+  scroll-snap-align: none;
+  flex-shrink: 0;
+  display: flex;
+  position: relative !important;
+}
+
+x-refresh-view[enable-refresh="false"]::part(placeholder-top) {
+  display: none;
+}
+
+x-refresh-view > x-refresh-header[x-magnet-enable]:first-of-type {
+  scroll-snap-align: start !important;
+}
+
+x-refresh-view > x-refresh-footer[x-magnet-enable]:first-of-type {
+  scroll-snap-align: end !important;
+}
+
+x-refresh-view:not([enable-loadmore="false"]) > x-refresh-footer:first-of-type {
+  scroll-snap-align: none;
+  flex-shrink: 0;
+  margin-top: auto;
+  display: flex;
+  position: relative !important;
+}
+
+x-refresh-view[enable-loadmore="false"]::part(placeholder-bot) {
+  display: none;
+}
+
+x-swiper {
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  contain: content;
+  timeline-scope: --x-swiper-item-0,
+    --x-swiper-item-1,
+    --x-swiper-item-2,
+    --x-swiper-item-3,
+    --x-swiper-item-4;
+  flex-direction: row;
+  justify-content: flex-start;
+  display: flex;
+  overflow: scroll clip;
+  flex-wrap: nowrap !important;
+}
+
+x-swiper::part(content) {
+  --page-margin: 0px;
+  --next-margin: 0px;
+  --previous-margin: 0px;
+}
+
+x-swiper, x-swiper::part(content), x-swiper::part(slot), x-swiper::part(slot-start), x-swiper::part(slot-end) {
+  --lynx-display: linear;
+  --lynx-display-toggle: var(--lynx-display-linear);
+}
+
+x-swiper > *, x-swiper > lynx-wrapper > * {
+  flex-shrink: 0;
+  flex-grow: calc(var(--lynx-linear-weight) / var(--lynx-linear-weight-sum));
+  flex-basis: var(--lynx-linear-weight-basis);
+  align-self: var(--align-self-column);
+}
+
+x-swiper::-webkit-scrollbar {
+  display: none;
+}
+
+x-swiper[vertical] {
+  scroll-snap-type: y mandatory;
+  --lynx-linear-orientation: vertical;
+  --lynx-linear-orientation-toggle: var(--lynx-linear-orientation-vertical);
+  overflow: clip scroll;
+  flex-direction: column !important;
+}
+
+x-swiper[bounces]:not([circular])::part(bounce-padding) {
+  display: initial;
+}
+
+x-swiper-item {
+  scroll-snap-align: start;
+  animation-duration: 10ms;
+  flex-shrink: 0 !important;
+  flex-grow: calc(var(--lynx-linear-weight) / var(--lynx-linear-weight-sum)) !important;
+  flex-basis: var(--lynx-linear-weight-basis) !important;
+}
+
+x-swiper-item:nth-child(n+20) {
+  contain: strict;
+  content-visibility: auto;
+}
+
+x-swiper-item:first-child {
+  view-timeline-name: --x-swiper-item-0;
+}
+
+x-swiper-item:nth-child(2) {
+  view-timeline-name: --x-swiper-item-1;
+}
+
+x-swiper-item:nth-child(3) {
+  view-timeline-name: --x-swiper-item-2;
+}
+
+x-swiper-item:nth-child(4) {
+  view-timeline-name: --x-swiper-item-3;
+}
+
+x-swiper-item:nth-child(5) {
+  view-timeline-name: --x-swiper-item-4;
+}
+
+x-swiper > :not(x-swiper-item) {
+  display: none;
+}
+
+x-swiper > x-swiper-item {
+  view-timeline-axis: inline;
+  height: 100%;
+  animation-timeline: view(inline);
+  width: calc(100% - 2 * var(--page-margin) - var(--previous-margin) - var(--next-margin)) !important;
+}
+
+x-swiper[vertical] > x-swiper-item {
+  view-timeline-axis: block;
+  width: 100%;
+  animation-timeline: view();
+  height: calc(100% - 2 * var(--page-margin) - var(--previous-margin) - var(--next-margin)) !important;
+}
+
+x-swiper[circular] {
+  scroll-snap-type: none;
+  overflow: hidden clip;
+}
+
+x-swiper[circular][vertical] {
+  overflow: clip hidden;
+}
+
+x-swiper[indicator-dots]::part(indicator-container) {
+  display: none;
+}
+
+x-swiper::part(indicator-container) {
+  --indicator-size: .6rem;
+  --indicator-container-margin: .5rem;
+  z-index: 100;
+  width: 100%;
+  height: var(--indicator-size);
+  contain: strict;
+  margin-bottom: var(--indicator-container-margin);
+  --indicator-color: #ffffff4d;
+  --indicator-active-color: white;
+  flex-direction: row;
+  justify-content: center;
+  align-items: stretch;
+  display: flex;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  overflow: clip;
+}
+
+x-swiper[vertical]::part(indicator-container) {
+  left: unset;
+  height: 100%;
+  width: var(--indicator-size);
+  margin-bottom: 0;
+  margin-right: var(--indicator-container-margin);
+  flex-direction: column;
+  top: 0;
+  right: 0;
+}
+
+x-swiper::part(indicator-item) {
+  background-color: var(--indicator-color);
+  flex: 0 0 var(--indicator-size);
+  margin: 0 calc(var(--indicator-size) / 5) 0 calc(var(--indicator-size) / 5);
+  border-radius: 100%;
+}
+
+x-swiper[vertical]::part(indicator-item) {
+  margin: calc(var(--indicator-size) / 5) 0 calc(var(--indicator-size) / 5) 0;
+}
+
+x-swiper[mode="carousel"]:not([vertical]) > x-swiper-item {
+  width: calc(80% - 2 * var(--page-margin) - var(--previous-margin) - var(--next-margin)) !important;
+}
+
+x-swiper[mode="carousel"][vertical] > x-swiper-item {
+  height: calc(80% - 2 * var(--page-margin) - var(--previous-margin) - var(--next-margin)) !important;
+}
+
+x-swiper[mode="carousel"]:not([circular]) > x-swiper-item:last-child {
+  margin-right: 20%;
+}
+
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  x-swiper[mode="carousel"]::part(content):after {
+    content: "";
+    padding-right: 20%;
+  }
+}
+
+x-swiper[mode="coverflow"]::part(content) {
+  perspective: 200px;
+}
+
+x-swiper[mode="coverflow"] > x-swiper-item {
+  scroll-snap-align: center;
+  transform-style: preserve-3d;
+  z-index: 0;
+  animation-name: x-swiper-coverflow;
+}
+
+x-swiper[mode="coverflow"]:not([vertical]) > x-swiper-item {
+  animation-name: x-swiper-coverflow-horizontal;
+  width: calc(60% - 2 * var(--page-margin) - var(--previous-margin) - var(--next-margin)) !important;
+}
+
+x-swiper[mode="coverflow"][vertical] > x-swiper-item {
+  animation-name: x-swiper-coverflow-vertical;
+  height: calc(60% - 2 * var(--page-margin) - var(--previous-margin) - var(--next-margin)) !important;
+}
+
+x-swiper[mode="coverflow"]:not([circular]):not([vertical]) > x-swiper-item:first-child {
+  margin-left: 20%;
+}
+
+x-swiper[mode="coverflow"]:not([circular]):not([vertical]) > x-swiper-item:last-child {
+  margin-right: 20%;
+}
+
+x-swiper[mode="coverflow"][vertical]:not([circular]) > x-swiper-item:first-child {
+  margin-top: 20%;
+}
+
+x-swiper[mode="coverflow"][vertical]:not([circular]) > x-swiper-item:last-child {
+  margin-bottom: 20%;
+}
+
+@keyframes x-swiper-coverflow-horizontal {
+  25% {
+    transform: rotateY(-50deg) scale(.8);
+  }
+
+  45%, 55% {
+    z-index: 1;
+    transform: rotateY(0) scale(1);
+  }
+
+  100% {
+    transform: rotateY(40deg) scale(.8);
+  }
+}
+
+@keyframes x-swiper-coverflow-vertical {
+  25% {
+    transform: rotateX(-50deg) scale(.8);
+  }
+
+  45%, 55% {
+    z-index: 1;
+    transform: rotateX(0) scale(1);
+  }
+
+  100% {
+    transform: rotateX(40deg) scale(.8);
+  }
+}
+
+x-swiper[mode="flat-coverflow"] > x-swiper-item {
+  scroll-snap-align: center;
+}
+
+x-swiper[mode="flat-coverflow"]:not([vertical]) > x-swiper-item {
+  width: 60% !important;
+}
+
+x-swiper[mode="flat-coverflow"]:not([circular]):not([vertical]) > x-swiper-item:first-child {
+  margin-left: 20%;
+}
+
+x-swiper[mode="flat-coverflow"]:not([circular]):not([vertical]) > x-swiper-item:last-child {
+  margin-right: 20%;
+}
+
+x-swiper[mode="flat-coverflow"][vertical] > x-swiper-item {
+  height: 60% !important;
+}
+
+x-swiper[mode="flat-coverflow"][vertical]:not([circular]) > x-swiper-item:first-child {
+  margin-top: 20%;
+}
+
+x-swiper[mode="flat-coverflow"][vertical]:not([circular]) > x-swiper-item:last-child {
+  margin-bottom: 20%;
+}
+
+x-swiper[mode="carry"] > x-swiper-item {
+  scroll-snap-align: center;
+  animation-name: x-swiper-carry;
+  width: 100% !important;
+}
+
+@keyframes x-swiper-carry {
+  0% {
+    transform: scale(.6);
+  }
+
+  45%, 55% {
+    z-index: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    transform: scale(.6);
+  }
+}
+
+x-textarea {
+  font-size: 14px;
+  display: contents;
+}
+
+x-textarea::part(form) {
+  display: contents;
+}
+
+x-textarea::part(textarea), x-textarea::part(form) {
+  width: inherit;
+  height: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  flex: inherit;
+  border: inherit;
+  padding: inherit;
+  margin: inherit;
+  caret-color: inherit;
+  direction: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  outline: inherit;
+  background-color: inherit;
+  color: inherit;
+}
+
+x-textarea::part(textarea) {
+  --placeholder-color: grey;
+  --placeholder-font-weight: normal;
+  --placeholder-font-family: inherit;
+  resize: none;
+}
+
+x-textarea::part(textarea)::placeholder {
+  color: var(--placeholder-color);
+  font-size: var(--placeholder-font-size, inherit);
+  font-weight: var(--placeholder-font-weight);
+  font-family: var(--placeholder-font-family);
+}
+
+x-list {
+  contain: layout;
+  scrollbar-width: none;
+  --list-item-sticky-offset: 0;
+  --list-item-span-count: 0;
+  --list-main-axis-gap: 0px;
+  --list-cross-axis-gap: 0px;
+  container-type: size;
+}
+
+x-list > :not(list-item) {
+  display: none;
+}
+
+x-list::part(content), x-list[list-type="waterfall"]::part(waterfall-content) {
+  justify-content: inherit;
+  background-color: inherit;
+  flex-wrap: nowrap;
+  flex: none;
+  flex-direction: inherit;
+  scrollbar-width: inherit;
+  scroll-snap-type: inherit;
+  scroll-snap-align: start;
+  width: 100%;
+  height: 100%;
+  overflow: inherit;
+  content-visibility: auto;
+  row-gap: inherit;
+  column-gap: inherit;
+  display: flex;
+  position: relative;
+}
+
+x-list::part(content), x-list::part(slot) {
+  --lynx-display: inherit;
+}
+
+x-list, x-list::part(content) {
+  scrollbar-width: none;
+}
+
+x-list::-webkit-scrollbar {
+  display: none;
+}
+
+x-list::part(content)::-webkit-scrollbar {
+  display: none;
+}
+
+x-list[scrollbar-enable]::part(content) {
+  scrollbar-width: initial;
+}
+
+x-list[scrollbar-enable]::part(content)::-webkit-scrollbar {
+  display: initial;
+}
+
+list-item {
+  content-visibility: auto;
+  contain: layout paint;
+  contain-intrinsic-size: none auto var(--estimated-main-axis-size-px, 100cqh);
+  display: none;
+  position: static;
+  flex: none !important;
+}
+
+list-item[recyclable="false"] {
+  content-visibility: visible;
+  contain: initial;
+}
+
+x-list[scroll-orientation="horizontal"] list-item {
+  contain-intrinsic-size: auto var(--estimated-main-axis-size-px, 100cqw) none;
+}
+
+x-list > list-item, x-list > lynx-wrapper > list-item {
+  display: flex;
+}
+
+x-list {
+  overflow: clip scroll !important;
+}
+
+x-list[scroll-orientation="horizontal"] {
+  overflow: scroll clip !important;
+}
+
+x-list[enable-scroll="false"] {
+  overflow-y: hidden !important;
+}
+
+x-list[scroll-orientation="horizontal"][enable-scroll="false"] {
+  overflow-x: hidden !important;
+}
+
+x-list[sticky="true"] list-item[sticky-top], x-list[sticky="true"] list-item[sticky-bottom] {
+  z-index: 1;
+  position: sticky;
+}
+
+x-list[sticky="true"] > list-item[sticky-top], x-list[sticky="true"] > lynx-wrapper > list-item[sticky-top] {
+  top: var(--list-item-sticky-offset);
+}
+
+x-list[sticky="true"] > list-item[sticky-bottom], x-list[sticky="true"] > lynx-wrapper > list-item[sticky-bottom] {
+  bottom: var(--list-item-sticky-offset);
+}
+
+x-list[sticky="true"][scroll-orientation="horizontal"] > list-item[sticky-top], x-list[sticky="true"][scroll-orientation="horizontal"] > lynx-wrapper > list-item[sticky-top] {
+  top: unset;
+  left: var(--list-item-sticky-offset);
+}
+
+x-list[sticky="true"][scroll-orientation="horizontal"] > list-item[sticky-bottom], x-list[sticky="true"][scroll-orientation="horizontal"] > lynx-wrapper > list-item[sticky-bottom] {
+  bottom: unset;
+  right: var(--list-item-sticky-offset);
+}
+
+x-list[item-snap], x-list[paging-enabled] {
+  scroll-snap-type: y mandatory;
+  scroll-snap-stop: always;
+}
+
+x-list[item-snap][scroll-orientation="horizontal"], x-list[paging-enabled][scroll-orientation="horizontal"] {
+  scroll-snap-type: x mandatory;
+}
+
+x-list[item-snap] > list-item, x-list[item-snap] > lynx-wrapper > list-item {
+  scroll-snap-align: start;
+}
+
+x-list[x-enable-scrolltoupper-event]::part(upper-threshold-observer), x-list[x-enable-scrolltoupperedge-event]::part(upper-threshold-observer), x-list[x-enable-scrolltolower-event]::part(lower-threshold-observer), x-list[x-enable-scrolltoloweredge-event]::part(lower-threshold-observer) {
+  display: flex;
+}
+
+x-list[x-enable-scrolltoupper-event]::part(upper-threshold-sentinel), x-list[x-enable-scrolltoupperedge-event]::part(upper-threshold-sentinel), x-list[x-enable-scrolltolower-event]::part(lower-threshold-sentinel), x-list[x-enable-scrolltoloweredge-event]::part(lower-threshold-sentinel) {
+  flex: 0 0 1px;
+}
+
+x-list[x-enable-scrolltoupper-event]::part(upper-threshold-sentinel), x-list[x-enable-scrolltoupperedge-event]::part(upper-threshold-sentinel) {
+  margin-bottom: -1px;
+}
+
+x-list[x-enable-scrolltolower-event]::part(lower-threshold-sentinel), x-list[x-enable-scrolltoloweredge-event]::part(lower-threshold-sentinel) {
+  margin-top: -1px;
+  transform: translateY(1px);
+}
+
+x-list[scroll-orientation="horizontal"][x-enable-scrolltoupper-event]::part(upper-threshold-sentinel), x-list[scroll-orientation="horizontal"][x-enable-scrolltoupperedge-event]::part(upper-threshold-sentinel) {
+  margin-bottom: 0;
+  margin-right: -1px;
+}
+
+x-list[scroll-orientation="horizontal"][x-enable-scrolltolower-event]::part(lower-threshold-sentinel), x-list[scroll-orientation="horizontal"][x-enable-scrolltoloweredge-event]::part(lower-threshold-sentinel) {
+  margin-top: 0;
+  margin-left: -1px;
+  transform: translateX(1px);
+}
+
+x-list::part(lower-threshold-observer) {
+  flex-direction: column-reverse;
+}
+
+x-list {
+  align-items: stretch;
+  row-gap: var(--list-main-axis-gap);
+  column-gap: var(--list-cross-axis-gap);
+  flex-direction: column;
+  display: flex;
+}
+
+x-list[scroll-orientation="horizontal"] {
+  row-gap: var(--list-cross-axis-gap);
+  column-gap: var(--list-main-axis-gap);
+  flex-direction: row;
+}
+
+x-list[list-type="flow"]::part(content) {
+  grid-template-columns: repeat(var(--list-item-span-count), 1fr);
+  grid-row-gap: var(--list-main-axis-gap);
+  grid-column-gap: var(--list-cross-axis-gap);
+  grid-auto-rows: min-content;
+  place-items: start stretch;
+  display: grid;
+}
+
+x-list[list-type="flow"][scroll-orientation="horizontal"]::part(content) {
+  grid-template-rows: repeat(var(--list-item-span-count), 1fr);
+  grid-row-gap: var(--list-cross-axis-gap);
+  grid-column-gap: var(--list-main-axis-gap);
+  grid-auto-columns: min-content;
+  grid-auto-flow: column;
+  place-items: stretch start;
+}
+
+x-list[list-type="flow"] list-item[full-span]:not([full-span="false"]) {
+  grid-column-start: 1;
+  grid-column-end: calc(var(--list-item-span-count) + 1);
+}
+
+x-list[list-type="flow"][scroll-orientation="horizontal"] list-item[full-span]:not([full-span="false"]) {
+  grid-row-start: 1;
+  grid-row-end: calc(var(--list-item-span-count) + 1);
+}
+
+x-list[list-type="flow"][x-enable-scrolltoupper-event]::part(upper-threshold-observer), x-list[list-type="flow"][x-enable-scrolltoupperedge-event]::part(upper-threshold-observer), x-list[list-type="flow"][x-enable-scrolltolower-event]::part(lower-threshold-observer), x-list[list-type="flow"][x-enable-scrolltoloweredge-event]::part(lower-threshold-observer) {
+  grid-column: 1 / calc(var(--list-item-span-count) + 1);
+}
+
+x-list[list-type="flow"][scroll-orientation="horizontal"][x-enable-scrolltoupper-event]::part(upper-threshold-observer), x-list[list-type="flow"][scroll-orientation="horizontal"][x-enable-scrolltoupperedge-event]::part(upper-threshold-observer), x-list[list-type="flow"][scroll-orientation="horizontal"][x-enable-scrolltolower-event]::part(lower-threshold-observer), x-list[list-type="flow"][scroll-orientation="horizontal"][x-enable-scrolltoloweredge-event]::part(lower-threshold-observer) {
+  grid-row: 1 / calc(var(--list-item-span-count) + 1);
+}
+
+x-list[list-type="waterfall"] {
+  flex-direction: column;
+  display: flex;
+}
+
+x-list[list-type="waterfall"][scroll-orientation="horizontal"] {
+  flex-direction: row;
+}
+
+x-list[list-type="waterfall"]::part(slot) {
+  visibility: hidden;
+}
+
+x-list[list-type="waterfall"] list-item {
+  width: calc((
+      100% - var(--list-cross-axis-gap) * (var(--list-item-span-count) - 1)
+    ) /
+      var(--list-item-span-count));
+  height: fit-content;
+  position: absolute;
+}
+
+x-list[list-type="waterfall"][scroll-orientation="horizontal"] list-item {
+  width: fit-content;
+  height: calc((
+      100% - var(--list-cross-axis-gap) * (var(--list-item-span-count) - 1)
+    ) /
+      var(--list-item-span-count));
+}
+
+x-list[list-type="waterfall"] list-item[full-span]:not([full-span="false"]) {
+  width: 100%;
+  height: fit-content;
+}
+
+x-list[list-type="waterfall"][scroll-orientation="horizontal"] list-item[full-span]:not([full-span="false"]) {
+  width: fit-content;
+  height: 100%;
+}
+
+x-list[list-type="waterfall"]::part(upper-threshold-observer), x-list[list-type="waterfall"]::part(lower-threshold-observer) {
+  position: absolute;
+}
+
+x-list[list-type="waterfall"]::part(lower-threshold-observer) {
+  bottom: -999px;
+}
+
+x-list[list-type="waterfall"][scroll-orientation="horizontal"]::part(lower-threshold-observer) {
+  bottom: unset;
+  right: -999px;
+}
+
+x-webview {
+  flex-direction: column;
+  display: flex;
+  overflow: hidden;
+}
+
+
+
