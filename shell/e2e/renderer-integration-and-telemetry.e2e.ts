@@ -109,6 +109,17 @@ for (const config of CONFIGS) {
       await page.goto(`/?renderer=${config.rendererUrl}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
 
+      // Verify actual styles, not just readable DOM text: broken CSS bundles can
+      // leave the form functional while displaying browser-default controls.
+      const styledFrame = page.frameLocator('iframe.preview-iframe');
+      await expect(styledFrame.locator('body')).toHaveCSS(
+        'font-family',
+        'Arial, Helvetica, sans-serif',
+      );
+      const searchButton = styledFrame.getByRole('button', {name: 'Search Cars'});
+      await expect(searchButton).toHaveCSS('border-radius', '24px');
+      await expect(searchButton).toHaveCSS('background-color', 'rgb(63, 81, 181)');
+
       await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
       await page.locator('.raw-messages-container .message-envelope').first().hover({trial: true});
       const envelopes = page.locator(
@@ -250,6 +261,17 @@ for (const config of CONFIGS) {
       const searchButton = iframe.getByRole('button', {name: 'Search Cars'});
       await expect(searchButton).toBeVisible();
       await searchButton.click();
+
+      // Content taller than the docked preview must scroll inside the iframe,
+      // rather than placing its controls underneath the debug panel.
+      await expect
+        .poll(() =>
+          page.locator('iframe.preview-iframe').evaluate(frame => {
+            const panel = frame.closest('a2ui-composer-rendered-frame')!;
+            return frame.getBoundingClientRect().bottom - panel.getBoundingClientRect().bottom;
+          }),
+        )
+        .toBeLessThanOrEqual(1);
 
       // Verify Event tab notification badge
       const eventsTab = page.locator('.dv-tab', {hasText: /^Events/});

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import '../../shared/basic-catalog.css';
 import {bootstrapLitSandbox} from 'a2ui-bridge/lit';
 import {basicCatalog} from '@a2ui/lit/v0_9';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
