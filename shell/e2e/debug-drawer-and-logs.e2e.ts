@@ -42,12 +42,14 @@ test.beforeEach(async ({page}) => {
   });
 
   await page.addInitScript(() => {
-    localStorage.clear();
-    localStorage.setItem('a2ui_composer_force_1p', 'true');
-    localStorage.setItem(
-      'a2ui_composer_allowed_origins',
-      JSON.stringify(['http://custom-renderer.com']),
-    );
+    if (window === window.top) {
+      localStorage.clear();
+      localStorage.setItem('a2ui_composer_force_1p', 'true');
+      localStorage.setItem(
+        'a2ui_composer_allowed_origins',
+        JSON.stringify(['http://custom-renderer.com']),
+      );
+    }
   });
   await page.goto('/?renderer=http://custom-renderer.com/index.html');
 });

@@ -72,8 +72,8 @@ const CONFIGS: IntegrationConfig[] = [
     fillDate: async (locator, value) => {
       await locator.evaluate((el: HTMLInputElement, val) => {
         el.value = val;
-        el.dispatchEvent(new Event('input', {bubbles: true}));
-        el.dispatchEvent(new Event('change', {bubbles: true}));
+        el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
       }, value);
     },
   },
@@ -253,11 +253,13 @@ test.beforeEach(async ({page}) => {
   });
 
   await page.addInitScript(() => {
-    localStorage.setItem('a2ui_composer_force_1p', 'true');
-    localStorage.setItem(
-      'a2ui_composer_allowed_origins',
-      JSON.stringify(['http://custom-renderer.com']),
-    );
+    if (window === window.top) {
+      localStorage.setItem('a2ui_composer_force_1p', 'true');
+      localStorage.setItem(
+        'a2ui_composer_allowed_origins',
+        JSON.stringify(['http://custom-renderer.com']),
+      );
+    }
   });
 });
 

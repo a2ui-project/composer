@@ -86,7 +86,9 @@ test.describe('E2E Workspace User Journey', () => {
 
   test('prevents empty chat bubbles when invalid JSON is entered in editor', async ({page}) => {
     await page.addInitScript(() => {
-      localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
+      if (window === window.top) {
+        localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
+      }
     });
     await page.goto('/');
 
