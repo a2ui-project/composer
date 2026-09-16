@@ -18,19 +18,38 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
   overflow: hidden;
+  background-color: var(--cpk-page-bg);
+  font-family: var(--cpk-font-body, 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif);
+  color: var(--cpk-text-primary, #010507);
 }
 
 .composer-header {
-  position: relative;
-  z-index: 2;
   flex-shrink: 0;
-  background-color: var(--mat-sys-surface-container);
-  color: var(--mat-sys-on-surface);
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
-  --mat-toolbar-container-background-color: var(--mat-sys-surface-container);
-  --mat-toolbar-container-text-color: var(--mat-sys-on-surface);
+  gap: 4px;
+  height: 64px;
+  padding: 0 16px;
+  background-color: var(--cpk-surface);
+  color: var(--cpk-text-primary);
+  border-bottom: 1px solid var(--cpk-border);
 }
+
+.header-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--cpk-font-body);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+
+.reset-session-button {
+  flex-shrink: 0;
+}
+
 .spacer {
   flex: 1 1 auto;
 }
@@ -39,7 +58,11 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
   display: flex;
+  background-color: var(--cpk-page-bg);
+  --mat-sidenav-container-background-color: transparent;
 
   > ::ng-deep .mat-drawer {
     position: relative !important;
@@ -55,14 +78,13 @@
 }
 
 .composer-sidenav {
-  width: 250px;
-  background-color: var(--mat-sys-surface-container);
-  border-right: 1px solid var(--mat-sys-outline-variant);
+  width: 232px;
+  background-color: var(--cpk-surface);
+  border-right: 1px solid var(--cpk-border);
   --mat-sidenav-container-shape: 0px;
   --mat-drawer-container-shape: 0px;
   border-radius: 0;
-  --mat-sidenav-background-color: var(--mat-sys-surface-container);
-  transition: width 200ms ease-in-out;
+  transition: width 160ms ease;
 
   ::ng-deep .mat-drawer-inner-container {
     border-radius: 0;
@@ -71,10 +93,10 @@
   }
 
   mat-nav-list {
-    padding: 8px;
+    padding: 12px 8px;
 
     a[mat-list-item] {
-      border-radius: 28px;
+      border-radius: 12px;
       margin-bottom: 4px;
 
       &.active-nav-item {
@@ -89,7 +111,7 @@
   }
 
   &.collapsed {
-    width: 64px;
+    width: 72px;
 
     a[mat-list-item] {
       padding: 16px;
@@ -115,4 +137,26 @@
 
 .theme-toggle-button {
   margin-left: 8px;
+}
+
+@media (max-width: 600px) {
+  .composer-header {
+    padding: 0 8px;
+    gap: 0;
+  }
+
+  .header-title {
+    font-size: 14px;
+  }
+
+  .hamburger-button,
+  .theme-toggle-button {
+    margin: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-sidenav {
+    transition: none;
+  }
 }

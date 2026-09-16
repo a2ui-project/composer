@@ -108,6 +108,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(renderedFrame).toBeVisible();
     const iframe = renderedFrame.locator('iframe');
     await expect(iframe).toBeVisible();
+    await iframe.evaluate(el => el.setAttribute('data-test-marker', 'persistent-preview'));
 
     // 10. Click copy to clipboard and assert clipboard content represents a JSON array envelope
     const copyButton = page.getByRole('button', {name: /copy/i});
@@ -186,6 +187,7 @@ test.describe('Components Gallery User Journey', () => {
 
     // Assert that the marker is still present, proving the DOM element was reused in-place
     await expect(detailsPanel).toHaveAttribute('data-test-marker', 'in-place-verify');
+    await expect(iframe).toHaveAttribute('data-test-marker', 'persistent-preview');
 
     // Take screenshot for verification
     const screenshotBuffer = await page.screenshot();
@@ -193,5 +195,64 @@ test.describe('Components Gallery User Journey', () => {
       body: screenshotBuffer,
       contentType: 'image/png',
     });
+  });
+
+  test('keeps tall renderer controls inside the preview card and reachable', async ({page}) => {
+    await page.goto('/?renderer=http://localhost:3456');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await page.getByRole('link', {name: 'Components Gallery'}).click();
+
+    const preview = page.frameLocator('.preview-card iframe');
+    await expect(preview.locator('body')).toBeVisible();
+    await preview.locator('body').evaluate(body => {
+      const content = document.createElement('div');
+      content.style.cssText = 'min-height:700px;display:flex;align-items:flex-end';
+      const button = document.createElement('button');
+      button.textContent = 'Tall preview action';
+      button.addEventListener('click', () => (button.textContent = 'Action completed'));
+      content.append(button);
+      body.append(content);
+    });
+
+    const frame = page.locator('.preview-card iframe');
+    await expect
+      .poll(async () => (await frame.boundingBox())?.height ?? 0)
+      .toBeGreaterThanOrEqual(700);
+    await expect
+      .poll(async () => {
+        const cardBounds = await page.locator('.preview-card').boundingBox();
+        const frameBounds = await frame.boundingBox();
+        if (!cardBounds || !frameBounds) return -1;
+        return cardBounds.y + cardBounds.height - frameBounds.y - frameBounds.height;
+      })
+      .toBeGreaterThanOrEqual(0);
+
+    await page.locator('.gallery-content').evaluate(el => {
+      const card = el.querySelector('.preview-card')!;
+      el.scrollTop += card.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom;
+    });
+    const action = preview.getByRole('button', {name: 'Tall preview action'});
+    await expect(action).toBeInViewport();
+    await action.click();
+    await expect(preview.getByRole('button', {name: 'Action completed'})).toBeVisible();
+  });
+
+  test('keeps the gallery beside its drawer when shell navigation changes width', async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 820, height: 800});
+    await page.goto('/?renderer=http://localhost:3456');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await page.getByRole('link', {name: 'Components Gallery'}).click();
+    const toggle = page.getByRole('button', {name: 'Toggle sidenav'});
+    await toggle.click();
+    await expect(page.locator('.gallery-sidenav')).toHaveCSS('width', '144px');
+    await page.setViewportSize({width: 830, height: 800});
+    await expect
+      .poll(() => page.locator('.gallery-content').evaluate(el => el.style.marginLeft))
+      .toBe('144px');
+    await toggle.click();
+    await expect(page.locator('.gallery-sidenav')).toHaveCSS('width', '208px');
+    await expect(page.locator('.gallery-content')).toHaveCSS('margin-left', '208px');
   });
 });
