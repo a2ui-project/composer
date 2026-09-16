@@ -40,7 +40,7 @@
   --a2ui-line-height-body: 1.5;
   --a2ui-card-padding: 24px;
   --a2ui-card-border-radius: 24px;
-  --a2ui-card-border: 1px solid var(--a2ui-color-border);
+  --a2ui-card-border: none;
   --a2ui-card-margin: 0;
   --a2ui-card-box-shadow: none;
   --a2ui-button-padding: 10px 18px;
