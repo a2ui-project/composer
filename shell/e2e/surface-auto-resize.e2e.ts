@@ -89,9 +89,6 @@ const MIN_GROWTH_FACTOR = 3;
 /** Budget for the frame to follow a payload change, in milliseconds. */
 const RESIZE_POLL_TIMEOUT_MS = 10_000;
 
-/** Floor from `.rendered-frame-container` in rendered-frame.scss, in pixels. */
-const MIN_FRAME_HEIGHT_PX = 280;
-
 /** Allowance for sub-pixel rounding between guest and host measurements. */
 const FRAME_HEIGHT_TOLERANCE_PX = 2;
 
@@ -143,7 +140,7 @@ test.describe('Surface Auto-Resize & Height Latch Prevention', () => {
         .frameLocator('iframe.preview-iframe')
         .locator('body')
         .evaluate(() => document.body.scrollHeight);
-      const expectedHeight = Math.max(MIN_FRAME_HEIGHT_PX, guestContentHeight);
+      const expectedHeight = guestContentHeight;
       const finalHeight = await frameHeight();
       expect(
         Math.abs(finalHeight - expectedHeight),
