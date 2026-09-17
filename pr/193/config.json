@@ -1,7 +1,7 @@
 {
   "renderers": {
     "default": {
-      "rendererUrl": "https://a2ui-project.github.io/composer/samples/ng-basic-catalog/",
+      "rendererUrl": "https://a2ui-project.github.io/composer/pr/193/samples/ng-basic-catalog/",
       "displayName": "Angular Basic (github)"
     },
     "angular-dev": {
@@ -9,7 +9,7 @@
       "displayName": "Angular Basic (local)"
     },
     "lit": {
-      "rendererUrl": "https://a2ui-project.github.io/composer/samples/lit-basic-catalog/",
+      "rendererUrl": "https://a2ui-project.github.io/composer/pr/193/samples/lit-basic-catalog/",
       "displayName": "Lit Basic (github)"
     },
     "lit-dev": {
@@ -17,7 +17,7 @@
       "displayName": "Lit Basic (local)"
     },
     "react": {
-      "rendererUrl": "https://a2ui-project.github.io/composer/samples/react-basic-catalog/",
+      "rendererUrl": "https://a2ui-project.github.io/composer/pr/193/samples/react-basic-catalog/",
       "displayName": "React Basic (github)"
     },
     "react-dev": {
