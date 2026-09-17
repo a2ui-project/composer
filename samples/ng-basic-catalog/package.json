@@ -14,7 +14,7 @@
   "dependencies": {
     "@a2ui/angular": "0.10.4",
     "@a2ui/markdown-it": "0.1.0",
-    "@a2ui/web_core": "0.10.5",
+    "@a2ui/web_core": "0.10.6",
     "@angular/animations": "22.0.7",
     "@angular/common": "22.0.7",
     "@angular/compiler": "22.0.7",

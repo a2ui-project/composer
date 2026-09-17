@@ -19,6 +19,20 @@
   [style.height]="frameHeightPx() ?? '100%'"
   [style.min-height]="frameHeightPx()"
 >
+  @if (lynxBundleUrl(); as bundleUrl) {
+    <div class="artifact-toolbar">
+      <span>Lynx Web preview</span>
+      <a
+        class="artifact-download"
+        [href]="bundleUrl"
+        download="a2ui.lynx.js"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Download mobile bundle
+      </a>
+    </div>
+  }
   @if (safeRendererUrl()) {
     <iframe
       #previewIframe

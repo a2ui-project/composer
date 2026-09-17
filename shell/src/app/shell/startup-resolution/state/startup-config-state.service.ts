@@ -16,6 +16,12 @@
 
 import {Injectable, computed, signal} from '@angular/core';
 
+/** Build artifacts exposed for a renderer integration. */
+export declare interface RendererArtifacts {
+  /** Downloadable bundle for embedding the rendered surface in a Lynx mobile host. */
+  lynxBundleUrl?: string;
+}
+
 /**
  * Represents the configuration options for an application renderer.
  */
@@ -26,6 +32,8 @@ export declare interface RendererConfig {
   name?: string;
   apiKey?: string;
   samplePayload?: string;
+  /** Optional platform-specific artifacts generated alongside the browser preview. */
+  artifacts?: RendererArtifacts;
 }
 
 /**

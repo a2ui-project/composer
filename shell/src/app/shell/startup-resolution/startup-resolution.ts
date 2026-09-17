@@ -54,6 +54,7 @@ export class StartupResolution {
   readonly apiKeys = this.startupConfigState.apiKeys;
   readonly sharedA2uiPayload = this.startupConfigState.sharedA2uiPayload;
   readonly sharedA2uiError = this.startupConfigState.sharedA2uiError;
+  readonly activeRenderer = this.startupConfigState.activeRenderer;
 
   private readonly destroyRef = inject(DestroyRef);
 

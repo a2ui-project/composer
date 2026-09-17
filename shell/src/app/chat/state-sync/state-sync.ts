@@ -16,7 +16,7 @@
 
 import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
-import {of} from 'rxjs';
+import {of, Subject} from 'rxjs';
 import {debounceTime, distinctUntilChanged, filter, skip} from 'rxjs/operators';
 import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
@@ -56,11 +56,12 @@ export class StateSync {
   // payload containing the active surface setup, component hierarchy,
   // and data models currently rendered on the preview canvas.
   //
-  // We maintain separate signals for `_activeDraft` and `_draftInput`
+  // We maintain separate state and event channels for `_activeDraft` and
+  // `draftInput$`
   // to prevent feedback loops when syncing with LLM chat history:
   // - `_activeDraft` is the source of truth for active editor/preview
   //   UI bindings, updating instantly.
-  // - `_draftInput` is an event trigger used to debounce and sync
+  // - `draftInput$` is an event trigger used to debounce and sync
   //   user edits back to the history. LLM-initiated edits update
   //   `_activeDraft` directly, bypassing history sync.
   private previousCatalogId: string | null = null;
@@ -72,9 +73,24 @@ export class StateSync {
    */
   readonly activeDraft = this._activeDraft.asReadonly();
 
-  private readonly _draftInput = signal<string>('');
+  private readonly draftInput$ = new Subject<string>();
 
   constructor() {
+    this.draftInput$
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe((val: string) => {
+        this.syncLayoutToHistory(val);
+      });
+
+    // App initialization may resolve the renderer before this service is created.
+    // Hydrate its sample immediately; renderers without a sample keep the
+    // existing catalog-handshake initialization path.
+    const initialSample = this.startupConfigState.activeRenderer()?.samplePayload;
+    if (initialSample) {
+      this._activeDraft.set(initialSample);
+      this.draftInput$.next(initialSample);
+    }
+
     toObservable(this.startupConfigState.selectedRendererId)
       .pipe(skip(1), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
@@ -95,7 +111,7 @@ export class StateSync {
         if ((isInitialHandshake || isCatalogChange) && !this.isDraftModified) {
           const initial = this.getInitialDraft(catalogId);
           this._activeDraft.set(initial);
-          this._draftInput.set(initial);
+          this.draftInput$.next(initial);
         }
 
         this.previousCatalogId = catalogId;
@@ -113,12 +129,6 @@ export class StateSync {
       .subscribe((payload: string) => {
         this.injectExternalDraft(payload);
       });
-
-    toObservable(this._draftInput)
-      .pipe(skip(1), debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
-      .subscribe((val: string) => {
-        this.syncLayoutToHistory(val);
-      });
   }
 
   /**
@@ -128,7 +138,7 @@ export class StateSync {
   updateDraft(value: string): void {
     this.isDraftModified = true;
     this._activeDraft.set(value);
-    this._draftInput.set(value);
+    this.draftInput$.next(value);
   }
 
   /**
@@ -137,7 +147,7 @@ export class StateSync {
   injectExternalDraft(value: string): void {
     this.isDraftModified = true;
     this._activeDraft.set(value);
-    this._draftInput.set(value);
+    this.draftInput$.next(value);
   }
 
   /**
@@ -172,7 +182,7 @@ export class StateSync {
     }
     const initial = this.getInitialDraft(catalogId);
     this._activeDraft.set(initial);
-    this._draftInput.set(initial);
+    this.draftInput$.next(initial);
   }
 
   private getInitialDraft(catalogId: string): string {

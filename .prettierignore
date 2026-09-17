@@ -23,5 +23,6 @@ coverage
 **/coverage
 **/coverage/**
 **/.angular/
+**/.lynx-dist/
 **/test-results/
 **/playwright-report/**

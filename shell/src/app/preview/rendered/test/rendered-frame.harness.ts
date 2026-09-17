@@ -20,6 +20,7 @@ export class RenderedFrameHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-rendered-frame';
 
   protected getIframeElement = this.locatorForOptional('iframe');
+  protected getArtifactDownloadElement = this.locatorForOptional('.artifact-download');
 
   async hasIframe(): Promise<boolean> {
     const iframe = await this.getIframeElement();
@@ -35,5 +36,10 @@ export class RenderedFrameHarness extends ComponentHarness {
   async isLocked(): Promise<boolean> {
     const container = await this.locatorFor('.rendered-frame-container')();
     return await container.hasClass('is-locked');
+  }
+
+  async getArtifactDownloadHref(): Promise<string | null> {
+    const link = await this.getArtifactDownloadElement();
+    return link?.getAttribute('href') ?? null;
   }
 }

@@ -49,14 +49,19 @@ describe('RenderedFrame Live Preview Viewport', () => {
   let startupResolutionServiceMock: Partial<StartupResolution>;
   let hostCommunicationServiceMock: Partial<HostCommunication>;
   let resolvedUrlSignal: WritableSignal<string | null>;
+  let activeRendererSignal: WritableSignal<{
+    artifacts?: {lynxBundleUrl?: string};
+  } | null>;
   let themePreferenceSignal: WritableSignal<ThemePreference>;
   let chatStateMock: MockChatState;
 
   beforeEach(async () => {
     resolvedUrlSignal = signal('http://localhost:3000/renderer');
+    activeRendererSignal = signal(null);
     themePreferenceSignal = signal<ThemePreference>(ThemePreference.LIGHT);
     startupResolutionServiceMock = {
       resolvedUrl: resolvedUrlSignal,
+      activeRenderer: activeRendererSignal,
     };
 
     const messageStreamSignal = signal(null);
@@ -107,6 +112,21 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(await harness.getIframeSrc()).toBe(
       'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
     );
+  });
+
+  it('shows the mobile bundle download for a Lynx renderer', async () => {
+    activeRendererSignal.set({
+      artifacts: {lynxBundleUrl: '/samples/lynx-basic-catalog/a2ui.lynx.js'},
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getArtifactDownloadHref()).toBe(
+      '/samples/lynx-basic-catalog/a2ui.lynx.js',
+    );
+  });
+
+  it('hides the mobile bundle download for renderers without artifacts', async () => {
+    expect(await harness.getArtifactDownloadHref()).toBeNull();
   });
 
   it('registers the iframe element with HostCommunication upon view initialization', () => {

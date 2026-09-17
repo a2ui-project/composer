@@ -22,6 +22,7 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
+      '**/.lynx-dist/**',
       '**/coverage/**',
       '**/.angular/**',
       '**/node_modules/**',
