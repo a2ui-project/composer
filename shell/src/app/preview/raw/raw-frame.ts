@@ -118,6 +118,23 @@ export class RawFrame {
         ) {
           this.clearWatchdog();
         }
+
+        if (envelope?.type === PreviewBridgeMessageType.RENDER_ERROR) {
+          if (!this.isLocked() && !this.hasActiveSchemaErrors && !this.isJsonInvalid()) {
+            const errorMessage =
+              (envelope.payload as {error?: {message?: string}})?.error?.message ??
+              (envelope as {error?: {message?: string}})?.error?.message ??
+              'Renderer validation error';
+            this.snackBar.open(`Render error: ${errorMessage}`, 'Dismiss', {
+              duration: 5000,
+              panelClass: 'schema-error-snackbar',
+            });
+          }
+        } else if (envelope?.type === PreviewBridgeMessageType.RENDER_SUCCESS) {
+          if (!this.hasActiveSchemaErrors && !this.isJsonInvalid()) {
+            this.snackBar.dismiss();
+          }
+        }
       });
 
     // Initialize backing editor layout state Signal dynamically from the volatile session cache
@@ -226,7 +243,7 @@ export class RawFrame {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((payload: unknown[]) => {
-        if (payload.length === 0 || this.hasActiveSchemaErrors) {
+        if (payload.length === 0) {
           this.clearWatchdog();
           return;
         }
@@ -249,7 +266,8 @@ export class RawFrame {
   }
 
   protected onMarkersChange(markers: editor.IMarker[]): void {
-    if (markers.some(m => m.severity === 8 || m.severity === 4)) {
+    const hasErrors = markers.some(m => m.severity === 8 || m.severity === 4);
+    if (hasErrors) {
       this.clearWatchdog();
       this.hasActiveSchemaErrors = true;
     } else {
@@ -377,6 +395,7 @@ export class RawFrame {
     if (this.isLocked()) {
       return;
     }
+
     let line = this.lastSyntaxError?.line;
     let column = this.lastSyntaxError?.column;
 
