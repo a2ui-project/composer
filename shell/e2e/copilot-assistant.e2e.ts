@@ -97,6 +97,7 @@ async function openEditedGalleryExampleInWorkspace(page: Page): Promise<void> {
   await expect(
     page.frameLocator('.workspace-container iframe').getByText(GALLERY_TEXT),
   ).toBeVisible();
+  await expect.poll(() => readRawDraft(page)).toContain(GALLERY_TEXT);
 }
 
 async function readRawDraft(page: Page): Promise<string> {
@@ -284,6 +285,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
       'aria-checked',
       'false',
     );
+    await expect(page.getByRole('menuitem', {name: 'Attach files'})).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(add).toBeFocused();
 
