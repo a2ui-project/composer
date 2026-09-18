@@ -1199,6 +1199,31 @@ describe('Gallery Component', () => {
     expect(await harness.getDraftText()).toContain('Edited');
     expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
   });
+
+  it('still edits properties when the catalog declares no schema for the component', async () => {
+    // `resolveComponentPropertiesSchema` returns `{}` for a component the catalog does not
+    // describe, so the property controls must fall back to the draft values rather than
+    // failing to render.
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'custom://unresolved',
+      components: {Notice: {type: 'object'}},
+    });
+    catalogServiceMock.selectedComponentKey.set('Notice');
+    catalogServiceMock.selectedComponentProperties.set([
+      {name: 'text', type: 'string', description: '', required: false},
+    ]);
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Notice', text: 'Initial'}],
+    });
+    expect(() => fixture.detectChanges()).not.toThrow();
+
+    await harness.editProperty('text', 'Edited');
+    expect(JSON.parse(await harness.getDraftText()).components[0]).toMatchObject({
+      text: 'Edited',
+    });
+    expect(await harness.getDraftError()).toBeNull();
+  });
+
   it('preserves native number, boolean and enum values in supported property controls', async () => {
     catalogManagementMock.activeCatalog.set({
       catalogId: 'custom://controls',

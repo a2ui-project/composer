@@ -82,6 +82,18 @@ export class ChatPromptFactoryService {
   ${formatJson(COMMON_TYPES_SCHEMA)}
   \`\`\`
 
+  ## Editing the Current UI
+
+  When a current editor A2UI snapshot is provided, it is the authoritative UI
+  being edited. Use its actual surface IDs, component IDs, and data bindings;
+  never borrow IDs or paths from the illustrative examples below. For literal
+  Text values, emit updateComponents with the edited component and its existing
+  properties. Use updateDataModel only for values bound to that surface's model.
+  Preserve unrelated components and update all labels affected by the request
+  (for example, a destination's airport code, city label, and route heading).
+  For edits, emit updates to existing surfaces. For a replacement UI, emit a
+  complete document beginning with createSurface before its updates.
+
   ## Output Format: Strict A2UI JSON Lines (JSONL)
 
   Your output MUST be valid **A2UI JSON Lines (JSONL)**:

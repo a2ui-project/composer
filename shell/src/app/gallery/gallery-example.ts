@@ -83,6 +83,9 @@ function matchesSimpleSchema(value: unknown, schema: CatalogComponentSchema): bo
     return false;
   if ('const' in schema && JSON.stringify(schema['const']) !== JSON.stringify(value)) return false;
   const type = schema['type'];
+  if (Array.isArray(type)) {
+    return type.some(option => matchesSimpleSchema(value, {...schema, ['type']: option}));
+  }
   if (type === 'string' && typeof value !== 'string') return false;
   if (type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) return false;
   if (type === 'integer' && (typeof value !== 'number' || !Number.isInteger(value))) return false;

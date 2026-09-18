@@ -170,6 +170,92 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     }
   });
 
+  it('renders native CopilotKit prose from ChatState and clears it on a new session', async () => {
+    expect(await harness.hasCopilotChatView()).toBe(true);
+    chatStateMock.chatHistory.set([
+      {role: MessageRole.SYSTEM, content: 'Private system instructions'},
+      {role: MessageRole.USER, content: 'Make this clearer', promptId: 'prompt-1'},
+      {role: MessageRole.MODEL, content: 'I can help with that.'},
+    ]);
+    fixture.detectChanges();
+    expect(await harness.getCopilotMessageRoles()).toEqual(['user', 'assistant']);
+    expect(await harness.getBubblesText()).toEqual(['Make this clearer', 'I can help with that.']);
+    chatStateMock.chatHistory.set([]);
+    fixture.detectChanges();
+    expect(await harness.getBubblesText()).toEqual([]);
+    expect(await harness.hasWelcomeNotice()).toBe(true);
+    chatStateMock.chatHistory.set([{role: MessageRole.USER, content: 'Start a different layout'}]);
+    fixture.detectChanges();
+    expect(await harness.getBubblesText()).toEqual(['Start a different layout']);
+  });
+
+  it('keeps malformed model JSON out of prose while retaining parser recovery', async () => {
+    const invalid = '{"version":"v0.9","updateComponents": BROKEN}';
+    chatStateMock.chatHistory.set([
+      {
+        role: MessageRole.MODEL,
+        content: invalid,
+        parseError: {error: 'Unexpected token'},
+        isRetryable: true,
+        originalPrompt: 'Update my layout',
+      },
+    ]);
+    fixture.detectChanges();
+    const text = (await harness.getBubblesText()).join(' ');
+    expect(text).not.toContain(invalid);
+    expect(text).toContain('Unexpected token');
+    expect(await harness.hasParseErrorAction()).toBe(true);
+    await harness.clickRetryButtonAt(0);
+    expect(chatServiceMock.submitPrompt).toHaveBeenCalledWith('Update my layout', [], {
+      retryOfPromptId: undefined,
+    });
+  });
+
+  it('keeps partial JSON in a pending canvas card and surfaces its final parser failure', async () => {
+    const partial = '{"vers';
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    chatStateMock.chatHistory.set([{role: MessageRole.MODEL, content: partial}]);
+    fixture.detectChanges();
+    expect(await harness.getBubblesText()).toEqual(['Updating the canvas…']);
+    expect(await harness.hasStopButton()).toBe(true);
+    chatStateMock.isProgrammaticStreamActive.set(false);
+    chatStateMock.chatHistory.set([
+      {role: MessageRole.MODEL, content: partial, parseError: {error: 'Incomplete response'}},
+    ]);
+    fixture.detectChanges();
+    const text = (await harness.getBubblesText()).join(' ');
+    expect(text).not.toContain(partial);
+    expect(text).not.toContain('components in this canvas');
+    expect(text).toContain('Incomplete response');
+    expect(await harness.hasParseErrorAction()).toBe(true);
+  });
+
+  it('restores the authoritative conversation on a route remount without duplicating messages', async () => {
+    chatStateMock.chatHistory.set([
+      {role: MessageRole.USER, content: 'Continue the selected canvas'},
+      {role: MessageRole.MODEL, content: 'Here is the next revision.'},
+    ]);
+    fixture.detectChanges();
+    fixture.destroy();
+    fixture = TestBed.createComponent(ChatPanel);
+    fixture.detectChanges();
+    harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ChatPanelHarness);
+    expect(await harness.getBubblesText()).toEqual([
+      'Continue the selected canvas',
+      'Here is the next revision.',
+    ]);
+    expect(await harness.getCopilotMessageRoles()).toEqual(['user', 'assistant']);
+    expect(chatServiceMock.submitPrompt).not.toHaveBeenCalled();
+  });
+
+  it('does not submit with Enter before the selected renderer handshake completes', async () => {
+    catalogManagementServiceMock.activeCatalog.set(null);
+    await harness.setPromptText('Change the selected layout');
+    await harness.pressKeyOnPrompt('Enter');
+    expect(chatServiceMock.submitPrompt).not.toHaveBeenCalled();
+    expect(await harness.getPromptText()).toBe('Change the selected layout');
+  });
+
   it(
     'renders the chat panel shell along with empty history welcome ' + 'text correctly',
     async () => {
@@ -180,7 +266,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       expect(bubbles.length).toBe(0);
 
       expect(await harness.hasWelcomeNotice()).toBe(true);
-      expect(await harness.getWelcomeNoticeText()).toContain('Ask Gemini to shape your layout');
+      expect(await harness.getWelcomeNoticeText()).toContain('Build on your canvas');
     },
   );
 
@@ -221,12 +307,12 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       expect(bubbleTypes[0]).toBe('human-text');
 
       // Bubble 2: Layout snapshot block
-      expect(bubbleHeaders[1]).toBe('Canvas Revision Snapshot');
-      expect(bubbles[1]).toBe('Received 1 A2UI JSON Components');
+      expect(bubbleHeaders[1]).toBe('Canvas snapshot');
+      expect(bubbles[1]).toBe('1 component in this canvas');
       expect(bubbleTypes[1]).toBe('layout-snapshot');
 
       // Bubble 3: Model response turn
-      expect(bubbleHeaders[2]).toBe('Gemini AI');
+      expect(bubbleHeaders[2]).toBe('Assistant');
       expect(bubbles[2]).toBe('I have successfully updated the layout configurations.');
       expect(bubbleTypes[2]).toBe('model-response');
     },
@@ -249,7 +335,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     expect(bubbles.length).toBe(1);
     expect(bubbleTypes[0]).toBe('layout-snapshot');
-    expect(bubbles[0]).toBe('Received 2 A2UI JSON Components');
+    expect(bubbles[0]).toBe('2 components in this canvas');
   });
 
   it('classifies turns containing preamble text and ```jsonl code blocks as layout snapshots', async () => {
@@ -269,7 +355,33 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     expect(bubbles.length).toBe(1);
     expect(bubbleTypes[0]).toBe('layout-snapshot');
-    expect(bubbles[0]).toBe('Received 1 A2UI JSON Components');
+    expect(bubbles[0]).toBe('1 component in this canvas');
+  });
+
+  it('counts the single Text component without counting surface or data commands in snapshots', async () => {
+    const content = [
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's1',
+          components: [{id: 'root', component: 'Text', text: 'A single component'}],
+        },
+      },
+      {version: 'v0.9', updateDataModel: {surfaceId: 's1', path: '/', value: {}}},
+    ]
+      .map(command => JSON.stringify(command))
+      .join('\n');
+    chatStateMock.chatHistory.set([
+      {role: MessageRole.USER, content},
+      {role: MessageRole.MODEL, content},
+    ]);
+    fixture.detectChanges();
+
+    expect(await harness.getBubblesText()).toEqual([
+      '1 component in this canvas',
+      '1 component in this canvas',
+    ]);
   });
 
   it('does not classify plain text messages mentioning "version" as layout snapshots', async () => {
@@ -365,6 +477,26 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     expect(bubbles.length).toBe(2);
   });
 
+  it('counts only well-formed update blocks when a payload omits its components array', async () => {
+    // A partially healed model response can carry an `updateComponents` block with no
+    // `components` array. `isRenderA2uiItem` must drop it before the count is taken.
+    const malformedArray = JSON.stringify([
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
+      {version: 'v0.9', updateComponents: {surfaceId: 's1'}},
+      {version: 'v0.9', updateComponents: {surfaceId: 's1', components: null}},
+      {
+        version: 'v0.9',
+        updateComponents: {surfaceId: 's1', components: [{id: 'c1', component: 'Button'}]},
+      },
+    ]);
+
+    chatStateMock.chatHistory.set([{role: MessageRole.MODEL, content: malformedArray}]);
+    expect(() => fixture.detectChanges()).not.toThrow();
+
+    const bubbles = await harness.getBubblesText();
+    expect(bubbles[0]).toBe('1 component in this canvas');
+  });
+
   it('classifies formatted multi-line JSON arrays as layout snapshots and calculates component counts', async () => {
     const formattedArray = JSON.stringify(
       [
@@ -399,7 +531,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     expect(bubbles.length).toBe(1);
     expect(bubbleTypes[0]).toBe('layout-snapshot');
-    expect(bubbles[0]).toBe('Received 3 A2UI JSON Components');
+    expect(bubbles[0]).toBe('2 components in this canvas');
   });
 
   it('renders snapshot badges instead of text bubbles for streaming partial JSON arrays during streaming', async () => {
@@ -420,8 +552,8 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     expect(bubbles.length).toBe(1);
     expect(bubbleTypes[0]).toBe('layout-snapshot');
-    expect(bubbles[0]).toContain('Received');
-    expect(bubbles[0]).toContain('A2UI JSON Components');
+    expect(bubbles[0]).toContain('component');
+    expect(bubbles[0]).toContain('in this canvas');
     expect(bubbles[0]).not.toContain(partialArray);
   });
 
@@ -441,7 +573,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     expect(bubbles.length).toBe(1);
     expect(bubbleTypes[0]).toBe('layout-snapshot');
-    expect(bubbles[0]).toBe('Received 1 A2UI JSON Components');
+    expect(bubbles[0]).toBe('1 component in this canvas');
   });
 
   it('ignores prose text brackets when extracting JSON content for snapshot classification', async () => {
@@ -461,7 +593,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     expect(bubbles.length).toBe(1);
     expect(bubbleTypes[0]).toBe('layout-snapshot');
-    expect(bubbles[0]).toBe('Received 1 A2UI JSON Components');
+    expect(bubbles[0]).toBe('1 component in this canvas');
   });
 
   it(
@@ -635,19 +767,17 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       // Milestone 2: Received Raw
       chatStateMock.pipelineStatus.set(PipelineStatus.RECEIVED_RAW);
       fixture.detectChanges();
-      expect(await harness.getLoadingOverlayText()).toBe('Received A2UI JSON.');
+      expect(await harness.getLoadingOverlayText()).toBe('Preparing your canvas…');
 
       // Milestone 3: Validation checks running
       chatStateMock.pipelineStatus.set(PipelineStatus.VALIDATING);
       fixture.detectChanges();
-      expect(await harness.getLoadingOverlayText()).toBe('Validating A2UI JSON catalog schemas...');
+      expect(await harness.getLoadingOverlayText()).toBe('Checking your layout…');
 
       // Milestone 4: Self-repair auto-healing active
       chatStateMock.pipelineStatus.set(PipelineStatus.HEALING);
       fixture.detectChanges();
-      expect(await harness.getLoadingOverlayText()).toBe(
-        'Fixing A2UI JSON (Self-repair loop active)...',
-      );
+      expect(await harness.getLoadingOverlayText()).toBe('Repairing the layout…');
 
       // Milestone 5: Layout Ready (overlay is hidden, inputs are active)
       chatStateMock.pipelineStatus.set(PipelineStatus.READY);

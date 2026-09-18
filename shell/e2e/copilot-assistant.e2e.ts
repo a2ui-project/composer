@@ -1,0 +1,369 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {expect, test} from '@playwright/test';
+import type {Page} from '@playwright/test';
+import type {RenderA2uiItem} from 'a2ui-bridge';
+import {
+  FAKE_GEMINI_API_KEY,
+  geminiTextChunk,
+  getCapturedGeminiRequests,
+  installGeminiFixture,
+  setGeminiScenarios,
+  splitTextIntoGeminiChunks,
+} from './helpers/gemini-fixture';
+
+const GALLERY_TEXT = 'Ready to use from my selected catalog';
+const MODEL_TEXT = 'Updated by deterministic Gemini fixture';
+const RECOVERY_TEXT = 'Recovered by deterministic Gemini fixture';
+
+const pageErrors = new WeakMap<Page, string[]>();
+
+test.beforeEach(async ({page}) => {
+  pageErrors.set(page, []);
+  page.on('pageerror', err => {
+    pageErrors.get(page)?.push(err.message);
+  });
+
+  await installGeminiFixture(page);
+  await page.route('**/config.json', async route => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        renderers: {
+          default: {
+            rendererUrl: 'http://localhost:3456',
+          },
+        },
+        apiKeys: {
+          default: {
+            displayName: 'E2E fake Gemini key',
+            apiKey: FAKE_GEMINI_API_KEY,
+          },
+        },
+      }),
+    });
+  });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    localStorage.setItem('a2ui_composer_force_3p', 'true');
+    localStorage.removeItem('a2ui_composer_force_1p');
+  });
+});
+
+test.afterEach(async ({page}) => {
+  expect(pageErrors.get(page)).toEqual([]);
+});
+
+async function openEditedGalleryExampleInWorkspace(page: Page): Promise<void> {
+  await page.goto('/?renderer=http://localhost:3456');
+  await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+  await page.getByRole('link', {name: 'Components Gallery'}).click();
+  await page.locator('.catalog-list').getByRole('button', {name: 'Text', exact: true}).click();
+
+  const textInput = page.getByRole('textbox', {name: 'text', exact: true});
+  await expect(textInput).toBeVisible();
+  await textInput.fill(GALLERY_TEXT);
+
+  const galleryPreview = page.frameLocator('.preview-card iframe');
+  await expect(galleryPreview.getByText(GALLERY_TEXT, {exact: true})).toBeVisible();
+
+  await page.getByRole('button', {name: 'Open in Composer', exact: true}).click();
+  await page.waitForURL(url => !url.pathname.endsWith('/gallery') && url.hash.includes('a2ui='));
+  const selectedRenderer = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('renderer');
+  if (selectedRenderer) {
+    expect(new URL(selectedRenderer).origin).toBe('http://localhost:3456');
+  }
+  await expect(page.locator('.workspace-container')).toBeVisible();
+  await expect(
+    page.frameLocator('.workspace-container iframe').getByText(GALLERY_TEXT),
+  ).toBeVisible();
+}
+
+async function readRawDraft(page: Page): Promise<string> {
+  return await page.evaluate(() => {
+    const monaco = (window as unknown as {monaco?: {editor?: {getModels?: () => unknown[]}}})
+      .monaco;
+    const model = monaco?.editor?.getModels?.()[0] as {getValue?: () => string} | undefined;
+    return model?.getValue?.() || '';
+  });
+}
+
+function replaceDraftText(draft: string, from: string, to: string): string {
+  const updated = draft.replaceAll(from, to);
+  expect(updated).not.toBe(draft);
+  return updated;
+}
+
+function chatHistory(page: Page) {
+  return page.locator('.chat-history-log, [data-testid="copilot-chat-history"]').first();
+}
+
+function parseErrorCard(page: Page) {
+  return page.locator('.parse-error-card, [data-testid="parse-error-card"]').first();
+}
+
+interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+function parseCssColor(value: string): RgbColor | null {
+  const match = value.match(/rgba?\(([^)]+)\)/);
+  if (!match) return null;
+  const parts = match[1]
+    .split(',')
+    .map(part => part.trim())
+    .map(Number);
+  if (parts.length < 3 || parts.some(Number.isNaN)) return null;
+  return {r: parts[0], g: parts[1], b: parts[2], a: parts[3] ?? 1};
+}
+
+function luminanceChannel(channel: number): number {
+  const normalized = channel / 255;
+  return normalized <= 0.03928 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
+}
+
+function contrastRatio(foreground: RgbColor, background: RgbColor): number {
+  const foregroundLuminance =
+    0.2126 * luminanceChannel(foreground.r) +
+    0.7152 * luminanceChannel(foreground.g) +
+    0.0722 * luminanceChannel(foreground.b);
+  const backgroundLuminance =
+    0.2126 * luminanceChannel(background.r) +
+    0.7152 * luminanceChannel(background.g) +
+    0.0722 * luminanceChannel(background.b);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+async function expectReadableUserMessageContrast(page: Page, theme: 'light' | 'dark') {
+  const colors = await page.evaluate(() => {
+    const textElement = document.querySelector('a2ui-composer-chat-panel .composer-user-text');
+    if (!textElement) throw new Error('Unable to locate rendered user message text.');
+
+    const textStyle = getComputedStyle(textElement);
+    let backgroundElement: Element | null = textElement;
+    let background = 'rgba(0, 0, 0, 0)';
+    while (backgroundElement) {
+      const candidate = getComputedStyle(backgroundElement).backgroundColor;
+      if (!candidate.endsWith(', 0)') && candidate !== 'transparent') {
+        background = candidate;
+        break;
+      }
+      backgroundElement = backgroundElement.parentElement;
+    }
+    return {color: textStyle.color, background};
+  });
+
+  const foreground = parseCssColor(colors.color);
+  const background = parseCssColor(colors.background);
+  expect(foreground, `${theme} user message foreground should be an rgb color`).not.toBeNull();
+  expect(background, `${theme} user message background should be an rgb color`).not.toBeNull();
+  expect(
+    contrastRatio(foreground!, background!),
+    `${theme} user message text/background contrast`,
+  ).toBeGreaterThanOrEqual(4.5);
+}
+
+async function expectDarkFeatherGradientHasNoWhiteStop(page: Page) {
+  const featherStyles = await page.evaluate(() => {
+    const featherElements = Array.from(
+      document.querySelectorAll('a2ui-composer-chat-panel copilot-chat-view-feather > div'),
+    );
+    if (!featherElements.length) {
+      throw new Error('Unable to locate CopilotKit feather gradient element.');
+    }
+    return featherElements.map(element => {
+      const style = getComputedStyle(element);
+      return [
+        style.backgroundImage,
+        style.getPropertyValue('--tw-gradient-from'),
+        style.getPropertyValue('--tw-gradient-via'),
+        style.getPropertyValue('--tw-gradient-to'),
+      ].join(' ');
+    });
+  });
+
+  const whiteStopPattern =
+    /(?:^|[^\d])(?:#fff(?:fff)?|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\)|rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*(?:1|0?\.\d+)\s*\))/i;
+  expect(featherStyles.some(style => whiteStopPattern.test(style))).toBe(false);
+}
+
+async function submitPrompt(page: Page, prompt: string): Promise<void> {
+  await page.getByLabel('Chat prompt').fill(prompt);
+  await page.getByRole('button', {name: 'Send prompt'}).click();
+}
+
+async function expectGeminiRequestForCurrentDraft(page: Page, expectedDraftText: string) {
+  const requests = await getCapturedGeminiRequests(page);
+  expect(requests).toHaveLength(1);
+  const request = requests[0];
+  expect(request.url).toContain('/v1beta/models/gemini-3.5-flash:streamGenerateContent');
+  expect(request.url).toContain('alt=sse');
+  expect(request.headers['x-goog-api-key']).toBe(FAKE_GEMINI_API_KEY);
+  const bodyText = JSON.stringify(request.body);
+  expect(bodyText).toContain(expectedDraftText);
+  expect(bodyText).toContain('my_basic_catalog');
+  expect(bodyText).toContain('thinkingConfig');
+  return request;
+}
+
+test.describe('Copilot assistant replacement browser journey', () => {
+  test('uses selected gallery draft context to update the workspace preview', async ({page}) => {
+    await openEditedGalleryExampleInWorkspace(page);
+    const originalDraft = await readRawDraft(page);
+    expect(originalDraft).toContain(GALLERY_TEXT);
+    const updatedDraft = replaceDraftText(originalDraft, GALLERY_TEXT, MODEL_TEXT);
+
+    await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(updatedDraft)}]);
+    await submitPrompt(
+      page,
+      'Change the selected Text component copy to the deterministic fixture text.',
+    );
+
+    await expect(
+      page.frameLocator('.workspace-container iframe').getByText(MODEL_TEXT),
+    ).toBeVisible();
+    await expect(chatHistory(page)).toContainText('1 component in this canvas');
+    await expect.poll(() => readRawDraft(page)).toContain(MODEL_TEXT);
+    await expectGeminiRequestForCurrentDraft(page, GALLERY_TEXT);
+    await expectReadableUserMessageContrast(page, 'light');
+
+    await page.getByRole('button', {name: 'Switch to dark theme'}).click();
+    await expect(page.locator('body')).toHaveClass(/dark-theme/);
+    await expectReadableUserMessageContrast(page, 'dark');
+    await expectDarkFeatherGradientHasNoWhiteStop(page);
+  });
+
+  test('keeps the last valid draft after an invalid reply and recovers on the next prompt', async ({
+    page,
+  }) => {
+    await openEditedGalleryExampleInWorkspace(page);
+    const originalDraft = await readRawDraft(page);
+    const recoveredDraft = replaceDraftText(originalDraft, GALLERY_TEXT, RECOVERY_TEXT);
+
+    await setGeminiScenarios(page, [
+      {chunks: [geminiTextChunk('{"version":"v0.9","updateComponents": BROKEN}')]},
+    ]);
+    await submitPrompt(page, 'Return an invalid response for the deterministic fixture.');
+
+    await expect(parseErrorCard(page)).toBeVisible();
+    await expect(
+      page.frameLocator('.workspace-container iframe').getByText(GALLERY_TEXT),
+    ).toBeVisible();
+    await expect.poll(() => readRawDraft(page)).toBe(originalDraft);
+    await expectGeminiRequestForCurrentDraft(page, GALLERY_TEXT);
+
+    await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(recoveredDraft)}]);
+    await submitPrompt(page, 'Recover with valid A2UI JSON for the same selected draft.');
+
+    await expect(
+      page.frameLocator('.workspace-container iframe').getByText(RECOVERY_TEXT),
+    ).toBeVisible();
+    await expect.poll(() => readRawDraft(page)).toContain(RECOVERY_TEXT);
+    await expectGeminiRequestForCurrentDraft(page, GALLERY_TEXT);
+  });
+
+  test('rejects unknown surfaces and applies a valid incremental edit without losing the draft', async ({
+    page,
+  }) => {
+    await openEditedGalleryExampleInWorkspace(page);
+    const originalDraft = await readRawDraft(page);
+    const messages: RenderA2uiItem[] = JSON.parse(originalDraft);
+    const components = messages.find(message => message.updateComponents)?.updateComponents;
+    const target = components?.components.find(
+      (component): component is Record<string, unknown> =>
+        component !== null &&
+        typeof component === 'object' &&
+        !Array.isArray(component) &&
+        'text' in component &&
+        component.text === GALLERY_TEXT,
+    );
+    if (!components || !target)
+      throw new Error('Expected the selected Text component in the draft.');
+    await setGeminiScenarios(page, [
+      {
+        chunks: [
+          geminiTextChunk(
+            JSON.stringify({
+              version: 'v0.9',
+              updateDataModel: {
+                surfaceId: 'vacation_booking',
+                path: '/destination_value',
+                value: 'SF',
+              },
+            }),
+          ),
+        ],
+      },
+    ]);
+    await submitPrompt(page, 'Edit the selected canvas');
+    await expect(chatHistory(page)).toContainText('Validation Failure');
+    await expect.poll(() => readRawDraft(page)).toBe(originalDraft);
+    await expectGeminiRequestForCurrentDraft(page, GALLERY_TEXT);
+
+    await setGeminiScenarios(page, [
+      {
+        chunks: [
+          geminiTextChunk(
+            JSON.stringify({
+              version: 'v0.9',
+              updateComponents: {
+                surfaceId: components.surfaceId,
+                components: [{...target, text: MODEL_TEXT}],
+              },
+            }),
+          ),
+        ],
+      },
+    ]);
+    await submitPrompt(page, 'Update the selected text');
+    await expect(
+      page.frameLocator('.workspace-container iframe').getByText(MODEL_TEXT, {exact: true}),
+    ).toBeVisible();
+    await expect.poll(() => readRawDraft(page)).toContain('createSurface');
+    await expectGeminiRequestForCurrentDraft(page, GALLERY_TEXT);
+  });
+
+  test('stops an active stream without committing partial model output', async ({page}) => {
+    await openEditedGalleryExampleInWorkspace(page);
+    const originalDraft = await readRawDraft(page);
+
+    await setGeminiScenarios(page, [
+      {
+        chunks: [geminiTextChunk('[{"version":"v0.9"')],
+        delayMs: 50,
+        hangAfterChunks: true,
+      },
+    ]);
+    await submitPrompt(page, 'Start a long-running deterministic fixture response.');
+
+    await expect(page.getByRole('button', {name: 'Stop generating'})).toBeVisible();
+    await page.getByRole('button', {name: 'Stop generating'}).click();
+
+    await expect(chatHistory(page)).toContainText('You stopped this response');
+    await expect(
+      page.frameLocator('.workspace-container iframe').getByText(GALLERY_TEXT),
+    ).toBeVisible();
+    await expect.poll(() => readRawDraft(page)).toBe(originalDraft);
+    await expectGeminiRequestForCurrentDraft(page, GALLERY_TEXT);
+  });
+});

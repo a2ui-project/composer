@@ -26,6 +26,15 @@ import {
 } from '@angular/core';
 import {FileIngestionService, AttachedFile} from '../file-ingestion/file-ingestion.service';
 import {FormsModule} from '@angular/forms';
+import {
+  CopilotChatView,
+  CopilotChatMessageView,
+  CopilotChatUserMessage,
+  CopilotChatAssistantMessage,
+  CopilotChatUserMessageCopyButton,
+  CopilotChatAssistantMessageCopyButton,
+  provideCopilotChatLabels,
+} from '@copilotkit/angular';
 import {MatButtonModule} from '@angular/material/button';
 import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -39,7 +48,7 @@ import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-captur
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
-import {parseAndHealJsonLines} from '../a2ui-payload-parser/a2ui-payload-parser';
+import {isRenderA2uiItem, parseAndHealJsonLines} from '../a2ui-payload-parser/a2ui-payload-parser';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 import {ChatCoordinator} from '../chat-coordinator/chat-coordinator';
 import {ChatState} from '../chat-state/chat-state';
@@ -68,12 +77,15 @@ export class AutoScroll {
   }
 }
 
-/**
- * Displays the interactive Gemini chat dialogue drawer within the Composer
- * shell. Visualizes conversational bubble histories list, loading Overlay
- * milestone Spinners, and handles prompt dispatches with lockout editing
- * controls.
- */
+interface PresentedTurn extends LlmMessage {
+  id: string;
+  isSnapshot: boolean;
+  isStreaming: boolean;
+  componentCount: number | null;
+  displayContent: string;
+}
+
+/** Controlled CopilotKit presentation of Composer's conversation and generation actions. */
 @Component({
   selector: 'a2ui-composer-chat-panel',
   standalone: true,
@@ -87,7 +99,14 @@ export class AutoScroll {
     MatDialogModule,
     RouterLink,
     AutoScroll,
+    CopilotChatView,
+    CopilotChatMessageView,
+    CopilotChatUserMessage,
+    CopilotChatAssistantMessage,
+    CopilotChatUserMessageCopyButton,
+    CopilotChatAssistantMessageCopyButton,
   ],
+  providers: [provideCopilotChatLabels({welcomeMessageText: 'Build on your canvas'})],
   templateUrl: './chat-panel.ng.html',
   styleUrl: './chat-panel.scss',
 })
@@ -147,61 +166,88 @@ export class ChatPanel {
    * Reactively computed visible logs history turns log list excluding
    * system specs.
    */
-  protected readonly visibleChatHistory = computed<
-    Array<LlmMessage & {isSnapshot: boolean; isStreaming?: boolean; componentCount?: number | null}>
-  >(() => {
-    return this.chatState
-      .chatHistory()
-      .filter(
-        m =>
-          m.role !== MessageRole.SYSTEM &&
-          (!!m.content?.trim() ||
-            (m.attachments && m.attachments.length > 0) ||
-            !!m.thinking ||
-            m.role === MessageRole.ERROR),
+  protected readonly visibleChatHistory = computed<PresentedTurn[]>(() => {
+    const history = this.chatState.chatHistory();
+    return history.flatMap((message, index) => {
+      if (
+        message.role === MessageRole.SYSTEM ||
+        (!message.content?.trim() &&
+          !message.attachments?.length &&
+          !message.thinking &&
+          message.role !== MessageRole.ERROR)
       )
-      .map(m => {
-        const isStreaming =
-          m.role === MessageRole.MODEL && this.chatState.isProgrammaticStreamActive();
-        const cleaned = m.content ? this.chatCleaner.cleanPayload(m.content) : '';
-        const parseResult = cleaned ? parseAndHealJsonLines(cleaned) : null;
-        let isSnapshot = false;
-        if (m.content && parseResult && parseResult.success) {
-          isSnapshot = !parseResult.isConversational;
-        }
-        if (isSnapshot && m.content) {
-          return {
-            ...m,
-            isSnapshot: true,
-            isStreaming: !!isStreaming,
-            componentCount: parseResult?.success ? parseResult.count : 0,
-          };
-        }
-        return {
-          ...m,
-          isSnapshot: false,
-          isStreaming: !!isStreaming,
-          componentCount: null,
-        };
-      });
+        return [];
+
+      const isStreaming =
+        message.role === MessageRole.MODEL && index === history.length - 1 && this.isLocked();
+      const cleaned = message.content ? this.chatCleaner.cleanPayload(message.content) : '';
+      const parsed = cleaned ? parseAndHealJsonLines(cleaned) : null;
+      const isLayout =
+        message.role !== MessageRole.ERROR &&
+        ((parsed?.success && !parsed.isConversational) ||
+          this.chatCleaner.isLayoutSnapshot(message.content) ||
+          (message.role === MessageRole.MODEL && isStreaming && /^\s*[\[{]/.test(cleaned)));
+      const parseError =
+        message.parseError ||
+        (message.role === MessageRole.MODEL && isLayout && !isStreaming && parsed && !parsed.success
+          ? parsed
+          : undefined);
+      const isSnapshot = !!isLayout && !parseError;
+      const componentCount =
+        isSnapshot && parsed?.success
+          ? parsed.blocks
+              .filter(isRenderA2uiItem)
+              .reduce((count, block) => count + (block.updateComponents?.components.length ?? 0), 0)
+          : null;
+      const displayContent = parseError
+        ? 'This response could not update the canvas.'
+        : isSnapshot
+          ? isStreaming
+            ? 'Updating the canvas…'
+            : `${componentCount ?? 0} ${componentCount === 1 ? 'component' : 'components'} in this canvas`
+          : message.content || '';
+      return [
+        {
+          ...message,
+          id: `${message.promptId || 'turn'}-${index}`,
+          isSnapshot,
+          isStreaming,
+          componentCount,
+          parseError,
+          displayContent,
+        },
+      ];
+    });
   });
+
+  // These are read-only projections. Composer owns history, retries, and the active stream.
+  protected readonly chatMessages = computed<ReturnType<CopilotChatView['messages']>>(() =>
+    this.visibleChatHistory().map(turn => ({
+      id: turn.id,
+      role: turn.role === MessageRole.USER ? 'user' : 'assistant',
+      content: turn.displayContent,
+    })),
+  );
+  protected readonly turnsById = computed(
+    () => new Map(this.visibleChatHistory().map(turn => [turn.id, turn])),
+  );
 
   /** Reactively resolved milestones overlay text badges maps. */
   protected readonly pipelineStatusText = computed<string>(() => {
     const status = this.pipelineStatus();
     switch (status) {
       case PipelineStatus.RECEIVING_STREAM:
-        return 'Receiving A2UI JSON stream...';
+        return 'Updating your canvas…';
       case PipelineStatus.RECEIVED_RAW:
-        return 'Received A2UI JSON.';
+        return 'Preparing your canvas…';
       case PipelineStatus.VALIDATING:
-        return 'Validating A2UI JSON catalog schemas...';
+        return 'Checking your layout…';
       case PipelineStatus.HEALING:
-        return 'Fixing A2UI JSON (Self-repair loop active)...';
+        return 'Repairing the layout…';
       case PipelineStatus.READY:
-        return 'Raw A2UI JSON is ready.';
+        return 'Your canvas is ready.';
       case PipelineStatus.FAILED:
-        return 'A2UI JSON validation failed.';
+        return 'The layout needs attention.';
       default:
         return '';
     }
@@ -217,7 +263,13 @@ export class ChatPanel {
   }): Promise<void> {
     const textVal = this.userPrompt().trim();
     const attachments = [...this.attachedFiles()];
-    if ((!textVal && attachments.length === 0) || this.isLocked()) {
+    if (
+      (!textVal && attachments.length === 0) ||
+      this.isLocked() ||
+      this.isReadingFiles() ||
+      this.isChatDisabled() ||
+      !this.isHandshakeComplete()
+    ) {
       return;
     }
 
@@ -279,11 +331,9 @@ export class ChatPanel {
   /**
    * Classifies dialogue turn bubbles mapping semantic CSS layout classes.
    */
-  protected getBubbleClass(message: LlmMessage): string {
+  protected getBubbleClass(message: PresentedTurn): string {
     if (message.role === MessageRole.USER) {
-      return message.content && this.chatCleaner.isLayoutSnapshot(message.content)
-        ? 'bubble-user bubble-layout'
-        : 'bubble-user bubble-text';
+      return message.isSnapshot ? 'bubble-user bubble-layout' : 'bubble-user bubble-text';
     }
     if (message.role === MessageRole.MODEL) {
       return 'bubble-model';

@@ -35,6 +35,24 @@ export class ChatPanelHarness extends ComponentHarness {
     MatButtonHarness.with({selector: '.stop-button'}),
   );
 
+  /** Confirms the controlled CopilotKit view is the visible chat surface. */
+  async hasCopilotChatView(): Promise<boolean> {
+    return (await this.locatorForOptional('copilot-chat-view')()) !== null;
+  }
+
+  /** Reads the actual CopilotKit message primitives rendered for conversational turns. */
+  async getCopilotMessageRoles(): Promise<string[]> {
+    const messages = await this.locatorForAll('[data-message-role]')();
+    return Promise.all(
+      messages.map(async message => (await message.getAttribute('data-message-role')) || ''),
+    );
+  }
+
+  /** Checks the parser recovery action without accessing the fixture DOM. */
+  async hasParseErrorAction(): Promise<boolean> {
+    return (await this.locatorForOptional('.parse-error-card button')()) !== null;
+  }
+
   async getBubblesText(): Promise<string[]> {
     const bubbles = await this.locatorForAll('.bubble-body')();
     return Promise.all(bubbles.map(b => b.text()));
@@ -147,7 +165,7 @@ export class ChatPanelHarness extends ComponentHarness {
    * Checks if the welcome empty state card notice is shown.
    */
   async hasWelcomeNotice(): Promise<boolean> {
-    const notice = await this.locatorForOptional('.empty-state-notice')();
+    const notice = await this.locatorForOptional('[data-testid="copilot-welcome-screen"]')();
     return notice !== null;
   }
 
@@ -155,7 +173,7 @@ export class ChatPanelHarness extends ComponentHarness {
    * Retrieves the empty state card welcome notice text content.
    */
   async getWelcomeNoticeText(): Promise<string | null> {
-    const notice = await this.locatorForOptional('.empty-state-notice')();
+    const notice = await this.locatorForOptional('[data-testid="copilot-welcome-screen"]')();
     if (!notice) return null;
     return notice.text();
   }
@@ -224,23 +242,18 @@ export class ChatPanelHarness extends ComponentHarness {
   }
 
   async hasErrorDetailsAt(index: number): Promise<boolean> {
-    const selector = `.chat-bubble-container:nth-child(${index + 1}) .error-details`;
-    const details = await this.locatorForOptional(selector)();
-    return details !== null;
+    const turns = await this.locatorForAll(ChatTurnHarness)();
+    return turns[index].hasErrorDetails();
   }
 
   async getErrorDetailsTextAt(index: number): Promise<string | null> {
-    const selector = `.chat-bubble-container:nth-child(${index + 1}) .error-details pre`;
-    const pre = await this.locatorForOptional(selector)();
-    if (!pre) return null;
-    return pre.text();
+    const turns = await this.locatorForAll(ChatTurnHarness)();
+    return turns[index].getErrorDetailsText();
   }
 
   async toggleErrorDetailsAt(index: number): Promise<void> {
-    const selector = `.chat-bubble-container:nth-child(${index + 1}) .error-details summary`;
-    const summary = await this.locatorForOptional(selector)();
-    if (!summary) throw new Error(`Error details summary not found for bubble ${index}.`);
-    await summary.click();
+    const turns = await this.locatorForAll(ChatTurnHarness)();
+    await turns[index].toggleErrorDetails();
   }
 
   async isRedactedTextItalicizedAt(index: number): Promise<boolean> {
@@ -290,5 +303,22 @@ export class ChatPanelHarness extends ComponentHarness {
     const btn = await this.getScreenshotToggleButton();
     if (!btn) throw new Error('Screenshot toggle button not found.');
     await btn.click();
+  }
+}
+
+class ChatTurnHarness extends ComponentHarness {
+  static hostSelector = '.chat-bubble-container';
+
+  async hasErrorDetails(): Promise<boolean> {
+    return (await this.locatorForOptional('.error-details')()) !== null;
+  }
+
+  async getErrorDetailsText(): Promise<string | null> {
+    const details = await this.locatorForOptional('.error-details pre')();
+    return details ? details.text() : null;
+  }
+
+  async toggleErrorDetails(): Promise<void> {
+    await (await this.locatorFor('.error-details summary')()).click();
   }
 }
