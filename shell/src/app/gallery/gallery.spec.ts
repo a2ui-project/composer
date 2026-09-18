@@ -23,6 +23,8 @@ import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ReplaySubject} from 'rxjs';
 import {Clipboard} from '@angular/cdk/clipboard';
 import {Gallery} from './gallery';
+import {GalleryLauncher} from './gallery-launcher';
+import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {GalleryHarness} from './test/gallery.harness';
 import {GalleryCatalog, CategorizedComponents} from './services/gallery-catalog';
 import {PreviewBridgeMessageType, type ComponentUsage} from 'a2ui-bridge';
@@ -93,9 +95,11 @@ describe('Gallery Component', () => {
   let catalogServiceMock: MockGalleryCatalogService;
   let catalogManagementMock: MockCatalogManagement;
   let hostCommunicationMock: MockHostCommunication;
+  const launcher = {open: vi.fn<GalleryLauncher['open']>().mockResolvedValue()};
   let mockClipboard: {copy: ReturnType<typeof vi.fn>};
 
   beforeEach(async () => {
+    launcher.open.mockClear();
     mockClipboard = {copy: vi.fn().mockReturnValue(true)};
 
     await TestBed.configureTestingModule({
@@ -110,6 +114,7 @@ describe('Gallery Component', () => {
         {provide: ChatState, useClass: MockChatState},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
         {provide: Clipboard, useValue: mockClipboard},
+        {provide: GalleryLauncher, useValue: launcher},
       ],
     }).compileComponents();
 
@@ -314,29 +319,19 @@ describe('Gallery Component', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('logs an error when building A2UI payload throws an error', async () => {
+  it('reports clipboard exceptions without losing the valid preview', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.spyOn(
-      fixture.componentInstance as unknown as Record<string, () => unknown>,
-      'buildA2UIPayload',
-    ).mockImplementation(() => {
-      throw new Error('Formatting error');
-    });
-
     catalogServiceMock.selectedComponentKey.set('Text');
-    catalogServiceMock.selectedComponentPreset.set({usage: []});
-    catalogServiceMock.selectedComponentUsage.set('[]');
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     fixture.detectChanges();
-
-    try {
-      await harness.clickCopyButton();
-    } catch (e) {}
-
+    mockClipboard.copy.mockImplementation(() => {
+      throw new Error('Clipboard unavailable');
+    });
+    await harness.clickCopyButton();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Failed to parse or format A2UI usage payload: ',
       expect.any(Error),
     );
-
     consoleErrorSpy.mockRestore();
   });
 
@@ -415,7 +410,6 @@ describe('Gallery Component', () => {
     fixture.detectChanges();
     TestBed.tick();
 
-    // Since 'Column' is in the default mock catalog, it should wrap it
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith([
       {
         version: 'v0.9',
@@ -428,22 +422,13 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [
-            {
-              id: 'root',
-              component: 'Column',
-              align: 'center',
-              justify: 'center',
-              children: ['target'],
-            },
-            {id: 'target', component: 'Text'},
-          ],
+          components: [{id: 'root', component: 'Text'}],
         },
       },
     ]);
   });
 
-  it('does not wrap in Column layout if Column is not defined in the catalog', async () => {
+  it('normalizes a legacy target-only example without requiring a Column in the catalog', async () => {
     catalogManagementMock.activeCatalog.set({
       catalogId: 'https://a2ui.org/custom_catalog.json',
       components: {
@@ -501,16 +486,7 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [
-            {
-              id: 'root',
-              component: 'Column',
-              align: 'center',
-              justify: 'center',
-              children: ['target'],
-            },
-            {id: 'target', component: 'TextField'},
-          ],
+          components: [{id: 'root', component: 'TextField'}],
         },
       },
       {
@@ -523,7 +499,7 @@ describe('Gallery Component', () => {
     ]);
   });
 
-  it('wraps the component in Column layout using the exact casing defined in the catalog (e.g. coLuMn)', async () => {
+  it('does not infer layout behavior from a catalog component named coLuMn', async () => {
     catalogManagementMock.activeCatalog.set({
       catalogId: 'https://a2ui.org/custom_catalog.json',
       components: {
@@ -548,16 +524,7 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [
-            {
-              id: 'root',
-              component: 'coLuMn',
-              align: 'center',
-              justify: 'center',
-              children: ['target'],
-            },
-            {id: 'target', component: 'Text'},
-          ],
+          components: [{id: 'root', component: 'Text'}],
         },
       },
     ]);
@@ -697,16 +664,7 @@ describe('Gallery Component', () => {
       version: 'v0.9',
       updateComponents: {
         surfaceId: 'gallery-preview',
-        components: [
-          {
-            id: 'root',
-            component: 'Column',
-            align: 'center',
-            justify: 'center',
-            children: ['target'],
-          },
-          ...usageText,
-        ],
+        components: [{...usageText[0], id: 'root'}],
       },
     };
     const expectedTextPayload = [expectedTextLine1, expectedTextLine2];
@@ -724,16 +682,7 @@ describe('Gallery Component', () => {
       version: 'v0.9',
       updateComponents: {
         surfaceId: 'gallery-preview',
-        components: [
-          {
-            id: 'root',
-            component: 'Column',
-            align: 'center',
-            justify: 'center',
-            children: ['target'],
-          },
-          ...usageButton,
-        ],
+        components: [{...usageButton[0], id: 'root'}],
       },
     };
     const expectedButtonPayload = [expectedTextLine1, expectedButtonLine2];
@@ -741,7 +690,7 @@ describe('Gallery Component', () => {
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledWith(expectedButtonPayload);
   });
 
-  it('normalizes root and target IDs in custom component usages when wrapping in Column layout', async () => {
+  it('preserves authored root IDs and internal child references', async () => {
     catalogManagementMock.activeCatalog.set({
       catalogId: 'https://a2ui.org/default_catalog.json',
       components: {
@@ -772,14 +721,7 @@ describe('Gallery Component', () => {
         updateComponents: {
           surfaceId: 'gallery-preview',
           components: [
-            {
-              id: 'root',
-              component: 'Column',
-              align: 'center',
-              justify: 'center',
-              children: ['target'],
-            },
-            {id: 'target', component: 'Card', children: ['header']},
+            {id: 'root', component: 'Card', children: ['header']},
             {id: 'header', component: 'Text', text: 'Hello'},
           ],
         },
@@ -787,17 +729,14 @@ describe('Gallery Component', () => {
     ]);
   });
 
-  it('builds A2UI payload array using buildA2UIPayload helper method', () => {
+  it('dispatches a complete example payload with bound data', () => {
     const preset = {
       usage: [{id: 'target', component: 'Text', text: 'Hello'}],
       data: {key: 'val'},
     };
-    const payload = (
-      fixture.componentInstance as unknown as Record<
-        string,
-        (preset: unknown, catalogUrl: string) => unknown
-      >
-    )['buildA2UIPayload'](preset, 'https://a2ui.org/default_catalog.json');
+    catalogServiceMock.selectedComponentPreset.set(preset);
+    fixture.detectChanges();
+    const payload = hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0];
 
     expect(payload).toEqual([
       {
@@ -811,16 +750,7 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [
-            {
-              id: 'root',
-              component: 'Column',
-              align: 'center',
-              justify: 'center',
-              children: ['target'],
-            },
-            {id: 'target', component: 'Text', text: 'Hello'},
-          ],
+          components: [{id: 'root', component: 'Text', text: 'Hello'}],
         },
       },
       {
@@ -849,39 +779,21 @@ describe('Gallery Component', () => {
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledTimes(1);
   });
 
-  it('catches payload construction errors in RENDERER_READY listener without breaking subscription', () => {
+  it('keeps the ready subscription alive when the preview transport fails once', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     fixture.detectChanges();
-    TestBed.tick();
-
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.spyOn(fixture.componentInstance, 'buildA2UIPayload').mockImplementationOnce(() => {
-      throw new Error('Payload construction error');
-    });
-
     hostCommunicationMock.sendRenderA2UI.mockClear();
-
-    hostCommunicationMock.messageStream$.next({
-      type: PreviewBridgeMessageType.RENDERER_READY,
-      origin: 'http://localhost',
-      timestamp: Date.now(),
+    hostCommunicationMock.sendRenderA2UI.mockImplementationOnce(() => {
+      throw new Error('Transport failure');
     });
-
+    hostCommunicationMock.messageStream$.next({type: PreviewBridgeMessageType.RENDERER_READY});
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to parse component usage JSON:',
+      'Failed to dispatch component example:',
       expect.any(Error),
     );
-    expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
-
-    // Subsequent RENDERER_READY messages should still be handled
-    hostCommunicationMock.messageStream$.next({
-      type: PreviewBridgeMessageType.RENDERER_READY,
-      origin: 'http://localhost',
-      timestamp: Date.now(),
-    });
-
-    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledTimes(1);
-
+    hostCommunicationMock.messageStream$.next({type: PreviewBridgeMessageType.RENDERER_READY});
+    expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledTimes(2);
     consoleErrorSpy.mockRestore();
   });
 
@@ -906,16 +818,7 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [
-            {
-              id: 'root',
-              component: 'Column',
-              align: 'center',
-              justify: 'center',
-              children: ['target'],
-            },
-            {id: 'target', component: 'Button'},
-          ],
+          components: [{id: 'root', component: 'Button'}],
         },
       },
     ]);
@@ -975,33 +878,19 @@ describe('Gallery Component', () => {
     expect(rawJson).toContain('"updateComponents":');
     expect(rawJson).toContain('"components":');
     expect(rawJson).toContain('"id":"root"');
-    expect(rawJson).toContain('"component":"Column"');
+    expect(rawJson).toContain('"component":"Text"');
   });
 
-  it('catches payload dispatch errors in dispatchSelectedComponentPayload and logs them via console.error without rethrowing', () => {
-    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
-    fixture.detectChanges();
-    TestBed.tick();
-
+  it('reports an unencodable renderer example without enabling copy or breaking the Gallery', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.spyOn(
-      fixture.componentInstance as unknown as Record<string, () => unknown>,
-      'buildA2UIPayload',
-    ).mockImplementation(() => {
-      throw new Error('Test dispatch error');
-    });
-
-    expect(() => {
-      (fixture.componentInstance as unknown as Record<string, () => void>)[
-        'dispatchSelectedComponentPayload'
-      ]();
-    }).not.toThrow();
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to parse component usage JSON:',
-      expect.any(Error),
-    );
-
+    const cyclic: Record<string, unknown> = {id: 'target', component: 'Text'};
+    cyclic['self'] = cyclic;
+    catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({usage: [cyclic]});
+    fixture.detectChanges();
+    expect(await harness.getDraftError()).toContain('Could not load');
+    await harness.clickCopyButton();
+    expect(mockClipboard.copy).not.toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
   });
 
@@ -1075,5 +964,299 @@ describe('Gallery Component', () => {
 
       consoleErrorSpy.mockRestore();
     });
+  });
+  it('edits a property and retains the same valid preview and copy payload through invalid JSON and late usages', async () => {
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'custom://notice',
+      components: {Notice: {type: 'object', properties: {text: {type: 'string'}}}},
+    });
+    catalogServiceMock.selectedComponentKey.set('Notice');
+    catalogServiceMock.selectedComponentProperties.set([
+      {name: 'text', type: 'string', required: true, description: 'Notice text'},
+    ]);
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Notice', text: 'Original'}],
+      data: {count: 1},
+    });
+    fixture.detectChanges();
+    await harness.editProperty('text', 'Edited notice');
+    expect(await harness.getDraftText()).toContain('Edited notice');
+    const dispatched = hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0];
+    expect(dispatched[1].updateComponents.components[0].text).toBe('Edited notice');
+    await harness.clickCopyButton();
+    expect(JSON.parse(mockClipboard.copy.mock.lastCall?.[0])).toEqual(dispatched);
+
+    await harness.editDraft('{broken');
+    expect(await harness.getDraftError()).toContain('JSON');
+    expect(await harness.getDraftText()).toBe('{broken');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Notice', text: 'Late reply'}],
+    });
+    hostCommunicationMock.messageStream$.next({type: PreviewBridgeMessageType.RENDERER_READY});
+    fixture.detectChanges();
+    expect(await harness.getDraftText()).toBe('{broken');
+    await harness.clickCopyButton();
+    expect(JSON.parse(mockClipboard.copy.mock.lastCall?.[0])).toEqual(dispatched);
+    expect(hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0]).toEqual(dispatched);
+  });
+
+  it('updates bound data from JSON and rejects components outside the active catalog', async () => {
+    catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Text', text: {path: '/name'}}],
+      data: {name: 'Original'},
+    });
+    fixture.detectChanges();
+    const edited = {
+      components: [{id: 'target', component: 'Text', text: {path: '/name'}}],
+      data: {name: 'New name'},
+    };
+    await harness.editDraft(JSON.stringify(edited));
+    const preview = hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0];
+    expect(preview[2].updateDataModel.value).toEqual({name: 'New name'});
+    await harness.editDraft(
+      JSON.stringify({...edited, components: [{id: 'target', component: 'OtherCatalog'}]}),
+    );
+    expect(await harness.getDraftError()).toContain('OtherCatalog');
+    await harness.clickCopyButton();
+    expect(JSON.parse(mockClipboard.copy.mock.lastCall?.[0])).toEqual(preview);
+  });
+
+  it('resets the draft for a new component or catalog but not an equivalent catalog announcement', async () => {
+    const catalog: Catalog = {
+      catalogId: 'custom://notice',
+      components: {Notice: {type: 'object'}, Other: {type: 'object'}},
+    };
+    catalogManagementMock.activeCatalog.set(catalog);
+    catalogServiceMock.selectedComponentKey.set('Notice');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Notice', text: 'First'}],
+    });
+    fixture.detectChanges();
+    await harness.editDraft(
+      JSON.stringify({components: [{id: 'target', component: 'Notice', text: 'Edited'}]}),
+    );
+    catalogManagementMock.activeCatalog.set(structuredClone(catalog));
+    fixture.detectChanges();
+    expect(await harness.getDraftText()).toContain('Edited');
+    catalogServiceMock.selectedComponentKey.set('Other');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Other', text: 'Second'}],
+    });
+    fixture.detectChanges();
+    expect(await harness.getDraftText()).toContain('Second');
+    catalogManagementMock.activeCatalog.set({...catalog, catalogId: 'custom://new'});
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Other', text: 'New catalog'}],
+    });
+    fixture.detectChanges();
+    expect(await harness.getDraftText()).toContain('New catalog');
+  });
+  it.each([
+    {
+      name: 'an authored root and target tree with internal child references',
+      catalog: {
+        catalogId: 'custom://tree',
+        components: {
+          Column: {type: 'object'},
+          Row: {type: 'object'},
+          Text: {type: 'object'},
+        },
+      },
+      selected: 'Column',
+      authored: [
+        {id: 'root', component: 'Column', children: ['target', 'detail']},
+        {id: 'target', component: 'Row', children: ['label']},
+        {id: 'label', component: 'Text', text: 'Name'},
+        {id: 'detail', component: 'Text', text: 'target'},
+      ],
+      expected: [
+        {id: 'root', component: 'Column', children: ['target', 'detail']},
+        {id: 'target', component: 'Row', children: ['label']},
+        {id: 'label', component: 'Text', text: 'Name'},
+        {id: 'detail', component: 'Text', text: 'target'},
+      ],
+    },
+    {
+      name: 'a legacy target-only container and its child references',
+      catalog: {
+        catalogId: 'custom://tree',
+        components: {Column: {type: 'object'}, Text: {type: 'object'}},
+      },
+      selected: 'Column',
+      authored: [
+        {id: 'target', component: 'Column', children: ['label']},
+        {id: 'label', component: 'Text', text: 'target'},
+      ],
+      expected: [
+        {id: 'root', component: 'Column', children: ['label']},
+        {id: 'label', component: 'Text', text: 'target'},
+      ],
+    },
+    {
+      name: 'a prefixed Column with custom slots and mode properties',
+      catalog: {
+        catalogId: 'custom://acme',
+        components: {
+          AcmeColumn: {
+            type: 'object',
+            properties: {
+              id: {type: 'string'},
+              component: {const: 'AcmeColumn'},
+              slots: {type: 'array'},
+              mode: {type: 'string', enum: ['stacked']},
+            },
+            required: ['slots', 'mode'],
+            additionalProperties: false,
+          },
+          Text: {type: 'object'},
+        },
+      },
+      selected: 'AcmeColumn',
+      authored: [
+        {id: 'target', component: 'AcmeColumn', slots: ['label'], mode: 'stacked'},
+        {id: 'label', component: 'Text', text: 'Custom child'},
+      ],
+      expected: [
+        {id: 'root', component: 'AcmeColumn', slots: ['label'], mode: 'stacked'},
+        {id: 'label', component: 'Text', text: 'Custom child'},
+      ],
+    },
+  ])('preserves $name across preview, copy, and Open', async scenario => {
+    catalogManagementMock.activeCatalog.set(scenario.catalog);
+    catalogServiceMock.selectedComponentKey.set(scenario.selected);
+    catalogServiceMock.selectedComponentPreset.set({usage: scenario.authored});
+    fixture.detectChanges();
+    await harness.editDraft(
+      JSON.stringify({components: scenario.authored, data: {name: 'Edited'}}),
+    );
+    expect(await harness.getDraftError()).toBeNull();
+    const preview = hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0];
+    expect(preview[1].updateComponents.components).toEqual(scenario.expected);
+    expect(preview[2].updateDataModel.value).toEqual({name: 'Edited'});
+    expect(JSON.parse(await harness.getDraftText()).components).toEqual(scenario.authored);
+    await harness.clickCopyButton();
+    await harness.openInComposer();
+    const copied = mockClipboard.copy.mock.lastCall?.[0];
+    expect(JSON.parse(copied)).toEqual(preview);
+    expect(launcher.open.mock.lastCall?.[0]).toBe(copied);
+  });
+
+  it('copies and opens byte-equivalent last valid JSON with the selected renderer after an invalid edit', async () => {
+    catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Text', text: 'Initial'}],
+    });
+    TestBed.inject(StartupConfigStateService).setSelectedRendererId('selected');
+    fixture.detectChanges();
+    await harness.editDraft(
+      JSON.stringify({components: [{id: 'target', component: 'Text', text: 'Final'}]}),
+    );
+    await harness.editDraft('{bad');
+    await harness.clickCopyButton();
+    await harness.openInComposer();
+    expect(launcher.open).toHaveBeenCalledWith(
+      mockClipboard.copy.mock.lastCall?.[0],
+      'http://localhost/renderer',
+      'selected',
+    );
+    expect(JSON.parse(mockClipboard.copy.mock.lastCall?.[0])).toEqual(
+      hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0],
+    );
+  });
+
+  it('resets an edited draft when the selected renderer URL changes', async () => {
+    catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Text', text: 'Initial'}],
+    });
+    fixture.detectChanges();
+    await harness.editDraft(
+      JSON.stringify({components: [{id: 'target', component: 'Text', text: 'Edited'}]}),
+    );
+    const startup = TestBed.inject(StartupResolution) as unknown as MockStartupResolution;
+    startup.resolvedUrl.set('http://localhost/new-renderer');
+    fixture.detectChanges();
+    expect(await harness.getDraftText()).toContain('Initial');
+    expect(await harness.getDraftText()).not.toContain('Edited');
+  });
+
+  it('keeps the current draft when renderer validation and theme messages arrive', async () => {
+    catalogServiceMock.selectedComponentKey.set('Text');
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Text', text: 'Initial'}],
+    });
+    fixture.detectChanges();
+    await harness.editDraft(
+      JSON.stringify({components: [{id: 'target', component: 'Text', text: 'Edited'}]}),
+    );
+    hostCommunicationMock.sendRenderA2UI.mockClear();
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {validationErrors: []},
+    });
+    fixture.detectChanges();
+    expect(await harness.getDraftText()).toContain('Edited');
+    expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
+  });
+
+  it('still edits properties when the catalog declares no schema for the component', async () => {
+    // `resolveComponentPropertiesSchema` returns `{}` for a component the catalog does not
+    // describe, so the property controls must fall back to the draft values rather than
+    // failing to render.
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'custom://unresolved',
+      components: {Notice: {type: 'object'}},
+    });
+    catalogServiceMock.selectedComponentKey.set('Notice');
+    catalogServiceMock.selectedComponentProperties.set([
+      {name: 'text', type: 'string', description: '', required: false},
+    ]);
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Notice', text: 'Initial'}],
+    });
+    expect(() => fixture.detectChanges()).not.toThrow();
+
+    await harness.editProperty('text', 'Edited');
+    expect(JSON.parse(await harness.getDraftText()).components[0]).toMatchObject({
+      text: 'Edited',
+    });
+    expect(await harness.getDraftError()).toBeNull();
+  });
+
+  it('preserves native number, boolean and enum values in supported property controls', async () => {
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'custom://controls',
+      components: {
+        Notice: {
+          type: 'object',
+          properties: {
+            count: {type: 'number'},
+            enabled: {type: 'boolean'},
+            emphasis: {type: 'string', enum: ['normal', 'strong']},
+          },
+        },
+      },
+    });
+    catalogServiceMock.selectedComponentKey.set('Notice');
+    catalogServiceMock.selectedComponentProperties.set([
+      {name: 'count', type: 'number', description: '', required: false},
+      {name: 'enabled', type: 'boolean', description: '', required: false},
+      {name: 'emphasis', type: 'string', description: '', required: false},
+    ]);
+    catalogServiceMock.selectedComponentPreset.set({
+      usage: [{id: 'target', component: 'Notice', count: 2, enabled: true, emphasis: 'normal'}],
+    });
+    fixture.detectChanges();
+    await harness.editProperty('count', '');
+    await harness.editProperty('count', '12');
+    await harness.toggleProperty('enabled');
+    await harness.selectPropertyOption('emphasis', 1);
+    expect(JSON.parse(await harness.getDraftText()).components[0]).toMatchObject({
+      count: 12,
+      enabled: false,
+      emphasis: 'strong',
+    });
+    expect(await harness.getDraftError()).toBeNull();
   });
 });

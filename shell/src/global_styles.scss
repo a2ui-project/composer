@@ -16,6 +16,7 @@
 
 @use '@angular/material' as mat;
 @import 'dockview/dist/styles/dockview.css';
+@import '@copilotkit/angular/styles.css';
 
 @include mat.core();
 
@@ -26,7 +27,8 @@ $light-theme: mat.define-theme(
       primary: mat.$violet-palette,
     ),
     typography: (
-      plain-family: 'Roboto, sans-serif',
+      plain-family: 'Plus Jakarta Sans, sans-serif',
+      brand-family: 'Plus Jakarta Sans, sans-serif',
     ),
   )
 );
@@ -38,7 +40,8 @@ $dark-theme: mat.define-theme(
       primary: mat.$violet-palette,
     ),
     typography: (
-      plain-family: 'Roboto, sans-serif',
+      plain-family: 'Plus Jakarta Sans, sans-serif',
+      brand-family: 'Plus Jakarta Sans, sans-serif',
     ),
   )
 );
@@ -46,6 +49,7 @@ $dark-theme: mat.define-theme(
 @include mat.all-component-bases($light-theme);
 
 :root {
+  color-scheme: light;
   @include mat.all-component-typographies($light-theme);
   @include mat.system-level-typography($light-theme);
 }
@@ -80,24 +84,24 @@ $dark-theme: mat.define-theme(
       tertiary-fixed-dim: #ffa9fd,
       on-tertiary-fixed: #37003c,
       on-tertiary-fixed-variant: #702974,
-      background: #fefbff,
-      on-background: #1c1b1c,
-      surface: #fefbff,
-      surface-dim: #ddd9d9,
-      surface-bright: #fefbff,
-      surface-container-lowest: #ffffff,
-      surface-container-low: #f7f3f3,
-      surface-container: #f1eded,
-      surface-container-high: #ebe7e7,
-      surface-container-highest: #e5e2e2,
-      on-surface: #1c1b1c,
+      background: #eef0f4,
+      on-background: #202124,
+      surface: #f7f8fa,
+      surface-dim: #e1e3e8,
+      surface-bright: #fcfcfd,
+      surface-container-lowest: #fcfcfd,
+      surface-container-low: #f1f3f6,
+      surface-container: #eceef2,
+      surface-container-high: #e6e9ee,
+      surface-container-highest: #dfe3e9,
+      on-surface: #202124,
       shadow: #000000,
       scrim: #000000,
       surface-tint: #5e5e65,
       inverse-surface: #313031,
       inverse-on-surface: #f4f0f0,
       outline: #78767c,
-      outline-variant: #c7c5cc,
+      outline-variant: #dfe2e8,
       neutral: #787676,
       neutral10: #1c1b1c,
       error: #ba1a1a,
@@ -105,7 +109,7 @@ $dark-theme: mat.define-theme(
       on-error: #ffffff,
       on-error-container: #410002,
       surface-variant: #e4e1e8,
-      on-surface-variant: #46464c,
+      on-surface-variant: #5b606b,
       neutral-variant: #77767c,
       neutral-variant20: #303035,
       inverse-secondary: #bec4f2,
@@ -115,6 +119,7 @@ $dark-theme: mat.define-theme(
 }
 
 .dark-theme {
+  color-scheme: dark;
   @include mat.all-component-colors($dark-theme);
 
   @include mat.theme-overrides(
@@ -144,24 +149,24 @@ $dark-theme: mat.define-theme(
       tertiary-fixed-dim: #ffa9fd,
       on-tertiary-fixed: #37003c,
       on-tertiary-fixed-variant: #702974,
-      background: #141314,
-      on-background: #e5e2e2,
-      surface: #141314,
-      surface-dim: #141314,
-      surface-bright: #3a3939,
-      surface-container-lowest: #0e0e0e,
-      surface-container-low: #1c1b1c,
-      surface-container: #201f20,
-      surface-container-high: #2a2a2a,
-      surface-container-highest: #353435,
-      on-surface: #e5e2e2,
+      background: #111214,
+      on-background: #eef0f3,
+      surface: #1c1e22,
+      surface-dim: #111214,
+      surface-bright: #34373d,
+      surface-container-lowest: #151619,
+      surface-container-low: #191b1f,
+      surface-container: #222429,
+      surface-container-high: #2a2d33,
+      surface-container-highest: #34373e,
+      on-surface: #eef0f3,
       shadow: #000000,
       scrim: #000000,
       surface-tint: #c7c5ce,
       inverse-surface: #e5e2e2,
       inverse-on-surface: #313031,
       outline: #929095,
-      outline-variant: #46464c,
+      outline-variant: #35383f,
       neutral: #787676,
       neutral10: #1c1b1c,
       error: #ffb4ab,
@@ -169,7 +174,7 @@ $dark-theme: mat.define-theme(
       on-error: #690005,
       on-error-container: #ffdad6,
       surface-variant: #46464c,
-      on-surface-variant: #c7c5cc,
+      on-surface-variant: #b9bec8,
       neutral-variant: #77767c,
       neutral-variant20: #303035,
       inverse-secondary: #555c84,
@@ -245,8 +250,16 @@ body {
   padding: 0;
   overflow: hidden;
   background-color: var(--mat-sys-background);
-  color: var(--mat-sys-on-background);
-  font-family: Roboto, 'Helvetica Neue', sans-serif;
+  color: var(--mat-sys-on-surface);
+  font-family: var(--mat-sys-body-medium-font);
+}
+
+code,
+pre,
+kbd,
+samp {
+  // Material typography has no monospace role for source code.
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
 }
 
 /* High-specificity global overrides resolving slide toggle label checks collisions */
@@ -277,5 +290,146 @@ body .dv-dockview .dv-watermark-container {
   button,
   a {
     pointer-events: auto !important;
+  }
+}
+
+// CopilotKit's scoped components share Composer's existing light/dark palette.
+a2ui-composer-chat-panel [data-copilotkit] {
+  --cpk-default-font-family: 'Plus Jakarta Sans', sans-serif;
+  --background: var(--mat-sys-surface);
+  --foreground: var(--mat-sys-on-surface);
+  --primary: var(--mat-sys-primary);
+  --primary-foreground: var(--mat-sys-on-primary);
+  --secondary: var(--mat-sys-surface-container);
+  --secondary-foreground: var(--mat-sys-on-surface);
+  --muted: var(--mat-sys-surface-container-low);
+  --muted-foreground: var(--mat-sys-on-surface-variant);
+  --accent: var(--mat-sys-primary-container);
+  --accent-foreground: var(--mat-sys-on-primary-container);
+  --border: var(--mat-sys-outline-variant);
+  --input: var(--mat-sys-outline);
+  --ring: var(--mat-sys-primary);
+  --copilot-kit-primary-color: var(--mat-sys-primary);
+  --copilot-kit-contrast-color: var(--mat-sys-on-primary);
+  --copilot-kit-background-color: var(--mat-sys-surface);
+  --copilot-kit-input-background-color: var(--mat-sys-surface-container-low);
+  --copilot-kit-secondary-color: var(--mat-sys-primary-container);
+  --copilot-kit-secondary-contrast-color: var(--mat-sys-on-primary-container);
+  --copilot-kit-separator-color: var(--mat-sys-outline-variant);
+  --copilot-kit-muted-color: var(--mat-sys-on-surface-variant);
+}
+
+a2ui-composer-chat-panel {
+  copilot-chat-view {
+    display: block;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .composer-message-list {
+    gap: 22px;
+  }
+  .composer-native-message {
+    padding-top: 0;
+  }
+  .composer-user-text {
+    max-width: 100%;
+  }
+  .composer-input-container {
+    bottom: 12px;
+  }
+
+  // The SDK's prose and literal colors use `.dark`; Composer's theme is driven
+  // by Material tokens under `.dark-theme`. Bind these defaults to that same
+  // palette so messages and the input fade also update when the theme changes.
+  .cpk\:prose {
+    --tw-prose-body: var(--mat-sys-on-surface);
+    --tw-prose-headings: var(--mat-sys-on-surface);
+    --tw-prose-lead: var(--mat-sys-on-surface-variant);
+    --tw-prose-links: var(--mat-sys-primary);
+    --tw-prose-bold: var(--mat-sys-on-surface);
+    --tw-prose-counters: var(--mat-sys-on-surface-variant);
+    --tw-prose-bullets: var(--mat-sys-on-surface-variant);
+    --tw-prose-hr: var(--mat-sys-outline-variant);
+    --tw-prose-quotes: var(--mat-sys-on-surface);
+    --tw-prose-quote-borders: var(--mat-sys-outline);
+    --tw-prose-captions: var(--mat-sys-on-surface-variant);
+    --tw-prose-kbd: var(--mat-sys-on-surface);
+    --tw-prose-kbd-shadows: var(--mat-sys-outline-variant);
+    --tw-prose-code: var(--mat-sys-on-surface);
+    --tw-prose-pre-code: var(--mat-sys-on-surface);
+    --tw-prose-pre-bg: var(--mat-sys-surface-container-low);
+    --tw-prose-th-borders: var(--mat-sys-outline);
+    --tw-prose-td-borders: var(--mat-sys-outline-variant);
+
+    font-size: 14px;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+
+  copilot-chat-view-feather > div {
+    --tw-gradient-from: var(--mat-sys-surface);
+    --tw-gradient-via: var(--mat-sys-surface);
+  }
+
+  copilot-chat-user-message button,
+  copilot-chat-assistant-message button,
+  copilot-chat-view-scroll-to-bottom-button button {
+    color: var(--mat-sys-on-surface-variant);
+
+    &:hover {
+      color: var(--mat-sys-on-surface);
+      background-color: var(--mat-sys-surface-container-high);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: 2px;
+    }
+  }
+
+  copilot-chat-view-scroll-to-bottom-button button {
+    background-color: var(--mat-sys-surface-container);
+    border-color: var(--mat-sys-outline-variant);
+
+    copilot-icon {
+      color: inherit;
+    }
+  }
+
+  copilot-chat-assistant-message-renderer {
+    code:not(pre code),
+    .code-block-container {
+      color: var(--mat-sys-on-surface);
+      background-color: var(--mat-sys-surface-container-low);
+    }
+
+    .code-block-language {
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .hljs {
+      color: var(--mat-sys-on-surface);
+    }
+  }
+}
+
+// Composer menus render in the CDK overlay, outside ChatPanel's style scope.
+.composer-add-menu.mat-mdc-menu-panel,
+.composer-renderer-menu.mat-mdc-menu-panel {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 20px;
+  background: var(--mat-sys-surface-container-low);
+
+  .mat-mdc-menu-content {
+    padding: 6px;
+  }
+
+  .mat-mdc-menu-item {
+    border-radius: 12px;
+  }
+
+  [aria-checked='true'] {
+    background: var(--mat-sys-surface-container-high);
   }
 }

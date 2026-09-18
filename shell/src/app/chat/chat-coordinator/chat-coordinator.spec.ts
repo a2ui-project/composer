@@ -105,6 +105,7 @@ class MockStateSync {
     this.activeDraftSignal.set('Initial draft text');
   });
   hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
+  syncActiveDraftToHistory = vi.fn();
 }
 
 async function* createMockStream(chunks: string[]): AsyncIterable<LlmResponse> {
@@ -217,12 +218,97 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(prompt).toContain('"components": {}');
   });
 
+  describe('editing an imported demo', () => {
+    const flight = [
+      {version: 'v0.9', createSurface: {surfaceId: 'showcase-01-flight', catalogId: 'basic'}},
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'showcase-01-flight',
+          components: [{id: 'root', component: 'Text', text: 'JFK'}],
+        },
+      },
+    ];
+    function respondWith(blocks: unknown[]) {
+      const text = blocks.map(block => JSON.stringify(block)).join('\n');
+      llmClientMock.chatStream.mockResolvedValue({
+        contentStream: createMockStream([text]),
+        complete: Promise.resolve(text),
+      });
+    }
+    it('sends the current imported draft even before history synchronization', async () => {
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(flight));
+      stateSyncMock.syncActiveDraftToHistory.mockImplementation(() => {
+        chatStateMock.setChatHistory([
+          {role: MessageRole.USER, content: stateSyncMock.activeDraft()},
+        ]);
+      });
+      await service.submitPrompt('Change the destination to SF');
+      const messages = llmClientMock.chatStream.mock.calls[0][0];
+      expect(
+        messages.some(
+          message =>
+            message.role === MessageRole.USER &&
+            message.content.includes('showcase-01-flight') &&
+            message.content.includes('JFK'),
+        ),
+      ).toBe(true);
+      expect(messages.at(-1)?.content).toBe('Change the destination to SF');
+    });
+    it('rejects an unknown surface without replacing the draft', async () => {
+      const original = JSON.stringify(flight);
+      stateSyncMock.activeDraftSignal.set(original);
+      respondWith([
+        {
+          version: 'v0.9',
+          updateDataModel: {surfaceId: 'vacation_booking', path: '/destination_value', value: 'SF'},
+        },
+      ]);
+      await service.submitPrompt('Change the destination to SF');
+      expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
+      expect(stateSyncMock.activeDraft()).toBe(original);
+      expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+      expect(chatStateMock.chatHistory().at(-1)?.errorTitle).toBe('Validation Failure');
+      expect(chatStateMock.chatHistory().at(-1)?.errorDetails).toContain('vacation_booking');
+    });
+    it('retains the imported surface when applying a valid component edit', async () => {
+      stateSyncMock.activeDraftSignal.set(JSON.stringify(flight));
+      const update = {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'showcase-01-flight',
+          components: [{id: 'root', component: 'Text', text: 'SFO'}],
+        },
+      };
+      respondWith([update]);
+      await service.submitPrompt('Change the destination to SF');
+      expect(JSON.parse(stateSyncMock.activeDraft())).toEqual([...flight, update]);
+      expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
+    });
+  });
+
   /* Pipeline submit and Lockout assertions */
   it('ignores submitPrompt when programmatic stream is actively locked', async () => {
     chatStateMock.setProgrammaticStreamActive(true);
     await service.submitPrompt('Test locked');
     expect(llmClientMock.chatStream).not.toHaveBeenCalled();
     expect(chatStateMock.chatHistory().length).toBe(0);
+  });
+
+  it('includes the current canvas before the user instruction in the request', async () => {
+    stateSyncMock.syncActiveDraftToHistory.mockImplementation(() => {
+      chatStateMock.setChatHistory([
+        {role: MessageRole.USER, content: '[{"text":"edited gallery draft"}]'},
+      ]);
+    });
+
+    await service.submitPrompt('Make this blue');
+
+    const request = llmClientMock.chatStream.mock.calls[0][0];
+    expect(request.slice(1)).toEqual([
+      {role: MessageRole.USER, content: '[{"text":"edited gallery draft"}]'},
+      expect.objectContaining({role: MessageRole.USER, content: 'Make this blue'}),
+    ]);
   });
 
   it('triggers prompt stream turns locking panel and commits', async () => {
