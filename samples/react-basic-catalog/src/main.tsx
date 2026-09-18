@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import '@a2ui/react/v0_9/styles.css';
+import '../../shared/basic-catalog.css';
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {App} from './App';
