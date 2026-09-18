@@ -76,7 +76,7 @@
       color: var(--mat-sys-primary);
     }
     .message-type {
-      color: var(--mat-sys-tertiary);
+      color: var(--mat-sys-primary);
     }
     .origin {
       margin-left: auto;
@@ -149,7 +149,7 @@ mat-expansion-panel.llm-log-panel {
       }
 
       .message-type {
-        color: var(--mat-sys-tertiary);
+        color: var(--mat-sys-primary);
         font-weight: bold;
         &.llm {
           color: var(--mat-sys-primary);
