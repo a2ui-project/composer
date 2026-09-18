@@ -66,6 +66,10 @@ test.describe('A2aMessageInspector Visual Regression & Layout', () => {
   test('renders kind chips and validation error banner for invalid protocol messages', async ({
     page,
   }) => {
+    // The live event timestamp can change header wrapping. Keep it identical to
+    // the baseline while allowing timers and the response stream to run normally.
+    await page.clock.setFixedTime(new Date('2026-09-18T11:24:22Z'));
+
     // SSE stream with A2A protocol validation violations:
     // 1. StatusUpdate with an invalid TaskState value
     // 2. Message with invalid agent role and empty parts array

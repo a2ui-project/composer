@@ -90,16 +90,16 @@ $dark-theme: mat.define-theme(
       tertiary-fixed-dim: #ffa9fd,
       on-tertiary-fixed: #37003c,
       on-tertiary-fixed-variant: #702974,
-      background: #f5f6f8,
+      background: #eef0f4,
       on-background: #202124,
-      surface: #ffffff,
+      surface: #f7f8fa,
       surface-dim: #e1e3e8,
-      surface-bright: #ffffff,
-      surface-container-lowest: #ffffff,
-      surface-container-low: #f7f8fa,
-      surface-container: #f0f1f4,
-      surface-container-high: #e9ebef,
-      surface-container-highest: #e1e4e9,
+      surface-bright: #fcfcfd,
+      surface-container-lowest: #fcfcfd,
+      surface-container-low: #f1f3f6,
+      surface-container: #eceef2,
+      surface-container-high: #e6e9ee,
+      surface-container-highest: #dfe3e9,
       on-surface: #202124,
       shadow: #000000,
       scrim: #000000,
@@ -249,78 +249,23 @@ $dark-theme: mat.define-theme(
   }
 }
 
-// Shared shell tokens resolve against the active Material theme. Keep the
-// existing --cpk-* names so companion pages inherit the same solid surfaces.
-:root,
-.dark-theme {
-  --cpk-page-bg: var(--mat-sys-background);
-  --cpk-surface: var(--mat-sys-surface);
-  --cpk-surface-elevated: var(--mat-sys-surface);
-  --cpk-glass-bg: var(--mat-sys-surface);
-  --cpk-glass-bg-hover: var(--mat-sys-surface-container-low);
-  --cpk-glass-bg-selected: var(--mat-sys-secondary-container);
-  --cpk-glass-border: var(--mat-sys-outline-variant);
-  --cpk-border: var(--mat-sys-outline-variant);
-  --cpk-divider: var(--mat-sys-outline-variant);
-  --cpk-text-primary: var(--mat-sys-on-surface);
-  --cpk-text-secondary: var(--mat-sys-on-surface-variant);
-  --cpk-text-faint: var(--mat-sys-on-surface-variant);
-  --cpk-text-muted: var(--mat-sys-on-surface-variant);
-  --cpk-accent: var(--mat-sys-primary);
-  --cpk-accent-hover: var(--mat-sys-on-primary-container);
-  --cpk-accent-contrast: var(--mat-sys-on-primary);
-  --cpk-accent-bg: var(--mat-sys-primary-container);
-  --cpk-success: #1e7d4f;
-  --cpk-success-bg: #e8f5ee;
-  --cpk-warning: #9a5b00;
-  --cpk-warning-bg: #fff2db;
-  --cpk-critical: var(--mat-sys-error);
-  --cpk-critical-bg: var(--mat-sys-error-container);
-  --cpk-space-1: 4px;
-  --cpk-space-2: 8px;
-  --cpk-space-3: 12px;
-  --cpk-space-4: 16px;
-  --cpk-space-5: 24px;
-  --cpk-space-6: 32px;
-  --cpk-content-max: 1180px;
-  --cpk-radius-sm: 6px;
-  --cpk-radius-item: 10px;
-  --cpk-radius-card: 20px;
-  --cpk-radius-lg: 24px;
-  --cpk-radius-pill: 9999px;
-  --cpk-shadow-sm: 0 1px 2px rgba(20, 24, 35, 0.03);
-  --cpk-shadow-card: 0 2px 8px -4px rgba(20, 24, 35, 0.1);
-  --cpk-shadow-elevated: 0 12px 32px -12px rgba(20, 24, 35, 0.2);
-  --cpk-font-body: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
-  --cpk-font-mono: 'Spline Sans Mono', ui-monospace, monospace;
-}
-
-.dark-theme {
-  --cpk-success: #6fdfa0;
-  --cpk-success-bg: #163c2a;
-  --cpk-warning: #ffc078;
-  --cpk-warning-bg: #43311e;
-  --cpk-shadow-sm: none;
-  --cpk-shadow-card: none;
-  --cpk-shadow-elevated: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
-}
-
 html,
 body {
   height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background-color: var(--cpk-page-bg);
-  color: var(--cpk-text-primary);
-  font-family: var(--cpk-font-body);
+  background-color: var(--mat-sys-background);
+  color: var(--mat-sys-on-surface);
+  font-family: var(--mat-sys-body-medium-font);
 }
 
 code,
 pre,
 kbd,
 samp {
-  font-family: var(--cpk-font-mono);
+  // Material typography has no monospace role for source code.
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
 }
 
 /* High-specificity global overrides resolving slide toggle label checks collisions */
