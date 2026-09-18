@@ -27,7 +27,7 @@
   flex-direction: column;
   box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
+  scrollbar-color: var(--mat-sys-outline-variant) transparent;
 
   &::-webkit-scrollbar {
     width: 8px;
@@ -38,11 +38,11 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--mat-sys-outline-variant);
     border-radius: 4px;
 
     &:hover {
-      background: rgba(0, 0, 0, 0.4);
+      background: var(--mat-sys-outline);
     }
   }
 
@@ -172,9 +172,9 @@
           }
 
           &.extension-chip {
-            background: #e6f4ea;
-            color: #137333;
-            border: 1px solid #ceead6;
+            background: var(--mat-sys-primary-container);
+            color: var(--mat-sys-on-primary-container);
+            border: 1px solid var(--mat-sys-outline-variant);
           }
         }
       }

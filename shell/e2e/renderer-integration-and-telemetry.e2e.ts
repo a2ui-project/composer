@@ -103,6 +103,24 @@ test.beforeEach(async ({page}) => {
 
 for (const config of CONFIGS) {
   test.describe(`${config.name} Preview Handshake & Sync`, () => {
+    test('loads the shared catalog theme styles', async ({page}) => {
+      await page.goto(`/?renderer=${config.rendererUrl}`);
+      await expect(page.locator('.workspace-container')).toBeVisible();
+
+      // Verify actual styles, not just readable DOM text: broken CSS bundles can
+      // leave the form functional while displaying browser-default controls.
+      const styledFrame = page.frameLocator('iframe.preview-iframe');
+      await expect(styledFrame.locator('body')).toHaveCSS(
+        'font-family',
+        'Arial, Helvetica, sans-serif',
+      );
+      const searchButton = styledFrame.getByRole('button', {name: 'Search Cars'});
+      await expect(searchButton).toHaveCSS('border-radius', '24px');
+      await expect(searchButton).toHaveCSS('background-color', 'rgb(63, 81, 181)');
+
+      await expect(styledFrame.locator('body')).toHaveCSS('background-color', 'rgb(247, 248, 250)');
+    });
+
     test('validates startup telemetry handshake messages and catalog properties', async ({
       page,
     }) => {
@@ -233,6 +251,40 @@ for (const config of CONFIGS) {
       const iframe = page.frameLocator('iframe.preview-iframe');
       const searchButton = iframe.getByRole('button', {name: 'Search Rental Cars'});
       await expect(searchButton).toBeVisible();
+    });
+
+    test('keeps tall content inside the docked preview and its controls reachable', async ({
+      page,
+    }) => {
+      await page.setViewportSize({width: 1280, height: 480});
+      await page.goto(`/?renderer=${config.rendererUrl}`);
+      await expect(page.locator('.workspace-container')).toBeVisible();
+      const iframe = page.frameLocator('iframe.preview-iframe');
+      const searchButton = iframe.getByRole('button', {name: 'Search Cars'});
+      await expect(searchButton).toBeVisible();
+
+      // Exercise real overflow rather than passing because the sample fits the panel.
+      await expect
+        .poll(() =>
+          iframe
+            .locator('body')
+            .evaluate(() => document.documentElement.scrollHeight - innerHeight),
+        )
+        .toBeGreaterThan(0);
+
+      // Content taller than the docked preview must scroll inside the iframe,
+      // rather than placing its controls underneath the debug panel.
+      await expect
+        .poll(() =>
+          page.locator('iframe.preview-iframe').evaluate(frame => {
+            const panel = frame.closest('a2ui-composer-rendered-frame')!;
+            return frame.getBoundingClientRect().bottom - panel.getBoundingClientRect().bottom;
+          }),
+        )
+        .toBeLessThanOrEqual(1);
+
+      await searchButton.click();
+      await expect(page.locator('.dv-tab', {hasText: /^Events/})).toContainText('(1)');
     });
 
     test('captures telemetry actions and events updates upon search form click', async ({page}) => {
