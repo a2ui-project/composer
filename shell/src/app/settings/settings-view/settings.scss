@@ -29,17 +29,15 @@
   align-items: start;
   gap: 24px;
   padding: 32px;
-  max-width: var(--cpk-content-max);
+  max-width: 1180px;
   margin: 0 auto;
 }
 
 .settings-card,
 .status-card {
   min-width: 0;
-  border: 1px solid var(--cpk-border);
-  border-radius: var(--cpk-radius-card);
-  background-color: var(--cpk-surface);
-  box-shadow: var(--cpk-shadow-card);
+  border: 1px solid var(--mat-sys-outline-variant);
+  background-color: var(--mat-sys-surface);
 
   mat-card-header {
     padding: 28px 28px 8px;
@@ -61,7 +59,7 @@
     margin: 8px 0;
     font-size: 13px;
     font-weight: 400;
-    color: var(--cpk-text-secondary);
+    color: var(--mat-sys-on-surface-variant);
   }
 }
 
@@ -122,13 +120,13 @@ mat-form-field {
 
   .logs-console {
     background-color: var(--mat-sys-surface-container-low);
-    color: var(--cpk-text-secondary);
+    color: var(--mat-sys-on-surface-variant);
     padding: 16px;
     border-radius: 12px;
     overflow-wrap: anywhere;
-    font-family: var(--cpk-font-mono);
-    font-size: 12px;
-    line-height: 1.5;
+    font: var(--mat-sys-body-small);
+    font-family: 'Spline Sans Mono', monospace;
+    letter-spacing: var(--mat-sys-body-small-tracking);
 
     code {
       display: block;
@@ -146,7 +144,7 @@ mat-form-field {
 }
 
 .success-log {
-  color: var(--cpk-success);
+  color: var(--mat-sys-primary);
 }
 
 ::ng-deep body .mat-mdc-slide-toggle {
@@ -174,17 +172,17 @@ mat-form-field {
 
 .get-api-key {
   padding: 24px 28px;
-  border-top: 1px solid var(--cpk-divider);
+  border-top: 1px solid var(--mat-sys-outline-variant);
   font-size: 12px;
   line-height: 1.7;
-  color: var(--cpk-text-secondary);
+  color: var(--mat-sys-on-surface-variant);
 
   ol {
     padding-left: 20px;
   }
 
   a {
-    color: var(--cpk-accent);
+    color: var(--mat-sys-primary);
     text-underline-offset: 3px;
   }
 }
