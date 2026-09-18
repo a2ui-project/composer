@@ -262,6 +262,17 @@ for (const config of CONFIGS) {
       await expect(searchButton).toBeVisible();
       await searchButton.click();
 
+      // Content taller than the docked preview must scroll inside the iframe,
+      // rather than placing its controls underneath the debug panel.
+      await expect
+        .poll(() =>
+          page.locator('iframe.preview-iframe').evaluate(frame => {
+            const panel = frame.closest('a2ui-composer-rendered-frame')!;
+            return frame.getBoundingClientRect().bottom - panel.getBoundingClientRect().bottom;
+          }),
+        )
+        .toBeLessThanOrEqual(1);
+
       // Verify Event tab notification badge
       const eventsTab = page.locator('.dv-tab', {hasText: /^Events/});
       await expect(eventsTab).toBeVisible();
