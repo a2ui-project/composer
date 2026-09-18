@@ -21,7 +21,7 @@ import {LocalStorageInteractions} from '../../storage/local-storage-interactions
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
@@ -299,33 +299,49 @@ describe('ComposerWorkspace Dashboard', () => {
       expect(manager.api.options.className).toBe('dockview-theme-light');
     });
 
-    it('restores dockview layout from localStorage on initialization', async () => {
-      // Create new fixture since dockview is initialized on AfterViewInit
-      const storageSpy = vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify({}));
-      const newFixture = TestBed.createComponent(ComposerWorkspace);
-
-      const apiSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON').mockImplementation(() => {});
-
-      try {
-        newFixture.detectChanges();
-        await newFixture.whenStable();
-
-        expect(apiSpy).toHaveBeenCalled();
-      } finally {
-        newFixture.destroy();
-        apiSpy.mockRestore();
-        storageSpy.mockRestore();
-      }
-    });
-
-    it('preserves a real saved layout when leaving and returning to the workspace', async () => {
-      const storage = TestBed.inject(LocalStorageInteractions);
-      const previousLayout = storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
-      const manager = fixture.debugElement.injector.get(ComposerDockview);
-      const errorSpy = vi.spyOn(console, 'error');
+    describe('Saved layout recovery', () => {
+      let storage: LocalStorageInteractions;
+      let previousLayout: string | null;
       let returningFixture: ComponentFixture<ComposerWorkspace> | undefined;
 
-      try {
+      beforeEach(() => {
+        storage = TestBed.inject(LocalStorageInteractions);
+        previousLayout = storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
+        returningFixture = undefined;
+      });
+
+      afterEach(() => {
+        returningFixture?.destroy();
+        fixture.destroy();
+        vi.restoreAllMocks();
+        if (previousLayout === null) {
+          storage.removeItem(LocalStorageKey.DOCKVIEW_LAYOUT);
+        } else {
+          storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, previousLayout);
+        }
+      });
+
+      async function returnToWorkspace(): Promise<ComposerDockview> {
+        returningFixture = TestBed.createComponent(ComposerWorkspace);
+        returningFixture.detectChanges();
+        await returningFixture.whenStable();
+        return returningFixture.debugElement.injector.get(ComposerDockview);
+      }
+
+      it('restores dockview layout from localStorage on initialization', async () => {
+        vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify({}));
+        const restoreSpy = vi
+          .spyOn(DockviewComponent.prototype, 'fromJSON')
+          .mockImplementation(() => {});
+
+        await returnToWorkspace();
+
+        expect(restoreSpy).toHaveBeenCalled();
+      });
+
+      it('preserves a real saved layout when leaving and returning to the workspace', async () => {
+        const manager = fixture.debugElement.injector.get(ComposerDockview);
+        const errorSpy = vi.spyOn(console, 'error');
         manager.setPanelTitle(ComposerPanelId.Rendered, 'My preview');
         manager.openPanel(ComposerPanelId.Events);
         await new Promise(resolve => setTimeout(resolve, 1100));
@@ -336,69 +352,48 @@ describe('ComposerWorkspace Dashboard', () => {
         await new Promise(resolve => setTimeout(resolve, 1100));
         expect(storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT)).toBe(savedLayout);
 
-        returningFixture = TestBed.createComponent(ComposerWorkspace);
-        returningFixture.detectChanges();
-        await returningFixture.whenStable();
-        const restored = returningFixture.debugElement.injector.get(ComposerDockview);
+        const restored = await returnToWorkspace();
         expect(restored.api.getGroupPanel(ComposerPanelId.Rendered)?.title).toBe('My preview');
         expect(restored.api.getGroupPanel(ComposerPanelId.Events)?.api.isActive).toBe(true);
         expect(restored.api.panels.map(panel => panel.id).sort()).toEqual(
           Object.values(ComposerPanelId).sort(),
         );
         expect(errorSpy).not.toHaveBeenCalled();
-      } finally {
-        returningFixture?.destroy();
-        errorSpy.mockRestore();
-        if (previousLayout === null) {
-          storage.removeItem(LocalStorageKey.DOCKVIEW_LAYOUT);
-        } else {
-          storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, previousLayout);
-        }
-      }
-    });
+      });
 
-    it.each(['retired panel', 'mismatched panel ID'])(
-      'rejects a layout with a %s as a whole before restoring the default workspace',
-      async invalidState => {
-        const storage = TestBed.inject(LocalStorageInteractions);
-        const previousLayout = storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
-        const manager = fixture.debugElement.injector.get(ComposerDockview);
-        if (invalidState === 'retired panel') {
-          manager.api.addPanel({id: 'retiredPanel', component: 'retiredPanel'});
-        }
-        const layout = manager.api.toJSON();
-        if (invalidState === 'mismatched panel ID') {
-          layout.panels[ComposerPanelId.Rendered].id = 'missing';
-        }
-        const savedLayout = JSON.stringify(layout);
-        storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, savedLayout);
-        const restoreSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON');
-        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        let returningFixture: ComponentFixture<ComposerWorkspace> | undefined;
+      it.each(['retired panel', 'mismatched panel ID'])(
+        'rejects a layout with a %s and opens usable default panels',
+        async invalidState => {
+          const manager = fixture.debugElement.injector.get(ComposerDockview);
+          if (invalidState === 'retired panel') {
+            manager.api.addPanel({id: 'retiredPanel', component: 'retiredPanel'});
+          }
+          const layout = manager.api.toJSON();
+          if (invalidState === 'mismatched panel ID') {
+            layout.panels[ComposerPanelId.Rendered].id = 'missing';
+          }
+          fixture.destroy();
+          const savedLayout = JSON.stringify(layout);
+          storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, savedLayout);
+          const restoreSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON');
+          const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-        try {
-          returningFixture = TestBed.createComponent(ComposerWorkspace);
-          returningFixture.detectChanges();
-          await returningFixture.whenStable();
-          const restored = returningFixture.debugElement.injector.get(ComposerDockview);
+          const restored = await returnToWorkspace();
+
           expect(restoreSpy).not.toHaveBeenCalled();
           expect(restored.api.panels.map(panel => panel.id).sort()).toEqual(
             Object.values(ComposerPanelId).sort(),
           );
+          expect(restored.api.getGroupPanel(ComposerPanelId.Rendered)?.title).toBe(
+            'Rendered A2UI Preview',
+          );
+          restored.openPanel(ComposerPanelId.DataModel);
+          expect(restored.api.getGroupPanel(ComposerPanelId.DataModel)?.api.isActive).toBe(true);
           expect(errorSpy).toHaveBeenCalledExactlyOnceWith('Failed to restore dockview layout');
           expect(storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT)).toBe(savedLayout);
-        } finally {
-          returningFixture?.destroy();
-          restoreSpy.mockRestore();
-          errorSpy.mockRestore();
-          if (previousLayout === null) {
-            storage.removeItem(LocalStorageKey.DOCKVIEW_LAYOUT);
-          } else {
-            storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, previousLayout);
-          }
-        }
-      },
-    );
+        },
+      );
+    });
 
     it('applies Material M3 tab styling class hook to the Dockview root element', () => {
       const rootEl = fixture.nativeElement.querySelector('.dockview-root');
