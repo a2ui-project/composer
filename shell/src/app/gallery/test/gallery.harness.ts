@@ -152,4 +152,44 @@ export class GalleryHarness extends ComponentHarness {
     }
     return records;
   }
+  /** Replaces the editable example JSON through the rendered form. */
+  async editDraft(text: string): Promise<void> {
+    const input = await this.locatorFor('.draft-json')();
+    await input.setInputValue(text);
+    await input.dispatchEvent('input');
+  }
+
+  /** Reads the retained text, including an invalid edit. */
+  async getDraftText(): Promise<string> {
+    return (await this.locatorFor('.draft-json')()).getProperty<string>('value');
+  }
+
+  /** Edits a supported literal property using its visible control. */
+  async editProperty(name: string, value: string): Promise<void> {
+    const input = await this.locatorFor(`[data-property="${name}"]`)();
+    await input.setInputValue(value);
+    await input.dispatchEvent('input');
+  }
+
+  /** Reads an input error without depending on component internals. */
+  async getDraftError(): Promise<string | null> {
+    const error = await this.locatorForOptional('.draft-error')();
+    return error ? error.text() : null;
+  }
+
+  /** Launches the current last valid example in Composer. */
+  async openInComposer(): Promise<void> {
+    await (await this.locatorFor(MatButtonHarness.with({text: 'Open in Composer'}))()).click();
+  }
+  /** Selects a literal enum option using the native form control. */
+  async selectPropertyOption(name: string, index: number): Promise<void> {
+    const select = await this.locatorFor(`[data-property="${name}"]`)();
+    await select.selectOptions(index);
+    await select.dispatchEvent('change');
+  }
+
+  /** Toggles a boolean property through its native checkbox. */
+  async toggleProperty(name: string): Promise<void> {
+    await (await this.locatorFor(`[data-property="${name}"]`)()).click();
+  }
 }
