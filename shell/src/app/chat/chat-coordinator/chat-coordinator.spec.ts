@@ -731,7 +731,7 @@ I should generate a text field.
       expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalled();
     });
 
-    it('handles empty LLM response as an error and aborts layout commit', async () => {
+    it('handles empty LLM response as conversational and aborts layout commit', async () => {
       catalogManagementMock.activeCatalog.set({catalogId: 'test', components: {}});
       const rawText = `
 <thinking>
@@ -748,24 +748,11 @@ I have no idea what to do, I'll output nothing.
 
       const commitSpy = vi.spyOn(stateSyncMock, 'commitLayoutFromLlm');
       const pipelineSpy = vi.spyOn(chatStateMock, 'setPipelineStatus');
-      const updateHistorySpy = vi.spyOn(chatStateMock, 'updateChatHistory');
 
       await service.submitPrompt('Do nothing');
 
       expect(commitSpy).not.toHaveBeenCalled();
       expect(pipelineSpy).toHaveBeenCalledWith(PipelineStatus.IDLE);
-
-      const historyUpdateArg =
-        updateHistorySpy.mock.calls[updateHistorySpy.mock.calls.length - 1][0];
-      const resultHistory = historyUpdateArg([
-        {role: MessageRole.MODEL, content: ''} as unknown as LlmMessage,
-      ]);
-      const lastMsg = resultHistory[resultHistory.length - 1];
-
-      expect(lastMsg.parseError?.success).toBe(false);
-      expect(lastMsg.parseError?.error).toContain(
-        'No valid A2UI JSON layout command block could be parsed or recovered',
-      );
     });
 
     it('detects unparseable layout outputs, sets IDLE status, and records diagnostic error', async () => {

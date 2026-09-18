@@ -40,6 +40,8 @@ import {tryParseJsonArray} from '../../utils/json';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import type {editor} from 'monaco-editor';
 
+export const IFRAME_UNRESPONSIVE_ERROR = 'IFRAME_UNRESPONSIVE_ERROR';
+
 /**
  * Hosts the raw JSON view of active surface models, allowing direct source editing
  * and displaying real-time parsing error indicators.
@@ -77,6 +79,8 @@ export class RawFrame {
   private readonly layoutInput$ = new Subject<string>();
   private isDestroyed = false;
 
+  // A precise 15-second timeout handles normal connectivity limits and bootstrap
+  // without improperly punishing acceptable processing latency on slow renderers.
   private readonly WATCHDOG_TIMEOUT_MS = 15000;
   private readonly INVALID_JSON_TIMEOUT_MS = 3000;
   private readonly SCHEMA_ERROR_DEBOUNCE_MS = 50;
@@ -113,6 +117,23 @@ export class RawFrame {
           envelope?.type === PreviewBridgeMessageType.SURFACE_RESIZE
         ) {
           this.clearWatchdog();
+        }
+
+        if (envelope?.type === PreviewBridgeMessageType.RENDER_ERROR) {
+          if (!this.isLocked() && !this.hasActiveSchemaErrors && !this.isJsonInvalid()) {
+            const errorMessage =
+              (envelope.payload as {error?: {message?: string}})?.error?.message ??
+              (envelope as {error?: {message?: string}})?.error?.message ??
+              'Renderer validation error';
+            this.snackBar.open(`Render error: ${errorMessage}`, 'Dismiss', {
+              duration: 5000,
+              panelClass: 'schema-error-snackbar',
+            });
+          }
+        } else if (envelope?.type === PreviewBridgeMessageType.RENDER_SUCCESS) {
+          if (!this.hasActiveSchemaErrors && !this.isJsonInvalid()) {
+            this.snackBar.dismiss();
+          }
         }
       });
 
@@ -222,7 +243,7 @@ export class RawFrame {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((payload: unknown[]) => {
-        if (payload.length === 0 || this.hasActiveSchemaErrors) {
+        if (payload.length === 0) {
           this.clearWatchdog();
           return;
         }
@@ -245,7 +266,8 @@ export class RawFrame {
   }
 
   protected onMarkersChange(markers: editor.IMarker[]): void {
-    if (markers.some(m => m.severity === 8 || m.severity === 4)) {
+    const hasErrors = markers.some(m => m.severity === 8 || m.severity === 4);
+    if (hasErrors) {
       this.clearWatchdog();
       this.hasActiveSchemaErrors = true;
     } else {
@@ -281,6 +303,10 @@ export class RawFrame {
 
   private startWatchdog(): void {
     this.clearWatchdog();
+    // Suspend watchdog lifecycle during active LLM streams (since
+    // transient payloads are predictably broken) and when document is
+    // hidden (to avoid aggressive throttling timeouts triggered by
+    // browser background tab optimizations).
     if (
       this.isJsonInvalid() ||
       this.hasActiveSchemaErrors ||
@@ -299,7 +325,7 @@ export class RawFrame {
       } else {
         this.errorLogger.error({
           sourceTag: '[Previewer]',
-          message: 'Preview frame failed to process payload within 15 seconds.',
+          message: `${IFRAME_UNRESPONSIVE_ERROR}: Preview frame failed to process payload within 15 seconds.`,
         });
       }
     }, this.WATCHDOG_TIMEOUT_MS);
@@ -369,6 +395,7 @@ export class RawFrame {
     if (this.isLocked()) {
       return;
     }
+
     let line = this.lastSyntaxError?.line;
     let column = this.lastSyntaxError?.column;
 

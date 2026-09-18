@@ -19,8 +19,13 @@ import {RenderedFrame} from './rendered-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, afterEach, expect, beforeEach, vi} from 'vitest';
+import {ReplaySubject} from 'rxjs';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {
   AppConfigProvider,
   ThemePreference,
@@ -43,6 +48,16 @@ class MockChatState {
   }
 }
 
+/** Builds a SURFACE_RESIZE envelope in the shape HostCommunication delivers. */
+function surfaceResize(height: number, timestamp = Date.now()): MessageEnvelope {
+  return {
+    type: 'SURFACE_RESIZE',
+    payload: {height, width: 800},
+    origin: 'http://localhost:3000',
+    timestamp,
+  };
+}
+
 describe('RenderedFrame Live Preview Viewport', () => {
   let fixture: ComponentFixture<RenderedFrame>;
   let harness: RenderedFrameHarness;
@@ -51,6 +66,8 @@ describe('RenderedFrame Live Preview Viewport', () => {
   let resolvedUrlSignal: WritableSignal<string | null>;
   let themePreferenceSignal: WritableSignal<ThemePreference>;
   let chatStateMock: MockChatState;
+  let messageStreamSubject: ReplaySubject<MessageEnvelope>;
+  let messageStreamSignal: WritableSignal<MessageEnvelope | null>;
 
   beforeEach(async () => {
     resolvedUrlSignal = signal('http://localhost:3000/renderer');
@@ -59,13 +76,15 @@ describe('RenderedFrame Live Preview Viewport', () => {
       resolvedUrl: resolvedUrlSignal,
     };
 
-    const messageStreamSignal = signal(null);
+    messageStreamSubject = new ReplaySubject<MessageEnvelope>(1);
+    messageStreamSignal = signal<MessageEnvelope | null>(null);
     hostCommunicationServiceMock = {
       registerIframe: vi.fn(),
       unregisterIframe: vi.fn(),
       sendTheme: vi.fn(),
       sendRenderA2UI: vi.fn(),
       messageStream: messageStreamSignal,
+      messageStream$: messageStreamSubject.asObservable(),
     };
 
     await TestBed.configureTestingModule({
@@ -306,36 +325,48 @@ describe('RenderedFrame Live Preview Viewport', () => {
       expect.anything(),
     );
   });
-  it('updates dynamicHeight when SURFACE_RESIZE message arrives', () => {
-    const mockEnvelope = {
-      type: 'SURFACE_RESIZE',
-      payload: {height: 520, width: 800},
-      origin: 'http://localhost:3000',
-      timestamp: Date.now(),
-    };
-    const messageStreamSignal = signal(mockEnvelope);
-    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
-      value: messageStreamSignal,
-      writable: true,
-    });
+  it('applies a reported surface height to the frame container', async () => {
+    messageStreamSignal.set(surfaceResize(520));
+    fixture.detectChanges();
 
-    const newFixture = TestBed.createComponent(RenderedFrame);
-    newFixture.detectChanges();
-
-    expect(newFixture.componentInstance.dynamicHeight()).toBe(520);
-    expect(newFixture.componentInstance.frameHeight()).toBe(520);
+    expect(fixture.componentInstance.dynamicHeight()).toBe(520);
+    expect(await harness.getFrameHeight()).toBe('520px');
   });
 
-  it('exposes a reported height as a CSS length and none otherwise', () => {
-    const component = fixture.componentInstance;
-    expect(component['frameHeightPx']()).toBeUndefined();
+  it('lowers the applied height when a smaller SURFACE_RESIZE arrives', async () => {
+    messageStreamSignal.set(surfaceResize(3224));
+    fixture.detectChanges();
+    expect(await harness.getFrameHeight()).toBe('3224px');
 
-    component.dynamicHeight.set(320);
-    expect(component['frameHeightPx']()).toBe('320px');
+    messageStreamSignal.set(surfaceResize(264));
+    fixture.detectChanges();
 
-    // A guest reporting no usable height must not pin the container's height.
-    component.dynamicHeight.set(0);
-    expect(component['frameHeightPx']()).toBeUndefined();
+    expect(fixture.componentInstance.dynamicHeight()).toBe(264);
+    expect(await harness.getFrameHeight()).toBe('264px');
+  });
+
+  it('keeps the frame at panel height when the guest reports zero', async () => {
+    // CrossFrameValidator admits 0 as a valid dimension, so this component is
+    // what stops a zero report from collapsing the frame: with no usable
+    // height the container falls back to filling its panel.
+    messageStreamSignal.set(surfaceResize(0));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.frameHeight()).toBeNull();
+    expect(await harness.getFrameHeight()).toBe('100%');
+  });
+
+  it('holds the last applied height when a report exceeds the dimension cap', async () => {
+    messageStreamSignal.set(surfaceResize(520));
+    fixture.detectChanges();
+
+    // Above MAX_SURFACE_DIMENSION in CrossFrameValidator, which is the ceiling
+    // the frame was pinned to during the resize feedback loop. The report is
+    // dropped before it reaches the container, leaving the last good height.
+    messageStreamSignal.set(surfaceResize(20_001));
+    fixture.detectChanges();
+
+    expect(await harness.getFrameHeight()).toBe('520px');
   });
 
   it('re-dispatches sendRenderA2UI when RENDERER_READY or A2UI_CATALOG arrives from bridge', () => {
@@ -502,5 +533,136 @@ describe('RenderedFrame Live Preview Viewport', () => {
     });
 
     document.body.removeChild(parentContainer);
+  });
+
+  describe('runaway growth circuit breaker', () => {
+    /** Cadence of the observed SURFACE_RESIZE feedback loop, in milliseconds. */
+    const LOOP_CADENCE_MS = 24;
+    /** Growth increment of the observed loop (guest body padding), in pixels. */
+    const LOOP_STEP_PX = 32;
+    const BASE_HEIGHT_PX = 300;
+    const START_TIME = 1_700_000_000_000;
+
+    /** Emits through both the uncoalesced stream and the coalesced signal, as the host does. */
+    function emit(envelope: MessageEnvelope): void {
+      messageStreamSubject.next(envelope);
+      messageStreamSignal.set(envelope);
+    }
+
+    function warnings(logger: ErrorLogger): string[] {
+      return logger
+        .getHistory()
+        .filter(item => item.level === 'warn')
+        .map(item => item.message);
+    }
+
+    it('freezes the frame height once reports grow monotonically at loop cadence', () => {
+      const logger = TestBed.inject(ErrorLogger);
+      logger.clear();
+
+      let frozenHeight: number | null = null;
+      for (let i = 0; i < 20; i++) {
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
+        fixture.detectChanges();
+        const applied = fixture.componentInstance.dynamicHeight();
+        if (frozenHeight === null && applied !== BASE_HEIGHT_PX + i * LOOP_STEP_PX) {
+          frozenHeight = applied;
+        }
+      }
+
+      expect(frozenHeight).not.toBeNull();
+      expect(fixture.componentInstance.dynamicHeight()).toBe(frozenHeight);
+      expect(fixture.componentInstance.dynamicHeight()).toBeLessThan(
+        BASE_HEIGHT_PX + 19 * LOOP_STEP_PX,
+      );
+      expect(warnings(logger).filter(message => message.includes('runaway'))).toHaveLength(1);
+    });
+
+    it('latches when reports arrive faster than change detection runs', () => {
+      emit(surfaceResize(BASE_HEIGHT_PX, START_TIME));
+      fixture.detectChanges();
+      expect(fixture.componentInstance.dynamicHeight()).toBe(BASE_HEIGHT_PX);
+
+      // A whole runaway burst delivered inside a single change detection tick.
+      // The Angular effect coalesces these into one run for the final value only,
+      // so a counter living inside the effect would never see the ramp.
+      for (let i = 1; i <= 15; i++) {
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
+      }
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.dynamicHeight()).toBe(BASE_HEIGHT_PX);
+    });
+
+    it('keeps applying growth when reports arrive slower than the runaway window', () => {
+      const logger = TestBed.inject(ErrorLogger);
+      logger.clear();
+
+      const slowIntervalMs = 600;
+      for (let i = 0; i < 20; i++) {
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * slowIntervalMs));
+        fixture.detectChanges();
+      }
+
+      expect(fixture.componentInstance.dynamicHeight()).toBe(BASE_HEIGHT_PX + 19 * LOOP_STEP_PX);
+      expect(warnings(logger).filter(message => message.includes('runaway'))).toHaveLength(0);
+    });
+
+    it('restarts the growth run when a report does not grow', () => {
+      let time = START_TIME;
+      for (let cycle = 0; cycle < 4; cycle++) {
+        for (let i = 0; i < 6; i++) {
+          emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, time));
+          time += LOOP_CADENCE_MS;
+          fixture.detectChanges();
+        }
+        // A single non-growing report ends the run before it reaches the limit.
+        emit(surfaceResize(BASE_HEIGHT_PX, time));
+        time += LOOP_CADENCE_MS;
+        fixture.detectChanges();
+      }
+
+      emit(surfaceResize(BASE_HEIGHT_PX + LOOP_STEP_PX, time));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.dynamicHeight()).toBe(BASE_HEIGHT_PX + LOOP_STEP_PX);
+    });
+
+    it('applies shrinking heights after the breaker latches', () => {
+      for (let i = 0; i < 20; i++) {
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
+        fixture.detectChanges();
+      }
+      const latchedHeight = fixture.componentInstance.dynamicHeight();
+      expect(latchedHeight).toBeLessThan(BASE_HEIGHT_PX + 19 * LOOP_STEP_PX);
+
+      emit(surfaceResize(264, START_TIME + 20 * LOOP_CADENCE_MS));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.dynamicHeight()).toBe(264);
+    });
+
+    it('clears the latch when the renderer signals that it is ready again', () => {
+      for (let i = 0; i < 20; i++) {
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
+        fixture.detectChanges();
+      }
+      expect(fixture.componentInstance.dynamicHeight()).toBeLessThan(
+        BASE_HEIGHT_PX + 19 * LOOP_STEP_PX,
+      );
+
+      emit({
+        type: 'RENDERER_READY',
+        payload: {},
+        origin: 'http://localhost:3000',
+        timestamp: START_TIME + 20 * LOOP_CADENCE_MS,
+      });
+      fixture.detectChanges();
+
+      emit(surfaceResize(1024, START_TIME + 21 * LOOP_CADENCE_MS));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.dynamicHeight()).toBe(1024);
+    });
   });
 });

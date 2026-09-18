@@ -14,15 +14,11 @@
  * limitations under the License.
  */
 
-export interface MonacoModel {
-  getValue(): string;
-  setValue(value: string): void;
-}
+import {ComponentHarness} from '@angular/cdk/testing';
 
-export interface WindowWithMonaco extends Window {
-  monaco?: {
-    editor: {
-      getModels(): MonacoModel[];
-    };
-  };
+/**
+ * Test harness for the monaco editor.
+ */
+export class MonacoEditorHarness extends ComponentHarness {
+  static hostSelector = 'a2ui-composer-monaco-editor';
 }

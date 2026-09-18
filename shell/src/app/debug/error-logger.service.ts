@@ -15,7 +15,7 @@
  */
 import {Injectable} from '@angular/core';
 import {Subject, Observable} from 'rxjs';
-import {safeSerialize} from 'a2ui-bridge';
+import {safeSerialize, isErrorLike} from 'a2ui-bridge';
 
 /**
  * Defines the severity levels for log events.
@@ -59,28 +59,6 @@ export interface TaggedLogger {
   info(message: string, ...args: unknown[]): void;
   /** Logs a standard message with the bound tag. */
   log(message: string, ...args: unknown[]): void;
-}
-
-/**
- * Determines whether a given value resembles an Error object.
- * Checks for the presence of standard Error properties like 'message' and 'stack'.
- *
- * @param val - The value to inspect.
- * @returns True if the value is shaped like an Error, false otherwise.
- */
-export function isErrorLike(val: unknown): val is Error {
-  if (val instanceof Error || Object.prototype.toString.call(val) === '[object Error]') {
-    return true;
-  }
-  return (
-    typeof val === 'object' &&
-    val !== null &&
-    'message' in val &&
-    typeof (val as Record<string, unknown>)['message'] === 'string' &&
-    'stack' in val &&
-    typeof (val as Record<string, unknown>)['stack'] === 'string' &&
-    !('nodeType' in val)
-  );
 }
 
 /**

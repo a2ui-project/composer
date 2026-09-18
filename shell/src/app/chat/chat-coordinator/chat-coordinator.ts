@@ -97,10 +97,14 @@ export class ChatCoordinator {
     this.currentTurnIndex.set(0);
     this.activePromptId = null;
     this.chatState.setChatHistory([]);
-    this.chatState.setPipelineStatus(PipelineStatus.IDLE);
-    this.chatState.setProgrammaticStreamActive(false);
+    this.finalizeStream(PipelineStatus.IDLE);
     this.chatState.clearRawLlmHistory();
     this.stateSync.flushDraft();
+  }
+
+  private finalizeStream(status: PipelineStatus = PipelineStatus.IDLE): void {
+    this.chatState.setPipelineStatus(status);
+    this.chatState.setProgrammaticStreamActive(false);
   }
 
   /**
@@ -287,8 +291,7 @@ export class ChatCoordinator {
       // If it was cancelled, don't show an error. Just leave what was generated or remove the bubble.
       // But we probably want to just reset the UI lock.
       if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
-        this.chatState.setPipelineStatus(PipelineStatus.IDLE);
-        this.chatState.setProgrammaticStreamActive(false);
+        this.finalizeStream(PipelineStatus.IDLE);
         // Replace trailing pulse or partial JSON with stopped message, and force non-snapshot
         this.chatState.updateChatHistory(history => {
           const updated = [...history];
@@ -315,6 +318,7 @@ export class ChatCoordinator {
   private async processRawLlmPayload(rawText: string, promptId?: string): Promise<void> {
     // Stage 1: Parse and Syntax Healing
     let parsedBlocks: unknown[] = [];
+    let componentCount = 0;
     try {
       if (this.chatCleaner.extractCodeFences(rawText).hasFences) {
         this.chatState.setPipelineStatus(PipelineStatus.HEALING);
@@ -323,15 +327,15 @@ export class ChatCoordinator {
       const parseResult = parseAndHealJsonLines(cleanedText);
 
       if (parseResult.success && parseResult.isConversational) {
-        this.chatState.setPipelineStatus(PipelineStatus.IDLE);
-        this.chatState.setProgrammaticStreamActive(false);
+        this.finalizeStream(PipelineStatus.IDLE);
         return;
       }
 
       if (!parseResult.success) {
+        const errorPrefix = promptId ? `[prompt:${promptId}] ` : '';
         this.errorLogger.error({
           sourceTag: '[ChatParser]',
-          message: parseResult.error,
+          message: `${errorPrefix}${parseResult.error}`,
           line: parseResult.line,
           column: parseResult.column,
           snippet: parseResult.snippet,
@@ -345,15 +349,14 @@ export class ChatCoordinator {
           }
           return updated;
         });
-        this.chatState.setPipelineStatus(PipelineStatus.IDLE);
-        this.chatState.setProgrammaticStreamActive(false);
+        this.finalizeStream(PipelineStatus.IDLE);
         return;
       }
 
       parsedBlocks = parseResult.blocks;
+      componentCount = parseResult.count;
     } catch (err: unknown) {
-      this.chatState.setPipelineStatus(PipelineStatus.FAILED);
-      this.chatState.setProgrammaticStreamActive(false);
+      this.finalizeStream(PipelineStatus.FAILED);
       throw err;
     }
 
@@ -402,6 +405,8 @@ export class ChatCoordinator {
           updated[lastIdx] = {
             ...updated[lastIdx],
             content: finalLayoutText,
+            isSnapshot: true,
+            componentCount,
           };
         }
         return updated;
@@ -415,8 +420,7 @@ export class ChatCoordinator {
       // condition escapes
       this.chatState.setProgrammaticStreamActive(false);
     } catch (err: unknown) {
-      this.chatState.setPipelineStatus(PipelineStatus.FAILED);
-      this.chatState.setProgrammaticStreamActive(false);
+      this.finalizeStream(PipelineStatus.FAILED);
       throw err;
     }
   }
@@ -432,11 +436,10 @@ export class ChatCoordinator {
     const cleanMsg = cleanErrorMessage(rawError);
 
     if (this.errorPresenter.isConnectivityError(lowerMsg)) {
-      this.chatState.setPipelineStatus(PipelineStatus.IDLE);
+      this.finalizeStream(PipelineStatus.IDLE);
     } else {
-      this.chatState.setPipelineStatus(PipelineStatus.FAILED);
+      this.finalizeStream(PipelineStatus.FAILED);
     }
-    this.chatState.setProgrammaticStreamActive(false);
 
     const parsed = this.errorPresenter.parseError(lowerMsg, cleanMsg, !!originalPrompt);
 

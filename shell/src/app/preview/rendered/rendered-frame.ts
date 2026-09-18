@@ -25,15 +25,43 @@ import {
   input,
   signal,
 } from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {DomSanitizer} from '@angular/platform-browser';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {isValidHttpUrl} from '../../utils/url';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {HostCommunication} from '../../shell/host-communication/host-communication';
+import {
+  HostCommunication,
+  MessageEnvelope,
+} from '../../shell/host-communication/host-communication';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../../chat/chat-state/chat-state';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
+
+/**
+ * Number of consecutive growing SURFACE_RESIZE reports that trips the growth
+ * circuit breaker. A healthy renderer settles within a handful of reports, so
+ * this is high enough never to fire on legitimate content while still bounding
+ * a feedback loop to a fraction of a second.
+ *
+ * This covers monotonic divergence, which is the failure mode that scrolls
+ * content out of view and pins the frame at its maximum. It deliberately does
+ * not try to detect an oscillating loop: healthy renderers oscillate too. The
+ * Lit sample reports 32,148,288,312,148,288,312 for one ordinary re-render, so
+ * alternation is not a signal that can be separated from normal behaviour
+ * here. Oscillation is covered by the settle assertion in
+ * shell/e2e/renderer-integration-and-telemetry.e2e.ts instead.
+ */
+const MAX_MONOTONIC_GROWTH_REPORTS = 8;
+
+/**
+ * Maximum gap between two reports for them to belong to the same growth run.
+ * Legitimate streaming also grows the frame step by step, but not at the
+ * sub-frame cadence a resize feedback loop runs at.
+ */
+const RUNAWAY_REPORT_INTERVAL_MS = 500;
 
 /**
  * Orchestrates the secure, sandboxed iframe rendering the active preview target,
@@ -52,12 +80,26 @@ export class RenderedFrame {
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
+  private errorLogger = inject(ErrorLogger);
 
   /** Optional layout payload to render immediately into the guest iframe. */
   readonly payload = input<unknown[] | null | undefined>(null);
 
   /** Tracks dynamic surface height reported by the guest renderer frame. */
   readonly dynamicHeight = signal<number | null>(null);
+
+  private readonly growthBreakerLatched = signal<boolean>(false);
+
+  /** True once the guest has been detected driving the frame into unbounded growth. */
+  readonly isGrowthBreakerLatched = this.growthBreakerLatched.asReadonly();
+
+  /** Height reported by the first message of the current growth run, in pixels. */
+  private growthRunStartHeight: number | null = null;
+  private lastReportedHeight: number | null = null;
+  private lastReportTimestamp = 0;
+  private growthRunLength = 0;
+  /** Renderer URL the current breaker state belongs to; undefined until first read. */
+  private trackedRendererUrl: string | null | undefined = undefined;
 
   /** Computed pixel height string or 100% when rendered within dynamic/inline layout contexts. */
   readonly frameHeight = computed(() => {
@@ -162,6 +204,8 @@ export class RenderedFrame {
       const iframe = this.iframeRef()?.nativeElement;
       if (iframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
         this.hostCommunication.sendRenderA2UI(payload, iframe);
+        // New content legitimately resizes the surface; start counting afresh.
+        this.resetGrowthRun();
       }
     });
 
@@ -189,11 +233,110 @@ export class RenderedFrame {
         } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
           if (CrossFrameValidator.validateIncomingMessage(envelope)) {
             const resizePayload = envelope.payload as {height: number; width?: number};
-            this.dynamicHeight.set(resizePayload.height);
+            this.dynamicHeight.set(this.capReportedHeight(resizePayload.height));
           }
         }
       }
     });
+
+    // Runaway growth circuit breaker. The counting must happen here rather than in
+    // the effect above: signal effects coalesce, so a burst of messages arriving in
+    // one change detection tick runs that effect once, for the last value only, and
+    // a counter inside it would never see the ramp that defines a feedback loop.
+    this.hostCommunication.messageStream$
+      .pipe(takeUntilDestroyed())
+      .subscribe(envelope => this.trackReportedGrowth(envelope));
+
+    // A different renderer means a different guest; give it a clean slate.
+    effect(() => {
+      const rendererUrl = this.startupResolution.resolvedUrl();
+      untracked(() => {
+        if (this.trackedRendererUrl !== undefined && rendererUrl !== this.trackedRendererUrl) {
+          this.resetGrowthBreaker();
+        }
+        this.trackedRendererUrl = rendererUrl;
+      });
+    });
+  }
+
+  /**
+   * Counts consecutive growing surface reports and latches the circuit breaker
+   * when a guest drives the frame into unbounded growth.
+   */
+  private trackReportedGrowth(envelope: MessageEnvelope | null): void {
+    if (!envelope) {
+      return;
+    }
+
+    const myWindow = untracked(() => this.iframeRef()?.nativeElement)?.contentWindow;
+    if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
+      return;
+    }
+
+    if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
+      this.resetGrowthBreaker();
+      return;
+    }
+
+    if (
+      envelope.type !== PreviewBridgeMessageType.SURFACE_RESIZE ||
+      !CrossFrameValidator.validateIncomingMessage(envelope)
+    ) {
+      return;
+    }
+
+    const height = (envelope.payload as {height: number}).height;
+    const grewAtLoopCadence =
+      this.lastReportedHeight !== null &&
+      height > this.lastReportedHeight &&
+      envelope.timestamp - this.lastReportTimestamp <= RUNAWAY_REPORT_INTERVAL_MS;
+
+    if (grewAtLoopCadence) {
+      this.growthRunLength++;
+    } else {
+      this.growthRunLength = 1;
+      this.growthRunStartHeight = height;
+    }
+    this.lastReportedHeight = height;
+    this.lastReportTimestamp = envelope.timestamp;
+
+    if (this.growthRunLength >= MAX_MONOTONIC_GROWTH_REPORTS && !this.growthBreakerLatched()) {
+      this.growthBreakerLatched.set(true);
+      this.errorLogger.warn({
+        message:
+          `Preview frame growth stopped: the renderer reported ${this.growthRunLength} ` +
+          `consecutive larger heights within ${RUNAWAY_REPORT_INTERVAL_MS}ms, which is a ` +
+          `runaway resize loop. Frame held at ${untracked(() => this.dynamicHeight()) ?? this.growthRunStartHeight}px; ` +
+          `last reported height ${height}px.`,
+        sourceTag: '[Shell]',
+      });
+    }
+  }
+
+  /**
+   * Clamps a reported height so a latched guest can shrink the frame but never
+   * grow it further.
+   */
+  private capReportedHeight(height: number): number {
+    if (!untracked(() => this.growthBreakerLatched())) {
+      return height;
+    }
+    const ceiling = untracked(() => this.dynamicHeight()) ?? this.growthRunStartHeight;
+    return ceiling === null ? height : Math.min(height, ceiling);
+  }
+
+  /** Ends the current growth run without clearing an existing latch. */
+  private resetGrowthRun(): void {
+    this.growthRunLength = 0;
+    this.growthRunStartHeight = null;
+    this.lastReportedHeight = null;
+    this.lastReportTimestamp = 0;
+  }
+
+  /** Clears the latch and the growth run, restoring unrestricted sizing. */
+  private resetGrowthBreaker(): void {
+    this.resetGrowthRun();
+    this.growthBreakerLatched.set(false);
   }
 
   /**
