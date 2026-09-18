@@ -1,0 +1,195 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  height: 100%;
+  container: demos / inline-size;
+  --demos-canvas: var(--cpk-page-bg, #f5f6f8);
+  --demos-surface: var(--cpk-surface, #ffffff);
+  --demos-border: var(--cpk-border, #dfe2e8);
+  --demos-text: var(--cpk-text-primary, #202124);
+  --demos-text-secondary: var(--cpk-text-secondary, #5b606b);
+  --demos-shadow: 0 2px 8px rgb(20 25 35 / 4%);
+}
+
+:host-context(.dark-theme) {
+  --demos-canvas: var(--cpk-page-bg, #111214);
+  --demos-surface: var(--cpk-surface, #1c1e22);
+  --demos-border: var(--cpk-border, #35383f);
+  --demos-text: var(--cpk-text-primary, #eef0f3);
+  --demos-text-secondary: var(--cpk-text-secondary, #b9bec8);
+  --demos-shadow: none;
+}
+
+.demos-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 32px;
+  overflow-y: auto;
+  background-color: var(--demos-canvas);
+  color: var(--demos-text);
+}
+
+// The coordinator must stay mounted to complete the catalog handshake.
+.coordinator-frame {
+  visibility: hidden;
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.demos-header,
+.demos-wall {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.demos-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.demos-title {
+  margin: 0 0 10px;
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.8px;
+}
+
+.demos-subtitle {
+  margin: 0;
+  color: var(--demos-text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.demos-count {
+  flex-shrink: 0;
+  margin: 0 0 3px;
+  color: var(--demos-text-secondary);
+  font-size: 0.8125rem;
+}
+
+// Row order matches the renderer response and the keyboard reading order.
+.demos-wall {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+
+  a2ui-composer-demo-card {
+    display: block;
+    min-width: 0;
+    grid-column: span var(--demo-columns, 6);
+  }
+}
+
+.demos-loading,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 24px;
+  color: var(--demos-text-secondary);
+  text-align: center;
+}
+
+.empty-state {
+  flex: 1;
+  min-height: 240px;
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  font-size: 48px;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--demos-text);
+}
+
+.empty-subtitle,
+.empty-renderer {
+  margin: 0;
+  max-width: 480px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.empty-renderer {
+  max-width: 100%;
+  font-size: 0.8rem;
+}
+
+.empty-renderer-url {
+  font-family: var(--cpk-font-mono, 'Roboto Mono', Consolas, monospace);
+  overflow-wrap: anywhere;
+}
+
+@container demos (max-width: 900px) {
+  .demos-container {
+    padding: 28px;
+  }
+
+  .demos-wall {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 760px;
+
+    a2ui-composer-demo-card {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .demos-header {
+    max-width: 760px;
+  }
+}
+
+@container demos (max-width: 540px) {
+  .demos-container {
+    padding: 24px 16px;
+    gap: 28px;
+  }
+
+  .demos-header {
+    align-items: start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .demos-title {
+    font-size: 1.75rem;
+  }
+}
