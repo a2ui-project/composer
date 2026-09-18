@@ -37,19 +37,17 @@
 
 .catalog-title {
   margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
+  font: var(--mat-sys-title-medium);
+  letter-spacing: var(--mat-sys-title-medium-tracking);
   color: var(--mat-sys-on-surface);
 }
 
 .gallery-sidenav .catalog-list {
   .category-header {
-    font: var(--mat-sys-typescale-label-medium);
-    font-weight: 600;
+    font: var(--mat-sys-label-small);
     text-transform: uppercase;
-    letter-spacing: 1px;
-    font-size: 11px;
-    color: var(--cpk-text-secondary);
+    letter-spacing: var(--mat-sys-label-small-tracking);
+    color: var(--mat-sys-on-surface-variant);
   }
 
   .component-nav-item {
@@ -82,7 +80,7 @@
 
       span[matListItemTitle] {
         color: var(--mat-sys-on-secondary-container);
-        font-weight: 600;
+        font-weight: var(--mat-sys-label-large-weight-prominent);
       }
     }
 
@@ -101,7 +99,7 @@
   // Keep this synchronized with the drawer when its container changes width.
   margin-left: var(--gallery-sidenav-width) !important;
   padding: 32px;
-  background-color: var(--mat-sys-background, #fafafa);
+  background-color: var(--mat-sys-background);
   overflow-y: auto;
 }
 
@@ -112,7 +110,7 @@
   justify-content: center;
   height: 80%;
   text-align: center;
-  color: var(--mat-sys-on-surface-variant, #666);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .empty-icon {
@@ -125,14 +123,15 @@
 
 .empty-title {
   margin: 0 0 8px 0;
-  font-size: 1.25rem;
-  font-weight: 500;
+  font: var(--mat-sys-title-large);
+  letter-spacing: var(--mat-sys-title-large-tracking);
 }
 
 .empty-subtitle {
   margin: 0;
   max-width: 400px;
-  font-size: 0.9rem;
+  font: var(--mat-sys-body-medium);
+  letter-spacing: var(--mat-sys-body-medium-tracking);
   opacity: 0.8;
 }
 
@@ -164,16 +163,15 @@
 
 .component-title {
   margin: 0 0 8px 0;
-  font-size: 2rem;
-  font-weight: 600;
-  letter-spacing: -0.8px;
+  font: var(--mat-sys-headline-large);
+  letter-spacing: var(--mat-sys-headline-large-tracking);
 }
 
 .component-description {
   margin: 0;
-  font-size: 0.95rem;
-  color: var(--mat-sys-on-surface-variant, #49454f);
-  line-height: 1.4;
+  font: var(--mat-sys-body-large);
+  letter-spacing: var(--mat-sys-body-large-tracking);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .preview-card,
@@ -181,18 +179,16 @@
 .properties-card {
   min-width: 0;
   align-self: start;
-  border-radius: var(--cpk-radius-card);
-  border: 1px solid var(--cpk-border);
-  background-color: var(--cpk-surface);
-  box-shadow: var(--cpk-shadow-card);
+  border: 1px solid var(--mat-sys-outline-variant);
+  background-color: var(--mat-sys-surface);
 
   mat-card-header {
     padding: 20px 24px 16px;
   }
 
   mat-card-title {
-    font-size: 14px;
-    font-weight: 600;
+    font: var(--mat-sys-title-small);
+    letter-spacing: var(--mat-sys-title-small-tracking);
   }
 
   mat-card-content {
@@ -205,11 +201,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--mat-sys-surface-container-highest, #f0f0f0);
-  border: 2px dashed var(--mat-sys-outline-variant, #e0e0e0);
+  background-color: var(--mat-sys-surface-container-highest);
+  border: 2px dashed var(--mat-sys-outline-variant);
   border-radius: 4px;
   font-style: italic;
-  color: var(--mat-sys-on-surface-variant, #777);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .usage-header {
@@ -220,7 +216,7 @@
 }
 
 .copy-button {
-  color: var(--mat-sys-primary, #6750a4);
+  color: var(--mat-sys-primary);
 }
 
 .usage-code-block {
@@ -233,10 +229,12 @@
 }
 
 .usage-code {
-  font-family: var(--cpk-font-mono);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  color: var(--mat-sys-on-surface, #333);
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: var(--mat-sys-body-medium-size);
+  font-weight: var(--mat-sys-body-medium-weight);
+  line-height: var(--mat-sys-body-medium-line-height);
+  letter-spacing: var(--mat-sys-body-medium-tracking);
+  color: var(--mat-sys-on-surface);
 }
 
 .properties-table {
@@ -244,19 +242,21 @@
   background: transparent;
 
   th {
-    font-weight: 600;
+    font-weight: var(--mat-sys-title-small-weight);
   }
 
   .prop-name {
-    font-weight: 500;
-    color: var(--mat-sys-primary, #6750a4);
+    font-weight: var(--mat-sys-label-large-weight);
+    color: var(--mat-sys-primary);
   }
 
   .prop-type code {
-    background-color: var(--mat-sys-surface-container-high, #f0f0f0);
+    background-color: var(--mat-sys-surface-container-high);
     padding: 2px 6px;
     border-radius: 4px;
-    font-size: 0.8rem;
+    font: var(--mat-sys-body-small);
+    font-family: 'Spline Sans Mono', monospace;
+    letter-spacing: var(--mat-sys-body-small-tracking);
   }
 
   .prop-required {
@@ -268,16 +268,19 @@
   }
 
   .optional-label {
-    font-size: 0.8rem;
+    font: var(--mat-sys-body-small);
+    letter-spacing: var(--mat-sys-body-small-tracking);
     font-style: italic;
     opacity: 0.6;
   }
 
   .prop-default code {
-    background-color: var(--mat-sys-surface-container-high, #f0f0f0);
+    background-color: var(--mat-sys-surface-container-high);
     padding: 2px 6px;
     border-radius: 4px;
-    font-size: 0.8rem;
+    font: var(--mat-sys-body-small);
+    font-family: 'Spline Sans Mono', monospace;
+    letter-spacing: var(--mat-sys-body-small-tracking);
   }
 }
 
@@ -299,8 +302,9 @@
   justify-content: center;
   padding: 24px;
   gap: 16px;
-  color: var(--mat-sys-on-surface-variant, #666);
-  font-size: 0.9rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+  letter-spacing: var(--mat-sys-body-medium-tracking);
 }
 
 .preview-card {
@@ -353,14 +357,14 @@
 
 .edit-heading {
   margin: 0 0 8px;
-  font-size: 15px;
-  font-weight: 600;
+  font: var(--mat-sys-title-medium);
+  letter-spacing: var(--mat-sys-title-medium-tracking);
 }
 
 .draft-help {
-  color: var(--cpk-text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
   margin: 8px 0 16px;
 }
 
@@ -377,8 +381,8 @@
   align-items: stretch;
   gap: 8px;
   min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
+  font: var(--mat-sys-label-medium);
+  letter-spacing: var(--mat-sys-label-medium-tracking);
 
   input:not([type='checkbox']),
   select {
@@ -389,16 +393,16 @@
     border-radius: 8px;
     padding: 8px 10px;
     background: var(--mat-sys-surface-container-low);
-    color: var(--cpk-text-primary);
-    font: inherit;
-    font-weight: 400;
+    color: var(--mat-sys-on-surface);
+    font: var(--mat-sys-body-small);
+    letter-spacing: var(--mat-sys-body-small-tracking);
   }
 
   input[type='checkbox'] {
     align-self: flex-start;
     width: 20px;
     height: 20px;
-    accent-color: var(--cpk-accent);
+    accent-color: var(--mat-sys-primary);
   }
 }
 
@@ -409,15 +413,16 @@
 
   summary {
     cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
+    font: var(--mat-sys-label-large);
+    letter-spacing: var(--mat-sys-label-large-tracking);
     padding: 8px 0;
   }
 }
 
 .draft-label {
   display: block;
-  font-size: 12px;
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
   margin: 8px 0;
 }
 
@@ -430,24 +435,24 @@
   border: 1px solid var(--mat-sys-outline);
   border-radius: 10px;
   padding: 12px;
-  color: var(--cpk-text-primary);
+  color: var(--mat-sys-on-surface);
   background: var(--mat-sys-surface-container-low);
-  font-family: var(--cpk-font-mono);
-  font-size: 12px;
-  line-height: 1.6;
+  font: var(--mat-sys-body-small);
+  font-family: 'Spline Sans Mono', monospace;
+  letter-spacing: var(--mat-sys-body-small-tracking);
 }
 
 .draft-json:focus-visible,
 .simple-property input:focus-visible,
 .simple-property select:focus-visible {
-  outline: 2px solid var(--cpk-accent);
+  outline: 2px solid var(--mat-sys-primary);
   outline-offset: 2px;
 }
 
 .draft-error {
   color: var(--mat-sys-error);
-  font-size: 12px;
-  line-height: 1.6;
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
 }
 
 .draft-actions {
