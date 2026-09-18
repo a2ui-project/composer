@@ -129,3 +129,39 @@ test('Composer chat and raw update labels share the workspace palette in both th
     await expect(page.locator('.raw-messages-container')).toContainText('theme-check');
   }
 });
+
+test('Material configuration controls use the shell palette in light and dark modes', async ({
+  page,
+}) => {
+  await connectMockAgent(page);
+  await page.locator('.inline-config-btn').click();
+  const dialog = page.getByRole('dialog', {name: 'A2A Agent Configuration'});
+  await expect(dialog).toHaveCSS('opacity', '1');
+  const endpoint = dialog.getByLabel('Agent Endpoint URL');
+  for (const theme of ['light', 'dark']) {
+    if (theme === 'dark') {
+      await dialog.getByRole('button', {name: 'Cancel', exact: true}).click();
+      await page.getByRole('button', {name: 'Switch to dark theme'}).click();
+      await expect(page.locator('body')).toHaveClass(/dark-theme/);
+      await page.locator('.inline-config-btn').click();
+      await expect(dialog).toHaveCSS('opacity', '1');
+    }
+    await endpoint.focus();
+    const field = dialog
+      .locator('mat-form-field')
+      .filter({has: page.getByLabel('Agent Endpoint URL')});
+    await expect(field.locator('.mdc-floating-label')).toHaveCSS(
+      'color',
+      await themeColor(page, '--mat-sys-primary'),
+    );
+    await expect(field.locator('.mdc-notched-outline__leading')).toHaveCSS(
+      'border-top-color',
+      await themeColor(page, '--mat-sys-primary'),
+    );
+    await expect(page.locator('body')).toHaveCSS(
+      'background-color',
+      await themeColor(page, '--mat-sys-background'),
+    );
+    await expect(endpoint).toHaveValue('http://mock-agent.local');
+  }
+});
