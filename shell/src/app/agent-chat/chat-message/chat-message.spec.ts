@@ -19,6 +19,7 @@ import {signal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {MatSnackBar} from '@angular/material/snack-bar';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -27,6 +28,7 @@ import {
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../../chat/chat-state/chat-state';
+import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 import {A2aChatMessage} from './chat-message';
 import {A2aChatMessageHarness} from './test/chat-message.harness';
 
@@ -40,6 +42,7 @@ describe('A2aChatMessage', () => {
     await TestBed.configureTestingModule({
       imports: [A2aChatMessage],
       providers: [
+        provideNoopAnimations(),
         {provide: MatSnackBar, useValue: mockSnackBar},
         {
           provide: StartupResolution,
@@ -603,5 +606,16 @@ describe('A2aChatMessage', () => {
 
     expect(await harness.hasStreamingCursor()).toBe(true);
     expect(await harness.hasPendingIndicator()).toBe(false);
+  });
+
+  it('defaults agentIconUrl to the injected protocol icon url', () => {
+    expect(fixture.componentInstance.agentIconUrl()).toBe(A2A_PROTOCOL_ICON_URL);
+  });
+
+  it('uses an explicitly bound agentIconUrl over the injected default', () => {
+    fixture.componentRef.setInput('agentIconUrl', 'http://example.com/bound-icon.svg');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.agentIconUrl()).toBe('http://example.com/bound-icon.svg');
   });
 });

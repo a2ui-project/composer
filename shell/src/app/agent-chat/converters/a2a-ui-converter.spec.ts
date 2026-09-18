@@ -15,6 +15,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
+import {TestBed} from '@angular/core/testing';
 import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
 import {
   a2aCardToUiAgentInfo,
@@ -23,8 +24,12 @@ import {
   createSentActionEvent,
   createSentMessageEvent,
   A2A_PROTOCOL_ICON_URL,
+  A2A_PROTOCOL_ICON_URL_TOKEN,
   parseA2aStreamEvent,
 } from './a2a-ui-converter';
+
+/** Stand-in for a locally hosted icon asset used to verify override behavior. */
+const OVERRIDE_ICON_URL = '/assets/test-a2a-logo.svg';
 
 describe('A2aUiConverter', () => {
   describe('a2aCardToUiAgentInfo', () => {
@@ -78,6 +83,47 @@ describe('A2aUiConverter', () => {
       expect(info.iconUrl).toBe(A2A_PROTOCOL_ICON_URL);
       expect(info.endpoint).toBe('');
       expect(info.samplePrompts?.length).toBeGreaterThan(0);
+    });
+
+    it('falls back to the supplied defaultIconUrl when the card has no icon', () => {
+      const card: AgentCard = {name: 'Iconless Agent'};
+
+      const info = a2aCardToUiAgentInfo(card, 'http://localhost:8080', OVERRIDE_ICON_URL);
+
+      expect(info.iconUrl).toBe(OVERRIDE_ICON_URL);
+    });
+
+    it('falls back to the supplied defaultIconUrl when the card is null', () => {
+      const info = a2aCardToUiAgentInfo(null, null, OVERRIDE_ICON_URL);
+
+      expect(info.iconUrl).toBe(OVERRIDE_ICON_URL);
+    });
+
+    it('prefers the card icon over the supplied defaultIconUrl', () => {
+      const card: AgentCard = {
+        name: 'Branded Agent',
+        iconUrl: 'http://example.com/branded.png',
+      };
+
+      const info = a2aCardToUiAgentInfo(card, 'http://localhost:8080', OVERRIDE_ICON_URL);
+
+      expect(info.iconUrl).toBe('http://example.com/branded.png');
+    });
+  });
+
+  describe('A2A_PROTOCOL_ICON_URL_TOKEN', () => {
+    it('resolves to the A2A brand asset URL by default', () => {
+      TestBed.configureTestingModule({});
+
+      expect(TestBed.inject(A2A_PROTOCOL_ICON_URL_TOKEN)).toBe(A2A_PROTOCOL_ICON_URL);
+    });
+
+    it('resolves to an overriding provider value when one is supplied', () => {
+      TestBed.configureTestingModule({
+        providers: [{provide: A2A_PROTOCOL_ICON_URL_TOKEN, useValue: OVERRIDE_ICON_URL}],
+      });
+
+      expect(TestBed.inject(A2A_PROTOCOL_ICON_URL_TOKEN)).toBe(OVERRIDE_ICON_URL);
     });
   });
 

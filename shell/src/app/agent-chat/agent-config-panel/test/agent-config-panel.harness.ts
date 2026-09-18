@@ -26,6 +26,7 @@ export class AgentConfigPanelHarness extends ComponentHarness {
   private getCancelButton = this.locatorForOptional(MatButtonHarness.with({text: 'Cancel'}));
   private getClearButton = this.locatorFor(MatButtonHarness.with({selector: '.clear-address-btn'}));
   private getErrorBox = this.locatorForOptional('.connection-error-box');
+  private getAvatarImage = this.locatorForOptional('.avatar-image');
 
   async setEndpoint(value: string): Promise<void> {
     const inputs = await this.getInputs();
@@ -76,5 +77,10 @@ export class AgentConfigPanelHarness extends ComponentHarness {
   async getErrorMessage(): Promise<string | null> {
     const err = await this.getErrorBox();
     return err ? err.text() : null;
+  }
+
+  async getAvatarImageSrc(): Promise<string | null> {
+    const el = await this.getAvatarImage();
+    return el ? el.getAttribute('src') : null;
   }
 }

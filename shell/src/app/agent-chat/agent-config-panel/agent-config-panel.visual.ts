@@ -16,6 +16,7 @@
 
 import {test, expect, type Locator} from '@playwright/test';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
+import {stubA2aProtocolIcon} from '../test/mock-a2a-agent';
 
 async function waitForImageLoad(locator: Locator): Promise<void> {
   await locator.evaluate((img: HTMLImageElement) =>
@@ -30,6 +31,7 @@ async function waitForImageLoad(locator: Locator): Promise<void> {
 
 test.describe('AgentConfigPanel Visual Regression & Layout', () => {
   test.beforeEach(async ({page}) => {
+    await stubA2aProtocolIcon(page);
     await page.goto('/a2a');
     await page.evaluate(() => {
       try {

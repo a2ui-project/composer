@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {InjectionToken} from '@angular/core';
 import {
   A2aMessage,
   AgentCard,
@@ -33,10 +34,26 @@ export const A2A_PROTOCOL_ICON_URL =
   'https://raw.githubusercontent.com/google-a2a/A2A/refs/heads/main/docs/assets/a2a-logo-black.svg';
 
 /**
+ * Injection token for the default A2A Protocol icon URL.
+ * Allows overriding the external URL with a local or data URI asset in test environments.
+ */
+export const A2A_PROTOCOL_ICON_URL_TOKEN = new InjectionToken<string>(
+  'A2A_PROTOCOL_ICON_URL_TOKEN',
+  {
+    providedIn: 'root',
+    factory: () => A2A_PROTOCOL_ICON_URL,
+  },
+);
+
+/**
  * Converts a raw A2A AgentCard and endpoint URL into a UI Agent Info model.
  * Supports both v0.3 (top-level 'url') and v1.0 ('supportedInterfaces') schemas.
  */
-export function a2aCardToUiAgentInfo(card: AgentCard | null, url: string | null): UiAgentInfo {
+export function a2aCardToUiAgentInfo(
+  card: AgentCard | null,
+  url: string | null,
+  defaultIconUrl: string = A2A_PROTOCOL_ICON_URL,
+): UiAgentInfo {
   const samplePrompts: string[] = [];
   const rawPrompts = card?.samplePrompts || card?.sample_prompts;
 
@@ -69,7 +86,7 @@ export function a2aCardToUiAgentInfo(card: AgentCard | null, url: string | null)
     description: card?.description || 'Connected autonomous Agent-to-Agent service endpoint.',
     version: card?.version || '',
     endpoint: resolvedEndpoint,
-    iconUrl: card?.iconUrl || card?.icon_url || A2A_PROTOCOL_ICON_URL,
+    iconUrl: card?.iconUrl || card?.icon_url || defaultIconUrl,
     skills: card?.skills,
     capabilities: card?.capabilities,
     samplePrompts: samplePrompts.slice(0, 4),

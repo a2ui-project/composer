@@ -33,7 +33,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatSelectModule} from '@angular/material/select';
 import {A2A_BACKEND_OPTIONS, A2aBackendOption} from '../../chat/a2a/a2a-transport.token';
 import {A2aBackendMode} from '../../settings/app-config-provider/app-config-provider';
-import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
+import {A2A_PROTOCOL_ICON_URL_TOKEN} from '../converters/a2a-ui-converter';
 import {isValidEndpointUrl, normalizeHttpUrl} from '../../utils/url';
 
 export interface AgentConfigSaveEvent {
@@ -74,7 +74,7 @@ export class AgentConfigPanel implements OnInit {
     inject(A2A_BACKEND_OPTIONS, {
       optional: true,
     }) || [];
-  protected readonly a2aProtocolIconUrl = A2A_PROTOCOL_ICON_URL;
+  protected readonly a2aProtocolIconUrl = inject(A2A_PROTOCOL_ICON_URL_TOKEN);
 
   /** Initial A2A agent endpoint URL to populate in the form. */
   readonly initialEndpoint = input<string | null>(null);

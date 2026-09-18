@@ -29,6 +29,7 @@ import {
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
 import {A2A_TRANSPORT, A2aTransport} from '../chat/a2a/a2a-transport.token';
+import {A2A_PROTOCOL_ICON_URL, A2A_PROTOCOL_ICON_URL_TOKEN} from './converters/a2a-ui-converter';
 import {A2aChatView} from './a2a-chat-view';
 import {A2aChatViewHarness} from './test/a2a-chat-view.harness';
 
@@ -39,6 +40,33 @@ describe('A2aChatView', () => {
   let mockAgentUrlSignal: WritableSignal<string>;
   let mockConfigProvider: Partial<AppConfigProvider>;
   let mockMessageStream$: Subject<MessageEnvelope | null>;
+
+  /** Provider list wired to the mocks created for the current test. */
+  function createBaseProviders() {
+    return [
+      {provide: A2A_TRANSPORT, useValue: mockA2aTransport},
+      {provide: AppConfigProvider, useValue: mockConfigProvider},
+      {
+        provide: StartupResolution,
+        useValue: {resolvedUrl: signal('http://localhost:3000/renderer')},
+      },
+      {
+        provide: HostCommunication,
+        useValue: {
+          registerIframe: vi.fn(),
+          unregisterIframe: vi.fn(),
+          sendTheme: vi.fn(),
+          sendRenderA2UI: vi.fn(),
+          messageStream: signal(null),
+          messageStream$: mockMessageStream$.asObservable(),
+        },
+      },
+      {
+        provide: ChatState,
+        useValue: {isProgrammaticStreamActive: signal(false)},
+      },
+    ];
+  }
 
   beforeEach(async () => {
     mockAgentUrlSignal = signal('http://localhost:8000');
@@ -76,29 +104,7 @@ describe('A2aChatView', () => {
 
     await TestBed.configureTestingModule({
       imports: [A2aChatView],
-      providers: [
-        {provide: A2A_TRANSPORT, useValue: mockA2aTransport},
-        {provide: AppConfigProvider, useValue: mockConfigProvider},
-        {
-          provide: StartupResolution,
-          useValue: {resolvedUrl: signal('http://localhost:3000/renderer')},
-        },
-        {
-          provide: HostCommunication,
-          useValue: {
-            registerIframe: vi.fn(),
-            unregisterIframe: vi.fn(),
-            sendTheme: vi.fn(),
-            sendRenderA2UI: vi.fn(),
-            messageStream: signal(null),
-            messageStream$: mockMessageStream$.asObservable(),
-          },
-        },
-        {
-          provide: ChatState,
-          useValue: {isProgrammaticStreamActive: signal(false)},
-        },
-      ],
+      providers: createBaseProviders(),
     }).compileComponents();
 
     fixture = TestBed.createComponent(A2aChatView);
@@ -891,5 +897,58 @@ describe('A2aChatView', () => {
     fixture.detectChanges();
 
     expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(payload);
+  });
+
+  describe('protocol icon url', () => {
+    it('applies the default protocol icon when the agent card has none', async () => {
+      const header = await harness.getHeader();
+
+      expect(fixture.componentInstance['agentInfo']()?.iconUrl).toBe(A2A_PROTOCOL_ICON_URL);
+      expect(await header.getAvatarImageSrc()).toBe(A2A_PROTOCOL_ICON_URL);
+    });
+
+    it('applies the injected icon url override when the agent card has none', async () => {
+      const overrideIconUrl = '/assets/test-a2a-logo.svg';
+      fixture.destroy();
+      TestBed.resetTestingModule();
+
+      await TestBed.configureTestingModule({
+        imports: [A2aChatView],
+        providers: [
+          ...createBaseProviders(),
+          {provide: A2A_PROTOCOL_ICON_URL_TOKEN, useValue: overrideIconUrl},
+        ],
+      }).compileComponents();
+
+      const overrideFixture = TestBed.createComponent(A2aChatView);
+      overrideFixture.detectChanges();
+      const overrideHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        overrideFixture,
+        A2aChatViewHarness,
+      );
+      const header = await overrideHarness.getHeader();
+
+      expect(overrideFixture.componentInstance['agentInfo']()?.iconUrl).toBe(overrideIconUrl);
+      expect(await header.getAvatarImageSrc()).toBe(overrideIconUrl);
+      overrideFixture.destroy();
+    });
+
+    it('prefers the agent card icon over the injected default', async () => {
+      (mockA2aTransport.getAgentCard as ReturnType<typeof vi.fn>).mockResolvedValue({
+        name: 'Branded Agent',
+        iconUrl: 'http://example.com/branded.svg',
+      });
+      fixture.destroy();
+
+      const brandedFixture = TestBed.createComponent(A2aChatView);
+      brandedFixture.detectChanges();
+      await brandedFixture.whenStable();
+      brandedFixture.detectChanges();
+
+      expect(brandedFixture.componentInstance['agentInfo']()?.iconUrl).toBe(
+        'http://example.com/branded.svg',
+      );
+      brandedFixture.destroy();
+    });
   });
 });

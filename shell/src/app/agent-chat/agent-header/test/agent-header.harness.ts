@@ -72,4 +72,10 @@ export class A2aAgentHeaderHarness extends ComponentHarness {
     const el = await this.getAvatarImage();
     return el ? el.getAttribute('src') : null;
   }
+
+  /** Simulates the avatar image failing to load so the fallback path runs. */
+  async triggerAvatarError(): Promise<void> {
+    const el = await this.getAvatarImage();
+    await el?.dispatchEvent('error');
+  }
 }

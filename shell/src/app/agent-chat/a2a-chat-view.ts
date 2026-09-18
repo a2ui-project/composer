@@ -40,6 +40,7 @@ import {UiAgentInfo} from './agent-header/types';
 import {A2aChatHistory} from './chat-history/chat-history';
 import {CanvasArtifact, UiMessage} from './chat-message/types';
 import {
+  A2A_PROTOCOL_ICON_URL_TOKEN,
   a2aCardToUiAgentInfo,
   createErrorEvent,
   createReceivedEvent,
@@ -125,6 +126,7 @@ export class A2aChatView implements OnInit {
   private readonly a2aTransport = inject(A2A_TRANSPORT);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly defaultIconUrl = inject(A2A_PROTOCOL_ICON_URL_TOKEN);
   private readonly initTimestamp = Date.now();
 
   /** Discovered A2A AgentCard metadata for the connected agent. */
@@ -243,7 +245,7 @@ export class A2aChatView implements OnInit {
 
       this.configProvider.setA2aAgentUrl(normalizedUrl);
       this.agentCard.set(card);
-      const info = a2aCardToUiAgentInfo(card, normalizedUrl);
+      const info = a2aCardToUiAgentInfo(card, normalizedUrl, this.defaultIconUrl);
       this.agentInfo.set(info);
       this.isConfigPanelOpen.set(false);
     } catch (err: unknown) {

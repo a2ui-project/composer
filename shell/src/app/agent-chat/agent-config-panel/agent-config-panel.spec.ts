@@ -16,9 +16,11 @@
 
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {A2aBackendMode} from '../../settings/app-config-provider/app-config-provider';
 import {A2A_BACKEND_OPTIONS} from '../../chat/a2a/a2a-transport.token';
+import {A2A_PROTOCOL_ICON_URL, A2A_PROTOCOL_ICON_URL_TOKEN} from '../converters/a2a-ui-converter';
 import {AgentConfigPanel} from './agent-config-panel';
 import {AgentConfigPanelHarness} from './test/agent-config-panel.harness';
 
@@ -29,6 +31,7 @@ describe('AgentConfigPanel', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AgentConfigPanel],
+      providers: [provideNoopAnimations()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AgentConfigPanel);
@@ -194,5 +197,31 @@ describe('AgentConfigPanel', () => {
     // Test onClear resets backendMode to first option
     diFixture.componentInstance['clearConfiguration']();
     expect(diFixture.componentInstance['form'].value.backendMode).toBe(A2aBackendMode.HTTP_JSONRPC);
+  });
+
+  it('renders the A2A protocol brand icon by default', async () => {
+    expect(await harness.getAvatarImageSrc()).toBe(A2A_PROTOCOL_ICON_URL);
+  });
+
+  it('renders the icon url provided via A2A_PROTOCOL_ICON_URL_TOKEN', async () => {
+    const overrideIconUrl = '/assets/test-a2a-logo.svg';
+
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [AgentConfigPanel],
+      providers: [
+        provideNoopAnimations(),
+        {provide: A2A_PROTOCOL_ICON_URL_TOKEN, useValue: overrideIconUrl},
+      ],
+    }).compileComponents();
+
+    const diFixture = TestBed.createComponent(AgentConfigPanel);
+    diFixture.detectChanges();
+    const diHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      diFixture,
+      AgentConfigPanelHarness,
+    );
+
+    expect(await diHarness.getAvatarImageSrc()).toBe(overrideIconUrl);
   });
 });

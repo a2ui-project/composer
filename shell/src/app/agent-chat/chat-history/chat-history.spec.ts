@@ -17,6 +17,7 @@
 import {signal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -25,8 +26,38 @@ import {
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../../chat/chat-state/chat-state';
+import {A2A_PROTOCOL_ICON_URL, A2A_PROTOCOL_ICON_URL_TOKEN} from '../converters/a2a-ui-converter';
 import {A2aChatHistory} from './chat-history';
 import {A2aChatHistoryHarness} from './test/chat-history.harness';
+
+/** Builds the collaborator mocks the component needs to render in isolation. */
+function createBaseProviders() {
+  return [
+    provideNoopAnimations(),
+    {
+      provide: StartupResolution,
+      useValue: {resolvedUrl: signal('http://localhost:3000/renderer')},
+    },
+    {
+      provide: HostCommunication,
+      useValue: {
+        registerIframe: vi.fn(),
+        unregisterIframe: vi.fn(),
+        sendTheme: vi.fn(),
+        sendRenderA2UI: vi.fn(),
+        messageStream: signal(null),
+      },
+    },
+    {
+      provide: AppConfigProvider,
+      useValue: {themePreference: signal(ThemePreference.LIGHT)},
+    },
+    {
+      provide: ChatState,
+      useValue: {isProgrammaticStreamActive: signal(false)},
+    },
+  ];
+}
 
 describe('A2aChatHistory', () => {
   let fixture: ComponentFixture<A2aChatHistory>;
@@ -35,30 +66,7 @@ describe('A2aChatHistory', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [A2aChatHistory],
-      providers: [
-        {
-          provide: StartupResolution,
-          useValue: {resolvedUrl: signal('http://localhost:3000/renderer')},
-        },
-        {
-          provide: HostCommunication,
-          useValue: {
-            registerIframe: vi.fn(),
-            unregisterIframe: vi.fn(),
-            sendTheme: vi.fn(),
-            sendRenderA2UI: vi.fn(),
-            messageStream: signal(null),
-          },
-        },
-        {
-          provide: AppConfigProvider,
-          useValue: {themePreference: signal(ThemePreference.LIGHT)},
-        },
-        {
-          provide: ChatState,
-          useValue: {isProgrammaticStreamActive: signal(false)},
-        },
-      ],
+      providers: createBaseProviders(),
     }).compileComponents();
 
     fixture = TestBed.createComponent(A2aChatHistory);
@@ -152,5 +160,58 @@ describe('A2aChatHistory', () => {
       fixture.componentInstance['handleViewportScroll']();
       expect(fixture.componentInstance['shouldAutoScroll']).toBe(false);
     }
+  });
+
+  describe('getAgentIconUrl', () => {
+    it('falls back to the injected default when no icon is available', () => {
+      expect(fixture.componentInstance['getAgentIconUrl']()).toBe(A2A_PROTOCOL_ICON_URL);
+    });
+
+    it('prefers the agentInfo icon over the agentCard icon', () => {
+      fixture.componentRef.setInput('agentInfo', {
+        name: 'Agent',
+        iconUrl: 'http://example.com/info-icon.svg',
+      });
+      fixture.componentRef.setInput('agentCard', {
+        name: 'Agent',
+        iconUrl: 'http://example.com/card-icon.svg',
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance['getAgentIconUrl']()).toBe(
+        'http://example.com/info-icon.svg',
+      );
+    });
+
+    it('uses the agentCard icon when agentInfo has none', () => {
+      fixture.componentRef.setInput('agentCard', {
+        name: 'Agent',
+        iconUrl: 'http://example.com/card-icon.svg',
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance['getAgentIconUrl']()).toBe(
+        'http://example.com/card-icon.svg',
+      );
+    });
+  });
+});
+
+describe('A2aChatHistory with an overridden icon URL token', () => {
+  const overrideIconUrl = '/assets/test-a2a-logo.svg';
+
+  it('falls back to the injected icon url when no icon is available', async () => {
+    await TestBed.configureTestingModule({
+      imports: [A2aChatHistory],
+      providers: [
+        ...createBaseProviders(),
+        {provide: A2A_PROTOCOL_ICON_URL_TOKEN, useValue: overrideIconUrl},
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(A2aChatHistory);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['getAgentIconUrl']()).toBe(overrideIconUrl);
   });
 });

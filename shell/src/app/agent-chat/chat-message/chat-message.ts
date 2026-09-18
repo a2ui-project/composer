@@ -33,7 +33,7 @@ import {
 } from '../../chat/a2a/a2a-attachments';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {renderMarkdown} from '../../utils/markdown';
-import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
+import {A2A_PROTOCOL_ICON_URL_TOKEN} from '../converters/a2a-ui-converter';
 import {CanvasArtifact, UiAttachedImage, UiMessage} from './types';
 
 /**
@@ -126,11 +126,12 @@ function imagePreviewSrc(file: UiAttachedImage): string {
 export class A2aChatMessage {
   private readonly document = inject(DOCUMENT);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly defaultIconUrl = inject(A2A_PROTOCOL_ICON_URL_TOKEN);
 
   /** UI message object containing sender role, text, thinking trace, and optional A2UI payload. */
   readonly message = input.required<UiMessage>();
   /** URL for the agent's display avatar icon. */
-  readonly agentIconUrl = input<string>(A2A_PROTOCOL_ICON_URL);
+  readonly agentIconUrl = input<string>(this.defaultIconUrl);
   /** Display name of the agent. */
   readonly agentName = input<string>('Agent');
   /** Whether the A2UI surface canvas is currently open. */

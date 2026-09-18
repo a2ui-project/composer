@@ -14,7 +14,34 @@
  * limitations under the License.
  */
 
+import {fileURLToPath} from 'node:url';
 import type {Page} from '@playwright/test';
+import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
+
+/**
+ * Byte-identical copy of the remote A2A logo served by `stubA2aProtocolIcon`.
+ * Committed alongside the tests so the avatar renders exactly as the baseline
+ * screenshots expect without reaching raw.githubusercontent.com.
+ */
+const A2A_PROTOCOL_ICON_FIXTURE = fileURLToPath(new URL('./a2a-logo-black.svg', import.meta.url));
+
+/**
+ * Serves the A2A protocol logo from the local fixture.
+ *
+ * The avatar's `src` points at a file on raw.githubusercontent.com. Fetching it
+ * makes every screenshot that shows the avatar depend on GitHub being reachable
+ * and on the upstream file never changing, so the request is answered locally
+ * instead. Must be called before the page navigates.
+ */
+export async function stubA2aProtocolIcon(page: Page): Promise<void> {
+  await page.route(A2A_PROTOCOL_ICON_URL, route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'image/svg+xml',
+      path: A2A_PROTOCOL_ICON_FIXTURE,
+    }),
+  );
+}
 
 export const mockAgentCard = {
   name: 'Smart Travel Planner Agent',
@@ -236,6 +263,7 @@ export const sseHotelResponseBody = [
 
 /** Sets up network route mocks for the A2A test agent */
 export async function setupMockA2aRoutes(page: Page, agentUrl = 'http://mock-agent.local') {
+  await stubA2aProtocolIcon(page);
   await page.route(`${agentUrl}/**`, async route => {
     const url = route.request().url();
     if (url.includes('.well-known') || url.includes('agent.json')) {

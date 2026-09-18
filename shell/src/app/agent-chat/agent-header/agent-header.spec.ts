@@ -16,8 +16,9 @@
 
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
-import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
+import {A2A_PROTOCOL_ICON_URL, A2A_PROTOCOL_ICON_URL_TOKEN} from '../converters/a2a-ui-converter';
 import {A2aAgentHeader} from './agent-header';
 import {A2aAgentHeaderHarness} from './test/agent-header.harness';
 
@@ -28,6 +29,7 @@ describe('A2aAgentHeader', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [A2aAgentHeader],
+      providers: [provideNoopAnimations()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(A2aAgentHeader);
@@ -85,11 +87,51 @@ describe('A2aAgentHeader', () => {
   });
 
   it('falls back to default icon url on image loading error', async () => {
-    const img = fixture.nativeElement.querySelector('.avatar-image') as HTMLImageElement;
-    img.src = 'https://invalid-url.broken/avatar.png';
-    img.dispatchEvent(new Event('error'));
+    fixture.componentRef.setInput('agentInfo', {
+      name: 'Broken Icon Agent',
+      iconUrl: 'https://invalid-url.broken/avatar.png',
+    });
     fixture.detectChanges();
+    expect(await harness.getAvatarImageSrc()).toBe('https://invalid-url.broken/avatar.png');
+
+    await harness.triggerAvatarError();
 
     expect(await harness.getAvatarImageSrc()).toBe(A2A_PROTOCOL_ICON_URL);
+  });
+});
+
+describe('A2aAgentHeader with an overridden icon URL token', () => {
+  const overrideIconUrl = '/assets/test-a2a-logo.svg';
+  let fixture: ComponentFixture<A2aAgentHeader>;
+  let harness: A2aAgentHeaderHarness;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [A2aAgentHeader],
+      providers: [
+        provideNoopAnimations(),
+        {provide: A2A_PROTOCOL_ICON_URL_TOKEN, useValue: overrideIconUrl},
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(A2aAgentHeader);
+    fixture.detectChanges();
+    harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, A2aAgentHeaderHarness);
+  });
+
+  it('renders the injected icon url when the agent supplies none', async () => {
+    expect(await harness.getAvatarImageSrc()).toBe(overrideIconUrl);
+  });
+
+  it('falls back to the injected icon url on image loading error', async () => {
+    fixture.componentRef.setInput('agentInfo', {
+      name: 'Broken Icon Agent',
+      iconUrl: 'https://invalid-url.broken/avatar.png',
+    });
+    fixture.detectChanges();
+
+    await harness.triggerAvatarError();
+
+    expect(await harness.getAvatarImageSrc()).toBe(overrideIconUrl);
   });
 });

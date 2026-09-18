@@ -19,6 +19,7 @@ import {
   Component,
   ElementRef,
   effect,
+  inject,
   input,
   output,
   viewChild,
@@ -30,7 +31,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {AgentCard} from '../../chat/a2a/a2a-types';
 import {A2aChatMessage} from '../chat-message/chat-message';
-import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
+import {A2A_PROTOCOL_ICON_URL_TOKEN} from '../converters/a2a-ui-converter';
 import {UiAgentInfo} from '../agent-header/types';
 import {UiMessage} from '../chat-message/types';
 
@@ -51,6 +52,8 @@ import {UiMessage} from '../chat-message/types';
   styleUrl: './chat-history.scss',
 })
 export class A2aChatHistory implements AfterViewChecked {
+  private readonly defaultIconUrl = inject(A2A_PROTOCOL_ICON_URL_TOKEN);
+
   /** Chronological list of UI messages rendered in the conversation timeline. */
   readonly messages = input<UiMessage[]>([]);
   /** Agent metadata and capability badges to display in the empty showcase state. */
@@ -139,7 +142,7 @@ export class A2aChatHistory implements AfterViewChecked {
   }
 
   protected getAgentIconUrl(): string {
-    return this.agentInfo()?.iconUrl || this.agentCard()?.iconUrl || A2A_PROTOCOL_ICON_URL;
+    return this.agentInfo()?.iconUrl || this.agentCard()?.iconUrl || this.defaultIconUrl;
   }
 
   protected getAgentDisplayName(): string {
