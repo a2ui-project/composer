@@ -22,9 +22,12 @@ export enum PreviewBridgeMessageType {
   COMPONENT_USAGES = 'COMPONENT_USAGES',
   CONSOLE_LOG = 'CONSOLE_LOG',
   DATA_MODEL_CHANGE = 'DATA_MODEL_CHANGE',
+  /** Demo[] on success, or {error: 'DEMOS_PROVIDER_FAILED'} when the provider fails. */
+  DEMOS = 'DEMOS',
   FORCE_UNBLOCK = 'FORCE_UNBLOCK',
   GET_CATALOG = 'GET_CATALOG',
   GET_COMPONENT_USAGES = 'GET_COMPONENT_USAGES',
+  GET_DEMOS = 'GET_DEMOS',
   RENDER_A2UI = 'RENDER_A2UI',
   RENDER_ERROR = 'RENDER_ERROR',
   RENDER_SUCCESS = 'RENDER_SUCCESS',
@@ -63,6 +66,17 @@ export declare interface SurfaceResizePayload {
    * typically controls horizontal width (100%), but available for fixed/floating surfaces.
    */
   width?: number;
+  /**
+   * Iframe viewport width measured at the same time as the content dimensions.
+   * Compare width against this value to detect overflow across asynchronous resizes.
+   * Omitted when unavailable or supplied by a legacy renderer.
+   */
+  viewportWidth?: number;
+  /**
+   * Whether the renderer has committed the first surface content to the DOM.
+   * False identifies startup/reset measurements; omitted by legacy renderers.
+   */
+  contentReady?: boolean;
 }
 
 /**

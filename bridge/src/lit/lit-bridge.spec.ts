@@ -262,6 +262,24 @@ describe('Lit Framework Adapter Spec', () => {
     element.remove();
   });
 
+  it('acknowledges content after the Lit surface is attached', async () => {
+    bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root'});
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const element = new A2uiSandboxRoot();
+    document.body.appendChild(element);
+    await element.updateComplete;
+    const [processor, config] = attachSpy.mock.lastCall!;
+    expect(config.whenSurfaceRendered).toBeDefined();
+    processor.processMessages([
+      {version: 'v0.9', createSurface: {surfaceId: 'ready', catalogId: dummyCatalog.id}},
+    ]);
+    config.onSurfaceReady('ready');
+    expect(element.renderRoot.querySelector('a2ui-surface')).toBeNull();
+    await config.whenSurfaceRendered!();
+    expect(element.renderRoot.querySelector('a2ui-surface')).not.toBeNull();
+    element.remove();
+  });
+
   it('defines an anonymous subclass if A2uiSandboxRoot constructor is already registered to another tag', () => {
     bootstrapLitSandbox([dummyCatalog], {elementTagName: 'app-root'});
     const tag2 = 'app-root-second';
@@ -387,6 +405,26 @@ describe('Lit Framework Adapter Spec', () => {
     expect(attachSpy).toHaveBeenCalled();
     const configPassed = attachSpy.mock.lastCall![1];
     expect(configPassed.onThemeChange).toBe(onThemeChange);
+
+    element.remove();
+  });
+
+  it('passes getDemos option through sandbox configuration to attachRenderer', () => {
+    const getDemos = vi.fn();
+    bootstrapLitSandbox([dummyCatalog], {
+      elementTagName: 'app-root-demos-test',
+      getDemos,
+    });
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    const ctor = customElements.get('app-root-demos-test');
+    const element = new ctor!();
+    document.body.appendChild(element);
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.lastCall![1];
+    expect(configPassed.getDemos).toBe(getDemos);
 
     element.remove();
   });

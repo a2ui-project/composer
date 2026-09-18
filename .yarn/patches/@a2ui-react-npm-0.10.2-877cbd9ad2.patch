@@ -1,0 +1,394 @@
+diff --git a/package.json b/package.json
+index f7750048fb3cb76ac7e1c561eb4197a294da5203..a84a9c9597f6ec2311e8a151f7ed53df2d5d4be1 100644
+--- a/package.json
++++ b/package.json
+@@ -65,7 +65,8 @@
+         "default": "./styles/index.cjs"
+       }
+     },
+-    "./styles/structural.css": "./structural.css"
++    "./styles/structural.css": "./structural.css",
++    "./v0_9/styles.css": "./v0_9/index.css"
+   },
+   "sideEffects": [
+     "*.css"
+diff --git a/v0_9/index.cjs b/v0_9/index.cjs
+index 1ae90bffb6b6599b46cca35b0edf98b2d3a3dc06..d31365fa2b6f58635c2febdbe7f1624ee9b4b74e 100644
+--- a/v0_9/index.cjs
++++ b/v0_9/index.cjs
+@@ -238,7 +238,10 @@ function useMarkdown(text, options) {
+ }
+ 
+ // src/v0_9/catalog/basic/components/Text.module.css
+-var Text_default = {};
++var Text_default = {
++  "a2uiText": "Text_a2uiText",
++  "a2uiCaption": "Text_a2uiCaption"
++};
+ var NON_MARKDOWN_VARIANTS = /* @__PURE__ */ new Set(["h1", "h2", "h3", "h4", "h5", "caption"]);
+ function MarkdownText({
+   text,
+@@ -603,7 +606,11 @@ var Modal = createComponentImplementation(basic_catalog.ModalApi, ({ props, buil
+ });
+ 
+ // src/v0_9/catalog/basic/components/Button.module.css
+-var Button_default = {};
++var Button_default = {
++  "button": "Button_button",
++  "primary": "Button_primary",
++  "borderless": "Button_borderless"
++};
+ var Button = createComponentImplementation(basic_catalog.ButtonApi, ({ props, buildChild }) => {
+   useBasicCatalogStyles();
+   const classes = [Button_default.button];
+@@ -616,7 +623,13 @@ var Button = createComponentImplementation(basic_catalog.ButtonApi, ({ props, bu
+ });
+ 
+ // src/v0_9/catalog/basic/components/TextField.module.css
+-var TextField_default = {};
++var TextField_default = {
++  "host": "TextField_host",
++  "label": "TextField_label",
++  "input": "TextField_input",
++  "invalid": "TextField_invalid",
++  "error": "TextField_error"
++};
+ var TextField = createComponentImplementation(basic_catalog.TextFieldApi, ({ props }) => {
+   useBasicCatalogStyles();
+   const onChange = (e) => {
+@@ -725,7 +738,17 @@ var CheckBox = createComponentImplementation(basic_catalog.CheckBoxApi, ({ props
+ });
+ 
+ // src/v0_9/catalog/basic/components/ChoicePicker.module.css
+-var ChoicePicker_default = {};
++var ChoicePicker_default = {
++  "host": "ChoicePicker_host",
++  "label": "ChoicePicker_label",
++  "filterInput": "ChoicePicker_filterInput",
++  "options": "ChoicePicker_options",
++  "chips": "ChoicePicker_chips",
++  "chip": "ChoicePicker_chip",
++  "selected": "ChoicePicker_selected",
++  "optionLabel": "ChoicePicker_optionLabel",
++  "optionText": "ChoicePicker_optionText"
++};
+ var ChoicePicker = createComponentImplementation(basic_catalog.ChoicePickerApi, ({ props, context }) => {
+   useBasicCatalogStyles();
+   const [filter, setFilter] = React3.useState("");
+diff --git a/v0_9/index.css b/v0_9/index.css
+index 1096b820aa651a31272007663aa514034f8aca14..3e90f653353696a558ad40f6e4834241ae495590 100644
+--- a/v0_9/index.css
++++ b/v0_9/index.css
+@@ -1,69 +1,69 @@
+-/* src/v0_9/catalog/basic/components/Text.module.css */
+-.a2uiText {
++/* src/v0_9/catalog/basic/components/Text.module.css */
++.Text_a2uiText {
+   display: inline-block;
+   color: var(--_a2ui-text-color, var(--a2ui-text-color-text, var(--a2ui-color-on-background)));
+   margin: var(--_a2ui-text-margin, 0);
+   box-sizing: border-box;
+ }
+-.a2uiCaption {
++.Text_a2uiCaption {
+   display: inline-block;
+   color: var(--a2ui-text-caption-color, light-dark(#666, #aaa));
+   text-align: left;
+   margin: var(--_a2ui-text-margin, 0);
+   box-sizing: border-box;
+ }
+-.a2uiText :global(p),
+-.a2uiText :global(h1),
+-.a2uiText :global(h2),
+-.a2uiText :global(h3),
+-.a2uiText :global(h4),
+-.a2uiText :global(h5),
+-.a2uiText :global(h6),
+-.a2uiText :global(ol),
+-.a2uiText :global(ul),
+-.a2uiText :global(li),
+-.a2uiText :global(blockquote),
+-.a2uiText :global(pre) {
++.Text_a2uiText p,
++.Text_a2uiText h1,
++.Text_a2uiText h2,
++.Text_a2uiText h3,
++.Text_a2uiText h4,
++.Text_a2uiText h5,
++.Text_a2uiText h6,
++.Text_a2uiText ol,
++.Text_a2uiText ul,
++.Text_a2uiText li,
++.Text_a2uiText blockquote,
++.Text_a2uiText pre {
+   margin: var(--_a2ui-text-margin, 0);
+ }
+-.a2uiText :global(h1),
+-.a2uiText :global(h2),
+-.a2uiText :global(h3),
+-.a2uiText :global(h4),
+-.a2uiText :global(h5) {
++.Text_a2uiText h1,
++.Text_a2uiText h2,
++.Text_a2uiText h3,
++.Text_a2uiText h4,
++.Text_a2uiText h5 {
+   font-family: var(--a2ui-font-family-title, inherit);
+   line-height: var(--a2ui-line-height-headings, 1.2);
+ }
+-.a2uiText :global(h1) {
++.Text_a2uiText h1 {
+   font-size: var(--a2ui-font-size-2xl);
+ }
+-.a2uiText :global(h2) {
++.Text_a2uiText h2 {
+   font-size: var(--a2ui-font-size-xl);
+ }
+-.a2uiText :global(h3) {
++.Text_a2uiText h3 {
+   font-size: var(--a2ui-font-size-l);
+ }
+-.a2uiText :global(p),
+-.a2uiText :global(h4) {
++.Text_a2uiText p,
++.Text_a2uiText h4 {
+   font-size: var(--a2ui-font-size-m);
+ }
+-.a2uiText :global(h5) {
++.Text_a2uiText h5 {
+   font-size: var(--a2ui-font-size-s);
+ }
+-.a2uiText :global(p),
+-.a2uiText :global(ol),
+-.a2uiText :global(ul),
+-.a2uiText :global(li),
+-.a2uiText :global(blockquote) {
++.Text_a2uiText p,
++.Text_a2uiText ol,
++.Text_a2uiText ul,
++.Text_a2uiText li,
++.Text_a2uiText blockquote {
+   line-height: var(--a2ui-line-height-body, 1.5);
+ }
+-.a2uiText :global(a) {
++.Text_a2uiText a {
+   color: var(--a2ui-text-a-color, inherit);
+   font-weight: var(--a2ui-text-a-font-weight, inherit);
+ }
+ 
+-/* src/v0_9/catalog/basic/components/Button.module.css */
+-.button {
++/* src/v0_9/catalog/basic/components/Button.module.css */
++.Button_button {
+   --_a2ui-text-margin: 0;
+   --_a2ui-text-color: var(--a2ui-color-on-secondary, #333);
+   padding: var(--a2ui-button-padding, var(--a2ui-spacing-m, 0.5rem) var(--a2ui-spacing-l, 1rem));
+@@ -80,41 +80,41 @@
+   justify-content: center;
+   transition: background-color 0.2s;
+ }
+-.button:hover {
++.Button_button:hover {
+   background-color: var(--a2ui-color-secondary-hover, #ddd);
+ }
+-.primary {
++.Button_primary {
+   --_a2ui-text-color: var(--a2ui-color-on-primary, #fff);
+   background-color: var(--a2ui-color-primary, #17e);
+   border: none;
+   color: var(--_a2ui-text-color);
+ }
+-.primary:hover {
++.Button_primary:hover {
+   background-color: var(--a2ui-color-primary-hover, #fbd);
+ }
+-.borderless {
++.Button_borderless {
+   background: none;
+   padding: 0;
+   color: var(--a2ui-color-primary, #17e);
+   border: none;
+ }
+-.button:disabled {
++.Button_button:disabled {
+   cursor: not-allowed;
+   opacity: 0.6;
+ }
+ 
+-/* src/v0_9/catalog/basic/components/TextField.module.css */
+-.host {
++/* src/v0_9/catalog/basic/components/TextField.module.css */
++.TextField_host {
+   display: flex;
+   flex-direction: column;
+   gap: var(--a2ui-spacing-xs, 0.25rem);
+   width: 100%;
+ }
+-.label {
++.TextField_label {
+   font-size: var( --a2ui-textfield-label-font-size, var(--a2ui-label-font-size, var(--a2ui-font-size-s)) );
+   font-weight: var(--a2ui-textfield-label-font-weight, var(--a2ui-label-font-weight, bold));
+ }
+-.input {
++.TextField_input {
+   background-color: var(--a2ui-color-input, #fff);
+   color: var(--a2ui-color-on-input, #333);
+   border: var( --a2ui-textfield-border, var(--a2ui-border-width, 1px) solid var(--a2ui-color-border, #ccc) );
+@@ -125,34 +125,34 @@
+   width: 100%;
+   transition: border-color 0.2s;
+ }
+-.input:hover {
++.TextField_input:hover {
+   border-color: var(--a2ui-textfield-color-border-hover, var(--a2ui-color-border-hover, #999));
+ }
+-.input:focus {
++.TextField_input:focus {
+   outline: none;
+   border-color: var(--a2ui-textfield-color-border-focus, var(--a2ui-color-primary, #17e));
+ }
+-.invalid {
++.TextField_invalid {
+   border-color: var(--a2ui-textfield-color-error, red) !important;
+ }
+-.error {
++.TextField_error {
+   color: var(--a2ui-textfield-color-error, red);
+   font-size: var(--a2ui-font-size-xs, 0.75rem);
+ }
+ 
+-/* src/v0_9/catalog/basic/components/ChoicePicker.module.css */
+-.host {
++/* src/v0_9/catalog/basic/components/ChoicePicker.module.css */
++.ChoicePicker_host {
+   display: flex;
+   flex-direction: column;
+   gap: var(--a2ui-spacing-s, 0.5rem);
+   width: 100%;
+ }
+-.label {
++.ChoicePicker_label {
+   font-size: var( --a2ui-choicepicker-label-font-size, var(--a2ui-label-font-size, var(--a2ui-font-size-s)) );
+   font-weight: var(--a2ui-choicepicker-label-font-weight, var(--a2ui-label-font-weight, bold));
+   color: var(--a2ui-choicepicker-label-color, inherit);
+ }
+-.filterInput {
++.ChoicePicker_filterInput {
+   background-color: var(--a2ui-color-input, #fff);
+   color: var(--a2ui-color-on-input, #333);
+   border: var( --a2ui-textfield-border, var(--a2ui-border-width, 1px) solid var(--a2ui-color-border, #ccc) );
+@@ -161,23 +161,23 @@
+   font-family: inherit;
+   transition: border-color 0.2s;
+ }
+-.filterInput:hover {
++.ChoicePicker_filterInput:hover {
+   border-color: var(--a2ui-textfield-color-border-hover, var(--a2ui-color-border-hover, #999));
+ }
+-.filterInput:focus {
++.ChoicePicker_filterInput:focus {
+   outline: none;
+   border-color: var(--a2ui-textfield-color-border-focus, var(--a2ui-color-primary, #17e));
+ }
+-.options {
++.ChoicePicker_options {
+   display: flex;
+   flex-direction: column;
+   gap: var(--a2ui-choicepicker-gap, var(--a2ui-spacing-xs, 0.25rem));
+ }
+-.chips {
++.ChoicePicker_chips {
+   flex-direction: row;
+   flex-wrap: wrap;
+ }
+-.chip {
++.ChoicePicker_chip {
+   padding: var( --a2ui-choicepicker-chip-padding, var(--a2ui-spacing-s, 4px) var(--a2ui-spacing-m, 8px) );
+   border-radius: var(--a2ui-choicepicker-chip-border-radius, 999px);
+   border: 1px solid var(--a2ui-color-border, #ccc);
+@@ -188,18 +188,17 @@
+   font-family: inherit;
+   transition: background-color 0.2s, border-color 0.2s;
+ }
+-.chip.selected {
++.ChoicePicker_chip.ChoicePicker_selected {
+   background-color: var(--a2ui-color-primary, #007bff);
+   color: var(--a2ui-color-on-primary, #fff);
+   border-color: var(--a2ui-color-primary, #007bff);
+ }
+-.optionLabel {
++.ChoicePicker_optionLabel {
+   display: flex;
+   align-items: center;
+   gap: var(--a2ui-choicepicker-gap, var(--a2ui-spacing-xs, 0.25rem));
+   cursor: pointer;
+ }
+-.optionText {
++.ChoicePicker_optionText {
+   font-size: var(--a2ui-font-size-m, 1rem);
+ }
+-/*# sourceMappingURL=index.css.map */
+\ No newline at end of file
+diff --git a/v0_9/index.js b/v0_9/index.js
+index b4ed39833d3db9b02af2e2f0657de4e26f3bb392..f9907e4c2be45375e70e5f145368254bd5ece1ba 100644
+--- a/v0_9/index.js
++++ b/v0_9/index.js
+@@ -232,7 +232,10 @@ function useMarkdown(text, options) {
+ }
+ 
+ // src/v0_9/catalog/basic/components/Text.module.css
+-var Text_default = {};
++var Text_default = {
++  "a2uiText": "Text_a2uiText",
++  "a2uiCaption": "Text_a2uiCaption"
++};
+ var NON_MARKDOWN_VARIANTS = /* @__PURE__ */ new Set(["h1", "h2", "h3", "h4", "h5", "caption"]);
+ function MarkdownText({
+   text,
+@@ -597,7 +600,11 @@ var Modal = createComponentImplementation(ModalApi, ({ props, buildChild }) => {
+ });
+ 
+ // src/v0_9/catalog/basic/components/Button.module.css
+-var Button_default = {};
++var Button_default = {
++  "button": "Button_button",
++  "primary": "Button_primary",
++  "borderless": "Button_borderless"
++};
+ var Button = createComponentImplementation(ButtonApi, ({ props, buildChild }) => {
+   useBasicCatalogStyles();
+   const classes = [Button_default.button];
+@@ -610,7 +617,13 @@ var Button = createComponentImplementation(ButtonApi, ({ props, buildChild }) =>
+ });
+ 
+ // src/v0_9/catalog/basic/components/TextField.module.css
+-var TextField_default = {};
++var TextField_default = {
++  "host": "TextField_host",
++  "label": "TextField_label",
++  "input": "TextField_input",
++  "invalid": "TextField_invalid",
++  "error": "TextField_error"
++};
+ var TextField = createComponentImplementation(TextFieldApi, ({ props }) => {
+   useBasicCatalogStyles();
+   const onChange = (e) => {
+@@ -719,7 +732,17 @@ var CheckBox = createComponentImplementation(CheckBoxApi, ({ props }) => {
+ });
+ 
+ // src/v0_9/catalog/basic/components/ChoicePicker.module.css
+-var ChoicePicker_default = {};
++var ChoicePicker_default = {
++  "host": "ChoicePicker_host",
++  "label": "ChoicePicker_label",
++  "filterInput": "ChoicePicker_filterInput",
++  "options": "ChoicePicker_options",
++  "chips": "ChoicePicker_chips",
++  "chip": "ChoicePicker_chip",
++  "selected": "ChoicePicker_selected",
++  "optionLabel": "ChoicePicker_optionLabel",
++  "optionText": "ChoicePicker_optionText"
++};
+ var ChoicePicker = createComponentImplementation(ChoicePickerApi, ({ props, context }) => {
+   useBasicCatalogStyles();
+   const [filter, setFilter] = useState("");

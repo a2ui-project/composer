@@ -27,7 +27,7 @@ import {
 } from '@angular/core';
 import {DomSanitizer} from '@angular/platform-browser';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {isValidHttpUrl} from '../../utils/url';
+import {buildRendererUrl} from '../renderer-url';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
@@ -69,14 +69,18 @@ export class RenderedFrame {
    * `frameHeight` as a CSS length, or undefined when the guest has not
    * reported one.
    *
-   * Applied as both `height` and `min-height` so that a reported height wins
-   * over the stylesheet's minimum, which would otherwise leave a tall empty
-   * area below a short surface.
+   * Applied to inline previews so they grow to fit reported content. Docked
+   * previews keep their panel height because Dockview owns that layout.
    */
   protected readonly frameHeightPx = computed<string | undefined>(() => {
     const height = this.frameHeight();
-    return height === null ? undefined : `${height}px`;
+    if (height === null || this.isDockedPreview()) return undefined;
+    return `${height}px`;
   });
+
+  private isDockedPreview(): boolean {
+    return !!this.iframeRef()?.nativeElement.closest('.dockview-root');
+  }
 
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
@@ -84,57 +88,11 @@ export class RenderedFrame {
   protected iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('previewIframe');
 
   protected safeRendererUrl = computed(() => {
-    const currentUrl = this.startupResolution.resolvedUrl();
-    if (!currentUrl) return null;
-
-    try {
-      // Fallback to undefined if globalThis.location is undefined
-      // (e.g., in Server-Side Rendering).
-      const baseOrigin = globalThis.location?.origin || undefined;
-
-      // Construct a URL object. Passing baseOrigin as the second argument ensures that
-      // relative URLs (e.g., "/renderer") are parsed correctly relative to the current
-      // domain. Absolute URLs will ignore this base parameter.
-      const url = new URL(currentUrl, baseOrigin);
-
-      // Prevent unauthorized cross-site framing by appending parent and
-      // ancestor origins.
-      url.searchParams.delete('origin');
-
-      const origins = new Set<string>();
-      if (baseOrigin) {
-        origins.add(baseOrigin);
-      }
-
-      const ancestorOrigins = (
-        globalThis.location as Location & {['ancestorOrigins']?: DOMStringList}
-      )?.['ancestorOrigins'];
-      if (ancestorOrigins) {
-        for (let i = 0; i < ancestorOrigins.length; i++) {
-          if (ancestorOrigins[i]) {
-            origins.add(ancestorOrigins[i]);
-          }
-        }
-      }
-
-      for (const origin of origins) {
-        url.searchParams.append('origin', origin);
-      }
-
-      const initialTheme = untracked(() => this.configProvider.themePreference());
-      url.searchParams.set('theme', initialTheme);
-
-      const urlString = url.toString();
-      if (!isValidHttpUrl(urlString)) {
-        console.error('Renderer URL failed safe validation:', urlString);
-        return null;
-      }
-
-      return this.sanitizer.bypassSecurityTrustResourceUrl(urlString);
-    } catch (e) {
-      console.error('Failed to parse renderer URL:', e);
-      return null;
-    }
+    const built = buildRendererUrl(
+      this.startupResolution.resolvedUrl(),
+      untracked(() => this.configProvider.themePreference()),
+    );
+    return built ? this.sanitizer.bypassSecurityTrustResourceUrl(built) : null;
   });
 
   constructor() {

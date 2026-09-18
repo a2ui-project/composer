@@ -1,0 +1,162 @@
+{
+  "name": "Optimization plan",
+  "description": "An editable checklist that carries selected steps into a workflow action.",
+  "messages": [
+    {
+      "version": "v0.9",
+      "createSurface": {
+        "surfaceId": "showcase-04-workflow",
+        "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
+        "sendDataModel": true
+      }
+    },
+    {
+      "version": "v0.9",
+      "updateComponents": {
+        "surfaceId": "showcase-04-workflow",
+        "components": [
+          {
+            "id": "root",
+            "component": "Card",
+            "child": "content"
+          },
+          {
+            "id": "content",
+            "component": "Column",
+            "children": [
+              "eyebrow",
+              "title",
+              "divider",
+              "research",
+              "brief",
+              "creative",
+              "localize",
+              "review",
+              "divider-two",
+              "actions"
+            ]
+          },
+          {
+            "id": "eyebrow",
+            "component": "Text",
+            "text": "Optimization plan",
+            "variant": "caption"
+          },
+          {
+            "id": "title",
+            "component": "Text",
+            "text": "Summer product launch",
+            "variant": "h3"
+          },
+          {
+            "id": "divider",
+            "component": "Divider"
+          },
+          {
+            "id": "research",
+            "component": "CheckBox",
+            "label": "Identify creative opportunities",
+            "value": {
+              "path": "/research"
+            }
+          },
+          {
+            "id": "brief",
+            "component": "CheckBox",
+            "label": "Develop the creative brief",
+            "value": {
+              "path": "/brief"
+            }
+          },
+          {
+            "id": "creative",
+            "component": "CheckBox",
+            "label": "Generate campaign assets",
+            "value": {
+              "path": "/creative"
+            }
+          },
+          {
+            "id": "localize",
+            "component": "CheckBox",
+            "label": "Localize for each market",
+            "value": {
+              "path": "/localize"
+            }
+          },
+          {
+            "id": "review",
+            "component": "CheckBox",
+            "label": "Review and publish",
+            "value": {
+              "path": "/review"
+            }
+          },
+          {
+            "id": "divider-two",
+            "component": "Divider"
+          },
+          {
+            "id": "actions",
+            "component": "Row",
+            "children": ["start", "details"],
+            "align": "center"
+          },
+          {
+            "id": "start",
+            "component": "Button",
+            "child": "start-label",
+            "variant": "primary",
+            "action": {
+              "event": {
+                "name": "startPlan",
+                "context": {
+                  "research": {
+                    "path": "/research"
+                  },
+                  "brief": {
+                    "path": "/brief"
+                  },
+                  "creative": {
+                    "path": "/creative"
+                  },
+                  "localize": {
+                    "path": "/localize"
+                  },
+                  "review": {
+                    "path": "/review"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "start-label",
+            "component": "Text",
+            "text": "Start plan",
+            "variant": "body"
+          },
+          {
+            "id": "details",
+            "component": "Text",
+            "text": "5 steps · Ready when you are",
+            "variant": "caption"
+          }
+        ]
+      }
+    },
+    {
+      "version": "v0.9",
+      "updateDataModel": {
+        "surfaceId": "showcase-04-workflow",
+        "value": {
+          "research": true,
+          "brief": true,
+          "creative": false,
+          "localize": false,
+          "review": false
+        }
+      }
+    }
+  ]
+}

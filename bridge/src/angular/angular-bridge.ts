@@ -23,6 +23,9 @@ import {
   Provider,
   EnvironmentProviders,
   makeEnvironmentProviders,
+  afterNextRender,
+  Injector,
+  AfterRenderRef,
 } from '@angular/core';
 import {
   A2uiRendererService,
@@ -37,6 +40,7 @@ import {
   SurfaceStateSubscription,
   CatalogDetails,
   type ComponentUsages,
+  type Demo,
 } from '../index.js';
 
 export interface AngularSandboxOptions {
@@ -48,6 +52,8 @@ export interface AngularSandboxOptions {
   getComponentUsages?: () => Promise<ComponentUsages>;
   /** Optional callback when theme changes. */
   onThemeChange?: (theme: ThemePreference) => void;
+  /** Optional callback to retrieve the renderer's demos. */
+  getDemos?: () => Promise<Demo[]>;
 }
 
 /**
@@ -71,6 +77,8 @@ export class A2uiSandboxConnection implements OnDestroy {
 
   /** The dynamic teardown handle for the active framework renderer connection subscription. */
   private rendererConnection: SurfaceStateSubscription | null = null;
+  private readonly injector = inject(Injector);
+  private pendingContentRender?: AfterRenderRef;
 
   /**
    * Initializes a new instance of the sandbox connection, automatically establishing
@@ -78,11 +86,22 @@ export class A2uiSandboxConnection implements OnDestroy {
    *
    * Subscribes to the global preview bridge singleton, mapping dynamic renderer callbacks
    * (onSurfaceReady and onSurfaceCleared) directly to local reactive state signals.
+   *
+   * @param catalogJson Optional preloaded catalog JSON data, provided directly in memory.
+   * @param getComponentUsages Optional callback to retrieve component usage samples.
+   * @param onThemeChange Optional callback invoked when the theme preference changes.
+   * @param getDemos Optional callback to retrieve the renderer's demos.
+   *
+   * WARNING: These are positional parameters with no compile-time protection against
+   * mis-ordering. New parameters must be APPENDED here (never inserted between existing
+   * ones), and the `useFactory` call in `provideA2uiSandbox` below must be updated in the
+   * same edit to keep the argument order in lockstep.
    */
   constructor(
     catalogJson?: unknown,
     getComponentUsages?: () => Promise<ComponentUsages>,
     onThemeChange?: (theme: ThemePreference) => void,
+    getDemos?: () => Promise<Demo[]>,
   ) {
     const processor: RendererProcessor = {
       processMessages: payload =>
@@ -103,12 +122,24 @@ export class A2uiSandboxConnection implements OnDestroy {
       onSurfaceReady: (surfaceId: string) => {
         this.surfaceId.set(surfaceId);
       },
+      whenSurfaceRendered: () =>
+        new Promise<void>(resolve => {
+          this.pendingContentRender?.destroy();
+          this.pendingContentRender = afterNextRender(
+            () => {
+              this.pendingContentRender = undefined;
+              resolve();
+            },
+            {injector: this.injector},
+          );
+        }),
       onSurfaceCleared: () => {
         this.surfaceId.set('');
       },
       catalogJson: catalogJson,
       getComponentUsages: getComponentUsages,
       onThemeChange: onThemeChange,
+      getDemos: getDemos,
     });
   }
 
@@ -118,6 +149,8 @@ export class A2uiSandboxConnection implements OnDestroy {
    * to prevent memory leaks and observer bloat in high-frequency test runs.
    */
   ngOnDestroy(): void {
+    this.pendingContentRender?.destroy();
+    this.pendingContentRender = undefined;
     this.rendererConnection?.unsubscribe();
     this.rendererConnection = null;
   }
@@ -130,7 +163,10 @@ export class A2uiSandboxConnection implements OnDestroy {
  * rendering service, and the sandbox connection state to keep catalog bootstrap clean and modular.
  *
  * @param catalogsClasses The array of catalog component provider classes (e.g. BasicCatalog) to register and manage.
- * @param options Optional configuration adapter block holding local catalogJson and markdownRendererFn hook delegates.
+ * @param options Optional configuration adapter block holding `catalogJson` (preloaded catalog JSON),
+ *   `markdownRendererFn` (custom markdown rendering delegate), `getComponentUsages` (component usage
+ *   sample retrieval callback), `onThemeChange` (theme preference change callback), and `getDemos`
+ *   (renderer demos retrieval callback) hook delegates.
  * @return Angular EnvironmentProviders ready for modern standalone bootstrapping application scopes.
  */
 export function provideA2uiSandbox(
@@ -141,11 +177,14 @@ export function provideA2uiSandbox(
     A2uiRendererService,
     {
       provide: A2uiSandboxConnection,
+      // NOTE: Argument order must match the A2uiSandboxConnection constructor exactly.
+      // New parameters must be appended (never inserted) on both sides in the same edit.
       useFactory: () =>
         new A2uiSandboxConnection(
           options?.catalogJson,
           options?.getComponentUsages,
           options?.onThemeChange,
+          options?.getDemos,
         ),
     },
     ...catalogsClasses,
