@@ -18,20 +18,15 @@
   display: block;
   height: 100%;
   container: demos / inline-size;
-  --demos-canvas: var(--cpk-page-bg, #f5f6f8);
-  --demos-surface: var(--cpk-surface, #ffffff);
-  --demos-border: var(--cpk-border, #dfe2e8);
-  --demos-text: var(--cpk-text-primary, #202124);
-  --demos-text-secondary: var(--cpk-text-secondary, #5b606b);
+  --demos-canvas: var(--mat-sys-background);
+  --demos-surface: var(--mat-sys-surface);
+  --demos-border: var(--mat-sys-outline-variant);
+  --demos-text: var(--mat-sys-on-surface);
+  --demos-text-secondary: var(--mat-sys-on-surface-variant);
   --demos-shadow: 0 2px 8px rgb(20 25 35 / 4%);
 }
 
 :host-context(.dark-theme) {
-  --demos-canvas: var(--cpk-page-bg, #111214);
-  --demos-surface: var(--cpk-surface, #1c1e22);
-  --demos-border: var(--cpk-border, #35383f);
-  --demos-text: var(--cpk-text-primary, #eef0f3);
-  --demos-text-secondary: var(--cpk-text-secondary, #b9bec8);
   --demos-shadow: none;
 }
 
@@ -154,7 +149,9 @@
 }
 
 .empty-renderer-url {
-  font-family: var(--cpk-font-mono, 'Roboto Mono', Consolas, monospace);
+  font: var(--mat-sys-body-small);
+  font-family: 'Spline Sans Mono', monospace;
+  letter-spacing: var(--mat-sys-body-small-tracking);
   overflow-wrap: anywhere;
 }
 
