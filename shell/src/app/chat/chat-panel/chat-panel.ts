@@ -55,6 +55,7 @@ import {ChatState} from '../chat-state/chat-state';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
+import {RendererSelection} from '../renderer-selection/renderer-selection';
 
 /**
  * Directive responsible for automatically scrolling a container to the bottom whenever its inputs change.
@@ -121,6 +122,28 @@ export class ChatPanel {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly fileIngestionService = inject(FileIngestionService);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
+
+  protected readonly rendererSelection = inject(RendererSelection);
+
+  protected readonly rendererLabel = computed(() => {
+    const renderer = this.rendererSelection.activeRenderer();
+    if (!renderer) return 'Renderer';
+    if (renderer.id === 'default' || renderer.id === 'angular-dev') return 'A2UI';
+    return renderer.name;
+  });
+
+  protected readonly isRendererSwitchDisabled = computed(
+    () => this.isLocked() || this.isReadingFiles() || this.rendererSelection.isSwitching(),
+  );
+
+  protected async selectRenderer(rendererId: string): Promise<void> {
+    if (this.isRendererSwitchDisabled()) return;
+    try {
+      await this.rendererSelection.selectRenderer(rendererId);
+    } catch {
+      // The shared selection service exposes the failure beside the composer controls.
+    }
+  }
 
   protected readonly includeScreenshot = signal<boolean>(false);
 
@@ -267,6 +290,7 @@ export class ChatPanel {
       (!textVal && attachments.length === 0) ||
       this.isLocked() ||
       this.isReadingFiles() ||
+      this.rendererSelection.isSwitching() ||
       this.isChatDisabled() ||
       !this.isHandshakeComplete()
     ) {

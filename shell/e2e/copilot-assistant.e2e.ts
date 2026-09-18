@@ -46,6 +46,11 @@ test.beforeEach(async ({page}) => {
         renderers: {
           default: {
             rendererUrl: 'http://localhost:3456',
+            displayName: 'Angular Basic',
+          },
+          lit: {
+            rendererUrl: 'http://localhost:3457',
+            displayName: 'Lit Basic',
           },
         },
         apiKeys: {
@@ -227,6 +232,46 @@ async function expectGeminiRequestForCurrentDraft(page: Page, expectedDraftText:
 }
 
 test.describe('Copilot assistant replacement browser journey', () => {
+  test('switches standard renderers from the pill and retains the typed prompt', async ({page}) => {
+    await openEditedGalleryExampleInWorkspace(page);
+    const prompt = page.getByRole('textbox', {name: 'Chat prompt'});
+    await prompt.fill('Create a simple card in this renderer');
+    const selector = page.getByRole('button', {name: /Choose renderer, current:/});
+
+    await selector.click();
+    await expect(page.getByRole('menuitemradio', {name: 'Angular Basic'})).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await page.getByRole('menuitemradio', {name: 'Lit Basic'}).click();
+    await expect(selector).toHaveAccessibleName('Choose renderer, current: Lit Basic');
+    await expect(page.locator('.workspace-container iframe')).toHaveAttribute(
+      'src',
+      /localhost:3457/,
+    );
+    await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
+    await expect(prompt).toHaveValue('Create a simple card in this renderer');
+
+    await page.getByRole('button', {name: 'Add to prompt', exact: true}).click();
+    await page.getByRole('menuitem', {name: 'Instructions', exact: true}).click();
+    const instructions = page.getByRole('dialog');
+    await expect(instructions.getByRole('textbox', {name: 'System instructions text'})).toHaveValue(
+      /https:\/\/a2ui\.org\/specification\/v0_9\/basic_catalog\.json/,
+    );
+    await instructions.getByRole('button', {name: 'Close', exact: true}).click();
+
+    await selector.click();
+    await expect(page.getByRole('menuitemradio', {name: 'Lit Basic'})).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await page.getByRole('menuitemradio', {name: 'Angular Basic'}).click();
+    await expect(selector).toHaveAccessibleName('Choose renderer, current: A2UI');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
+    await expect(prompt).toHaveValue('Create a simple card in this renderer');
+  });
+
   test('keeps prompt helpers in the Add menu and preserves drafted text', async ({page}) => {
     await openEditedGalleryExampleInWorkspace(page);
     const prompt = page.getByRole('textbox', {name: 'Chat prompt'});

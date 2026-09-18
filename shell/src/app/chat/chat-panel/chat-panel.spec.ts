@@ -21,7 +21,7 @@ import {ChatPanelHarness} from './test/chat-panel.harness';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {ChatCoordinator} from '../chat-coordinator/chat-coordinator';
 import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
-import {signal, inject} from '@angular/core';
+import {signal, inject, computed} from '@angular/core';
 import {LlmMessage, MessageRole, Attachment} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
@@ -35,6 +35,8 @@ import {Catalog} from '../../storage/models/catalog-storage.model';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
+import {RendererSelection} from '../renderer-selection/renderer-selection';
+import {RendererOption} from '../../settings/settings-service/settings.service';
 import {
   parseAndHealJsonLines,
   SuccessRenderParseResult,
@@ -118,6 +120,23 @@ class MockHostCommunication {
   getIframeElement = vi.fn().mockReturnValue(null);
 }
 
+class MockRendererSelection {
+  readonly renderers = signal<RendererOption[]>([
+    {id: 'default', name: 'Angular Basic', rendererUrl: '/angular', readOnly: true},
+    {id: 'lit', name: 'Lit Basic', rendererUrl: '/lit', readOnly: true},
+    {id: 'custom', name: 'My renderer', rendererUrl: '/custom', readOnly: false},
+  ]);
+  readonly selectedRendererId = signal<string | null>('default');
+  readonly activeRenderer = computed(
+    () => this.renderers().find(renderer => renderer.id === this.selectedRendererId()) || null,
+  );
+  readonly isSwitching = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly selectRenderer = vi.fn(async (rendererId: string) => {
+    this.selectedRendererId.set(rendererId);
+  });
+}
+
 describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   let fixture: ComponentFixture<ChatPanel>;
   let harness: ChatPanelHarness;
@@ -128,6 +147,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   let configProviderMock: MockAppConfigProvider;
   let hostCommunicationMock: MockHostCommunication;
   let screenshotServiceMock: ScreenshotCaptureService;
+  let rendererSelectionMock: MockRendererSelection;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -147,6 +167,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
         {provide: StartupResolution, useClass: MockStartupResolution},
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
         {provide: HostCommunication, useClass: MockHostCommunication},
+        {provide: RendererSelection, useClass: MockRendererSelection},
       ],
     }).compileComponents();
 
@@ -159,6 +180,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     configProviderMock = TestBed.inject(AppConfigProvider) as unknown as MockAppConfigProvider;
     hostCommunicationMock = TestBed.inject(HostCommunication) as unknown as MockHostCommunication;
     screenshotServiceMock = TestBed.inject(ScreenshotCaptureService);
+    rendererSelectionMock = TestBed.inject(RendererSelection) as unknown as MockRendererSelection;
     fixture = TestBed.createComponent(ChatPanel);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ChatPanelHarness);
@@ -168,6 +190,69 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     if (fixture) {
       fixture.destroy();
     }
+  });
+
+  it('switches the renderer through the shared service without discarding the typed prompt', async () => {
+    await harness.setPromptText('Create a score card');
+    expect(await harness.getRendererLabel()).toBe('A2UI');
+    await harness.selectRenderer('Lit Basic');
+    expect(rendererSelectionMock.selectRenderer).toHaveBeenCalledWith('lit');
+    expect(await harness.getRendererLabel()).toBe('Lit Basic');
+    expect(await harness.getPromptText()).toBe('Create a score card');
+    expect(chatServiceMock.submitPrompt).not.toHaveBeenCalled();
+  });
+
+  it('lists configured renderers with the active option selected and reacts to external switches', async () => {
+    rendererSelectionMock.selectedRendererId.set('custom');
+    fixture.detectChanges();
+    expect(await harness.getRendererLabel()).toBe('My renderer');
+    const choices = await harness.getRendererChoices();
+    expect(choices).toHaveLength(3);
+    expect(choices.map(choice => choice.selected)).toEqual([false, false, true]);
+    expect(choices[1].label).toContain('Lit Basic');
+    rendererSelectionMock.selectedRendererId.set('lit');
+    fixture.detectChanges();
+    expect(await harness.getRendererLabel()).toBe('Lit Basic');
+  });
+
+  it('disables renderer changes during generation and renderer loading', async () => {
+    expect(await harness.isRendererSelectorDisabled()).toBe(false);
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    fixture.detectChanges();
+    expect(await harness.isRendererSelectorDisabled()).toBe(true);
+    chatStateMock.isProgrammaticStreamActive.set(false);
+    rendererSelectionMock.isSwitching.set(true);
+    fixture.detectChanges();
+    expect(await harness.isRendererSelectorDisabled()).toBe(true);
+    expect(await harness.getRendererFeedback()).toBe('Switching renderer…');
+    await harness.setPromptText('Keep this request');
+    expect(await harness.isSubmitDisabled()).toBe(true);
+    await harness.pressKeyOnPrompt('Enter');
+    expect(chatServiceMock.submitPrompt).not.toHaveBeenCalled();
+    expect(await harness.getPromptText()).toBe('Keep this request');
+  });
+
+  it('displays renderer failures and preserves the request for recovery', async () => {
+    rendererSelectionMock.selectRenderer.mockImplementationOnce(async () => {
+      rendererSelectionMock.error.set('The Lit Basic renderer could not connect. Try again.');
+      throw new Error('Renderer handshake timed out');
+    });
+    await harness.setPromptText('Generate a Lit Basic message');
+    await harness.selectRenderer('Lit Basic');
+    expect(await harness.getRendererFeedback()).toBe(
+      'The Lit Basic renderer could not connect. Try again.',
+    );
+    expect(await harness.getPromptText()).toBe('Generate a Lit Basic message');
+    expect(await harness.isRendererSelectorDisabled()).toBe(false);
+  });
+
+  it('prevents renderer changes while attachments are being read', async () => {
+    fixture.componentInstance.isReadingFiles.set(true);
+    fixture.detectChanges();
+    expect(await harness.isRendererSelectorDisabled()).toBe(true);
+    fixture.componentInstance.isReadingFiles.set(false);
+    fixture.detectChanges();
+    expect(await harness.isRendererSelectorDisabled()).toBe(false);
   });
 
   it('renders native CopilotKit prose from ChatState and clears it on a new session', async () => {

@@ -349,6 +349,39 @@
             </mat-menu>
           </div>
           <div class="action-bar-right">
+            <button
+              mat-button
+              type="button"
+              class="renderer-selector"
+              [matMenuTriggerFor]="rendererMenu"
+              [disabled]="isRendererSwitchDisabled()"
+              [attr.aria-label]="'Choose renderer, current: ' + rendererLabel()"
+              [title]="rendererSelection.activeRenderer()?.name || 'Choose renderer'"
+            >
+              <span class="renderer-selector-label">{{ rendererLabel() }}</span>
+              <mat-icon iconPositionEnd aria-hidden="true">expand_more</mat-icon>
+            </button>
+            <mat-menu
+              #rendererMenu="matMenu"
+              class="composer-renderer-menu"
+              yPosition="above"
+              xPosition="before"
+            >
+              @for (renderer of rendererSelection.renderers(); track renderer.id) {
+                <button
+                  mat-menu-item
+                  role="menuitemradio"
+                  [attr.aria-checked]="renderer.id === rendererSelection.selectedRendererId()"
+                  [disabled]="isRendererSwitchDisabled()"
+                  (click)="selectRenderer(renderer.id)"
+                >
+                  <mat-icon aria-hidden="true">{{
+                    renderer.id === rendererSelection.selectedRendererId() ? 'check' : ''
+                  }}</mat-icon>
+                  {{ renderer.name }}
+                </button>
+              }
+            </mat-menu>
             @if (isLocked()) {
               <button
                 mat-icon-button
@@ -367,6 +400,7 @@
                 class="submit-button send-button"
                 [disabled]="
                   isReadingFiles() ||
+                  rendererSelection.isSwitching() ||
                   !isHandshakeComplete() ||
                   (!userPrompt().trim() && attachedFiles().length === 0)
                 "
@@ -379,6 +413,11 @@
             }
           </div>
         </div>
+        @if (rendererSelection.error(); as error) {
+          <p class="renderer-feedback renderer-error" role="alert">{{ error }}</p>
+        } @else if (rendererSelection.isSwitching()) {
+          <p class="renderer-feedback" role="status">Switching renderer…</p>
+        }
       </div>
     </ng-template>
   }

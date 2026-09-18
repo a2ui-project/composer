@@ -38,6 +38,41 @@ export class ChatPanelHarness extends ComponentHarness {
     MatButtonHarness.with({selector: '.stop-button'}),
   );
 
+  async getRendererLabel(): Promise<string> {
+    return (await this.locatorFor('.renderer-selector-label')()).text();
+  }
+
+  async isRendererSelectorDisabled(): Promise<boolean> {
+    return (
+      await this.locatorFor(MatButtonHarness.with({selector: '.renderer-selector'}))()
+    ).isDisabled();
+  }
+
+  async selectRenderer(name: string): Promise<void> {
+    const menu = await this.locatorFor(MatMenuHarness.with({selector: '.renderer-selector'}))();
+    await menu.open();
+    await menu.clickItem({text: new RegExp(name)});
+  }
+
+  async getRendererChoices(): Promise<{label: string; selected: boolean}[]> {
+    const menu = await this.locatorFor(MatMenuHarness.with({selector: '.renderer-selector'}))();
+    await menu.open();
+    const items = await menu.getItems();
+    const choices = await Promise.all(
+      items.map(async item => ({
+        label: await item.getText(),
+        selected: (await (await item.host()).getAttribute('aria-checked')) === 'true',
+      })),
+    );
+    await menu.close();
+    return choices;
+  }
+
+  async getRendererFeedback(): Promise<string | null> {
+    const feedback = await this.locatorForOptional('.renderer-feedback')();
+    return feedback ? feedback.text() : null;
+  }
+
   async getAddPromptActions(): Promise<{text: string; disabled: boolean}[]> {
     const menu = await this.getAddPromptMenu();
     await menu.open();

@@ -470,7 +470,8 @@ a2ui-composer-chat-panel {
 }
 
 // Composer menus render in the CDK overlay, outside ChatPanel's style scope.
-.composer-add-menu.mat-mdc-menu-panel {
+.composer-add-menu.mat-mdc-menu-panel,
+.composer-renderer-menu.mat-mdc-menu-panel {
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 20px;
   background: var(--mat-sys-surface-container-low);
