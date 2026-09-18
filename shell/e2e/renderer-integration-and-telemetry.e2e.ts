@@ -103,9 +103,7 @@ test.beforeEach(async ({page}) => {
 
 for (const config of CONFIGS) {
   test.describe(`${config.name} Preview Handshake & Sync`, () => {
-    test('validates startup telemetry handshake messages and catalog properties', async ({
-      page,
-    }) => {
+    test('loads the shared catalog theme styles', async ({page}) => {
       await page.goto(`/?renderer=${config.rendererUrl}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
 
@@ -119,6 +117,15 @@ for (const config of CONFIGS) {
       const searchButton = styledFrame.getByRole('button', {name: 'Search Cars'});
       await expect(searchButton).toHaveCSS('border-radius', '24px');
       await expect(searchButton).toHaveCSS('background-color', 'rgb(63, 81, 181)');
+
+      await expect(styledFrame.locator('body')).toHaveCSS('background-color', 'rgb(247, 248, 250)');
+    });
+
+    test('validates startup telemetry handshake messages and catalog properties', async ({
+      page,
+    }) => {
+      await page.goto(`/?renderer=${config.rendererUrl}`);
+      await expect(page.locator('.workspace-container')).toBeVisible();
 
       await page.locator('.dv-tab', {hasText: /^Raw Messages/}).click();
       await page.locator('.raw-messages-container .message-envelope').first().hover({trial: true});
