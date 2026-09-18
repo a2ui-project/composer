@@ -52,7 +52,9 @@
       </a>
     </div>
   } @else {
+    <!-- The canvas session is already active; keep its input mounted across history resets. -->
     <copilot-chat-view
+      [hasExplicitThreadId]="true"
       [messages]="chatMessages()"
       [messageViewTemplate]="historyView"
       [inputTemplate]="composerInput"

@@ -28,6 +28,7 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {MatDialogHarness} from '@angular/material/dialog/testing';
+import {MatMenuHarness} from '@angular/material/menu/testing';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {MatInputHarness} from '@angular/material/input/testing';
@@ -268,7 +269,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     chatStateMock.chatHistory.set([]);
     fixture.detectChanges();
     expect(await harness.getBubblesText()).toEqual([]);
-    expect(await harness.hasWelcomeNotice()).toBe(true);
+    expect(await harness.hasWelcomeNotice()).toBe(false);
     chatStateMock.chatHistory.set([{role: MessageRole.USER, content: 'Start a different layout'}]);
     fixture.detectChanges();
     expect(await harness.getBubblesText()).toEqual(['Start a different layout']);
@@ -341,19 +342,17 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     expect(await harness.getPromptText()).toBe('Change the selected layout');
   });
 
-  it(
-    'renders the chat panel shell along with empty history welcome ' + 'text correctly',
-    async () => {
-      expect(harness).toBeTruthy();
+  it('keeps the active canvas conversation ready when its history is empty', async () => {
+    expect(harness).toBeTruthy();
 
-      // Verify welcome card renders on empty histories
-      const bubbles = await harness.getBubblesText();
-      expect(bubbles.length).toBe(0);
+    // Composer already has a canvas session even before its first history snapshot.
+    const bubbles = await harness.getBubblesText();
+    expect(bubbles.length).toBe(0);
 
-      expect(await harness.hasWelcomeNotice()).toBe(true);
-      expect(await harness.getWelcomeNoticeText()).toContain('Build on your canvas');
-    },
-  );
+    expect(await harness.hasWelcomeNotice()).toBe(false);
+    expect(await harness.getPromptText()).toBe('');
+    expect(await harness.hasCopilotChatView()).toBe(true);
+  });
 
   it(
     'renders conversational turns bubbles log correctly ' +
@@ -875,6 +874,57 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       expect(await harness.hasLoadingOverlay()).toBe(false);
     },
   );
+
+  it('preserves prompt focus when canvas snapshots initialize or reset the conversation', async () => {
+    await harness.setPromptText('Keep this draft while the renderer changes');
+    const host: HTMLElement = fixture.nativeElement;
+    const prompt = host.querySelector('textarea');
+    if (!prompt) throw new Error('Expected the chat prompt');
+    prompt.focus();
+    expect(document.activeElement).toBe(prompt);
+
+    const snapshot: LlmMessage = {
+      role: MessageRole.USER,
+      content: '[{"version":"v0.9","createSurface":{"surfaceId":"canvas","catalogId":"test"}}]',
+    };
+    for (const history of [[snapshot], [], [snapshot]]) {
+      chatStateMock.chatHistory.set(history);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(host.querySelector('textarea')).toBe(prompt);
+      expect(document.activeElement).toBe(prompt);
+      expect(await harness.getPromptText()).toBe('Keep this draft while the renderer changes');
+    }
+  });
+
+  it('keeps the Add menu usable while canvas snapshots initialize or reset the conversation', async () => {
+    const host: HTMLElement = fixture.nativeElement;
+    const trigger = host.querySelector('.add-prompt-button');
+    const menu = await TestbedHarnessEnvironment.loader(fixture).getHarness(
+      MatMenuHarness.with({selector: '.add-prompt-button'}),
+    );
+    await menu.open();
+    const focusedItem = document.activeElement;
+    expect(focusedItem?.getAttribute('role')).toBe('menuitem');
+
+    const snapshot: LlmMessage = {
+      role: MessageRole.USER,
+      content: '[{"version":"v0.9","createSurface":{"surfaceId":"canvas","catalogId":"test"}}]',
+    };
+    for (const history of [[snapshot], [], [snapshot]]) {
+      chatStateMock.chatHistory.set(history);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(host.querySelector('.add-prompt-button')).toBe(trigger);
+      expect(await menu.isOpen()).toBe(true);
+      expect(document.activeElement).toBe(focusedItem);
+    }
+
+    await menu.clickItem({text: /Instructions/});
+    const dialog =
+      await TestbedHarnessEnvironment.documentRootLoader(fixture).getHarness(MatDialogHarness);
+    expect(await dialog.getTitleText()).toBe('System Instructions');
+  });
 
   it('opens the system instructions dialog from the Add menu', async () => {
     expect(await harness.hasSystemInstructionsLink()).toBe(true);
