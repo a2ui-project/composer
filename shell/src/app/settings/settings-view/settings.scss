@@ -130,6 +130,7 @@ mat-form-field {
 
     code {
       display: block;
+      font-family: inherit;
 
       + code {
         margin-top: 8px;
@@ -140,7 +141,7 @@ mat-form-field {
 
 .error-log {
   color: var(--mat-sys-error);
-  font-weight: bold;
+  font-weight: var(--mat-sys-label-large-weight-prominent);
 }
 
 .success-log {
