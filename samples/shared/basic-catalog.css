@@ -16,11 +16,11 @@
 
 :root {
   color-scheme: light;
-  --a2ui-color-surface: #ffffff;
+  --a2ui-color-surface: #f7f8fa;
   --a2ui-color-on-surface: #202124;
-  --a2ui-color-background: #ffffff;
+  --a2ui-color-background: #f7f8fa;
   --a2ui-color-on-background: #202124;
-  --a2ui-color-input: #f7f8fa;
+  --a2ui-color-input: #eef0f4;
   --a2ui-color-on-input: #202124;
   --a2ui-color-border: #dfe2e8;
   --a2ui-color-primary: #3f51b5;
