@@ -290,6 +290,8 @@ export class ComposerDockview {
         this.dockviewApi.fromJSON(parsedLayout);
         layoutRestored = true;
       } catch (e) {
+        // Keep layoutRestored false so the default panels below replace the invalid
+        // saved arrangement. This error never escapes workspace initialization.
         console.error('Failed to restore dockview layout');
       }
     }
