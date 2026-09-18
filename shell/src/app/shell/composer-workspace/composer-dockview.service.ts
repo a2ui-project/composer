@@ -274,8 +274,15 @@ export class ComposerDockview {
           const validIds = Object.values(ComposerPanelId) as string[];
           for (const key of Object.keys(parsedLayout.panels)) {
             const panel = parsedLayout.panels[key];
-            if (panel && (!validIds.includes(panel.id) || !validIds.includes(panel.component))) {
-              delete parsedLayout.panels[key];
+            if (
+              !panel ||
+              key !== panel.id ||
+              !validIds.includes(panel.id) ||
+              !validIds.includes(panel.contentComponent)
+            ) {
+              // Grid groups reference these records, so reject the whole layout rather than
+              // leaving dangling references by removing retired or invalid panels.
+              throw new Error(`Unsupported saved dockview panel: ${key}`);
             }
           }
         }
