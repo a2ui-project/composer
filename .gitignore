@@ -51,6 +51,7 @@ out/
 
 ### Diff template
 *.patch
+!.yarn/patches/*.patch
 *.diff
 
 ### Node template

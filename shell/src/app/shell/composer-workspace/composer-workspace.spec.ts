@@ -17,9 +17,11 @@
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ComposerPanelId, ComposerWorkspace} from './composer-workspace';
 import {ComposerDockview} from './composer-dockview.service';
+import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
@@ -260,6 +262,13 @@ describe('ComposerWorkspace Dashboard', () => {
   });
 
   describe('Dockview Layout and Effects', () => {
+    it('uses a product-neutral Assistant title for the chat panel tab', () => {
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
+      const chatPanel = manager.api.getGroupPanel(ComposerPanelId.Chat);
+
+      expect(chatPanel?.title).toBe('Assistant');
+    });
+
     it('updates events and errors panel titles based on unread count', async () => {
       fixture.componentInstance.unreadEventsCount.set(5);
       fixture.componentInstance.unreadErrorsCount.set(3);
@@ -297,42 +306,100 @@ describe('ComposerWorkspace Dashboard', () => {
       expect(manager.api.options.className).toBe('dockview-theme-light');
     });
 
-    it('restores dockview layout from localStorage on initialization', async () => {
-      // Create new fixture since dockview is initialized on AfterViewInit
-      vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify({}));
-      const newFixture = TestBed.createComponent(ComposerWorkspace);
+    describe('Saved layout recovery', () => {
+      let storage: LocalStorageInteractions;
+      let previousLayout: string | null;
+      let returningFixture: ComponentFixture<ComposerWorkspace> | undefined;
 
-      const apiSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON').mockImplementation(() => {});
+      beforeEach(() => {
+        storage = TestBed.inject(LocalStorageInteractions);
+        previousLayout = storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
+        returningFixture = undefined;
+      });
 
-      newFixture.detectChanges();
-      await newFixture.whenStable();
+      afterEach(() => {
+        returningFixture?.destroy();
+        fixture.destroy();
+        vi.restoreAllMocks();
+        if (previousLayout === null) {
+          storage.removeItem(LocalStorageKey.DOCKVIEW_LAYOUT);
+        } else {
+          storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, previousLayout);
+        }
+      });
 
-      expect(apiSpy).toHaveBeenCalled();
-      apiSpy.mockRestore();
-    });
+      async function returnToWorkspace(): Promise<ComposerDockview> {
+        returningFixture = TestBed.createComponent(ComposerWorkspace);
+        returningFixture.detectChanges();
+        await returningFixture.whenStable();
+        return returningFixture.debugElement.injector.get(ComposerDockview);
+      }
 
-    it('sanitizes dockview layout from localStorage to prevent ghost panels', async () => {
-      const mockLayout = {
-        grid: {root: {type: 'branch'}},
-        panels: {
-          [ComposerPanelId.Chat]: {id: ComposerPanelId.Chat, component: ComposerPanelId.Chat},
-          mockRules: {id: 'mockRules', component: 'mockRules'},
-          invalidPanel: {id: 'invalidPanel', component: ComposerPanelId.Chat},
+      it('restores dockview layout from localStorage on initialization', async () => {
+        vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify({}));
+        const restoreSpy = vi
+          .spyOn(DockviewComponent.prototype, 'fromJSON')
+          .mockImplementation(() => {});
+
+        await returnToWorkspace();
+
+        expect(restoreSpy).toHaveBeenCalled();
+      });
+
+      it('preserves a real saved layout when leaving and returning to the workspace', async () => {
+        const manager = fixture.debugElement.injector.get(ComposerDockview);
+        const errorSpy = vi.spyOn(console, 'error');
+        manager.setPanelTitle(ComposerPanelId.Rendered, 'My preview');
+        manager.openPanel(ComposerPanelId.Events);
+        await new Promise(resolve => setTimeout(resolve, 1100));
+        const savedLayout = storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
+        expect(savedLayout).toBe(JSON.stringify(manager.api.toJSON()));
+
+        fixture.destroy();
+        await new Promise(resolve => setTimeout(resolve, 1100));
+        expect(storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT)).toBe(savedLayout);
+
+        const restored = await returnToWorkspace();
+        expect(restored.api.getGroupPanel(ComposerPanelId.Rendered)?.title).toBe('My preview');
+        expect(restored.api.getGroupPanel(ComposerPanelId.Events)?.api.isActive).toBe(true);
+        expect(restored.api.panels.map(panel => panel.id).sort()).toEqual(
+          Object.values(ComposerPanelId).sort(),
+        );
+        expect(errorSpy).not.toHaveBeenCalled();
+      });
+
+      it.each(['retired panel', 'mismatched panel ID'])(
+        'rejects a layout with a %s and opens usable default panels',
+        async invalidState => {
+          const manager = fixture.debugElement.injector.get(ComposerDockview);
+          if (invalidState === 'retired panel') {
+            manager.api.addPanel({id: 'retiredPanel', component: 'retiredPanel'});
+          }
+          const layout = manager.api.toJSON();
+          if (invalidState === 'mismatched panel ID') {
+            layout.panels[ComposerPanelId.Rendered].id = 'missing';
+          }
+          fixture.destroy();
+          const savedLayout = JSON.stringify(layout);
+          storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, savedLayout);
+          const restoreSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON');
+          const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+          const restored = await returnToWorkspace();
+
+          expect(restoreSpy).not.toHaveBeenCalled();
+          expect(restored.api.panels.map(panel => panel.id).sort()).toEqual(
+            Object.values(ComposerPanelId).sort(),
+          );
+          expect(restored.api.getGroupPanel(ComposerPanelId.Rendered)?.title).toBe(
+            'Rendered A2UI Preview',
+          );
+          restored.openPanel(ComposerPanelId.DataModel);
+          expect(restored.api.getGroupPanel(ComposerPanelId.DataModel)?.api.isActive).toBe(true);
+          expect(errorSpy).toHaveBeenCalledExactlyOnceWith('Failed to restore dockview layout');
+          expect(storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT)).toBe(savedLayout);
         },
-      };
-      vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify(mockLayout));
-      const apiSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON').mockImplementation(() => {});
-
-      const newFixture = TestBed.createComponent(ComposerWorkspace);
-      newFixture.detectChanges();
-      await newFixture.whenStable();
-
-      expect(apiSpy).toHaveBeenCalled();
-      const passedLayout = apiSpy.mock.calls[0][0];
-      expect(passedLayout.panels[ComposerPanelId.Chat]).toBeDefined();
-      expect(passedLayout.panels['mockRules']).toBeUndefined();
-      expect(passedLayout.panels['invalidPanel']).toBeUndefined();
-      apiSpy.mockRestore();
+      );
     });
 
     it('applies Material M3 tab styling class hook to the Dockview root element', () => {

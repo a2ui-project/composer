@@ -25,6 +25,24 @@ test.beforeEach(async ({page}) => {
 test.describe('Settings and Client Configuration', () => {
   test.describe('Custom Config Modification & Persistence', () => {
     test.beforeEach(async ({page}) => {
+      await page.route('**/config.json', async route => {
+        const response = await route.fetch();
+        const config = await response.json();
+        await route.fulfill({
+          response,
+          json: {
+            ...config,
+            renderers: {
+              ...config.renderers,
+              default: {
+                ...config.renderers?.default,
+                rendererUrl: '/samples/ng-basic-catalog/',
+              },
+            },
+          },
+        });
+      });
+
       await page.addInitScript(() => {
         if (!sessionStorage.getItem('init_cleared')) {
           sessionStorage.setItem('init_cleared', 'true');

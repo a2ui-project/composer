@@ -610,6 +610,131 @@ describe('StartupResolution', () => {
     expect(stateService.selectedRendererId()).toBeNull();
   });
 
+  describe('interactive renderer approval', () => {
+    beforeEach(() => {
+      stateService.setRenderers({
+        standard: {rendererUrl: '/standard/'},
+        lit: {rendererUrl: 'samples/lit-basic-catalog/'},
+        other: {rendererUrl: '/other/'},
+      });
+      stateService.setSelectedRendererId('standard');
+      stateService.setResolvedUrl('/standard/');
+    });
+
+    it('keeps the current selection intact until approval succeeds', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed').mockReturnValue(
+        new Promise(resolve => {
+          approve = resolve;
+        }),
+      );
+      const selection = service.setSelectedRendererId('lit');
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+      approve(true);
+      expect(await selection).toBe(true);
+      expect(stateService.selectedRendererId()).toBe('lit');
+      expect(service.resolvedUrl()).toBe('samples/lit-basic-catalog/');
+    });
+
+    it('does not reset the current renderer when approval is denied', async () => {
+      vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(false);
+      expect(await service.setSelectedRendererId('lit')).toBe(false);
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
+    it('does not apply a renderer after the caller cancels pending approval', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed').mockReturnValue(
+        new Promise(resolve => {
+          approve = resolve;
+        }),
+      );
+      const controller = new AbortController();
+      const cancellation = new Error('Stopped');
+      cancellation.name = 'CancelError';
+      const selection = service.setSelectedRendererId('lit', controller.signal);
+      const rejection = expect(selection).rejects.toBe(cancellation);
+      controller.abort(cancellation);
+      approve(true);
+      await rejection;
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
+    it('does not overwrite a newer selection when an older approval completes', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed')
+        .mockReturnValueOnce(
+          new Promise(resolve => {
+            approve = resolve;
+          }),
+        )
+        .mockResolvedValue(true);
+      const selection = service.setSelectedRendererId('lit');
+      const rejection = expect(selection).rejects.toThrow('superseded');
+      await service.setSelectedRendererId('other');
+      approve(true);
+      await rejection;
+      expect(stateService.selectedRendererId()).toBe('other');
+      expect(service.resolvedUrl()).toBe('/other/');
+    });
+
+    it('rejects pending approval when the target URL is edited', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed').mockReturnValue(
+        new Promise(resolve => {
+          approve = resolve;
+        }),
+      );
+      const selection = service.setSelectedRendererId('lit');
+      const rejection = expect(selection).rejects.toThrow('superseded');
+      stateService.setRenderers({lit: {rendererUrl: 'https://other.example/renderer'}});
+      approve(true);
+      await rejection;
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
+    it('selects the configured path-relative Lit renderer without origin confirmation', async () => {
+      const confirmation = vi.spyOn(service, 'confirmOrigin');
+      expect(await service.setSelectedRendererId('lit')).toBe(true);
+      expect(stateService.selectedRendererId()).toBe('lit');
+      expect(service.resolvedUrl()).toBe('samples/lit-basic-catalog/');
+      expect(confirmation).not.toHaveBeenCalled();
+    });
+
+    it.each(['javascript:alert(1)', 'data:text/html,preview', 'ftp://localhost/renderer'])(
+      'rejects non-HTTP renderer URL %s',
+      async rendererUrl => {
+        stateService.setRenderers({lit: {rendererUrl}});
+        expect(await service.setSelectedRendererId('lit')).toBe(false);
+        expect(stateService.selectedRendererId()).toBe('standard');
+        expect(service.resolvedUrl()).toBe('/standard/');
+      },
+    );
+
+    it('closes a pending origin dialog when the selection is canceled', async () => {
+      localStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'external', name: 'External', rendererUrl: 'https://external.example/preview'},
+        ]),
+      );
+      const controller = new AbortController();
+      const selection = service.setSelectedRendererId('external', controller.signal);
+      const rejection = expect(selection).rejects.toMatchObject({name: 'AbortError'});
+      expect(service.dialog.openDialogs).toHaveLength(1);
+      controller.abort();
+      await rejection;
+      expect(service.dialog.openDialogs).toHaveLength(0);
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+      expect(localStorage.getItem(LocalStorageKey.ALLOWED_ORIGINS)).toBeNull();
+    });
+  });
+
   describe('renderer resolution', () => {
     it('loads default profile when no profile query parameter is provided', async () => {
       mockFetchConfig({
@@ -691,6 +816,44 @@ describe('StartupResolution', () => {
 
       const url = await service.resolveStartupConfiguration();
       expect(url).toBe('http://testing-renderer:3000');
+    });
+
+    it('loads Lit static renderer paths through rendererId selections', async () => {
+      const litConfig = {
+        renderers: {
+          default: {
+            rendererUrl: 'http://base:3000',
+          },
+          lit: {
+            rendererUrl: 'samples/lit-basic-catalog/',
+            displayName: 'Lit Basic',
+          },
+          'lit-dev': {
+            rendererUrl: 'http://localhost:4200/samples/lit-basic-catalog/',
+            displayName: 'Lit Basic (local static)',
+          },
+        },
+      };
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        async () => new Response(JSON.stringify(litConfig)),
+      );
+
+      const getWindowSearchSpy = vi
+        .spyOn(service, 'getWindowSearch')
+        .mockReturnValue('?rendererId=lit');
+
+      const url = await service.resolveStartupConfiguration();
+      expect(url).toBe('samples/lit-basic-catalog/');
+      expect(service.resolvedUrl()).toBe('samples/lit-basic-catalog/');
+      expect(stateService.selectedRendererId()).toBe('lit');
+      expect(mockConfigProvider.setRendererUrl).toHaveBeenCalledWith('samples/lit-basic-catalog/');
+
+      getWindowSearchSpy.mockReturnValue('?rendererId=lit-dev');
+
+      const devUrl = await service.resolveStartupConfiguration();
+      expect(devUrl).toBe('http://localhost:4200/samples/lit-basic-catalog/');
+      expect(service.resolvedUrl()).toBe('http://localhost:4200/samples/lit-basic-catalog/');
+      expect(stateService.selectedRendererId()).toBe('lit-dev');
     });
 
     it('uses named profile directly without merging default profile properties', async () => {

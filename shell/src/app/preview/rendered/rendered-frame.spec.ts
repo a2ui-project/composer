@@ -179,6 +179,52 @@ describe('RenderedFrame Live Preview Viewport', () => {
     );
   });
 
+  it('resolves catalog-relative renderer URLs against a GitHub Pages base path', async () => {
+    fixture.destroy();
+    const base = document.createElement('base');
+    base.href = 'http://localhost:3000/composer/';
+    document.head.appendChild(base);
+
+    try {
+      resolvedUrlSignal.set('samples/react-slack-catalog/');
+      const relativeFixture = TestBed.createComponent(RenderedFrame);
+      relativeFixture.detectChanges();
+      const relativeHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        relativeFixture,
+        RenderedFrameHarness,
+      );
+
+      expect(await relativeHarness.getIframeSrc()).toBe(
+        'http://localhost:3000/composer/samples/react-slack-catalog/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    } finally {
+      base.remove();
+    }
+  });
+
+  it('resolves catalog-relative renderer URLs against a PR preview base path', async () => {
+    fixture.destroy();
+    const base = document.createElement('base');
+    base.href = 'http://localhost:3000/composer/pr/216/';
+    document.head.appendChild(base);
+
+    try {
+      resolvedUrlSignal.set('samples/react-slack-catalog/');
+      const relativeFixture = TestBed.createComponent(RenderedFrame);
+      relativeFixture.detectChanges();
+      const relativeHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        relativeFixture,
+        RenderedFrameHarness,
+      );
+
+      expect(await relativeHarness.getIframeSrc()).toBe(
+        'http://localhost:3000/composer/pr/216/samples/react-slack-catalog/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    } finally {
+      base.remove();
+    }
+  });
+
   it('appends all ancestor origins and base origin to the renderer URL query params', async () => {
     fixture.destroy();
     vi.stubGlobal('location', {
@@ -336,6 +382,50 @@ describe('RenderedFrame Live Preview Viewport', () => {
     // A guest reporting no usable height must not pin the container's height.
     component.dynamicHeight.set(0);
     expect(component['frameHeightPx']()).toBeUndefined();
+  });
+
+  it('does not apply reported content height as layout height inside Dockview', () => {
+    const dockviewRoot = document.createElement('div');
+    dockviewRoot.className = 'dockview-root';
+    document.body.appendChild(dockviewRoot);
+    let dockedFixture: ComponentFixture<RenderedFrame> | null = null;
+
+    try {
+      dockedFixture = TestBed.createComponent(RenderedFrame);
+      dockviewRoot.appendChild(dockedFixture.nativeElement);
+      dockedFixture.detectChanges();
+
+      dockedFixture.componentInstance.dynamicHeight.set(421);
+      dockedFixture.detectChanges();
+
+      expect(dockedFixture.componentInstance.frameHeight()).toBe(421);
+      expect(dockedFixture.componentInstance['frameHeightPx']()).toBeUndefined();
+    } finally {
+      dockedFixture?.destroy();
+      dockviewRoot.remove();
+    }
+  });
+
+  it('detects Dockview after delayed dynamic insertion before applying reported height', () => {
+    const dockviewRoot = document.createElement('div');
+    dockviewRoot.className = 'dockview-root';
+    document.body.appendChild(dockviewRoot);
+    let dockedFixture: ComponentFixture<RenderedFrame> | null = null;
+
+    try {
+      dockedFixture = TestBed.createComponent(RenderedFrame);
+      dockedFixture.detectChanges();
+
+      dockviewRoot.appendChild(dockedFixture.nativeElement);
+      dockedFixture.componentInstance.dynamicHeight.set(421);
+      dockedFixture.detectChanges();
+
+      expect(dockedFixture.componentInstance.frameHeight()).toBe(421);
+      expect(dockedFixture.componentInstance['frameHeightPx']()).toBeUndefined();
+    } finally {
+      dockedFixture?.destroy();
+      dockviewRoot.remove();
+    }
   });
 
   it('re-dispatches sendRenderA2UI when RENDERER_READY or A2UI_CATALOG arrives from bridge', () => {

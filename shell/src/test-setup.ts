@@ -60,6 +60,23 @@ if (typeof window !== 'undefined') {
   const localStorageMock = new MockStorage();
   const sessionStorageMock = new MockStorage();
 
+  // jsdom has no scrolling API; retain positions for components that auto-scroll.
+  if (!HTMLElement.prototype.scrollTo) {
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      configurable: true,
+      writable: true,
+      value(this: HTMLElement, optionsOrX: ScrollToOptions | number = {}, y?: number): void {
+        if (typeof optionsOrX === 'number') {
+          this.scrollLeft = optionsOrX;
+          this.scrollTop = y ?? 0;
+        } else {
+          this.scrollLeft = optionsOrX.left ?? this.scrollLeft;
+          this.scrollTop = optionsOrX.top ?? this.scrollTop;
+        }
+      },
+    });
+  }
+
   class MockResizeObserver {
     constructor(private callback: (entries: unknown[]) => void) {}
     observe(target: Element) {

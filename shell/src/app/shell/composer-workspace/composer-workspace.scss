@@ -39,6 +39,17 @@
 }
 
 :host ::ng-deep .dockview-root {
+  // Docked previews scroll inside their panel. A renderer's content-height
+  // report must not extend the iframe beneath the adjacent debug panel.
+  a2ui-composer-rendered-frame .rendered-frame-container {
+    max-height: 100%;
+    min-height: 0;
+  }
+
+  a2ui-composer-rendered-frame .rendered-frame-container .preview-iframe {
+    min-height: 0;
+  }
+
   --dv-activegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container);
   --dv-activegroup-hiddenpanel-tab-color: var(--mat-sys-on-surface-variant);
   --dv-activegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
