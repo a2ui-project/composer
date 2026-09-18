@@ -34,6 +34,7 @@ import {Standard3pA2aTransport} from './chat/a2a/standard-3p-a2a-transport';
 import {USAGE_TRACKING_CONFIG, UsageTrackingService} from './usage-tracking/usage-tracking.service';
 import {Ga4UsageTrackingService} from './usage-tracking/ga4-usage-tracking.service';
 import {NoopUsageTrackingService} from './usage-tracking/noop-usage-tracking.service';
+import {ErrorTelemetryReporter} from './usage-tracking/error-telemetry-reporter.service';
 
 /**
  * Application-wide Angular configuration defining core providers,
@@ -48,6 +49,7 @@ export const appConfig: ApplicationConfig = {
       const startupResolution = inject(StartupResolution);
       const configProvider = inject(AppConfigProvider);
       const usageTrackingService = inject(UsageTrackingService);
+      const errorTelemetryReporter = inject(ErrorTelemetryReporter);
       const router = inject(Router);
 
       router.events
@@ -55,6 +57,8 @@ export const appConfig: ApplicationConfig = {
         .subscribe(event => {
           usageTrackingService.trackPageView({pagePath: event.urlAfterRedirects});
         });
+
+      errorTelemetryReporter.start();
 
       return startupResolution
         .resolveStartupConfiguration()

@@ -26,10 +26,12 @@ test.describe('Settings and Client Configuration', () => {
   test.describe('Custom Config Modification & Persistence', () => {
     test.beforeEach(async ({page}) => {
       await page.addInitScript(() => {
-        if (!sessionStorage.getItem('init_cleared')) {
-          sessionStorage.setItem('init_cleared', 'true');
-          localStorage.clear();
-          localStorage.setItem('a2ui_composer_force_3p', 'true');
+        if (window === window.top) {
+          if (!sessionStorage.getItem('init_cleared')) {
+            sessionStorage.setItem('init_cleared', 'true');
+            localStorage.clear();
+            localStorage.setItem('a2ui_composer_force_3p', 'true');
+          }
         }
       });
       await page.goto('/settings');
@@ -41,6 +43,7 @@ test.describe('Settings and Client Configuration', () => {
       await expect(apiKeyDialog).toBeVisible();
       await apiKeyDialog.getByLabel('Name', {exact: true}).fill('Test Key');
       await apiKeyDialog.getByLabel('API Key', {exact: true}).fill('test-api-key');
+      await page.keyboard.press('Tab');
       await apiKeyDialog.getByRole('button', {name: 'Add', exact: true}).click();
       await expect(apiKeyDialog).toBeHidden();
 
@@ -49,6 +52,7 @@ test.describe('Settings and Client Configuration', () => {
       await expect(rendererDialog).toBeVisible();
       await rendererDialog.getByLabel('Name', {exact: true}).fill('Test Renderer');
       await rendererDialog.getByLabel('Renderer URL', {exact: true}).fill('http://localhost:9090');
+      await page.keyboard.press('Tab');
       await rendererDialog.getByRole('button', {name: 'Add', exact: true}).click();
       await expect(rendererDialog).toBeHidden();
 
@@ -80,6 +84,7 @@ test.describe('Settings and Client Configuration', () => {
       await expect(apiKeyDialog).toBeVisible();
       await apiKeyDialog.getByLabel('Name', {exact: true}).fill('Unique Key');
       await apiKeyDialog.getByLabel('API Key', {exact: true}).fill('new-unique-api-key');
+      await page.keyboard.press('Tab');
       await apiKeyDialog.getByRole('button', {name: 'Add', exact: true}).click();
       await expect(apiKeyDialog).toBeHidden();
 
@@ -142,7 +147,9 @@ test.describe('Settings and Client Configuration', () => {
       });
 
       await page.addInitScript(() => {
-        localStorage.setItem('a2ui_composer_force_3p', 'true');
+        if (window === window.top) {
+          localStorage.setItem('a2ui_composer_force_3p', 'true');
+        }
       });
       await page.goto('/settings');
 
@@ -196,8 +203,10 @@ test.describe('Settings and Client Configuration', () => {
         });
       });
       await page.addInitScript(() => {
-        localStorage.setItem('a2ui_composer_force_3p', 'true');
-        localStorage.removeItem('a2ui_composer_force_1p');
+        if (window === window.top) {
+          localStorage.setItem('a2ui_composer_force_3p', 'true');
+          localStorage.removeItem('a2ui_composer_force_1p');
+        }
       });
       await page.goto('/?renderer=http://localhost:3000');
       await expect(page.locator('.disabled-chat-panel')).toBeVisible();
@@ -210,7 +219,9 @@ test.describe('Settings and Client Configuration', () => {
       page,
     }) => {
       await page.addInitScript(() => {
-        localStorage.clear();
+        if (window === window.top) {
+          localStorage.clear();
+        }
       });
       await page.goto('/settings');
 

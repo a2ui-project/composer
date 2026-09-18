@@ -22,6 +22,8 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatTableModule} from '@angular/material/table';
 import {ErrorLogger, ErrorLogItem} from '../error-logger.service';
 import {Subject} from 'rxjs';
+import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 
 describe('Errors Component', () => {
   let fixture: ComponentFixture<Errors>;
@@ -48,7 +50,11 @@ describe('Errors Component', () => {
 
     await TestBed.configureTestingModule({
       imports: [Errors, MatTableModule],
-      providers: [provideNoopAnimations(), {provide: ErrorLogger, useValue: mockErrorLogger}],
+      providers: [
+        provideNoopAnimations(),
+        {provide: ErrorLogger, useValue: mockErrorLogger},
+        {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Errors);

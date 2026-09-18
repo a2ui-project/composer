@@ -55,8 +55,7 @@ describe('RawMessages', () => {
     hostCommMock = {
       messageStream$: mockMessageStreamSubject,
       messageStream: messageStreamSignal,
-      getHistoryBuffer: vi.fn(() => []),
-      getLatestCatalog: vi.fn(() => null),
+      consumeEnvelopeHistory: vi.fn(() => []),
       clearHistoryBuffer: vi.fn(),
     };
     latestLlmLogSignal = signal<LlmLogEntry | null>(null);
@@ -259,7 +258,7 @@ describe('RawMessages', () => {
       },
     ];
 
-    vi.spyOn(hostCommMock, 'getHistoryBuffer').mockReturnValue(pastEnvelopes);
+    vi.spyOn(hostCommMock, 'consumeEnvelopeHistory').mockReturnValue(pastEnvelopes);
     llmHistorySignal.set(pastLlmLogs);
 
     // Recreate fixture to load constructor with both history collections

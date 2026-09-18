@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {FailureParseResult} from '../a2ui-payload-parser/a2ui-payload-parser';
+
 /**
  * Defines the semantic roles for conversational message segments.
  * This categorizes the originator or context of chat communication.
@@ -79,7 +81,15 @@ export declare interface LlmMessage {
 
   /** Optional user-facing actionable tip for error messages. */
   readonly errorTip?: string;
-  readonly parseError?: unknown;
+
+  /** Details of any syntax or parsing failure encountered when interpreting the message payload. */
+  readonly parseError?: FailureParseResult;
+
+  /** Indicates whether the message represents an established state snapshot rather than an incremental delta. */
+  readonly isSnapshot?: boolean;
+
+  /** The total count of recognized A2UI components contained in this message, or null/undefined if uncounted. */
+  readonly componentCount?: number | null;
 }
 
 /**

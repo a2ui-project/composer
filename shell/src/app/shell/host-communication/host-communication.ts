@@ -43,12 +43,6 @@ export declare interface MessageEnvelope {
   sourceWindow?: Window | null;
 }
 
-declare global {
-  interface Window {
-    a2uiHostCommunication?: HostCommunication;
-  }
-}
-
 /**
  * Core service managing cross-frame message passing and event dispatching
  * between the primary workspace shell and rendering client frames.
@@ -101,22 +95,15 @@ export class HostCommunication implements OnDestroy {
     message: {type: PreviewBridgeMessageType; payload?: unknown};
     target?: HTMLIFrameElement | Window | null;
   }> = [];
-  private latestCatalogEnvelope: MessageEnvelope | null = null;
 
   /**
    * Retrieves a snapshot copy of the recent message history buffer.
    * @return Array of stored message envelopes
    */
-  getHistoryBuffer(): MessageEnvelope[] {
-    return [...this.messageHistoryBuffer];
-  }
-
-  /**
-   * Retrieves the most recent catalog message envelope received from the preview frame.
-   * @return Latest catalog envelope or null if none received
-   */
-  getLatestCatalog(): MessageEnvelope | null {
-    return this.latestCatalogEnvelope;
+  consumeEnvelopeHistory(): MessageEnvelope[] {
+    const records = [...this.messageHistoryBuffer];
+    this.messageHistoryBuffer.length = 0;
+    return records;
   }
 
   /**
@@ -124,7 +111,24 @@ export class HostCommunication implements OnDestroy {
    */
   clearHistoryBuffer(): void {
     this.messageHistoryBuffer.length = 0;
-    this.latestCatalogEnvelope = null;
+  }
+
+  private handleConsoleLog(payload: unknown): void {
+    const payloadObj = payload as {level?: string; message?: string; stack?: string} | undefined;
+    const levelStr = payloadObj?.level || 'log';
+    const msg = payloadObj?.message || '';
+    const stackStr = payloadObj?.stack;
+    let level: ErrorLogLevel = 'log';
+    if (levelStr === 'error') level = 'error';
+    else if (levelStr === 'warn') level = 'warn';
+    else if (levelStr === 'info') level = 'info';
+
+    this.errorLogger.log({
+      level,
+      message: msg,
+      sourceTag: '[Previewer]',
+      ...(stackStr !== undefined ? {stack: stackStr} : {}),
+    });
   }
 
   /**
@@ -132,6 +136,9 @@ export class HostCommunication implements OnDestroy {
    * to safely simulate incoming guest frame postMessages without unsafe casting bypasses.
    */
   private triggerMessageStreamForTesting(envelope: MessageEnvelope): void {
+    if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+      this.handleConsoleLog(envelope.payload);
+    }
     this.messageStreamSubject.next(envelope);
   }
 
@@ -156,7 +163,21 @@ export class HostCommunication implements OnDestroy {
         event.data &&
         typeof event.data === 'object' &&
         Object.values(PreviewBridgeMessageType).includes(event.data.type);
-      if (!isBridgeMessage || event.data.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+
+      if (event.data?.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+        const envelope: MessageEnvelope = {
+          type: event.data.type,
+          payload: event.data.payload,
+          origin: event.origin,
+          timestamp: Date.now(),
+          sourceWindow: (event.source as Window) ?? null,
+        };
+        this.handleConsoleLog(event.data.payload);
+        this.messageStreamSubject.next(envelope);
+        return;
+      }
+
+      if (!isBridgeMessage) {
         return;
       }
       this.earlyMessageBuffer.push(event);
@@ -200,9 +221,6 @@ export class HostCommunication implements OnDestroy {
         timestamp: Date.now(),
         sourceWindow: (event.source as Window) ?? null,
       };
-      if (type === PreviewBridgeMessageType.A2UI_CATALOG) {
-        this.latestCatalogEnvelope = envelope;
-      }
       if (type === PreviewBridgeMessageType.RENDERER_READY) {
         this.isRendererReadySignal.set(true);
         this.sendTheme(this.configProvider.themePreference());
@@ -213,21 +231,7 @@ export class HostCommunication implements OnDestroy {
         }
       }
       if (type === PreviewBridgeMessageType.CONSOLE_LOG) {
-        const payloadObj = data.payload as {level?: string; message?: string; stack?: string};
-        const levelStr = payloadObj?.level || 'log';
-        const msg = payloadObj?.message || '';
-        const stackStr = payloadObj?.stack;
-        let level: ErrorLogLevel = 'log';
-        if (levelStr === 'error') level = 'error';
-        else if (levelStr === 'warn') level = 'warn';
-        else if (levelStr === 'info') level = 'info';
-
-        this.errorLogger.log({
-          level,
-          message: msg,
-          sourceTag: '[Previewer]',
-          ...(stackStr !== undefined ? {stack: stackStr} : {}),
-        });
+        this.handleConsoleLog(data.payload);
         this.messageStreamSubject.next(envelope);
         return;
       }
@@ -276,7 +280,6 @@ export class HostCommunication implements OnDestroy {
   constructor() {
     if (typeof window !== 'undefined') {
       window.addEventListener('message', this.messageListener);
-      window.a2uiHostCommunication = this;
     }
   }
 
@@ -465,7 +468,6 @@ export class HostCommunication implements OnDestroy {
     this.messageStreamSubject.complete();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
-      delete window.a2uiHostCommunication;
     }
   }
 }

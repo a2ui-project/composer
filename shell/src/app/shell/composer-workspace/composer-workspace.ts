@@ -30,6 +30,7 @@ import {
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {HostCommunication} from '../host-communication/host-communication';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {
   AppConfigProvider,
@@ -59,16 +60,10 @@ export declare interface WorkspaceMessagePayload {
   styleUrl: './composer-workspace.scss',
 })
 export class ComposerWorkspace implements OnInit, AfterViewInit {
-  @HostListener('window:a2ui-open-panel', ['$event']) onOpenPanel(event: Event) {
-    const detail = (event as CustomEvent).detail;
-    const panelId = typeof detail === 'string' ? detail : detail?.panelId;
-    if (panelId) {
-      this.composerDockview.openPanel(panelId);
-    }
-  }
   private readonly startupResolution = inject(StartupResolution);
   private readonly hostComm = inject(HostCommunication);
   private readonly configProvider = inject(AppConfigProvider);
+  private readonly errorLogger = inject(ErrorLogger);
   private readonly composerDockview = inject(ComposerDockview);
   private readonly usageTrackingService = inject(UsageTrackingService);
 
@@ -79,7 +74,22 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   unreadErrorsCount = signal(0);
   isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
 
+  @HostListener('window:a2ui-open-panel', ['$event']) onOpenPanel(event: Event) {
+    const detail = (event as CustomEvent).detail;
+    const panelId = typeof detail === 'string' ? detail : detail?.panelId;
+    if (panelId && Object.values(ComposerPanelId).includes(panelId as ComposerPanelId)) {
+      this.composerDockview.openPanel(panelId as ComposerPanelId);
+    }
+  }
+
   constructor() {
+    this.errorLogger.errorStream$.pipe(takeUntilDestroyed()).subscribe(log => {
+      if (log.level === 'warn' || log.level === 'error') {
+        if (!this.composerDockview.isPanelVisible(ComposerPanelId.Errors)) {
+          this.unreadErrorsCount.update(count => count + 1);
+        }
+      }
+    });
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
       if (!envelope) return;
 
@@ -88,24 +98,6 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
       if (envelope.type === PreviewBridgeMessageType.SEND_TO_SERVER && payload?.action) {
         if (!this.composerDockview.isPanelVisible(ComposerPanelId.Events)) {
           this.unreadEventsCount.update(count => count + 1);
-        }
-      } else if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
-        if (!this.composerDockview.isPanelVisible(ComposerPanelId.Errors)) {
-          this.unreadErrorsCount.update(count => count + 1);
-        }
-      } else if (
-        envelope.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE &&
-        payload?.validationErrors
-      ) {
-        const validationErrors = payload.validationErrors;
-        const hasErrors = Array.isArray(validationErrors)
-          ? validationErrors.length > 0
-          : typeof validationErrors === 'object' && validationErrors !== null
-            ? Object.keys(validationErrors).length > 0
-            : !!validationErrors;
-
-        if (hasErrors && !this.composerDockview.isPanelVisible(ComposerPanelId.Errors)) {
-          this.unreadErrorsCount.update(count => count + 1);
         }
       }
     });
