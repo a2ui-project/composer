@@ -20,9 +20,9 @@
   height: 100%;
   position: relative;
   overflow: hidden;
-  background-color: var(--cpk-page-bg);
-  font-family: var(--cpk-font-body, 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif);
-  color: var(--cpk-text-primary, #010507);
+  background-color: var(--mat-sys-background);
+  font-family: var(--mat-sys-body-medium-font);
+  color: var(--mat-sys-on-surface);
 }
 
 .composer-header {
@@ -30,9 +30,9 @@
   gap: 4px;
   height: 64px;
   padding: 0 16px;
-  background-color: var(--cpk-surface);
-  color: var(--cpk-text-primary);
-  border-bottom: 1px solid var(--cpk-border);
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
 
 .header-title {
@@ -40,10 +40,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--cpk-font-body);
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.4px;
+  font: var(--mat-sys-title-medium);
+  letter-spacing: var(--mat-sys-title-medium-tracking);
 }
 
 .reset-session-button {
@@ -61,7 +59,7 @@
   position: relative;
   z-index: 1;
   display: flex;
-  background-color: var(--cpk-page-bg);
+  background-color: var(--mat-sys-background);
   --mat-sidenav-container-background-color: transparent;
 
   > ::ng-deep .mat-drawer {
@@ -79,8 +77,8 @@
 
 .composer-sidenav {
   width: 232px;
-  background-color: var(--cpk-surface);
-  border-right: 1px solid var(--cpk-border);
+  background-color: var(--mat-sys-surface);
+  border-right: 1px solid var(--mat-sys-outline-variant);
   --mat-sidenav-container-shape: 0px;
   --mat-drawer-container-shape: 0px;
   border-radius: 0;
@@ -146,7 +144,8 @@
   }
 
   .header-title {
-    font-size: 14px;
+    font: var(--mat-sys-title-small);
+    letter-spacing: var(--mat-sys-title-small-tracking);
   }
 
   .hamburger-button,
