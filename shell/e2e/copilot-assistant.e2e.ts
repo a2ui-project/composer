@@ -227,6 +227,55 @@ async function expectGeminiRequestForCurrentDraft(page: Page, expectedDraftText:
 }
 
 test.describe('Copilot assistant replacement browser journey', () => {
+  test('keeps prompt helpers in the Add menu and preserves drafted text', async ({page}) => {
+    await openEditedGalleryExampleInWorkspace(page);
+    const prompt = page.getByRole('textbox', {name: 'Chat prompt'});
+    await prompt.fill('Keep this draft while I add context');
+    const add = page.getByRole('button', {name: 'Add to prompt', exact: true});
+
+    await add.click();
+    await expect(page.getByRole('menuitem', {name: 'Attach files'})).toBeVisible();
+    await expect(page.getByRole('menuitemcheckbox', {name: 'Include screenshot'})).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    await page.keyboard.press('Escape');
+    await expect(add).toBeFocused();
+
+    await add.click();
+    await page.getByRole('menuitemcheckbox', {name: 'Include screenshot'}).click();
+    await expect(add).toHaveAttribute('aria-description', /screenshot will be included/);
+    await add.click();
+    const screenshot = page.getByRole('menuitemcheckbox', {name: 'Include screenshot'});
+    await expect(screenshot).toHaveAttribute('aria-checked', 'true');
+    await screenshot.click();
+    await expect(add).not.toHaveAttribute('aria-description');
+
+    await add.click();
+    await page.getByRole('menuitem', {name: 'Instructions', exact: true}).click();
+    const instructions = page.getByRole('dialog');
+    await expect(instructions.getByRole('heading', {name: 'System Instructions'})).toBeVisible();
+    await expect(instructions.getByRole('textbox', {name: 'System instructions text'})).toHaveValue(
+      /my_basic_catalog/,
+    );
+    await instructions.getByRole('button', {name: 'Close', exact: true}).click();
+
+    await add.click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('menuitem', {name: 'Attach files', exact: true}).click();
+    await (
+      await chooser
+    ).setFiles({
+      name: 'brief.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('Make the selected card easier to read.'),
+    });
+    await expect(page.locator('.attachment-previews')).toContainText('brief.txt');
+    await page.getByRole('button', {name: 'Remove attachment'}).click();
+    await expect(page.locator('.attachment-previews')).not.toBeVisible();
+    await expect(prompt).toHaveValue('Keep this draft while I add context');
+  });
+
   test('uses selected gallery draft context to update the workspace preview', async ({page}) => {
     await openEditedGalleryExampleInWorkspace(page);
     const originalDraft = await readRawDraft(page);

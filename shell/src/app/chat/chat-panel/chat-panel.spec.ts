@@ -791,7 +791,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     },
   );
 
-  it('opens the system instructions dialog when the link is clicked', async () => {
+  it('opens the system instructions dialog from the Add menu', async () => {
     expect(await harness.hasSystemInstructionsLink()).toBe(true);
     const documentRootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
 
@@ -803,6 +803,40 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     const dialog = dialogs[0];
     expect(await dialog.getTitleText()).toBe('System Instructions');
+  });
+
+  it('opens the attachment picker only after selecting Attach files from the Add menu', async () => {
+    const pickerClick = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      expect((await harness.getAddPromptActions()).map(action => action.text)).toEqual([
+        expect.stringContaining('Attach files'),
+        expect.stringContaining('Include screenshot'),
+        expect.stringContaining('Instructions'),
+      ]);
+      expect(pickerClick).not.toHaveBeenCalled();
+      await harness.clickAttachFiles();
+      expect(pickerClick).toHaveBeenCalledOnce();
+    } finally {
+      pickerClick.mockRestore();
+    }
+  });
+
+  it('keeps Instructions available while attachment and screenshot changes are locked', async () => {
+    chatStateMock.isProgrammaticStreamActive.set(true);
+    fixture.detectChanges();
+    expect((await harness.getAddPromptActions()).map(action => action.disabled)).toEqual([
+      true,
+      true,
+      false,
+    ]);
+    chatStateMock.isProgrammaticStreamActive.set(false);
+    fixture.componentInstance.isReadingFiles.set(true);
+    fixture.detectChanges();
+    expect((await harness.getAddPromptActions()).map(action => action.disabled)).toEqual([
+      true,
+      true,
+      false,
+    ]);
   });
 
   it('disables the Send button when the catalog handshake is pending, and enables it when complete', async () => {
@@ -998,7 +1032,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   });
 
   describe('Screenshot Integration', () => {
-    it('renders the screenshot checkbox toggle in the action bar', async () => {
+    it('renders the screenshot checkbox option in the Add menu', async () => {
       expect(await harness.hasScreenshotCheckbox()).toBe(true);
       expect(await harness.isScreenshotChecked()).toBe(false);
     });
@@ -1013,6 +1047,11 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
       expect(component.includeScreenshot()).toBe(true);
       expect(await harness.isScreenshotChecked()).toBe(true);
+      expect(await harness.getAddPromptDescription()).toContain('screenshot will be included');
+
+      await harness.toggleScreenshot();
+      expect(await harness.isScreenshotChecked()).toBe(false);
+      expect(await harness.getAddPromptDescription()).toBeNull();
     });
 
     it('captures screenshot and attaches it when sending prompt with includeScreenshot enabled', async () => {

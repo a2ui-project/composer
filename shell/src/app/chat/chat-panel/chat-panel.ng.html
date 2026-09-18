@@ -264,7 +264,7 @@
             }
           </div>
         }
-        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-form-field">
+        <div class="prompt-form-field">
           <textarea
             matInput
             aria-label="Chat prompt"
@@ -275,19 +275,29 @@
             placeholder="Describe a change to your canvas…"
             rows="2"
           ></textarea>
-        </mat-form-field>
+        </div>
         <div class="submit-action-bar">
           <div class="action-bar-left">
             <button
               mat-icon-button
-              class="attach-file-button"
-              [disabled]="isLocked() || isReadingFiles()"
-              (click)="fileInput.click()"
+              class="add-prompt-button"
+              [class.has-screenshot]="includeScreenshot()"
+              [matMenuTriggerFor]="addPromptMenu"
+              [attr.aria-description]="
+                includeScreenshot()
+                  ? 'A canvas screenshot will be included with your prompt.'
+                  : null
+              "
               type="button"
-              title="Upload attachment"
-              aria-label="Upload attachment"
+              [title]="
+                includeScreenshot() ? 'Add to prompt · Screenshot included' : 'Add to prompt'
+              "
+              aria-label="Add to prompt"
             >
-              <mat-icon>attach_file</mat-icon>
+              <mat-icon aria-hidden="true">add</mat-icon>
+              @if (includeScreenshot()) {
+                <span class="screenshot-indicator" aria-hidden="true"></span>
+              }
             </button>
             <input
               #fileInput
@@ -297,55 +307,77 @@
               [disabled]="isReadingFiles()"
               (change)="onFilesSelected($event)"
             />
-            <button
-              mat-icon-button
-              class="screenshot-toggle-button"
-              [class.active]="includeScreenshot()"
-              [attr.aria-pressed]="includeScreenshot()"
-              [disabled]="isLocked()"
-              (click)="onIncludeScreenshotChange(!includeScreenshot())"
-              type="button"
-              title="Add screenshot"
-              aria-label="Add screenshot"
+            <mat-menu
+              #addPromptMenu="matMenu"
+              class="composer-add-menu"
+              yPosition="above"
+              xPosition="after"
             >
-              <mat-icon>photo_camera</mat-icon>
-            </button>
-            <button
-              type="button"
-              class="system-instructions-link"
-              (click)="showSystemInstructions()"
-            >
-              Instructions
-            </button>
+              <button
+                mat-menu-item
+                class="attach-file-button"
+                [disabled]="isLocked() || isReadingFiles()"
+                (click)="fileInput.click()"
+                type="button"
+              >
+                <mat-icon aria-hidden="true">attach_file</mat-icon>
+                Attach files
+              </button>
+              <button
+                mat-menu-item
+                class="screenshot-toggle-button"
+                role="menuitemcheckbox"
+                [attr.aria-checked]="includeScreenshot()"
+                [disabled]="isLocked() || isReadingFiles()"
+                (click)="onIncludeScreenshotChange(!includeScreenshot())"
+                type="button"
+              >
+                <mat-icon aria-hidden="true">{{
+                  includeScreenshot() ? 'check' : 'photo_camera'
+                }}</mat-icon>
+                Include screenshot
+              </button>
+              <button
+                mat-menu-item
+                type="button"
+                class="system-instructions-link"
+                (click)="showSystemInstructions()"
+              >
+                <mat-icon aria-hidden="true">tune</mat-icon>
+                Instructions
+              </button>
+            </mat-menu>
           </div>
-          @if (isLocked()) {
-            <button
-              mat-icon-button
-              color="warn"
-              class="submit-button stop-button"
-              (click)="cancelPrompt()"
-              title="Stop generating"
-              aria-label="Stop generating"
-            >
-              <mat-icon>stop_circle</mat-icon>
-            </button>
-          } @else {
-            <button
-              mat-icon-button
-              color="primary"
-              class="submit-button send-button"
-              [disabled]="
-                isReadingFiles() ||
-                !isHandshakeComplete() ||
-                (!userPrompt().trim() && attachedFiles().length === 0)
-              "
-              (click)="submitPrompt()"
-              title="Send prompt"
-              aria-label="Send prompt"
-            >
-              <mat-icon>send</mat-icon>
-            </button>
-          }
+          <div class="action-bar-right">
+            @if (isLocked()) {
+              <button
+                mat-icon-button
+                color="warn"
+                class="submit-button stop-button"
+                (click)="cancelPrompt()"
+                title="Stop generating"
+                aria-label="Stop generating"
+              >
+                <mat-icon>stop_circle</mat-icon>
+              </button>
+            } @else {
+              <button
+                mat-icon-button
+                color="primary"
+                class="submit-button send-button"
+                [disabled]="
+                  isReadingFiles() ||
+                  !isHandshakeComplete() ||
+                  (!userPrompt().trim() && attachedFiles().length === 0)
+                "
+                (click)="submitPrompt()"
+                title="Send prompt"
+                aria-label="Send prompt"
+              >
+                <mat-icon>send</mat-icon>
+              </button>
+            }
+          </div>
         </div>
       </div>
     </ng-template>

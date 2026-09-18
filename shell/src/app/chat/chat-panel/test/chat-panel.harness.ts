@@ -18,6 +18,7 @@
 import {ComponentHarness} from '@angular/cdk/testing';
 import {MatInputHarness} from '@angular/material/input/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
+import {MatMenuHarness} from '@angular/material/menu/testing';
 
 /**
  * Harness for interacting with the chat drawer view.
@@ -30,10 +31,33 @@ export class ChatPanelHarness extends ComponentHarness {
   protected getSubmitButton = this.locatorForOptional(
     MatButtonHarness.with({selector: '.send-button'}),
   );
-  protected getScreenshotToggleButton = this.locatorForOptional('.screenshot-toggle-button');
+  protected getAddPromptMenu = this.locatorFor(
+    MatMenuHarness.with({selector: '.add-prompt-button'}),
+  );
   protected getStopButton = this.locatorForOptional(
     MatButtonHarness.with({selector: '.stop-button'}),
   );
+
+  async getAddPromptActions(): Promise<{text: string; disabled: boolean}[]> {
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const items = await menu.getItems();
+    const actions = await Promise.all(
+      items.map(async item => ({text: await item.getText(), disabled: await item.isDisabled()})),
+    );
+    await menu.close();
+    return actions;
+  }
+
+  async clickAttachFiles(): Promise<void> {
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    await menu.clickItem({text: /Attach files/});
+  }
+
+  async getAddPromptDescription(): Promise<string | null> {
+    return (await this.locatorFor('.add-prompt-button')()).getAttribute('aria-description');
+  }
 
   /** Confirms the controlled CopilotKit view is the visible chat surface. */
   async hasCopilotChatView(): Promise<boolean> {
@@ -178,13 +202,17 @@ export class ChatPanelHarness extends ComponentHarness {
     return notice.text();
   }
   async clickSystemInstructionsLink(): Promise<void> {
-    const link = await this.locatorFor('.system-instructions-link')();
-    await link.click();
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    await menu.clickItem({text: /Instructions/});
   }
 
   async hasSystemInstructionsLink(): Promise<boolean> {
-    const link = await this.locatorForOptional('.system-instructions-link')();
-    return link !== null;
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const items = await menu.getItems({text: /Instructions/});
+    await menu.close();
+    return items.length > 0;
   }
 
   async getRetryButtonsCount(): Promise<number> {
@@ -289,20 +317,29 @@ export class ChatPanelHarness extends ComponentHarness {
   }
 
   async hasScreenshotCheckbox(): Promise<boolean> {
-    const btn = await this.getScreenshotToggleButton();
-    return btn !== null;
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const items = await menu.getItems({text: /Include screenshot/});
+    const role = items.length ? await (await items[0].host()).getAttribute('role') : null;
+    await menu.close();
+    return role === 'menuitemcheckbox';
   }
 
   async isScreenshotChecked(): Promise<boolean> {
-    const btn = await this.getScreenshotToggleButton();
-    if (!btn) return false;
-    return btn.hasClass('active');
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const items = await menu.getItems({text: /Include screenshot/});
+    const checked = items.length
+      ? await (await items[0].host()).getAttribute('aria-checked')
+      : null;
+    await menu.close();
+    return checked === 'true';
   }
 
   async toggleScreenshot(): Promise<void> {
-    const btn = await this.getScreenshotToggleButton();
-    if (!btn) throw new Error('Screenshot toggle button not found.');
-    await btn.click();
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    await menu.clickItem({text: /Include screenshot/});
   }
 }
 

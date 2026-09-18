@@ -173,29 +173,44 @@
 .chat-controllers-panel {
   padding: 12px;
   border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 16px;
+  border-radius: 24px;
   background: var(--mat-sys-surface);
   box-shadow: 0 3px 16px color-mix(in srgb, var(--mat-sys-on-surface) 7%, transparent);
 
+  &:focus-within {
+    border-color: var(--mat-sys-primary);
+  }
+
   .prompt-form-field {
     width: 100%;
-    --mdc-outlined-text-field-container-shape: 12px;
-    --mdc-outlined-text-field-outline-color: var(--mat-sys-outline-variant);
-    --mdc-outlined-text-field-focus-outline-color: var(--mat-sys-primary);
-    --mdc-outlined-text-field-hover-outline-color: var(--mat-sys-outline);
   }
 
   textarea {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 6px 8px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--mat-sys-on-surface);
+    font: inherit;
     font-size: 14px;
     line-height: 1.5;
-    resize: vertical;
-    min-height: 48px;
+    resize: none;
+    min-height: 64px;
     max-height: 160px;
+
+    &::placeholder {
+      color: var(--mat-sys-on-surface-variant);
+      opacity: 0.8;
+    }
   }
 }
 
 .submit-action-bar,
-.action-bar-left {
+.action-bar-left,
+.action-bar-right {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -206,26 +221,28 @@
   margin-top: 8px;
 }
 
-.action-bar-left {
+.action-bar-left,
+.action-bar-right {
   min-width: 0;
-  flex-wrap: wrap;
 }
 
-.system-instructions-link {
-  padding: 8px 4px;
-  border: 0;
-  background: transparent;
-  color: var(--mat-sys-on-surface-variant);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.action-bar-left {
+  gap: 0;
 }
 
-.screenshot-toggle-button.active {
+.add-prompt-button.has-screenshot {
   color: var(--mat-sys-primary);
   background: var(--mat-sys-primary-container);
+}
+
+.screenshot-indicator {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mat-sys-primary);
 }
 
 .send-button:not(:disabled) {

@@ -37,9 +37,9 @@ import {
 } from '@copilotkit/angular';
 import {MatButtonModule} from '@angular/material/button';
 import {MatDialog, MatDialogModule} from '@angular/material/dialog';
-import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatIconModule} from '@angular/material/icon';
 import {MatInputModule} from '@angular/material/input';
+import {MatMenuModule} from '@angular/material/menu';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {RouterLink} from '@angular/router';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
@@ -90,8 +90,8 @@ interface PresentedTurn extends LlmMessage {
   selector: 'a2ui-composer-chat-panel',
   standalone: true,
   imports: [
-    MatFormFieldModule,
     MatInputModule,
+    MatMenuModule,
     MatButtonModule,
     FormsModule,
     MatProgressSpinnerModule,
