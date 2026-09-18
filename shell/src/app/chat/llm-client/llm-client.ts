@@ -87,7 +87,24 @@ export declare interface LlmMessage {
  * generative model operations. Used primarily in synchronous or
  * non-incremental user flow layouts.
  */
+export interface LlmToolCall {
+  readonly name: string;
+  readonly args: Record<string, unknown>;
+}
+
+export interface LlmToolDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly parametersJsonSchema: Record<string, unknown>;
+}
+
+export interface LlmRequestOptions {
+  readonly tools?: LlmToolDefinition[];
+}
+
 export interface LlmResponse {
+  /** Native function calls requested by the model, separate from canvas JSON. */
+  readonly toolCalls?: LlmToolCall[];
   /**
    * The final complete layout accumulated text content returned by the target
    * LLM client.
@@ -206,7 +223,10 @@ export abstract class LlmClient {
    * @return A promise resolving to an active stream response boundary
    *   interface.
    */
-  abstract chatStream(messages: LlmMessage[]): Promise<LlmStreamResponse>;
+  abstract chatStream(
+    messages: LlmMessage[],
+    options?: LlmRequestOptions,
+  ): Promise<LlmStreamResponse>;
 
   /**
    * Extracts and removes XML-like thought tags (`<thought>`, `<thinking>`,

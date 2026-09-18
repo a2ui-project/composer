@@ -84,6 +84,7 @@ interface PresentedTurn extends LlmMessage {
   isStreaming: boolean;
   componentCount: number | null;
   displayContent: string;
+  snapshotSignature: string | null;
 }
 
 /** Controlled CopilotKit presentation of Composer's conversation and generation actions. */
@@ -122,13 +123,13 @@ export class ChatPanel {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly fileIngestionService = inject(FileIngestionService);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
-
   protected readonly rendererSelection = inject(RendererSelection);
 
   protected readonly rendererLabel = computed(() => {
     const renderer = this.rendererSelection.activeRenderer();
     if (!renderer) return 'Renderer';
     if (renderer.id === 'default' || renderer.id === 'angular-dev') return 'A2UI';
+    if (renderer.id === 'slack' || renderer.id === 'slack-dev') return 'Slack';
     return renderer.name;
   });
 
@@ -191,7 +192,7 @@ export class ChatPanel {
    */
   protected readonly visibleChatHistory = computed<PresentedTurn[]>(() => {
     const history = this.chatState.chatHistory();
-    return history.flatMap((message, index) => {
+    const turns = history.flatMap((message, index) => {
       if (
         message.role === MessageRole.SYSTEM ||
         (!message.content?.trim() &&
@@ -222,6 +223,8 @@ export class ChatPanel {
               .filter(isRenderA2uiItem)
               .reduce((count, block) => count + (block.updateComponents?.components.length ?? 0), 0)
           : null;
+      const snapshotSignature =
+        isSnapshot && parsed?.success ? this.stableSnapshotSignature(parsed.blocks) : null;
       const displayContent = parseError
         ? 'This response could not update the canvas.'
         : isSnapshot
@@ -238,10 +241,59 @@ export class ChatPanel {
           componentCount,
           parseError,
           displayContent,
+          snapshotSignature,
         },
       ];
     });
+    return this.filterTranscriptSnapshots(turns);
   });
+
+  private filterTranscriptSnapshots(turns: PresentedTurn[]): PresentedTurn[] {
+    const visibleTurns: PresentedTurn[] = [];
+    for (const turn of turns) {
+      if (
+        turn.isSnapshot &&
+        !turn.isStreaming &&
+        !this.isLocked() &&
+        turn.componentCount === 0 &&
+        visibleTurns.length === 0
+      ) {
+        continue;
+      }
+
+      const previousTurn = visibleTurns[visibleTurns.length - 1];
+      const duplicatesPreviousAssistantSnapshot =
+        turn.isSnapshot &&
+        !!turn.snapshotSignature &&
+        previousTurn?.role === MessageRole.MODEL &&
+        previousTurn.isSnapshot &&
+        previousTurn.snapshotSignature === turn.snapshotSignature;
+      if (duplicatesPreviousAssistantSnapshot) {
+        continue;
+      }
+
+      visibleTurns.push(turn);
+    }
+    return visibleTurns;
+  }
+
+  private stableSnapshotSignature(value: unknown): string {
+    return JSON.stringify(this.sortSnapshotValue(value));
+  }
+
+  private sortSnapshotValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map(item => this.sortSnapshotValue(item));
+    }
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value)
+          .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+          .map(([key, item]) => [key, this.sortSnapshotValue(item)]),
+      );
+    }
+    return value;
+  }
 
   // These are read-only projections. Composer owns history, retries, and the active stream.
   protected readonly chatMessages = computed<ReturnType<CopilotChatView['messages']>>(() =>
@@ -417,7 +469,9 @@ export class ChatPanel {
   }
 
   protected parseMessage(text: string | undefined): Array<{text: string; isRedacted: boolean}> {
-    if (!text) return [];
+    if (!text) {
+      return [];
+    }
     const delimiter = 'redacted for your protection';
     const parts = text.split(delimiter);
     const result: Array<{text: string; isRedacted: boolean}> = [];

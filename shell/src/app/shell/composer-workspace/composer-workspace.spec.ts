@@ -262,6 +262,13 @@ describe('ComposerWorkspace Dashboard', () => {
   });
 
   describe('Dockview Layout and Effects', () => {
+    it('uses a product-neutral Assistant title for the chat panel tab', () => {
+      const manager = fixture.debugElement.injector.get(ComposerDockview);
+      const chatPanel = manager.api.getGroupPanel(ComposerPanelId.Chat);
+
+      expect(chatPanel?.title).toBe('Assistant');
+    });
+
     it('updates events and errors panel titles based on unread count', async () => {
       fixture.componentInstance.unreadEventsCount.set(5);
       fixture.componentInstance.unreadErrorsCount.set(3);

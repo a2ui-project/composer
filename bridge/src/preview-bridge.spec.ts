@@ -416,6 +416,142 @@ describe('PreviewBridge Core API Runtime', () => {
     );
   });
 
+  describe('catalog requests across renderer lifecycles', () => {
+    it('does not start an HTML fallback after the renderer attaches its catalog', async () => {
+      vi.useFakeTimers();
+      const postMessage = vi.spyOn(window.parent, 'postMessage');
+      let completeText!: (text: string) => void;
+      const pendingText = new Promise<string>(resolve => {
+        completeText = resolve;
+      });
+      const response = new Response();
+      vi.spyOn(response, 'text').mockReturnValue(pendingText);
+      window.fetch = vi.fn<typeof window.fetch>().mockResolvedValue(response);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(response.text).toHaveBeenCalledOnce();
+
+      bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {
+          surfaceGroup: {onSurfaceCreated: {subscribe: () => ({unsubscribe: vi.fn()})}},
+          onSurfaceReady: vi.fn(),
+          catalogJson: {catalogId: 'inline-catalog'},
+        },
+      );
+      completeText('<!doctype html><html>SPA fallback</html>');
+      await vi.runAllTimersAsync();
+
+      expect(window.fetch).toHaveBeenCalledExactlyOnceWith('catalog', expect.any(Object));
+      expect(
+        postMessage.mock.calls.filter(
+          ([message]) => message.type === PreviewBridgeMessageType.A2UI_CATALOG,
+        ),
+      ).toEqual([]);
+    });
+
+    it.each([
+      {startAttached: false, responseStatus: 200},
+      {startAttached: false, responseStatus: 404},
+      {startAttached: true, responseStatus: 200},
+      {startAttached: true, responseStatus: 404},
+    ])(
+      'ignores a stale $responseStatus response after attachment (previous renderer: $startAttached)',
+      async ({startAttached, responseStatus}) => {
+        vi.useFakeTimers();
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const postMessage = vi.spyOn(window.parent, 'postMessage');
+        const surfaceGroup: SurfaceGroupLike = {
+          onSurfaceCreated: {subscribe: () => ({unsubscribe: vi.fn()})},
+        };
+        let completeFetch!: () => void;
+        const pendingFetch = new Promise<void>(resolve => {
+          completeFetch = resolve;
+        });
+        window.fetch = vi.fn<typeof window.fetch>().mockImplementation(async () => {
+          await pendingFetch;
+          return new Response(JSON.stringify({catalogId: 'stale-catalog'}), {
+            status: responseStatus,
+          });
+        });
+        const requestCatalog = () => {
+          window.dispatchEvent(
+            new MessageEvent('message', {
+              source: window.parent,
+              origin: window.location.origin,
+              data: {type: PreviewBridgeMessageType.GET_CATALOG},
+            }),
+          );
+        };
+        if (startAttached) {
+          bridge.attachRenderer(
+            {processMessages: vi.fn()},
+            {surfaceGroup, onSurfaceReady: vi.fn()},
+          );
+        }
+        requestCatalog();
+        expect(window.fetch).toHaveBeenCalledOnce();
+
+        const catalog = {catalogId: 'current-catalog', components: {}};
+        const onCatalogResolved = vi.fn();
+        bridge.attachRenderer(
+          {processMessages: vi.fn()},
+          {surfaceGroup, onSurfaceReady: vi.fn(), catalogJson: catalog, onCatalogResolved},
+        );
+        requestCatalog();
+        await vi.advanceTimersByTimeAsync(0);
+        completeFetch();
+        await vi.runAllTimersAsync();
+
+        const catalogMessages = postMessage.mock.calls.filter(
+          ([message]) => message.type === PreviewBridgeMessageType.A2UI_CATALOG,
+        );
+        expect(catalogMessages).toEqual([
+          [{type: PreviewBridgeMessageType.A2UI_CATALOG, payload: catalog}, window.location.origin],
+        ]);
+        expect(onCatalogResolved).toHaveBeenCalledExactlyOnceWith('current-catalog');
+      },
+    );
+
+    it.each(['detach', 'destroy'] as const)(
+      'does not publish an in-flight catalog after %s',
+      async lifecycle => {
+        vi.useFakeTimers();
+        const postMessage = vi.spyOn(window.parent, 'postMessage');
+        const connection = bridge.attachRenderer(
+          {processMessages: vi.fn()},
+          {
+            surfaceGroup: {onSurfaceCreated: {subscribe: () => ({unsubscribe: vi.fn()})}},
+            onSurfaceReady: vi.fn(),
+            catalogJson: {catalogId: 'detached-catalog'},
+          },
+        );
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: window.parent,
+            origin: window.location.origin,
+            data: {type: PreviewBridgeMessageType.GET_CATALOG},
+          }),
+        );
+        if (lifecycle === 'detach') connection.unsubscribe();
+        else bridge.destroy();
+        await vi.runAllTimersAsync();
+
+        expect(
+          postMessage.mock.calls.filter(
+            ([message]) => message.type === PreviewBridgeMessageType.A2UI_CATALOG,
+          ),
+        ).toEqual([]);
+      },
+    );
+  });
+
   it('responds with COMPONENT_USAGES containing usages from getComponentUsages callback (async)', async () => {
     const spy = vi.spyOn(window.parent, 'postMessage');
     const mockUsages = {

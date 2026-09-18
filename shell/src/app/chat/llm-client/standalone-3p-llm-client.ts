@@ -19,6 +19,8 @@ import {
   LlmClient,
   LlmMessage,
   LlmResponse,
+  LlmRequestOptions,
+  LlmToolCall,
   LlmStreamResponse,
   MessageRole,
   CANCEL_ERROR_NAME,
@@ -110,7 +112,10 @@ export class Standalone3pLlmClient extends LlmClient {
    * Generates a streamed, incremental response for the provided chat
    * history.
    */
-  override async chatStream(messages: LlmMessage[]): Promise<LlmStreamResponse> {
+  override async chatStream(
+    messages: LlmMessage[],
+    options?: LlmRequestOptions,
+  ): Promise<LlmStreamResponse> {
     const apiKeyVal = this.config.geminiApiKey();
 
     const ai = new GoogleGenAI({
@@ -118,7 +123,7 @@ export class Standalone3pLlmClient extends LlmClient {
     });
 
     const abortController = new AbortController();
-    const params = this.buildGenerateContentParams(messages, abortController.signal);
+    const params = this.buildGenerateContentParams(messages, abortController.signal, options);
 
     // Instantiate response generator stream eagerly
     const responseStream = await ai.models.generateContentStream(params);
@@ -197,9 +202,13 @@ export class Standalone3pLlmClient extends LlmClient {
   private buildGenerateContentParams(
     messages: LlmMessage[],
     abortSignal: AbortSignal,
+    options?: LlmRequestOptions,
   ): GenerateContentParameters {
     const {systemInstruction, contents} = this.parseMessages(messages);
     const config = this.buildGenerateContentConfig(systemInstruction, abortSignal);
+    if (options?.tools?.length) {
+      config.tools = [{functionDeclarations: options.tools}];
+    }
     return {
       model: 'gemini-3.5-flash',
       contents,
@@ -210,12 +219,20 @@ export class Standalone3pLlmClient extends LlmClient {
   private parseChunkParts(chunk: GenerateContentResponse): {
     chunkContent: string;
     nativeThoughtVal: string;
+    toolCalls: LlmToolCall[];
   } {
+    const toolCalls: LlmToolCall[] = [];
     let chunkContent = '';
     let nativeThoughtVal = '';
     const parts = chunk.candidates?.[0]?.content?.parts;
     if (parts && parts.length > 0) {
       for (const part of parts) {
+        if (part.functionCall) {
+          toolCalls.push({
+            name: part.functionCall.name || '',
+            args: part.functionCall.args || {},
+          });
+        }
         if (part.thought === true) {
           if (part.text) {
             nativeThoughtVal += part.text;
@@ -229,7 +246,7 @@ export class Standalone3pLlmClient extends LlmClient {
     } else {
       chunkContent = chunk.text || '';
     }
-    return {chunkContent, nativeThoughtVal};
+    return {chunkContent, nativeThoughtVal, toolCalls};
   }
 
   private normalizeStreamError(err: unknown, abortSignal: AbortSignal): unknown {
@@ -265,7 +282,7 @@ export class Standalone3pLlmClient extends LlmClient {
   ): Promise<void> {
     try {
       for await (const chunk of responseStream) {
-        const {chunkContent, nativeThoughtVal} = this.parseChunkParts(chunk);
+        const {chunkContent, nativeThoughtVal, toolCalls} = this.parseChunkParts(chunk);
 
         state.accumulatedRawText += chunkContent;
 
@@ -282,7 +299,12 @@ export class Standalone3pLlmClient extends LlmClient {
 
         state.accumulatedText += contentVal;
 
-        buffer.push({content: contentVal, thinking: thoughtVal, isComplete: false});
+        buffer.push({
+          content: contentVal,
+          thinking: thoughtVal,
+          isComplete: false,
+          ...(toolCalls.length ? {toolCalls} : {}),
+        });
         notify();
       }
       state.isDone = true;

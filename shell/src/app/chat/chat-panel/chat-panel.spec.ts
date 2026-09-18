@@ -124,7 +124,7 @@ class MockHostCommunication {
 class MockRendererSelection {
   readonly renderers = signal<RendererOption[]>([
     {id: 'default', name: 'Angular Basic', rendererUrl: '/angular', readOnly: true},
-    {id: 'lit', name: 'Lit Basic', rendererUrl: '/lit', readOnly: true},
+    {id: 'slack', name: 'Slack Block Kit Preview', rendererUrl: '/slack', readOnly: true},
     {id: 'custom', name: 'My renderer', rendererUrl: '/custom', readOnly: false},
   ]);
   readonly selectedRendererId = signal<string | null>('default');
@@ -196,24 +196,24 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   it('switches the renderer through the shared service without discarding the typed prompt', async () => {
     await harness.setPromptText('Create a score card');
     expect(await harness.getRendererLabel()).toBe('A2UI');
-    await harness.selectRenderer('Lit Basic');
-    expect(rendererSelectionMock.selectRenderer).toHaveBeenCalledWith('lit');
-    expect(await harness.getRendererLabel()).toBe('Lit Basic');
+    await harness.selectRenderer('Slack Block Kit Preview');
+    expect(rendererSelectionMock.selectRenderer).toHaveBeenCalledWith('slack');
+    expect(await harness.getRendererLabel()).toBe('Slack');
     expect(await harness.getPromptText()).toBe('Create a score card');
     expect(chatServiceMock.submitPrompt).not.toHaveBeenCalled();
   });
 
-  it('lists configured renderers with the active option selected and reacts to external switches', async () => {
+  it('lists configured renderers with the active option selected and reacts to assistant switches', async () => {
     rendererSelectionMock.selectedRendererId.set('custom');
     fixture.detectChanges();
     expect(await harness.getRendererLabel()).toBe('My renderer');
     const choices = await harness.getRendererChoices();
     expect(choices).toHaveLength(3);
     expect(choices.map(choice => choice.selected)).toEqual([false, false, true]);
-    expect(choices[1].label).toContain('Lit Basic');
-    rendererSelectionMock.selectedRendererId.set('lit');
+    expect(choices[1].label).toContain('Slack Block Kit Preview');
+    rendererSelectionMock.selectedRendererId.set('slack');
     fixture.detectChanges();
-    expect(await harness.getRendererLabel()).toBe('Lit Basic');
+    expect(await harness.getRendererLabel()).toBe('Slack');
   });
 
   it('disables renderer changes during generation and renderer loading', async () => {
@@ -235,15 +235,15 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
   it('displays renderer failures and preserves the request for recovery', async () => {
     rendererSelectionMock.selectRenderer.mockImplementationOnce(async () => {
-      rendererSelectionMock.error.set('The Lit Basic renderer could not connect. Try again.');
+      rendererSelectionMock.error.set('The Slack renderer could not connect. Try again.');
       throw new Error('Renderer handshake timed out');
     });
-    await harness.setPromptText('Generate a Lit Basic message');
-    await harness.selectRenderer('Lit Basic');
+    await harness.setPromptText('Generate a Slack message');
+    await harness.selectRenderer('Slack Block Kit Preview');
     expect(await harness.getRendererFeedback()).toBe(
-      'The Lit Basic renderer could not connect. Try again.',
+      'The Slack renderer could not connect. Try again.',
     );
-    expect(await harness.getPromptText()).toBe('Generate a Lit Basic message');
+    expect(await harness.getPromptText()).toBe('Generate a Slack message');
     expect(await harness.isRendererSelectorDisabled()).toBe(false);
   });
 
@@ -466,6 +466,77 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       '1 component in this canvas',
       '1 component in this canvas',
     ]);
+  });
+
+  it('suppresses only the initial empty canvas snapshot from the visible transcript', async () => {
+    const emptySnapshot = JSON.stringify([
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
+    ]);
+    const laterEmptySnapshot = JSON.stringify([
+      {version: 'v0.9', createSurface: {surfaceId: 's2', catalogId: 'test'}},
+    ]);
+
+    chatStateMock.chatHistory.set([
+      {role: MessageRole.USER, content: emptySnapshot},
+      {role: MessageRole.USER, content: 'Start with a blank canvas'},
+      {role: MessageRole.USER, content: laterEmptySnapshot},
+    ]);
+    fixture.detectChanges();
+
+    expect(await harness.getBubblesText()).toEqual([
+      'Start with a blank canvas',
+      '0 components in this canvas',
+    ]);
+    expect(chatStateMock.chatHistory()).toHaveLength(3);
+  });
+
+  it('collapses a snapshot that immediately duplicates the previous assistant canvas result', async () => {
+    const assistantSnapshot = JSON.stringify([
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's1',
+          components: [{id: 'headline', component: 'Text', text: 'Hello'}],
+        },
+      },
+    ]);
+    const duplicateSnapshot = JSON.stringify(
+      [
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 's1',
+            components: [{id: 'headline', component: 'Text', text: 'Hello'}],
+          },
+        },
+      ],
+      null,
+      2,
+    );
+    const changedSnapshotWithSameCount = JSON.stringify([
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's1',
+          components: [{id: 'headline', component: 'Text', text: 'Changed'}],
+        },
+      },
+    ]);
+
+    chatStateMock.chatHistory.set([
+      {role: MessageRole.USER, content: 'Make a headline'},
+      {role: MessageRole.MODEL, content: assistantSnapshot},
+      {role: MessageRole.USER, content: duplicateSnapshot},
+      {role: MessageRole.USER, content: changedSnapshotWithSameCount},
+    ]);
+    fixture.detectChanges();
+
+    expect(await harness.getBubblesText()).toEqual([
+      'Make a headline',
+      '1 component in this canvas',
+      '1 component in this canvas',
+    ]);
+    expect(chatStateMock.chatHistory()).toHaveLength(4);
   });
 
   it('does not classify plain text messages mentioning "version" as layout snapshots', async () => {

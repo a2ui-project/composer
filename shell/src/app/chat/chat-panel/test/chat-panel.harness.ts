@@ -145,25 +145,33 @@ export class ChatPanelHarness extends ComponentHarness {
 
   async getPromptText(): Promise<string> {
     const input = await this.getPromptInput();
-    if (!input) return '';
+    if (!input) {
+      return '';
+    }
     return input.getValue();
   }
 
   async setPromptText(text: string): Promise<void> {
     const input = await this.getPromptInput();
-    if (!input) throw new Error('Prompt input field not found.');
+    if (!input) {
+      throw new Error('Prompt input field not found.');
+    }
     await input.setValue(text);
   }
 
   async clickSubmit(): Promise<void> {
     const btn = await this.getSubmitButton();
-    if (!btn) throw new Error('Submit button not found.');
+    if (!btn) {
+      throw new Error('Submit button not found.');
+    }
     await btn.click();
   }
 
   async clickStop(): Promise<void> {
     const btn = await this.getStopButton();
-    if (!btn) throw new Error('Stop button not found.');
+    if (!btn) {
+      throw new Error('Stop button not found.');
+    }
     await btn.click();
   }
 
@@ -174,13 +182,17 @@ export class ChatPanelHarness extends ComponentHarness {
 
   async isSubmitDisabled(): Promise<boolean> {
     const btn = await this.getSubmitButton();
-    if (!btn) return true;
+    if (!btn) {
+      return true;
+    }
     return btn.isDisabled();
   }
 
   async isPromptDisabled(): Promise<boolean> {
     const input = await this.getPromptInput();
-    if (!input) return true;
+    if (!input) {
+      return true;
+    }
     return input.isDisabled();
   }
 
@@ -191,7 +203,9 @@ export class ChatPanelHarness extends ComponentHarness {
 
   async getLoadingOverlayText(): Promise<string | null> {
     const textNode = await this.locatorForOptional('.status-badge-text')();
-    if (!textNode) return null;
+    if (!textNode) {
+      return null;
+    }
     return textNode.text();
   }
 
@@ -203,7 +217,9 @@ export class ChatPanelHarness extends ComponentHarness {
    */
   async pressKeyOnPrompt(key: string, modifiers?: {shiftKey?: boolean}): Promise<void> {
     const input = await this.getPromptInput();
-    if (!input) throw new Error('Prompt input field not found.');
+    if (!input) {
+      throw new Error('Prompt input field not found.');
+    }
     const host = await input.host();
     await host.dispatchEvent('keydown', {
       key,
@@ -216,7 +232,9 @@ export class ChatPanelHarness extends ComponentHarness {
    */
   async dismissLoadingOverlay(): Promise<void> {
     const overlay = await this.locatorForOptional('.pipeline-overlay')();
-    if (!overlay) throw new Error('Pipeline overlay not found.');
+    if (!overlay) {
+      throw new Error('Pipeline overlay not found.');
+    }
     await overlay.click();
   }
 
@@ -233,7 +251,9 @@ export class ChatPanelHarness extends ComponentHarness {
    */
   async getWelcomeNoticeText(): Promise<string | null> {
     const notice = await this.locatorForOptional('[data-testid="copilot-welcome-screen"]')();
-    if (!notice) return null;
+    if (!notice) {
+      return null;
+    }
     return notice.text();
   }
   async clickSystemInstructionsLink(): Promise<void> {
@@ -269,7 +289,9 @@ export class ChatPanelHarness extends ComponentHarness {
     ariaLabel: string | null;
   }> {
     const overlay = await this.locatorForOptional('.pipeline-overlay')();
-    if (!overlay) return {role: null, tabindex: null, ariaLabel: null};
+    if (!overlay) {
+      return {role: null, tabindex: null, ariaLabel: null};
+    }
     return {
       role: await overlay.getAttribute('role'),
       tabindex: await overlay.getAttribute('tabindex'),
@@ -289,7 +311,9 @@ export class ChatPanelHarness extends ComponentHarness {
 
   async getDisabledNoticeText(): Promise<string | null> {
     const textNode = await this.locatorForOptional('.disabled-notice-text')();
-    if (!textNode) return null;
+    if (!textNode) {
+      return null;
+    }
     return textNode.text();
   }
 
@@ -300,7 +324,9 @@ export class ChatPanelHarness extends ComponentHarness {
 
   async clickAddKeyButton(): Promise<void> {
     const btn = await this.locatorForOptional('.add-key-button')();
-    if (!btn) throw new Error('Add API key button not found.');
+    if (!btn) {
+      throw new Error('Add API key button not found.');
+    }
     await btn.click();
   }
 

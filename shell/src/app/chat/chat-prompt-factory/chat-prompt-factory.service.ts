@@ -16,6 +16,7 @@
 
 import {Injectable, computed, inject} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 import {formatJson} from '../../utils/json';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 
@@ -41,10 +42,22 @@ export class ChatPromptFactoryService {
       `;
     }
 
-    return this.generateSystemPrompt(formatJson(catalog));
+    return this.generateSystemPrompt(catalog);
   });
 
-  private generateSystemPrompt(catalog: string): string {
+  private generateSystemPrompt(catalog: Catalog): string {
+    const catalogText = formatJson(catalog);
+    const componentNames = new Set(Object.keys(catalog.components ?? {}));
+    const hasIcon = componentNames.has('Icon');
+    const hasCustomSvg = this.catalogSupportsCustomSvg(catalog);
+    const imageUrlGuidance = this.imageUrlGuidance(catalog);
+    const iconGuidance = this.iconGuidance(hasIcon, hasCustomSvg);
+    const visualAffordanceGuidance = this.visualAffordanceGuidance(hasIcon);
+    const componentTreeMappingGuidance = this.componentTreeMappingGuidance(hasIcon, hasCustomSvg);
+    const examples = this.examplesForCatalog(
+      componentNames,
+      catalog.catalogId || catalog.$id || 'active-catalog',
+    );
     return `
   # A2UI Generation Expert
 
@@ -63,8 +76,8 @@ export class ChatPromptFactoryService {
   2. **No Hallucinated Component Names**: Never invent, guess, or mix
      component names from other libraries or catalogs. For example, if only
      "Column", "Row", "Text", and "Button" are present in the active catalog
-     schema below, emitting "MaterialColumn", "MaterialText", or "Div" is
-     strictly INVALID.
+     schema below, emitting any prefixed, library-specific, or DOM component
+     name that is absent from the active catalog is strictly INVALID.
   3. **No Hallucinated Properties**: Include ONLY properties explicitly
      defined in the JSON Schema for that specific component type in the
      active catalog. Do NOT emit unauthorized keys (e.g., "rules", "mock*",
@@ -72,7 +85,7 @@ export class ChatPromptFactoryService {
 
   ### Active Catalog Schema (Mandatory Allowlist)
   \`\`\`json
-  ${catalog}
+  ${catalogText}
   \`\`\`
 
   ### Common Schema Types
@@ -165,59 +178,14 @@ export class ChatPromptFactoryService {
     from the "components" map in the active catalog schema provided above.
     Never invent or guess component names not present in the active catalog.
 
-  ### 3. Icon Fidelity, Custom SVG & Styling Intent
-  * **Composite Icon & Feature Matching**: Closely examine visual icon
-    shapes for composite features (e.g., a document with an edit badge, a
-    search icon with a filter indicator, or a custom symbol). First check if
-    the active catalog's Icon component includes an exact visual match in
-    its enum.
-  * **Custom SVG Fallback (No Close Icon Match)**: If an icon in the
-    screenshot has distinct visual features that do NOT have a close match
-    in the active catalog's predefined icon list:
-    - **Do NOT** substitute a visually mismatched, generic, or oversimplified
-      placeholder icon.
-    - **Fallback to SVG**: Generate an inline vector graphic instead using
-      one of the mechanisms supported by the active catalog schema:
-      1. If the Icon component in the active catalog accepts custom path
-         data, specify the svgPath property with a valid SVG path d string.
-      2. If an Image component is available in the active catalog, supply an
-         inline SVG Data URL in its url/image source property
-         ("data:image/svg+xml;utf8,<svg ...>...</svg>").
+  ### 3. Icon, Image & Styling Intent
+  ${iconGuidance}
+  ${imageUrlGuidance}
   * **Visual Hierarchy**: Preserve typography scale, text weight, button
     prominence, and color intent using supported catalog properties.
 
   ### 4. Visual Affordance Recognition
-  Recognize common UI visual affordance symbols and map them strictly using
-  components defined in the active catalog schema provided above:
-  * **Downward Chevrons / Disclosure Carets (Collapsible Rows)**:
-    - **Visual Indicator**: Downward-facing arrows (∨, expand_more) at row
-      edges denote expandable/collapsible sections.
-    - **Catalog Mapping**: If the active catalog schema includes an expansion
-      or accordion component, use it. Otherwise, compose the row using
-      layout primitives in the catalog: e.g., a horizontal layout container
-      (Row) holding leading text/icons and a trailing downward icon.
-  * **Search Cues (Search Inputs)**:
-    - **Visual Indicator**: Magnifying glass symbols (🔍) inside or adjacent
-      to text entry boxes.
-    - **Catalog Mapping**: If a search component exists in the active catalog
-      schema, use it; otherwise, use a text input component paired with a
-      search icon.
-  * **Toggle Track & Thumb (Switches & Toggles)**:
-    - **Visual Indicator**: Pill-shaped track with a circular thumb (⚪━━).
-    - **Catalog Mapping**: Use a toggle, switch, or selection control
-      component defined in the active catalog schema.
-  * **Selection Controls (Option Pickers)**:
-    - **Visual Indicator**: Radio circles (◯ / 🔘), checkboxes (☐ / ☑), or
-      dropdown carets.
-    - **Catalog Mapping**: Look up selection, picker, or option components
-      in the active catalog schema; if none exist, compose using interactive
-      button components.
-  * **Pill Badges & Chips (Status & Tags)**:
-    - **Visual Indicator**: Small rounded rectangle or oval containing short
-      text/status labels.
-    - **Catalog Mapping**: Use a chip, badge, or tag component if defined in
-      the active catalog schema; otherwise, compose using a text component
-      inside a container or card.
+  ${visualAffordanceGuidance}
 
   ### 5. Grounding, Data Binding & Sequence
   * **Complete Data Model Extraction**: ALL text strings, label names, image
@@ -241,8 +209,8 @@ export class ChatPromptFactoryService {
   2. **Extract Data**: Extract all visible text strings, values, and list
      items into updateDataModel.
   3. **Build Component Tree**: Map visual elements strictly to active
-     catalog component types with exact icon names/SVGs, full-width
-     properties, and JSON Pointer paths.
+     catalog component types with ${componentTreeMappingGuidance},
+     full-width properties, and JSON Pointer paths.
   4. **Emit JSONL Messages**: Output the single-line JSONL messages in
      strict sequence (createSurface -> updateComponents -> updateDataModel).
 
@@ -269,36 +237,7 @@ export class ChatPromptFactoryService {
 
   ## Examples
 
-  **IMPORTANT**: The component names used in the examples below (Column, Text,
-  TextField, ChoicePicker, Button, etc.) are for structural illustration.
-  You MUST replace them with exact component names from the active catalog
-  schema provided above. In addition, code fences (\`\`\`jsonl) are shown
-  below for documentation readability only; do NOT include code fences in
-  your actual JSONL output.
-
-    * **Simple Example**: A basic column with text:
-      \`\`\`jsonl
-      {"version": "v0.9", "createSurface": {"surfaceId": "main", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version": "v0.9", "updateComponents": {"surfaceId": "main", "components": [{"id": "root", "component": "MaterialColumn", "children": ["header", "content"]}, {"id": "header", "component": "MaterialText", "text": "Welcome"}, {"id": "content", "component": "MaterialText", "text": {"path": "/message"}}]}}
-      {"version": "v0.9", "updateDataModel": {"surfaceId": "main", "path": "/message", "value": "Hello, world!"}}
-      \`\`\`
-
-    * **Complex Form Example**: A vacation booking form demonstrating advanced
-      Material form controls (\`MaterialDatepicker\`, \`MaterialSelect\`,
-      \`MaterialSlideToggle\`) and buttons using the modernized Material catalog:
-      \`\`\`jsonl
-      {"version": "v0.9", "createSurface": {"surfaceId": "vacation_booking", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version": "v0.9", "updateComponents": {"surfaceId": "vacation_booking", "components": [{"id": "root", "component": "MaterialColumn", "children": ["title", "destination_input", "checkin_datepicker", "checkout_datepicker", "room_type_select", "passenger_select", "flexible_dates_toggle", "search_button"]}, {"id": "title", "component": "MaterialText", "text": {"path": "/title_label"}, "usageHint": "h1"}, {"id": "destination_input", "component": "MaterialInput", "label": {"path": "/destination_label"}, "value": {"path": "/destination_value"}}, {"id": "checkin_datepicker", "component": "MaterialDatepicker", "label": {"path": "/checkin_label"}, "value": {"path": "/checkin_value"}}, {"id": "checkout_datepicker", "component": "MaterialDatepicker", "label": {"path": "/checkout_label"}, "value": {"path": "/checkout_value"}}, {"id": "room_type_select", "component": "MaterialSelect", "label": {"path": "/room_type_label"}, "value": {"path": "/room_type_value"}, "options": [{"label": "Standard Room", "value": "standard"}, {"label": "Deluxe Suite", "value": "deluxe"}]}, {"id": "passenger_select", "component": "MaterialSelect", "label": {"path": "/passenger_label"}, "value": {"path": "/passenger_value"}, "options": [{"label": "1 Passenger", "value": "1"}, {"label": "2 Passengers", "value": "2"}, {"label": "3+ Passengers", "value": "3"}]}, {"id": "flexible_dates_toggle", "component": "MaterialSlideToggle", "label": {"path": "/flexible_dates_label"}, "checked": {"path": "/flexible_dates_checked"}, "color": "primary"}, {"id": "search_button", "component": "MaterialButton", "label": {"path": "/search_label"}, "action": {"event": {"name": "searchVacation"}}}]}}
-      {"version": "v0.9", "updateDataModel": {"surfaceId": "vacation_booking", "value": {"title_label": "Book Your Dream Vacation", "destination_label": "Destination", "destination_value": "Hawaii", "checkin_label": "Check-in Date", "checkin_value": "2026-07-01", "checkout_label": "Check-out Date", "checkout_value": "2026-07-14", "room_type_label": "Room Type", "room_type_value": "standard", "passenger_label": "Passengers", "passenger_value": "2", "flexible_dates_label": "Flexible Dates (+/- 3 days)", "flexible_dates_checked": true, "search_label": "Search Flights & Hotels"}}}
-      \`\`\`
-
-    * **Dynamic List Example**: An example using templates to render a list of
-      items.
-      \`\`\`jsonl
-      {"version": "v0.9", "createSurface": {"surfaceId": "dynamic_list_demo", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version": "v0.9", "updateComponents": {"surfaceId": "dynamic_list_demo", "components": [{"id": "root", "component": "MaterialColumn", "children": ["title", "list_container"]}, {"id": "title", "component": "MaterialText", "text": "Dynamic List Demo"}, {"id": "list_container", "component": "MaterialColumn", "children": {"componentId": "item_template", "path": "/items"}}, {"id": "item_template", "component": "MaterialText", "text": {"path": "text"}}]}}
-      {"version": "v0.9", "updateDataModel": {"surfaceId": "dynamic_list_demo", "value": {"items": [{"text": "Item One"}, {"text": "Item Two"}]}}}
-      \`\`\`
+  ${examples}
 
   ## Data Binding
   Every component property value MUST come from the data model (with minor
@@ -324,5 +263,123 @@ export class ChatPromptFactoryService {
   }
   \`\`\`
   `;
+  }
+
+  private iconGuidance(hasIcon: boolean, hasCustomSvg: boolean): string {
+    if (!hasIcon || !hasCustomSvg) {
+      return `* The active catalog does not support custom icon drawing. Do NOT invent Icon
+    components, icon names, svgPath fields, inline SVG fields, or
+    data:image/svg+xml fallbacks unless those exact component names and
+    properties appear in the active catalog schema. Omit the icon or represent
+    the meaning with supported Text, Button, Image, or layout components.`;
+    }
+
+    return `* Use Icon components only when the active catalog schema includes the exact
+    icon values and properties you need. Custom SVG fields are allowed only
+    when the Icon schema explicitly defines them.`;
+  }
+
+  private imageUrlGuidance(catalog: Catalog): string {
+    const imageSchema = catalog.components?.['Image'];
+    if (!imageSchema) return '';
+    const imageSchemaText = JSON.stringify(imageSchema).toLowerCase();
+    if (imageSchemaText.includes('http(s)') || imageSchemaText.includes('http')) {
+      return `* For Image.url, use only HTTP(S) URLs. If no suitable HTTP(S) URL is
+    provided or visible, omit the Image component instead of inventing a URL.`;
+    }
+    return '';
+  }
+
+  private catalogSupportsCustomSvg(catalog: Catalog): boolean {
+    const iconSchema = catalog.components?.['Icon'];
+    if (!iconSchema) return false;
+    const iconSchemaText = JSON.stringify(iconSchema).toLowerCase();
+    return iconSchemaText.includes('svg') || iconSchemaText.includes('path data');
+  }
+
+  private visualAffordanceGuidance(hasIcon: boolean): string {
+    const disclosureFallback = hasIcon
+      ? `layout primitives in the catalog: e.g., a horizontal layout container
+      (Row) holding leading text/icons and a trailing downward icon.`
+      : `layout primitives in the catalog: e.g., a horizontal layout container
+      (Row) holding the visible label and any supported text marker only when
+      that marker is literally present.`;
+    const searchFallback = hasIcon
+      ? `use a text input component paired with a search icon.`
+      : `use the active catalog's text input component if one exists, or
+      represent the visible search label/placeholder with supported Text and
+      layout components.`;
+
+    return `Recognize common UI visual affordance symbols and map them strictly using
+  components defined in the active catalog schema provided above:
+  * **Downward Chevrons / Disclosure Carets (Collapsible Rows)**:
+    - **Visual Indicator**: Downward-facing arrows (∨, expand_more) at row
+      edges denote expandable/collapsible sections.
+    - **Catalog Mapping**: If the active catalog schema includes an expansion
+      or accordion component, use it. Otherwise, compose the row using
+      ${disclosureFallback}
+  * **Search Cues (Search Inputs)**:
+    - **Visual Indicator**: Magnifying glass symbols (🔍) inside or adjacent
+      to text entry boxes.
+    - **Catalog Mapping**: If a search component exists in the active catalog
+      schema, use it; otherwise, ${searchFallback}
+  * **Toggle Track & Thumb (Switches & Toggles)**:
+    - **Visual Indicator**: Pill-shaped track with a circular thumb (⚪━━).
+    - **Catalog Mapping**: Use a toggle, switch, or selection control
+      component defined in the active catalog schema.
+  * **Selection Controls (Option Pickers)**:
+    - **Visual Indicator**: Radio circles (◯ / 🔘), checkboxes (☐ / ☑), or
+      dropdown carets.
+    - **Catalog Mapping**: Look up selection, picker, or option components
+      in the active catalog schema; if none exist, compose using interactive
+      button components.
+  * **Pill Badges & Chips (Status & Tags)**:
+    - **Visual Indicator**: Small rounded rectangle or oval containing short
+      text/status labels.
+    - **Catalog Mapping**: Use a chip, badge, or tag component if defined in
+      the active catalog schema; otherwise, compose using a text component
+      inside a container or card.`;
+  }
+
+  private componentTreeMappingGuidance(hasIcon: boolean, hasCustomSvg: boolean): string {
+    if (hasIcon && hasCustomSvg) {
+      return 'exact icon names/SVGs';
+    }
+    if (hasIcon) {
+      return 'exact supported icon values';
+    }
+    return 'supported layout and text properties';
+  }
+
+  private examplesForCatalog(componentNames: Set<string>, catalogId: string): string {
+    if (componentNames.has('Column') && componentNames.has('Text')) {
+      const examples = [
+        `* **Simple Example**: A basic column with text:
+      \`\`\`jsonl
+      {"version": "v0.9", "createSurface": {"surfaceId": "main", "catalogId": "${catalogId}"}}
+      {"version": "v0.9", "updateComponents": {"surfaceId": "main", "components": [{"id": "root", "component": "Column", "children": ["header", "content"]}, {"id": "header", "component": "Text", "text": "Welcome"}, {"id": "content", "component": "Text", "text": {"path": "/message"}}]}}
+      {"version": "v0.9", "updateDataModel": {"surfaceId": "main", "path": "/message", "value": "Hello, world!"}}
+      \`\`\``,
+      ];
+
+      if (componentNames.has('Button')) {
+        examples.push(`* **Action Example**: A button with a text child:
+      \`\`\`jsonl
+      {"version": "v0.9", "createSurface": {"surfaceId": "action_demo", "catalogId": "${catalogId}"}}
+      {"version": "v0.9", "updateComponents": {"surfaceId": "action_demo", "components": [{"id": "root", "component": "Column", "children": ["summary", "ack_button"]}, {"id": "summary", "component": "Text", "text": {"path": "/summary"}}, {"id": "ack_button", "component": "Button", "child": "ack_label", "action": {"event": {"name": "acknowledge"}}}, {"id": "ack_label", "component": "Text", "text": {"path": "/ackLabel"}}]}}
+      {"version": "v0.9", "updateDataModel": {"surfaceId": "action_demo", "value": {"summary": "Three updates are ready for review.", "ackLabel": "Acknowledge"}}}
+      \`\`\``);
+      }
+
+      return `These examples use only component names present in the active catalog. Code
+  fences are shown for readability only; do NOT include code fences in your
+  actual JSONL output.
+
+    ${examples.join('\n\n    ')}`;
+    }
+
+    return `No generic component examples are included because the active catalog does
+  not contain the common Column/Text layout primitives. Use only the exact
+  component names and properties in the active catalog schema above.`;
   }
 }

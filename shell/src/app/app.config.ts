@@ -20,6 +20,7 @@ import {
   provideAppInitializer,
   inject,
 } from '@angular/core';
+import {provideCopilotKit} from '@copilotkit/angular';
 import {provideRouter, Router, NavigationEnd} from '@angular/router';
 import {provideAnimations} from '@angular/platform-browser/animations';
 import {filter} from 'rxjs/operators';
@@ -41,6 +42,7 @@ import {NoopUsageTrackingService} from './usage-tracking/noop-usage-tracking.ser
  */
 export const appConfig: ApplicationConfig = {
   providers: [
+    provideCopilotKit({enableInspector: false}),
     provideZonelessChangeDetection(),
     provideRouter(routes),
     provideAnimations(),
