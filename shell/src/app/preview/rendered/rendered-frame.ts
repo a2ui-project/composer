@@ -69,14 +69,18 @@ export class RenderedFrame {
    * `frameHeight` as a CSS length, or undefined when the guest has not
    * reported one.
    *
-   * Applied as both `height` and `min-height` so that a reported height wins
-   * over the stylesheet's minimum, which would otherwise leave a tall empty
-   * area below a short surface.
+   * Applied to inline previews so they grow to fit reported content. Docked
+   * previews keep their panel height because Dockview owns that layout.
    */
   protected readonly frameHeightPx = computed<string | undefined>(() => {
     const height = this.frameHeight();
-    return height === null ? undefined : `${height}px`;
+    if (height === null || this.isDockedPreview()) return undefined;
+    return `${height}px`;
   });
+
+  private isDockedPreview(): boolean {
+    return !!this.iframeRef()?.nativeElement.closest('.dockview-root');
+  }
 
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
