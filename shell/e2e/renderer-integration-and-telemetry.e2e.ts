@@ -189,13 +189,6 @@ const LOOP_CADENCE_GAP_MS = 50;
  */
 const MAX_LOOP_CADENCE_RUN = 5;
 
-/**
- * Floor the host applies to the frame, mirroring the `min-height` on
- * `.preview-iframe` in rendered-frame.scss. Guest content shorter than this
- * still renders at this height.
- */
-const MIN_FRAME_HEIGHT_PX = 280;
-
 /** Allowance for sub-pixel rounding between guest and host measurements. */
 const FRAME_HEIGHT_TOLERANCE_PX = 2;
 
@@ -381,6 +374,11 @@ for (const config of CONFIGS) {
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
       await waitForPreviewSettled(page, historyHandle);
+      await page.waitForFunction(
+        (history: CapturedBridgeEnvelope[]) =>
+          history.some(env => env?.type === 'DATA_MODEL_CHANGE'),
+        historyHandle,
+      );
 
       await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
       await expect(page.locator('.data-model-container textarea')).toBeVisible();
@@ -612,15 +610,16 @@ for (const config of CONFIGS) {
       // against the guest's own content box rather than a literal keeps this
       // valid when the sample payload changes. Hard, not soft: this is the
       // assertion with real margin (off by 16-32px when the fix is reverted)
-      // and it cannot be satisfied by the 280px floor, by MAX_SURFACE_DIMENSION,
-      // by the host growth breaker, or by the panel geometry of the day.
+      // and it cannot be satisfied by MAX_SURFACE_DIMENSION, by the host
+      // growth breaker, or by the panel geometry of the day. RenderedFrame
+      // overrides the stylesheet min-height once a real content height is reported.
       //
       // It is also the only thing standing between React and no coverage at
       // all: on a reverted React guest, the message count, run-length and
       // cadence bounds above ALL PASSED, and this assertion alone failed.
       // Making it soft, or comparing against a literal, gives up React.
       const settledHeight = heights[heights.length - 1];
-      const expectedHeight = Math.max(MIN_FRAME_HEIGHT_PX, guest.contentHeight);
+      const expectedHeight = guest.contentHeight;
       expect(
         Math.abs(settledHeight - expectedHeight),
         `frame: ${settledHeight}px, guest content: ${guest.contentHeight}px`,
