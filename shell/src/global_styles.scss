@@ -26,7 +26,8 @@ $light-theme: mat.define-theme(
       primary: mat.$violet-palette,
     ),
     typography: (
-      plain-family: 'Roboto, sans-serif',
+      plain-family: 'Plus Jakarta Sans, sans-serif',
+      brand-family: 'Plus Jakarta Sans, sans-serif',
     ),
   )
 );
@@ -38,7 +39,8 @@ $dark-theme: mat.define-theme(
       primary: mat.$violet-palette,
     ),
     typography: (
-      plain-family: 'Roboto, sans-serif',
+      plain-family: 'Plus Jakarta Sans, sans-serif',
+      brand-family: 'Plus Jakarta Sans, sans-serif',
     ),
   )
 );
@@ -46,6 +48,7 @@ $dark-theme: mat.define-theme(
 @include mat.all-component-bases($light-theme);
 
 :root {
+  color-scheme: light;
   @include mat.all-component-typographies($light-theme);
   @include mat.system-level-typography($light-theme);
 }
@@ -80,24 +83,24 @@ $dark-theme: mat.define-theme(
       tertiary-fixed-dim: #ffa9fd,
       on-tertiary-fixed: #37003c,
       on-tertiary-fixed-variant: #702974,
-      background: #fefbff,
-      on-background: #1c1b1c,
-      surface: #fefbff,
-      surface-dim: #ddd9d9,
-      surface-bright: #fefbff,
+      background: #f5f6f8,
+      on-background: #202124,
+      surface: #ffffff,
+      surface-dim: #e1e3e8,
+      surface-bright: #ffffff,
       surface-container-lowest: #ffffff,
-      surface-container-low: #f7f3f3,
-      surface-container: #f1eded,
-      surface-container-high: #ebe7e7,
-      surface-container-highest: #e5e2e2,
-      on-surface: #1c1b1c,
+      surface-container-low: #f7f8fa,
+      surface-container: #f0f1f4,
+      surface-container-high: #e9ebef,
+      surface-container-highest: #e1e4e9,
+      on-surface: #202124,
       shadow: #000000,
       scrim: #000000,
       surface-tint: #5e5e65,
       inverse-surface: #313031,
       inverse-on-surface: #f4f0f0,
       outline: #78767c,
-      outline-variant: #c7c5cc,
+      outline-variant: #dfe2e8,
       neutral: #787676,
       neutral10: #1c1b1c,
       error: #ba1a1a,
@@ -105,7 +108,7 @@ $dark-theme: mat.define-theme(
       on-error: #ffffff,
       on-error-container: #410002,
       surface-variant: #e4e1e8,
-      on-surface-variant: #46464c,
+      on-surface-variant: #5b606b,
       neutral-variant: #77767c,
       neutral-variant20: #303035,
       inverse-secondary: #bec4f2,
@@ -115,6 +118,7 @@ $dark-theme: mat.define-theme(
 }
 
 .dark-theme {
+  color-scheme: dark;
   @include mat.all-component-colors($dark-theme);
 
   @include mat.theme-overrides(
@@ -144,24 +148,24 @@ $dark-theme: mat.define-theme(
       tertiary-fixed-dim: #ffa9fd,
       on-tertiary-fixed: #37003c,
       on-tertiary-fixed-variant: #702974,
-      background: #141314,
-      on-background: #e5e2e2,
-      surface: #141314,
-      surface-dim: #141314,
-      surface-bright: #3a3939,
-      surface-container-lowest: #0e0e0e,
-      surface-container-low: #1c1b1c,
-      surface-container: #201f20,
-      surface-container-high: #2a2a2a,
-      surface-container-highest: #353435,
-      on-surface: #e5e2e2,
+      background: #111214,
+      on-background: #eef0f3,
+      surface: #1c1e22,
+      surface-dim: #111214,
+      surface-bright: #34373d,
+      surface-container-lowest: #151619,
+      surface-container-low: #191b1f,
+      surface-container: #222429,
+      surface-container-high: #2a2d33,
+      surface-container-highest: #34373e,
+      on-surface: #eef0f3,
       shadow: #000000,
       scrim: #000000,
       surface-tint: #c7c5ce,
       inverse-surface: #e5e2e2,
       inverse-on-surface: #313031,
       outline: #929095,
-      outline-variant: #46464c,
+      outline-variant: #35383f,
       neutral: #787676,
       neutral10: #1c1b1c,
       error: #ffb4ab,
@@ -169,7 +173,7 @@ $dark-theme: mat.define-theme(
       on-error: #690005,
       on-error-container: #ffdad6,
       surface-variant: #46464c,
-      on-surface-variant: #c7c5cc,
+      on-surface-variant: #b9bec8,
       neutral-variant: #77767c,
       neutral-variant20: #303035,
       inverse-secondary: #555c84,
@@ -238,15 +242,78 @@ $dark-theme: mat.define-theme(
   }
 }
 
+// Shared shell tokens resolve against the active Material theme. Keep the
+// existing --cpk-* names so companion pages inherit the same solid surfaces.
+:root,
+.dark-theme {
+  --cpk-page-bg: var(--mat-sys-background);
+  --cpk-surface: var(--mat-sys-surface);
+  --cpk-surface-elevated: var(--mat-sys-surface);
+  --cpk-glass-bg: var(--mat-sys-surface);
+  --cpk-glass-bg-hover: var(--mat-sys-surface-container-low);
+  --cpk-glass-bg-selected: var(--mat-sys-secondary-container);
+  --cpk-glass-border: var(--mat-sys-outline-variant);
+  --cpk-border: var(--mat-sys-outline-variant);
+  --cpk-divider: var(--mat-sys-outline-variant);
+  --cpk-text-primary: var(--mat-sys-on-surface);
+  --cpk-text-secondary: var(--mat-sys-on-surface-variant);
+  --cpk-text-faint: var(--mat-sys-on-surface-variant);
+  --cpk-text-muted: var(--mat-sys-on-surface-variant);
+  --cpk-accent: var(--mat-sys-primary);
+  --cpk-accent-hover: var(--mat-sys-on-primary-container);
+  --cpk-accent-contrast: var(--mat-sys-on-primary);
+  --cpk-accent-bg: var(--mat-sys-primary-container);
+  --cpk-success: #1e7d4f;
+  --cpk-success-bg: #e8f5ee;
+  --cpk-warning: #9a5b00;
+  --cpk-warning-bg: #fff2db;
+  --cpk-critical: var(--mat-sys-error);
+  --cpk-critical-bg: var(--mat-sys-error-container);
+  --cpk-space-1: 4px;
+  --cpk-space-2: 8px;
+  --cpk-space-3: 12px;
+  --cpk-space-4: 16px;
+  --cpk-space-5: 24px;
+  --cpk-space-6: 32px;
+  --cpk-content-max: 1180px;
+  --cpk-radius-sm: 6px;
+  --cpk-radius-item: 10px;
+  --cpk-radius-card: 20px;
+  --cpk-radius-lg: 24px;
+  --cpk-radius-pill: 9999px;
+  --cpk-shadow-sm: 0 1px 2px rgba(20, 24, 35, 0.03);
+  --cpk-shadow-card: 0 2px 8px -4px rgba(20, 24, 35, 0.1);
+  --cpk-shadow-elevated: 0 12px 32px -12px rgba(20, 24, 35, 0.2);
+  --cpk-font-body: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --cpk-font-mono: 'Spline Sans Mono', ui-monospace, monospace;
+}
+
+.dark-theme {
+  --cpk-success: #6fdfa0;
+  --cpk-success-bg: #163c2a;
+  --cpk-warning: #ffc078;
+  --cpk-warning-bg: #43311e;
+  --cpk-shadow-sm: none;
+  --cpk-shadow-card: none;
+  --cpk-shadow-elevated: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+}
+
 html,
 body {
   height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background-color: var(--mat-sys-background);
-  color: var(--mat-sys-on-background);
-  font-family: Roboto, 'Helvetica Neue', sans-serif;
+  background-color: var(--cpk-page-bg);
+  color: var(--cpk-text-primary);
+  font-family: var(--cpk-font-body);
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--cpk-font-mono);
 }
 
 /* High-specificity global overrides resolving slide toggle label checks collisions */
