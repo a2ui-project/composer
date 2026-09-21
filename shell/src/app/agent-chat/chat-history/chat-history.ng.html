@@ -84,7 +84,6 @@
       @for (msg of messages(); track msg.id) {
         <a2ui-composer-chat-message
           [message]="msg"
-          [agentIconUrl]="getAgentIconUrl()"
           [agentName]="getAgentDisplayName()"
           [isCanvasOpen]="isCanvasOpen()"
           [activeCanvasPayload]="activeCanvasPayload()"
