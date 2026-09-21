@@ -104,17 +104,48 @@ mat-form-field {
   color: var(--mat-sys-tertiary);
 }
 
+mat-card-header {
+  h2[mat-card-title] {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 28px;
+  }
+
+  [mat-card-subtitle] {
+    margin: 4px 0 0;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 20px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
 ::ng-deep body .mat-mdc-slide-toggle {
+  --mat-slide-toggle-track-width: 52px;
+  --mat-slide-toggle-track-height: 32px;
+  --mat-slide-toggle-track-shape: 9999px;
+  --mat-slide-toggle-handle-width: 100%;
+  --mat-slide-toggle-handle-height: 24px;
+  --mat-slide-toggle-handle-shape: 9999px;
+  --mat-slide-toggle-with-icon-handle-size: 24px;
+  --mat-slide-toggle-selected-handle-size: 24px;
+  --mat-slide-toggle-unselected-handle-size: 16px;
+  --mat-slide-toggle-selected-handle-horizontal-margin: 0 24px;
+  --mat-slide-toggle-selected-with-icon-handle-horizontal-margin: 0 24px;
+  --mat-slide-toggle-unselected-handle-horizontal-margin: 0 8px;
+  --mat-slide-toggle-unselected-with-icon-handle-horizontal-margin: 0 4px;
+
   .mat-internal-form-field,
   .mdc-form-field {
     display: inline-flex !important;
     align-items: center !important;
-    gap: 16px !important;
+    gap: 12px !important;
   }
 
-  label,
-  .mdc-label {
-    padding-left: 16px !important;
+  label:not(:empty),
+  .mdc-label:not(:empty) {
+    padding-left: 4px !important;
     white-space: normal !important;
     line-height: 1.4 !important;
     color: var(--mat-sys-on-surface) !important;
@@ -135,44 +166,57 @@ mat-form-field {
 
 .mcp-add-row {
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  margin-top: 12px;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
 
   .mcp-url-field {
     flex: 1;
   }
 
   .mcp-add-btn {
-    margin-top: 4px;
-    height: 48px;
+    height: 56px;
+    padding: 0 24px;
+    border-radius: 8px;
     white-space: nowrap;
+    flex-shrink: 0;
   }
 }
 
 .mcp-server-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 12px;
+  margin-top: 16px;
 }
 
 .mcp-server-item {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  background-color: var(--mat-sys-surface-container-low);
+}
+
+.mcp-server-top-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background-color: var(--mat-sys-surface-container-low);
   gap: 12px;
 }
 
 .mcp-server-main {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
   flex: 1;
+}
+
+.mcp-server-toggle {
+  flex-shrink: 0;
 }
 
 .mcp-server-info {
@@ -192,12 +236,14 @@ mat-form-field {
 .mcp-server-name {
   font-weight: 600;
   font-size: 14px;
+  color: var(--mat-sys-on-surface);
 }
 
 .mcp-server-status {
   font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 12px;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: 9999px;
   background-color: var(--mat-sys-surface-container-high);
 
   &[data-status='connected'] {
@@ -221,14 +267,15 @@ mat-form-field {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
 .mcp-tool-name {
   font-family: monospace;
   font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
   background-color: var(--mat-sys-surface-container-high);
   color: var(--mat-sys-on-surface);
 }
@@ -237,4 +284,5 @@ mat-form-field {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
