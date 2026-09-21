@@ -34,9 +34,7 @@ vi.mock('a2ui-bridge', () => ({
     attachRenderer: vi.fn().mockReturnValue({unsubscribe: vi.fn()}),
     sendMessage: vi.fn(),
     sendAction: vi.fn(),
-    getMcpClient: vi.fn(),
   },
-  createMcpCatalogFunctions: vi.fn().mockReturnValue([]),
 }));
 
 describe('A2uiSandbox', () => {

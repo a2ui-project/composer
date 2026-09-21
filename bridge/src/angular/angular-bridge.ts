@@ -29,27 +29,15 @@ import {
   A2UI_RENDERER_CONFIG,
   provideMarkdownRenderer,
 } from '@a2ui/angular/v0_9';
-import {Catalog, ComponentApi, FunctionImplementation} from '@a2ui/web_core/v0_9';
+import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
 import {
   a2uiBridge,
   ThemePreference,
   RendererProcessor,
   SurfaceStateSubscription,
   CatalogDetails,
-  createMcpCatalogFunctions,
   type ComponentUsages,
 } from '../index.js';
-
-export const BASIC_WITH_MCP_CATALOG_ID =
-  'https://a2ui.org/specification/v0_9/catalogs/basic_with_mcp/catalog.json';
-
-function extractCatalogEntries<T>(collection?: ReadonlyMap<string, T> | Record<string, T>): T[] {
-  if (!collection) return [];
-  if (typeof (collection as ReadonlyMap<string, T>).values === 'function') {
-    return Array.from((collection as ReadonlyMap<string, T>).values());
-  }
-  return Object.values(collection);
-}
 
 export interface AngularSandboxOptions {
   /** Optional custom markdown rendering delegate callback hook */
@@ -166,26 +154,8 @@ export function provideA2uiSandbox(
       provide: A2UI_RENDERER_CONFIG,
       useFactory: () => {
         const resolvedCatalogs = catalogsClasses.map(cls => inject(cls));
-        const baseCatalog = resolvedCatalogs[0];
-        const baseComponents = extractCatalogEntries<ComponentApi>(baseCatalog?.components);
-        const baseFunctions = extractCatalogEntries<FunctionImplementation>(baseCatalog?.functions);
-        const mcpFunctions = createMcpCatalogFunctions(
-          {
-            processMessages: msgs => {
-              const activeProcessor = (
-                a2uiBridge as unknown as {activeRenderer?: {processor?: RendererProcessor}}
-              ).activeRenderer?.processor;
-              activeProcessor?.processMessages(msgs);
-            },
-          },
-          async () => a2uiBridge.getMcpClient(),
-        );
-        const mcpCatalog = new Catalog(BASIC_WITH_MCP_CATALOG_ID, baseComponents, [
-          ...baseFunctions,
-          ...mcpFunctions,
-        ]);
         return {
-          catalogs: [mcpCatalog, ...resolvedCatalogs],
+          catalogs: resolvedCatalogs,
           actionHandler: (action: unknown) => {
             a2uiBridge.sendAction(action);
           },

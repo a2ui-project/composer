@@ -66,7 +66,6 @@ jobs:
       - name: Build Production Shell & Catalogs with Correct Base URLs
         run: |
           yarn workspace ng-basic-catalog run build --base-href=/composer/samples/ng-basic-catalog/
-          yarn workspace ng-basic-with-mcp-catalog run build --base-href=/composer/samples/ng-basic-with-mcp-catalog/
           yarn workspace a2ui-composer-shell run build --base-href=/composer/
           yarn workspace lit-basic-catalog run build --base=/composer/samples/lit-basic-catalog/
           yarn workspace react-basic-catalog run build --base=/composer/samples/react-basic-catalog/
@@ -75,7 +74,6 @@ jobs:
       - name: Assemble Staging Directory (deploy_dist)
         run: |
           mkdir -p deploy_dist/samples/ng-basic-catalog
-          mkdir -p deploy_dist/samples/ng-basic-with-mcp-catalog
           mkdir -p deploy_dist/samples/lit-basic-catalog
           mkdir -p deploy_dist/samples/react-basic-catalog
 
@@ -86,17 +84,11 @@ jobs:
             cp -r shell/dist/a2ui-composer/. deploy_dist/
           fi
 
-          # Stage Angular Samples
+          # Stage Angular Sample
           if [ -d "samples/ng-basic-catalog/dist/ng-basic-catalog/browser" ]; then
             cp -r samples/ng-basic-catalog/dist/ng-basic-catalog/browser/. deploy_dist/samples/ng-basic-catalog/
           else
             cp -r samples/ng-basic-catalog/dist/ng-basic-catalog/. deploy_dist/samples/ng-basic-catalog/
-          fi
-
-          if [ -d "samples/ng-basic-with-mcp-catalog/dist/ng-basic-with-mcp-catalog/browser" ]; then
-            cp -r samples/ng-basic-with-mcp-catalog/dist/ng-basic-with-mcp-catalog/browser/. deploy_dist/samples/ng-basic-with-mcp-catalog/
-          else
-            cp -r samples/ng-basic-with-mcp-catalog/dist/ng-basic-with-mcp-catalog/. deploy_dist/samples/ng-basic-with-mcp-catalog/
           fi
 
           # Stage Vite Samples

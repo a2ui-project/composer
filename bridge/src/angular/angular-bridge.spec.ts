@@ -168,11 +168,7 @@ describe('Angular Sandbox Connection Spec', () => {
     // 2. Verify A2UI_RENDERER_CONFIG factory and actionHandler
     const config = TestBed.inject(A2UI_RENDERER_CONFIG);
 
-    expect(config.catalogs).toHaveLength(2);
-    expect((config.catalogs[0] as {id: string}).id).toBe(
-      'https://a2ui.org/specification/v0_9/catalogs/basic_with_mcp/catalog.json',
-    );
-    expect(config.catalogs[1]).toBe(mockCatalogInstance);
+    expect(config.catalogs).toEqual([mockCatalogInstance]);
 
     const sendActionSpy = vi.spyOn(a2uiBridge, 'sendAction');
     const dummyAction: A2uiClientAction = {
