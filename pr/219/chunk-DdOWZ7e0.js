@@ -1,0 +1,479 @@
+import {E,F,k,z,T,S,j}from'./chunk-C6Or1Hzv.js';import {b,R as RB,r as rg,U as tZ,o as oe,H as Hu,an as lv,y as yt,cs as ng,O as Od,L as La,_ as Oi$1,l as ln,K as K1,W as W1,c as Hoe,d as br,e as Ai,$ as $r,F as Fm,S as Sd,ag as k3,aI as j8,g as Wo,x as xd,I as Id,h as Jb,j as x6,ah as O3,aK as H8,ct as _B,k as ks,J,ap as f,p as pe,n as Rt,q as xt,D as Do,t as pt,b9 as bf,a8 as Gm,b3 as V,bk as Zi,bd as bt,br as Jr,bs as V1,bB as OR,c6 as ci$1,cu as t1e,bJ as Zo,bv as dn,v as hu,f as cR,X as Xo,aM as t6,i as zr,Q as Qo,a3 as Wb,cv as Yl,ca as HR,cq as Td,B as qb,b7 as Ad,E as Lm,G as $m,av as zR,aw as ZTe,aq as IL,b1 as Kn,z as zm,aD as J8,au as Y8,cb as Ek,am as Nf,a6 as Bn,Y as bze,M as Tt,cw as Rf,ay as Gw,az as _L,aA as EL,aB as wL,aC as DL,aE as uk,aF as lk}from'./main.js';import {k as ki$1,E as Et$1,x as xi$2,a as xn,b as Cn,c as wn,r as re$1}from'./chunk-DeR5223u.js';import {Y as Yt$1,m as mt}from'./chunk-CIdMFfZa.js';import {m as me,n as nt,d as de,D as Dn,R as Rn$1,P as Pt}from'./chunk-1jWFFIM0.js';import'./chunk-D3gBM8CB.js';import {O as Oi,x as xi$1,N as Ni,E as Et,F as Fi,I as Ii,R as Rn,b as Ri,U as Un,l as li$1,a as ai$1,T as Te$1,K,w as we,k as kn}from'./chunk-DW4AGcaA.js';var Gt=["*"],Ft=(()=>{class n{labelPosition="after";static \u0275fac=function(i){return new(i||n)};static \u0275cmp=ln({type:n,selectors:[["div","mat-internal-form-field",""]],hostAttrs:[1,"mdc-form-field","mat-internal-form-field"],hostVars:2,hostBindings:function(i,r){i&2&&zr("mdc-form-field--align-end",r.labelPosition==="before");},inputs:{labelPosition:"labelPosition"},ngContentSelectors:Gt,decls:1,vars:0,template:function(i,r){i&1&&(hu(),Xo(0));},styles:[`.mat-internal-form-field {
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+.mat-internal-form-field > label {
+  margin-left: 0;
+  margin-right: auto;
+  padding-left: 4px;
+  padding-right: 0;
+  order: 0;
+}
+[dir=rtl] .mat-internal-form-field > label {
+  margin-left: auto;
+  margin-right: 0;
+  padding-left: 0;
+  padding-right: 4px;
+}
+
+.mdc-form-field--align-end > label {
+  margin-left: auto;
+  margin-right: 0;
+  padding-left: 0;
+  padding-right: 4px;
+  order: -1;
+}
+[dir=rtl] .mdc-form-field--align-end .mdc-form-field--align-end label {
+  margin-left: 0;
+  margin-right: auto;
+  padding-left: 4px;
+  padding-right: 0;
+}
+`],encapsulation:2})}return n})();var jt=["switch"],$t=["*"];function qt(n,t){n&1&&(br(0,"span",11),Ek(),br(1,"svg",13),cR(2,"path",14),$r(),br(3,"svg",15),cR(4,"path",16),$r()());}var Ht=new V("mat-slide-toggle-default-options",{providedIn:"root",factory:()=>({disableToggleValue:false,hideIcon:false,disabledInteractive:false})}),Me=class{source;checked;constructor(t,e){this.source=t,this.checked=e;}},Te=(()=>{class n{_elementRef=b(pt);_focusMonitor=b(bf);_changeDetectorRef=b(Gm);defaults=b(Ht);_onChange=e=>{};_onTouched=()=>{};_validatorOnChange=()=>{};_uniqueId;_checked=false;_createChangeEvent(e){return new Me(this,e)}_labelId;get buttonId(){return `${this.id||this._uniqueId}-button`}_switchElement;focus(){this._switchElement.nativeElement.focus();}_noopAnimations=Zi();_focused=false;name=null;id;labelPosition="after";ariaLabel=null;ariaLabelledby=null;ariaDescribedby;required=false;color;disabled=false;disableRipple=false;tabIndex=0;get checked(){return this._checked}set checked(e){this._checked=e,this._changeDetectorRef.markForCheck();}hideIcon;disabledInteractive;change=new bt;toggleChange=new bt;get inputId(){return `${this.id||this._uniqueId}-input`}constructor(){b(Jr).load(V1);let e=b(new OR("tabindex"),{optional:true}),i=this.defaults;this.tabIndex=e==null?0:parseInt(e)||0,this.color=i.color||"accent",this.id=this._uniqueId=b(ci$1).getId("mat-mdc-slide-toggle-"),this.hideIcon=i.hideIcon??false,this.disabledInteractive=i.disabledInteractive??false,this._labelId=this._uniqueId+"-label";}ngAfterContentInit(){this._focusMonitor.monitor(this._elementRef,true).subscribe(e=>{e==="keyboard"||e==="program"?(this._focused=true,this._changeDetectorRef.markForCheck()):e||Promise.resolve().then(()=>{this._focused=false,this._onTouched(),this._changeDetectorRef.markForCheck();});});}ngOnChanges(e){e.required&&this._validatorOnChange();}ngOnDestroy(){this._focusMonitor.stopMonitoring(this._elementRef);}writeValue(e){this.checked=!!e;}registerOnChange(e){this._onChange=e;}registerOnTouched(e){this._onTouched=e;}validate(e){return this.required&&e.value!==true?{required:true}:null}registerOnValidatorChange(e){this._validatorOnChange=e;}setDisabledState(e){this.disabled=e,this._changeDetectorRef.markForCheck();}toggle(){this.checked=!this.checked,this._onChange(this.checked);}_emitChangeEvent(){this._onChange(this.checked),this.change.emit(this._createChangeEvent(this.checked));}_handleClick(){this.disabled||(this.toggleChange.emit(),this.defaults.disableToggleValue||(this.checked=!this.checked,this._onChange(this.checked),this.change.emit(new Me(this,this.checked))));}_getAriaLabelledBy(){return this.ariaLabelledby?this.ariaLabelledby:this.ariaLabel?null:this._labelId}static \u0275fac=function(i){return new(i||n)};static \u0275cmp=ln({type:n,selectors:[["mat-slide-toggle"]],viewQuery:function(i,r){if(i&1&&Ad(jt,5),i&2){let d;Lm(d=$m())&&(r._switchElement=d.first);}},hostAttrs:[1,"mat-mdc-slide-toggle"],hostVars:13,hostBindings:function(i,r){i&2&&(Td("id",r.id),Qo("tabindex",null)("aria-label",null)("name",null)("aria-labelledby",null),qb(r.color?"mat-"+r.color:""),zr("mat-mdc-slide-toggle-focused",r._focused)("mat-mdc-slide-toggle-checked",r.checked)("_mat-animation-noopable",r._noopAnimations));},inputs:{name:"name",id:"id",labelPosition:"labelPosition",ariaLabel:[0,"aria-label","ariaLabel"],ariaLabelledby:[0,"aria-labelledby","ariaLabelledby"],ariaDescribedby:[0,"aria-describedby","ariaDescribedby"],required:[2,"required","required",dn],color:"color",disabled:[2,"disabled","disabled",dn],disableRipple:[2,"disableRipple","disableRipple",dn],tabIndex:[2,"tabIndex","tabIndex",e=>e==null?0:HR(e)],checked:[2,"checked","checked",dn],hideIcon:[2,"hideIcon","hideIcon",dn],disabledInteractive:[2,"disabledInteractive","disabledInteractive",dn]},outputs:{change:"change",toggleChange:"toggleChange"},exportAs:["matSlideToggle"],features:[Wb([{provide:Te$1,useExisting:Yl(()=>n),multi:true},{provide:K,useExisting:n,multi:true}]),Zo],ngContentSelectors:$t,decls:14,vars:27,consts:[["switch",""],["mat-internal-form-field","",3,"labelPosition"],["role","switch","type","button",1,"mdc-switch",3,"click","tabIndex","disabled"],[1,"mat-mdc-slide-toggle-touch-target"],[1,"mdc-switch__track"],[1,"mdc-switch__handle-track"],[1,"mdc-switch__handle"],[1,"mdc-switch__shadow"],[1,"mdc-elevation-overlay"],[1,"mdc-switch__ripple"],["mat-ripple","",1,"mat-mdc-slide-toggle-ripple","mat-focus-indicator",3,"matRippleTrigger","matRippleDisabled","matRippleCentered"],[1,"mdc-switch__icons"],[1,"mdc-label",3,"click","for"],["viewBox","0 0 24 24","aria-hidden","true",1,"mdc-switch__icon","mdc-switch__icon--on"],["d","M19.69,5.23L8.96,15.96l-4.23-4.23L2.96,13.5l6,6L21.46,7L19.69,5.23z"],["viewBox","0 0 24 24","aria-hidden","true",1,"mdc-switch__icon","mdc-switch__icon--off"],["d","M20 13H4v-2h16v2z"]],template:function(i,r){if(i&1&&(hu(),br(0,"div",1)(1,"button",2,0),Fm("click",function(){return r._handleClick()}),cR(3,"div",3)(4,"span",4),br(5,"span",5)(6,"span",6)(7,"span",7),cR(8,"span",8),$r(),br(9,"span",9),cR(10,"span",10),$r(),Sd(11,qt,5,0,"span",11),$r()()(),br(12,"label",12),Fm("click",function(p){return p.stopPropagation()}),Xo(13),$r()()),i&2){let d=t6(2);xd("labelPosition",r.labelPosition),Wo(),zr("mdc-switch--selected",r.checked)("mdc-switch--unselected",!r.checked)("mdc-switch--checked",r.checked)("mdc-switch--disabled",r.disabled)("mat-mdc-slide-toggle-disabled-interactive",r.disabledInteractive),xd("tabIndex",r.disabled&&!r.disabledInteractive?-1:r.tabIndex)("disabled",r.disabled&&!r.disabledInteractive),Qo("id",r.buttonId)("name",r.name)("aria-label",r.ariaLabel)("aria-labelledby",r._getAriaLabelledBy())("aria-describedby",r.ariaDescribedby)("aria-required",r.required||null)("aria-checked",r.checked)("aria-disabled",r.disabled&&r.disabledInteractive?"true":null),Wo(9),xd("matRippleTrigger",d)("matRippleDisabled",r.disableRipple||r.disabled)("matRippleCentered",true),Wo(),Id(r.hideIcon?-1:11),Wo(),xd("for",r.buttonId),Qo("id",r._labelId);}},dependencies:[t1e,Ft],styles:[`.mdc-switch {
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  margin: 0;
+  outline: none;
+  overflow: visible;
+  padding: 0;
+  position: relative;
+  width: var(--mat-slide-toggle-track-width, 52px);
+}
+.mdc-switch.mdc-switch--disabled {
+  cursor: default;
+  pointer-events: none;
+}
+.mdc-switch.mat-mdc-slide-toggle-disabled-interactive {
+  pointer-events: auto;
+}
+
+.mdc-switch__track {
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  height: var(--mat-slide-toggle-track-height, 32px);
+  border-radius: var(--mat-slide-toggle-track-shape, var(--mat-sys-corner-full));
+}
+.mdc-switch--disabled.mdc-switch .mdc-switch__track {
+  opacity: var(--mat-slide-toggle-disabled-track-opacity, 0.12);
+}
+.mdc-switch__track::before, .mdc-switch__track::after {
+  border: 1px solid transparent;
+  border-radius: inherit;
+  box-sizing: border-box;
+  content: "";
+  height: 100%;
+  left: 0;
+  position: absolute;
+  width: 100%;
+  border-width: var(--mat-slide-toggle-track-outline-width, 2px);
+  border-color: var(--mat-slide-toggle-track-outline-color, var(--mat-sys-outline));
+}
+.mdc-switch--selected .mdc-switch__track::before, .mdc-switch--selected .mdc-switch__track::after {
+  border-width: var(--mat-slide-toggle-selected-track-outline-width, 2px);
+  border-color: var(--mat-slide-toggle-selected-track-outline-color, transparent);
+}
+.mdc-switch--disabled .mdc-switch__track::before, .mdc-switch--disabled .mdc-switch__track::after {
+  border-width: var(--mat-slide-toggle-disabled-unselected-track-outline-width, 2px);
+  border-color: var(--mat-slide-toggle-disabled-unselected-track-outline-color, var(--mat-sys-on-surface));
+}
+@media (forced-colors: active) {
+  .mdc-switch__track {
+    border-color: currentColor;
+  }
+}
+.mdc-switch__track::before {
+  transition: transform 75ms 0ms cubic-bezier(0, 0, 0.2, 1);
+  transform: translateX(0);
+  background: var(--mat-slide-toggle-unselected-track-color, var(--mat-sys-surface-variant));
+}
+.mdc-switch--selected .mdc-switch__track::before {
+  transition: transform 75ms 0ms cubic-bezier(0.4, 0, 0.6, 1);
+  transform: translateX(100%);
+}
+[dir=rtl] .mdc-switch--selected .mdc-switch--selected .mdc-switch__track::before {
+  transform: translateX(-100%);
+}
+.mdc-switch--selected .mdc-switch__track::before {
+  opacity: var(--mat-slide-toggle-hidden-track-opacity, 0);
+  transition: var(--mat-slide-toggle-hidden-track-transition, opacity 75ms);
+}
+.mdc-switch--unselected .mdc-switch__track::before {
+  opacity: var(--mat-slide-toggle-visible-track-opacity, 1);
+  transition: var(--mat-slide-toggle-visible-track-transition, opacity 75ms);
+}
+.mdc-switch:enabled:hover:not(:focus):not(:active) .mdc-switch__track::before {
+  background: var(--mat-slide-toggle-unselected-hover-track-color, var(--mat-sys-surface-variant));
+}
+.mdc-switch:enabled:focus:not(:active) .mdc-switch__track::before {
+  background: var(--mat-slide-toggle-unselected-focus-track-color, var(--mat-sys-surface-variant));
+}
+.mdc-switch:enabled:active .mdc-switch__track::before {
+  background: var(--mat-slide-toggle-unselected-pressed-track-color, var(--mat-sys-surface-variant));
+}
+.mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:hover:not(:focus):not(:active) .mdc-switch__track::before, .mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:focus:not(:active) .mdc-switch__track::before, .mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:active .mdc-switch__track::before, .mdc-switch.mdc-switch--disabled .mdc-switch__track::before {
+  background: var(--mat-slide-toggle-disabled-unselected-track-color, var(--mat-sys-surface-variant));
+}
+.mdc-switch__track::after {
+  transform: translateX(-100%);
+  background: var(--mat-slide-toggle-selected-track-color, var(--mat-sys-primary));
+}
+[dir=rtl] .mdc-switch__track::after {
+  transform: translateX(100%);
+}
+.mdc-switch--selected .mdc-switch__track::after {
+  transform: translateX(0);
+}
+.mdc-switch--selected .mdc-switch__track::after {
+  opacity: var(--mat-slide-toggle-visible-track-opacity, 1);
+  transition: var(--mat-slide-toggle-visible-track-transition, opacity 75ms);
+}
+.mdc-switch--unselected .mdc-switch__track::after {
+  opacity: var(--mat-slide-toggle-hidden-track-opacity, 0);
+  transition: var(--mat-slide-toggle-hidden-track-transition, opacity 75ms);
+}
+.mdc-switch:enabled:hover:not(:focus):not(:active) .mdc-switch__track::after {
+  background: var(--mat-slide-toggle-selected-hover-track-color, var(--mat-sys-primary));
+}
+.mdc-switch:enabled:focus:not(:active) .mdc-switch__track::after {
+  background: var(--mat-slide-toggle-selected-focus-track-color, var(--mat-sys-primary));
+}
+.mdc-switch:enabled:active .mdc-switch__track::after {
+  background: var(--mat-slide-toggle-selected-pressed-track-color, var(--mat-sys-primary));
+}
+.mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:hover:not(:focus):not(:active) .mdc-switch__track::after, .mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:focus:not(:active) .mdc-switch__track::after, .mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:active .mdc-switch__track::after, .mdc-switch.mdc-switch--disabled .mdc-switch__track::after {
+  background: var(--mat-slide-toggle-disabled-selected-track-color, var(--mat-sys-on-surface));
+}
+
+.mdc-switch__handle-track {
+  height: 100%;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  transition: transform 75ms 0ms cubic-bezier(0.4, 0, 0.2, 1);
+  left: 0;
+  right: auto;
+  transform: translateX(0);
+  width: calc(100% - var(--mat-slide-toggle-handle-width));
+}
+[dir=rtl] .mdc-switch__handle-track {
+  left: auto;
+  right: 0;
+}
+.mdc-switch--selected .mdc-switch__handle-track {
+  transform: translateX(100%);
+}
+[dir=rtl] .mdc-switch--selected .mdc-switch__handle-track {
+  transform: translateX(-100%);
+}
+
+.mdc-switch__handle {
+  display: flex;
+  pointer-events: auto;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  left: 0;
+  right: auto;
+  transition: width 75ms cubic-bezier(0.4, 0, 0.2, 1), height 75ms cubic-bezier(0.4, 0, 0.2, 1), margin 75ms cubic-bezier(0.4, 0, 0.2, 1);
+  width: var(--mat-slide-toggle-handle-width);
+  height: var(--mat-slide-toggle-handle-height);
+  border-radius: var(--mat-slide-toggle-handle-shape, var(--mat-sys-corner-full));
+}
+[dir=rtl] .mdc-switch__handle {
+  left: auto;
+  right: 0;
+}
+.mat-mdc-slide-toggle .mdc-switch--unselected .mdc-switch__handle {
+  width: var(--mat-slide-toggle-unselected-handle-size, 16px);
+  height: var(--mat-slide-toggle-unselected-handle-size, 16px);
+  margin: var(--mat-slide-toggle-unselected-handle-horizontal-margin, 0 8px);
+}
+.mat-mdc-slide-toggle .mdc-switch--unselected .mdc-switch__handle:has(.mdc-switch__icons) {
+  margin: var(--mat-slide-toggle-unselected-with-icon-handle-horizontal-margin, 0 4px);
+}
+.mat-mdc-slide-toggle .mdc-switch--selected .mdc-switch__handle {
+  width: var(--mat-slide-toggle-selected-handle-size, 24px);
+  height: var(--mat-slide-toggle-selected-handle-size, 24px);
+  margin: var(--mat-slide-toggle-selected-handle-horizontal-margin, 0 24px);
+}
+.mat-mdc-slide-toggle .mdc-switch--selected .mdc-switch__handle:has(.mdc-switch__icons) {
+  margin: var(--mat-slide-toggle-selected-with-icon-handle-horizontal-margin, 0 24px);
+}
+.mat-mdc-slide-toggle .mdc-switch__handle:has(.mdc-switch__icons) {
+  width: var(--mat-slide-toggle-with-icon-handle-size, 24px);
+  height: var(--mat-slide-toggle-with-icon-handle-size, 24px);
+}
+.mat-mdc-slide-toggle .mdc-switch:active:not(.mdc-switch--disabled) .mdc-switch__handle {
+  width: var(--mat-slide-toggle-pressed-handle-size, 28px);
+  height: var(--mat-slide-toggle-pressed-handle-size, 28px);
+}
+.mat-mdc-slide-toggle .mdc-switch--selected:active:not(.mdc-switch--disabled) .mdc-switch__handle {
+  margin: var(--mat-slide-toggle-selected-pressed-handle-horizontal-margin, 0 22px);
+}
+.mat-mdc-slide-toggle .mdc-switch--unselected:active:not(.mdc-switch--disabled) .mdc-switch__handle {
+  margin: var(--mat-slide-toggle-unselected-pressed-handle-horizontal-margin, 0 2px);
+}
+.mdc-switch--disabled.mdc-switch--selected .mdc-switch__handle::after {
+  opacity: var(--mat-slide-toggle-disabled-selected-handle-opacity, 1);
+}
+.mdc-switch--disabled.mdc-switch--unselected .mdc-switch__handle::after {
+  opacity: var(--mat-slide-toggle-disabled-unselected-handle-opacity, 0.38);
+}
+.mdc-switch__handle::before, .mdc-switch__handle::after {
+  border: 1px solid transparent;
+  border-radius: inherit;
+  box-sizing: border-box;
+  content: "";
+  width: 100%;
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  transition: background-color 75ms 0ms cubic-bezier(0.4, 0, 0.2, 1), border-color 75ms 0ms cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: -1;
+}
+@media (forced-colors: active) {
+  .mdc-switch__handle::before, .mdc-switch__handle::after {
+    border-color: currentColor;
+  }
+}
+.mdc-switch--selected:enabled .mdc-switch__handle::after {
+  background: var(--mat-slide-toggle-selected-handle-color, var(--mat-sys-on-primary));
+}
+.mdc-switch--selected:enabled:hover:not(:focus):not(:active) .mdc-switch__handle::after {
+  background: var(--mat-slide-toggle-selected-hover-handle-color, var(--mat-sys-primary-container));
+}
+.mdc-switch--selected:enabled:focus:not(:active) .mdc-switch__handle::after {
+  background: var(--mat-slide-toggle-selected-focus-handle-color, var(--mat-sys-primary-container));
+}
+.mdc-switch--selected:enabled:active .mdc-switch__handle::after {
+  background: var(--mat-slide-toggle-selected-pressed-handle-color, var(--mat-sys-primary-container));
+}
+.mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled.mdc-switch--selected:hover:not(:focus):not(:active) .mdc-switch__handle::after, .mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled.mdc-switch--selected:focus:not(:active) .mdc-switch__handle::after, .mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled.mdc-switch--selected:active .mdc-switch__handle::after, .mdc-switch--selected.mdc-switch--disabled .mdc-switch__handle::after {
+  background: var(--mat-slide-toggle-disabled-selected-handle-color, var(--mat-sys-surface));
+}
+.mdc-switch--unselected:enabled .mdc-switch__handle::after {
+  background: var(--mat-slide-toggle-unselected-handle-color, var(--mat-sys-outline));
+}
+.mdc-switch--unselected:enabled:hover:not(:focus):not(:active) .mdc-switch__handle::after {
+  background: var(--mat-slide-toggle-unselected-hover-handle-color, var(--mat-sys-on-surface-variant));
+}
+.mdc-switch--unselected:enabled:focus:not(:active) .mdc-switch__handle::after {
+  background: var(--mat-slide-toggle-unselected-focus-handle-color, var(--mat-sys-on-surface-variant));
+}
+.mdc-switch--unselected:enabled:active .mdc-switch__handle::after {
+  background: var(--mat-slide-toggle-unselected-pressed-handle-color, var(--mat-sys-on-surface-variant));
+}
+.mdc-switch--unselected.mdc-switch--disabled .mdc-switch__handle::after {
+  background: var(--mat-slide-toggle-disabled-unselected-handle-color, var(--mat-sys-on-surface));
+}
+.mdc-switch__handle::before {
+  background: var(--mat-slide-toggle-handle-surface-color);
+}
+
+.mdc-switch__shadow {
+  border-radius: inherit;
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+.mdc-switch:enabled .mdc-switch__shadow {
+  box-shadow: var(--mat-slide-toggle-handle-elevation-shadow);
+}
+.mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:hover:not(:focus):not(:active) .mdc-switch__shadow, .mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:focus:not(:active) .mdc-switch__shadow, .mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:active .mdc-switch__shadow, .mdc-switch.mdc-switch--disabled .mdc-switch__shadow {
+  box-shadow: var(--mat-slide-toggle-disabled-handle-elevation-shadow);
+}
+
+.mdc-switch__ripple {
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: -1;
+  width: var(--mat-slide-toggle-state-layer-size, 40px);
+  height: var(--mat-slide-toggle-state-layer-size, 40px);
+}
+.mdc-switch__ripple::after {
+  content: "";
+  opacity: 0;
+}
+.mdc-switch--disabled .mdc-switch__ripple::after {
+  display: none;
+}
+.mat-mdc-slide-toggle-disabled-interactive .mdc-switch__ripple::after {
+  display: block;
+}
+.mdc-switch:hover .mdc-switch__ripple::after {
+  transition: 75ms opacity cubic-bezier(0, 0, 0.2, 1);
+}
+.mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:enabled:focus .mdc-switch__ripple::after, .mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:enabled:active .mdc-switch__ripple::after, .mat-mdc-slide-toggle-disabled-interactive.mdc-switch--disabled:enabled:hover:not(:focus) .mdc-switch__ripple::after, .mdc-switch--unselected:enabled:hover:not(:focus) .mdc-switch__ripple::after {
+  background: var(--mat-slide-toggle-unselected-hover-state-layer-color, var(--mat-sys-on-surface));
+  opacity: var(--mat-slide-toggle-unselected-hover-state-layer-opacity, var(--mat-sys-hover-state-layer-opacity));
+}
+.mdc-switch--unselected:enabled:focus .mdc-switch__ripple::after {
+  background: var(--mat-slide-toggle-unselected-focus-state-layer-color, var(--mat-sys-on-surface));
+  opacity: var(--mat-slide-toggle-unselected-focus-state-layer-opacity, var(--mat-sys-focus-state-layer-opacity));
+}
+.mdc-switch--unselected:enabled:active .mdc-switch__ripple::after {
+  background: var(--mat-slide-toggle-unselected-pressed-state-layer-color, var(--mat-sys-on-surface));
+  opacity: var(--mat-slide-toggle-unselected-pressed-state-layer-opacity, var(--mat-sys-pressed-state-layer-opacity));
+  transition: opacity 75ms linear;
+}
+.mdc-switch--selected:enabled:hover:not(:focus) .mdc-switch__ripple::after {
+  background: var(--mat-slide-toggle-selected-hover-state-layer-color, var(--mat-sys-primary));
+  opacity: var(--mat-slide-toggle-selected-hover-state-layer-opacity, var(--mat-sys-hover-state-layer-opacity));
+}
+.mdc-switch--selected:enabled:focus .mdc-switch__ripple::after {
+  background: var(--mat-slide-toggle-selected-focus-state-layer-color, var(--mat-sys-primary));
+  opacity: var(--mat-slide-toggle-selected-focus-state-layer-opacity, var(--mat-sys-focus-state-layer-opacity));
+}
+.mdc-switch--selected:enabled:active .mdc-switch__ripple::after {
+  background: var(--mat-slide-toggle-selected-pressed-state-layer-color, var(--mat-sys-primary));
+  opacity: var(--mat-slide-toggle-selected-pressed-state-layer-opacity, var(--mat-sys-pressed-state-layer-opacity));
+  transition: opacity 75ms linear;
+}
+
+.mdc-switch__icons {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  z-index: 1;
+  transform: translateZ(0);
+}
+.mdc-switch--disabled.mdc-switch--unselected .mdc-switch__icons {
+  opacity: var(--mat-slide-toggle-disabled-unselected-icon-opacity, 0.38);
+}
+.mdc-switch--disabled.mdc-switch--selected .mdc-switch__icons {
+  opacity: var(--mat-slide-toggle-disabled-selected-icon-opacity, 0.38);
+}
+
+.mdc-switch__icon {
+  bottom: 0;
+  left: 0;
+  margin: auto;
+  position: absolute;
+  right: 0;
+  top: 0;
+  opacity: 0;
+  transition: opacity 30ms 0ms cubic-bezier(0.4, 0, 1, 1);
+}
+.mdc-switch--unselected .mdc-switch__icon {
+  width: var(--mat-slide-toggle-unselected-icon-size, 16px);
+  height: var(--mat-slide-toggle-unselected-icon-size, 16px);
+  fill: var(--mat-slide-toggle-unselected-icon-color, var(--mat-sys-surface-variant));
+}
+.mdc-switch--unselected.mdc-switch--disabled .mdc-switch__icon {
+  fill: var(--mat-slide-toggle-disabled-unselected-icon-color, var(--mat-sys-surface-variant));
+}
+.mdc-switch--selected .mdc-switch__icon {
+  width: var(--mat-slide-toggle-selected-icon-size, 16px);
+  height: var(--mat-slide-toggle-selected-icon-size, 16px);
+  fill: var(--mat-slide-toggle-selected-icon-color, var(--mat-sys-on-primary-container));
+}
+.mdc-switch--selected.mdc-switch--disabled .mdc-switch__icon {
+  fill: var(--mat-slide-toggle-disabled-selected-icon-color, var(--mat-sys-on-surface));
+}
+
+.mdc-switch--selected .mdc-switch__icon--on,
+.mdc-switch--unselected .mdc-switch__icon--off {
+  opacity: 1;
+  transition: opacity 45ms 30ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.mat-mdc-slide-toggle {
+  -webkit-user-select: none;
+  user-select: none;
+  display: inline-block;
+  -webkit-tap-highlight-color: transparent;
+  outline: 0;
+}
+.mat-mdc-slide-toggle .mat-mdc-slide-toggle-ripple,
+.mat-mdc-slide-toggle .mdc-switch__ripple::after {
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.mat-mdc-slide-toggle .mat-mdc-slide-toggle-ripple:not(:empty),
+.mat-mdc-slide-toggle .mdc-switch__ripple::after:not(:empty) {
+  transform: translateZ(0);
+}
+.mat-mdc-slide-toggle.mat-mdc-slide-toggle-focused .mat-focus-indicator::before {
+  content: "";
+}
+.mat-mdc-slide-toggle .mat-internal-form-field {
+  color: var(--mat-slide-toggle-label-text-color, var(--mat-sys-on-surface));
+  font-family: var(--mat-slide-toggle-label-text-font, var(--mat-sys-body-medium-font));
+  line-height: var(--mat-slide-toggle-label-text-line-height, var(--mat-sys-body-medium-line-height));
+  font-size: var(--mat-slide-toggle-label-text-size, var(--mat-sys-body-medium-size));
+  letter-spacing: var(--mat-slide-toggle-label-text-tracking, var(--mat-sys-body-medium-tracking));
+  font-weight: var(--mat-slide-toggle-label-text-weight, var(--mat-sys-body-medium-weight));
+}
+.mat-mdc-slide-toggle .mat-ripple-element {
+  opacity: 0.12;
+}
+.mat-mdc-slide-toggle .mat-focus-indicator::before {
+  border-radius: 50%;
+}
+.mat-mdc-slide-toggle._mat-animation-noopable .mdc-switch__handle-track,
+.mat-mdc-slide-toggle._mat-animation-noopable .mdc-switch__icon,
+.mat-mdc-slide-toggle._mat-animation-noopable .mdc-switch__handle::before,
+.mat-mdc-slide-toggle._mat-animation-noopable .mdc-switch__handle::after,
+.mat-mdc-slide-toggle._mat-animation-noopable .mdc-switch__track::before,
+.mat-mdc-slide-toggle._mat-animation-noopable .mdc-switch__track::after {
+  transition: none;
+}
+.mat-mdc-slide-toggle .mdc-switch:enabled + .mdc-label {
+  cursor: pointer;
+}
+.mat-mdc-slide-toggle .mdc-switch--disabled + label {
+  color: var(--mat-slide-toggle-disabled-label-text-color, var(--mat-sys-on-surface));
+}
+.mat-mdc-slide-toggle label:empty {
+  display: none;
+}
+
+.mat-mdc-slide-toggle-touch-target {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: var(--mat-slide-toggle-touch-target-size, 48px);
+  width: 100%;
+  transform: translate(-50%, -50%);
+  display: var(--mat-slide-toggle-touch-target-display, block);
+}
+[dir=rtl] .mat-mdc-slide-toggle-touch-target {
+  left: auto;
+  right: 50%;
+  transform: translate(50%, -50%);
+}
+`],encapsulation:2})}return n})(),Nt=(()=>{class n{static \u0275fac=function(i){return new(i||n)};static \u0275mod=Rt({type:n});static \u0275inj=xt({imports:[Te,Do]})}return n})();var M=class n{startupResolution=b(RB);startupConfigState=b(rg);configProvider=b(Hu);secureCredentialsStorage=b(_B);localStorageInteractions=b(ks);usageTrackingService=b(J);renderers=Od(()=>this.startupConfigState.renderers());selectedRendererId=Od(()=>this.startupConfigState.selectedRendererId());activeRenderer=Od(()=>this.startupConfigState.activeRenderer());async selectRenderer(t){let e=this.selectedRendererId();if(!await this.startupResolution.setSelectedRendererId(t))return  false;this.usageTrackingService.trackRendererSwitch({fromRendererId:e,toRendererId:t||""}),t?this.localStorageInteractions.setItem("a2ui_composer_selected_renderer",t):this.localStorageInteractions.removeItem("a2ui_composer_selected_renderer");let r=this.activeRenderer();r?.rendererUrl?this.configProvider.setRendererUrl(r.rendererUrl):this.configProvider.setRendererUrl("");let d=typeof r?.apiKey=="string"?r.apiKey.trim():"";if(d)this.configProvider.setApiKeyFromConfig(d);else try{await this.syncEffectiveApiKeyToConfigProvider();}catch(p){console.warn("Failed to resolve effective API key during renderer selection:",p);}return  true}_selectedApiKeyId=yt(this.localStorageInteractions.getItem("a2ui_composer_selected_api_key")||null);selectedApiKeyId=Od(()=>{let t=this._selectedApiKeyId();return t||((this.startupConfigState.apiKeys()||{}).default!==void 0?"default":null)});_effectiveApiKey=yt("");effectiveApiKey=this._effectiveApiKey.asReadonly();getStaticApiKeys(){return this.startupConfigState.apiKeys()||{}}async getAvailableApiKeys(){let t=this.getStaticApiKeys(),e=Object.entries(t).map(([d,p])=>({id:d,name:p.displayName||d,key:p.apiKey||"",readOnly:true})),r=(await this.secureCredentialsStorage.getCustomApiKeys()).filter(d=>!Object.prototype.hasOwnProperty.call(t,d.id)).map(d=>({id:d.id,name:d.name,key:d.key,readOnly:false}));return [...e,...r]}async selectApiKey(t){this.usageTrackingService.trackApiKeyUpdate({action:"select"}),t?this.localStorageInteractions.setItem("a2ui_composer_selected_api_key",t):this.localStorageInteractions.removeItem("a2ui_composer_selected_api_key"),this._selectedApiKeyId.set(t),await this.syncEffectiveApiKeyToConfigProvider();}async getEffectiveApiKey(){let t=this.selectedApiKeyId(),e=this.getStaticApiKeys();if(t&&e[t]){let d=e[t].apiKey||"";return this._effectiveApiKey.set(d),d}if(t){let d=await this.secureCredentialsStorage.getCustomApiKey(t);return d?(this._effectiveApiKey.set(d.key),d.key):(this._effectiveApiKey.set(""),"")}let i=await this.secureCredentialsStorage.getCustomApiKeys(),r=i.find(d=>d.id==="default")||i[0];if(r){let d=r.key;return this._effectiveApiKey.set(d),d}return this._effectiveApiKey.set(""),""}async saveCustomApiKey(t,e,i){let r=this.getStaticApiKeys();if(Object.prototype.hasOwnProperty.call(r,t))throw new Error(`Cannot save custom API key with ID "${t}": collides with a static configuration key.`);this.usageTrackingService.trackApiKeyUpdate({action:"add"}),await this.secureCredentialsStorage.saveCustomApiKey(t,e,i),await this.syncEffectiveApiKeyToConfigProvider();}async deleteCustomApiKey(t){this.usageTrackingService.trackApiKeyUpdate({action:"delete"}),await this.secureCredentialsStorage.deleteCustomApiKey(t),this._selectedApiKeyId()===t?await this.selectApiKey(null):await this.syncEffectiveApiKeyToConfigProvider();}async syncEffectiveApiKeyToConfigProvider(){let t=await this.getEffectiveApiKey(),e=this._selectedApiKeyId(),i=this.getStaticApiKeys();return e&&i[e]?this.configProvider.setApiKeyFromConfig(t):!e&&i.default?this.configProvider.setApiKeyFromConfig(t):this.configProvider.setRuntimeApiKey(t),t}getStaticRenderersMap(){return this.startupConfigState.renderers()||{}}getCustomRenderers(){let t=this.localStorageInteractions.getItem("a2ui_composer_custom_renderers");if(!t)return [];try{let e=JSON.parse(t);return Array.isArray(e)?e.filter(i=>i&&typeof i=="object"&&!!String(i.id||"").trim()).map(i=>({id:String(i?.id||"").trim(),name:String(i?.name||""),rendererUrl:String(i?.rendererUrl||"")})):[]}catch(e){return console.warn("Failed to parse custom renderers from LocalStorage:",e),[]}}getRenderers(){let t=this.getStaticRenderersMap(),e=Object.entries(t).map(([d,p])=>({id:d,name:p?.displayName||p?.name||d,rendererUrl:p?.rendererUrl||"",readOnly:true})),i=new Set(e.map(d=>d.name)),r=this.getCustomRenderers().filter(d=>!Object.prototype.hasOwnProperty.call(t,d.id)).map(d=>({id:d.id,name:i.has(d.name)?`${d.name} (local)`:d.name,rendererUrl:d.rendererUrl,readOnly:false}));return [...e,...r]}saveCustomRenderer(t){let e=(t.id||"").trim(),i=(t.name||"").trim(),r=(t.rendererUrl||"").trim();if(!e||!i||!r)throw new Error("Custom renderer id, name, and rendererUrl must not be empty.");if(!/^https?:\/\//i.test(r))throw new Error("Custom renderer URL must start with http:// or https://");let d=this.getStaticRenderersMap();if(Object.prototype.hasOwnProperty.call(d,e))throw new Error(`Cannot save custom renderer with ID "${e}": collides with a static configuration renderer.`);let p=this.getCustomRenderers(),Ke=p.findIndex(Bt=>Bt.id===e);Ke>=0?(p[Ke]={id:e,name:i,rendererUrl:r},this.usageTrackingService.trackRendererEdit({rendererId:e})):(p.push({id:e,name:i,rendererUrl:r}),this.usageTrackingService.trackRendererAdd({rendererId:e})),this.localStorageInteractions.setItem("a2ui_composer_custom_renderers",JSON.stringify(p));let Fe=f({},this.startupConfigState.renderers());Fe[e]={id:e,name:i,rendererUrl:r},this.startupConfigState.setRenderers(Fe);}deleteCustomRenderer(t){this.usageTrackingService.trackRendererDelete({rendererId:t});let e=this.getCustomRenderers().filter(r=>r.id!==t);this.localStorageInteractions.setItem("a2ui_composer_custom_renderers",JSON.stringify(e));let i=f({},this.startupConfigState.renderers());delete i[t],this.startupConfigState.setRenderers(i),this.selectedRendererId()===t&&(this.localStorageInteractions.removeItem("a2ui_composer_selected_renderer"),this.selectRenderer(null));}static \u0275fac=function(e){return new(e||n)};static \u0275prov=pe({token:n,factory:n.\u0275fac,providedIn:"root"})};function Yt(n,t){if(n&1&&(br(0,"div",5),Ai(1),$r()),n&2){let e=Y8();Wo(),zm(e.errorMessage());}}function Qt(n){let t=n.value;if(!t)return null;try{let e=new URL(t.trim());return ["http:","https:"].includes(e.protocol)&&e.host?null:{invalidUrl:!0}}catch{return {invalidUrl:true}}}var re=class n{fb=b(Oi);settingsService=b(M);dialogRef=b(Rf);data=b(Gw,{optional:true});errorMessage=yt(null);form=this.fb.group({name:[this.data?.renderer?.name??"",[we.required,we.pattern(/\S/)]],rendererUrl:[this.data?.renderer?.rendererUrl??"",[we.required,Qt]]});onConfirm(){if(this.form.invalid){this.form.markAllAsTouched();return}this.errorMessage.set(null);let t=this.form.controls.name.value.trim(),e=this.form.controls.rendererUrl.value.trim(),i=this.data?.renderer?.id||`custom-${Date.now()}`;try{this.settingsService.saveCustomRenderer({id:i,name:t,rendererUrl:e}),this.dialogRef.close(i);}catch(r){this.errorMessage.set(r instanceof Error?r.message:"Failed to save custom renderer.");}}static \u0275fac=function(e){return new(e||n)};static \u0275cmp=ln({type:n,selectors:[["a2ui-composer-add-renderer-dialog"]],decls:18,vars:5,consts:[["mat-dialog-title",""],[3,"ngSubmit","formGroup"],["appearance","outline",1,"full-width"],["matInput","","id","renderer-name-input","formControlName","name","placeholder","My Renderer"],["matInput","","id","renderer-url-input","formControlName","rendererUrl","placeholder","http://localhost:3000"],["role","alert",1,"error-message"],["align","end"],["mat-button","","type","button","mat-dialog-close",""],["mat-button","","type","submit","color","primary",3,"click","disabled"]],template:function(e,i){e&1&&(br(0,"h2",0),Ai(1),$r(),br(2,"mat-dialog-content")(3,"form",1),Fm("ngSubmit",function(d){return d.preventDefault(),i.onConfirm()}),br(4,"mat-form-field",2)(5,"mat-label"),Ai(6,"Name"),$r(),cR(7,"input",3),k3(),$r(),br(8,"mat-form-field",2)(9,"mat-label"),Ai(10,"Renderer URL"),$r(),cR(11,"input",4),k3(),$r(),Sd(12,Yt,2,1,"div",5),$r()(),br(13,"mat-dialog-actions",6)(14,"button",7),Ai(15,"Cancel"),$r(),br(16,"button",8),Fm("click",function(){return i.onConfirm()}),Ai(17),$r()()),e&2&&(Wo(),zm(i.data?.renderer?"Edit Custom Renderer":"Add Custom Renderer"),Wo(2),xd("formGroup",i.form),Wo(4),O3(),Wo(4),O3(),Wo(),Id(i.errorMessage()?12:-1),Wo(4),xd("disabled",i.form.invalid),Wo(),Jb(" ",i.data?.renderer?"Save":"Add"," "));},dependencies:[Ri,Ni,Et,Fi,Ii,Un,kn,IL,_L,EL,wL,DL,me,nt,de,Dn,Rn$1,K1,W1],styles:["mat-dialog-content[_ngcontent-%COMP%]{padding-top:12px}.full-width[_ngcontent-%COMP%]{width:100%;margin-bottom:12px;margin-top:4px}.error-message[_ngcontent-%COMP%]{color:var(--mat-sys-error, #b3261e);font-size:.875rem;margin-top:8px}"]})};var ie=class n{disabled=zR(false);dialog=b(Nf);destroyRef=b(Bn);items=yt([]);selectedItem=Od(()=>{let t=this.getSelectedId();if(t)return this.items().find(e=>e.id===t)});onSelectionChange(t){t!=null&&this.emitSelection(t);}async handleAdd(t,e){e?.preventDefault(),e?.stopPropagation(),this.dialog.open(t,{width:"450px"}).afterClosed().pipe(bze(this.destroyRef)).subscribe(async r=>{r&&(await this.refreshItems(),this.emitSelection(r));});}async handleEdit(t,e,i,r){if(e.stopPropagation(),e.preventDefault(),i.readOnly)return;this.dialog.open(t,{width:"450px",data:{[r]:i}}).afterClosed().pipe(bze(this.destroyRef)).subscribe(async p=>{p&&(await this.refreshItems(),this.getSelectedId()===p&&this.emitSelection(p));});}async handleDelete(t,e,i=null){t.stopPropagation(),t.preventDefault(),!this.items().find(d=>d.id===e)?.readOnly&&(await this.deleteItem(e),await this.refreshItems(),this.getSelectedId()===e&&this.emitSelection(i));}static \u0275fac=function(e){return new(e||n)};static \u0275dir=Tt({type:n,inputs:{disabled:[1,"disabled"]}})};var Zt=(n,t)=>t.id;function ei(n,t){if(n&1&&(br(0,"span",5),Ai(1),$r()),n&2){let e=Y8();Wo(),zm(e.selectedItem()?.rendererUrl);}}function ti(n,t){n&1&&(br(0,"mat-option",6),Ai(1,"No items available \u2014 click + to add"),$r()),n&2&&xd("disabled",true);}function ii(n,t){if(n&1){let e=J8();br(0,"mat-option",8)(1,"div",9)(2,"div",10),Ai(3),$r(),br(4,"div",5),Ai(5),$r()(),br(6,"button",11),Fm("click",function(r){let d=uk(e).$implicit,p=Y8(2);return lk(p.onEditRenderer(r,d))})("keydown",function(r){return r.stopPropagation()}),br(7,"mat-icon",12),Ai(8,"edit"),$r()(),br(9,"button",13),Fm("click",function(r){let d=uk(e).$implicit,p=Y8(2);return lk(p.onDeleteRenderer(r,d.id))})("keydown",function(r){return r.stopPropagation()}),br(10,"mat-icon",12),Ai(11,"delete"),$r()()();}if(n&2){let e=t.$implicit;xd("value",e.id),Wo(3),zm(e.name),Wo(2),zm(e.rendererUrl),Wo(),xd("disabled",e.readOnly)("matTooltip",e.readOnly?"Static configuration items cannot be edited":"Edit renderer"),Qo("aria-label","Edit "+e.name),Wo(3),xd("disabled",e.readOnly)("matTooltip",e.readOnly?"Static configuration items cannot be deleted":"Delete renderer"),Qo("aria-label","Delete "+e.name);}}function ni(n,t){if(n&1&&j8(0,ii,12,9,"mat-option",8,Zt),n&2){let e=Y8();H8(e.items());}}var Ie=class n extends ie{selectedRendererId=zR("default");rendererSelected=ZTe();settingsService=b(M);constructor(){super(),this.refreshItems();}getSelectedId(){return this.selectedRendererId()}refreshItems(){let t=this.settingsService.getRenderers();this.items.set(t);}emitSelection(t){t&&this.rendererSelected.emit(t);}deleteItem(t){this.settingsService.deleteCustomRenderer(t);}onAddRenderer(t){this.handleAdd(re,t);}onEditRenderer(t,e){this.handleEdit(re,t,e,"renderer");}onDeleteRenderer(t,e){this.handleDelete(t,e,"default");}static \u0275fac=function(e){return new(e||n)};static \u0275cmp=ln({type:n,selectors:[["a2ui-composer-renderer-selector"]],inputs:{selectedRendererId:[1,"selectedRendererId"]},outputs:{rendererSelected:"rendererSelected"},features:[Kn],decls:15,vars:6,consts:[[1,"renderer-selector-container"],["appearance","outline",1,"renderer-selector-form-field"],["id","renderer-select",3,"selectionChange","value","disabled"],[1,"renderer-trigger-content"],[1,"renderer-name"],[1,"renderer-url-subtext"],[1,"empty-state-option",3,"disabled"],["mat-icon-button","","type","button","aria-label","Add custom renderer",1,"add-renderer-button",3,"click","disabled"],[1,"renderer-option",3,"value"],[1,"renderer-option-content"],[1,"renderer-option-label"],["mat-icon-button","","type","button",1,"edit-renderer-button",3,"click","keydown","disabled","matTooltip"],["aria-hidden","true"],["mat-icon-button","","type","button",1,"delete-renderer-button",3,"click","keydown","disabled","matTooltip"]],template:function(e,i){e&1&&(br(0,"div",0)(1,"mat-form-field",1)(2,"mat-label"),Ai(3,"Renderer"),$r(),br(4,"mat-select",2),Fm("selectionChange",function(d){return i.onSelectionChange(d.value)}),br(5,"mat-select-trigger")(6,"div",3)(7,"span",4),Ai(8),$r(),Sd(9,ei,2,1,"span",5),$r()(),Sd(10,ti,2,1,"mat-option",6)(11,ni,2,0),$r()(),br(12,"button",7),Fm("click",function(d){return i.onAddRenderer(d)}),br(13,"mat-icon"),Ai(14,"add_circle"),$r()()()),e&2&&(Wo(4),xd("value",i.selectedRendererId())("disabled",i.disabled()),Wo(4),zm(i.selectedItem()?.name),Wo(),Id(i.selectedItem()?.rendererUrl?9:-1),Wo(),Id(i.items().length===0?10:11),Wo(2),xd("disabled",i.disabled()));},dependencies:[me,nt,de,xn,Cn,wn,re$1,K1,Hoe,li$1,ai$1,Yt$1,mt,IL],styles:[".renderer-selector-container[_ngcontent-%COMP%]{display:flex;width:100%}.renderer-selector-form-field[_ngcontent-%COMP%]{flex:1}.renderer-trigger-content[_ngcontent-%COMP%]{display:flex;flex-direction:column;overflow:hidden;line-height:normal}.renderer-trigger-content[_ngcontent-%COMP%]   .renderer-name[_ngcontent-%COMP%]{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.renderer-option[_ngcontent-%COMP%]{height:auto!important;line-height:normal!important;padding-top:8px!important;padding-bottom:8px!important}.renderer-option[_ngcontent-%COMP%]     .mdc-list-item__primary-text, .renderer-option[_ngcontent-%COMP%]     .mat-mdc-option-text{display:flex;align-items:center;width:100%;overflow:hidden}.renderer-option-content[_ngcontent-%COMP%]{display:flex;flex-direction:column;flex:1;min-width:0;overflow:hidden}.renderer-option-label[_ngcontent-%COMP%]{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.renderer-url-subtext[_ngcontent-%COMP%]{font-size:12px;color:var(--mat-option-supporting-text-color, #666);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.edit-renderer-button[_ngcontent-%COMP%]{margin-left:auto;flex-shrink:0;opacity:0;transition:opacity .15s ease-in-out}.renderer-option[_ngcontent-%COMP%]:hover   .edit-renderer-button[_ngcontent-%COMP%], .renderer-option[_ngcontent-%COMP%]:focus-within   .edit-renderer-button[_ngcontent-%COMP%]{opacity:1}.edit-renderer-button[disabled][_ngcontent-%COMP%]{pointer-events:auto}.delete-renderer-button[_ngcontent-%COMP%]{flex-shrink:0;opacity:0;transition:opacity .15s ease-in-out}.renderer-option[_ngcontent-%COMP%]:hover   .delete-renderer-button[_ngcontent-%COMP%], .renderer-option[_ngcontent-%COMP%]:focus-within   .delete-renderer-button[_ngcontent-%COMP%]{opacity:1}.delete-renderer-button[disabled][_ngcontent-%COMP%]{pointer-events:auto}.empty-state-option[_ngcontent-%COMP%]{font-style:italic}"]})};function ri(n,t){if(n&1&&(br(0,"div",7),Ai(1),$r()),n&2){let e=Y8();Wo(),zm(e.errorMessage());}}var ae=class n{fb=b(Oi);settingsService=b(M);dialogRef=b(Rf);data=b(Gw,{optional:true});errorMessage=yt(null);hideApiKey=yt(true);form=this.fb.group({name:[this.data?.apiKey?.name??"",[we.required,we.pattern(/\S/)]],apiKey:[this.data?.apiKey?.key??"",[we.required,we.pattern(/\S/)]]});toggleHideApiKey(){this.hideApiKey.update(t=>!t);}async onConfirm(){if(this.form.invalid){this.form.markAllAsTouched();return}this.errorMessage.set(null);let t=this.form.controls.name.value.trim(),e=this.form.controls.apiKey.value.trim(),i=this.data?.apiKey?.id||`custom-${Date.now()}`;try{await this.settingsService.saveCustomApiKey(i,t,e),this.dialogRef.close(i);}catch(r){this.errorMessage.set(r instanceof Error?r.message:"Failed to save custom API key.");}}static \u0275fac=function(e){return new(e||n)};static \u0275cmp=ln({type:n,selectors:[["a2ui-composer-add-api-key-dialog"]],decls:21,vars:8,consts:[["mat-dialog-title",""],[3,"ngSubmit","formGroup"],["appearance","outline",1,"full-width"],["matInput","","id","api-key-name-input","formControlName","name","placeholder","My Gemini Key"],["matInput","","id","api-key-value-input","formControlName","apiKey","placeholder","Paste your API key here",3,"type"],["mat-icon-button","","matSuffix","","type","button",1,"api-key-toggle-btn",3,"click"],["aria-hidden","true"],["role","alert",1,"error-message"],["align","end"],["mat-button","","type","button","mat-dialog-close",""],["mat-button","","type","submit","color","primary",3,"click","disabled"]],template:function(e,i){e&1&&(br(0,"h2",0),Ai(1),$r(),br(2,"mat-dialog-content")(3,"form",1),Fm("ngSubmit",function(d){return d.preventDefault(),i.onConfirm()}),br(4,"mat-form-field",2)(5,"mat-label"),Ai(6,"Name"),$r(),cR(7,"input",3),k3(),$r(),br(8,"mat-form-field",2)(9,"mat-label"),Ai(10,"API Key"),$r(),cR(11,"input",4),k3(),br(12,"button",5),Fm("click",function(){return i.toggleHideApiKey()}),br(13,"mat-icon",6),Ai(14),$r()()(),Sd(15,ri,2,1,"div",7),$r()(),br(16,"mat-dialog-actions",8)(17,"button",9),Ai(18,"Cancel"),$r(),br(19,"button",10),Fm("click",function(){return i.onConfirm()}),Ai(20),$r()()),e&2&&(Wo(),zm(i.data?.apiKey?"Edit Gemini API Key":"Add Gemini API Key"),Wo(2),xd("formGroup",i.form),Wo(4),O3(),Wo(4),xd("type",i.hideApiKey()?"password":"text"),O3(),Wo(),Qo("aria-label",i.hideApiKey()?"Show API key":"Hide API key"),Wo(2),zm(i.hideApiKey()?"visibility":"visibility_off"),Wo(),Id(i.errorMessage()?15:-1),Wo(4),xd("disabled",i.form.invalid),Wo(),Jb(" ",i.data?.apiKey?"Save":"Add"," "));},dependencies:[Ri,Ni,Et,Fi,Ii,Un,kn,IL,_L,EL,wL,DL,me,nt,de,Pt,Dn,Rn$1,K1,W1,Hoe,li$1,ai$1],styles:["mat-dialog-content[_ngcontent-%COMP%]{padding-top:12px}.full-width[_ngcontent-%COMP%]{width:100%;margin-bottom:12px;margin-top:4px}.error-message[_ngcontent-%COMP%]{color:var(--mat-sys-error, #b3261e);font-size:.875rem;margin-top:8px}"]})};var ai=(n,t)=>t.id;function oi(n,t){n&1&&(br(0,"mat-option",3),Ai(1,"No items available \u2014 click + to add"),$r()),n&2&&xd("disabled",true);}function di(n,t){if(n&1){let e=J8();br(0,"mat-option",5)(1,"span",6),Ai(2),$r(),br(3,"button",7),Fm("keydown",function(r){return r.stopPropagation()})("click",function(r){let d=uk(e).$implicit,p=Y8(2);return lk(p.onEditApiKey(r,d))}),br(4,"mat-icon",8),Ai(5,"edit"),$r()(),br(6,"button",9),Fm("keydown",function(r){return r.stopPropagation()})("click",function(r){let d=uk(e).$implicit,p=Y8(2);return lk(p.onDeleteApiKey(r,d.id))}),br(7,"mat-icon",8),Ai(8,"delete"),$r()()();}if(n&2){let e=t.$implicit;xd("value",e.id),Wo(2),zm(e.name),Wo(),xd("disabled",e.readOnly)("matTooltip",e.readOnly?"Static configuration items cannot be edited":"Edit API key"),Qo("aria-label","Edit "+e.name),Wo(3),xd("disabled",e.readOnly)("matTooltip",e.readOnly?"Static configuration items cannot be deleted":"Delete API key"),Qo("aria-label","Delete "+e.name);}}function li(n,t){if(n&1&&j8(0,di,9,8,"mat-option",5,ai),n&2){let e=Y8();H8(e.items());}}var Pe=class n extends ie{selectedApiKeyId=zR(null);apiKeySelected=ZTe();settingsService=b(M);constructor(){super(),this.refreshItems();}getSelectedId(){return this.selectedApiKeyId()}async refreshItems(){let t=await this.settingsService.getAvailableApiKeys();this.items.set(t);}emitSelection(t){this.apiKeySelected.emit(t);}async deleteItem(t){await this.settingsService.deleteCustomApiKey(t);}onAddApiKey(t){this.handleAdd(ae,t);}onEditApiKey(t,e){this.handleEdit(ae,t,e,"apiKey");}onDeleteApiKey(t,e){this.handleDelete(t,e,null);}static \u0275fac=function(e){return new(e||n)};static \u0275cmp=ln({type:n,selectors:[["a2ui-composer-api-key-selector"]],inputs:{selectedApiKeyId:[1,"selectedApiKeyId"]},outputs:{apiKeySelected:"apiKeySelected"},features:[Kn],decls:12,vars:5,consts:[[1,"api-key-selector-container"],["appearance","outline",1,"api-key-selector-form-field"],["id","api-key-select",3,"selectionChange","value","disabled"],[1,"empty-state-option",3,"disabled"],["mat-icon-button","","type","button","aria-label","Add Gemini API key",1,"add-api-key-button",3,"click","disabled"],[1,"api-key-option",3,"value"],[1,"api-key-option-label"],["mat-icon-button","","type","button",1,"edit-api-key-button",3,"keydown","click","disabled","matTooltip"],["aria-hidden","true"],["mat-icon-button","","type","button",1,"delete-api-key-button",3,"keydown","click","disabled","matTooltip"]],template:function(e,i){e&1&&(br(0,"div",0)(1,"mat-form-field",1)(2,"mat-label"),Ai(3,"API Key"),$r(),br(4,"mat-select",2),Fm("selectionChange",function(d){return i.onSelectionChange(d.value)}),br(5,"mat-select-trigger"),Ai(6),$r(),Sd(7,oi,2,1,"mat-option",3)(8,li,2,0),$r()(),br(9,"button",4),Fm("click",function(d){return i.onAddApiKey(d)}),br(10,"mat-icon"),Ai(11,"add_circle"),$r()()()),e&2&&(Wo(4),xd("value",i.selectedApiKeyId())("disabled",i.disabled()),Wo(2),Jb(" ",i.selectedItem()?.name," "),Wo(),Id(i.items().length===0?7:8),Wo(2),xd("disabled",i.disabled()));},dependencies:[me,nt,de,xn,Cn,wn,re$1,K1,Hoe,li$1,ai$1,Yt$1,mt,IL],styles:[".api-key-selector-container[_ngcontent-%COMP%]{display:flex;width:100%}.api-key-selector-form-field[_ngcontent-%COMP%]{flex:1}.api-key-option[_ngcontent-%COMP%]     .mdc-list-item__primary-text, .api-key-option[_ngcontent-%COMP%]     .mat-mdc-option-text{display:flex;align-items:center;width:100%;overflow:hidden}.api-key-option-label[_ngcontent-%COMP%]{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.edit-api-key-button[_ngcontent-%COMP%]{margin-left:auto;flex-shrink:0;opacity:0;transition:opacity .15s ease-in-out}.api-key-option[_ngcontent-%COMP%]:hover   .edit-api-key-button[_ngcontent-%COMP%], .api-key-option[_ngcontent-%COMP%]:focus-within   .edit-api-key-button[_ngcontent-%COMP%]{opacity:1}.edit-api-key-button[disabled][_ngcontent-%COMP%]{pointer-events:auto}.delete-api-key-button[_ngcontent-%COMP%]{flex-shrink:0;opacity:0;transition:opacity .15s ease-in-out}.api-key-option[_ngcontent-%COMP%]:hover   .delete-api-key-button[_ngcontent-%COMP%], .api-key-option[_ngcontent-%COMP%]:focus-within   .delete-api-key-button[_ngcontent-%COMP%]{opacity:1}.delete-api-key-button[disabled][_ngcontent-%COMP%]{pointer-events:auto}.empty-state-option[_ngcontent-%COMP%]{font-style:italic}"]})};var si=()=>({standalone:true}),ci=(n,t)=>t.id,mi=(n,t)=>t.name;function pi(n,t){if(n&1){let e=J8();br(0,"div",4)(1,"h3"),Ai(2,"Gemini API Provisioning"),$r(),br(3,"a2ui-composer-api-key-selector",27),Fm("apiKeySelected",function(r){uk(e);let d=Y8();return lk(d.onApiKeySelected(r))}),$r()();}if(n&2){let e=Y8();Wo(3),xd("selectedApiKeyId",e.selectedApiKeyId());}}function gi(n,t){n&1&&(br(0,"mat-card-footer",10),Ai(1," To obtain an API key: "),br(2,"ol")(3,"li"),Ai(4," Go to "),br(5,"a",28),Ai(6," Google AI Studio"),$r(),Ai(7," and sign in with your Google account. "),$r(),br(8,"li"),Ai(9,"Click Create API key."),$r(),br(10,"li"),Ai(11,"Select or create a Google Cloud project when prompted, then click Create key."),$r(),br(12,"li"),Ai(13,"Save your key in a secure location!"),$r()(),Ai(14," A2UI Composer encrypts your key and stores it locally in your browser's secure database using the "),br(15,"a",29),Ai(16,"Web Crypto API"),$r(),Ai(17,". Neither Google nor anyone else has access to this key. "),$r());}function ui(n,t){if(n&1&&(br(0,"code"),Ai(1),$r()),n&2){let e=Y8();Wo(),Jb("[System] Active renderer updated to ",e.activeRendererUrl());}}function hi(n,t){if(n&1&&(br(0,"code",18),Ai(1),$r()),n&2){let e=Y8();Wo(),Jb("[Catalog Error] ",e.catalogErrorMessage());}}function fi(n,t){n&1&&(br(0,"code",19),Ai(1,"[System] Catalog handshake completed successfully. Active catalog ready."),$r());}function yi(n,t){n&1&&(br(0,"code"),Ai(1,"[System] Catalog handshake in progress. Indexing metadata..."),$r());}function vi(n,t){n&1&&(br(0,"code"),Ai(1,"[System] Bridge connected. Initializing catalog handshake..."),$r());}function _i(n,t){n&1&&(br(0,"code"),Ai(1,"[System] Bridge disconnected. Waiting for iframe handshake initialization..."),$r());}function bi(n,t){if(n&1&&Ai(0),n&2){let e=Y8().$implicit;Jb(" Connected (",e.tools?.length||0," tools) ");}}function wi(n,t){n&1&&Ai(0," Connecting... ");}function Ci(n,t){if(n&1&&Ai(0),n&2){let e=Y8().$implicit;Jb(" Error: ",e.errorMessage||"Failed to connect"," ");}}function Si(n,t){n&1&&Ai(0," Disconnected ");}function Mi(n,t){if(n&1&&(br(0,"span",43),Ai(1),$r()),n&2){let e=t.$implicit;Wo(),zm(e.name);}}function ki(n,t){if(n&1&&(br(0,"div",42),j8(1,Mi,2,1,"span",43,mi),$r()),n&2){let e=Y8().$implicit;Wo(),H8(e.tools);}}function xi(n,t){if(n&1){let e=J8();br(0,"div",26)(1,"div",30)(2,"div",31)(3,"mat-slide-toggle",32),Fm("change",function(r){let d=uk(e).$implicit,p=Y8();return lk(p.toggleMcpServer(d.id,r.checked))}),$r(),br(4,"div",33)(5,"div",34)(6,"span",35),Ai(7),$r(),br(8,"span",36),Sd(9,bi,1,1)(10,wi,1,0)(11,Ci,1,1)(12,Si,1,0),$r()(),br(13,"span",37),Ai(14),$r()()(),br(15,"div",38)(16,"button",39),Fm("click",function(){let r=uk(e).$implicit,d=Y8();return lk(d.reconnectMcpServer(r.id))}),br(17,"mat-icon",40),Ai(18,"refresh"),$r()(),br(19,"button",41),Fm("click",function(){let r=uk(e).$implicit,d=Y8();return lk(d.removeMcpServer(r.id))}),br(20,"mat-icon",40),Ai(21,"delete"),$r()()()(),Sd(22,ki,3,0,"div",42),$r();}if(n&2){let e=t.$implicit;Wo(3),xd("checked",e.enabled),Qo("aria-label","Toggle "+(e.name||e.url)),Wo(4),zm(e.name||e.url),Wo(),Qo("data-status",e.status),Wo(),Id(e.status==="connected"?9:e.status==="connecting"?10:e.status==="error"?11:12),Wo(5),zm(e.url),Wo(8),Id(e.tools&&e.tools.length>0?22:-1);}}var Vt=class n{fb=b(Oi);startupResolution=b(RB);startupConfigState=b(rg);hostCommunication=b(tZ);catalogManagement=b(oe);configProvider=b(Hu);settingsService=b(M);mcpManager=b(lv);newMcpServerUrl=yt("");is1PAuthEnabled=b(ng);selectedRendererId=yt(null);selectedApiKeyId=Od(()=>this.settingsService.selectedApiKeyId());selectedRendererOption=Od(()=>{let t=this.selectedRendererId();if(!(!t||t==="Custom"))return this.settingsService.getRenderers().find(e=>e.id===t)});isThirdParty=yt(false);isApiKeyProvidedByConfig=Od(()=>this.configProvider.isApiKeyProvidedByConfig());isApiKeyUnmaskDisabled=Od(()=>this.isApiKeyProvidedByConfig());hideApiKey=yt(true);forceThirdPartyAuth=yt(false);bridgeConnected=Od(()=>this.hostCommunication.latestEnvelope()!==null);catalogStatus=Od(()=>this.catalogManagement.catalogError()?"Error":this.catalogManagement.isHandshakeInProgress()?"Indexing":this.catalogManagement.activeCatalog()?"Connected":"Disconnected");catalogErrorMessage=Od(()=>this.catalogManagement.catalogError());activeRendererUrl=Od(()=>this.startupConfigState.resolvedUrl());settingsForm=this.fb.group({});constructor(){La(()=>{let t=this.settingsService.selectedRendererId()||"default";Oi$1(()=>{this.selectedRendererId.set(t);});});}ngOnInit(){let t=this.settingsService.selectedRendererId()||"default";this.selectedRendererId.set(t),this.settingsService.getEffectiveApiKey();let e=this.startupResolution.isThirdPartyEnvironment();this.isThirdParty.set(e),this.forceThirdPartyAuth.set(this.configProvider.authType()==="3p");}async onRendererSelected(t){let e=this.selectedRendererId();this.selectedRendererId.set(t),await this.settingsService.selectRenderer(t)||this.selectedRendererId.set(e);}async onApiKeySelected(t){await this.settingsService.selectApiKey(t);}toggleHideApiKey(){this.isApiKeyUnmaskDisabled()||this.hideApiKey.set(!this.hideApiKey());}toggleForceThirdPartyAuth(){let t=!this.forceThirdPartyAuth();this.forceThirdPartyAuth.set(t),this.configProvider.setForcedAuthMode(t?"3p":"1p"),this.isThirdParty.set(this.startupResolution.isThirdPartyEnvironment());}async addMcpServer(){let t=this.newMcpServerUrl().trim();t&&(this.newMcpServerUrl.set(""),await this.mcpManager.addServer(t));}async removeMcpServer(t){await this.mcpManager.removeServer(t);}async toggleMcpServer(t,e){await this.mcpManager.toggleServer(t,e);}async reconnectMcpServer(t){await this.mcpManager.connectServer(t);}static \u0275fac=function(e){return new(e||n)};static \u0275cmp=ln({type:n,selectors:[["a2ui-composer-settings"]],decls:61,vars:16,consts:[[1,"settings-container"],[1,"settings-card"],["mat-card-title",""],[3,"formGroup"],[1,"form-section"],[3,"rendererSelected","selectedRendererId"],[1,"form-section","first-party-auth-section",3,"hidden"],[1,"description"],[1,"toggle-container",2,"margin-top","12px"],[3,"change","checked"],[1,"get-api-key"],[1,"status-card"],["mat-card-subtitle",""],[1,"status-badges"],[1,"status-badge","bridge-badge",3,"color"],[1,"status-badge","catalog-badge",3,"color"],[1,"overlay-logs"],[1,"logs-console"],[1,"error-log"],[1,"success-log"],[1,"status-card","mcp-card"],[1,"mcp-add-row"],["appearance","outline","subscriptSizing","dynamic",1,"mcp-url-field"],["matInput","","placeholder","http://localhost:3001/mcp","aria-label","MCP Server URL",3,"ngModelChange","ngModel","ngModelOptions"],["type","button","mat-flat-button","","color","primary",1,"mcp-add-btn",3,"click","disabled"],[1,"mcp-server-list"],[1,"mcp-server-item"],[3,"apiKeySelected","selectedApiKeyId"],["href","https://aistudio.google.com/api-keys","target","_blank","rel","noopener noreferrer"],["href","https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API","target","_blank","rel","noopener noreferrer"],[1,"mcp-server-top-row"],[1,"mcp-server-main"],[1,"mcp-server-toggle",3,"change","checked"],[1,"mcp-server-info"],[1,"mcp-server-header"],[1,"mcp-server-name"],[1,"mcp-server-status"],[1,"mcp-server-url"],[1,"mcp-server-actions"],["type","button","mat-icon-button","","matTooltip","Reconnect","aria-label","Reconnect MCP Server",3,"click"],["aria-hidden","true"],["type","button","mat-icon-button","","color","warn","matTooltip","Delete Server","aria-label","Delete MCP Server",3,"click"],[1,"mcp-server-tools"],[1,"mcp-tool-name"]],template:function(e,i){e&1&&(br(0,"div",0)(1,"mat-card",1)(2,"mat-card-header")(3,"h2",2),Ai(4,"A2UI Composer Settings"),$r()(),br(5,"mat-card-content")(6,"form",3)(7,"div",4)(8,"h3"),Ai(9,"Renderer"),$r(),br(10,"a2ui-composer-renderer-selector",5),Fm("rendererSelected",function(d){return i.onRendererSelected(d)}),$r()(),Sd(11,pi,4,1,"div",4),br(12,"div",6)(13,"h3"),Ai(14,"Developer Authentication Overrides"),$r(),br(15,"p",7),Ai(16," Simulate external 3P context to verify Gemini API key provisioning workflows. "),$r(),br(17,"div",8)(18,"mat-slide-toggle",9),Fm("change",function(){return i.toggleForceThirdPartyAuth()}),Ai(19," Force External Third-Party Authentication Mode "),$r()()()()(),Sd(20,gi,18,0,"mat-card-footer",10),$r(),br(21,"mat-card",11)(22,"mat-card-header")(23,"h2",2),Ai(24,"Connection Status & Diagnostics"),$r(),br(25,"p",12),Ai(26,"Real-time monitoring bridge"),$r()(),br(27,"mat-card-content")(28,"div",13)(29,"mat-chip-set")(30,"mat-chip",14),Ai(31),$r(),br(32,"mat-chip",15),Ai(33),$r()()(),br(34,"div",16)(35,"h4"),Ai(36,"Overlay Logs Preview"),$r(),br(37,"div",17),Sd(38,ui,2,1,"code"),Sd(39,hi,2,1,"code",18)(40,fi,2,0,"code",19)(41,yi,2,0,"code")(42,vi,2,0,"code")(43,_i,2,0,"code"),$r()()()(),br(44,"mat-card",20)(45,"mat-card-header")(46,"h2",2),Ai(47,"MCP Servers"),$r(),br(48,"p",12),Ai(49," Configure HTTP Model Context Protocol (MCP) servers for use in renderers that support the A2UI MCP Catalog. "),$r()(),br(50,"mat-card-content")(51,"div",21)(52,"mat-form-field",22)(53,"mat-label"),Ai(54,"Server URL"),$r(),br(55,"input",23),Fm("ngModelChange",function(d){return i.newMcpServerUrl.set(d)}),$r(),k3(),$r(),br(56,"button",24),Fm("click",function(){return i.addMcpServer()}),Ai(57," Add Server "),$r()(),br(58,"div",25),j8(59,xi,23,7,"div",26,ci),$r()()()()),e&2&&(Wo(6),xd("formGroup",i.settingsForm),Wo(4),xd("selectedRendererId",i.selectedRendererId()),Wo(),Id(i.isThirdParty()?11:-1),Wo(),xd("hidden",!i.is1PAuthEnabled),Wo(6),xd("checked",i.forceThirdPartyAuth()),Wo(2),Id(i.isThirdParty()?20:-1),Wo(10),xd("color",i.bridgeConnected()?"primary":"accent"),Wo(),Jb("Bridge: ",i.bridgeConnected()?"Connected":"Disconnected"),Wo(),xd("color",i.catalogStatus()==="Connected"?"primary":i.catalogStatus()==="Indexing"?"accent":i.catalogStatus()==="Error"?"warn":void 0),Wo(),Jb("Catalog Handshake: ",i.catalogStatus()),Wo(5),Id(i.activeRendererUrl()?38:-1),Wo(),Id(i.catalogErrorMessage()?39:i.catalogStatus()==="Connected"?40:i.catalogStatus()==="Indexing"?41:i.bridgeConnected()?42:43),Wo(16),xd("ngModel",i.newMcpServerUrl())("ngModelOptions",x6(15,si)),O3(),Wo(),xd("disabled",!i.newMcpServerUrl().trim()),Wo(3),H8(i.mcpManager.servers()));},dependencies:[xi$1,Ni,Et,Fi,Ii,Rn,Ri,Un,me,nt,de,Dn,Rn$1,K1,W1,Hoe,li$1,ai$1,E,F,k,z,T,S,j,ki$1,Et$1,xi$2,Nt,Te,Yt$1,mt,Ie,Pe],styles:[`[_nghost-%COMP%]{display:block;height:100%;overflow-y:auto}.settings-container[_ngcontent-%COMP%]{padding:24px;max-width:600px;margin:0 auto}.form-section[_ngcontent-%COMP%]{margin-top:16px}.form-section[_ngcontent-%COMP%]   h3[_ngcontent-%COMP%]{margin-bottom:8px}.full-width[_ngcontent-%COMP%], a2ui-composer-renderer-selector[_ngcontent-%COMP%], a2ui-composer-api-key-selector[_ngcontent-%COMP%], mat-form-field[_ngcontent-%COMP%]{width:100%;box-sizing:border-box}.locked-notice[_ngcontent-%COMP%]{display:flex;align-items:center;gap:8px;padding:10px 14px;background-color:var(--mat-sys-error-container);color:var(--mat-sys-on-error-container);border-radius:6px;margin-bottom:16px;font-size:13px;font-weight:500}.save-error-banner[_ngcontent-%COMP%]{display:flex;align-items:center;gap:8px;padding:12px 16px;background-color:var(--mat-sys-error-container);color:var(--mat-sys-on-error-container);border-radius:6px;margin:16px 24px 0;font-size:13px;font-weight:500}.status-card[_ngcontent-%COMP%]{margin-top:24px}.status-badges[_ngcontent-%COMP%]{margin-top:12px;margin-bottom:16px}.overlay-logs[_ngcontent-%COMP%]   h4[_ngcontent-%COMP%]{margin-bottom:8px;font-size:14px}.overlay-logs[_ngcontent-%COMP%]   .logs-console[_ngcontent-%COMP%]{background-color:var(--mat-sys-surface-container-lowest);color:var(--mat-sys-primary);padding:12px;border-radius:6px;font-family:monospace;font-size:12px;line-height:1.5}.error-log[_ngcontent-%COMP%]{color:var(--mat-sys-error);font-weight:700}.success-log[_ngcontent-%COMP%]{color:var(--mat-sys-tertiary)}mat-card-header[_ngcontent-%COMP%]   h2[mat-card-title][_ngcontent-%COMP%]{margin:0;font-size:20px;font-weight:500;line-height:28px}mat-card-header[_ngcontent-%COMP%]   [mat-card-subtitle][_ngcontent-%COMP%]{margin:4px 0 0;font-size:14px;font-weight:400;line-height:20px;color:var(--mat-sys-on-surface-variant)}  body .mat-mdc-slide-toggle{--mat-slide-toggle-track-width: 52px;--mat-slide-toggle-track-height: 32px;--mat-slide-toggle-track-shape: 9999px;--mat-slide-toggle-handle-width: 100%;--mat-slide-toggle-handle-height: 24px;--mat-slide-toggle-handle-shape: 9999px;--mat-slide-toggle-with-icon-handle-size: 24px;--mat-slide-toggle-selected-handle-size: 24px;--mat-slide-toggle-unselected-handle-size: 16px;--mat-slide-toggle-selected-handle-horizontal-margin: 0 24px;--mat-slide-toggle-selected-with-icon-handle-horizontal-margin: 0 24px;--mat-slide-toggle-unselected-handle-horizontal-margin: 0 8px;--mat-slide-toggle-unselected-with-icon-handle-horizontal-margin: 0 4px}  body .mat-mdc-slide-toggle .mat-internal-form-field,   body .mat-mdc-slide-toggle .mdc-form-field{display:inline-flex!important;align-items:center!important;gap:12px!important}  body .mat-mdc-slide-toggle label:not(:empty),   body .mat-mdc-slide-toggle .mdc-label:not(:empty){padding-left:4px!important;white-space:normal!important;line-height:1.4!important;color:var(--mat-sys-on-surface)!important}.warning-hint[_ngcontent-%COMP%]{color:var(--mat-sys-on-surface-variant);display:block;margin-top:4px}.get-api-key[_ngcontent-%COMP%]{font-size:var(--mat-sys-body-small-size, 12px);padding-left:24px;padding-bottom:12px}.mcp-add-row[_ngcontent-%COMP%]{display:flex;gap:12px;align-items:center;margin-top:16px}.mcp-add-row[_ngcontent-%COMP%]   .mcp-url-field[_ngcontent-%COMP%]{flex:1}.mcp-add-row[_ngcontent-%COMP%]   .mcp-add-btn[_ngcontent-%COMP%]{height:56px;padding:0 24px;border-radius:8px;white-space:nowrap;flex-shrink:0}.mcp-server-list[_ngcontent-%COMP%]{display:flex;flex-direction:column;gap:12px;margin-top:16px}.mcp-server-item[_ngcontent-%COMP%]{display:flex;flex-direction:column;gap:12px;padding:14px 16px;border-radius:10px;border:1px solid var(--mat-sys-outline-variant);background-color:var(--mat-sys-surface-container-low)}.mcp-server-top-row[_ngcontent-%COMP%]{display:flex;align-items:center;justify-content:space-between;gap:12px}.mcp-server-main[_ngcontent-%COMP%]{display:flex;align-items:center;gap:14px;min-width:0;flex:1}.mcp-server-toggle[_ngcontent-%COMP%]{flex-shrink:0}.mcp-server-info[_ngcontent-%COMP%]{display:flex;flex-direction:column;min-width:0;gap:2px}.mcp-server-header[_ngcontent-%COMP%]{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.mcp-server-name[_ngcontent-%COMP%]{font-weight:600;font-size:14px;color:var(--mat-sys-on-surface)}.mcp-server-status[_ngcontent-%COMP%]{font-size:12px;font-weight:500;padding:2px 10px;border-radius:9999px;background-color:var(--mat-sys-surface-container-high)}.mcp-server-status[data-status=connected][_ngcontent-%COMP%]{color:var(--mat-sys-tertiary)}.mcp-server-status[data-status=error][_ngcontent-%COMP%]{color:var(--mat-sys-error)}.mcp-server-url[_ngcontent-%COMP%]{font-size:12px;color:var(--mat-sys-on-surface-variant);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mcp-server-tools[_ngcontent-%COMP%]{display:flex;flex-wrap:wrap;gap:6px;padding-top:10px;border-top:1px solid var(--mat-sys-outline-variant)}.mcp-tool-name[_ngcontent-%COMP%]{font-family:monospace;font-size:11px;padding:3px 8px;border-radius:6px;background-color:var(--mat-sys-surface-container-high);color:var(--mat-sys-on-surface)}.mcp-server-actions[_ngcontent-%COMP%]{display:flex;align-items:center;gap:4px;flex-shrink:0}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+`]})};export{Vt as Settings};
