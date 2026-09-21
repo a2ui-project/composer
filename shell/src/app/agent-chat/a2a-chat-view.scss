@@ -25,7 +25,7 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: #ffffff;
+  background: var(--mat-sys-surface, #ffffff);
   overflow: hidden;
   position: relative;
 
@@ -57,8 +57,8 @@
     .side-canvas-column {
       flex: 1.1;
       min-width: 360px;
-      border-left: 1px solid #e0e0e0;
-      background: #ffffff;
+      border-left: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+      background: var(--mat-sys-surface, #ffffff);
       display: flex;
       flex-direction: column;
       height: 100%;
@@ -68,8 +68,8 @@
         align-items: center;
         justify-content: space-between;
         padding: 8px 16px;
-        background: #ffffff;
-        border-bottom: 1px solid #e0e0e0;
+        background: var(--mat-sys-surface, #ffffff);
+        border-bottom: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
         min-height: 48px;
         box-sizing: border-box;
 
