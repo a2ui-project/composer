@@ -19,7 +19,11 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {doesCatalogSupportMcp} from '../../storage/models/catalog-storage.model';
 import {formatJson} from '../../utils/json';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
-import {McpClientManagerService, McpServerConfig} from '../../mcp/mcp-client-manager.service';
+import {
+  McpClientManagerService,
+  McpServerConfig,
+  McpToolInfo,
+} from '../../mcp/mcp-client-manager.service';
 
 /**
  * Constructs dynamic system prompts based on the provided LLM intent and active catalog states.
@@ -53,15 +57,43 @@ export class ChatPromptFactoryService {
   });
 
   private buildMcpInstructions(activeServers: McpServerConfig[]): string {
-    const toolNames = Array.from(
-      new Set(activeServers.flatMap(server => (server.tools || []).map(tool => tool.name))),
-    );
+    const toolsMap = new Map<string, McpToolInfo>();
+    for (const server of activeServers) {
+      for (const tool of server.tools || []) {
+        if (!toolsMap.has(tool.name)) {
+          toolsMap.set(tool.name, tool);
+        }
+      }
+    }
 
-    if (toolNames.length === 0) {
+    if (toolsMap.size === 0) {
       return '';
     }
 
-    const toolsMarkdown = toolNames.map(name => `- \`${name}\``).join('\n');
+    const defaultOutputSchema = {
+      type: 'object',
+      properties: {
+        content: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              type: {type: 'string'},
+              text: {type: 'string'},
+            },
+          },
+        },
+      },
+    };
+
+    const toolsMarkdown = Array.from(toolsMap.values())
+      .map(tool => {
+        const desc = tool.description ? ` - ${tool.description}` : '';
+        const inputSchemaStr = JSON.stringify(tool.inputSchema || {type: 'object', properties: {}});
+        const outputSchemaStr = JSON.stringify(tool.outputSchema || defaultOutputSchema);
+        return `- **\`${tool.name}\`**${desc}\n  - **Input Schema**: \`${inputSchemaStr}\`\n  - **Output Schema**: \`${outputSchemaStr}\``;
+      })
+      .join('\n');
 
     return `
 

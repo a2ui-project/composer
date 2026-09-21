@@ -24,6 +24,7 @@ export interface McpToolInfo {
   name: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
 }
 
 export interface McpServerConfig {
@@ -154,6 +155,7 @@ export class McpClientManagerService {
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema as Record<string, unknown> | undefined,
+        outputSchema: (t as unknown as {outputSchema?: Record<string, unknown>}).outputSchema,
       }));
 
       this.clients.set(id, client);

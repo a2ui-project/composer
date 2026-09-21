@@ -64,7 +64,7 @@ describe('ChatPromptFactoryService', () => {
     expect(service.systemPrompt()).not.toContain('Available MCP Tools & Catalog Instructions');
   });
 
-  it('appends active MCP tool names without server name or URL when callMcpTool is present in catalog functions', () => {
+  it('appends active MCP tools with input and output schema without server name or URL when callMcpTool is present in catalog functions', () => {
     mcpSpy.getActiveServersWithTools.mockReturnValue([
       {
         id: 'srv-1',
@@ -72,7 +72,14 @@ describe('ChatPromptFactoryService', () => {
         url: 'http://localhost:3001/mcp',
         enabled: true,
         status: 'connected',
-        tools: [{name: 'read_file', description: 'Reads a file'}],
+        tools: [
+          {
+            name: 'read_file',
+            description: 'Reads a file',
+            inputSchema: {type: 'object', properties: {path: {type: 'string'}}},
+            outputSchema: {type: 'object', properties: {content: {type: 'string'}}},
+          },
+        ],
       },
     ]);
     catalogSpy.activeCatalog.mockReturnValue({
@@ -81,6 +88,10 @@ describe('ChatPromptFactoryService', () => {
     });
     expect(service.systemPrompt()).toContain('Available MCP Tools & Catalog Instructions');
     expect(service.systemPrompt()).toContain('read_file');
+    expect(service.systemPrompt()).toContain('Input Schema');
+    expect(service.systemPrompt()).toContain('Output Schema');
+    expect(service.systemPrompt()).toContain('"path":{"type":"string"}');
+    expect(service.systemPrompt()).toContain('"content":{"type":"string"}');
     expect(service.systemPrompt()).not.toContain('fs-server');
     expect(service.systemPrompt()).not.toContain('http://localhost:3001/mcp');
   });
