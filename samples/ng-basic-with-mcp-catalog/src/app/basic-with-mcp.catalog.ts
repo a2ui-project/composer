@@ -17,7 +17,7 @@
 import {Injectable, inject} from '@angular/core';
 import {BasicCatalog} from '@a2ui/angular/v0_9';
 import {Catalog, ComponentApi, FunctionImplementation} from '@a2ui/web_core/v0_9';
-import {a2uiBridge, createMcpCatalogFunctions, RendererProcessor} from 'a2ui-bridge';
+import {a2uiBridge, createMcpCatalogFunctions} from 'a2ui-bridge';
 
 export const BASIC_WITH_MCP_CATALOG_ID =
   'https://a2ui.org/specification/v0_9/catalogs/basic_with_mcp/catalog.json';
@@ -43,10 +43,7 @@ export class BasicWithMcpCatalog extends Catalog<ComponentApi> {
     const mcpFunctions = createMcpCatalogFunctions(
       {
         processMessages: msgs => {
-          const activeProcessor = (
-            a2uiBridge as unknown as {activeRenderer?: {processor?: RendererProcessor}}
-          ).activeRenderer?.processor;
-          activeProcessor?.processMessages(msgs);
+          a2uiBridge.getActiveProcessor()?.processMessages(msgs);
         },
       },
       async () => a2uiBridge.getMcpClient(),

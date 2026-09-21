@@ -242,6 +242,13 @@ export class PreviewBridge {
   }
 
   /**
+   * Returns the currently attached renderer processor, if any.
+   */
+  getActiveProcessor(): RendererProcessor | undefined {
+    return this.activeRenderer?.processor;
+  }
+
+  /**
    * Initializes a new PreviewBridge instance.
    * Sets up the global window message listener, observes layout dimensions, and applies initial theme from URL if present.
    */
