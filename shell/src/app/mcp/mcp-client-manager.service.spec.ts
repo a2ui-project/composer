@@ -91,7 +91,7 @@ describe('McpClientManagerService', () => {
     expect(servers[0].tools).toHaveLength(1);
     expect(service.getActiveServersWithTools()).toHaveLength(1);
 
-    const res = await service.callTool('fs', 'list_directory', {path: '/tmp'});
+    const res = await service.callTool('list_directory', {path: '/tmp'});
     expect(callToolMock).toHaveBeenCalledWith({
       name: 'list_directory',
       arguments: {path: '/tmp'},
@@ -119,7 +119,7 @@ describe('McpClientManagerService', () => {
     expect(service.servers()[0].status).toBe('error');
     expect(service.servers()[0].errorMessage).toContain('Connection refused');
 
-    await expect(service.callTool('unknown-server', 'tool', {})).rejects.toThrow(
+    await expect(service.callTool('unknown-tool', {})).rejects.toThrow(
       /No connected MCP server found/,
     );
 

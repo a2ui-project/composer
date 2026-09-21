@@ -223,24 +223,22 @@ export class PreviewBridge {
 
   private readonly cachedParentOrigin: string | null = null;
 
-  /** Registry of active iframe MCP proxy clients keyed by server name. */
-  private readonly mcpClients = new Map<string, IframeMcpClient>();
+  /** Cached iframe MCP proxy client. */
+  private mcpClient: IframeMcpClient | null = null;
 
   /**
-   * Returns an IframeMcpClient proxy for the given server name, creating and caching it if needed.
+   * Returns the IframeMcpClient proxy, creating and caching it if needed.
    */
-  getMcpClient(server: string): IframeMcpClient {
-    let client = this.mcpClients.get(server);
-    if (!client) {
-      client = new IframeMcpClient(server, payload => {
+  getMcpClient(): IframeMcpClient {
+    if (!this.mcpClient) {
+      this.mcpClient = new IframeMcpClient(payload => {
         this.sendMessage({
           type: PreviewBridgeMessageType.MCP_REQUEST,
           payload,
         });
       });
-      this.mcpClients.set(server, client);
     }
-    return client;
+    return this.mcpClient;
   }
 
   /**
@@ -409,7 +407,7 @@ export class PreviewBridge {
       }
     }
     this.activeConnections.clear();
-    this.mcpClients.clear();
+    this.mcpClient = null;
   }
 
   private resolveExpectedParentOrigin(): string {
@@ -513,14 +511,12 @@ export class PreviewBridge {
   };
 
   /**
-   * Routes incoming MCP_RESPONSE messages to the matching IframeMcpClient pending request.
+   * Routes incoming MCP_RESPONSE messages to the IframeMcpClient pending request.
    */
   private handleMcpResponse(payload: unknown): void {
     const payloadObj = payload as McpResponsePayload | undefined;
     if (!payloadObj || typeof payloadObj.requestId !== 'string') return;
-    for (const client of this.mcpClients.values()) {
-      client.handleResponse(payloadObj);
-    }
+    this.mcpClient?.handleResponse(payloadObj);
   }
 
   /**

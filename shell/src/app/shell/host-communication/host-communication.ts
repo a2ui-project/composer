@@ -235,17 +235,21 @@ export class HostCommunication implements OnDestroy {
       }
 
       if (type === PreviewBridgeMessageType.MCP_REQUEST) {
+        this.isRendererReadySignal.set(true);
         const req = data.payload as McpRequestPayload;
-        const sourceWin = (event.source as Window) ?? null;
+        const sourceTarget =
+          Array.from(this.registeredIframes).find(f => f.contentWindow === event.source) ??
+          (event.source as Window) ??
+          null;
         void this.mcpManager
-          .callTool(req.server, req.toolName, req.args)
+          .callTool(req.toolName, req.args)
           .then(result => {
             this.sendMessage(
               {
                 type: PreviewBridgeMessageType.MCP_RESPONSE,
                 payload: {requestId: req.requestId, result},
               },
-              sourceWin,
+              sourceTarget,
             );
           })
           .catch((err: unknown) => {
@@ -257,7 +261,7 @@ export class HostCommunication implements OnDestroy {
                   error: err instanceof Error ? err.message : String(err),
                 },
               },
-              sourceWin,
+              sourceTarget,
             );
           });
       }
@@ -320,6 +324,19 @@ export class HostCommunication implements OnDestroy {
     }
   }
 
+  private isIframeElement(target: HTMLIFrameElement | Window): target is HTMLIFrameElement {
+    if (typeof HTMLIFrameElement !== 'undefined' && target instanceof HTMLIFrameElement) {
+      return true;
+    }
+    try {
+      return (
+        'contentWindow' in target && typeof (target as unknown as Window).postMessage !== 'function'
+      );
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Registers an active iframe DOM element or content window target and flushes
    * any buffered early messages. Supports multiple concurrent iframes.
@@ -338,14 +355,14 @@ export class HostCommunication implements OnDestroy {
     }
 
     let windowTarget: Window | null = null;
-    if ('contentWindow' in target) {
-      this.iframeElement = target as HTMLIFrameElement;
-      this.registeredIframes.add(target as HTMLIFrameElement);
+    if (this.isIframeElement(target)) {
+      this.iframeElement = target;
+      this.registeredIframes.add(target);
       windowTarget = target.contentWindow;
     } else {
       this.iframeElement = null;
-      this.registeredWindows.add(target as Window);
-      windowTarget = target as Window;
+      this.registeredWindows.add(target);
+      windowTarget = target;
     }
 
     this.iframeWindow = windowTarget;
@@ -365,8 +382,8 @@ export class HostCommunication implements OnDestroy {
    */
   unregisterIframe(target: HTMLIFrameElement | Window): void {
     if (!target) return;
-    if ('contentWindow' in target) {
-      this.registeredIframes.delete(target as HTMLIFrameElement);
+    if (this.isIframeElement(target)) {
+      this.registeredIframes.delete(target);
       if (this.iframeElement === target) {
         this.iframeElement = this.registeredIframes.values().next().value ?? null;
         this.iframeWindow = this.iframeElement
@@ -375,7 +392,7 @@ export class HostCommunication implements OnDestroy {
       }
     } else {
       // Target is a direct Window reference (e.g. external popout or window-only test target).
-      this.registeredWindows.delete(target as Window);
+      this.registeredWindows.delete(target);
       if (this.iframeWindow === target) {
         const nextWindow = this.registeredWindows.values().next().value ?? null;
         if (nextWindow) {
@@ -412,7 +429,7 @@ export class HostCommunication implements OnDestroy {
 
     let targetWindow: Window | null = null;
     if (target) {
-      targetWindow = 'contentWindow' in target ? target.contentWindow : (target as Window);
+      targetWindow = this.isIframeElement(target) ? target.contentWindow : target;
     } else {
       targetWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
     }

@@ -816,10 +816,6 @@
               "$ref": "#/$defs/common_types_DynamicString",
               "description": "The name of the MCP tool to execute."
             },
-            "server": {
-              "$ref": "#/$defs/common_types_DynamicString",
-              "description": "Optional MCP server name."
-            },
             "arguments": {
               "type": "object",
               "description": "The arguments to pass to the MCP tool.",

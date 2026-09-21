@@ -30,7 +30,6 @@ export class IframeMcpClient {
   private pendingRequests = new Map<string, PendingRequest>();
 
   constructor(
-    private readonly server: string,
     private readonly sendMcpRequest: (payload: McpRequestPayload) => void,
     private readonly timeoutMs = 30000,
   ) {}
@@ -44,18 +43,13 @@ export class IframeMcpClient {
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(requestId);
-        reject(
-          new Error(
-            `MCP tool call "${params.name}" on server "${this.server}" timed out after ${this.timeoutMs}ms`,
-          ),
-        );
+        reject(new Error(`MCP tool call "${params.name}" timed out after ${this.timeoutMs}ms`));
       }, this.timeoutMs);
 
       this.pendingRequests.set(requestId, {resolve, reject, timer});
 
       this.sendMcpRequest({
         requestId,
-        server: this.server,
         toolName: params.name,
         args: params.arguments ?? {},
       });

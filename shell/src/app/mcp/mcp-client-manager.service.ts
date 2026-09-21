@@ -211,22 +211,11 @@ export class McpClientManagerService {
     );
   }
 
-  async callTool(
-    serverNameOrToolName: string,
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<unknown> {
+  async callTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     const activeServers = this.getActiveServersWithTools();
-    let targetServer = activeServers.find(
-      s => s.name === serverNameOrToolName || s.id === serverNameOrToolName,
-    );
+    const targetServer = activeServers.find(s => s.tools?.some(t => t.name === toolName));
     if (!targetServer) {
-      targetServer = activeServers.find(s => s.tools?.some(t => t.name === toolName));
-    }
-    if (!targetServer) {
-      throw new Error(
-        `No connected MCP server found for "${serverNameOrToolName}" or tool "${toolName}".`,
-      );
+      throw new Error(`No connected MCP server found for tool "${toolName}".`);
     }
 
     const client = this.clients.get(targetServer.id);

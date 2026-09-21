@@ -207,7 +207,6 @@ export declare interface A2uiComponentInstance {
 /** Payload for MCP_REQUEST message type. */
 export declare interface McpRequestPayload {
   requestId: string;
-  server: string;
   toolName: string;
   args: Record<string, unknown>;
 }

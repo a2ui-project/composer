@@ -55,13 +55,13 @@ export interface McpMessageProcessor {
 }
 
 /**
- * Resolves the connected MCP client for a given tool or server name.
+ * Resolves the connected MCP client for a given tool name.
  *
  * May return `null` or `undefined` if no client is currently available,
  * which causes the tool call to fail with an error.
  */
 export type McpClientResolver = (
-  toolOrServer: string,
+  toolName: string,
 ) => McpToolClient | undefined | null | Promise<McpToolClient | undefined | null>;
 
 /**
@@ -77,9 +77,6 @@ export const CallMcpToolApi: FunctionApiDefinition = {
     name: (DynamicStringSchema as unknown as z.ZodTypeAny).describe(
       'The name of the MCP tool to execute.',
     ),
-    server: (DynamicStringSchema as unknown as z.ZodTypeAny)
-      .optional()
-      .describe('Optional MCP server name.'),
     arguments: z
       .record(DynamicValueSchema as unknown as z.ZodTypeAny)
       .optional()
@@ -158,9 +155,6 @@ export function createCallMcpToolImplementation(
     CallMcpToolApi as Parameters<typeof createFunctionImplementation>[0],
     async (args, context) => {
       const toolName = context.resolveDynamicValue<string>(args['name']);
-      const serverName = args['server']
-        ? context.resolveDynamicValue<string>(args['server'])
-        : undefined;
 
       try {
         const resolvedArguments = resolveDynamicRecord(
@@ -168,7 +162,7 @@ export function createCallMcpToolImplementation(
           context,
         );
 
-        const client = await getMcpClientForTool(serverName ?? toolName);
+        const client = await getMcpClientForTool(toolName);
         if (!client) {
           throw new Error(`MCP client for tool '${toolName}' could not be resolved.`);
         }

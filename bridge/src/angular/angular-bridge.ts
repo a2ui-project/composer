@@ -178,7 +178,7 @@ export function provideA2uiSandbox(
               activeProcessor?.processMessages(msgs);
             },
           },
-          async server => a2uiBridge.getMcpClient(server),
+          async () => a2uiBridge.getMcpClient(),
         );
         const mcpCatalog = new Catalog(BASIC_WITH_MCP_CATALOG_ID, baseComponents, [
           ...baseFunctions,

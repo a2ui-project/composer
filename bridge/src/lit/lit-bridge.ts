@@ -104,7 +104,7 @@ export class A2uiSandboxRoot extends LitElement {
       {
         processMessages: msgs => procRef.current?.processMessages(msgs),
       },
-      async server => a2uiBridge.getMcpClient(server),
+      async () => a2uiBridge.getMcpClient(),
     );
     const mcpCatalog = new Catalog(BASIC_WITH_MCP_CATALOG_ID, baseComponents, [
       ...baseFunctions,

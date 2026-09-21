@@ -80,7 +80,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
       {
         processMessages: msgs => procRef.current?.processMessages(msgs),
       },
-      async server => a2uiBridge.getMcpClient(server),
+      async () => a2uiBridge.getMcpClient(),
     );
     const mcpCatalog = new Catalog<C>(BASIC_WITH_MCP_CATALOG_ID, baseComponents, [
       ...baseFunctions,

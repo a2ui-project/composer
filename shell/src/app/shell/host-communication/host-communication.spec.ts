@@ -1212,5 +1212,92 @@ describe('HostCommunication', () => {
       });
       expect(Object.keys(renderCall?.[0] as object)).not.toContain('target');
     });
+
+    it('handles MCP_REQUEST by calling mcpManager.callTool with toolName and sending MCP_RESPONSE to a cross-origin WindowProxy', async () => {
+      const postMessageSpy = vi.fn();
+      const crossOriginWindowProxy = new Proxy(
+        {postMessage: postMessageSpy},
+        {
+          has(target, prop) {
+            if (prop === 'contentWindow') {
+              throw new DOMException(
+                'Blocked a frame from accessing a cross-origin frame.',
+                'SecurityError',
+              );
+            }
+            return prop in target;
+          },
+        },
+      ) as unknown as Window;
+
+      service.registerIframe(crossOriginWindowProxy);
+
+      const mcpManager = (
+        service as unknown as {
+          mcpManager: {callTool: ReturnType<typeof vi.fn>};
+        }
+      ).mcpManager;
+      const callToolSpy = vi
+        .spyOn(mcpManager, 'callTool')
+        .mockResolvedValueOnce({content: [{type: 'text', text: 'dir-list'}]});
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: crossOriginWindowProxy,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.MCP_REQUEST,
+            payload: {
+              requestId: 'req-123',
+              toolName: 'list_directory',
+              args: {path: '.'},
+            },
+          },
+        }),
+      );
+
+      await vi.waitFor(() => {
+        expect(callToolSpy).toHaveBeenCalledWith('list_directory', {path: '.'});
+        expect(postMessageSpy).toHaveBeenCalledWith(
+          {
+            type: PreviewBridgeMessageType.MCP_RESPONSE,
+            payload: {
+              requestId: 'req-123',
+              result: {content: [{type: 'text', text: 'dir-list'}]},
+            },
+          },
+          'http://localhost:3000',
+        );
+      });
+
+      callToolSpy.mockRejectedValueOnce(new Error('Tool failure'));
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: crossOriginWindowProxy,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.MCP_REQUEST,
+            payload: {
+              requestId: 'req-456',
+              toolName: 'list_directory',
+              args: {path: '/bad'},
+            },
+          },
+        }),
+      );
+
+      await vi.waitFor(() => {
+        expect(postMessageSpy).toHaveBeenCalledWith(
+          {
+            type: PreviewBridgeMessageType.MCP_RESPONSE,
+            payload: {
+              requestId: 'req-456',
+              error: 'Tool failure',
+            },
+          },
+          'http://localhost:3000',
+        );
+      });
+    });
   });
 });

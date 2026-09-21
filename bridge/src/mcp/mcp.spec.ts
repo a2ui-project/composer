@@ -99,17 +99,15 @@ describe('MCP Bridge & Catalog Functions', () => {
     it('resolves callTool when matching MCP_RESPONSE is received', async () => {
       const sentPayloads: Array<{
         requestId: string;
-        server: string;
         toolName: string;
         args: Record<string, unknown>;
       }> = [];
-      const client = new IframeMcpClient('fs', payload => {
+      const client = new IframeMcpClient(payload => {
         sentPayloads.push(payload);
       });
 
       const promise = client.callTool({name: 'list_dir', arguments: {path: '/root'}});
       expect(sentPayloads).toHaveLength(1);
-      expect(sentPayloads[0].server).toBe('fs');
       expect(sentPayloads[0].toolName).toBe('list_dir');
       expect(sentPayloads[0].args).toEqual({path: '/root'});
 
@@ -124,7 +122,7 @@ describe('MCP Bridge & Catalog Functions', () => {
 
     it('rejects callTool when MCP_RESPONSE contains error', async () => {
       let reqId = '';
-      const client = new IframeMcpClient('fs', payload => {
+      const client = new IframeMcpClient(payload => {
         reqId = payload.requestId;
       });
 
@@ -138,7 +136,7 @@ describe('MCP Bridge & Catalog Functions', () => {
     });
 
     it('times out if no response is received within timeoutMs', async () => {
-      const client = new IframeMcpClient('fs', () => {}, 1000);
+      const client = new IframeMcpClient(() => {}, 1000);
       const promise = client.callTool({name: 'slow_tool'});
       vi.advanceTimersByTime(1001);
       await expect(promise).rejects.toThrow(/timed out/);
@@ -224,10 +222,7 @@ describe('MCP Bridge & Catalog Functions', () => {
       ).toThrow(/context\.set is not a function/);
 
       const callMcpFn = mcpFunctions.find(f => f.name === 'callMcpTool')!;
-      const toolRes = await callMcpFn.execute(
-        {name: 'list_dir', server: 'fs', arguments: {path: '/'}},
-        mockCtx,
-      );
+      const toolRes = await callMcpFn.execute({name: 'list_dir', arguments: {path: '/'}}, mockCtx);
       expect(mockClient.callTool).toHaveBeenCalledWith({
         name: 'list_dir',
         arguments: {path: '/'},
@@ -281,8 +276,8 @@ describe('MCP Bridge & Catalog Functions', () => {
         {
           processMessages: msgs => processedMsgs.push(...msgs),
         },
-        async server => {
-          if (server === 'broken') {
+        async toolName => {
+          if (toolName === 'broken_tool') {
             throw new Error('Server offline');
           }
           return fullClient;
@@ -294,10 +289,7 @@ describe('MCP Bridge & Catalog Functions', () => {
         resolveDynamicValue: (v: unknown) => v,
       } as never;
 
-      const res = await callMcpFn.execute(
-        {name: 'rich_tool', server: 'ok', arguments: {x: 1}},
-        mockCtx,
-      );
+      const res = await callMcpFn.execute({name: 'rich_tool', arguments: {x: 1}}, mockCtx);
       expect(res).toBeDefined();
       expect(fullClient.request).toHaveBeenCalled();
       expect(fullClient.listTools).toHaveBeenCalled();
@@ -305,7 +297,7 @@ describe('MCP Bridge & Catalog Functions', () => {
       expect(processedMsgs.length).toBeGreaterThanOrEqual(2);
 
       await expect(
-        callMcpFn.execute({name: 'rich_tool', server: 'broken', arguments: {}}, mockCtx),
+        callMcpFn.execute({name: 'broken_tool', arguments: {}}, mockCtx),
       ).rejects.toThrow(/Server offline/);
     });
 
@@ -351,8 +343,8 @@ describe('MCP Bridge & Catalog Functions', () => {
       const bridge = new PreviewBridge();
       const sendSpy = vi.spyOn(bridge, 'sendMessage');
 
-      const client = bridge.getMcpClient('fs');
-      expect(bridge.getMcpClient('fs')).toBe(client);
+      const client = bridge.getMcpClient();
+      expect(bridge.getMcpClient()).toBe(client);
 
       const callPromise = client.callTool({name: 'read_file', arguments: {path: '/a'}});
       expect(sendSpy).toHaveBeenCalledWith(
