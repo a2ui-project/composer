@@ -23,6 +23,7 @@ import {
   SurfaceModel,
   Catalog,
   ComponentApi,
+  FunctionImplementation,
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
 import type {MarkdownRenderer} from '@a2ui/web_core/types/types';
@@ -31,8 +32,20 @@ import {
   ThemePreference,
   SurfaceStateSubscription,
   CatalogDetails,
+  createMcpCatalogFunctions,
   type ComponentUsages,
 } from '../index.js';
+
+export const BASIC_WITH_MCP_CATALOG_ID =
+  'https://a2ui.org/specification/v0_9/catalogs/basic_with_mcp/catalog.json';
+
+function extractCatalogEntries<T>(collection?: ReadonlyMap<string, T> | Record<string, T>): T[] {
+  if (!collection) return [];
+  if (typeof (collection as ReadonlyMap<string, T>).values === 'function') {
+    return Array.from((collection as ReadonlyMap<string, T>).values());
+  }
+  return Object.values(collection);
+}
 
 /**
  * Options block configuring custom element generation and static payload injection
@@ -79,13 +92,31 @@ export class A2uiSandboxRoot extends LitElement {
   /** Optional callback when theme changes shared statically */
   static onThemeChange?: (theme: ThemePreference) => void = undefined;
 
+  private runtimeCatalogs: Catalog<ComponentApi>[] = [];
+
   // Core dynamic processing engine mapping actions outbox proxies
-  private processor = new MessageProcessor(
-    (this.constructor as typeof A2uiSandboxRoot).catalogs,
-    (action: A2uiClientAction) => {
+  private processor: MessageProcessor<ComponentApi> = (() => {
+    const baseCatalog = (this.constructor as typeof A2uiSandboxRoot).catalogs[0];
+    const baseComponents = extractCatalogEntries<ComponentApi>(baseCatalog?.components);
+    const baseFunctions = extractCatalogEntries<FunctionImplementation>(baseCatalog?.functions);
+    const procRef: {current?: MessageProcessor<ComponentApi>} = {};
+    const mcpFunctions = createMcpCatalogFunctions(
+      {
+        processMessages: msgs => procRef.current?.processMessages(msgs),
+      },
+      async server => a2uiBridge.getMcpClient(server),
+    );
+    const mcpCatalog = new Catalog(BASIC_WITH_MCP_CATALOG_ID, baseComponents, [
+      ...baseFunctions,
+      ...mcpFunctions,
+    ]);
+    this.runtimeCatalogs = [mcpCatalog, ...(this.constructor as typeof A2uiSandboxRoot).catalogs];
+    const proc = new MessageProcessor(this.runtimeCatalogs, (action: A2uiClientAction) => {
       a2uiBridge.sendAction(action);
-    },
-  );
+    });
+    procRef.current = proc;
+    return proc;
+  })();
 
   private markdownProvider = new ContextProvider(this, {
     context: Context.markdown,
@@ -132,7 +163,10 @@ export class A2uiSandboxRoot extends LitElement {
       getComponentUsages: (this.constructor as typeof A2uiSandboxRoot).getComponentUsages,
       onThemeChange: (this.constructor as typeof A2uiSandboxRoot).onThemeChange,
       onCatalogResolved: catalogId => {
-        for (const catalog of (this.constructor as typeof A2uiSandboxRoot).catalogs) {
+        for (const catalog of [
+          ...this.runtimeCatalogs,
+          ...(this.constructor as typeof A2uiSandboxRoot).catalogs,
+        ]) {
           if (catalog) {
             (catalog as unknown as CatalogDetails).id = catalogId;
           }

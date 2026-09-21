@@ -25,6 +25,8 @@ export enum PreviewBridgeMessageType {
   FORCE_UNBLOCK = 'FORCE_UNBLOCK',
   GET_CATALOG = 'GET_CATALOG',
   GET_COMPONENT_USAGES = 'GET_COMPONENT_USAGES',
+  MCP_REQUEST = 'MCP_REQUEST',
+  MCP_RESPONSE = 'MCP_RESPONSE',
   RENDER_A2UI = 'RENDER_A2UI',
   RENDER_ERROR = 'RENDER_ERROR',
   RENDER_SUCCESS = 'RENDER_SUCCESS',
@@ -200,4 +202,19 @@ export declare interface A2uiComponentInstance {
   component: string;
   id?: string;
   [key: string]: unknown;
+}
+
+/** Payload for MCP_REQUEST message type. */
+export declare interface McpRequestPayload {
+  requestId: string;
+  server: string;
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+/** Payload for MCP_RESPONSE message type. */
+export declare interface McpResponsePayload {
+  requestId: string;
+  result?: unknown;
+  error?: string;
 }

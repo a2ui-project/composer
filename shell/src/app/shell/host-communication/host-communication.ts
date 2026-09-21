@@ -23,8 +23,9 @@ import {
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {CrossFrameValidator} from '../cross-frame-validator/cross-frame-validator';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {PreviewBridgeMessageType, McpRequestPayload} from 'a2ui-bridge';
 import {ErrorLogger, ErrorLogLevel} from '../../debug/error-logger.service';
+import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
 /**
  * Schema representing a structured postMessage payload used to communicate
@@ -60,6 +61,7 @@ export class HostCommunication implements OnDestroy {
   private readonly startupResolution = inject(StartupResolution);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly errorLogger = inject(ErrorLogger);
+  private readonly mcpManager = inject(McpClientManagerService);
   private iframeWindow: Window | null = null;
   private iframeElement: HTMLIFrameElement | null = null;
   private readonly registeredIframes = new Set<HTMLIFrameElement>();
@@ -230,6 +232,34 @@ export class HostCommunication implements OnDestroy {
         });
         this.messageStreamSubject.next(envelope);
         return;
+      }
+
+      if (type === PreviewBridgeMessageType.MCP_REQUEST) {
+        const req = data.payload as McpRequestPayload;
+        const sourceWin = (event.source as Window) ?? null;
+        void this.mcpManager
+          .callTool(req.server, req.toolName, req.args)
+          .then(result => {
+            this.sendMessage(
+              {
+                type: PreviewBridgeMessageType.MCP_RESPONSE,
+                payload: {requestId: req.requestId, result},
+              },
+              sourceWin,
+            );
+          })
+          .catch((err: unknown) => {
+            this.sendMessage(
+              {
+                type: PreviewBridgeMessageType.MCP_RESPONSE,
+                payload: {
+                  requestId: req.requestId,
+                  error: err instanceof Error ? err.message : String(err),
+                },
+              },
+              sourceWin,
+            );
+          });
       }
 
       if (type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {

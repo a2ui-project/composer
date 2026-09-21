@@ -46,6 +46,7 @@ import {ChatState} from '../chat-state/chat-state';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
+import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
 /**
  * Directive responsible for automatically scrolling a container to the bottom whenever its inputs change.
@@ -102,11 +103,20 @@ export class ChatPanel {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly fileIngestionService = inject(FileIngestionService);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
+  protected readonly mcpManager = inject(McpClientManagerService);
 
   protected readonly includeScreenshot = signal<boolean>(false);
+  protected readonly mcpEnabledInChat = this.mcpManager.mcpEnabledInChat;
+  protected readonly activeMcpServerCount = computed(
+    () => this.mcpManager.getActiveServersWithTools().length,
+  );
 
   protected onIncludeScreenshotChange(checked: boolean): void {
     this.includeScreenshot.set(checked);
+  }
+
+  protected toggleMcpInChat(): void {
+    this.mcpManager.setMcpEnabledInChat(!this.mcpEnabledInChat());
   }
 
   /**

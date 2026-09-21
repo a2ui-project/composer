@@ -30,6 +30,7 @@
     "@angular/platform-browser": "22.0.7",
     "@angular/router": "22.0.7",
     "@google/genai": "2.11.0",
+    "@modelcontextprotocol/sdk": "portal:../../a2ui/node_modules/@modelcontextprotocol/sdk",
     "@monaco-editor/loader": "1.7.0",
     "a2ui-bridge": "0.1.0",
     "dockview": "7.0.3",

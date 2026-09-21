@@ -276,6 +276,22 @@
           >
             <mat-icon>photo_camera</mat-icon>
           </button>
+          <button
+            mat-icon-button
+            class="mcp-toggle-button"
+            [class.active]="mcpEnabledInChat() && activeMcpServerCount() > 0"
+            [attr.aria-pressed]="mcpEnabledInChat()"
+            [disabled]="isLocked()"
+            (click)="toggleMcpInChat()"
+            type="button"
+            [title]="'Toggle MCP Servers (' + activeMcpServerCount() + ' active)'"
+            aria-label="Toggle MCP Servers"
+          >
+            <mat-icon>dns</mat-icon>
+            @if (activeMcpServerCount() > 0) {
+              <span class="mcp-badge">{{ activeMcpServerCount() }}</span>
+            }
+          </button>
           <button type="button" class="system-instructions-link" (click)="showSystemInstructions()">
             Instructions
           </button>

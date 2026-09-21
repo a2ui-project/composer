@@ -20,9 +20,27 @@ import {
   SurfaceModel,
   Catalog,
   ComponentApi,
+  FunctionImplementation,
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
-import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages} from '../index.js';
+import {
+  a2uiBridge,
+  ThemePreference,
+  CatalogDetails,
+  ComponentUsages,
+  createMcpCatalogFunctions,
+} from '../index.js';
+
+export const BASIC_WITH_MCP_CATALOG_ID =
+  'https://a2ui.org/specification/v0_9/catalogs/basic_with_mcp/catalog.json';
+
+function extractCatalogEntries<T>(collection?: ReadonlyMap<string, T> | Record<string, T>): T[] {
+  if (!collection) return [];
+  if (typeof (collection as ReadonlyMap<string, T>).values === 'function') {
+    return Array.from((collection as ReadonlyMap<string, T>).values());
+  }
+  return Object.values(collection);
+}
 
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   /** The reactive dynamic surface drawing model representing the active canvas. */
@@ -54,10 +72,27 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
   const [surface, setSurface] = useState<SurfaceModel<C> | undefined>(undefined);
 
   useEffect(() => {
+    const procRef: {current?: MessageProcessor<C>} = {};
+    const baseCatalog = catalogs[0];
+    const baseComponents = extractCatalogEntries<C>(baseCatalog?.components);
+    const baseFunctions = extractCatalogEntries<FunctionImplementation>(baseCatalog?.functions);
+    const mcpFunctions = createMcpCatalogFunctions(
+      {
+        processMessages: msgs => procRef.current?.processMessages(msgs),
+      },
+      async server => a2uiBridge.getMcpClient(server),
+    );
+    const mcpCatalog = new Catalog<C>(BASIC_WITH_MCP_CATALOG_ID, baseComponents, [
+      ...baseFunctions,
+      ...mcpFunctions,
+    ]);
+    const runtimeCatalogs = [mcpCatalog, ...catalogs];
+
     // Instantiates a new dynamic MessageProcessor mapping outbound event actions
-    const processor = new MessageProcessor(catalogs, (action: A2uiClientAction) => {
+    const processor = new MessageProcessor(runtimeCatalogs, (action: A2uiClientAction) => {
       a2uiBridge.sendAction(action);
     });
+    procRef.current = processor;
 
     // Connects the renderer stack and establishes inter-frame callbacks
     const connection = a2uiBridge.attachRenderer(processor, {
@@ -66,7 +101,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
       getComponentUsages: options?.getComponentUsages,
       onThemeChange: options?.onThemeChange,
       onCatalogResolved: catalogId => {
-        for (const catalog of catalogs) {
+        for (const catalog of runtimeCatalogs) {
           if (catalog) {
             (catalog as unknown as CatalogDetails).id = catalogId;
           }

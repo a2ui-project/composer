@@ -379,10 +379,10 @@ describe('Settings', () => {
       const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
 
       expect(component.isThirdParty()).toBe(true);
-      expect(await harness.getFormSectionsCount()).toBe(3);
+      expect(await harness.getFormSectionsCount()).toBe(4);
 
       const sections = await harness.getFormSectionsCount();
-      expect(sections).toBe(3);
+      expect(sections).toBe(4);
     } finally {
       localStorage.removeItem('a2ui_composer_force_3p');
     }

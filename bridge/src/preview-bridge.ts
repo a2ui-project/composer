@@ -32,7 +32,10 @@ import {
   CreateSurfaceCommand,
   CatalogDetails,
   ThemePreference,
+  McpResponsePayload,
 } from './bridge-message';
+
+import {IframeMcpClient} from './mcp/iframe-mcp-client';
 
 import {SurfaceResizeObserver} from './surface-resize-observer';
 export * from './surface-resize-observer';
@@ -220,6 +223,26 @@ export class PreviewBridge {
 
   private readonly cachedParentOrigin: string | null = null;
 
+  /** Registry of active iframe MCP proxy clients keyed by server name. */
+  private readonly mcpClients = new Map<string, IframeMcpClient>();
+
+  /**
+   * Returns an IframeMcpClient proxy for the given server name, creating and caching it if needed.
+   */
+  getMcpClient(server: string): IframeMcpClient {
+    let client = this.mcpClients.get(server);
+    if (!client) {
+      client = new IframeMcpClient(server, payload => {
+        this.sendMessage({
+          type: PreviewBridgeMessageType.MCP_REQUEST,
+          payload,
+        });
+      });
+      this.mcpClients.set(server, client);
+    }
+    return client;
+  }
+
   /**
    * Initializes a new PreviewBridge instance.
    * Sets up the global window message listener, observes layout dimensions, and applies initial theme from URL if present.
@@ -386,6 +409,7 @@ export class PreviewBridge {
       }
     }
     this.activeConnections.clear();
+    this.mcpClients.clear();
   }
 
   private resolveExpectedParentOrigin(): string {
@@ -475,6 +499,10 @@ export class PreviewBridge {
         void this.handleGetComponentUsages();
         break;
 
+      case PreviewBridgeMessageType.MCP_RESPONSE:
+        this.handleMcpResponse(data.payload);
+        break;
+
       case PreviewBridgeMessageType.SET_THEME:
         this.handleSetTheme(data.payload);
         break;
@@ -483,6 +511,17 @@ export class PreviewBridge {
         console.warn(`PreviewBridge: Unrecognized incoming message type: ${data.type}`);
     }
   };
+
+  /**
+   * Routes incoming MCP_RESPONSE messages to the matching IframeMcpClient pending request.
+   */
+  private handleMcpResponse(payload: unknown): void {
+    const payloadObj = payload as McpResponsePayload | undefined;
+    if (!payloadObj || typeof payloadObj.requestId !== 'string') return;
+    for (const client of this.mcpClients.values()) {
+      client.handleResponse(payloadObj);
+    }
+  }
 
   /**
    * Handles incoming theme change requests.
@@ -633,7 +672,15 @@ export class PreviewBridge {
         }
       }
 
-      this.activeRenderer.processor.processMessages(payload as A2uiMessage[]);
+      let clonedPayload = payload as A2uiMessage[];
+      if (typeof structuredClone === 'function') {
+        try {
+          clonedPayload = structuredClone(payload) as A2uiMessage[];
+        } catch {
+          clonedPayload = payload as A2uiMessage[];
+        }
+      }
+      this.activeRenderer.processor.processMessages(clonedPayload);
 
       if (hasCreateSurface && surfaceId) {
         this.activeRenderer.config.onSurfaceReady(surfaceId);

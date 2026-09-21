@@ -18,6 +18,7 @@ import {Injectable, computed, inject} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {formatJson} from '../../utils/json';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
+import {McpClientManagerService, McpServerConfig} from '../../mcp/mcp-client-manager.service';
 
 /**
  * Constructs dynamic system prompts based on the provided LLM intent and active catalog states.
@@ -27,9 +28,14 @@ import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 })
 export class ChatPromptFactoryService {
   private readonly catalogManagement = inject(CatalogManagement);
+  private readonly mcpManager = inject(McpClientManagerService);
 
   readonly systemPrompt = computed<string>(() => {
     const catalog = this.catalogManagement.activeCatalog();
+    const mcpEnabled = this.mcpManager.mcpEnabledInChat();
+    const activeServers = mcpEnabled ? this.mcpManager.getActiveServersWithTools() : [];
+    const mcpInstructions = this.buildMcpInstructions(activeServers);
+
     if (!catalog) {
       return `
   # A2UI Generation Expert
@@ -38,11 +44,70 @@ export class ChatPromptFactoryService {
   You are an expert A2UI generation assistant. Your role is to translate user
   requests—whether provided as text instructions, UI wireframes, screenshots,
   or mockup images—into valid A2UI v0.9 interactive user interfaces.
+  ${mcpInstructions}
       `;
     }
 
-    return this.generateSystemPrompt(formatJson(catalog));
+    return this.generateSystemPrompt(formatJson(catalog)) + mcpInstructions;
   });
+
+  private buildMcpInstructions(activeServers: McpServerConfig[]): string {
+    if (activeServers.length === 0) {
+      return '';
+    }
+
+    const serversMarkdown = activeServers
+      .map(server => {
+        const toolsList =
+          server.tools && server.tools.length > 0
+            ? server.tools
+                .map(
+                  tool =>
+                    `  - \`${tool.name}\`: ${tool.description || 'No description'} — Input Schema: \`${JSON.stringify(tool.inputSchema || {})}\``,
+                )
+                .join('\n')
+            : '  - (No tools discovered)';
+        return `- **Server \`${server.name}\`** (\`${server.url}\`):\n${toolsList}`;
+      })
+      .join('\n\n');
+
+    return `
+
+  ## Available MCP Servers & Catalog Instructions
+
+  When building surfaces that interact with MCP tools:
+  1. Use \`"catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic_with_mcp/catalog.json"\` in \`createSurface\`.
+  2. Trigger MCP tools via button \`functionCall\` actions that chain \`updateDataModel\`, \`jmespath\`, and \`callMcpTool\`:
+     \`\`\`json
+     "action": {
+       "functionCall": {
+         "call": "updateDataModel",
+         "args": {
+           "updates": {
+             "/result": {
+               "call": "jmespath",
+               "args": {
+                 "expression": "content[0].text",
+                 "data": {
+                   "call": "callMcpTool",
+                   "args": {
+                     "server": "${activeServers[0].name}",
+                     "name": "<tool_name>",
+                     "arguments": {}
+                   }
+                 }
+               }
+             }
+           }
+         }
+       }
+     }
+     \`\`\`
+
+  ### Connected MCP Servers
+  ${serversMarkdown}
+`;
+  }
 
   private generateSystemPrompt(catalog: string): string {
     return `

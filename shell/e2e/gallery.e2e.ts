@@ -47,7 +47,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(workspaceIframe).toBeVisible();
 
     // Wait for the catalog handshake to complete (indicated by header title updating)
-    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await expect(page.locator('.header-title')).toContainText('Basic with MCP Catalog');
 
     // 2. Click on the gallery link in the sidebar
     const galleryLink = page.getByRole('link', {name: 'Components Gallery'});
