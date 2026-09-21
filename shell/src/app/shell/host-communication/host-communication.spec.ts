@@ -1268,6 +1268,19 @@ describe('HostCommunication', () => {
           },
           'http://localhost:3000',
         );
+        const successEnvelope = service
+          .getHistoryBuffer()
+          .find(
+            env =>
+              env.type === PreviewBridgeMessageType.MCP_RESPONSE &&
+              (env.payload as {requestId?: string})?.requestId === 'req-123',
+          );
+        expect(successEnvelope).toBeDefined();
+        expect(successEnvelope?.payload).toEqual({
+          requestId: 'req-123',
+          result: {content: [{type: 'text', text: 'dir-list'}]},
+        });
+        expect(successEnvelope?.origin).toBe('http://localhost:3000');
       });
 
       callToolSpy.mockRejectedValueOnce(new Error('Tool failure'));
@@ -1297,6 +1310,19 @@ describe('HostCommunication', () => {
           },
           'http://localhost:3000',
         );
+        const errorEnvelope = service
+          .getHistoryBuffer()
+          .find(
+            env =>
+              env.type === PreviewBridgeMessageType.MCP_RESPONSE &&
+              (env.payload as {requestId?: string})?.requestId === 'req-456',
+          );
+        expect(errorEnvelope).toBeDefined();
+        expect(errorEnvelope?.payload).toEqual({
+          requestId: 'req-456',
+          error: 'Tool failure',
+        });
+        expect(errorEnvelope?.origin).toBe('http://localhost:3000');
       });
     });
   });

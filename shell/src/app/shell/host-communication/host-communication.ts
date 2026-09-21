@@ -297,15 +297,19 @@ export class HostCommunication implements OnDestroy {
         }
       }
 
-      this.messageHistoryBuffer.push(envelope);
-      if (this.messageHistoryBuffer.length > 100) {
-        this.messageHistoryBuffer.shift();
-      }
-
-      this.latestEnvelopeSignal.set(envelope);
-      this.messageStreamSubject.next(envelope);
+      this.recordEnvelope(envelope);
     }
   };
+
+  private recordEnvelope(envelope: MessageEnvelope): void {
+    this.messageHistoryBuffer.push(envelope);
+    if (this.messageHistoryBuffer.length > 100) {
+      this.messageHistoryBuffer.shift();
+    }
+
+    this.latestEnvelopeSignal.set(envelope);
+    this.messageStreamSubject.next(envelope);
+  }
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -441,6 +445,15 @@ export class HostCommunication implements OnDestroy {
     try {
       const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
       targetWindow.postMessage(message, targetOrigin);
+      if (message.type === PreviewBridgeMessageType.MCP_RESPONSE) {
+        this.recordEnvelope({
+          type: message.type,
+          payload: message.payload,
+          origin: targetOrigin,
+          timestamp: Date.now(),
+          sourceWindow: targetWindow,
+        });
+      }
     } catch (err) {
       // Ignore malformed URL
     }
