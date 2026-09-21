@@ -39,6 +39,7 @@ import {
   parseAndHealJsonLines,
   SuccessRenderParseResult,
 } from '../a2ui-payload-parser/a2ui-payload-parser';
+import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -1000,6 +1001,44 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
       expect(await harness.getSystemInstructionsLinkText()).toBe(
         'Instructions (includes 0 MCP Servers)',
+      );
+
+      const mcpManager = TestBed.inject(McpClientManagerService);
+      mcpManager.servers.set([
+        {
+          id: 'server-1',
+          url: 'http://localhost:3001/mcp',
+          enabled: true,
+          status: 'connected',
+          tools: [{name: 'sample_tool', inputSchema: {}}],
+        },
+      ]);
+      fixture.detectChanges();
+
+      expect(await harness.getSystemInstructionsLinkText()).toBe(
+        'Instructions (includes 1 MCP Server)',
+      );
+
+      mcpManager.servers.set([
+        {
+          id: 'server-1',
+          url: 'http://localhost:3001/mcp',
+          enabled: true,
+          status: 'connected',
+          tools: [{name: 'sample_tool_1', inputSchema: {}}],
+        },
+        {
+          id: 'server-2',
+          url: 'http://localhost:3002/mcp',
+          enabled: true,
+          status: 'connected',
+          tools: [{name: 'sample_tool_2', inputSchema: {}}],
+        },
+      ]);
+      fixture.detectChanges();
+
+      expect(await harness.getSystemInstructionsLinkText()).toBe(
+        'Instructions (includes 2 MCP Servers)',
       );
     });
   });

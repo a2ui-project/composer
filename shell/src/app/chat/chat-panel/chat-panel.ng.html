@@ -278,7 +278,9 @@
           </button>
           <button type="button" class="system-instructions-link" (click)="showSystemInstructions()">
             @if (isMcpSupported()) {
-              Instructions (includes {{ activeMcpServerCount() }} MCP Servers)
+              Instructions (includes {{ activeMcpServerCount() }} MCP Server{{
+                activeMcpServerCount() === 1 ? '' : 's'
+              }})
             } @else {
               Instructions
             }
