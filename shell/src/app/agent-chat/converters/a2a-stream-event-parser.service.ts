@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {inject, Injectable} from '@angular/core';
 import {RenderA2uiItem} from 'a2ui-bridge';
 
 import {renderBase64Data, renderMultimediaContent} from '../../chat/a2a/a2a-media';
@@ -28,6 +28,7 @@ import {
   normalizeTaskState,
   TaskStatusUpdateEvent,
 } from '../../chat/a2a/a2a-types';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {UiToolCall} from '../chat-message/types';
 import {asRecord} from '../../utils/json';
 
@@ -155,6 +156,20 @@ export interface ParsedA2aStreamEvent {
 }
 
 /**
+ * Resolves the logger, which is only reachable when the injector creates the parser.
+ *
+ * `inject` throws outside an injection context, and `a2a-ui-converter` constructs a parser with
+ * `new` at module load. Payloads discarded by that instance therefore go unreported.
+ */
+function resolveErrorLogger(): ErrorLogger | undefined {
+  try {
+    return inject(ErrorLogger);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Service responsible for parsing incoming A2A streaming chunks (TaskStatusUpdateEvent),
  * unwrapping JSON-RPC result and protobuf StreamResponse envelopes, extracting text chunks,
  * model reasoning/thoughts, multimedia files, tool invocations, and declarative A2UI UI payloads.
@@ -163,6 +178,8 @@ export interface ParsedA2aStreamEvent {
   providedIn: 'root',
 })
 export class A2aStreamEventParser {
+  private readonly errorLogger = resolveErrorLogger();
+
   /**
    * Parses an incoming TaskStatusUpdateEvent into textual chunks, thoughts, and layout items.
    */
@@ -552,7 +569,7 @@ export class A2aStreamEventParser {
         : [];
 
     // Extract declarative A2UI items
-    const a2uiNormalized = normalizeA2uiItems(items);
+    const a2uiNormalized = normalizeA2uiItems(items, this.errorLogger);
     if (a2uiNormalized.length > 0) {
       result.a2uiItems.push(...a2uiNormalized);
     }

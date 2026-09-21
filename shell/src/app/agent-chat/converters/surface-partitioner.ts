@@ -15,6 +15,7 @@
  */
 
 import {A2UI_UPDATE_KEYS, RenderA2uiItem} from 'a2ui-bridge';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {CanvasArtifact} from '../chat-message/types';
 
 interface ExtractedCanvasInfo {
@@ -303,18 +304,45 @@ export function isA2uiItem(item: unknown): boolean {
   return A2UI_UPDATE_KEYS.some(key => key in obj && obj[key] !== undefined && obj[key] !== null);
 }
 
+/** Legacy operation keys from A2UI v0.8 that are superseded in v0.9. */
+const LEGACY_A2UI_KEYS = ['beginRendering', 'surfaceUpdate', 'dataModelUpdate'];
+
 /**
  * Normalizes an array of raw layout updates into valid `RenderA2uiItem` specifications,
  * filtering out any non-A2UI objects and deduplicating redundant createSurface commands.
+ *
+ * @param items Raw layout updates as received from the agent.
+ * @param errorLogger Logger used to report discarded legacy payloads. It is optional because
+ *     callers that construct their dependencies outside Angular's injector cannot resolve it;
+ *     when it is absent the payload is discarded silently, as it was before.
  */
-export function normalizeA2uiItems(items: readonly unknown[]): RenderA2uiItem[] {
+export function normalizeA2uiItems(
+  items: readonly unknown[],
+  errorLogger?: ErrorLogger,
+): RenderA2uiItem[] {
   if (!items || !Array.isArray(items)) return [];
 
   const seenSurfaces = new Set<string>();
   const normalized: RenderA2uiItem[] = [];
 
   for (const raw of items) {
-    if (!isA2uiItem(raw)) continue;
+    if (!isA2uiItem(raw)) {
+      if (
+        raw &&
+        typeof raw === 'object' &&
+        !Array.isArray(raw) &&
+        LEGACY_A2UI_KEYS.some(k => k in raw)
+      ) {
+        errorLogger?.warn(
+          {
+            message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9.',
+            sourceTag: '[A2UI]',
+          },
+          raw,
+        );
+      }
+      continue;
+    }
     const itemObj = raw as Record<string, unknown>;
     const item = {
       version:
