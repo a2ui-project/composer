@@ -93,6 +93,13 @@ vi.mock('@google/genai', () => {
 
   return {
     GoogleGenAI: MockGoogleGenAI,
+    ThinkingLevel: {
+      THINKING_LEVEL_UNSPECIFIED: 'THINKING_LEVEL_UNSPECIFIED',
+      MINIMAL: 'MINIMAL',
+      LOW: 'LOW',
+      MEDIUM: 'MEDIUM',
+      HIGH: 'HIGH',
+    },
   };
 });
 
@@ -260,7 +267,8 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
         expect(mockGenerateContentStream).toHaveBeenCalledTimes(1);
         const passedParams = mockGenerateContentStream.mock.calls[0][0];
 
-        expect(passedParams.model).toBe('gemini-3.5-flash');
+        expect(passedParams.model).toBe('gemini-3.7-flash');
+        expect(passedParams.config?.thinkingConfig?.thinkingLevel).toBe('MEDIUM');
 
         // Assert system directives aggregate consolidation
         expect(passedParams.config).toBeDefined();
