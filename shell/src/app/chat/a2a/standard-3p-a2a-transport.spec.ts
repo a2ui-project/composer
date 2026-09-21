@@ -694,6 +694,118 @@ describe('Standard3pA2aTransport', () => {
     });
   });
 
+  it('forwards message-level metadata on the JSON-RPC envelope', async () => {
+    let capturedBody: {params: {message: Record<string, unknown>}} | null = null;
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url !== 'http://localhost:8000/') {
+        return new Response(null, {status: 404});
+      }
+      capturedBody = JSON.parse(init?.body as string);
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                'data: {"taskId": "task-meta", "status": {"state": "TASK_STATE_COMPLETED"}}\n\n',
+              ),
+            );
+            controller.close();
+          },
+        }),
+        {status: 200, headers: {'Content-Type': 'text/event-stream'}},
+      );
+    });
+
+    const clientCapabilities = {supportedCatalogIds: ['https://example.com/catalog.json']};
+    const message: A2aMessage = {
+      role: 'user',
+      parts: [{text: 'Hello'}],
+      metadata: {a2uiClientCapabilities: clientCapabilities},
+    };
+
+    for await (const _ of transport.sendMessageStream('http://localhost:8000', message)) {
+      // Drain the stream so the request completes.
+    }
+
+    expect(capturedBody).not.toBeNull();
+    expect(capturedBody!.params.message['metadata']).toEqual({
+      a2uiClientCapabilities: clientCapabilities,
+    });
+  });
+
+  it('forwards message-level metadata on the REST fallback envelope', async () => {
+    let capturedBody: {message: Record<string, unknown>} | null = null;
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url !== 'http://localhost:8000/sendStreaming') {
+        return new Response(null, {status: 404});
+      }
+      capturedBody = JSON.parse(init?.body as string);
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode('data: {"taskId": "task-meta-rest", "final": true}\n\n'),
+            );
+            controller.close();
+          },
+        }),
+        {status: 200, headers: {'Content-Type': 'text/event-stream'}},
+      );
+    });
+
+    const message: A2aMessage = {
+      role: 'user',
+      parts: [{text: 'Hello REST'}],
+      metadata: {a2uiClientCapabilities: {supportedCatalogIds: []}},
+    };
+
+    for await (const _ of transport.sendMessageStream('http://localhost:8000', message)) {
+      // Drain the stream so the request completes.
+    }
+
+    expect(capturedBody).not.toBeNull();
+    expect(capturedBody!.message['metadata']).toEqual({
+      a2uiClientCapabilities: {supportedCatalogIds: []},
+    });
+  });
+
+  it('omits the metadata key when the message carries no metadata', async () => {
+    let capturedBody: {params: {message: Record<string, unknown>}} | null = null;
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url !== 'http://localhost:8000/') {
+        return new Response(null, {status: 404});
+      }
+      capturedBody = JSON.parse(init?.body as string);
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                'data: {"taskId": "task-no-meta", "status": {"state": "TASK_STATE_COMPLETED"}}\n\n',
+              ),
+            );
+            controller.close();
+          },
+        }),
+        {status: 200, headers: {'Content-Type': 'text/event-stream'}},
+      );
+    });
+
+    const message: A2aMessage = {role: 'user', parts: [{text: 'Hello'}]};
+
+    for await (const _ of transport.sendMessageStream('http://localhost:8000', message)) {
+      // Drain the stream so the request completes.
+    }
+
+    expect(capturedBody).not.toBeNull();
+    // An explicit `metadata: undefined` would serialize away, but asserting on key absence
+    // keeps the wire payload minimal and guards against a regression to `metadata: null`.
+    expect('metadata' in capturedBody!.params.message).toBe(false);
+  });
+
   it('terminates SSE stream when integer state 3 (completed) is received', async () => {
     const stream = new ReadableStream({
       start(controller) {

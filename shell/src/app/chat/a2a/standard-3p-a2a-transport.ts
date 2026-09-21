@@ -204,6 +204,11 @@ export class Standard3pA2aTransport implements A2aTransport {
       ['extensions']: supportedExtensions,
       ...(contextId ? {['contextId']: contextId} : {}),
       ...(taskId ? {['taskId']: taskId} : {}),
+      // Message-level metadata is how clients advertise out-of-band context to the agent
+      // (for example `a2uiClientCapabilities`, describing which catalogs this renderer
+      // supports). Agents that negotiate on it degrade silently when it is dropped, so it
+      // must survive normalization.
+      ...(message.metadata ? {['metadata']: message.metadata} : {}),
     };
 
     const configuration = {
