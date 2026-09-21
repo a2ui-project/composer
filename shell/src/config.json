@@ -8,6 +8,14 @@
       "rendererUrl": "http://localhost:4200/samples/ng-basic-catalog/",
       "displayName": "Angular Basic (local)"
     },
+    "angular-mcp": {
+      "rendererUrl": "https://a2ui-project.github.io/composer/samples/ng-basic-with-mcp-catalog/",
+      "displayName": "Angular Basic with MCP (github)"
+    },
+    "angular-mcp-dev": {
+      "rendererUrl": "http://localhost:4200/samples/ng-basic-with-mcp-catalog/",
+      "displayName": "Angular Basic with MCP (local)"
+    },
     "lit": {
       "rendererUrl": "https://a2ui-project.github.io/composer/samples/lit-basic-catalog/",
       "displayName": "Lit Basic (github)"

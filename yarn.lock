@@ -6073,6 +6073,7 @@ __metadata:
     marked: "npm:18.0.11"
     monaco-editor: "npm:0.56.0"
     ng-basic-catalog: "npm:0.1.0"
+    ng-basic-with-mcp-catalog: "npm:0.1.0"
     prettier: "npm:3.9.6"
     react-basic-catalog: "npm:0.1.0"
     rxjs: "npm:7.8.2"
@@ -10204,6 +10205,40 @@ __metadata:
 "ng-basic-catalog@npm:0.1.0, ng-basic-catalog@workspace:samples/ng-basic-catalog":
   version: 0.0.0-use.local
   resolution: "ng-basic-catalog@workspace:samples/ng-basic-catalog"
+  dependencies:
+    "@a2ui/angular": "npm:0.10.4"
+    "@a2ui/markdown-it": "npm:0.1.0"
+    "@a2ui/web_core": "npm:0.10.5"
+    "@analogjs/vite-plugin-angular": "npm:2.6.3"
+    "@angular-devkit/build-angular": "npm:22.0.7"
+    "@angular/animations": "npm:22.0.7"
+    "@angular/build": "npm:22.0.7"
+    "@angular/cli": "npm:22.0.7"
+    "@angular/common": "npm:22.0.7"
+    "@angular/compiler": "npm:22.0.7"
+    "@angular/compiler-cli": "npm:22.0.7"
+    "@angular/core": "npm:22.0.7"
+    "@angular/forms": "npm:22.0.7"
+    "@angular/platform-browser": "npm:22.0.7"
+    "@angular/platform-browser-dynamic": "npm:22.0.7"
+    "@angular/router": "npm:22.0.7"
+    "@types/jsdom": "npm:28.0.3"
+    a2ui-bridge: "npm:0.1.0"
+    angular-eslint: "npm:22.1.0"
+    eslint: "npm:10.7.0"
+    jsdom: "npm:29.1.1"
+    prettier: "npm:3.9.6"
+    rxjs: "npm:7.8.2"
+    tslib: "npm:2.8.1"
+    typescript: "npm:6.0.3"
+    typescript-eslint: "npm:8.65.0"
+    vitest: "npm:4.1.11"
+  languageName: unknown
+  linkType: soft
+
+"ng-basic-with-mcp-catalog@npm:0.1.0, ng-basic-with-mcp-catalog@workspace:samples/ng-basic-with-mcp-catalog":
+  version: 0.0.0-use.local
+  resolution: "ng-basic-with-mcp-catalog@workspace:samples/ng-basic-with-mcp-catalog"
   dependencies:
     "@a2ui/angular": "npm:0.10.4"
     "@a2ui/markdown-it": "npm:0.1.0"

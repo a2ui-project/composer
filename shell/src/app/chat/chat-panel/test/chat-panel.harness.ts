@@ -169,6 +169,12 @@ export class ChatPanelHarness extends ComponentHarness {
     return link !== null;
   }
 
+  async getSystemInstructionsLinkText(): Promise<string | null> {
+    const link = await this.locatorForOptional('.system-instructions-link')();
+    if (!link) return null;
+    return (await link.text()).trim();
+  }
+
   async getRetryButtonsCount(): Promise<number> {
     const buttons = await this.locatorForAll('.retry-button')();
     return buttons.length;

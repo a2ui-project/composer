@@ -79,7 +79,6 @@ export class Settings implements OnInit {
   protected readonly settingsService = inject(SettingsService);
   protected readonly mcpManager = inject(McpClientManagerService);
 
-  readonly newMcpServerName = signal('');
   readonly newMcpServerUrl = signal('');
 
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
@@ -175,12 +174,10 @@ export class Settings implements OnInit {
   }
 
   async addMcpServer(): Promise<void> {
-    const name = this.newMcpServerName().trim();
     const url = this.newMcpServerUrl().trim();
-    if (!name || !url) return;
-    this.newMcpServerName.set('');
+    if (!url) return;
     this.newMcpServerUrl.set('');
-    await this.mcpManager.addServer(name, url);
+    await this.mcpManager.addServer(url);
   }
 
   async removeMcpServer(id: string): Promise<void> {

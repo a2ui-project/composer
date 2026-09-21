@@ -21,6 +21,7 @@ import {LocalStorageInteractions} from '../storage/local-storage-interactions/lo
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
 
 const connectMock = vi.fn();
+const getServerVersionMock = vi.fn();
 const listToolsMock = vi.fn();
 const callToolMock = vi.fn();
 const closeMock = vi.fn();
@@ -28,6 +29,7 @@ const closeMock = vi.fn();
 vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   Client: class {
     connect = connectMock;
+    getServerVersion = getServerVersionMock;
     listTools = listToolsMock;
     callTool = callToolMock;
     close = closeMock;
@@ -59,6 +61,7 @@ describe('McpClientManagerService', () => {
     };
 
     connectMock.mockResolvedValue(undefined);
+    getServerVersionMock.mockReturnValue({name: 'filesystem-mcp-server', version: '1.0.0'});
     listToolsMock.mockResolvedValue({
       tools: [
         {
@@ -82,11 +85,11 @@ describe('McpClientManagerService', () => {
     service = TestBed.inject(McpClientManagerService);
   });
 
-  it('adds, connects, toggles, calls tool, and removes an MCP server', async () => {
-    await service.addServer('fs', 'http://localhost:3001/mcp');
+  it('adds by URL, populates name from serverInfo, toggles, calls tool, and removes an MCP server', async () => {
+    await service.addServer('http://localhost:3001/mcp');
     const servers = service.servers();
     expect(servers).toHaveLength(1);
-    expect(servers[0].name).toBe('fs');
+    expect(servers[0].name).toBe('filesystem-mcp-server');
     expect(servers[0].status).toBe('connected');
     expect(servers[0].tools).toHaveLength(1);
     expect(service.getActiveServersWithTools()).toHaveLength(1);
@@ -113,19 +116,15 @@ describe('McpClientManagerService', () => {
     expect(service.servers()).toHaveLength(0);
   });
 
-  it('handles connection failure, missing server callTool, and persists mcpEnabledInChat toggle', async () => {
+  it('handles connection failure and missing server callTool', async () => {
     connectMock.mockRejectedValueOnce(new Error('Connection refused'));
-    await service.addServer('broken', 'http://localhost:9999/mcp');
+    await service.addServer('http://localhost:9999/mcp');
     expect(service.servers()[0].status).toBe('error');
     expect(service.servers()[0].errorMessage).toContain('Connection refused');
 
     await expect(service.callTool('unknown-tool', {})).rejects.toThrow(
       /No connected MCP server found/,
     );
-
-    service.setMcpEnabledInChat(false);
-    expect(service.mcpEnabledInChat()).toBe(false);
-    expect(mockStorage.setItem).toHaveBeenCalledWith(LocalStorageKey.MCP_ENABLED_IN_CHAT, 'false');
   });
 
   it('hydrates saved servers from localStorage on initialization', () => {
@@ -140,7 +139,6 @@ describe('McpClientManagerService', () => {
         },
       ]),
     );
-    storageMap.set(LocalStorageKey.MCP_ENABLED_IN_CHAT, 'false');
 
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -152,6 +150,5 @@ describe('McpClientManagerService', () => {
     const hydratedService = TestBed.inject(McpClientManagerService);
     expect(hydratedService.servers()).toHaveLength(1);
     expect(hydratedService.servers()[0].name).toBe('saved-fs');
-    expect(hydratedService.mcpEnabledInChat()).toBe(false);
   });
 });

@@ -28,7 +28,7 @@ export interface McpToolInfo {
 
 export interface McpServerConfig {
   id: string;
-  name: string;
+  name?: string;
   url: string;
   enabled: boolean;
   status?: 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -38,7 +38,7 @@ export interface McpServerConfig {
 
 interface PersistedMcpServer {
   id: string;
-  name: string;
+  name?: string;
   url: string;
   enabled: boolean;
 }
@@ -51,7 +51,6 @@ export class McpClientManagerService {
   private readonly clients = new Map<string, Client>();
 
   readonly servers = signal<McpServerConfig[]>([]);
-  readonly mcpEnabledInChat = signal<boolean>(true);
 
   constructor() {
     this.loadFromStorage();
@@ -71,7 +70,7 @@ export class McpClientManagerService {
           this.servers.set(
             parsed.map(s => ({
               id: s.id,
-              name: s.name,
+              name: s.name || s.url,
               url: s.url,
               enabled: Boolean(s.enabled),
               status: 'disconnected',
@@ -82,11 +81,6 @@ export class McpClientManagerService {
       } catch {
         this.servers.set([]);
       }
-    }
-
-    const rawEnabled = this.storage.getItem(LocalStorageKey.MCP_ENABLED_IN_CHAT);
-    if (rawEnabled !== null) {
-      this.mcpEnabledInChat.set(rawEnabled !== 'false');
     }
   }
 
@@ -100,15 +94,9 @@ export class McpClientManagerService {
     this.storage.setItem(LocalStorageKey.MCP_SERVERS, JSON.stringify(toSave));
   }
 
-  setMcpEnabledInChat(enabled: boolean): void {
-    this.mcpEnabledInChat.set(enabled);
-    this.storage.setItem(LocalStorageKey.MCP_ENABLED_IN_CHAT, String(enabled));
-  }
-
-  async addServer(name: string, url: string): Promise<void> {
-    const trimmedName = name.trim();
+  async addServer(url: string): Promise<void> {
     const trimmedUrl = url.trim();
-    if (!trimmedName || !trimmedUrl) return;
+    if (!trimmedUrl) return;
 
     const id =
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -117,7 +105,7 @@ export class McpClientManagerService {
 
     const newServer: McpServerConfig = {
       id,
-      name: trimmedName,
+      name: trimmedUrl,
       url: trimmedUrl,
       enabled: true,
       status: 'disconnected',
@@ -159,6 +147,8 @@ export class McpClientManagerService {
       const transport = new StreamableHTTPClientTransport(new URL(server.url));
       const client = new Client({name: 'a2ui-composer', version: '1.0.0'});
       await client.connect(transport);
+      const serverInfo = client.getServerVersion?.();
+      const resolvedName = serverInfo?.name?.trim() || server.name || server.url;
       const toolsRes = await client.listTools();
       const discoveredTools: McpToolInfo[] = (toolsRes.tools ?? []).map(t => ({
         name: t.name,
@@ -172,6 +162,7 @@ export class McpClientManagerService {
           s.id === id
             ? {
                 ...s,
+                name: resolvedName,
                 status: 'connected',
                 errorMessage: undefined,
                 tools: discoveredTools,
@@ -179,6 +170,7 @@ export class McpClientManagerService {
             : s,
         ),
       );
+      this.persistServers();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.servers.update(list =>
@@ -220,7 +212,9 @@ export class McpClientManagerService {
 
     const client = this.clients.get(targetServer.id);
     if (!client) {
-      throw new Error(`MCP client for server "${targetServer.name}" is not initialized.`);
+      throw new Error(
+        `MCP client for server "${targetServer.name || targetServer.url}" is not initialized.`,
+      );
     }
 
     return await client.callTool({

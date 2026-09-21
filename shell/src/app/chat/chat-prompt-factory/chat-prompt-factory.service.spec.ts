@@ -18,15 +18,25 @@ import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {TestBed} from '@angular/core/testing';
 import {ChatPromptFactoryService} from './chat-prompt-factory.service';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
 describe('ChatPromptFactoryService', () => {
   let service: ChatPromptFactoryService;
-  let catalogSpy: unknown;
+  let catalogSpy: {
+    activeCatalog: ReturnType<typeof vi.fn>;
+    activeCatalogSignal: ReturnType<typeof vi.fn>;
+  };
+  let mcpSpy: {getActiveServersWithTools: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     catalogSpy = {activeCatalog: vi.fn(), activeCatalogSignal: vi.fn(() => null)};
+    mcpSpy = {getActiveServersWithTools: vi.fn(() => [])};
     TestBed.configureTestingModule({
-      providers: [ChatPromptFactoryService, {provide: CatalogManagement, useValue: catalogSpy}],
+      providers: [
+        ChatPromptFactoryService,
+        {provide: CatalogManagement, useValue: catalogSpy},
+        {provide: McpClientManagerService, useValue: mcpSpy},
+      ],
     });
     service = TestBed.inject(ChatPromptFactoryService);
   });
@@ -37,9 +47,40 @@ describe('ChatPromptFactoryService', () => {
     expect(service.systemPrompt()).not.toContain('Active Catalog Schema');
   });
 
-  it('generate catalog specific prompt', () => {
+  it('generate catalog specific prompt without MCP instructions when callMcpTool is absent', () => {
+    mcpSpy.getActiveServersWithTools.mockReturnValue([
+      {
+        id: 'srv-1',
+        name: 'fs-server',
+        url: 'http://localhost:3001/mcp',
+        enabled: true,
+        status: 'connected',
+        tools: [{name: 'read_file', description: 'Reads a file'}],
+      },
+    ]);
     catalogSpy.activeCatalog.mockReturnValue({components: {}});
     expect(service.systemPrompt()).toContain('Active Catalog Schema');
     expect(service.systemPrompt()).toContain('A2UI Generation Expert');
+    expect(service.systemPrompt()).not.toContain('Available MCP Servers & Catalog Instructions');
+  });
+
+  it('appends active MCP servers when callMcpTool is present in catalog functions', () => {
+    mcpSpy.getActiveServersWithTools.mockReturnValue([
+      {
+        id: 'srv-1',
+        name: 'fs-server',
+        url: 'http://localhost:3001/mcp',
+        enabled: true,
+        status: 'connected',
+        tools: [{name: 'read_file', description: 'Reads a file'}],
+      },
+    ]);
+    catalogSpy.activeCatalog.mockReturnValue({
+      components: {},
+      functions: {callMcpTool: {type: 'object'}},
+    });
+    expect(service.systemPrompt()).toContain('Available MCP Servers & Catalog Instructions');
+    expect(service.systemPrompt()).toContain('fs-server');
+    expect(service.systemPrompt()).toContain('read_file');
   });
 });

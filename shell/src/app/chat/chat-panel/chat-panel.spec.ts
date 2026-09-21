@@ -986,4 +986,21 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       expect(parsed?.success).toBe(false);
     });
   });
+
+  describe('MCP catalog status indicator', () => {
+    it('shows "Instructions" when callMcpTool is not in activeCatalog and "Instructions (includes X MCP Servers)" when it is', async () => {
+      expect(await harness.getSystemInstructionsLinkText()).toBe('Instructions');
+
+      catalogManagementServiceMock.activeCatalog.set({
+        title: 'Basic with MCP',
+        components: {},
+        functions: {callMcpTool: {type: 'object'}},
+      });
+      fixture.detectChanges();
+
+      expect(await harness.getSystemInstructionsLinkText()).toBe(
+        'Instructions (includes 0 MCP Servers)',
+      );
+    });
+  });
 });

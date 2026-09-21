@@ -44,4 +44,22 @@ export declare interface Catalog {
   description?: string;
   catalogId?: string;
   components?: {[key: string]: CatalogComponentSchema};
+  functions?: {[key: string]: Record<string, unknown>};
+  $defs?: {[key: string]: Record<string, unknown>};
+}
+
+/**
+ * Checks whether the active catalog includes `callMcpTool` to determine if the renderer supports MCP mode.
+ */
+export function doesCatalogSupportMcp(catalog: Catalog | null | undefined): boolean {
+  if (!catalog) {
+    return false;
+  }
+  if (catalog.functions && 'callMcpTool' in catalog.functions) {
+    return true;
+  }
+  if (catalog.$defs && ('callMcpTool' in catalog.$defs || 'catalog_callMcpTool' in catalog.$defs)) {
+    return true;
+  }
+  return false;
 }

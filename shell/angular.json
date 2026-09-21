@@ -33,6 +33,11 @@
               },
               {
                 "glob": "**/*",
+                "input": "node_modules/ng-basic-with-mcp-catalog/dist/ng-basic-with-mcp-catalog/browser",
+                "output": "samples/ng-basic-with-mcp-catalog"
+              },
+              {
+                "glob": "**/*",
                 "input": "node_modules/lit-basic-catalog/dist",
                 "output": "samples/lit-basic-catalog"
               },

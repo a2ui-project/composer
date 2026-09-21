@@ -16,6 +16,7 @@
 
 import {Injectable, computed, inject} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {doesCatalogSupportMcp} from '../../storage/models/catalog-storage.model';
 import {formatJson} from '../../utils/json';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {McpClientManagerService, McpServerConfig} from '../../mcp/mcp-client-manager.service';
@@ -32,8 +33,8 @@ export class ChatPromptFactoryService {
 
   readonly systemPrompt = computed<string>(() => {
     const catalog = this.catalogManagement.activeCatalog();
-    const mcpEnabled = this.mcpManager.mcpEnabledInChat();
-    const activeServers = mcpEnabled ? this.mcpManager.getActiveServersWithTools() : [];
+    const mcpSupported = doesCatalogSupportMcp(catalog);
+    const activeServers = mcpSupported ? this.mcpManager.getActiveServersWithTools() : [];
     const mcpInstructions = this.buildMcpInstructions(activeServers);
 
     if (!catalog) {
@@ -67,7 +68,7 @@ export class ChatPromptFactoryService {
                 )
                 .join('\n')
             : '  - (No tools discovered)';
-        return `- **Server \`${server.name}\`** (\`${server.url}\`):\n${toolsList}`;
+        return `- **Server \`${server.name || server.url}\`** (\`${server.url}\`):\n${toolsList}`;
       })
       .join('\n\n');
 

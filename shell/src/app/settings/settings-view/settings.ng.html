@@ -55,101 +55,6 @@
             </mat-slide-toggle>
           </div>
         </div>
-
-        <div class="form-section mcp-servers-section">
-          <h3>MCP Servers</h3>
-          <p class="description">
-            Configure HTTP Model Context Protocol (MCP) servers for live tool execution in A2UI
-            surfaces.
-          </p>
-
-          <div class="mcp-add-row">
-            <mat-form-field appearance="outline" class="mcp-name-field">
-              <mat-label>Server Name</mat-label>
-              <input
-                matInput
-                placeholder="e.g. fs"
-                [ngModel]="newMcpServerName()"
-                (ngModelChange)="newMcpServerName.set($event)"
-                [ngModelOptions]="{standalone: true}"
-                aria-label="MCP Server Name"
-              />
-            </mat-form-field>
-            <mat-form-field appearance="outline" class="mcp-url-field">
-              <mat-label>Server URL</mat-label>
-              <input
-                matInput
-                placeholder="http://localhost:3001/mcp"
-                [ngModel]="newMcpServerUrl()"
-                (ngModelChange)="newMcpServerUrl.set($event)"
-                [ngModelOptions]="{standalone: true}"
-                aria-label="MCP Server URL"
-              />
-            </mat-form-field>
-            <button
-              type="button"
-              mat-flat-button
-              color="primary"
-              class="mcp-add-btn"
-              [disabled]="!newMcpServerName().trim() || !newMcpServerUrl().trim()"
-              (click)="addMcpServer()"
-            >
-              Add Server
-            </button>
-          </div>
-
-          <div class="mcp-server-list">
-            @for (server of mcpManager.servers(); track server.id) {
-              <div class="mcp-server-item">
-                <div class="mcp-server-main">
-                  <mat-slide-toggle
-                    [checked]="server.enabled"
-                    (change)="toggleMcpServer(server.id, $event.checked)"
-                    [attr.aria-label]="'Toggle ' + server.name"
-                  ></mat-slide-toggle>
-                  <div class="mcp-server-info">
-                    <div class="mcp-server-header">
-                      <span class="mcp-server-name">{{ server.name }}</span>
-                      <span class="mcp-server-status" [attr.data-status]="server.status">
-                        @if (server.status === 'connected') {
-                          Connected ({{ server.tools?.length || 0 }} tools)
-                        } @else if (server.status === 'connecting') {
-                          Connecting...
-                        } @else if (server.status === 'error') {
-                          Error: {{ server.errorMessage || 'Failed to connect' }}
-                        } @else {
-                          Disconnected
-                        }
-                      </span>
-                    </div>
-                    <span class="mcp-server-url">{{ server.url }}</span>
-                  </div>
-                </div>
-                <div class="mcp-server-actions">
-                  <button
-                    type="button"
-                    mat-icon-button
-                    matTooltip="Reconnect"
-                    aria-label="Reconnect MCP Server"
-                    (click)="reconnectMcpServer(server.id)"
-                  >
-                    <mat-icon>refresh</mat-icon>
-                  </button>
-                  <button
-                    type="button"
-                    mat-icon-button
-                    color="warn"
-                    matTooltip="Delete Server"
-                    aria-label="Delete MCP Server"
-                    (click)="removeMcpServer(server.id)"
-                  >
-                    <mat-icon>delete</mat-icon>
-                  </button>
-                </div>
-              </div>
-            }
-          </div>
-        </div>
       </form>
     </mat-card-content>
     @if (isThirdParty()) {
@@ -235,6 +140,99 @@
             >
           }
         </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="status-card mcp-card">
+    <mat-card-header>
+      <h2 mat-card-title>MCP Servers</h2>
+      <h3 mat-card-subtitle>
+        Configure HTTP Model Context Protocol (MCP) servers for live tool execution in A2UI surfaces
+      </h3>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="mcp-add-row">
+        <mat-form-field appearance="outline" class="mcp-url-field">
+          <mat-label>Server URL</mat-label>
+          <input
+            matInput
+            placeholder="http://localhost:3001/mcp"
+            [ngModel]="newMcpServerUrl()"
+            (ngModelChange)="newMcpServerUrl.set($event)"
+            [ngModelOptions]="{standalone: true}"
+            aria-label="MCP Server URL"
+          />
+        </mat-form-field>
+        <button
+          type="button"
+          mat-flat-button
+          color="primary"
+          class="mcp-add-btn"
+          [disabled]="!newMcpServerUrl().trim()"
+          (click)="addMcpServer()"
+        >
+          Add Server
+        </button>
+      </div>
+
+      <div class="mcp-server-list">
+        @for (server of mcpManager.servers(); track server.id) {
+          <div class="mcp-server-item">
+            <div class="mcp-server-main">
+              <mat-slide-toggle
+                [checked]="server.enabled"
+                (change)="toggleMcpServer(server.id, $event.checked)"
+                [attr.aria-label]="'Toggle ' + (server.name || server.url)"
+              ></mat-slide-toggle>
+              <div class="mcp-server-info">
+                <div class="mcp-server-header">
+                  <span class="mcp-server-name">{{ server.name || server.url }}</span>
+                  <span class="mcp-server-status" [attr.data-status]="server.status">
+                    @if (server.status === 'connected') {
+                      Connected ({{ server.tools?.length || 0 }} tools)
+                    } @else if (server.status === 'connecting') {
+                      Connecting...
+                    } @else if (server.status === 'error') {
+                      Error: {{ server.errorMessage || 'Failed to connect' }}
+                    } @else {
+                      Disconnected
+                    }
+                  </span>
+                </div>
+                <span class="mcp-server-url">{{ server.url }}</span>
+                @if (server.tools && server.tools.length > 0) {
+                  <div class="mcp-server-tools">
+                    @for (tool of server.tools; track tool.name) {
+                      <span class="mcp-tool-name">{{ tool.name }}</span>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+            <div class="mcp-server-actions">
+              <button
+                type="button"
+                mat-icon-button
+                matTooltip="Reconnect"
+                aria-label="Reconnect MCP Server"
+                (click)="reconnectMcpServer(server.id)"
+              >
+                <mat-icon aria-hidden="true">refresh</mat-icon>
+              </button>
+              <button
+                type="button"
+                mat-icon-button
+                color="warn"
+                matTooltip="Delete Server"
+                aria-label="Delete MCP Server"
+                (click)="removeMcpServer(server.id)"
+              >
+                <mat-icon aria-hidden="true">delete</mat-icon>
+              </button>
+            </div>
+          </div>
+        }
       </div>
     </mat-card-content>
   </mat-card>

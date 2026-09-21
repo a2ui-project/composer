@@ -379,10 +379,10 @@ describe('Settings', () => {
       const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
 
       expect(component.isThirdParty()).toBe(true);
-      expect(await harness.getFormSectionsCount()).toBe(4);
+      expect(await harness.getFormSectionsCount()).toBe(3);
 
       const sections = await harness.getFormSectionsCount();
-      expect(sections).toBe(4);
+      expect(sections).toBe(3);
     } finally {
       localStorage.removeItem('a2ui_composer_force_3p');
     }
@@ -578,6 +578,46 @@ describe('Settings', () => {
       expect(await harness.getLogsConsoleText()).toContain(
         '[System] Active renderer updated to http://resolved-url.com',
       );
+    });
+  });
+
+  describe('MCP Servers section', () => {
+    it('renders MCP Servers in a separate card and displays server name and tool names', async () => {
+      const {fixture, component, harness} = await setupComponent();
+      expect(await harness.hasMcpCard()).toBe(true);
+
+      const addSpy = vi.spyOn(component['mcpManager'], 'addServer').mockResolvedValue();
+      component.newMcpServerUrl.set('http://localhost:3001/mcp');
+      await component.addMcpServer();
+      expect(addSpy).toHaveBeenCalledWith('http://localhost:3001/mcp');
+      expect(component.newMcpServerUrl()).toBe('');
+
+      component['mcpManager'].servers.set([
+        {
+          id: 'srv-1',
+          name: 'filesystem-server',
+          url: 'http://localhost:3001/mcp',
+          enabled: true,
+          status: 'connected',
+          tools: [{name: 'read_file'}, {name: 'list_directory'}],
+        },
+      ]);
+      fixture.detectChanges();
+
+      expect(await harness.getMcpServerNames()).toEqual(['filesystem-server']);
+      expect(await harness.getMcpServerToolNames()).toEqual(['read_file', 'list_directory']);
+
+      const toggleSpy = vi.spyOn(component['mcpManager'], 'toggleServer').mockResolvedValue();
+      await component.toggleMcpServer('srv-1', false);
+      expect(toggleSpy).toHaveBeenCalledWith('srv-1', false);
+
+      const reconnectSpy = vi.spyOn(component['mcpManager'], 'connectServer').mockResolvedValue();
+      await component.reconnectMcpServer('srv-1');
+      expect(reconnectSpy).toHaveBeenCalledWith('srv-1');
+
+      const removeSpy = vi.spyOn(component['mcpManager'], 'removeServer').mockResolvedValue();
+      await component.removeMcpServer('srv-1');
+      expect(removeSpy).toHaveBeenCalledWith('srv-1');
     });
   });
 });
