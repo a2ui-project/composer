@@ -77,8 +77,8 @@ export class ChatPromptFactoryService {
   ## Available MCP Servers & Catalog Instructions
 
   When building surfaces that interact with MCP tools:
-  1. Use \`"catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic_with_mcp/catalog.json"\` in \`createSurface\`.
-  2. Trigger MCP tools via button \`functionCall\` actions that chain \`updateDataModel\`, \`jmespath\`, and \`callMcpTool\`. Never specify a \`server\` property in \`callMcpTool\` (the host resolves the MCP server from the tool \`name\`):
+
+  1. Trigger MCP tools via button \`functionCall\` actions that chain \`updateDataModel\`, \`jmespath\`, and \`callMcpTool\`:
      \`\`\`json
      "action": {
        "functionCall": {
