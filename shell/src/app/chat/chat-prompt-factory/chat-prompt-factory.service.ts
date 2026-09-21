@@ -53,28 +53,19 @@ export class ChatPromptFactoryService {
   });
 
   private buildMcpInstructions(activeServers: McpServerConfig[]): string {
-    if (activeServers.length === 0) {
+    const toolNames = Array.from(
+      new Set(activeServers.flatMap(server => (server.tools || []).map(tool => tool.name))),
+    );
+
+    if (toolNames.length === 0) {
       return '';
     }
 
-    const serversMarkdown = activeServers
-      .map(server => {
-        const toolsList =
-          server.tools && server.tools.length > 0
-            ? server.tools
-                .map(
-                  tool =>
-                    `  - \`${tool.name}\`: ${tool.description || 'No description'} — Input Schema: \`${JSON.stringify(tool.inputSchema || {})}\``,
-                )
-                .join('\n')
-            : '  - (No tools discovered)';
-        return `- **Server \`${server.name || server.url}\`** (\`${server.url}\`):\n${toolsList}`;
-      })
-      .join('\n\n');
+    const toolsMarkdown = toolNames.map(name => `- \`${name}\``).join('\n');
 
     return `
 
-  ## Available MCP Servers & Catalog Instructions
+  ## Available MCP Tools & Catalog Instructions
 
   When building surfaces that interact with MCP tools:
 
@@ -104,8 +95,8 @@ export class ChatPromptFactoryService {
      }
      \`\`\`
 
-  ### Connected MCP Servers
-  ${serversMarkdown}
+  ### Available MCP Tools
+  ${toolsMarkdown}
 `;
   }
 

@@ -61,10 +61,10 @@ describe('ChatPromptFactoryService', () => {
     catalogSpy.activeCatalog.mockReturnValue({components: {}});
     expect(service.systemPrompt()).toContain('Active Catalog Schema');
     expect(service.systemPrompt()).toContain('A2UI Generation Expert');
-    expect(service.systemPrompt()).not.toContain('Available MCP Servers & Catalog Instructions');
+    expect(service.systemPrompt()).not.toContain('Available MCP Tools & Catalog Instructions');
   });
 
-  it('appends active MCP servers when callMcpTool is present in catalog functions', () => {
+  it('appends active MCP tool names without server name or URL when callMcpTool is present in catalog functions', () => {
     mcpSpy.getActiveServersWithTools.mockReturnValue([
       {
         id: 'srv-1',
@@ -79,8 +79,9 @@ describe('ChatPromptFactoryService', () => {
       components: {},
       functions: {callMcpTool: {type: 'object'}},
     });
-    expect(service.systemPrompt()).toContain('Available MCP Servers & Catalog Instructions');
-    expect(service.systemPrompt()).toContain('fs-server');
+    expect(service.systemPrompt()).toContain('Available MCP Tools & Catalog Instructions');
     expect(service.systemPrompt()).toContain('read_file');
+    expect(service.systemPrompt()).not.toContain('fs-server');
+    expect(service.systemPrompt()).not.toContain('http://localhost:3001/mcp');
   });
 });
