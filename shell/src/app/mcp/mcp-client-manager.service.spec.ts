@@ -151,4 +151,31 @@ describe('McpClientManagerService', () => {
     expect(hydratedService.servers()).toHaveLength(1);
     expect(hydratedService.servers()[0].name).toBe('saved-fs');
   });
+
+  it('falls back to server name or url if getServerVersion returns a non-string name', async () => {
+    getServerVersionMock.mockReturnValueOnce({name: {unexpected: 'object'}});
+    await service.addServer('http://localhost:3002/mcp');
+    expect(service.servers()[0].name).toBe('http://localhost:3002/mcp');
+  });
+
+  it('closes client and aborts connectServer if server is disabled while connecting', async () => {
+    let resolveListTools!: (val: {tools: []}) => void;
+    listToolsMock.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveListTools = resolve;
+        }),
+    );
+
+    const addPromise = service.addServer('http://localhost:3003/mcp');
+    await Promise.resolve();
+    await Promise.resolve();
+    const id = service.servers()[0].id;
+    await service.toggleServer(id, false);
+    resolveListTools({tools: []});
+    await addPromise;
+
+    expect(closeMock).toHaveBeenCalled();
+    expect(service.servers()[0].status).toBe('disconnected');
+  });
 });

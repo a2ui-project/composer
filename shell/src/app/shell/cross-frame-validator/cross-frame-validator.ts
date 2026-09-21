@@ -188,6 +188,32 @@ export class CrossFrameValidator {
         return true;
       }
 
+      case PreviewBridgeMessageType.MCP_REQUEST: {
+        if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
+          CrossFrameValidator.recordError(
+            'Malformed payload for MCP_REQUEST: must be an object.',
+            errors,
+          );
+          return false;
+        }
+        const mcpReq = msgPayload as {requestId?: unknown; toolName?: unknown};
+        if (typeof mcpReq.requestId !== 'string' || !mcpReq.requestId.trim()) {
+          CrossFrameValidator.recordError(
+            'Malformed payload for MCP_REQUEST: must contain a non-empty requestId string.',
+            errors,
+          );
+          return false;
+        }
+        if (typeof mcpReq.toolName !== 'string' || !mcpReq.toolName.trim()) {
+          CrossFrameValidator.recordError(
+            'Malformed payload for MCP_REQUEST: must contain a non-empty toolName string.',
+            errors,
+          );
+          return false;
+        }
+        return true;
+      }
+
       case PreviewBridgeMessageType.MCP_RESPONSE: {
         if (!msgPayload || typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
           CrossFrameValidator.recordError(

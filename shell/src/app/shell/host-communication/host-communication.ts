@@ -242,7 +242,7 @@ export class HostCommunication implements OnDestroy {
           (event.source as Window) ??
           null;
         void this.mcpManager
-          .callTool(req.toolName, req.args)
+          .callTool(req.toolName, req.args ?? {})
           .then(result => {
             this.sendMessage(
               {

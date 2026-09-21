@@ -301,7 +301,7 @@ describe('MCP Bridge & Catalog Functions', () => {
       ).rejects.toThrow(/Server offline/);
     });
 
-    it('parses A2UI resources and UI resource URIs', () => {
+    it('parses A2UI resources and UI resource URIs', async () => {
       expect(
         readUiResourceUris({_meta: {ui: {resourceUri: ['ui://a', 'ui://a', 'ui://b']}}}),
       ).toEqual(['ui://a', 'ui://b']);
@@ -335,6 +335,40 @@ describe('MCP Bridge & Catalog Functions', () => {
         'ui://res',
       );
       expect(parsedMsgs).toEqual([{version: 'v0.9', deleteSurface: {surfaceId: 's2'}}]);
+
+      const localProcessed: unknown[] = [];
+      const nullToolsClient = {
+        listTools: vi.fn().mockResolvedValue(undefined),
+        callTool: vi.fn().mockResolvedValue({
+          content: [
+            {
+              type: 'resource',
+              resource: {
+                uri: 'ui://prim',
+                mimeType: A2UI_MIME_TYPE,
+                text: JSON.stringify([
+                  'primitive-entry',
+                  {version: 'v0.9', createSurface: {surfaceId: 's3'}},
+                ]),
+              },
+            },
+          ],
+        }),
+      };
+      const fnNullTools = createMcpCatalogFunctions(
+        {processMessages: msgs => localProcessed.push(msgs)},
+        async () => nullToolsClient as never,
+      ).find(f => f.name === 'callMcpTool')!;
+      const mockCtx = {
+        surfaceId: 'surf-1',
+        dataModel: {set: vi.fn()},
+        resolveDynamicValue: <T>(v: T) => v,
+      } as never;
+      await fnNullTools.execute({name: 'any_tool'}, mockCtx);
+      expect(localProcessed).toContainEqual([
+        'primitive-entry',
+        {version: 'v0.9', createSurface: {surfaceId: 's3'}},
+      ]);
     });
   });
 

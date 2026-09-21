@@ -1250,14 +1250,13 @@ describe('HostCommunication', () => {
             payload: {
               requestId: 'req-123',
               toolName: 'list_directory',
-              args: {path: '.'},
             },
           },
         }),
       );
 
       await vi.waitFor(() => {
-        expect(callToolSpy).toHaveBeenCalledWith('list_directory', {path: '.'});
+        expect(callToolSpy).toHaveBeenCalledWith('list_directory', {});
         expect(postMessageSpy).toHaveBeenCalledWith(
           {
             type: PreviewBridgeMessageType.MCP_RESPONSE,

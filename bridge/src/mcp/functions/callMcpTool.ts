@@ -135,7 +135,8 @@ export function createCallMcpToolImplementation(
         return uris;
       }
       try {
-        const {tools} = await client.listTools();
+        const res = await client.listTools();
+        const tools = res?.tools ?? [];
         for (const tool of tools) {
           const toolUris = readUiResourceUris(tool);
           if (toolUris.length > 0) {
@@ -297,7 +298,7 @@ export function parseA2uiMessages(
 /** Checks whether any message attempts to create a surface that already exists in `processor`. */
 function createsExistingSurface(messages: A2uiMessage[], processor: McpMessageProcessor): boolean {
   return messages.some(message => {
-    if (!message || !('createSurface' in message)) {
+    if (!message || typeof message !== 'object' || !('createSurface' in message)) {
       return false;
     }
     const surfaceId = (message as CreateSurfaceMessage).createSurface?.surfaceId;

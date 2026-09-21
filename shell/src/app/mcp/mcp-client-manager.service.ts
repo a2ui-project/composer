@@ -136,9 +136,12 @@ export class McpClientManagerService {
 
   async connectServer(id: string): Promise<void> {
     const server = this.servers().find(s => s.id === id);
-    if (!server) return;
+    if (!server || !server.enabled) return;
 
     await this.disconnectServer(id);
+
+    const activeBeforeConnect = this.servers().find(s => s.id === id);
+    if (!activeBeforeConnect || !activeBeforeConnect.enabled) return;
 
     this.servers.update(list =>
       list.map(s => (s.id === id ? {...s, status: 'connecting', errorMessage: undefined} : s)),
@@ -149,7 +152,9 @@ export class McpClientManagerService {
       const client = new Client({name: 'a2ui-composer', version: '1.0.0'});
       await client.connect(transport);
       const serverInfo = client.getServerVersion?.();
-      const resolvedName = serverInfo?.name?.trim() || server.name || server.url;
+      const rawName = serverInfo?.name;
+      const resolvedName =
+        (typeof rawName === 'string' ? rawName.trim() : '') || server.name || server.url;
       const toolsRes = await client.listTools();
       const discoveredTools: McpToolInfo[] = (toolsRes.tools ?? []).map(t => ({
         name: t.name,
@@ -157,6 +162,16 @@ export class McpClientManagerService {
         inputSchema: t.inputSchema as Record<string, unknown> | undefined,
         outputSchema: (t as unknown as {outputSchema?: Record<string, unknown>}).outputSchema,
       }));
+
+      const currentServer = this.servers().find(s => s.id === id);
+      if (!currentServer || !currentServer.enabled) {
+        try {
+          await client.close();
+        } catch {
+          // Ignore close errors during abort
+        }
+        return;
+      }
 
       this.clients.set(id, client);
       this.servers.update(list =>
