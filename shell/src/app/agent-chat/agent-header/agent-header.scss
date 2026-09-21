@@ -174,7 +174,7 @@
         color: var(--mat-sys-primary, #6750a4);
 
         &.active {
-          background: #f3edf7;
+          background: var(--mat-sys-surface-container, #f3edf7);
           border-color: var(--mat-sys-primary, #6750a4);
           color: var(--mat-sys-primary, #6750a4);
         }
