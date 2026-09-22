@@ -30,6 +30,7 @@
         --a2ui-color-input: #ffffff;
         --a2ui-color-on-input: #1c1b1c;
         --a2ui-color-border: #cccccc;
+        --a2ui-color-error: #d32f2f;
       }
 
       html.dark-theme,
@@ -42,6 +43,7 @@
         --a2ui-color-input: #2a2a2a;
         --a2ui-color-on-input: #e5e2e2;
         --a2ui-color-border: #444444;
+        --a2ui-color-error: #f28b82;
       }
 
       body {
@@ -52,8 +54,34 @@
         color: var(--a2ui-color-on-background, canvastext);
         box-sizing: border-box;
       }
+
+      .error-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        inset: 0;
+        z-index: 9999;
+        background-color: color-mix(in srgb, var(--a2ui-color-surface, canvas) 95%, transparent);
+        color: var(--a2ui-color-error, #d32f2f);
+        padding: 24px;
+        font-family: monospace;
+        overflow: auto;
+        box-sizing: border-box;
+      }
+
+      .error-overlay h3 {
+        margin-top: 0;
+      }
+
+      .error-overlay pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+      }
     </style>
-    <script type="module" crossorigin src="/composer/samples/react-basic-catalog/assets/index-DMW2CNDI.js"></script>
+    <script type="module" crossorigin src="/composer/samples/react-basic-catalog/assets/index-DMeXzlYW.js"></script>
   </head>
   <body>
     <div id="app-root"></div>
