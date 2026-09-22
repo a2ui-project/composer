@@ -1,0 +1,41 @@
+{
+  "name": "lynx-basic-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "yarn build:lynx && rsbuild dev",
+    "dev": "yarn start",
+    "build:lynx": "rspeedy build",
+    "build": "yarn lint && tsc --noEmit && yarn build:lynx && rsbuild build",
+    "preview": "rsbuild preview",
+    "test": "NODE_ENV=test vitest run",
+    "prettier": "prettier --ignore-path ../../.prettierignore --write . | grep -v '(unchanged)'",
+    "prettier:check": "prettier --ignore-path ../../.prettierignore --check .",
+    "clean": "rm -rf dist .lynx-dist node_modules/.vite",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@lynx-js/genui": "0.4.0",
+    "@lynx-js/luna-styles": "0.2.2",
+    "@lynx-js/lynx-core": "0.1.4",
+    "@lynx-js/lynx-ui": "3.138.0",
+    "@lynx-js/react": "0.126.1",
+    "@lynx-js/web-core": "0.26.1",
+    "@lynx-js/web-elements": "0.12.11"
+  },
+  "devDependencies": {
+    "@lynx-js/config-rsbuild-plugin": "0.2.3",
+    "@lynx-js/react-rsbuild-plugin": "0.20.2",
+    "@lynx-js/rspeedy": "0.17.2",
+    "@lynx-js/types": "4.1.0",
+    "@rsbuild/core": "2.2.4",
+    "@types/react": "19.2.17",
+    "eslint": "10.7.0",
+    "jsdom": "29.1.1",
+    "prettier": "3.9.6",
+    "tslib": "2.8.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
+}

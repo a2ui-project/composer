@@ -6,6 +6,7 @@
     "samples/ng-basic-catalog",
     "samples/lit-basic-catalog",
     "samples/react-basic-catalog",
+    "samples/lynx-basic-catalog",
     "bridge"
   ],
   "scripts": {
@@ -19,7 +20,7 @@
     "lint": "yarn workspaces foreach -A --exclude a2ui-composer-root run lint"
   },
   "resolutions": {
-    "@a2ui/web_core": "0.10.5",
+    "@a2ui/web_core": "0.10.6",
     "@google/genai": "2.8.0"
   },
   "packageManager": "yarn@4.5.0",

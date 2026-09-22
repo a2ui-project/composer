@@ -32,6 +32,31 @@
   background-color: var(--mat-sys-surface);
   position: relative;
 
+  .artifact-toolbar {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+    color: var(--mat-sys-on-surface-variant);
+    background: var(--mat-sys-surface-container-low);
+    font:
+      500 12px/20px Roboto,
+      sans-serif;
+  }
+
+  .artifact-download {
+    color: var(--mat-sys-primary);
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+      text-decoration: underline;
+    }
+  }
+
   &.is-locked {
     pointer-events: none;
     user-select: none;

@@ -69,6 +69,7 @@ jobs:
           yarn workspace a2ui-composer-shell run build --base-href=/composer/
           yarn workspace lit-basic-catalog run build --base=/composer/samples/lit-basic-catalog/
           yarn workspace react-basic-catalog run build --base=/composer/samples/react-basic-catalog/
+          yarn workspace lynx-basic-catalog run build --base=/composer/samples/lynx-basic-catalog/
 
       # Explicitly pre-create all destination directories and use cp -r SOURCE/. DEST/ to prevent nesting traps
       - name: Assemble Staging Directory (deploy_dist)
@@ -76,6 +77,7 @@ jobs:
           mkdir -p deploy_dist/samples/ng-basic-catalog
           mkdir -p deploy_dist/samples/lit-basic-catalog
           mkdir -p deploy_dist/samples/react-basic-catalog
+          mkdir -p deploy_dist/samples/lynx-basic-catalog
 
           # Stage Shell
           if [ -d "shell/dist/a2ui-composer/browser" ]; then
@@ -94,6 +96,7 @@ jobs:
           # Stage Vite Samples
           cp -r samples/lit-basic-catalog/dist/. deploy_dist/samples/lit-basic-catalog/
           cp -r samples/react-basic-catalog/dist/. deploy_dist/samples/react-basic-catalog/
+          cp -r samples/lynx-basic-catalog/dist/. deploy_dist/samples/lynx-basic-catalog/
 
           # Create Angular SPA fallback and bypass Jekyll
           cp deploy_dist/index.html deploy_dist/404.html
