@@ -15,6 +15,8 @@
  */
 
 /**
+ * TODO: Replace this file with imports from `@a2ui/mcp-catalog/v0_9` once published to NPM.
+ *
  * Type guards and recursive resolution utilities for A2UI dynamic values.
  *
  * While `DataContext.resolveDynamicValue` resolves a single top-level `DynamicValue`,

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {McpRequestPayload, McpResponsePayload} from '../bridge-message.js';
+import {McpRequestPayload, McpResponsePayload} from './bridge-message.js';
 
 interface PendingRequest {
   resolve: (value: unknown) => void;

@@ -17,6 +17,7 @@
 import {Injectable, inject} from '@angular/core';
 import {BasicCatalog} from '@a2ui/angular/v0_9';
 import {Catalog, ComponentApi, FunctionImplementation} from '@a2ui/web_core/v0_9';
+// TODO: Replace import from 'a2ui-bridge' with '@a2ui/mcp-catalog/v0_9' once published to NPM.
 import {a2uiBridge, createMcpCatalogFunctions} from 'a2ui-bridge';
 
 export const BASIC_WITH_MCP_CATALOG_ID =

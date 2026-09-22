@@ -17,8 +17,9 @@
 export * from './bridge-message.js';
 export * from './domain-origin-verification.js';
 export * from './instrumentation-overrides.js';
+// TODO: Replace './mcp/index.js' with '@a2ui/mcp-catalog/v0_9' once published to NPM.
 export * from './mcp/index.js';
-export * from './mcp/iframe-mcp-client.js';
+export * from './iframe-mcp-client.js';
 export * from './preview-bridge.js';
 export * from './render-config.js';
 export * from './surface-resize-observer.js';

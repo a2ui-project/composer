@@ -35,7 +35,7 @@ import {
   McpResponsePayload,
 } from './bridge-message';
 
-import {IframeMcpClient} from './mcp/iframe-mcp-client';
+import {IframeMcpClient} from './iframe-mcp-client';
 
 import {SurfaceResizeObserver} from './surface-resize-observer';
 export * from './surface-resize-observer';

@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * TODO: Replace this module with `@a2ui/mcp-catalog/v0_9` once published to NPM.
+ * See README.md in this directory for details and the migration plan.
+ */
+
 import type {FunctionImplementation} from '@a2ui/web_core/v0_9';
 import {
   createCallMcpToolImplementation,

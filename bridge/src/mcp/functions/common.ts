@@ -15,6 +15,8 @@
  */
 
 /**
+ * TODO: Replace this file with imports from `@a2ui/mcp-catalog/v0_9` once published to NPM.
+ *
  * Shared utilities for MCP catalog data functions.
  *
  * Because A2UI resolves arguments before invoking a function, nested async

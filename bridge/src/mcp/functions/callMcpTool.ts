@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+/**
+ * TODO: Replace this file with imports from `@a2ui/mcp-catalog/v0_9` once published to NPM.
+ */
+
 import {
   A2uiExpressionError,
   DynamicStringSchema,

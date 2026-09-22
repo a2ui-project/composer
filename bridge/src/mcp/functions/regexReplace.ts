@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+/**
+ * TODO: Replace this file with imports from `@a2ui/mcp-catalog/v0_9` once published to NPM.
+ */
+
 import {createFunctionImplementation, type FunctionImplementation} from '@a2ui/web_core/v0_9';
 import {RE2JS} from 're2js';
 import {z} from 'zod/v3';

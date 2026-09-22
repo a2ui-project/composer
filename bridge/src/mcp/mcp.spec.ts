@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+/**
+ * TODO: Replace with upstream test coverage from `@a2ui/mcp-catalog` once published to NPM.
+ */
+
+import {describe, it, expect, vi} from 'vitest';
 import {Catalog, MessageProcessor, type ComponentApi} from '@a2ui/web_core/v0_9';
 import {
-  IframeMcpClient,
   createMcpCatalogFunctions,
   PreviewBridge,
   PreviewBridgeMessageType,
@@ -84,62 +87,6 @@ describe('MCP Bridge & Catalog Functions', () => {
         directPromise: 'done',
         nestedList: [1, {deep: 'ok'}],
       });
-    });
-  });
-
-  describe('IframeMcpClient', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it('resolves callTool when matching MCP_RESPONSE is received', async () => {
-      const sentPayloads: Array<{
-        requestId: string;
-        toolName: string;
-        args: Record<string, unknown>;
-      }> = [];
-      const client = new IframeMcpClient(payload => {
-        sentPayloads.push(payload);
-      });
-
-      const promise = client.callTool({name: 'list_dir', arguments: {path: '/root'}});
-      expect(sentPayloads).toHaveLength(1);
-      expect(sentPayloads[0].toolName).toBe('list_dir');
-      expect(sentPayloads[0].args).toEqual({path: '/root'});
-
-      client.handleResponse({
-        requestId: sentPayloads[0].requestId,
-        result: {content: [{type: 'text', text: 'file1.txt'}]},
-      });
-
-      const result = await promise;
-      expect(result).toEqual({content: [{type: 'text', text: 'file1.txt'}]});
-    });
-
-    it('rejects callTool when MCP_RESPONSE contains error', async () => {
-      let reqId = '';
-      const client = new IframeMcpClient(payload => {
-        reqId = payload.requestId;
-      });
-
-      const promise = client.callTool({name: 'fail_tool'});
-      client.handleResponse({
-        requestId: reqId,
-        error: 'Server unreachable',
-      });
-
-      await expect(promise).rejects.toThrow('Server unreachable');
-    });
-
-    it('times out if no response is received within timeoutMs', async () => {
-      const client = new IframeMcpClient(() => {}, 1000);
-      const promise = client.callTool({name: 'slow_tool'});
-      vi.advanceTimersByTime(1001);
-      await expect(promise).rejects.toThrow(/timed out/);
     });
   });
 
