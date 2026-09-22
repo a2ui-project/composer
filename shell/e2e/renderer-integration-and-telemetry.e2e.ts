@@ -125,11 +125,13 @@ const CONFIGS: IntegrationConfig[] = [
 const HEIGHT_SAMPLE_COUNT = 12;
 
 /** Delay between consecutive frame height samples, in milliseconds. */
+const HEIGHT_SAMPLE_INTERVAL_MS = 100;
 
 /** Bound on how long to wait for the frame to stop moving before sampling. */
 const HEIGHT_STABILITY_TIMEOUT_MS = 5_000;
 
 /** Delay between height readings while waiting for the frame to stop moving. */
+const STABILITY_PROBE_INTERVAL_MS = 100;
 
 /**
  * Upper bound for a settled preview frame. The sample content is roughly 280px
@@ -239,7 +241,7 @@ async function waitForStableHeight(page: Page, locator: Locator): Promise<void> 
     const height = await locator.evaluate(el => (el as HTMLElement).offsetHeight);
     if (height === previous) return;
     previous = height;
-    await expect.poll(async () => true).toBe(true);
+    await page.evaluate(ms => new Promise(r => setTimeout(r, ms)), STABILITY_PROBE_INTERVAL_MS);
   }
 }
 
@@ -545,7 +547,7 @@ for (const config of CONFIGS) {
       const heights: number[] = [];
       for (let i = 0; i < HEIGHT_SAMPLE_COUNT; i++) {
         heights.push(await frameContainer.evaluate(el => (el as HTMLElement).offsetHeight));
-        await expect.poll(async () => true).toBe(true);
+        await page.evaluate(ms => new Promise(r => setTimeout(r, ms)), HEIGHT_SAMPLE_INTERVAL_MS);
       }
 
       // The frame must come to rest. Its resting value is deliberately not
