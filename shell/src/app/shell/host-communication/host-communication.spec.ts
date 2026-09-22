@@ -35,6 +35,7 @@ describe('HostCommunication', () => {
     error: ReturnType<typeof vi.fn>;
     warn: ReturnType<typeof vi.fn>;
     info: ReturnType<typeof vi.fn>;
+    withTag: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -48,6 +49,7 @@ describe('HostCommunication', () => {
       error: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),
+      withTag: vi.fn().mockReturnThis(),
     };
 
     TestBed.configureTestingModule({
@@ -1367,6 +1369,11 @@ describe('HostCommunication', () => {
           },
           'http://localhost:3000',
         );
+        expect(mockErrorLogger.log).toHaveBeenCalledWith({
+          level: 'error',
+          message: 'MCP tool execution failed for "list_directory": Tool failure',
+          sourceTag: '[McpBridge]',
+        });
         const errorEnvelope = service
           .getHistoryBuffer()
           .find(

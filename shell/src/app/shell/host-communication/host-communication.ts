@@ -99,13 +99,21 @@ export class HostCommunication implements OnDestroy {
   }> = [];
 
   /**
-   * Retrieves a snapshot copy of the recent message history buffer.
+   * Retrieves a snapshot copy of the recent message history buffer and clears it.
    * @return Array of stored message envelopes
    */
   consumeEnvelopeHistory(): MessageEnvelope[] {
     const records = [...this.messageHistoryBuffer];
-    this.messageHistoryBuffer.length = 0;
+    this.clearHistoryBuffer();
     return records;
+  }
+
+  /**
+   * Retrieves a snapshot copy of the recent message history buffer without clearing it.
+   * @return Array of stored message envelopes
+   */
+  getHistoryBuffer(): MessageEnvelope[] {
+    return [...this.messageHistoryBuffer];
   }
 
   /**
@@ -257,12 +265,18 @@ export class HostCommunication implements OnDestroy {
             );
           })
           .catch((err: unknown) => {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            this.errorLogger.log({
+              level: 'error',
+              message: `MCP tool execution failed for "${req.toolName}": ${errorMessage}`,
+              sourceTag: '[McpBridge]',
+            });
             this.sendMessage(
               {
                 type: PreviewBridgeMessageType.MCP_RESPONSE,
                 payload: {
                   requestId: req.requestId,
-                  error: err instanceof Error ? err.message : String(err),
+                  error: errorMessage,
                 },
               },
               sourceTarget,
