@@ -16,7 +16,6 @@
 
 import {Injectable, computed, inject} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {doesCatalogSupportMcp} from '../../storage/models/catalog-storage.model';
 import {formatJson} from '../../utils/json';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {
@@ -37,7 +36,7 @@ export class ChatPromptFactoryService {
 
   readonly systemPrompt = computed<string>(() => {
     const catalog = this.catalogManagement.activeCatalog();
-    const mcpSupported = doesCatalogSupportMcp(catalog);
+    const mcpSupported = this.mcpManager.doesCatalogSupportMcp(catalog);
     const activeServers = mcpSupported ? this.mcpManager.getActiveServersWithTools() : [];
     const mcpInstructions = this.buildMcpInstructions(activeServers);
 

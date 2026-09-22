@@ -20,9 +20,11 @@ import {Catalog, ComponentApi, FunctionImplementation} from '@a2ui/web_core/v0_9
 // TODO: Replace import from 'a2ui-bridge' with '@a2ui/mcp-catalog/v0_9' once published to NPM.
 import {a2uiBridge, createMcpCatalogFunctions} from 'a2ui-bridge';
 
-export const BASIC_WITH_MCP_CATALOG_ID =
-  'https://a2ui.org/specification/v0_9/catalogs/basic_with_mcp/catalog.json';
+export const BASIC_CATALOG_ID = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
 
+/**
+ * Normalizes a catalog entry collection (ReadonlyMap or Record) into a flat array of values.
+ */
 function extractCatalogEntries<T>(collection?: ReadonlyMap<string, T> | Record<string, T>): T[] {
   if (!collection) return [];
   if (typeof (collection as ReadonlyMap<string, T>).values === 'function') {
@@ -49,6 +51,6 @@ export class BasicWithMcpCatalog extends Catalog<ComponentApi> {
       },
       async () => a2uiBridge.getMcpClient(),
     );
-    super(BASIC_WITH_MCP_CATALOG_ID, baseComponents, [...baseFunctions, ...mcpFunctions]);
+    super(BASIC_CATALOG_ID, baseComponents, [...baseFunctions, ...mcpFunctions]);
   }
 }

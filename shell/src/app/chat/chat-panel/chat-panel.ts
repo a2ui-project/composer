@@ -38,7 +38,6 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {doesCatalogSupportMcp} from '../../storage/models/catalog-storage.model';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
 import {
   FailureParseResult,
@@ -111,7 +110,7 @@ export class ChatPanel {
 
   protected readonly includeScreenshot = signal<boolean>(false);
   protected readonly isMcpSupported = computed(() =>
-    doesCatalogSupportMcp(this.catalogManagement.activeCatalog()),
+    this.mcpManager.doesCatalogSupportMcp(this.catalogManagement.activeCatalog()),
   );
   protected readonly activeMcpServerCount = computed(
     () => this.mcpManager.getActiveServersWithTools().length,

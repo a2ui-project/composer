@@ -92,11 +92,11 @@ flowchart TD
 The ecosystem is architected as a modular, highly cohesive monorepo utilizing
 **Yarn v4 Workspaces**:
 
-| Workspace      | Package Name                                                                                      | Description & Core Responsibilities                                                                                                                                                                      |
-| :------------- | :------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`shell/`**   | `a2ui-composer-shell`                                                                             | Standalone web application hosting chat panel, live JSON editors, real-time iframe preview wrapper, debugging suite, interactive mock rules manager, and IndexedDB storage engines.                      |
-| **`bridge/`**  | `a2ui-bridge`                                                                                     | ESBuild-bundled lightweight cross-frame JavaScript library embedded inside child rendering iframes.                                                                                                      |
-| **`samples/`** | `ng-basic-catalog`<br>`ng-basic-with-mcp-catalog`<br>`lit-basic-catalog`<br>`react-basic-catalog` | Plug-and-play developer renderer sandbox applications demonstrating zero-boilerplate integration across Lit, Angular, and React rendering stacks, plus an Angular renderer with MCP catalog integration. |
+| Workspace      | Package Name                                                       | Description & Core Responsibilities                                                                                                                                                 |
+| :------------- | :----------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`shell/`**   | `a2ui-composer-shell`                                              | Standalone web application hosting chat panel, live JSON editors, real-time iframe preview wrapper, debugging suite, interactive mock rules manager, and IndexedDB storage engines. |
+| **`bridge/`**  | `a2ui-bridge`                                                      | ESBuild-bundled lightweight cross-frame JavaScript library embedded inside child rendering iframes.                                                                                 |
+| **`samples/`** | `ng-basic-catalog`<br>`lit-basic-catalog`<br>`react-basic-catalog` | Plug-and-play developer renderer sandbox applications demonstrating zero-boilerplate integration across Lit, Angular, and React rendering stacks.                                   |
 
 ## Getting Started
 
@@ -118,19 +118,13 @@ yarn install
 #   ng-basic-catalog starts on localhost:3456
 #   lit-basic-catalog starts on localhost:3457
 #   react-basic-catalog starts on localhost:3458
-#   ng-basic-with-mcp-catalog starts on localhost:3459
 yarn --cwd samples/ng-basic-catalog start
 yarn --cwd samples/lit-basic-catalog start
 yarn --cwd samples/react-basic-catalog start
-yarn --cwd samples/ng-basic-with-mcp-catalog start
 
 # Launch standalone interactive development shell on http://localhost:4200
 yarn --cwd shell start
 ```
-
-### Angular Basic with MCP Renderer (`ng-basic-with-mcp-catalog`)
-
-`samples/ng-basic-with-mcp-catalog` provides a standalone Angular renderer configured with the `basic_with_mcp` catalog (`https://a2ui.org/specification/v0_9/catalogs/basic_with_mcp/catalog.json`). Unlike the standard basic catalog renderers (`ng-basic-catalog`, `lit-basic-catalog`, and `react-basic-catalog`), this renderer exposes the Model Context Protocol (**MCP**) catalog functions (`callMcpTool`, `jmespath`, `split`, `regexCapture`, `regexReplace`, and `updateDataModel`). When selected in Settings alongside active HTTP MCP servers, the Gemini assistant automatically includes the discovered MCP tools in its system instructions so generated A2UI surfaces can invoke live MCP tools directly.
 
 When the A2UI Composer starts, if this is your first time using it, you'll be
 automatically routed to the Settings page, where you will need to enter the URL

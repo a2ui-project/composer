@@ -161,19 +161,21 @@
             placeholder="http://localhost:3001/mcp"
             [ngModel]="newMcpServerUrl()"
             (ngModelChange)="newMcpServerUrl.set($event)"
+            (keydown.enter)="addMcpServer()"
             [ngModelOptions]="{standalone: true}"
             aria-label="MCP Server URL"
           />
         </mat-form-field>
         <button
           type="button"
-          mat-flat-button
-          color="primary"
+          mat-icon-button
           class="mcp-add-btn"
+          aria-label="Add MCP Server"
+          matTooltip="Add MCP Server"
           [disabled]="!newMcpServerUrl().trim()"
           (click)="addMcpServer()"
         >
-          Add Server
+          <mat-icon aria-hidden="true">add_circle</mat-icon>
         </button>
       </div>
 
@@ -203,18 +205,71 @@
                       }
                     </span>
                   </div>
-                  <span class="mcp-server-url">{{ server.url }}</span>
+                  @if (editingMcpServerId() === server.id) {
+                    <div class="mcp-edit-row">
+                      <mat-form-field
+                        appearance="outline"
+                        subscriptSizing="dynamic"
+                        class="mcp-edit-url-field"
+                      >
+                        <input
+                          matInput
+                          [ngModel]="editingMcpServerUrl()"
+                          (ngModelChange)="editingMcpServerUrl.set($event)"
+                          (keydown.enter)="saveEditedMcpServer(server.id)"
+                          (keydown.escape)="cancelEditingMcpServer()"
+                          [ngModelOptions]="{standalone: true}"
+                          aria-label="Edit MCP Server URL"
+                        />
+                      </mat-form-field>
+                      <button
+                        type="button"
+                        mat-icon-button
+                        color="primary"
+                        class="mcp-save-edit-btn"
+                        matTooltip="Save URL"
+                        aria-label="Save MCP Server URL"
+                        [disabled]="!editingMcpServerUrl().trim()"
+                        (click)="saveEditedMcpServer(server.id)"
+                      >
+                        <mat-icon aria-hidden="true">check</mat-icon>
+                      </button>
+                      <button
+                        type="button"
+                        mat-icon-button
+                        class="mcp-cancel-edit-btn"
+                        matTooltip="Cancel Editing"
+                        aria-label="Cancel Editing MCP Server URL"
+                        (click)="cancelEditingMcpServer()"
+                      >
+                        <mat-icon aria-hidden="true">close</mat-icon>
+                      </button>
+                    </div>
+                  } @else {
+                    <span class="mcp-server-url">{{ server.url }}</span>
+                  }
                 </div>
               </div>
               <div class="mcp-server-actions">
                 <button
                   type="button"
-                  mat-icon-button
-                  matTooltip="Reconnect"
-                  aria-label="Reconnect MCP Server"
-                  (click)="reconnectMcpServer(server.id)"
+                  mat-stroked-button
+                  class="mcp-test-btn"
+                  matTooltip="Test Connection"
+                  aria-label="Test MCP Server"
+                  (click)="testMcpServer(server.id)"
                 >
-                  <mat-icon aria-hidden="true">refresh</mat-icon>
+                  Test
+                </button>
+                <button
+                  type="button"
+                  mat-icon-button
+                  class="mcp-edit-btn"
+                  matTooltip="Edit URL"
+                  aria-label="Edit MCP Server URL"
+                  (click)="startEditingMcpServer(server)"
+                >
+                  <mat-icon aria-hidden="true">edit</mat-icon>
                 </button>
                 <button
                   type="button"

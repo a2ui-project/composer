@@ -43,7 +43,7 @@ import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tok
 import {SettingsService, RendererOption} from '../settings-service/settings.service';
 import {RendererSelectorComponent} from '../renderer-selector/renderer-selector';
 import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
-import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
+import {McpClientManagerService, McpServerConfig} from '../../mcp/mcp-client-manager.service';
 
 /**
  * Renders the user settings view, allowing configuration of target URL endpoints,
@@ -80,6 +80,8 @@ export class Settings implements OnInit {
   protected readonly mcpManager = inject(McpClientManagerService);
 
   readonly newMcpServerUrl = signal('');
+  readonly editingMcpServerId = signal<string | null>(null);
+  readonly editingMcpServerUrl = signal('');
 
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
@@ -180,7 +182,28 @@ export class Settings implements OnInit {
     await this.mcpManager.addServer(url);
   }
 
+  startEditingMcpServer(server: McpServerConfig): void {
+    this.editingMcpServerId.set(server.id);
+    this.editingMcpServerUrl.set(server.url);
+  }
+
+  cancelEditingMcpServer(): void {
+    this.editingMcpServerId.set(null);
+    this.editingMcpServerUrl.set('');
+  }
+
+  async saveEditedMcpServer(id: string): Promise<void> {
+    const url = this.editingMcpServerUrl().trim();
+    if (!url) return;
+    this.editingMcpServerId.set(null);
+    this.editingMcpServerUrl.set('');
+    await this.mcpManager.updateServerUrl(id, url);
+  }
+
   async removeMcpServer(id: string): Promise<void> {
+    if (this.editingMcpServerId() === id) {
+      this.cancelEditingMcpServer();
+    }
     await this.mcpManager.removeServer(id);
   }
 
@@ -188,7 +211,7 @@ export class Settings implements OnInit {
     await this.mcpManager.toggleServer(id, enabled);
   }
 
-  async reconnectMcpServer(id: string): Promise<void> {
-    await this.mcpManager.connectServer(id);
+  async testMcpServer(id: string): Promise<void> {
+    await this.mcpManager.testServer(id);
   }
 }

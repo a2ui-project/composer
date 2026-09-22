@@ -582,7 +582,7 @@ describe('Settings', () => {
   });
 
   describe('MCP Servers section', () => {
-    it('renders MCP Servers in a separate card and displays server name and tool names', async () => {
+    it('renders MCP Servers card and supports adding, testing, editing URL, toggling, and removing servers', async () => {
       const {fixture, component, harness} = await setupComponent();
       expect(await harness.hasMcpCard()).toBe(true);
 
@@ -592,32 +592,57 @@ describe('Settings', () => {
       expect(addSpy).toHaveBeenCalledWith('http://localhost:3001/mcp');
       expect(component.newMcpServerUrl()).toBe('');
 
-      component['mcpManager'].servers.set([
-        {
-          id: 'srv-1',
-          name: 'filesystem-server',
-          url: 'http://localhost:3001/mcp',
-          enabled: true,
-          status: 'connected',
-          tools: [{name: 'read_file'}, {name: 'list_directory'}],
-        },
-      ]);
+      const serverItem = {
+        id: 'srv-1',
+        name: 'filesystem-server',
+        url: 'http://localhost:3001/mcp',
+        enabled: true,
+        status: 'connected' as const,
+        tools: [{name: 'read_file'}, {name: 'list_directory'}],
+      };
+      component['mcpManager'].servers.set([serverItem]);
       fixture.detectChanges();
 
       expect(await harness.getMcpServerNames()).toEqual(['filesystem-server']);
+      expect(await harness.getMcpServerUrls()).toEqual(['http://localhost:3001/mcp']);
       expect(await harness.getMcpServerToolNames()).toEqual(['read_file', 'list_directory']);
+      expect(await harness.hasMcpTestButtons()).toBe(true);
+
+      component.startEditingMcpServer(serverItem);
+      fixture.detectChanges();
+      expect(await harness.hasMcpEditRow()).toBe(true);
+      expect(component.editingMcpServerId()).toBe('srv-1');
+      expect(component.editingMcpServerUrl()).toBe('http://localhost:3001/mcp');
+
+      component.cancelEditingMcpServer();
+      fixture.detectChanges();
+      expect(await harness.hasMcpEditRow()).toBe(false);
+
+      const updateUrlSpy = vi.spyOn(component['mcpManager'], 'updateServerUrl').mockResolvedValue();
+      component.startEditingMcpServer(serverItem);
+      component.editingMcpServerUrl.set('   ');
+      await component.saveEditedMcpServer('srv-1');
+      expect(updateUrlSpy).not.toHaveBeenCalled();
+      expect(component.editingMcpServerId()).toBe('srv-1');
+
+      component.editingMcpServerUrl.set('http://localhost:3002/mcp');
+      await component.saveEditedMcpServer('srv-1');
+      expect(updateUrlSpy).toHaveBeenCalledWith('srv-1', 'http://localhost:3002/mcp');
+      expect(component.editingMcpServerId()).toBeNull();
 
       const toggleSpy = vi.spyOn(component['mcpManager'], 'toggleServer').mockResolvedValue();
       await component.toggleMcpServer('srv-1', false);
       expect(toggleSpy).toHaveBeenCalledWith('srv-1', false);
 
-      const reconnectSpy = vi.spyOn(component['mcpManager'], 'connectServer').mockResolvedValue();
-      await component.reconnectMcpServer('srv-1');
-      expect(reconnectSpy).toHaveBeenCalledWith('srv-1');
+      const testSpy = vi.spyOn(component['mcpManager'], 'testServer').mockResolvedValue();
+      await component.testMcpServer('srv-1');
+      expect(testSpy).toHaveBeenCalledWith('srv-1');
 
       const removeSpy = vi.spyOn(component['mcpManager'], 'removeServer').mockResolvedValue();
+      component.startEditingMcpServer(serverItem);
       await component.removeMcpServer('srv-1');
       expect(removeSpy).toHaveBeenCalledWith('srv-1');
+      expect(component.editingMcpServerId()).toBeNull();
     });
   });
 });

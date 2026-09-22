@@ -34,7 +34,7 @@
     "@modelcontextprotocol/sdk": "1.30.0",
     "jmespath": "0.16.0",
     "re2js": "2.8.6",
-    "zod": "^4.1.12"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@angular/core": "22.0.7",

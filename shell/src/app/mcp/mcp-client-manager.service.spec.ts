@@ -235,4 +235,58 @@ describe('McpClientManagerService', () => {
     expect(closeMock).toHaveBeenCalled();
     expect(service.servers()[0].status).toBe('disconnected');
   });
+
+  it('updates server URL, reconnects if enabled, and ignores empty URLs or unknown IDs', async () => {
+    await service.addServer('http://localhost:3001/mcp');
+    const id = service.servers()[0].id;
+
+    await service.updateServerUrl(id, '   ');
+    expect(service.servers()[0].url).toBe('http://localhost:3001/mcp');
+
+    await service.updateServerUrl('non-existent-id', 'http://localhost:3009/mcp');
+    expect(service.servers()[0].url).toBe('http://localhost:3001/mcp');
+
+    getServerVersionMock.mockReturnValueOnce({name: 'updated-mcp-server', version: '1.0.0'});
+    await service.updateServerUrl(id, 'http://localhost:3005/mcp');
+    expect(service.servers()[0].url).toBe('http://localhost:3005/mcp');
+    expect(service.servers()[0].name).toBe('updated-mcp-server');
+    expect(service.servers()[0].status).toBe('connected');
+  });
+
+  it('tests server connection when enabled or disabled, including error handling', async () => {
+    await service.addServer('http://localhost:3001/mcp');
+    const id = service.servers()[0].id;
+
+    // Test when enabled (happy path)
+    await service.testServer(id);
+    expect(service.servers()[0].status).toBe('connected');
+
+    // Test when enabled (connection failure)
+    connectMock.mockRejectedValueOnce(new Error('Enabled test failed'));
+    await service.testServer(id);
+    expect(service.servers()[0].status).toBe('error');
+    expect(service.servers()[0].errorMessage).toContain('Enabled test failed');
+
+    // Test when disabled (connects, lists tools, and closes client)
+    await service.toggleServer(id, false);
+    expect(service.servers()[0].status).toBe('disconnected');
+    await service.testServer(id);
+    expect(service.servers()[0].status).toBe('connected');
+    expect(closeMock).toHaveBeenCalled();
+
+    // Test failure when disabled
+    connectMock.mockRejectedValueOnce(new Error('Test connection failed'));
+    await service.testServer(id);
+    expect(service.servers()[0].status).toBe('error');
+    expect(service.servers()[0].errorMessage).toContain('Test connection failed');
+  });
+
+  it('checks whether a catalog supports MCP via doesCatalogSupportMcp', () => {
+    expect(service.doesCatalogSupportMcp(null)).toBe(false);
+    expect(service.doesCatalogSupportMcp(undefined)).toBe(false);
+    expect(service.doesCatalogSupportMcp({functions: {required: {}}})).toBe(false);
+    expect(service.doesCatalogSupportMcp({functions: {callMcpTool: {}}})).toBe(true);
+    expect(service.doesCatalogSupportMcp({$defs: {callMcpTool: {}}})).toBe(true);
+    expect(service.doesCatalogSupportMcp({$defs: {catalog_callMcpTool: {}}})).toBe(true);
+  });
 });

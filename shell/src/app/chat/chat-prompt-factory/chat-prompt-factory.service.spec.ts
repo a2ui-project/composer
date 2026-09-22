@@ -25,11 +25,19 @@ describe('ChatPromptFactoryService', () => {
     activeCatalog: ReturnType<typeof vi.fn>;
     activeCatalogSignal: ReturnType<typeof vi.fn>;
   };
-  let mcpSpy: {getActiveServersWithTools: ReturnType<typeof vi.fn>};
+  let mcpSpy: {
+    getActiveServersWithTools: ReturnType<typeof vi.fn>;
+    doesCatalogSupportMcp: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     catalogSpy = {activeCatalog: vi.fn(), activeCatalogSignal: vi.fn(() => null)};
-    mcpSpy = {getActiveServersWithTools: vi.fn(() => [])};
+    mcpSpy = {
+      getActiveServersWithTools: vi.fn(() => []),
+      doesCatalogSupportMcp: vi.fn(catalog =>
+        McpClientManagerService.prototype.doesCatalogSupportMcp(catalog),
+      ),
+    };
     TestBed.configureTestingModule({
       providers: [
         ChatPromptFactoryService,

@@ -81,10 +81,10 @@ is published to NPM:
    rm -rf bridge/src/mcp
    ```
 
-5. Update `samples/ng-basic-with-mcp-catalog`:
+5. Update `samples/ng-basic-catalog`:
 
-   - Add `@a2ui/mcp-catalog` to `samples/ng-basic-with-mcp-catalog/package.json`.
-   - In `samples/ng-basic-with-mcp-catalog/src/app/basic-with-mcp.catalog.ts`,
+   - Add `@a2ui/mcp-catalog` to `samples/ng-basic-catalog/package.json`.
+   - In `samples/ng-basic-catalog/src/app/basic-with-mcp.catalog.ts`,
      replace the import from `a2ui-bridge` with `@a2ui/mcp-catalog/v0_9`.
 
 6. Run the test suite and linter to verify the migration:
