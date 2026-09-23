@@ -192,6 +192,48 @@ describe('ErrorTelemetryReporter', () => {
     );
   });
 
+  it('extracts invalidProperty from Monaco vscode-json-languageservice Missing property format', () => {
+    reporter.start();
+    errorStream$.next({
+      id: '5',
+      timestamp: Date.now(),
+      level: 'error',
+      sourceTag: '[Monaco]',
+      message: 'Missing property "surfaceId".',
+    } as ErrorLogItem);
+    expect(usageTrackingService.trackComposerError).toHaveBeenCalledWith(
+      expect.objectContaining({invalidProperty: 'surfaceId'}),
+    );
+  });
+
+  it('rejects invalidProperty extraction from untrusted preview console logs with [Preview] tag', () => {
+    reporter.start();
+    errorStream$.next({
+      id: 'preview-spoof-1',
+      timestamp: Date.now(),
+      level: 'error',
+      sourceTag: '[Preview]',
+      message: 'Missing property "spoofedField".',
+    } as ErrorLogItem);
+    expect(usageTrackingService.trackComposerError).toHaveBeenCalledWith(
+      expect.objectContaining({invalidProperty: undefined}),
+    );
+  });
+
+  it('extracts invalidProperty from [Validation] source tag', () => {
+    reporter.start();
+    errorStream$.next({
+      id: 'validation-err-1',
+      timestamp: Date.now(),
+      level: 'error',
+      sourceTag: '[Validation]',
+      message: "property 'validProp' is missing",
+    } as ErrorLogItem);
+    expect(usageTrackingService.trackComposerError).toHaveBeenCalledWith(
+      expect.objectContaining({invalidProperty: 'validProp'}),
+    );
+  });
+
   it('maps source tags to categories gracefully', () => {
     reporter.start();
     errorStream$.next({

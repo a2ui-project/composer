@@ -319,12 +319,12 @@ export class RawFrame {
     this.watchdogTimer = setTimeout(() => {
       if (!this.hostCommunication.isRendererReady()) {
         this.errorLogger.warn({
-          sourceTag: '[Previewer]',
+          sourceTag: '[Preview]',
           message: 'Preview frame did not respond within 15 seconds.',
         });
       } else {
         this.errorLogger.warn({
-          sourceTag: '[Previewer]',
+          sourceTag: '[Preview]',
           message: `${IFRAME_UNRESPONSIVE_ERROR_PREFIX}Preview frame failed to process payload within 15 seconds.`,
         });
       }

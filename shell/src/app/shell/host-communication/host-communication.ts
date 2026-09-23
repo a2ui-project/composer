@@ -99,20 +99,10 @@ export class HostCommunication implements OnDestroy {
   }> = [];
 
   /**
-   * Retrieves a snapshot copy of the recent message history buffer and clears it.
+   * Returns a snapshot copy of the recent message history buffer. Non-destructive: several debug panels hydrate from this same buffer during construction. Use `clearHistoryBuffer()` for a genuine reset.
    * @return Array of stored message envelopes
    */
-  consumeEnvelopeHistory(): MessageEnvelope[] {
-    const records = [...this.messageHistoryBuffer];
-    this.clearHistoryBuffer();
-    return records;
-  }
-
-  /**
-   * Retrieves a snapshot copy of the recent message history buffer without clearing it.
-   * @return Array of stored message envelopes
-   */
-  getHistoryBuffer(): MessageEnvelope[] {
+  getEnvelopeHistory(): readonly MessageEnvelope[] {
     return [...this.messageHistoryBuffer];
   }
 
@@ -136,7 +126,7 @@ export class HostCommunication implements OnDestroy {
     this.errorLogger.log({
       level,
       message: msg,
-      sourceTag: '[Previewer]',
+      sourceTag: '[Preview]',
       ...(stackStr !== undefined ? {stack: stackStr} : {}),
     });
   }
@@ -175,6 +165,20 @@ export class HostCommunication implements OnDestroy {
         Object.values(PreviewBridgeMessageType).includes(event.data.type);
 
       if (event.data?.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+        const expectedUrl = this.startupResolution.getResolvedRendererUrl();
+        if (!expectedUrl) {
+          return;
+        }
+
+        try {
+          const expectedOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
+          if (event.origin !== expectedOrigin) {
+            return;
+          }
+        } catch {
+          return;
+        }
+
         const envelope: MessageEnvelope = {
           type: event.data.type,
           payload: event.data.payload,

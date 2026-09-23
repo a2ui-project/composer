@@ -100,4 +100,40 @@ test.describe('Cross-Frame Security & Sandboxing', () => {
     await expect(envelope).toContainText(PreviewBridgeMessageType.RENDERER_READY);
     await expect(envelope).toContainText('http://custom-renderer.com');
   });
+
+  test('drops CONSOLE_LOG messages from unauthorized or unregistered origins without polluting Errors panel', async ({
+    page,
+  }) => {
+    await page.route('http://custom-renderer.com/*', async route => {
+      await route.fulfill({
+        contentType: 'text/html',
+        body: `<!DOCTYPE html><html><body>Preview</body></html>`,
+      });
+    });
+
+    await page.goto('/?renderer=http://custom-renderer.com/index.html');
+    await expect(page.locator('.workspace-container')).toBeVisible();
+
+    await page.evaluate(type => {
+      window.postMessage(
+        {
+          type,
+          payload: {
+            level: 'error',
+            message: 'Malicious unauthorized console error',
+          },
+        },
+        '*',
+      );
+    }, PreviewBridgeMessageType.CONSOLE_LOG);
+
+    await page.getByRole('tab', {name: /Errors/i}).click();
+
+    await expect(page.locator('.errors-container')).not.toContainText(
+      'Malicious unauthorized console error',
+    );
+    await expect(
+      page.locator('.errors-container .source-badge', {hasText: '[Preview]'}),
+    ).toHaveCount(0);
+  });
 });

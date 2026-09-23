@@ -199,7 +199,7 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     await expect(page.getByRole('tab', {name: 'Errors', selected: true})).toBeVisible();
   });
 
-  test('captures cross-frame preview errors, renders non-crashing 350ms debounced UI error overlay, and assigns [Previewer] log provenance', async ({
+  test('captures cross-frame preview errors, renders non-crashing 350ms debounced UI error overlay, and assigns [Preview] log provenance', async ({
     page,
   }) => {
     // Wait for the iframe
@@ -230,7 +230,7 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     const errorRow = page.locator('.errors-container table tr.element-row').first();
     await expect(errorRow).toBeVisible();
     await expect(errorRow).toContainText('TypeError: mock is undefined');
-    await expect(errorRow).toContainText('[Previewer]');
+    await expect(errorRow).toContainText('[Preview]');
   });
 
   test('toggles expandable stack trace rows in the Errors panel distinctly for structured diagnostics', async ({

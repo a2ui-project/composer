@@ -35,7 +35,6 @@ describe('CatalogManagement', () => {
     latestEnvelope: WritableSignal<MessageEnvelope | null>;
     messageStream$: Subject<MessageEnvelope>;
     sendMessage: ReturnType<typeof vi.fn>;
-    getHistoryBuffer?: ReturnType<typeof vi.fn>;
   };
   let indexedDbStorageMock: {
     getCatalogRecord: ReturnType<typeof vi.fn>;
@@ -783,19 +782,6 @@ describe('CatalogManagement', () => {
 
   it('exposes handshakeState', async () => {
     expect(service.handshakeState()).toBe('idle');
-
-    hostCommunicationMock.getHistoryBuffer = vi.fn().mockReturnValue([
-      {
-        type: PreviewBridgeMessageType.RENDERER_READY,
-        origin: 'http://localhost',
-        timestamp: 1000,
-      },
-      {
-        type: PreviewBridgeMessageType.A2UI_CATALOG,
-        origin: 'http://localhost',
-        timestamp: 1001,
-      },
-    ]);
 
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.RENDERER_READY,

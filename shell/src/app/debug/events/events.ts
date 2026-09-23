@@ -76,7 +76,7 @@ export class Events {
     // interactive user actions and component event payloads destined for the server/backend.
     // Other message types (CONSOLE_LOG, DATA_MODEL_CHANGE, RENDERER_READY, SURFACE_RESIZE)
     // are routed to their dedicated tabs: Errors, Data Model, and Raw Messages.
-    const initialEvents = (this.hostComm.consumeEnvelopeHistory() || [])
+    const initialEvents = (this.hostComm.getEnvelopeHistory() || [])
       .filter(env => env.type === PreviewBridgeMessageType.SEND_TO_SERVER)
       .map(env => this.mapEnvelopeToEvent(env))
       .filter((item): item is DisplayEventLogItem => item !== null)

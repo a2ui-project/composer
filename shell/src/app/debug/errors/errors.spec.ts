@@ -77,7 +77,7 @@ describe('Errors Component', () => {
       timestamp: Date.now(),
       level: 'error',
       message: 'Simple error message',
-      sourceTag: '[Previewer]',
+      sourceTag: '[Preview]',
     });
     fixture.detectChanges();
 
@@ -86,7 +86,7 @@ describe('Errors Component', () => {
 
     const row = await harness.getRowValuesAt(0);
     expect(row.time).toMatch(/\d{2}:\d{2}:\d{2}\.\d{3}/);
-    expect(row.source).toBe('[Previewer]');
+    expect(row.source).toBe('[Preview]');
     expect(row.message).toContain('Simple error message');
   });
 
@@ -96,13 +96,13 @@ describe('Errors Component', () => {
       timestamp: Date.now(),
       level: 'error',
       message: 'Uncaught TypeError: Cannot read property',
-      sourceTag: '[Previewer]',
+      sourceTag: '[Preview]',
       stack: 'Error\n  at main.ts:10:5',
     });
     fixture.detectChanges();
 
     const row = await harness.getRowValuesAt(0);
-    expect(row.source).toBe('[Previewer]');
+    expect(row.source).toBe('[Preview]');
     expect(row.message).toContain('Uncaught TypeError: Cannot read property');
   });
 

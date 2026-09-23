@@ -132,7 +132,7 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     const errorRow = page.locator('.errors-container table tr.element-row').first();
     await expect(errorRow).toBeVisible();
     await expect(errorRow).toContainText('warn');
-    await expect(errorRow).toContainText('Previewer');
+    await expect(errorRow).toContainText('[Preview]');
     await expect(errorRow).toContainText('Telemetry active warn');
   });
 

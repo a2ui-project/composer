@@ -87,7 +87,7 @@ export class RawMessages {
   };
 
   constructor() {
-    const historyBuffer = this.hostComm.consumeEnvelopeHistory();
+    const historyBuffer = this.hostComm.getEnvelopeHistory();
     const initialHosts: RawLogEntry[] = historyBuffer
       .filter(env => env.type !== PreviewBridgeMessageType.CONSOLE_LOG)
       .map(env => ({

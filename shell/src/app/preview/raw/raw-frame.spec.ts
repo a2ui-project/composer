@@ -882,7 +882,7 @@ describe('RawFrame JSON Source Editor View', () => {
       expect(errorLoggerMock.warn).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Preview frame did not respond within 15 seconds.',
-          sourceTag: '[Previewer]',
+          sourceTag: '[Preview]',
         }),
       );
     });
@@ -897,7 +897,7 @@ describe('RawFrame JSON Source Editor View', () => {
       expect(errorLoggerMock.warn).toHaveBeenCalledWith(
         expect.objectContaining({
           message: `${IFRAME_UNRESPONSIVE_ERROR_PREFIX}Preview frame failed to process payload within 15 seconds.`,
-          sourceTag: '[Previewer]',
+          sourceTag: '[Preview]',
         }),
       );
     });

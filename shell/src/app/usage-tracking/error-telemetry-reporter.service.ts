@@ -56,9 +56,17 @@ export class ErrorTelemetryReporter {
 
     // Context-bound to missing-property messages only to guarantee schema-authored keys.
     // 'not-allowed' or 'instance.xxx' shapes are discarded as they represent user-authored keys (PII risk).
-    const propMatch = item.message.match(/property '([\w.$-]+)' is missing/i);
-    if (propMatch) {
-      invalidProp = propMatch[1];
+    // Restrict out verbatim untrusted guest preview console output to prevent spoofing invalidProperty dimensions.
+    const isPreviewSource =
+      item.sourceTag === '[Preview]' || (item as {source?: string}).source === 'preview';
+
+    if (!isPreviewSource) {
+      const propMatch = item.message.match(
+        /(?:property '([\w.$-]+)' is missing|missing property "([\w.$-]+)")/i,
+      );
+      if (propMatch) {
+        invalidProp = propMatch[1] || propMatch[2];
+      }
     }
 
     const now = Date.now();

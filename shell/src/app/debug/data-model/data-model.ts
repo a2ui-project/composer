@@ -66,7 +66,7 @@ export class DataModel {
   });
 
   constructor() {
-    const history = this.hostComm.consumeEnvelopeHistory() || [];
+    const history = this.hostComm.getEnvelopeHistory() || [];
     for (let i = history.length - 1; i >= 0; i--) {
       const env = history[i];
       if (env.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {

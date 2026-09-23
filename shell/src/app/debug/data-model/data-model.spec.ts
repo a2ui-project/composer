@@ -29,6 +29,17 @@ import {
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
+import {signal} from '@angular/core';
+import {RawMessages} from '../raw-messages/raw-messages';
+import {RawMessagesHarness} from '../raw-messages/test/raw-messages.harness';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
+import {ErrorLogger} from '../error-logger.service';
+import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
+import {ChatState} from '../../chat/chat-state/chat-state';
 
 describe('DataModel', () => {
   let fixture: ComponentFixture<DataModel>;
@@ -37,7 +48,7 @@ describe('DataModel', () => {
   let mockHostComm: {
     messageStream$: Subject<MessageEnvelope>;
     sendMessage: ReturnType<typeof vi.fn>;
-    consumeEnvelopeHistory: ReturnType<typeof vi.fn>;
+    getEnvelopeHistory: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -46,7 +57,7 @@ describe('DataModel', () => {
     mockHostComm = {
       messageStream$: new Subject<MessageEnvelope>(),
       sendMessage: vi.fn(),
-      consumeEnvelopeHistory: vi.fn().mockReturnValue([]),
+      getEnvelopeHistory: vi.fn().mockReturnValue([]),
     };
 
     await TestBed.configureTestingModule({
@@ -287,7 +298,7 @@ describe('DataModel', () => {
       timestamp: Date.now(),
     };
 
-    mockHostComm.consumeEnvelopeHistory.mockReturnValue([historicalEnvelope]);
+    mockHostComm.getEnvelopeHistory.mockReturnValue([historicalEnvelope]);
 
     const newFixture = TestBed.createComponent(DataModel);
     newFixture.detectChanges();
@@ -313,7 +324,7 @@ describe('DataModel', () => {
       timestamp: Date.now(),
     };
 
-    mockHostComm.consumeEnvelopeHistory.mockReturnValue([historicalEnvelope]);
+    mockHostComm.getEnvelopeHistory.mockReturnValue([historicalEnvelope]);
 
     const newFixture = TestBed.createComponent(DataModel);
     newFixture.detectChanges();
@@ -373,5 +384,109 @@ describe('DataModel', () => {
 
     const text = await harness.getModelText();
     expect(JSON.parse(text)).toEqual({count: 1, userTyping: true});
+  });
+
+  describe('multi-consumer hydration regression', () => {
+    it('hydrates both DataModel and RawMessages from the same HostCommunication buffer without draining it', async () => {
+      TestBed.resetTestingModule();
+      vi.useFakeTimers();
+
+      const historicalEnvelope: MessageEnvelope = {
+        type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+        payload: {
+          updateDataModel: {
+            surfaceId: 'shared-surface',
+            path: '/test',
+            value: {sharedHydrationKey: 'hydratedValue'},
+          },
+        },
+        origin: 'http://localhost:3000',
+        timestamp: Date.now(),
+      };
+
+      await TestBed.configureTestingModule({
+        imports: [DataModel, RawMessages],
+        providers: [
+          provideNoopAnimations(),
+          HostCommunication,
+          {
+            provide: StartupResolution,
+            useValue: {getResolvedRendererUrl: () => 'http://localhost:3000'},
+          },
+          {
+            provide: AppConfigProvider,
+            useValue: {themePreference: signal(ThemePreference.LIGHT)},
+          },
+          {
+            provide: ErrorLogger,
+            useValue: {
+              log: vi.fn(),
+              error: vi.fn(),
+              warn: vi.fn(),
+              info: vi.fn(),
+              withTag: vi.fn().mockReturnThis(),
+            },
+          },
+          {
+            provide: McpClientManagerService,
+            useValue: {callTool: vi.fn()},
+          },
+          {
+            provide: ChatState,
+            useValue: {
+              llmHistory: signal([]),
+              latestLlmLog: signal(null),
+            },
+          },
+          {
+            provide: UsageTrackingService,
+            useClass: NoopUsageTrackingService,
+          },
+        ],
+      }).compileComponents();
+
+      const hostComm = TestBed.inject(HostCommunication);
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      hostComm.registerIframe(mockIframeWindow);
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            type: historicalEnvelope.type,
+            payload: historicalEnvelope.payload,
+          },
+        }),
+      );
+
+      expect(hostComm.getEnvelopeHistory().length).toBe(1);
+
+      // 1. Instantiate DataModel first
+      const dataModelFixture = TestBed.createComponent(DataModel);
+      dataModelFixture.detectChanges();
+      const dataModelHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        dataModelFixture,
+        DataModelHarness,
+      );
+      const modelText = await dataModelHarness.getModelText();
+      expect(JSON.parse(modelText)).toEqual({sharedHydrationKey: 'hydratedValue'});
+
+      // Assert that DataModel did not drain the shared buffer
+      expect(hostComm.getEnvelopeHistory().length).toBe(1);
+
+      // 2. Instantiate RawMessages second against the SAME HostCommunication instance
+      const rawMessagesFixture = TestBed.createComponent(RawMessages);
+      rawMessagesFixture.detectChanges();
+      const rawMessagesHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        rawMessagesFixture,
+        RawMessagesHarness,
+      );
+      expect(await rawMessagesHarness.getLoggedMessagesCount()).toBe(1);
+      expect(await rawMessagesHarness.getMessageTextAt(0)).toContain('DATA_MODEL_CHANGE');
+
+      // Assert that the shared buffer is still intact for any future consumers
+      expect(hostComm.getEnvelopeHistory().length).toBe(1);
+    });
   });
 });
