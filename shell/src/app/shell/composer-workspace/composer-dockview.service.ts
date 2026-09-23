@@ -100,8 +100,8 @@ export interface DockviewManagerInitOptions {
  * Layout Architecture:
  * - **Gemini Assistant (Chat)**: Left vertical panel, constrained initially to <= 1/3 viewport width.
  * - **Rendered A2UI Preview & A2UI JSON Editor**: Central workspace area split to the right of Chat.
- *   Both panels share the same tab group (`direction: 'within'`), with "Rendered A2UI Preview"
- *   active by default and "A2UI JSON Editor" tabbed behind it (`inactive: true`).
+ *   Both panels are placed side-by-side with an equal 50/50 width split, with "Rendered A2UI Preview"
+ *   on the left and "A2UI JSON Editor" on the right.
  * - **Debug Drawer**: Bottom drawer positioned below the Preview (`direction: 'below'`), occupying ~28%
  *   of container height. Combines "Data Model" (initially active), "Events", "Errors", and "Raw Messages"
  *   in a single tabbed group (`direction: 'within'`, `inactive: true`).
@@ -372,19 +372,16 @@ export class ComposerDockview {
    *
    * Layout Design:
    * 1. **Chat Panel (Gemini Assistant)**: Anchored left. Width <= 1/3 viewport (`chatWidth`).
-   * 2. **Rendered A2UI Preview & A2UI JSON Editor**: Placed right of Chat. Both are tabbed together
-   *    (`direction: 'within'`), with Rendered active and JSON Editor `inactive: true`.
+   * 2. **Rendered A2UI Preview & A2UI JSON Editor**: Placed right of Chat side-by-side with an
+   *    equal 50/50 width split between Rendered Preview (left) and JSON Editor (right).
    * 3. **Debug Drawer Group**: Placed below Rendered Preview (`direction: 'below'`), sized to ~28%
    *    container height. Houses Data Model (active), Events, Errors, and Raw Messages (`inactive: true`).
    *
-   * @param width Viewport width in pixels, defaulting to `DEFAULT_CONTAINER_WIDTH`.
-   * @param height Viewport height in pixels, defaulting to `DEFAULT_CONTAINER_HEIGHT`.
+   * @param width Viewport width in pixels.
+   * @param height Viewport height in pixels.
    * @returns `true` if saved layout was restored; `false` if initial default layout was constructed.
    */
-  private buildDockviewLayout(
-    width = this.rootEl?.clientWidth || DEFAULT_CONTAINER_WIDTH,
-    height = this.rootEl?.clientHeight || DEFAULT_CONTAINER_HEIGHT,
-  ): boolean {
+  private buildDockviewLayout(width: number, height: number): boolean {
     this.storage.removeItem(LocalStorageKey.ACTIVE_DRAFT);
 
     const savedLayout = this.storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
@@ -510,8 +507,6 @@ export class ComposerDockview {
 
       const chatPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat);
       chatPanel?.api.setActive();
-
-      this.enforceInitialProportions(width, height);
     }
 
     return layoutRestored;

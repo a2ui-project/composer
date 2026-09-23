@@ -453,14 +453,17 @@ describe('ComposerWorkspace Dashboard', () => {
       const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
       const heightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
 
-      const newFixture = TestBed.createComponent(ComposerWorkspace);
-      newFixture.detectChanges();
-      await newFixture.whenStable();
+      try {
+        const newFixture = TestBed.createComponent(ComposerWorkspace);
+        newFixture.detectChanges();
+        await newFixture.whenStable();
 
-      expect(layoutSpy).toHaveBeenCalledWith(1200, 800);
-      layoutSpy.mockRestore();
-      widthSpy.mockRestore();
-      heightSpy.mockRestore();
+        expect(layoutSpy).toHaveBeenCalledWith(1200, 800);
+      } finally {
+        layoutSpy.mockRestore();
+        widthSpy.mockRestore();
+        heightSpy.mockRestore();
+      }
     });
 
     it('activates panel and triggers change detection when pointerdown occurs on tab element', () => {
@@ -707,28 +710,30 @@ describe('ComposerWorkspace Dashboard', () => {
           .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
           .mockReturnValue(900);
 
-        const newFixture = TestBed.createComponent(ComposerWorkspace);
-        newFixture.detectChanges();
-        await newFixture.whenStable();
+        try {
+          const newFixture = TestBed.createComponent(ComposerWorkspace);
+          newFixture.detectChanges();
+          await newFixture.whenStable();
 
-        const manager = newFixture.debugElement.injector.get(ComposerDockview);
-        const chatPanel = manager.api.getGroupPanel(ComposerPanelId.Chat);
-        const dataModelPanel = manager.api.getGroupPanel(ComposerPanelId.DataModel);
-        const renderedPanel = manager.api.getGroupPanel(ComposerPanelId.Rendered);
+          const manager = newFixture.debugElement.injector.get(ComposerDockview);
+          const chatPanel = manager.api.getGroupPanel(ComposerPanelId.Chat);
+          const dataModelPanel = manager.api.getGroupPanel(ComposerPanelId.DataModel);
+          const renderedPanel = manager.api.getGroupPanel(ComposerPanelId.Rendered);
 
-        expect(chatPanel).toBeDefined();
-        expect(dataModelPanel).toBeDefined();
-        expect(renderedPanel).toBeDefined();
+          expect(chatPanel).toBeDefined();
+          expect(dataModelPanel).toBeDefined();
+          expect(renderedPanel).toBeDefined();
 
-        // Chat <= 1/3 of 1200 (400)
-        expect(chatPanel!.group.width).toBeLessThanOrEqual(400);
+          // Chat <= 1/3 of 1200 (400)
+          expect(chatPanel!.group.width).toBeLessThanOrEqual(400);
 
-        // Debug height ~28% of 900 (252), preview ~648
-        expect(dataModelPanel!.group.height).toBeLessThan(renderedPanel!.group.height);
-        expect(dataModelPanel!.group.height).toBeLessThanOrEqual(300);
-
-        widthSpy.mockRestore();
-        heightSpy.mockRestore();
+          // Debug height ~28% of 900 (252), preview ~648
+          expect(dataModelPanel!.group.height).toBeLessThan(renderedPanel!.group.height);
+          expect(dataModelPanel!.group.height).toBeLessThanOrEqual(300);
+        } finally {
+          widthSpy.mockRestore();
+          heightSpy.mockRestore();
+        }
       });
     });
   });
