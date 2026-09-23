@@ -23,7 +23,6 @@ import {
   MessageRole,
   CANCEL_ERROR_NAME,
   StreamProcessingState,
-  THINKING_BUDGET,
 } from './llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {
@@ -33,6 +32,7 @@ import {
   Part,
   GenerateContentConfig,
   GenerateContentResponse,
+  ThinkingLevel,
 } from '@google/genai';
 
 /**
@@ -183,7 +183,7 @@ export class Standalone3pLlmClient extends LlmClient {
     }
     config.thinkingConfig = {
       includeThoughts: true,
-      thinkingBudget: THINKING_BUDGET,
+      thinkingLevel: ThinkingLevel.MEDIUM,
     };
     return config;
   }
@@ -195,7 +195,7 @@ export class Standalone3pLlmClient extends LlmClient {
     const {systemInstruction, contents} = this.parseMessages(messages);
     const config = this.buildGenerateContentConfig(systemInstruction, abortSignal);
     return {
-      model: 'gemini-3.5-flash',
+      model: 'gemini-3.7-flash',
       contents,
       config,
     };

@@ -263,18 +263,34 @@ samp {
   font-family: 'Spline Sans Mono', ui-monospace, monospace;
 }
 
-/* High-specificity global overrides resolving slide toggle label checks collisions */
+/* High-specificity global overrides resolving slide toggle M2/M3 token and label collisions */
+body .mat-mdc-slide-toggle {
+  --mat-slide-toggle-track-width: 52px;
+  --mat-slide-toggle-track-height: 32px;
+  --mat-slide-toggle-track-shape: 9999px;
+  --mat-slide-toggle-handle-width: 100%;
+  --mat-slide-toggle-handle-height: 24px;
+  --mat-slide-toggle-handle-shape: 9999px;
+  --mat-slide-toggle-with-icon-handle-size: 24px;
+  --mat-slide-toggle-selected-handle-size: 24px;
+  --mat-slide-toggle-unselected-handle-size: 16px;
+  --mat-slide-toggle-selected-handle-horizontal-margin: 0 24px;
+  --mat-slide-toggle-selected-with-icon-handle-horizontal-margin: 0 24px;
+  --mat-slide-toggle-unselected-handle-horizontal-margin: 0 8px;
+  --mat-slide-toggle-unselected-with-icon-handle-horizontal-margin: 0 4px;
+}
+
 body .mat-mdc-slide-toggle .mdc-form-field,
 body .mat-mdc-slide-toggle .mat-internal-form-field {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 16px !important; // Clean spacer gap between switch and text label
+  gap: 12px !important;
 }
 
-body .mat-mdc-slide-toggle label,
-body .mat-mdc-slide-toggle .mdc-label {
-  padding-left: 16px !important; // Safe spacing cushion blocking handle overlaps
-  white-space: normal !important; // Forces clean wrapping on narrow viewports
+body .mat-mdc-slide-toggle label:not(:empty),
+body .mat-mdc-slide-toggle .mdc-label:not(:empty) {
+  padding-left: 4px !important;
+  white-space: normal !important;
   line-height: 1.4 !important;
   color: var(--mat-sys-on-surface) !important;
 }

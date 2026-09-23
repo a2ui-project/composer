@@ -23,6 +23,7 @@
   --a2ui-color-input: #eef0f4;
   --a2ui-color-on-input: #202124;
   --a2ui-color-border: #dfe2e8;
+  --a2ui-color-error: #d32f2f;
   --a2ui-color-primary: #3f51b5;
   --a2ui-color-on-primary: #ffffff;
   --a2ui-text-caption-color: #5b606b;
@@ -61,6 +62,7 @@ html[data-theme='dark'] {
   --a2ui-color-input: #151619;
   --a2ui-color-on-input: #eef0f3;
   --a2ui-color-border: #35383f;
+  --a2ui-color-error: #f28b82;
   --a2ui-text-caption-color: #b9bec8;
   --a2ui-textfield-border: 1px solid #767f90;
   --a2ui-textfield-color-border-focus: #a9b8ff;

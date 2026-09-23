@@ -160,4 +160,18 @@ export class SettingsHarness extends ComponentHarness {
   async hasProfileSelector(): Promise<boolean> {
     return !!(await this.getProfileSelector());
   }
+
+  async hasMcpCard(): Promise<boolean> {
+    return !!(await this.locatorForOptional('.mcp-card')());
+  }
+
+  async getMcpServerNames(): Promise<string[]> {
+    const els = await this.locatorForAll('.mcp-server-name')();
+    return Promise.all(els.map(e => e.text()));
+  }
+
+  async getMcpServerToolNames(): Promise<string[]> {
+    const els = await this.locatorForAll('.mcp-tool-name')();
+    return Promise.all(els.map(e => e.text()));
+  }
 }

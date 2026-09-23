@@ -56,7 +56,6 @@ describe('RawMessages', () => {
       messageStream$: mockMessageStreamSubject,
       messageStream: messageStreamSignal,
       getHistoryBuffer: vi.fn(() => []),
-      getLatestCatalog: vi.fn(() => null),
       clearHistoryBuffer: vi.fn(),
     };
     latestLlmLogSignal = signal<LlmLogEntry | null>(null);
@@ -412,5 +411,27 @@ describe('RawMessages', () => {
     expect(trackSpy).toHaveBeenCalledWith({
       messageType: LlmLogType.REQUEST,
     });
+  });
+
+  it('displays MCP_RESPONSE with result payload in collapsible panel', async () => {
+    emitMessage({
+      type: PreviewBridgeMessageType.MCP_RESPONSE,
+      payload: {
+        requestId: 'req-1',
+        result: {content: [{type: 'text', text: 'Directory listing complete'}]},
+      },
+      origin: 'http://localhost:3000',
+      timestamp: 1000,
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getLoggedMessagesCount()).toBe(1);
+    expect(await harness.isMessageCollapsibleAt(0)).toBe(true);
+    expect(await harness.getMessageTextAt(0)).toContain(PreviewBridgeMessageType.MCP_RESPONSE);
+
+    const panel = await harness.getLlmLogPanelAt(0);
+    await panel.expand();
+    const content = await panel.getTextContent();
+    expect(content).toContain('Directory listing complete');
   });
 });

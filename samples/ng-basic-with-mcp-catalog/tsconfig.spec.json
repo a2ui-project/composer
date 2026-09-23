@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist/out-tsc",
+    "types": ["node", "jsdom"]
+  },
+  "include": ["src/**/*.spec.ts", "src/**/*.ts"]
+}

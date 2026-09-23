@@ -46,7 +46,6 @@ import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
  * (dark/light mode) and integrates with the active A2UI catalog to provide
  * real-time schema validation and autocompletion for component properties.
  */
-const MODEL_URI = 'inmemory://model/layout.json';
 const ERROR_MARKER_DEBOUNCE_MS = 3000;
 
 @Component({
@@ -56,6 +55,7 @@ const ERROR_MARKER_DEBOUNCE_MS = 3000;
   styleUrl: './monaco-editor.scss',
 })
 export class MonacoEditor {
+  private readonly modelUri = 'inmemory://model/layout-' + crypto.randomUUID() + '.json';
   readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
 
   readonly value = input<string>('');
@@ -146,10 +146,11 @@ export class MonacoEditor {
     isRoot = true,
     depth = 0,
   ): Record<string, unknown> {
-    // Thread safety recursion bounding prevents catastrophic backtracking
+    // Prevent call-stack overflows by returning an empty schema on deeply nested
     // loops or halting when attempting to flatten deeply nested cyclic refs.
     if (depth > 50) {
-      return {error: 'Max schema recursion depth exceeded'};
+      console.warn('MonacoEditor: Max schema recursion depth exceeded (> 50), failing open.');
+      return {};
     }
 
     const result: Record<string, unknown> = {...rawSchema};
@@ -329,7 +330,9 @@ export class MonacoEditor {
     if (required.size > 0) {
       result['required'] = Array.from(required);
     }
-    result['additionalProperties'] = false;
+    if (result['additionalProperties'] === false || result['unevaluatedProperties'] === false) {
+      result['additionalProperties'] = false;
+    }
     delete result['allOf'];
     delete result['unevaluatedProperties'];
   }
@@ -473,7 +476,7 @@ export class MonacoEditor {
         }
         this.monacoInstance.set(monacoInstance);
 
-        const modelUri = monacoInstance.Uri.parse(MODEL_URI);
+        const modelUri = monacoInstance.Uri.parse(this.modelUri);
         let model = monacoInstance.editor.getModel(modelUri);
         if (model) {
           model.setValue(this.value());
@@ -590,7 +593,7 @@ export class MonacoEditor {
     if (!monacoInstance) {
       return null;
     }
-    const modelUri = monacoInstance.Uri.parse(MODEL_URI);
+    const modelUri = monacoInstance.Uri.parse(this.modelUri);
     const markers = monacoInstance.editor.getModelMarkers({resource: modelUri});
     const firstError = markers.find(m => m.severity === 8 || m.severity === 4);
     if (!firstError) {
@@ -652,7 +655,7 @@ export class MonacoEditor {
     return [
       {
         uri: 'a2ui-catalog-schema',
-        fileMatch: [MODEL_URI],
+        fileMatch: [this.modelUri],
         schema: structuredClone(layoutSchema),
       },
       {

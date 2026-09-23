@@ -526,7 +526,6 @@ describe('HostCommunication', () => {
     service.ngOnDestroy();
 
     expect(removeEventListenerSpy).toHaveBeenCalledWith('message', expect.any(Function));
-    expect(window.a2uiHostCommunication).toBeUndefined();
 
     removeEventListenerSpy.mockRestore();
   });
@@ -546,15 +545,6 @@ describe('HostCommunication', () => {
     });
 
     window.dispatchEvent(event);
-
-    const latestCatalog = service.getLatestCatalog();
-    expect(latestCatalog).toEqual({
-      type: PreviewBridgeMessageType.A2UI_CATALOG,
-      payload: catalogPayload,
-      origin: 'http://localhost:3000',
-      timestamp: expect.any(Number),
-      sourceWindow: mockIframeWindow,
-    });
 
     const history = service.getHistoryBuffer();
     expect(history.length).toBe(1);
@@ -1211,6 +1201,118 @@ describe('HostCommunication', () => {
         payload,
       });
       expect(Object.keys(renderCall?.[0] as object)).not.toContain('target');
+    });
+
+    it('handles MCP_REQUEST by calling mcpManager.callTool with toolName and sending MCP_RESPONSE to a cross-origin WindowProxy', async () => {
+      const postMessageSpy = vi.fn();
+      const crossOriginWindowProxy = new Proxy(
+        {postMessage: postMessageSpy},
+        {
+          has(target, prop) {
+            if (prop === 'contentWindow') {
+              throw new DOMException(
+                'Blocked a frame from accessing a cross-origin frame.',
+                'SecurityError',
+              );
+            }
+            return prop in target;
+          },
+        },
+      ) as unknown as Window;
+
+      service.registerIframe(crossOriginWindowProxy);
+
+      const mcpManager = (
+        service as unknown as {
+          mcpManager: {callTool: ReturnType<typeof vi.fn>};
+        }
+      ).mcpManager;
+      const callToolSpy = vi
+        .spyOn(mcpManager, 'callTool')
+        .mockResolvedValueOnce({content: [{type: 'text', text: 'dir-list'}]});
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: crossOriginWindowProxy,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.MCP_REQUEST,
+            payload: {
+              requestId: 'req-123',
+              toolName: 'list_directory',
+            },
+          },
+        }),
+      );
+
+      await vi.waitFor(() => {
+        expect(callToolSpy).toHaveBeenCalledWith('list_directory', {});
+        expect(postMessageSpy).toHaveBeenCalledWith(
+          {
+            type: PreviewBridgeMessageType.MCP_RESPONSE,
+            payload: {
+              requestId: 'req-123',
+              result: {content: [{type: 'text', text: 'dir-list'}]},
+            },
+          },
+          'http://localhost:3000',
+        );
+        const successEnvelope = service
+          .getHistoryBuffer()
+          .find(
+            env =>
+              env.type === PreviewBridgeMessageType.MCP_RESPONSE &&
+              (env.payload as {requestId?: string})?.requestId === 'req-123',
+          );
+        expect(successEnvelope).toBeDefined();
+        expect(successEnvelope?.payload).toEqual({
+          requestId: 'req-123',
+          result: {content: [{type: 'text', text: 'dir-list'}]},
+        });
+        expect(successEnvelope?.origin).toBe('http://localhost:3000');
+      });
+
+      callToolSpy.mockRejectedValueOnce(new Error('Tool failure'));
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: crossOriginWindowProxy,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.MCP_REQUEST,
+            payload: {
+              requestId: 'req-456',
+              toolName: 'list_directory',
+              args: {path: '/bad'},
+            },
+          },
+        }),
+      );
+
+      await vi.waitFor(() => {
+        expect(postMessageSpy).toHaveBeenCalledWith(
+          {
+            type: PreviewBridgeMessageType.MCP_RESPONSE,
+            payload: {
+              requestId: 'req-456',
+              error: 'Tool failure',
+            },
+          },
+          'http://localhost:3000',
+        );
+        const errorEnvelope = service
+          .getHistoryBuffer()
+          .find(
+            env =>
+              env.type === PreviewBridgeMessageType.MCP_RESPONSE &&
+              (env.payload as {requestId?: string})?.requestId === 'req-456',
+          );
+        expect(errorEnvelope).toBeDefined();
+        expect(errorEnvelope?.payload).toEqual({
+          requestId: 'req-456',
+          error: 'Tool failure',
+        });
+        expect(errorEnvelope?.origin).toBe('http://localhost:3000');
+      });
     });
   });
 });

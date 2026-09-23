@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, DestroyRef, effect} from '@angular/core';
+import {Injectable, inject, signal, DestroyRef, effect, Signal} from '@angular/core';
 import {
   HostCommunication,
   MessageEnvelope,
@@ -49,6 +49,13 @@ export class CatalogManagement {
    * are currently in progress.
    */
   readonly isHandshakeInProgress = this._isHandshakeInProgress.asReadonly();
+
+  private readonly _handshakeHistoryIndex = signal<number | null>(null);
+  /**
+   * History buffer index when the catalog handshake settled. Used by integration tests
+   * to guarantee subsequent renders have finished before interacting with the preview.
+   */
+  readonly handshakeHistoryIndex: Signal<number | null> = this._handshakeHistoryIndex.asReadonly();
 
   private readonly _watchdogFired = signal<boolean>(false);
   /**
@@ -137,6 +144,7 @@ export class CatalogManagement {
           this.watchdogTimerId = null;
         }
         this._isHandshakeInProgress.set(false);
+        this._handshakeHistoryIndex.set(null);
         this._catalogError.set(null);
         this._activeCatalog.set(null);
         this._activeCatalogTitle.set('');
@@ -173,6 +181,9 @@ export class CatalogManagement {
                   this._activeCatalogTitle.set(catalogObj.title || '');
                   this._activeCatalogDescription.set(catalogObj.description || '');
                   this._catalogError.set(null);
+                  this._handshakeHistoryIndex.set(
+                    this.hostCommunication.getHistoryBuffer?.()?.length ?? 0,
+                  );
                 }
               }
             })
@@ -199,6 +210,7 @@ export class CatalogManagement {
             }
 
             this._isHandshakeInProgress.set(true);
+            this._handshakeHistoryIndex.set(null);
             this._watchdogFired.set(false);
             this._catalogError.set(null);
             this.hostCommunication.sendMessage({
@@ -324,6 +336,9 @@ export class CatalogManagement {
 
                   this._catalogError.set(null);
                   this._isHandshakeInProgress.set(false);
+                  this._handshakeHistoryIndex.set(
+                    this.hostCommunication.getHistoryBuffer?.()?.length ?? 0,
+                  );
                   return null;
                 })
                 .catch((err: unknown) => {

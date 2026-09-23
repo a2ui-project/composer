@@ -876,5 +876,42 @@ describe('CrossFrameValidator', () => {
       expect(errors).toEqual([]);
       expect(errorSpy).not.toHaveBeenCalled();
     });
+
+    it('validates MCP_REQUEST payloads and rejects malformed payloads', () => {
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.MCP_REQUEST,
+          payload: {
+            requestId: 'req-1',
+            toolName: 'read_file',
+          },
+        }),
+      ).toBe(true);
+
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.MCP_REQUEST,
+          payload: null,
+        }),
+      ).toBe(false);
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.MCP_REQUEST,
+          payload: {
+            requestId: '',
+            toolName: 'read_file',
+          },
+        }),
+      ).toBe(false);
+      expect(
+        CrossFrameValidator.validateOutgoingMessage({
+          type: PreviewBridgeMessageType.MCP_REQUEST,
+          payload: {
+            requestId: 'req-1',
+            toolName: '   ',
+          },
+        }),
+      ).toBe(false);
+    });
   });
 });

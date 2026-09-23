@@ -32,7 +32,10 @@ import {
   CreateSurfaceCommand,
   CatalogDetails,
   ThemePreference,
+  McpResponsePayload,
 } from './bridge-message';
+
+import {IframeMcpClient} from './iframe-mcp-client';
 
 import {SurfaceResizeObserver} from './surface-resize-observer';
 export * from './surface-resize-observer';
@@ -44,6 +47,35 @@ import type {
   SurfaceStateSubscription,
   ComponentUsages,
 } from './render-config';
+
+/**
+ * Debounce duration in milliseconds before rendering an error overlay.
+ * Suppresses transient syntax error popups during rapid typing.
+ */
+export const ERROR_OVERLAY_DEBOUNCE_MS = 350;
+
+/**
+ * Determines whether a given value resembles an Error object.
+ * Checks for the presence of standard Error properties like 'message' and 'stack'.
+ *
+ * @param val - The value to inspect.
+ * @returns True if the value is shaped like an Error, false otherwise.
+ */
+export function isErrorLike(val: unknown): val is Error {
+  if (val instanceof Error || Object.prototype.toString.call(val) === '[object Error]') {
+    return true;
+  }
+  return (
+    typeof val === 'object' &&
+    val !== null &&
+    'message' in val &&
+    typeof (val as Record<string, unknown>)['message'] === 'string' &&
+    'stack' in val &&
+    typeof (val as Record<string, unknown>)['stack'] === 'string' &&
+    !('nodeType' in val) &&
+    !('component' in val)
+  );
+}
 
 /**
  * Safely serializes an unknown value to a JSON string.
@@ -64,20 +96,11 @@ export function safeSerialize(val: unknown): string {
       seen.add(v);
       let result: unknown;
 
-      const isErrorLike =
-        v instanceof Error ||
-        Object.prototype.toString.call(v) === '[object Error]' ||
-        ('message' in v &&
-          typeof (v as Record<string, unknown>)['message'] === 'string' &&
-          'stack' in v &&
-          !('nodeType' in v) &&
-          !('component' in v));
-
-      if (isErrorLike) {
+      if (isErrorLike(v)) {
         result = {
-          name: (v as unknown as Record<string, unknown>)['name'] || 'Error',
-          message: (v as Record<string, unknown>)['message'],
-          stack: (v as Record<string, unknown>)['stack'],
+          name: v.name || 'Error',
+          message: v.message,
+          stack: v.stack,
         };
       } else if (
         'nodeType' in v &&
@@ -219,6 +242,31 @@ export class PreviewBridge {
   });
 
   private readonly cachedParentOrigin: string | null = null;
+
+  /** Cached iframe MCP proxy client. */
+  private mcpClient: IframeMcpClient | null = null;
+
+  /**
+   * Returns the IframeMcpClient proxy, creating and caching it if needed.
+   */
+  getMcpClient(): IframeMcpClient {
+    if (!this.mcpClient) {
+      this.mcpClient = new IframeMcpClient(payload => {
+        this.sendMessage({
+          type: PreviewBridgeMessageType.MCP_REQUEST,
+          payload,
+        });
+      });
+    }
+    return this.mcpClient;
+  }
+
+  /**
+   * Returns the currently attached renderer processor, if any.
+   */
+  getActiveProcessor(): RendererProcessor | undefined {
+    return this.activeRenderer?.processor;
+  }
 
   /**
    * Initializes a new PreviewBridge instance.
@@ -386,6 +434,7 @@ export class PreviewBridge {
       }
     }
     this.activeConnections.clear();
+    this.mcpClient = null;
   }
 
   private resolveExpectedParentOrigin(): string {
@@ -464,7 +513,10 @@ export class PreviewBridge {
         break;
 
       case PreviewBridgeMessageType.RENDER_A2UI:
-        this.dispatchRenderA2ui(data.payload !== undefined ? data.payload : data);
+        this.dispatchRenderA2ui(
+          data.payload !== undefined ? data.payload : data,
+          Boolean(data.isStreaming),
+        );
         break;
 
       case PreviewBridgeMessageType.GET_CATALOG:
@@ -475,6 +527,10 @@ export class PreviewBridge {
         void this.handleGetComponentUsages();
         break;
 
+      case PreviewBridgeMessageType.MCP_RESPONSE:
+        this.handleMcpResponse(data.payload);
+        break;
+
       case PreviewBridgeMessageType.SET_THEME:
         this.handleSetTheme(data.payload);
         break;
@@ -483,6 +539,15 @@ export class PreviewBridge {
         console.warn(`PreviewBridge: Unrecognized incoming message type: ${data.type}`);
     }
   };
+
+  /**
+   * Routes incoming MCP_RESPONSE messages to the IframeMcpClient pending request.
+   */
+  private handleMcpResponse(payload: unknown): void {
+    const payloadObj = payload as McpResponsePayload | undefined;
+    if (!payloadObj || typeof payloadObj.requestId !== 'string') return;
+    this.mcpClient?.handleResponse(payloadObj);
+  }
 
   /**
    * Handles incoming theme change requests.
@@ -535,7 +600,7 @@ export class PreviewBridge {
    * If a createSurface instruction is present, it synchronously triggers a clear/unmount,
    * then defers the rendering actual layout command payload to a clean event cycle task.
    */
-  private dispatchRenderA2ui(payload: unknown): void {
+  private dispatchRenderA2ui(payload: unknown, isStreaming: boolean = false): void {
     // If a dynamic layout setup message is received before the framework application has
     // bootstrapped and attached its renderer, we print a warning and ignore the payload.
     // This should not ever happen since the host Shell is strictly designed never to dispatch
@@ -554,18 +619,19 @@ export class PreviewBridge {
     if (hasCreateSurface) {
       // Step 1: Synchronously dispatch null to trigger unmounting/reset
       try {
-        this.handleRenderA2ui(null);
+        this.handleRenderA2ui(null, isStreaming);
       } catch (err) {
         console.error('PreviewBridge: Error during RENDER_A2UI null reset dispatch:', err);
       }
 
-      // Step 2: Defer actual payload dispatch to the next event loop tick to trigger clean remount
+      // Step 2: Defer actual payload dispatch to the next event loop tick to
+      // trigger clean remount
       if (this.renderTimeoutId) {
         clearTimeout(this.renderTimeoutId);
       }
       this.renderTimeoutId = setTimeout(() => {
         try {
-          this.handleRenderA2ui(payload);
+          this.handleRenderA2ui(payload, isStreaming);
         } catch (err) {
           console.error('PreviewBridge: Error during deferred RENDER_A2UI payload dispatch:', err);
         }
@@ -573,7 +639,7 @@ export class PreviewBridge {
     } else {
       // Incremental state updates bypass the unmounting phase to prevent flicker
       try {
-        this.handleRenderA2ui(payload);
+        this.handleRenderA2ui(payload, isStreaming);
       } catch (err) {
         console.error('PreviewBridge: Error during direct RENDER_A2UI payload dispatch:', err);
       }
@@ -584,7 +650,7 @@ export class PreviewBridge {
    * Renders the specified payload array, mapping surface creation handles,
    * or delegates a resetting null command.
    */
-  private handleRenderA2ui(payload: unknown): void {
+  private handleRenderA2ui(payload: unknown, isStreaming: boolean = false): void {
     if (!this.activeRenderer) return;
 
     if (payload === null) {
@@ -633,13 +699,43 @@ export class PreviewBridge {
         }
       }
 
-      this.activeRenderer.processor.processMessages(payload as A2uiMessage[]);
+      let clonedPayload = payload as A2uiMessage[];
+      if (typeof structuredClone === 'function') {
+        try {
+          clonedPayload = structuredClone(payload) as A2uiMessage[];
+        } catch {
+          clonedPayload = payload as A2uiMessage[];
+        }
+      }
 
-      if (hasCreateSurface && surfaceId) {
+      let rendered = false;
+      try {
+        this.activeRenderer.processor.processMessages(clonedPayload);
+        rendered = true;
+
+        // Clears any stale error overlay as soon as a frame renders successfully,
+        // even during active streaming.
+        if (this.activeRenderer.config.onError) {
+          this.activeRenderer.config.onError(null);
+        }
+        this.sendMessage({type: PreviewBridgeMessageType.RENDER_SUCCESS});
+      } catch (err: unknown) {
+        console.error('PreviewBridge: Error during message processing:', err);
+        if (!isStreaming && this.activeRenderer.config.onError) {
+          this.activeRenderer.config.onError(err instanceof Error ? err : new Error(String(err)));
+        }
+        this.sendMessage({
+          type: PreviewBridgeMessageType.RENDER_ERROR,
+          error: safeSerialize(err),
+        });
+      }
+
+      if (rendered && hasCreateSurface && surfaceId) {
         this.activeRenderer.config.onSurfaceReady(surfaceId);
       }
 
-      // Defer measurement to the next event loop tick so asynchronous framework rendering and DOM attachment complete.
+      // Defer measurement to the next event loop tick so asynchronous framework
+      // rendering and DOM attachment complete.
       setTimeout(() => this.dispatchSurfaceResize(), 0);
     } else {
       console.warn('PreviewBridge: Unexpected non-array RENDER_A2UI payload received:', payload);

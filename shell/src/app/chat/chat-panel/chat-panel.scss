@@ -247,6 +247,32 @@
       opacity: 0.8;
     }
   }
+
+  .parse-error-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background-color: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+    border: 1px solid var(--mat-sys-error);
+
+    mat-icon {
+      flex-shrink: 0;
+    }
+
+    .error-notice {
+      flex: 1;
+      font-size: var(--mat-sys-body-small-size);
+      line-height: var(--mat-sys-body-small-line-height);
+    }
+
+    button {
+      flex-shrink: 0;
+    }
+  }
 }
 
 /* Diagnostic Connectivity / Gateway exceptions logs turns alerts */
