@@ -98,18 +98,22 @@ export class SurfaceResizeObserver {
     const body = document.body;
     const docEl = document.documentElement;
 
+    // `documentElement.scrollHeight` and `documentElement.scrollWidth` are both
+    // floored at the guest viewport, and the host derives that viewport from the
+    // size reported here, so a measurement including either can only grow along
+    // that axis: it cannot see content that is smaller than the frame the host
+    // just applied. Measure the body box and the root element's border box only;
+    // both track real content in either direction. The width axis drops the same
+    // term even though the host ignores `width` today, so that driving the frame
+    // width from this payload cannot silently reopen the feedback loop, and so
+    // that a root scroll box following the frame does not trip the dedupe below
+    // while the height stays put.
     const height = Math.max(
       body?.scrollHeight || 0,
-      docEl?.scrollHeight || 0,
       body?.offsetHeight || 0,
       docEl?.offsetHeight || 0,
     );
-    const width = Math.max(
-      body?.scrollWidth || 0,
-      docEl?.scrollWidth || 0,
-      body?.offsetWidth || 0,
-      docEl?.offsetWidth || 0,
-    );
+    const width = Math.max(body?.scrollWidth || 0, body?.offsetWidth || 0, docEl?.offsetWidth || 0);
 
     if (height <= 0) return;
 

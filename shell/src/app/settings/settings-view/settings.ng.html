@@ -92,7 +92,7 @@
   <mat-card class="status-card">
     <mat-card-header>
       <h2 mat-card-title>Connection Status & Diagnostics</h2>
-      <h3 mat-card-subtitle>Real-time monitoring bridge</h3>
+      <p mat-card-subtitle>Real-time monitoring bridge</p>
     </mat-card-header>
     <mat-card-content>
       <div class="status-badges">
@@ -140,6 +140,103 @@
             >
           }
         </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="status-card mcp-card">
+    <mat-card-header>
+      <h2 mat-card-title>MCP Servers</h2>
+      <p mat-card-subtitle>
+        Configure HTTP Model Context Protocol (MCP) servers for use in renderers that support the
+        A2UI MCP Catalog.
+      </p>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="mcp-add-row">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="mcp-url-field">
+          <mat-label>Server URL</mat-label>
+          <input
+            matInput
+            placeholder="http://localhost:3001/mcp"
+            [ngModel]="newMcpServerUrl()"
+            (ngModelChange)="newMcpServerUrl.set($event)"
+            [ngModelOptions]="{standalone: true}"
+            aria-label="MCP Server URL"
+          />
+        </mat-form-field>
+        <button
+          type="button"
+          mat-flat-button
+          color="primary"
+          class="mcp-add-btn"
+          [disabled]="!newMcpServerUrl().trim()"
+          (click)="addMcpServer()"
+        >
+          Add Server
+        </button>
+      </div>
+
+      <div class="mcp-server-list">
+        @for (server of mcpManager.servers(); track server.id) {
+          <div class="mcp-server-item">
+            <div class="mcp-server-top-row">
+              <div class="mcp-server-main">
+                <mat-slide-toggle
+                  class="mcp-server-toggle"
+                  [checked]="server.enabled"
+                  (change)="toggleMcpServer(server.id, $event.checked)"
+                  [attr.aria-label]="'Toggle ' + (server.name || server.url)"
+                ></mat-slide-toggle>
+                <div class="mcp-server-info">
+                  <div class="mcp-server-header">
+                    <span class="mcp-server-name">{{ server.name || server.url }}</span>
+                    <span class="mcp-server-status" [attr.data-status]="server.status">
+                      @if (server.status === 'connected') {
+                        Connected ({{ server.tools?.length || 0 }} tools)
+                      } @else if (server.status === 'connecting') {
+                        Connecting...
+                      } @else if (server.status === 'error') {
+                        Error: {{ server.errorMessage || 'Failed to connect' }}
+                      } @else {
+                        Disconnected
+                      }
+                    </span>
+                  </div>
+                  <span class="mcp-server-url">{{ server.url }}</span>
+                </div>
+              </div>
+              <div class="mcp-server-actions">
+                <button
+                  type="button"
+                  mat-icon-button
+                  matTooltip="Reconnect"
+                  aria-label="Reconnect MCP Server"
+                  (click)="reconnectMcpServer(server.id)"
+                >
+                  <mat-icon aria-hidden="true">refresh</mat-icon>
+                </button>
+                <button
+                  type="button"
+                  mat-icon-button
+                  color="warn"
+                  matTooltip="Delete Server"
+                  aria-label="Delete MCP Server"
+                  (click)="removeMcpServer(server.id)"
+                >
+                  <mat-icon aria-hidden="true">delete</mat-icon>
+                </button>
+              </div>
+            </div>
+            @if (server.tools && server.tools.length > 0) {
+              <div class="mcp-server-tools">
+                @for (tool of server.tools; track tool.name) {
+                  <span class="mcp-tool-name">{{ tool.name }}</span>
+                }
+              </div>
+            }
+          </div>
+        }
       </div>
     </mat-card-content>
   </mat-card>

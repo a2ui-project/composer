@@ -113,7 +113,7 @@
       color: var(--mat-sys-on-surface-variant, #49454f);
       border-radius: 50%;
       border: 1px solid #cac4d0;
-      background: #ffffff;
+      background: var(--mat-sys-surface, #ffffff);
       cursor: pointer;
       transition:
         background 0.15s ease,
@@ -128,8 +128,8 @@
 
       &:hover {
         color: var(--mat-sys-primary, #6750a4);
-        border-color: #6750a4;
-        background: #f3edf7;
+        border-color: var(--mat-sys-primary, #6750a4);
+        background: var(--mat-sys-surface-container, #f3edf7);
       }
     }
   }
@@ -170,19 +170,19 @@
       }
 
       &.inspector-toggle-btn {
-        border-color: #6750a4;
-        color: #6750a4;
+        border-color: var(--mat-sys-primary, #6750a4);
+        color: var(--mat-sys-primary, #6750a4);
 
         &.active {
-          background: #f3edf7;
-          border-color: #6750a4;
-          color: #6750a4;
+          background: var(--mat-sys-surface-container, #f3edf7);
+          border-color: var(--mat-sys-primary, #6750a4);
+          color: var(--mat-sys-primary, #6750a4);
         }
       }
 
       &.new-session-btn {
-        border-color: #6750a4;
-        color: #6750a4;
+        border-color: var(--mat-sys-primary, #6750a4);
+        color: var(--mat-sys-primary, #6750a4);
       }
     }
   }

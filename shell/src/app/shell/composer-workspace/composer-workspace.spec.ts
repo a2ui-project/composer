@@ -311,6 +311,7 @@ describe('ComposerWorkspace Dashboard', () => {
       });
 
       afterEach(() => {
+        vi.useRealTimers();
         returningFixture?.destroy();
         fixture.destroy();
         vi.restoreAllMocks();
@@ -343,13 +344,16 @@ describe('ComposerWorkspace Dashboard', () => {
         const manager = fixture.debugElement.injector.get(ComposerDockview);
         const errorSpy = vi.spyOn(console, 'error');
         manager.setPanelTitle(ComposerPanelId.Rendered, 'My preview');
+        vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
         manager.openPanel(ComposerPanelId.Events);
-        await new Promise(resolve => setTimeout(resolve, 1100));
+        // Past the 1000ms layout-save debounce.
+        await vi.advanceTimersByTimeAsync(1100);
         const savedLayout = storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT);
         expect(savedLayout).toBe(JSON.stringify(manager.api.toJSON()));
 
         fixture.destroy();
-        await new Promise(resolve => setTimeout(resolve, 1100));
+        await vi.advanceTimersByTimeAsync(1100);
+        vi.useRealTimers();
         expect(storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT)).toBe(savedLayout);
 
         const restored = await returnToWorkspace();

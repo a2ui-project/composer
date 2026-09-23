@@ -39,13 +39,15 @@
 }
 
 :host ::ng-deep .dockview-root {
-  // Docked previews scroll inside their panel. A renderer's content-height
-  // report must not extend the iframe beneath the adjacent debug panel.
-  a2ui-composer-rendered-frame .rendered-frame-container {
-    max-height: 100%;
-    min-height: 0;
+  // The frame follows the renderer's reported content height, so a docked
+  // preview taller than its panel scrolls inside the panel instead of being
+  // clipped beneath the adjacent debug panel.
+  a2ui-composer-rendered-frame {
+    overflow-y: auto;
   }
 
+  // Without a reported height, fill the panel however short it is.
+  a2ui-composer-rendered-frame .rendered-frame-container,
   a2ui-composer-rendered-frame .rendered-frame-container .preview-iframe {
     min-height: 0;
   }

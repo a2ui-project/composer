@@ -16,8 +16,14 @@
 
 import {Injectable, computed, inject} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {doesCatalogSupportMcp} from '../../storage/models/catalog-storage.model';
 import {formatJson} from '../../utils/json';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
+import {
+  McpClientManagerService,
+  McpServerConfig,
+  McpToolInfo,
+} from '../../mcp/mcp-client-manager.service';
 
 /**
  * Constructs dynamic system prompts based on the provided LLM intent and active catalog states.
@@ -27,9 +33,14 @@ import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 })
 export class ChatPromptFactoryService {
   private readonly catalogManagement = inject(CatalogManagement);
+  private readonly mcpManager = inject(McpClientManagerService);
 
   readonly systemPrompt = computed<string>(() => {
     const catalog = this.catalogManagement.activeCatalog();
+    const mcpSupported = doesCatalogSupportMcp(catalog);
+    const activeServers = mcpSupported ? this.mcpManager.getActiveServersWithTools() : [];
+    const mcpInstructions = this.buildMcpInstructions(activeServers);
+
     if (!catalog) {
       return `
   # A2UI Generation Expert
@@ -38,11 +49,88 @@ export class ChatPromptFactoryService {
   You are an expert A2UI generation assistant. Your role is to translate user
   requests—whether provided as text instructions, UI wireframes, screenshots,
   or mockup images—into valid A2UI v0.9 interactive user interfaces.
+  ${mcpInstructions}
       `;
     }
 
-    return this.generateSystemPrompt(formatJson(catalog));
+    return this.generateSystemPrompt(formatJson(catalog)) + mcpInstructions;
   });
+
+  private buildMcpInstructions(activeServers: McpServerConfig[]): string {
+    const toolsMap = new Map<string, McpToolInfo>();
+    for (const server of activeServers) {
+      for (const tool of server.tools || []) {
+        if (!toolsMap.has(tool.name)) {
+          toolsMap.set(tool.name, tool);
+        }
+      }
+    }
+
+    if (toolsMap.size === 0) {
+      return '';
+    }
+
+    const defaultOutputSchema = {
+      type: 'object',
+      properties: {
+        content: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              type: {type: 'string'},
+              text: {type: 'string'},
+            },
+          },
+        },
+      },
+    };
+
+    const toolsMarkdown = Array.from(toolsMap.values())
+      .map(tool => {
+        const desc = tool.description ? ` - ${tool.description}` : '';
+        const inputSchemaStr = JSON.stringify(tool.inputSchema || {type: 'object', properties: {}});
+        const outputSchemaStr = JSON.stringify(tool.outputSchema || defaultOutputSchema);
+        return `- **\`${tool.name}\`**${desc}\n  - **Input Schema**: \`${inputSchemaStr}\`\n  - **Output Schema**: \`${outputSchemaStr}\``;
+      })
+      .join('\n');
+
+    return `
+
+  ## Available MCP Tools & Catalog Instructions
+
+  When building surfaces that interact with MCP tools:
+
+  1. Trigger MCP tools via button \`functionCall\` actions that chain \`updateDataModel\`, \`jmespath\`, and \`callMcpTool\`:
+     \`\`\`json
+     "action": {
+       "functionCall": {
+         "call": "updateDataModel",
+         "args": {
+           "updates": {
+             "call": "jmespath",
+             "args": {
+               "expression": "{\\"/result\\": content[0].text}",
+               "data": {
+                 "call": "callMcpTool",
+                 "args": {
+                   "name": "<tool_name>",
+                   "arguments": {
+                     "path": "/mcp_arguments"
+                   }
+                 }
+               }
+             }
+           }
+         }
+       }
+     }
+     \`\`\`
+
+  ### Available MCP Tools
+  ${toolsMarkdown}
+`;
+  }
 
   private generateSystemPrompt(catalog: string): string {
     return `

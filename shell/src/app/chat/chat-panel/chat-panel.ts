@@ -38,14 +38,19 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {doesCatalogSupportMcp} from '../../storage/models/catalog-storage.model';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
-import {parseAndHealJsonLines} from '../a2ui-payload-parser/a2ui-payload-parser';
+import {
+  FailureParseResult,
+  parseAndHealJsonLines,
+} from '../a2ui-payload-parser/a2ui-payload-parser';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 import {ChatCoordinator} from '../chat-coordinator/chat-coordinator';
 import {ChatState} from '../chat-state/chat-state';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
+import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
 /**
  * Directive responsible for automatically scrolling a container to the bottom whenever its inputs change.
@@ -102,8 +107,15 @@ export class ChatPanel {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly fileIngestionService = inject(FileIngestionService);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
+  protected readonly mcpManager = inject(McpClientManagerService);
 
   protected readonly includeScreenshot = signal<boolean>(false);
+  protected readonly isMcpSupported = computed(() =>
+    doesCatalogSupportMcp(this.catalogManagement.activeCatalog()),
+  );
+  protected readonly activeMcpServerCount = computed(
+    () => this.mcpManager.getActiveServersWithTools().length,
+  );
 
   protected onIncludeScreenshotChange(checked: boolean): void {
     this.includeScreenshot.set(checked);
@@ -163,6 +175,22 @@ export class ChatPanel {
       .map(m => {
         const isStreaming =
           m.role === MessageRole.MODEL && this.chatState.isProgrammaticStreamActive();
+        if (isStreaming) {
+          return {
+            ...m,
+            isSnapshot: false,
+            isStreaming: true,
+            componentCount: null,
+          };
+        }
+        if (m.isSnapshot !== undefined) {
+          return {
+            ...m,
+            isSnapshot: m.isSnapshot,
+            isStreaming: false,
+            componentCount: m.componentCount ?? null,
+          };
+        }
         const cleaned = m.content ? this.chatCleaner.cleanPayload(m.content) : '';
         const parseResult = cleaned ? parseAndHealJsonLines(cleaned) : null;
         let isSnapshot = false;
@@ -173,14 +201,14 @@ export class ChatPanel {
           return {
             ...m,
             isSnapshot: true,
-            isStreaming: !!isStreaming,
+            isStreaming: false,
             componentCount: parseResult?.success ? parseResult.count : 0,
           };
         }
         return {
           ...m,
           isSnapshot: false,
-          isStreaming: !!isStreaming,
+          isStreaming: false,
           componentCount: null,
         };
       });
@@ -297,12 +325,8 @@ export class ChatPanel {
   /**
    * Type-safe helper to extract the parser syntax error message from the structured payload.
    */
-  getParseErrorMessage(parseError: unknown): string {
-    if (!parseError || typeof parseError !== 'object') {
-      return 'Unknown formatting failure';
-    }
-    const result = parseError as Record<string, unknown>;
-    return typeof result['error'] === 'string' ? result['error'] : 'Invalid JSON layout structure';
+  getParseErrorMessage(parseError?: FailureParseResult): string {
+    return parseError?.error ?? 'Invalid JSON layout structure';
   }
 
   viewParseErrorDetails(): void {

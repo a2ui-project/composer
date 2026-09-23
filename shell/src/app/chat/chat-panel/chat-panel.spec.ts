@@ -34,11 +34,9 @@ import {MatInputHarness} from '@angular/material/input/testing';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
-import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
-import {
-  parseAndHealJsonLines,
-  SuccessRenderParseResult,
-} from '../a2ui-payload-parser/a2ui-payload-parser';
+import {FailureParseResult} from '../a2ui-payload-parser/a2ui-payload-parser';
+import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
+import {ComposerPanelId} from '../../shell/composer-workspace/composer-panel-id';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -952,38 +950,131 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     });
   });
 
-  describe('ChatCleaner parse count logic', () => {
-    it('counts components in JSON array of commands', () => {
-      const cleaner = TestBed.inject(ChatCleaner);
-      const payload = '[{"createSurface": {}}, {"updateComponents": {"components": [{}, {}]}}]';
-      const cleaned = cleaner.cleanPayload(payload);
-      const parsed = parseAndHealJsonLines(cleaned);
-      expect(parsed?.success).toBe(true);
-      expect((parsed as SuccessRenderParseResult).count).toBe(3);
+  describe('parse error card', () => {
+    it('renders parse error card when message has parseError and is not streaming', async () => {
+      const historyMocks: LlmMessage[] = [
+        {
+          role: MessageRole.MODEL,
+          content: '{"bad json"',
+          parseError: {
+            success: false,
+            error: 'Unexpected end of JSON input',
+            line: 1,
+            column: 11,
+          },
+        },
+      ];
+      chatStateMock.setChatHistory(historyMocks);
+      chatStateMock.setProgrammaticStreamActive(false);
+      fixture.detectChanges();
+
+      expect(await harness.hasParseErrorCard()).toBe(true);
+      const attributes = await harness.getParseErrorCardAttributes();
+      expect(attributes.role).toBe('alert');
+      expect(attributes.ariaLive).toBe('assertive');
+      expect(await harness.getParseErrorText()).toContain('Unexpected end of JSON input');
     });
 
-    it('counts components in multi-line JSONL commands', () => {
-      const cleaner = TestBed.inject(ChatCleaner);
-      const payload = '{"createSurface": {}}\n{"updateComponents": {"components": [{}]}}';
-      const cleaned = cleaner.cleanPayload(payload);
-      const parsed = parseAndHealJsonLines(cleaned);
-      expect(parsed?.count).toBe(2);
+    it('dispatches OpenPanelEvent for Errors tab when clicking view error details button', async () => {
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+      const historyMocks: LlmMessage[] = [
+        {
+          role: MessageRole.MODEL,
+          content: '{"bad json"',
+          parseError: {
+            success: false,
+            error: 'Unexpected token',
+          },
+        },
+      ];
+      chatStateMock.setChatHistory(historyMocks);
+      chatStateMock.setProgrammaticStreamActive(false);
+      fixture.detectChanges();
+
+      await harness.clickParseErrorDetailsButton();
+
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'a2ui-open-panel',
+          detail: {panelId: ComposerPanelId.Errors},
+        }),
+      );
     });
 
-    it('returns 0 for non-layout text or invalid JSON', () => {
-      const cleaner = TestBed.inject(ChatCleaner);
-      const cleaned = cleaner.cleanPayload('invalid text');
-      const parsed = parseAndHealJsonLines(cleaned);
-      expect(parsed?.count).toBe(0);
-    });
+    describe('getParseErrorMessage', () => {
+      it('extracts error description when FailureParseResult is provided', () => {
+        const failure: FailureParseResult = {
+          success: false,
+          error: 'Unexpected token at line 2',
+          line: 2,
+          column: 4,
+        };
+        const component = fixture.componentInstance;
 
-    it('ignores single-line parse failures in multi-line JSONL and counts valid lines', () => {
-      const cleaner = TestBed.inject(ChatCleaner);
-      const payload =
-        '{"createSurface": {}}\n{corrupted\n{"updateComponents": {"components": [{}, {}]}}';
-      const cleaned = cleaner.cleanPayload(payload);
-      const parsed = parseAndHealJsonLines(cleaned);
-      expect(parsed?.success).toBe(false);
+        expect(component.getParseErrorMessage(failure)).toBe('Unexpected token at line 2');
+      });
+
+      it('returns fallback message when parseError is undefined or omitted', () => {
+        const component = fixture.componentInstance;
+
+        expect(component.getParseErrorMessage(undefined)).toBe('Invalid JSON layout structure');
+        expect(component.getParseErrorMessage()).toBe('Invalid JSON layout structure');
+      });
+    });
+  });
+
+  describe('MCP catalog status indicator', () => {
+    it('shows "Instructions" when callMcpTool is not in activeCatalog and "Instructions (includes X MCP Servers)" when it is', async () => {
+      expect(await harness.getSystemInstructionsLinkText()).toBe('Instructions');
+
+      catalogManagementServiceMock.activeCatalog.set({
+        title: 'Basic with MCP',
+        components: {},
+        functions: {callMcpTool: {type: 'object'}},
+      });
+      fixture.detectChanges();
+
+      expect(await harness.getSystemInstructionsLinkText()).toBe(
+        'Instructions (includes 0 MCP Servers)',
+      );
+
+      const mcpManager = TestBed.inject(McpClientManagerService);
+      mcpManager.servers.set([
+        {
+          id: 'server-1',
+          url: 'http://localhost:3001/mcp',
+          enabled: true,
+          status: 'connected',
+          tools: [{name: 'sample_tool', inputSchema: {}}],
+        },
+      ]);
+      fixture.detectChanges();
+
+      expect(await harness.getSystemInstructionsLinkText()).toBe(
+        'Instructions (includes 1 MCP Server)',
+      );
+
+      mcpManager.servers.set([
+        {
+          id: 'server-1',
+          url: 'http://localhost:3001/mcp',
+          enabled: true,
+          status: 'connected',
+          tools: [{name: 'sample_tool_1', inputSchema: {}}],
+        },
+        {
+          id: 'server-2',
+          url: 'http://localhost:3002/mcp',
+          enabled: true,
+          status: 'connected',
+          tools: [{name: 'sample_tool_2', inputSchema: {}}],
+        },
+      ]);
+      fixture.detectChanges();
+
+      expect(await harness.getSystemInstructionsLinkText()).toBe(
+        'Instructions (includes 2 MCP Servers)',
+      );
     });
   });
 });

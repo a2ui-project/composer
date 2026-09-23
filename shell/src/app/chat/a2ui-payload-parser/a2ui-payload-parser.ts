@@ -56,10 +56,7 @@ export type ParseResult =
  */
 export function parseAndHealJsonLines(content?: string | null): ParseResult {
   if (content == null || content.trim().length === 0) {
-    return {
-      success: false,
-      error: 'No valid A2UI JSON layout command block could be parsed or recovered.',
-    };
+    return {success: true, isConversational: true, blocks: [], count: 0};
   }
 
   const parsedArray = tryParseJsonArray(content);
@@ -93,6 +90,7 @@ export function parseAndHealJsonLines(content?: string | null): ParseResult {
 
   const parsedBlocks: unknown[] = [];
   let looksLikeA2ui = false;
+  let firstError: FailureParseResult | null = null;
 
   for (const line of lines) {
     if (line.text.startsWith('```') || (!line.text.startsWith('{') && !line.text.startsWith('['))) {
@@ -107,19 +105,24 @@ export function parseAndHealJsonLines(content?: string | null): ParseResult {
       if (healedObj !== null) {
         parsedBlocks.push(healedObj);
       } else {
-        const errDetails = extractErrorDetails(err as Error, line.text);
-        return {
-          success: false,
-          error: (err as Error)?.message ?? 'Syntax recovery failed',
-          line: line.originalIndex + 1,
-          column: errDetails.column,
-          snippet: line.text,
-        };
+        if (!firstError) {
+          const errDetails = extractErrorDetails(err as Error, line.text);
+          firstError = {
+            success: false,
+            error: (err as Error)?.message ?? 'Syntax recovery failed',
+            line: line.originalIndex + 1,
+            column: errDetails.column,
+            snippet: line.text,
+          };
+        }
       }
     }
   }
 
   if (parsedBlocks.length === 0) {
+    if (firstError) {
+      return firstError;
+    }
     if (looksLikeA2ui) {
       const errDetails = parsedArray.error;
       return {
@@ -141,22 +144,36 @@ export function parseAndHealJsonLines(content?: string | null): ParseResult {
   };
 }
 
+/**
+ * Attempts syntax healing on malformed or truncated JSON strings produced by LLMs.
+ * Strips trailing commas and injects balanced closing brackets and braces.
+ *
+ * @param line - The raw string representation to heal.
+ * @returns The parsed JSON object if healed successfully, or null if unrecoverable.
+ */
 export function attemptSyntaxHealing(line?: string | null): unknown | null {
   if (line == null || line.trim().length === 0) {
     return null;
   }
   let patched = line.trim();
 
+  // Guard against excessive payloads to prevent combinatorial parsing overhead
+  if (patched.length > 256 * 1024) {
+    return null;
+  }
+
   patched = patched.replace(/,\s*([\]}])/g, '$1');
 
   try {
     return JSON.parse(patched);
   } catch (e) {
+    // 1. Try closing open objects (e.g. truncated inner properties)
     for (let i = 1; i <= 5; i++) {
       try {
         return JSON.parse(patched + '}'.repeat(i));
       } catch (_) {}
     }
+    // 2. Try closing objects nested within arrays (curly braces followed by square brackets)
     for (let i = 1; i <= 3; i++) {
       for (let j = 1; j <= 3; j++) {
         try {
@@ -164,6 +181,7 @@ export function attemptSyntaxHealing(line?: string | null): unknown | null {
         } catch (_) {}
       }
     }
+    // 3. Try closing arrays nested within objects (square brackets followed by curly braces)
     for (let i = 1; i <= 3; i++) {
       for (let j = 1; j <= 3; j++) {
         try {
@@ -176,6 +194,12 @@ export function attemptSyntaxHealing(line?: string | null): unknown | null {
   return null;
 }
 
+/**
+ * Type guard verifying if an item is a valid RenderA2uiItem with updateComponents.
+ *
+ * @param block - The candidate payload to validate.
+ * @returns True if the block matches RenderA2uiItem structure.
+ */
 export function isRenderA2uiItem(block: unknown): block is RenderA2uiItem {
   if (!block || typeof block !== 'object') return false;
   const b = block as Record<string, unknown>;
@@ -184,6 +208,13 @@ export function isRenderA2uiItem(block: unknown): block is RenderA2uiItem {
   return Array.isArray(uc['components']);
 }
 
+/**
+ * Inspects parsed A2UI blocks against the catalog schema, healing casing and synonym deviations.
+ *
+ * @param parsedBlocks - The list of parsed A2UI command blocks.
+ * @param componentsObj - Optional dictionary of recognized catalog components.
+ * @returns True if any component type or property was healed in-place.
+ */
 export function runCatalogComponentSchemaCheck(
   parsedBlocks: unknown[],
   componentsObj?: Record<string, unknown>,
@@ -283,6 +314,12 @@ export function runCatalogComponentSchemaCheck(
   return healed;
 }
 
+/**
+ * Recursively strips potentially dangerous object prototype properties (__proto__, constructor, prototype).
+ *
+ * @param val - The raw object or value to sanitize.
+ * @returns A safe clone of the value without prototype pollution keys.
+ */
 export function sanitizeValue(val: unknown): unknown {
   if (val === null || typeof val !== 'object') {
     return val;
@@ -305,6 +342,12 @@ export function sanitizeValue(val: unknown): unknown {
   return cleaned;
 }
 
+/**
+ * Sanitizes an A2UI component instance by recursively removing prototype pollution keys.
+ *
+ * @param obj - The component instance to sanitize.
+ * @returns A clean A2uiComponentInstance.
+ */
 export function sanitizeComponentObject(obj: A2uiComponentInstance): A2uiComponentInstance {
   return sanitizeValue(obj) as A2uiComponentInstance;
 }

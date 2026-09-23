@@ -25,7 +25,7 @@ import {
   untracked,
   WritableSignal,
 } from '@angular/core';
-import {NonNullableFormBuilder, ReactiveFormsModule} from '@angular/forms';
+import {FormsModule, NonNullableFormBuilder, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatButtonModule} from '@angular/material/button';
@@ -33,6 +33,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -42,6 +43,7 @@ import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tok
 import {SettingsService, RendererOption} from '../settings-service/settings.service';
 import {RendererSelectorComponent} from '../renderer-selector/renderer-selector';
 import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
+import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
 /**
  * Renders the user settings view, allowing configuration of target URL endpoints,
@@ -51,6 +53,7 @@ import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
   selector: 'a2ui-composer-settings',
   standalone: true,
   imports: [
+    FormsModule,
     ReactiveFormsModule,
     MatFormFieldModule,
     MatInputModule,
@@ -59,6 +62,7 @@ import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
     MatCardModule,
     MatChipsModule,
     MatSlideToggleModule,
+    MatTooltipModule,
     RendererSelectorComponent,
     ApiKeySelectorComponent,
   ],
@@ -73,6 +77,9 @@ export class Settings implements OnInit {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
   protected readonly settingsService = inject(SettingsService);
+  protected readonly mcpManager = inject(McpClientManagerService);
+
+  readonly newMcpServerUrl = signal('');
 
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
@@ -164,5 +171,24 @@ export class Settings implements OnInit {
     this.forceThirdPartyAuth.set(newState);
     this.configProvider.setForcedAuthMode(newState ? AuthType.THIRD_PARTY : AuthType.FIRST_PARTY);
     this.isThirdParty.set(this.startupResolution.isThirdPartyEnvironment());
+  }
+
+  async addMcpServer(): Promise<void> {
+    const url = this.newMcpServerUrl().trim();
+    if (!url) return;
+    this.newMcpServerUrl.set('');
+    await this.mcpManager.addServer(url);
+  }
+
+  async removeMcpServer(id: string): Promise<void> {
+    await this.mcpManager.removeServer(id);
+  }
+
+  async toggleMcpServer(id: string, enabled: boolean): Promise<void> {
+    await this.mcpManager.toggleServer(id, enabled);
+  }
+
+  async reconnectMcpServer(id: string): Promise<void> {
+    await this.mcpManager.connectServer(id);
   }
 }

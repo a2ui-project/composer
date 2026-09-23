@@ -14,15 +14,5 @@
  * limitations under the License.
  */
 
-export interface MonacoModel {
-  getValue(): string;
-  setValue(value: string): void;
-}
-
-export interface WindowWithMonaco extends Window {
-  monaco?: {
-    editor: {
-      getModels(): MonacoModel[];
-    };
-  };
-}
+declare const catalogJson: unknown;
+export default catalogJson;
