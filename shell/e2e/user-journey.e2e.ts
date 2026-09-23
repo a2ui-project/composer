@@ -105,7 +105,8 @@ test.describe('E2E Workspace User Journey', () => {
     await page.waitForURL(url => url.pathname === '/');
     await page.waitForLoadState('load');
 
-    // 7. Wait for Monaco to load and enter malformed JSON
+    // 7. Switch to A2UI JSON Editor tab, wait for Monaco to load and enter malformed JSON
+    await page.locator('.dv-tab', {hasText: /^A2UI JSON Editor/}).click();
     await waitForMonacoEditor(page);
 
     await setMonacoContent(page, 'invalid json {');
@@ -144,7 +145,8 @@ test.describe('E2E Workspace User Journey', () => {
     await page.goto('/');
     await page.waitForLoadState('load');
 
-    // Wait for Monaco to load
+    // Switch to A2UI JSON Editor tab and wait for Monaco to load
+    await page.locator('.dv-tab', {hasText: /^A2UI JSON Editor/}).click();
     await waitForMonacoEditor(page);
 
     // Wait for initial layout snapshot in chat history
@@ -213,6 +215,7 @@ test.describe('E2E Workspace User Journey', () => {
     });
   });
 
+
   test('displays informative error snackbar when navigating with truncated or corrupted shared design URL', async ({
     page,
   }) => {
@@ -257,6 +260,7 @@ test.describe('E2E Workspace User Journey', () => {
       timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
     });
   });
+
 
   for (const panel of CHAT_PANELS) {
     test(`should create, overwrite in-place, preview in system instructions, and disable custom instruction presets (${panel} panel)`, async ({
