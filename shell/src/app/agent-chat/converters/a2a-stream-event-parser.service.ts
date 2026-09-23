@@ -602,11 +602,14 @@ export class A2aStreamEventParser {
       return {unwrappedData: data, isMedia: false};
     }
 
-    const envelope = data as {mimeType?: string; data?: unknown; name?: string};
+    const envelope = data as Record<string, unknown>;
+    const rawData = envelope['data'];
+    const rawMimeType = typeof envelope['mimeType'] === 'string' ? envelope['mimeType'] : undefined;
+    const rawName = typeof envelope['name'] === 'string' ? envelope['name'] : undefined;
 
     // Case 1: Stringified JSON (e.g. a serialized A2UI component list or action)
-    if (typeof envelope.data === 'string') {
-      const trimmed = envelope.data.trim();
+    if (typeof rawData === 'string') {
+      const trimmed = rawData.trim();
       if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
         try {
           return {unwrappedData: JSON.parse(trimmed), isMedia: false};
@@ -618,8 +621,8 @@ export class A2aStreamEventParser {
     }
 
     // Case 2: Base64 media data payload (image, audio, video, PDF)
-    if (envelope.mimeType && typeof envelope.data === 'string') {
-      const mime = envelope.mimeType.toLowerCase();
+    if (rawMimeType && typeof rawData === 'string') {
+      const mime = rawMimeType.toLowerCase();
       if (
         mime.startsWith('image/') ||
         mime.startsWith('audio/') ||
@@ -627,15 +630,14 @@ export class A2aStreamEventParser {
         mime === 'application/pdf'
       ) {
         result.textChunk =
-          (result.textChunk || '') +
-          renderBase64Data(envelope.data, envelope.mimeType, envelope.name);
-        return {unwrappedData: envelope.data, isMedia: true};
+          (result.textChunk || '') + renderBase64Data(rawData, rawMimeType, rawName);
+        return {unwrappedData: rawData, isMedia: true};
       }
     }
 
     // Case 3: Inner data payload
-    if (envelope.data !== undefined) {
-      return {unwrappedData: envelope.data, isMedia: false};
+    if (rawData !== undefined) {
+      return {unwrappedData: rawData, isMedia: false};
     }
 
     return {unwrappedData: data, isMedia: false};

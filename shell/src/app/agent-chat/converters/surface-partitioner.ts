@@ -470,7 +470,7 @@ function formatCanvasComponents(
     const rootId = Array.from(childRootIds)[0];
     return components.map(c => {
       if (c['id'] === rootId) {
-        return {...c, id: 'root'};
+        return {...c, 'id': 'root'};
       }
       return c;
     });
@@ -479,9 +479,9 @@ function formatCanvasComponents(
   if (childRootIds.size > 1) {
     return [
       {
-        id: 'root',
-        component: 'Column',
-        children: Array.from(childRootIds),
+        'id': 'root',
+        'component': 'Column',
+        'children': Array.from(childRootIds),
       },
       ...components,
     ];
