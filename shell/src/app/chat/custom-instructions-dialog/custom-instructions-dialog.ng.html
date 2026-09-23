@@ -1,0 +1,92 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<div class="dialog-header">
+  <h2 mat-dialog-title class="dialog-title-text">Custom Instructions</h2>
+</div>
+
+<mat-dialog-content>
+  <mat-form-field appearance="outline" class="preset-select-field">
+    <mat-label>Preset</mat-label>
+    <mat-select
+      id="custom-instructions-preset-select"
+      class="preset-select"
+      [value]="selectedOption()"
+      (selectionChange)="onOptionChange($event.value)"
+      aria-label="Preset selection"
+    >
+      <mat-option [value]="NONE_OPTION" class="preset-option-none">None (Off)</mat-option>
+      @for (preset of presets(); track preset.id) {
+        <mat-option [value]="preset.id" class="preset-option-item">{{ preset.name }}</mat-option>
+      }
+      <mat-option [value]="NEW_OPTION" class="preset-option-new">+ New preset...</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  @if (!isNoneSelected()) {
+    <mat-form-field appearance="outline" class="preset-name-field">
+      <mat-label>Preset Name</mat-label>
+      <input
+        matInput
+        class="preset-name-input"
+        [ngModel]="presetName()"
+        (ngModelChange)="onNameChange($event)"
+        placeholder="e.g. Compact Theme"
+        aria-label="Preset Name"
+      />
+    </mat-form-field>
+
+    <div class="instructions-container">
+      <label class="instructions-label" for="custom-instructions-textarea"
+        >Custom Instructions</label
+      >
+      <textarea
+        id="custom-instructions-textarea"
+        class="instructions-textarea"
+        [ngModel]="instructionsContent()"
+        (ngModelChange)="onContentChange($event)"
+        placeholder="What would you like Gemini to know or consider when responding?"
+        aria-label="Custom instructions text"
+      ></textarea>
+    </div>
+  } @else {
+    <div class="none-selected-message">
+      Custom instructions are turned off. Select an existing preset or choose "+ New preset..." to
+      configure instructions.
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end" class="dialog-actions">
+  @if (isExistingPreset()) {
+    <button mat-button color="warn" class="delete-button" (click)="deletePreset()" type="button">
+      <mat-icon>delete</mat-icon>
+      Delete
+    </button>
+  }
+  <span class="actions-spacer"></span>
+  <button mat-button class="cancel-button" (click)="cancel()" type="button">Cancel</button>
+  <button
+    mat-flat-button
+    color="primary"
+    class="save-button"
+    [disabled]="isSaveDisabled()"
+    (click)="save()"
+    type="button"
+  >
+    Save
+  </button>
+</mat-dialog-actions>

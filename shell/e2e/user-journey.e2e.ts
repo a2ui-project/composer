@@ -179,4 +179,80 @@ test.describe('E2E Workspace User Journey', () => {
     await expect(previewIframe.locator('body')).toBeVisible({timeout: 10000});
     await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({timeout: 10000});
   });
+
+  test('should create, overwrite in-place, preview in system instructions, and disable custom instruction presets', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      if (window === window.top) {
+        localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
+      }
+    });
+    await page.goto('/');
+
+    const customInstructionsLink = page.locator('.custom-instructions-link');
+    const systemInstructionsLink = page.locator('.system-instructions-link');
+
+    // 1. Open the Gemini chat panel and click "Custom Instructions" next to "Instructions"
+    await expect(customInstructionsLink).toHaveText('Custom Instructions');
+    await customInstructionsLink.click();
+
+    const dialog = page.locator('a2ui-composer-custom-instructions-dialog');
+    await expect(dialog).toBeVisible();
+
+    // 2. Create a named preset, click Save, and verify the link label updates to "Custom Instructions: <Preset Name>"
+    await dialog.locator('.preset-name-input').fill('Compact Theme');
+    await dialog
+      .locator('.instructions-textarea')
+      .fill('Always use compact spacing and high-contrast cards.');
+    await dialog.locator('.save-button').click();
+    await expect(dialog).toBeHidden();
+
+    await expect(customInstructionsLink).toHaveText('Custom Instructions: Compact Theme');
+
+    // 3. Click "Instructions" and verify "## Custom User Instructions" appears at the end of the system prompt
+    await systemInstructionsLink.click();
+    const sysDialog = page.locator('a2ui-composer-system-instructions-dialog');
+    await expect(sysDialog).toBeVisible();
+    await expect(sysDialog.locator('.instructions-textarea')).toHaveValue(
+      /## Custom User Instructions\s+Always use compact spacing and high-contrast cards\./,
+    );
+    await sysDialog.getByRole('button', {name: 'Close'}).click();
+    await expect(sysDialog).toBeHidden();
+
+    // 4. Reopen "Custom Instructions", edit the existing preset in-place, click Save, and verify overwrite
+    await customInstructionsLink.click();
+    await expect(dialog).toBeVisible();
+    await dialog.locator('.preset-name-input').fill('Compact Theme v2');
+    await dialog
+      .locator('.instructions-textarea')
+      .fill('Updated: strictly use compact spacing and dark elevation.');
+    await dialog.locator('.save-button').click();
+    await expect(dialog).toBeHidden();
+
+    await expect(customInstructionsLink).toHaveText('Custom Instructions: Compact Theme v2');
+
+    // Verify the overwritten content in SystemInstructionsDialog and after page reload
+    await page.reload();
+    await expect(customInstructionsLink).toHaveText('Custom Instructions: Compact Theme v2');
+    await systemInstructionsLink.click();
+    await expect(sysDialog.locator('.instructions-textarea')).toHaveValue(
+      /## Custom User Instructions\s+Updated: strictly use compact spacing and dark elevation\./,
+    );
+    await sysDialog.getByRole('button', {name: 'Close'}).click();
+
+    // 5. Switch preset dropdown to "None (Off)" and click Save to disable custom instructions
+    await customInstructionsLink.click();
+    await dialog.locator('.preset-select').click();
+    await page.locator('mat-option.preset-option-none').click();
+    await dialog.locator('.save-button').click();
+    await expect(dialog).toBeHidden();
+
+    await expect(customInstructionsLink).toHaveText('Custom Instructions');
+    await systemInstructionsLink.click();
+    await expect(sysDialog.locator('.instructions-textarea')).not.toHaveValue(
+      /## Custom User Instructions/,
+    );
+    await sysDialog.getByRole('button', {name: 'Close'}).click();
+  });
 });

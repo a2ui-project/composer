@@ -19,6 +19,9 @@ import {ChatPromptFactoryService} from './chat-prompt-factory.service';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
+import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+
 describe('ChatPromptFactoryService', () => {
   let service: ChatPromptFactoryService;
   let catalogSpy: {
@@ -29,6 +32,11 @@ describe('ChatPromptFactoryService', () => {
     getActiveServersWithTools: ReturnType<typeof vi.fn>;
     doesCatalogSupportMcp: ReturnType<typeof vi.fn>;
   };
+  let localStorageSpy: {
+    getItem: ReturnType<typeof vi.fn>;
+    setItem: ReturnType<typeof vi.fn>;
+    removeItem: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     catalogSpy = {activeCatalog: vi.fn(), activeCatalogSignal: vi.fn(() => null)};
@@ -38,11 +46,17 @@ describe('ChatPromptFactoryService', () => {
         McpClientManagerService.prototype.doesCatalogSupportMcp(catalog),
       ),
     };
+    localStorageSpy = {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
     TestBed.configureTestingModule({
       providers: [
         ChatPromptFactoryService,
         {provide: CatalogManagement, useValue: catalogSpy},
         {provide: McpClientManagerService, useValue: mcpSpy},
+        {provide: LocalStorageInteractions, useValue: localStorageSpy},
       ],
     });
     service = TestBed.inject(ChatPromptFactoryService);
@@ -101,5 +115,108 @@ describe('ChatPromptFactoryService', () => {
     expect(service.systemPrompt()).toContain('"content":{"type":"string"}');
     expect(service.systemPrompt()).not.toContain('fs-server');
     expect(service.systemPrompt()).not.toContain('http://localhost:3001/mcp');
+  });
+
+  describe('Custom Instructions', () => {
+    it('initializes with empty state when storage is empty or invalid JSON', () => {
+      expect(service.customInstructionsState()).toEqual({
+        presets: [],
+        activePresetId: null,
+      });
+      expect(service.presets()).toEqual([]);
+      expect(service.activePresetId()).toBeNull();
+      expect(service.activePreset()).toBeNull();
+      expect(service.customInstructions()).toBe('');
+      expect(service.hasCustomInstructions()).toBe(false);
+    });
+
+    it('hydrates saved state from LocalStorageInteractions on initialization', () => {
+      const savedState = {
+        presets: [{id: 'p-1', name: 'Concise', content: 'Be concise.'}],
+        activePresetId: 'p-1',
+      };
+      localStorageSpy.getItem.mockImplementation(key =>
+        key === LocalStorageKey.CUSTOM_INSTRUCTIONS ? JSON.stringify(savedState) : null,
+      );
+
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          ChatPromptFactoryService,
+          {provide: CatalogManagement, useValue: catalogSpy},
+          {provide: McpClientManagerService, useValue: mcpSpy},
+          {provide: LocalStorageInteractions, useValue: localStorageSpy},
+        ],
+      });
+      const newService = TestBed.inject(ChatPromptFactoryService);
+
+      expect(newService.customInstructionsState()).toEqual(savedState);
+      expect(newService.presets()).toEqual(savedState.presets);
+      expect(newService.activePresetId()).toBe('p-1');
+      expect(newService.activePreset()).toEqual(savedState.presets[0]);
+      expect(newService.customInstructions()).toBe('Be concise.');
+      expect(newService.hasCustomInstructions()).toBe(true);
+    });
+
+    it('appends ## Custom User Instructions to systemPrompt when active preset has non-empty content (no catalog)', () => {
+      catalogSpy.activeCatalog.mockReturnValue(null);
+      service.setCustomInstructionsState({
+        presets: [{id: 'p-1', name: 'Dark Theme', content: 'Always use dark colors.'}],
+        activePresetId: 'p-1',
+      });
+
+      const prompt = service.systemPrompt();
+      expect(prompt).toContain('## Custom User Instructions\n\nAlways use dark colors.');
+      expect(prompt.endsWith('## Custom User Instructions\n\nAlways use dark colors.')).toBe(true);
+    });
+
+    it('appends ## Custom User Instructions to systemPrompt when active preset has non-empty content (with catalog)', () => {
+      catalogSpy.activeCatalog.mockReturnValue({components: {}});
+      service.setCustomInstructionsState({
+        presets: [{id: 'p-1', name: 'Dense', content: 'Dense layout only.'}],
+        activePresetId: 'p-1',
+      });
+
+      const prompt = service.systemPrompt();
+      expect(prompt).toContain('## Custom User Instructions\n\nDense layout only.');
+      expect(prompt.endsWith('## Custom User Instructions\n\nDense layout only.')).toBe(true);
+    });
+
+    it('omits ## Custom User Instructions when activePresetId is null or content is whitespace only', () => {
+      catalogSpy.activeCatalog.mockReturnValue(null);
+
+      // Active preset null
+      service.setCustomInstructionsState({
+        presets: [{id: 'p-1', name: 'Dark Theme', content: 'Always use dark colors.'}],
+        activePresetId: null,
+      });
+      expect(service.systemPrompt()).not.toContain('## Custom User Instructions');
+      expect(service.hasCustomInstructions()).toBe(false);
+
+      // Active preset with whitespace content
+      service.setCustomInstructionsState({
+        presets: [{id: 'p-2', name: 'Empty', content: '   \n  '}],
+        activePresetId: 'p-2',
+      });
+      expect(service.systemPrompt()).not.toContain('## Custom User Instructions');
+      expect(service.hasCustomInstructions()).toBe(false);
+    });
+
+    it('normalizes unknown activePresetId to null and persists to storage in setCustomInstructionsState', () => {
+      service.setCustomInstructionsState({
+        presets: [{id: 'p-1', name: 'Preset 1', content: 'Some instructions'}],
+        activePresetId: 'non-existent-id',
+      });
+
+      expect(service.activePresetId()).toBeNull();
+      expect(service.activePreset()).toBeNull();
+      expect(localStorageSpy.setItem).toHaveBeenCalledWith(
+        LocalStorageKey.CUSTOM_INSTRUCTIONS,
+        JSON.stringify({
+          presets: [{id: 'p-1', name: 'Preset 1', content: 'Some instructions'}],
+          activePresetId: null,
+        }),
+      );
+    });
   });
 });

@@ -39,7 +39,10 @@ import {
   parseAndHealJsonLines,
   runCatalogComponentSchemaCheck,
 } from '../a2ui-payload-parser/a2ui-payload-parser';
-import {ChatPromptFactoryService} from '../chat-prompt-factory/chat-prompt-factory.service';
+import {
+  ChatPromptFactoryService,
+  CustomInstructionsState,
+} from '../chat-prompt-factory/chat-prompt-factory.service';
 import {ChatErrorFormatterService} from '../chat-error-formatter/chat-error-formatter.service';
 import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
 import {ErrorLogger} from '../../debug/error-logger.service';
@@ -490,4 +493,26 @@ export class ChatCoordinator {
    * catalog schema specifications system instructions.
    */
   readonly systemPrompt = this.promptFactory.systemPrompt;
+
+  /**
+   * Reactively mapped custom instruction preset configuration state.
+   */
+  readonly customInstructionsState = this.promptFactory.customInstructionsState;
+
+  /**
+   * Active custom instruction preset, or null if disabled or not found.
+   */
+  readonly activeCustomPreset = this.promptFactory.activePreset;
+
+  /**
+   * True if an active custom instruction preset exists and has non-empty trimmed content.
+   */
+  readonly hasCustomInstructions = this.promptFactory.hasCustomInstructions;
+
+  /**
+   * Updates the custom instructions state and persists to browser storage.
+   */
+  setCustomInstructionsState(state: CustomInstructionsState): void {
+    this.promptFactory.setCustomInstructionsState(state);
+  }
 }

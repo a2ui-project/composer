@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, computed, inject} from '@angular/core';
+import {Injectable, computed, inject, signal} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {formatJson} from '../../utils/json';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
@@ -23,6 +23,25 @@ import {
   McpServerConfig,
   McpToolInfo,
 } from '../../mcp/mcp-client-manager.service';
+import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../../storage/models/local-storage-keys';
+
+/**
+ * Representation of a named custom instruction preset.
+ */
+export interface CustomInstructionPreset {
+  id: string;
+  name: string;
+  content: string;
+}
+
+/**
+ * Persisted state of custom instruction presets and active selection.
+ */
+export interface CustomInstructionsState {
+  presets: CustomInstructionPreset[];
+  activePresetId: string | null;
+}
 
 /**
  * Constructs dynamic system prompts based on the provided LLM intent and active catalog states.
@@ -33,15 +52,31 @@ import {
 export class ChatPromptFactoryService {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly mcpManager = inject(McpClientManagerService);
+  private readonly localStorageInteractions = inject(LocalStorageInteractions);
+
+  readonly customInstructionsState = signal<CustomInstructionsState>(this.loadInitialState());
+  readonly presets = computed(() => this.customInstructionsState().presets);
+  readonly activePresetId = computed(() => this.customInstructionsState().activePresetId);
+  readonly activePreset = computed(() => {
+    const state = this.customInstructionsState();
+    return state.presets.find(p => p.id === state.activePresetId) ?? null;
+  });
+  readonly customInstructions = computed(() => this.activePreset()?.content ?? '');
+  readonly hasCustomInstructions = computed(() => this.customInstructions().trim().length > 0);
 
   readonly systemPrompt = computed<string>(() => {
     const catalog = this.catalogManagement.activeCatalog();
     const mcpSupported = this.mcpManager.doesCatalogSupportMcp(catalog);
     const activeServers = mcpSupported ? this.mcpManager.getActiveServersWithTools() : [];
     const mcpInstructions = this.buildMcpInstructions(activeServers);
+    const customInstructionsText = this.customInstructions().trim();
+    const customPromptSuffix = customInstructionsText
+      ? `\n\n## Custom User Instructions\n\n${customInstructionsText}`
+      : '';
 
     if (!catalog) {
-      return `
+      return (
+        `
   # A2UI Generation Expert
 
   ## Role
@@ -49,11 +84,60 @@ export class ChatPromptFactoryService {
   requests—whether provided as text instructions, UI wireframes, screenshots,
   or mockup images—into valid A2UI v0.9 interactive user interfaces.
   ${mcpInstructions}
-      `;
+      `.trimEnd() + customPromptSuffix
+      );
     }
 
-    return this.generateSystemPrompt(formatJson(catalog)) + mcpInstructions;
+    return (
+      (this.generateSystemPrompt(formatJson(catalog)) + mcpInstructions).trimEnd() +
+      customPromptSuffix
+    );
   });
+
+  /**
+   * Updates the custom instruction state and persists it to local storage.
+   */
+  setCustomInstructionsState(state: CustomInstructionsState): void {
+    const validPreset = state.presets.some(p => p.id === state.activePresetId);
+    const normalizedState: CustomInstructionsState = {
+      presets: state.presets,
+      activePresetId: validPreset ? state.activePresetId : null,
+    };
+    this.customInstructionsState.set(normalizedState);
+    this.localStorageInteractions.setItem(
+      LocalStorageKey.CUSTOM_INSTRUCTIONS,
+      JSON.stringify(normalizedState),
+    );
+  }
+
+  private loadInitialState(): CustomInstructionsState {
+    const raw = this.localStorageInteractions.getItem(LocalStorageKey.CUSTOM_INSTRUCTIONS);
+    if (!raw) {
+      return {presets: [], activePresetId: null};
+    }
+    try {
+      const parsed = JSON.parse(raw) as Partial<CustomInstructionsState>;
+      if (!parsed || !Array.isArray(parsed.presets)) {
+        return {presets: [], activePresetId: null};
+      }
+      const presets: CustomInstructionPreset[] = parsed.presets.filter(
+        (p: unknown): p is CustomInstructionPreset =>
+          typeof p === 'object' &&
+          p !== null &&
+          typeof (p as CustomInstructionPreset).id === 'string' &&
+          typeof (p as CustomInstructionPreset).name === 'string' &&
+          typeof (p as CustomInstructionPreset).content === 'string',
+      );
+      const activePresetId =
+        typeof parsed.activePresetId === 'string' &&
+        presets.some(p => p.id === parsed.activePresetId)
+          ? parsed.activePresetId
+          : null;
+      return {presets, activePresetId};
+    } catch {
+      return {presets: [], activePresetId: null};
+    }
+  }
 
   private buildMcpInstructions(activeServers: McpServerConfig[]): string {
     const toolsMap = new Map<string, McpToolInfo>();
