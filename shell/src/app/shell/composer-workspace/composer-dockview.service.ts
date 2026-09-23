@@ -100,8 +100,8 @@ export interface DockviewManagerInitOptions {
  * Layout Architecture:
  * - **Gemini Assistant (Chat)**: Left vertical panel, constrained initially to <= 1/3 viewport width.
  * - **Rendered A2UI Preview & A2UI JSON Editor**: Central workspace area split to the right of Chat.
- *   Both panels are placed side-by-side with an equal 50/50 width split, with "Rendered A2UI Preview"
- *   on the left and "A2UI JSON Editor" on the right.
+ *   Both panels share the same tab group (`direction: 'within'`), with "Rendered A2UI Preview"
+ *   active by default and "A2UI JSON Editor" tabbed behind it (`inactive: true`).
  * - **Debug Drawer**: Bottom drawer positioned below the Preview (`direction: 'below'`), occupying ~28%
  *   of container height. Combines "Data Model" (initially active), "Events", "Errors", and "Raw Messages"
  *   in a single tabbed group (`direction: 'within'`, `inactive: true`).
@@ -374,8 +374,8 @@ export class ComposerDockview {
    *
    * Layout Design:
    * 1. **Chat Panel (Gemini Assistant)**: Anchored left. Width <= 1/3 viewport (`chatWidth`).
-   * 2. **Rendered A2UI Preview & A2UI JSON Editor**: Placed right of Chat side-by-side with an
-   *    equal 50/50 width split between Rendered Preview (left) and JSON Editor (right).
+   * 2. **Rendered A2UI Preview & A2UI JSON Editor**: Placed right of Chat. Both are tabbed together
+   *    (`direction: 'within'`), with Rendered active and JSON Editor `inactive: true`.
    * 3. **Debug Drawer Group**: Placed below Rendered Preview (`direction: 'below'`), sized to ~28%
    *    container height. Houses Data Model (active), Events, Errors, and Raw Messages (`inactive: true`).
    *
@@ -423,7 +423,6 @@ export class ComposerDockview {
       const chatWidth = Math.floor(width * CHAT_PANEL_MAX_WIDTH_FRACTION);
       const debugHeight = Math.round(height * DEBUG_DRAWER_HEIGHT_RATIO);
       const previewHeight = height - debugHeight;
-      const halfRightWidth = Math.floor((width - chatWidth) / 2);
 
       // 1. Chat panel (Gemini Assistant) on the left
       this.dockviewApi.addPanel({
@@ -440,13 +439,25 @@ export class ComposerDockview {
         component: ComposerPanelId.Rendered,
         title: 'Rendered A2UI Preview',
         position: {direction: 'right', referencePanel: ComposerPanelId.Chat},
-        initialWidth: halfRightWidth,
+        initialWidth: width - chatWidth,
         initialHeight: previewHeight,
         minimumWidth: PREVIEW_PANEL_MIN_WIDTH,
         minimumHeight: PREVIEW_PANEL_MIN_HEIGHT,
       });
 
-      // 3. Debug drawer split below Rendered preview
+      // 3. Raw JSON editor tabbed within Rendered preview group (inactive initially)
+      this.dockviewApi.addPanel({
+        id: ComposerPanelId.Raw,
+        component: ComposerPanelId.Raw,
+        title: 'A2UI JSON Editor',
+        position: {
+          direction: 'within',
+          referencePanel: ComposerPanelId.Rendered,
+        },
+        inactive: true,
+      });
+
+      // 4. Debug drawer split below Rendered preview
       this.dockviewApi.addPanel({
         id: ComposerPanelId.DataModel,
         component: ComposerPanelId.DataModel,
@@ -459,7 +470,7 @@ export class ComposerDockview {
         minimumHeight: DEBUG_DRAWER_MIN_HEIGHT,
       });
 
-      // 4. Secondary debug tabs placed within Data Model group (inactive initially)
+      // 5. Secondary debug tabs placed within Data Model group (inactive initially)
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Events,
         component: ComposerPanelId.Events,
@@ -491,21 +502,9 @@ export class ComposerDockview {
         inactive: true,
       });
 
-      // 5. Raw JSON editor placed to the right of Rendered preview
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Raw,
-        component: ComposerPanelId.Raw,
-        title: 'A2UI JSON Editor',
-        position: {
-          direction: 'right',
-          referencePanel: ComposerPanelId.Rendered,
-        },
-        initialWidth: halfRightWidth,
-        minimumWidth: PREVIEW_PANEL_MIN_WIDTH,
-        minimumHeight: PREVIEW_PANEL_MIN_HEIGHT,
-      });
-
       // Explicitly activate default primary tabs
+      const renderedPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Rendered);
+      renderedPanel?.api.setActive();
       const chatPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat);
       chatPanel?.api.setActive();
     }

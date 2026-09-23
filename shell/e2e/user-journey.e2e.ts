@@ -65,7 +65,8 @@ test.describe('E2E Workspace User Journey', () => {
     await page.waitForURL(url => url.pathname === '/');
     await page.waitForLoadState('load');
 
-    // 7. Wait for Monaco to load and enter malformed JSON
+    // 7. Switch to A2UI JSON Editor tab, wait for Monaco to load and enter malformed JSON
+    await page.locator('.dv-tab', {hasText: /^A2UI JSON Editor/}).click();
     await waitForMonacoEditor(page);
 
     await setMonacoContent(page, 'invalid json {');
@@ -92,7 +93,8 @@ test.describe('E2E Workspace User Journey', () => {
     });
     await page.goto('/');
 
-    // Wait for Monaco to load
+    // Switch to A2UI JSON Editor tab and wait for Monaco to load
+    await page.locator('.dv-tab', {hasText: /^A2UI JSON Editor/}).click();
     await waitForMonacoEditor(page);
 
     // Wait for initial layout snapshot in chat history
@@ -136,16 +138,17 @@ test.describe('E2E Workspace User Journey', () => {
     await recipientPage.goto(shareUrl);
     await recipientPage.waitForLoadState('load');
 
-    const editorLocator = recipientPage
-      .locator('a2ui-composer-monaco-editor .monaco-editor')
-      .first();
-    await expect(editorLocator).toBeVisible();
-
     const previewIframe = recipientPage
       .frameLocator('.preview-frame iframe, iframe.preview-iframe, iframe')
       .first();
     await expect(previewIframe.locator('body')).toBeVisible({timeout: 10000});
     await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({timeout: 10000});
+
+    await recipientPage.locator('.dv-tab', {hasText: /^A2UI JSON Editor/}).click();
+    const editorLocator = recipientPage
+      .locator('a2ui-composer-monaco-editor .monaco-editor')
+      .first();
+    await expect(editorLocator).toBeVisible();
   });
 
   test('displays informative error snackbar when navigating with truncated or corrupted shared design URL', async ({
@@ -170,13 +173,14 @@ test.describe('E2E Workspace User Journey', () => {
       window.location.hash = `a2ui=${payload}`;
     }, ELECTRIC_CAR_CHARGING_UI);
 
-    const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
-    await expect(editorLocator).toBeVisible();
-
     const previewIframe = page
       .frameLocator('.preview-frame iframe, iframe.preview-iframe, iframe')
       .first();
     await expect(previewIframe.locator('body')).toBeVisible({timeout: 10000});
     await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({timeout: 10000});
+
+    await page.locator('.dv-tab', {hasText: /^A2UI JSON Editor/}).click();
+    const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
+    await expect(editorLocator).toBeVisible();
   });
 });

@@ -422,6 +422,7 @@ for (const config of CONFIGS) {
       );
       await setMonacoContent(page, updatedRawJson);
 
+      await page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/}).click();
       const iframe = page.frameLocator('iframe.preview-iframe');
       const searchButton = iframe.getByRole('button', {name: 'Search Rental Cars'});
       await expect(searchButton).toBeVisible();
