@@ -29,7 +29,7 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 /**
  * Representation of a named custom instruction preset.
  */
-export interface CustomInstructionPreset {
+export declare interface CustomInstructionPreset {
   id: string;
   name: string;
   content: string;
@@ -38,7 +38,7 @@ export interface CustomInstructionPreset {
 /**
  * Persisted state of custom instruction presets and active selection.
  */
-export interface CustomInstructionsState {
+export declare interface CustomInstructionsState {
   presets: CustomInstructionPreset[];
   activePresetId: string | null;
 }

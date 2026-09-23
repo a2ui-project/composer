@@ -38,6 +38,7 @@ import {FailureParseResult} from '../a2ui-payload-parser/a2ui-payload-parser';
 import {ComposerPanelId} from '../../shell/composer-workspace/composer-panel-id';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {
+  ChatPromptFactoryService,
   CustomInstructionPreset,
   CustomInstructionsState,
 } from '../chat-prompt-factory/chat-prompt-factory.service';
@@ -83,18 +84,6 @@ class MockChatCoordinator {
 
   readonly systemPrompt = signal<string>('Initial system prompt instructions block');
   readonly currentTurnIndex = signal<number>(0);
-  readonly customInstructionsState = signal<CustomInstructionsState>({
-    presets: [],
-    activePresetId: null,
-  });
-  readonly activeCustomPreset = signal<CustomInstructionPreset | null>(null);
-  readonly hasCustomInstructions = signal<boolean>(false);
-  setCustomInstructionsState = vi.fn((state: CustomInstructionsState) => {
-    this.customInstructionsState.set(state);
-    const preset = state.presets.find(p => p.id === state.activePresetId) ?? null;
-    this.activeCustomPreset.set(preset);
-    this.hasCustomInstructions.set(!!preset && preset.content.trim().length > 0);
-  });
 
   get pipelineStatus() {
     return this.chatState.pipelineStatus;
@@ -112,6 +101,22 @@ class MockChatCoordinator {
     ): Promise<void> => {},
   );
   cancelActiveStream = vi.fn();
+}
+
+class MockChatPromptFactoryService {
+  readonly systemPrompt = signal<string>('Initial system prompt instructions block');
+  readonly customInstructionsState = signal<CustomInstructionsState>({
+    presets: [],
+    activePresetId: null,
+  });
+  readonly activePreset = signal<CustomInstructionPreset | null>(null);
+  readonly hasCustomInstructions = signal<boolean>(false);
+  setCustomInstructionsState = vi.fn((state: CustomInstructionsState) => {
+    this.customInstructionsState.set(state);
+    const preset = state.presets.find(p => p.id === state.activePresetId) ?? null;
+    this.activePreset.set(preset);
+    this.hasCustomInstructions.set(!!preset && preset.content.trim().length > 0);
+  });
 }
 
 class MockCatalogManagement {
@@ -143,6 +148,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   let configProviderMock: MockAppConfigProvider;
   let hostCommunicationMock: MockHostCommunication;
   let screenshotServiceMock: ScreenshotCaptureService;
+  let promptFactoryMock: MockChatPromptFactoryService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -157,6 +163,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
         provideNoopAnimations(),
         provideRouter([]),
         {provide: ChatCoordinator, useClass: MockChatCoordinator},
+        {provide: ChatPromptFactoryService, useClass: MockChatPromptFactoryService},
         {provide: ChatState, useClass: MockChatState},
         {provide: CatalogManagement, useClass: MockCatalogManagement},
         {provide: StartupResolution, useClass: MockStartupResolution},
@@ -166,6 +173,9 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     }).compileComponents();
 
     chatServiceMock = TestBed.inject(ChatCoordinator) as unknown as MockChatCoordinator;
+    promptFactoryMock = TestBed.inject(
+      ChatPromptFactoryService,
+    ) as unknown as MockChatPromptFactoryService;
     chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
     catalogManagementServiceMock = TestBed.inject(
       CatalogManagement,
@@ -694,7 +704,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     expect(await harness.hasCustomInstructionsLink()).toBe(true);
     expect(await harness.getCustomInstructionsLinkText()).toBe('Custom Instructions');
 
-    chatServiceMock.setCustomInstructionsState({
+    promptFactoryMock.setCustomInstructionsState({
       presets: [{id: 'preset-1', name: 'Concise Mode', content: 'Be concise'}],
       activePresetId: 'preset-1',
     });
@@ -717,7 +727,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     expect(await dialog.getTitleText()).toBe('Custom Instructions');
   });
 
-  it('saves updated custom instructions state to coordinator when dialog saves', async () => {
+  it('saves updated custom instructions state to prompt factory when dialog saves', async () => {
     const documentRootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
     await harness.clickCustomInstructionsLink();
     fixture.detectChanges();
@@ -728,7 +738,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     await customDialog.clickSave();
     fixture.detectChanges();
 
-    expect(chatServiceMock.setCustomInstructionsState).toHaveBeenCalledWith(
+    expect(promptFactoryMock.setCustomInstructionsState).toHaveBeenCalledWith(
       expect.objectContaining({
         presets: [
           expect.objectContaining({

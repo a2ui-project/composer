@@ -166,23 +166,6 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
   it('initializes successfully with dynamic computed signal properties', () => {
     expect(service).toBeTruthy();
     expect(service.systemPrompt).toBeDefined();
-    expect(service.customInstructionsState).toBeDefined();
-    expect(service.activeCustomPreset).toBeDefined();
-    expect(service.hasCustomInstructions).toBeDefined();
-  });
-
-  it('delegates custom instructions state management to prompt factory', () => {
-    expect(service.hasCustomInstructions()).toBe(false);
-    service.setCustomInstructionsState({
-      presets: [{id: 'preset-1', name: 'Test Preset', content: 'Test instructions'}],
-      activePresetId: 'preset-1',
-    });
-    expect(service.hasCustomInstructions()).toBe(true);
-    expect(service.activeCustomPreset()).toEqual({
-      id: 'preset-1',
-      name: 'Test Preset',
-      content: 'Test instructions',
-    });
   });
 
   it('returns default instructions fallback prompt on empty catalog', () => {

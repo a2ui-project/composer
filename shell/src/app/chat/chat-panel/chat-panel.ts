@@ -52,7 +52,10 @@ import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 import {CustomInstructionsDialog} from '../custom-instructions-dialog/custom-instructions-dialog';
-import {CustomInstructionsState} from '../chat-prompt-factory/chat-prompt-factory.service';
+import {
+  ChatPromptFactoryService,
+  CustomInstructionsState,
+} from '../chat-prompt-factory/chat-prompt-factory.service';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
 /**
@@ -111,6 +114,7 @@ export class ChatPanel {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly fileIngestionService = inject(FileIngestionService);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
+  private readonly promptFactory = inject(ChatPromptFactoryService);
   protected readonly mcpManager = inject(McpClientManagerService);
 
   protected readonly includeScreenshot = signal<boolean>(false);
@@ -130,9 +134,8 @@ export class ChatPanel {
    * text.
    */
   protected readonly systemPrompt = this.chatCoordinator.systemPrompt;
-  protected readonly hasCustomInstructions =
-    this.chatCoordinator.hasCustomInstructions ?? signal(false);
-  protected readonly activeCustomPreset = this.chatCoordinator.activeCustomPreset ?? signal(null);
+  protected readonly hasCustomInstructions = this.promptFactory.hasCustomInstructions;
+  protected readonly activeCustomPreset = this.promptFactory.activePreset;
   protected readonly isHandshakeComplete = computed(
     () => this.catalogManagement.activeCatalog() !== null,
   );
@@ -355,7 +358,7 @@ export class ChatPanel {
    */
   protected showCustomInstructions(): void {
     const dialogRef = this.dialog.open(CustomInstructionsDialog, {
-      data: this.chatCoordinator.customInstructionsState(),
+      data: this.promptFactory.customInstructionsState(),
       maxWidth: '90vw',
     });
 
@@ -364,7 +367,7 @@ export class ChatPanel {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((result: CustomInstructionsState | undefined) => {
         if (result) {
-          this.chatCoordinator.setCustomInstructionsState(result);
+          this.promptFactory.setCustomInstructionsState(result);
         }
       });
   }

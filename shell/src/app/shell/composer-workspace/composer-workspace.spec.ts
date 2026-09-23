@@ -89,8 +89,6 @@ class MockChatCoordinator {
   readonly pipelineStatus = signal(PipelineStatus.IDLE);
   readonly currentTurnIndex = signal(0);
   readonly isProgrammaticStreamActive = signal(false);
-  readonly hasCustomInstructions = signal(false);
-  readonly activeCustomPreset = signal(null);
 }
 
 class MockStateSync {
