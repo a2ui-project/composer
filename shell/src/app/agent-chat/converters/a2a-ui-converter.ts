@@ -163,6 +163,10 @@ const defaultStreamEventParser = new A2aStreamEventParser();
 
 /**
  * Parses an incoming TaskStatusUpdateEvent into textual chunks, thoughts, and layout items.
+ *
+ * @deprecated Inject {@link A2aStreamEventParser} and call `parse` instead. This helper delegates
+ *     to a module-scope instance built with `new`, so the parser cannot resolve its `ErrorLogger`
+ *     and any diagnostics it would report are lost.
  */
 export function parseA2aStreamEvent(
   event: TaskStatusUpdateEvent | Record<string, unknown>,

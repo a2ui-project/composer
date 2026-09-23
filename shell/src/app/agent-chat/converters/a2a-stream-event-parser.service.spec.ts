@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {TestBed} from '@angular/core/testing';
 import {A2aStreamEventParser} from './a2a-stream-event-parser.service';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
 
 describe('A2aStreamEventParser', () => {
@@ -113,6 +114,35 @@ describe('A2aStreamEventParser', () => {
     expect(parsed.toolCalls?.length).toBe(1);
     expect(parsed.toolCalls?.[0].name).toBe('show_vacation_booking_form');
     expect(parsed.toolCalls?.[0].id).toBe('call_3478204');
+  });
+
+  it('reports discarded legacy v0.8 payloads through the injected error logger', () => {
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const warn = vi.spyOn(errorLogger, 'warn');
+    const legacyPayload = {beginRendering: {surfaceId: 'surf-legacy'}};
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-legacy',
+      message: {
+        role: 'agent',
+        parts: [
+          {data: legacyPayload},
+          {data: {createSurface: {surfaceId: 'surf-1', catalogId: 'cat-1'}}},
+        ],
+      },
+    };
+
+    const parsed = parser.parse(event);
+
+    expect(parsed.a2uiItems.length).toBe(1);
+    expect(parsed.a2uiItems[0].createSurface?.surfaceId).toBe('surf-1');
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      {
+        message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9.',
+        sourceTag: '[A2UI]',
+      },
+      legacyPayload,
+    );
   });
 
   it('detects terminal completed states', () => {

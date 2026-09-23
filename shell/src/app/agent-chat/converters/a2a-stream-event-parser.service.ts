@@ -156,10 +156,12 @@ export interface ParsedA2aStreamEvent {
 }
 
 /**
- * Resolves the logger, which is only reachable when the injector creates the parser.
+ * Resolves the logger when the injector builds this service, and tolerates it being absent.
  *
- * `inject` throws outside an injection context, and `a2a-ui-converter` constructs a parser with
- * `new` at module load. Payloads discarded by that instance therefore go unreported.
+ * Consumers should inject `A2aStreamEventParser`, which resolves the logger normally. The fallback
+ * exists for `a2a-ui-converter`, which holds a module-scope instance built with `new` to back the
+ * `parseA2aStreamEvent` helper; `inject` throws there, and without the guard merely importing that
+ * module would fail. Payloads discarded by that instance go unreported.
  */
 function resolveErrorLogger(): ErrorLogger | undefined {
   try {

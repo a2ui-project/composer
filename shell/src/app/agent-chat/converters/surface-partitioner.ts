@@ -305,16 +305,28 @@ export function isA2uiItem(item: unknown): boolean {
 }
 
 /** Legacy operation keys from A2UI v0.8 that are superseded in v0.9. */
-const LEGACY_A2UI_KEYS = ['beginRendering', 'surfaceUpdate', 'dataModelUpdate'];
+const LEGACY_A2UI_KEYS = ['beginRendering', 'surfaceUpdate', 'dataModelUpdate'] as const;
+
+/**
+ * Checks whether a candidate object is an A2UI v0.8 update that v0.9 no longer accepts.
+ *
+ * Counterpart to {@link isA2uiItem}: an item that satisfies neither is not A2UI traffic at all
+ * (a tool call, an action echo, or arbitrary structured data) and is dropped without comment.
+ */
+function isLegacyA2uiItem(item: unknown): boolean {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  return LEGACY_A2UI_KEYS.some(key => key in item);
+}
 
 /**
  * Normalizes an array of raw layout updates into valid `RenderA2uiItem` specifications,
  * filtering out any non-A2UI objects and deduplicating redundant createSurface commands.
  *
  * @param items Raw layout updates as received from the agent.
- * @param errorLogger Logger used to report discarded legacy payloads. It is optional because
- *     callers that construct their dependencies outside Angular's injector cannot resolve it;
- *     when it is absent the payload is discarded silently, as it was before.
+ * @param errorLogger Reports payloads dropped for using superseded v0.8 operations. Optional
+ *     because `mergeA2uiItems`, `partitionA2uiSurfacePayload`, and `unwrapCanvasForRenderer`
+ *     re-normalize `RenderA2uiItem[]` that already passed this function, where a legacy payload
+ *     cannot occur. Ingestion callers should always pass one.
  */
 export function normalizeA2uiItems(
   items: readonly unknown[],
@@ -327,12 +339,7 @@ export function normalizeA2uiItems(
 
   for (const raw of items) {
     if (!isA2uiItem(raw)) {
-      if (
-        raw &&
-        typeof raw === 'object' &&
-        !Array.isArray(raw) &&
-        LEGACY_A2UI_KEYS.some(k => k in raw)
-      ) {
+      if (isLegacyA2uiItem(raw)) {
         errorLogger?.warn(
           {
             message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9.',
