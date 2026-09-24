@@ -691,23 +691,14 @@ describe('ComposerWorkspace Dashboard', () => {
         expect(dataModelPanel!.group.width).toBeGreaterThanOrEqual(renderedPanel!.group.width);
       });
 
-      it('balances initial widths equally between Rendered A2UI Preview and A2UI JSON Editor', () => {
+      it('matches debug drawer width with the shared preview and editor tab group width', () => {
         const manager = fixture.debugElement.injector.get(ComposerDockview);
         const renderedPanel = manager.api.getGroupPanel(ComposerPanelId.Rendered);
-        const rawPanel = manager.api.getGroupPanel(ComposerPanelId.Raw);
         const dataModelPanel = manager.api.getGroupPanel(ComposerPanelId.DataModel);
 
         expect(renderedPanel).toBeDefined();
-        expect(rawPanel).toBeDefined();
         expect(dataModelPanel).toBeDefined();
-        expect(rawPanel!.group.width).toBe(renderedPanel!.group.width);
-        if (renderedPanel!.group === rawPanel!.group) {
-          expect(dataModelPanel!.group.width).toBe(renderedPanel!.group.width);
-        } else {
-          expect(dataModelPanel!.group.width).toBe(
-            renderedPanel!.group.width + rawPanel!.group.width,
-          );
-        }
+        expect(dataModelPanel!.group.width).toBe(renderedPanel!.group.width);
       });
 
       it('limits Gemini Assistant initial width to not exceed 1/3 of the overall page width', () => {
