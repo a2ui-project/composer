@@ -26,7 +26,7 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
-import {DockviewComponent} from 'dockview';
+import {DockviewComponent} from 'dockview-core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {LlmClient, LlmMessage} from '../../chat/llm-client/llm-client';

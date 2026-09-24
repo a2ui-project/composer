@@ -24,7 +24,7 @@ import {
   inject,
 } from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
-import {DockviewComponent} from 'dockview';
+import {DockviewComponent} from 'dockview-core';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {ChatPanel} from '../../chat/chat-panel/chat-panel';

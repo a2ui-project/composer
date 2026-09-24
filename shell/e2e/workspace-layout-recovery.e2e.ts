@@ -15,7 +15,7 @@
  */
 
 import {expect, test} from '@playwright/test';
-import type {SerializedDockview} from 'dockview';
+import type {SerializedDockview} from 'dockview-core';
 import {LocalStorageKey} from '../src/app/storage/models/local-storage-keys';
 
 const rendererUrl = 'http://localhost:3456';
