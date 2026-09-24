@@ -178,8 +178,8 @@ export class Gallery implements OnInit, OnDestroy {
       if (prop.name === 'id' || prop.name === 'component' || schema?.['const'] !== undefined) {
         return [];
       }
-      const control = galleryPropertyControl(schema);
       const value = target[prop.name];
+      const control = galleryPropertyControl(schema, value);
       return [
         {
           name: prop.name,

@@ -92,13 +92,18 @@ export function parseGalleryExample(
 /**
  * Picks the property editor control from the resolved schema rather than the current value.
  * Literal-or-binding unions such as DynamicString edit their single literal branch; lists,
- * objects and unions with several literal types are edited as JSON.
+ * objects and unions with several literal types are edited as JSON. A catalog that declares
+ * no schema for the property falls back to the type of the example's current value.
  */
 export function galleryPropertyControl(
   schema: CatalogComponentSchema | undefined,
+  value?: unknown,
 ): GalleryPropertyControl {
   if (!schema) {
-    return {kind: 'json', options: []};
+    const type = typeof value;
+    return type === 'string' || type === 'number' || type === 'boolean'
+      ? {kind: type, options: []}
+      : {kind: 'json', options: []};
   }
   const choices = schema['enum'];
   if (Array.isArray(choices) && choices.length > 0 && choices.every(isLiteral)) {
