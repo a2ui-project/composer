@@ -113,6 +113,13 @@ describe('galleryPropertyControl', () => {
     expect(galleryPropertyControl(schema as CatalogComponentSchema | undefined).kind).toBe(kind);
   });
 
+  it('falls back to the current value type when the catalog declares no schema', () => {
+    expect(galleryPropertyControl(undefined, 'Initial').kind).toBe('string');
+    expect(galleryPropertyControl(undefined, 3).kind).toBe('number');
+    expect(galleryPropertyControl(undefined, true).kind).toBe('boolean');
+    expect(galleryPropertyControl(undefined, {path: '/x'}).kind).toBe('json');
+  });
+
   it('keeps enum options in catalog order', () => {
     expect(galleryPropertyControl({type: 'string', enum: ['checkbox', 'chips']}).options).toEqual([
       'checkbox',
