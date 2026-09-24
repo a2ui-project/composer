@@ -199,6 +199,8 @@ test.describe('E2E Workspace User Journey', () => {
 
     const dialog = page.locator('a2ui-composer-custom-instructions-dialog');
     await expect(dialog).toBeVisible();
+    const box = await dialog.boundingBox();
+    expect(box?.width).toBeCloseTo(600, 0);
 
     // 2. Create a named preset, click Save, and verify the link label updates to "Custom Instructions: <Preset Name>"
     await dialog.locator('.preset-name-input').fill('Compact Theme');

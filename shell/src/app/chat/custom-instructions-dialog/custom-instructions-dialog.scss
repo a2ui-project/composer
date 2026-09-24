@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+:host {
+  display: block;
+  width: 600px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 .dialog-header {
   padding: 0 16px;
 
@@ -51,10 +58,11 @@ mat-dialog-content {
 }
 
 .instructions-textarea {
-  width: 100%;
+  width: calc(600px - 32px);
+  max-width: 100%;
   min-width: 300px;
   min-height: 180px;
-  height: 260px;
+  height: 210px;
   resize: vertical;
   background-color: var(--mat-sys-surface-container-high);
   padding: 12px;

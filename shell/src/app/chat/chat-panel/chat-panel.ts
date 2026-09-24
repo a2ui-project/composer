@@ -359,6 +359,7 @@ export class ChatPanel {
   protected showCustomInstructions(): void {
     const dialogRef = this.dialog.open(CustomInstructionsDialog, {
       data: this.promptFactory.customInstructionsState(),
+      width: '600px',
       maxWidth: '90vw',
     });
 
