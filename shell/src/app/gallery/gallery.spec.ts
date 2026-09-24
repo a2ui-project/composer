@@ -29,7 +29,8 @@ import {GalleryHarness} from './test/gallery.harness';
 import {GalleryCatalog, CategorizedComponents} from './services/gallery-catalog';
 import {PreviewBridgeMessageType, type ComponentUsage} from 'a2ui-bridge';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
-import {ParsedProperty} from './schema/catalog-schema-resolver';
+import {CatalogSchemaResolver, ParsedProperty} from './schema/catalog-schema-resolver';
+import {ErrorLogger} from '../debug/error-logger.service';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
@@ -88,6 +89,81 @@ class MockStartupResolution {
 class MockChatState {
   readonly isProgrammaticStreamActive = signal<boolean>(false);
 }
+
+// The basic catalog's ChoicePicker and DateTimeInput, with the common types they reference.
+const dynamic = (literal: Record<string, unknown>) => ({
+  oneOf: [literal, {$ref: '#/$defs/DataBinding'}, {$ref: '#/$defs/FunctionCall'}],
+});
+const basicCatalog: Catalog = {
+  catalogId: 'https://a2ui.org/basic_catalog.json',
+  $defs: {
+    DataBinding: {type: 'object', properties: {path: {type: 'string'}}, required: ['path']},
+    FunctionCall: {type: 'object', properties: {call: {type: 'string'}}, required: ['call']},
+    DynamicString: dynamic({type: 'string'}),
+    DynamicStringList: dynamic({type: 'array', items: {type: 'string'}}),
+    ComponentCommon: {
+      type: 'object',
+      properties: {id: {type: 'string'}, weight: {type: 'number'}},
+      required: ['id'],
+    },
+  },
+  components: {
+    ChoicePicker: {
+      type: 'object',
+      allOf: [
+        {$ref: '#/$defs/ComponentCommon'},
+        {
+          type: 'object',
+          properties: {
+            component: {const: 'ChoicePicker'},
+            label: {$ref: '#/$defs/DynamicString'},
+            variant: {type: 'string', enum: ['multipleSelection', 'mutuallyExclusive']},
+            options: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {label: {$ref: '#/$defs/DynamicString'}, value: {type: 'string'}},
+                required: ['label', 'value'],
+              },
+            },
+            value: {$ref: '#/$defs/DynamicStringList'},
+            displayStyle: {type: 'string', enum: ['checkbox', 'chips']},
+            filterable: {type: 'boolean'},
+          },
+          required: ['component', 'options', 'value'],
+        },
+      ],
+    },
+    DateTimeInput: {
+      type: 'object',
+      allOf: [
+        {$ref: '#/$defs/ComponentCommon'},
+        {
+          type: 'object',
+          properties: {
+            component: {const: 'DateTimeInput'},
+            value: {$ref: '#/$defs/DynamicString'},
+            enableDate: {type: 'boolean'},
+            enableTime: {type: 'boolean'},
+            min: {$ref: '#/$defs/DynamicString'},
+            label: {$ref: '#/$defs/DynamicString'},
+          },
+          required: ['component', 'value'],
+        },
+      ],
+    },
+  },
+};
+const choicePicker = {
+  id: 'target',
+  component: 'ChoicePicker',
+  label: 'Size',
+  options: [
+    {label: 'Small', value: 's'},
+    {label: 'Large', value: 'l'},
+  ],
+  value: {path: '/size'},
+};
 
 describe('Gallery Component', () => {
   let fixture: ComponentFixture<Gallery>;
@@ -230,12 +306,9 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentUsage.set(mockUsage);
     fixture.detectChanges();
 
-    const usageText = await harness.getUsageCodeText();
-    expect(usageText).toBe(mockUsage);
+    expect(JSON.parse(await harness.getDraftText())).toEqual({components: mockComponents});
 
-    try {
-      await harness.clickCopyButton();
-    } catch (e) {}
+    await harness.clickCopyButton();
 
     const expectedPayload = JSON.stringify(
       [
@@ -271,8 +344,7 @@ describe('Gallery Component', () => {
     const desc = await harness.getSelectedComponentDescription();
     expect(desc).toBeNull();
 
-    const usage = await harness.getUsageCodeText();
-    expect(usage).toBeNull();
+    expect(await harness.hasDraftEditor()).toBe(false);
 
     const placeholderText = await harness.getEmptyStateSubtitleText();
     expect(placeholderText).toContain('Choose a component from the sidebar catalog');
@@ -308,9 +380,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentUsage.set('[]');
     fixture.detectChanges();
 
-    try {
-      await harness.clickCopyButton();
-    } catch (e) {}
+    await harness.clickCopyButton();
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Failed to copy A2UI component usage to clipboard.',
@@ -340,9 +410,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set(null);
     fixture.detectChanges();
 
-    try {
-      await harness.clickCopyButton();
-    } catch (e) {}
+    await harness.clickCopyButton();
 
     expect(mockClipboard.copy).not.toHaveBeenCalled();
   });
@@ -373,9 +441,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentUsage.set('');
     fixture.detectChanges();
 
-    try {
-      await harness.clickCopyButton();
-    } catch (e) {}
+    await harness.clickCopyButton();
 
     expect(mockClipboard.copy).not.toHaveBeenCalled();
   });
@@ -393,7 +459,8 @@ describe('Gallery Component', () => {
     fixture.detectChanges();
 
     const titles = await harness.getCardTitlesText();
-    expect(titles).toEqual(['Preview', 'Usage', 'Properties']);
+    expect(titles).toEqual(['Usage', 'Properties']);
+    expect(await harness.getExampleTabLabels()).toEqual(['Preview', 'Edit JSON']);
   });
 
   it('displays catalog configuration error state when catalogError is set', async () => {
@@ -597,9 +664,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: []});
     catalogServiceMock.selectedComponentUsage.set('[]');
     fixture.detectChanges();
-    try {
-      await harness.clickCopyButton();
-    } catch (e) {}
+    await expect(harness.clickCopyButton()).rejects.toThrow('Clipboard copy button is not present');
     expect(mockClipboard.copy).not.toHaveBeenCalled();
   });
 
@@ -836,9 +901,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentUsage.set(JSON.stringify(mockUsage));
     fixture.detectChanges();
 
-    try {
-      await harness.clickCopyButton();
-    } catch (e) {}
+    await harness.clickCopyButton();
 
     expect(mockClipboard.copy).toHaveBeenCalled();
     const copiedPayloadString = mockClipboard.copy.mock.calls[0][0] as string;
@@ -931,9 +994,7 @@ describe('Gallery Component', () => {
       catalogServiceMock.selectedComponentKey.set('Text');
       mockClipboard.copy.mockReturnValueOnce(true);
 
-      try {
-        await harness.clickCopyButton();
-      } catch (e) {}
+      await harness.clickCopyButton();
       await Promise.resolve();
 
       expect(trackSpy).toHaveBeenCalledWith({
@@ -952,9 +1013,7 @@ describe('Gallery Component', () => {
       catalogServiceMock.selectedComponentKey.set('Text');
       mockClipboard.copy.mockReturnValueOnce(false);
 
-      try {
-        await harness.clickCopyButton();
-      } catch (e) {}
+      await harness.clickCopyButton();
       await Promise.resolve();
 
       expect(trackSpy).not.toHaveBeenCalled();
@@ -1226,12 +1285,137 @@ describe('Gallery Component', () => {
     await harness.editProperty('count', '');
     await harness.editProperty('count', '12');
     await harness.toggleProperty('enabled');
-    await harness.selectPropertyOption('emphasis', 1);
+    await harness.selectPropertyOption('emphasis', 2);
     expect(JSON.parse(await harness.getDraftText()).components[0]).toMatchObject({
       count: 12,
       enabled: false,
       emphasis: 'strong',
     });
     expect(await harness.getDraftError()).toBeNull();
+  });
+
+  describe('property editor', () => {
+    const select = (name: string, usage: Record<string, unknown>[]) => {
+      catalogManagementMock.activeCatalog.set(basicCatalog);
+      catalogServiceMock.selectedComponentKey.set(name);
+      catalogServiceMock.selectedComponentProperties.set(
+        new CatalogSchemaResolver(basicCatalog, new ErrorLogger()).resolveComponentProperties(name),
+      );
+      catalogServiceMock.selectedComponentPreset.set({usage, data: {size: ['s']}});
+      fixture.detectChanges();
+    };
+    const target = async () => JSON.parse(await harness.getDraftText()).components[0];
+
+    it('lists every catalog property, including required and unset optional ones', async () => {
+      select('ChoicePicker', [choicePicker]);
+      // Required first, then ChoicePicker's own, then those every component shares.
+      expect(await harness.getPropertyNames()).toEqual([
+        'options',
+        'value',
+        'variant',
+        'displayStyle',
+        'filterable',
+        'weight',
+        'label',
+      ]);
+      expect(await harness.getPropertySectionHeadings()).toEqual(['Common properties']);
+      expect(await harness.getPropertyControlKind('options')).toBe('json');
+      expect(await harness.getPropertyControlKind('displayStyle')).toBe('select');
+      expect(await harness.getPropertyControlKind('filterable')).toBe('checkbox');
+      expect(await harness.getPropertyControlKind('weight')).toBe('number');
+      expect(await harness.getPropertyControlKind('label')).toBe('text');
+      expect(await harness.isPropertyRequired('options')).toBe(true);
+      expect(await harness.isPropertyRequired('displayStyle')).toBe(false);
+    });
+
+    it('adds an unset enum property and removes it again with "(not set)"', async () => {
+      select('ChoicePicker', [choicePicker]);
+      expect(await harness.getPropertyOptions('displayStyle')).toEqual([
+        '(not set)',
+        'checkbox',
+        'chips',
+      ]);
+      await harness.selectPropertyOption('displayStyle', 2);
+      expect((await target()).displayStyle).toBe('chips');
+      expect(hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0][1]).toMatchObject({
+        updateComponents: {components: [{displayStyle: 'chips'}]},
+      });
+      await harness.selectPropertyOption('displayStyle', 0);
+      expect(await target()).not.toHaveProperty('displayStyle');
+    });
+
+    it('edits options as JSON and keeps the draft when that JSON is invalid', async () => {
+      select('ChoicePicker', [choicePicker]);
+      const options = [{label: 'Medium', value: 'm'}];
+      await harness.editJsonProperty('options', JSON.stringify(options));
+      expect((await target()).options).toEqual(options);
+      expect(await harness.getPropertyError('options')).toBeNull();
+
+      const draft = await harness.getDraftText();
+      await harness.editJsonProperty('options', '[{"label": ');
+      expect(await harness.getPropertyError('options')).toContain('Invalid JSON');
+      expect(await harness.getJsonPropertyText('options')).toBe('[{"label": ');
+      expect(await harness.getDraftText()).toBe(draft);
+      expect(await harness.getDraftError()).toBeNull();
+    });
+
+    it('never offers to remove or unset a required property', async () => {
+      select('ChoicePicker', [{...choicePicker, variant: 'mutuallyExclusive'}]);
+      expect(await harness.canRemoveProperty('options')).toBe(false);
+      expect(await harness.canRemoveProperty('value')).toBe(false);
+      await harness.editJsonProperty('options', '');
+      expect(await harness.getPropertyError('options')).toContain('required');
+      expect((await target()).options).toEqual(choicePicker.options);
+      expect(await harness.getPropertyOptions('variant')).toContain('(not set)');
+    });
+
+    it('removes a set optional property through its remove action', async () => {
+      select('ChoicePicker', [{...choicePicker, filterable: true}]);
+      expect(await harness.canRemoveProperty('filterable')).toBe(true);
+      await harness.removeProperty('filterable');
+      expect(await target()).not.toHaveProperty('filterable');
+      expect(await harness.canRemoveProperty('filterable')).toBe(false);
+    });
+
+    it('shows a bound literal property as read-only instead of overwriting the binding', async () => {
+      select('ChoicePicker', [{...choicePicker, label: {path: '/sizeLabel'}}]);
+      expect(await harness.getPropertyNote('label')).toContain('Bound to /sizeLabel');
+      expect(await harness.getPropertyControlKind('label')).toBeNull();
+      await harness.selectPropertyOption('displayStyle', 1);
+      expect((await target()).label).toEqual({path: '/sizeLabel'});
+    });
+
+    it('keeps each DateTimeInput boolean on its own single-line row', async () => {
+      select('DateTimeInput', [
+        {id: 'target', component: 'DateTimeInput', value: '', enableDate: true},
+      ]);
+      for (const name of ['enableDate', 'enableTime']) {
+        expect(await harness.getPropertyControlKind(name)).toBe('checkbox');
+        expect(await harness.isPropertyInline(name)).toBe(true);
+      }
+      expect(await harness.isPropertyRequired('value')).toBe(true);
+      await harness.toggleProperty('enableTime');
+      expect(await target()).toMatchObject({value: '', enableDate: true, enableTime: true});
+    });
+
+    it('edits the draft from the Edit JSON tab while keeping the preview frame mounted', async () => {
+      select('ChoicePicker', [choicePicker]);
+      await harness.editDraft(
+        JSON.stringify({components: [{...choicePicker, displayStyle: 'chips'}]}),
+      );
+      expect(await harness.hasRenderedFrame()).toBe(true);
+      expect(hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0][1]).toMatchObject({
+        updateComponents: {components: [{displayStyle: 'chips'}]},
+      });
+      expect(await harness.getPropertyOptions('displayStyle')).toContain('chips');
+      await harness.selectExampleTab('Preview');
+      expect(await harness.hasRenderedFrame()).toBe(true);
+    });
+
+    it('no longer renders collapsible groups or a read-only current JSON block', async () => {
+      select('ChoicePicker', [choicePicker]);
+      expect(await harness.hasCollapsibleJson()).toBe(false);
+      expect(fixture.nativeElement.textContent).not.toContain('Current component JSON');
+    });
   });
 });

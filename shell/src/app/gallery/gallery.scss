@@ -219,24 +219,6 @@
   color: var(--mat-sys-primary);
 }
 
-.usage-code-block {
-  margin: 0;
-  padding: 20px;
-  background-color: var(--mat-sys-surface-container-low);
-  border-radius: 12px;
-  max-height: 360px;
-  overflow-x: auto;
-}
-
-.usage-code {
-  font-family: 'Spline Sans Mono', monospace;
-  font-size: var(--mat-sys-body-medium-size);
-  font-weight: var(--mat-sys-body-medium-weight);
-  line-height: var(--mat-sys-body-medium-line-height);
-  letter-spacing: var(--mat-sys-body-medium-tracking);
-  color: var(--mat-sys-on-surface);
-}
-
 .properties-table {
   width: 100%;
   background: transparent;
@@ -309,10 +291,10 @@
 
 .preview-card {
   overflow: hidden;
+}
 
-  mat-card-content {
-    padding: 0;
-  }
+.json-tab {
+  padding: 16px 24px 24px;
 }
 
 .properties-content {
@@ -350,8 +332,8 @@
     }
   }
 
-  .preview-card mat-card-content {
-    padding: 0;
+  .json-tab {
+    padding: 16px;
   }
 }
 
@@ -368,24 +350,63 @@
   margin: 8px 0 16px;
 }
 
-.simple-properties {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
-  gap: 16px;
+// One property per row: name on the left, control on the right. Structured values and
+// read-only binding notes take the full row below their name.
+.property-list {
+  display: flex;
+  flex-direction: column;
   margin-bottom: 20px;
 }
 
-.simple-property {
+.property-section-heading {
+  margin: 16px 0 4px;
+  font: var(--mat-sys-title-small);
+  letter-spacing: var(--mat-sys-title-small-tracking);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.property-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 8px;
+  min-height: 48px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.property-name {
+  grid-column: 1;
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 8px;
   min-width: 0;
-  font: var(--mat-sys-label-medium);
-  letter-spacing: var(--mat-sys-label-medium-tracking);
+  overflow-wrap: anywhere;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-large);
+  letter-spacing: var(--mat-sys-label-large-tracking);
+}
+
+.required-marker {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: var(--mat-sys-label-small-tracking);
+}
+
+.property-control {
+  grid-column: 2;
+  display: flex;
+  min-width: 0;
 
   input:not([type='checkbox']),
-  select {
+  select,
+  textarea {
     box-sizing: border-box;
     width: 100%;
     min-height: 40px;
@@ -399,24 +420,49 @@
   }
 
   input[type='checkbox'] {
-    align-self: flex-start;
     width: 20px;
     height: 20px;
+    margin: 0;
     accent-color: var(--mat-sys-primary);
+  }
+
+  .property-json {
+    min-height: 96px;
+    resize: vertical;
+    font-family: 'Spline Sans Mono', monospace;
   }
 }
 
-.draft-editor,
-.usage-details {
-  margin-top: 16px;
-  min-width: 0;
+.remove-property {
+  grid-column: 3;
+  color: var(--mat-sys-on-surface-variant);
+}
 
-  summary {
-    cursor: pointer;
-    font: var(--mat-sys-label-large);
-    letter-spacing: var(--mat-sys-label-large-tracking);
-    padding: 8px 0;
+.property-row-stacked {
+  .property-name,
+  .remove-property {
+    grid-row: 1;
   }
+
+  .property-control {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+.property-note {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
+.property-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
 }
 
 .draft-label {
@@ -443,8 +489,9 @@
 }
 
 .draft-json:focus-visible,
-.simple-property input:focus-visible,
-.simple-property select:focus-visible {
+.property-control input:focus-visible,
+.property-control select:focus-visible,
+.property-control textarea:focus-visible {
   outline: 2px solid var(--mat-sys-primary);
   outline-offset: 2px;
 }

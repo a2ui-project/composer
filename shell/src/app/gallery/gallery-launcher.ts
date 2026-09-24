@@ -27,12 +27,16 @@ export class GalleryLauncher {
   /** Snapshots the selected example and renderer before compressing the workspace handoff. */
   async open(payload: string, rendererUrl: string, rendererId: string | null): Promise<void> {
     const view = this.document.defaultView;
-    if (!view) throw new Error('The workspace cannot be opened in this environment.');
+    if (!view) {
+      throw new Error('The workspace cannot be opened in this environment.');
+    }
     const workspaceUrl = new URL(this.location.prepareExternalUrl('/'), view.location.href);
     const compressed = await QueryParser.encodeSharedPayload(payload);
     const hash = new URLSearchParams();
     hash.set('renderer', rendererUrl);
-    if (rendererId) hash.set('rendererId', rendererId);
+    if (rendererId) {
+      hash.set('rendererId', rendererId);
+    }
     hash.set('a2ui', compressed);
     workspaceUrl.search = '';
     workspaceUrl.hash = hash.toString();
