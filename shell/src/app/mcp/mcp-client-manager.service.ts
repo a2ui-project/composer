@@ -17,6 +17,7 @@
 import {Injectable, inject, signal} from '@angular/core';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import {ErrorLogger} from '../debug/error-logger.service';
 import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
 
@@ -49,6 +50,7 @@ interface PersistedMcpServer {
 })
 export class McpClientManagerService {
   private readonly storage = inject(LocalStorageInteractions);
+  private readonly errorLogger = inject(ErrorLogger).withTag('[McpClientManager]');
   private readonly clients = new Map<string, Client>();
 
   readonly servers = signal<McpServerConfig[]>([]);
@@ -79,7 +81,8 @@ export class McpClientManagerService {
             })),
           );
         }
-      } catch {
+      } catch (err) {
+        this.errorLogger.warn('Failed to parse persisted MCP servers:', err);
         this.servers.set([]);
       }
     }
@@ -167,8 +170,11 @@ export class McpClientManagerService {
       if (!currentServer || !currentServer.enabled) {
         try {
           await client.close();
-        } catch {
-          // Ignore close errors during abort
+        } catch (err) {
+          this.errorLogger.warn(
+            `Failed to close client during connect abort for server "${server.name || server.url}":`,
+            err,
+          );
         }
         return;
       }
@@ -190,6 +196,10 @@ export class McpClientManagerService {
       this.persistServers();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorLogger.error(
+        `Failed to connect to MCP server "${server.name || server.url}": ${errorMessage}`,
+        error,
+      );
       this.servers.update(list =>
         list.map(s =>
           s.id === id
@@ -211,8 +221,8 @@ export class McpClientManagerService {
       this.clients.delete(id);
       try {
         await existing.close();
-      } catch {
-        // Ignore errors when closing disconnected transport
+      } catch (err) {
+        this.errorLogger.warn(`Failed to close client during disconnect for server "${id}":`, err);
       }
     }
     this.servers.update(list =>
@@ -224,20 +234,30 @@ export class McpClientManagerService {
     const activeServers = this.getActiveServersWithTools();
     const targetServer = activeServers.find(s => s.tools?.some(t => t.name === toolName));
     if (!targetServer) {
-      throw new Error(`No connected MCP server found for tool "${toolName}".`);
+      const message = `No connected MCP server found for tool "${toolName}".`;
+      this.errorLogger.error(message);
+      throw new Error(message);
     }
 
     const client = this.clients.get(targetServer.id);
     if (!client) {
-      throw new Error(
-        `MCP client for server "${targetServer.name || targetServer.url}" is not initialized.`,
-      );
+      const message = `MCP client for server "${targetServer.name || targetServer.url}" is not initialized.`;
+      this.errorLogger.error(message);
+      throw new Error(message);
     }
 
-    return await client.callTool({
-      name: toolName,
-      arguments: args,
-    });
+    try {
+      return await client.callTool({
+        name: toolName,
+        arguments: args,
+      });
+    } catch (err) {
+      this.errorLogger.error(
+        `Failed to call MCP tool "${toolName}" on server "${targetServer.name || targetServer.url}":`,
+        err,
+      );
+      throw err;
+    }
   }
 
   getActiveServersWithTools(): McpServerConfig[] {

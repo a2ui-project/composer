@@ -24,6 +24,7 @@ import {debounceTime, distinctUntilChanged} from 'rxjs/operators';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {formatJson} from '../../utils/json';
+import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 
 /**
  * A debug drawer component presenting a reactive, nested JSON tree explorer
@@ -65,9 +66,32 @@ export class DataModel {
   });
 
   constructor() {
+    const history = this.hostComm.getEnvelopeHistory() || [];
+    for (let i = history.length - 1; i >= 0; i--) {
+      const env = history[i];
+      if (env.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
+        const payload = env.payload as DataModelChangePayload | undefined;
+        const updateObj = payload?.['updateDataModel'];
+        if (updateObj) {
+          if (typeof updateObj['surfaceId'] === 'string') {
+            this.lastSurfaceId = updateObj['surfaceId'];
+          }
+          if (typeof updateObj['path'] === 'string') {
+            this.lastPath = updateObj['path'];
+          }
+          this.latestModelValue.set(updateObj['value']);
+          break;
+        }
+      }
+    }
+
     this.hostComm.messageStream$.pipe(takeUntilDestroyed()).subscribe(streamValue => {
-      if (streamValue?.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
-        const payload = streamValue?.payload as DataModelChangePayload | undefined;
+      if (!streamValue) {
+        return;
+      }
+
+      if (streamValue.type === PreviewBridgeMessageType.DATA_MODEL_CHANGE) {
+        const payload = streamValue.payload as DataModelChangePayload | undefined;
         const updateObj = payload?.['updateDataModel'];
         if (updateObj) {
           if (typeof updateObj['surfaceId'] === 'string') {
@@ -80,7 +104,9 @@ export class DataModel {
           }
 
           const cleanValue = updateObj['value'];
-          this.latestModelValue.set(cleanValue);
+          if (stableStringify(cleanValue) !== stableStringify(this.latestModelValue())) {
+            this.latestModelValue.set(cleanValue);
+          }
         }
       }
     });
@@ -93,8 +119,8 @@ export class DataModel {
           const parsed = JSON.parse(jsonStr);
           isValid = true;
           const currentIncoming = this.latestModelValue();
-          const incomingStr = currentIncoming ? JSON.stringify(currentIncoming) : '';
-          const localStr = JSON.stringify(parsed);
+          const incomingStr = currentIncoming ? stableStringify(currentIncoming) : '';
+          const localStr = stableStringify(parsed);
           if (incomingStr !== localStr) {
             // prettier-ignore
             this.hostComm.sendMessage({

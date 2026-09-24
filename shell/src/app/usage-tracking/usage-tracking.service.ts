@@ -82,6 +82,17 @@ export const USAGE_TRACKING_CONFIG = new InjectionToken<UsageTrackingConfig>(
 );
 
 /**
+ * Encapsulates necessary details for emitting structured error telemetry events.
+ */
+export interface ComposerErrorTelemetryParams {
+  sourceTag: string;
+  errorCategory: string;
+  line?: number;
+  column?: number;
+  invalidProperty?: string;
+}
+
+/**
  * Abstract usage tracking service defining the contract for telemetry collection.
  */
 export abstract class UsageTrackingService {
@@ -228,4 +239,9 @@ export abstract class UsageTrackingService {
     durationSeconds: number;
     interfaceCount: number;
   }): void;
+
+  /**
+   * Tracks errors logged in the app.
+   */
+  abstract trackComposerError(params: ComposerErrorTelemetryParams): void;
 }

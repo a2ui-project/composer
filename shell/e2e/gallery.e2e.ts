@@ -26,9 +26,9 @@ test.beforeEach(async ({page}) => {
 test.describe('Components Gallery User Journey', () => {
   test.beforeEach(async ({page}) => {
     await page.addInitScript(() => {
-      try {
+      if (window === window.top) {
         localStorage.setItem('a2ui_composer_force_1p', 'true');
-      } catch (e) {}
+      }
     });
   });
 
@@ -115,7 +115,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(copyButton).toBeVisible();
     await copyButton.click();
 
-    // Assert clipboard matches using expect.poll (avoiding waitForTimeout)
+    // Assert clipboard matches using expect.poll
     await expect
       .poll(async () => {
         const text = await page.evaluate(() => navigator.clipboard.readText());

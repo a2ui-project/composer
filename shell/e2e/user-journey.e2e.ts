@@ -25,9 +25,7 @@ test.beforeEach(async ({page}) => {
 
   await page.goto('/');
   await page.evaluate(() => {
-    try {
-      localStorage.clear();
-    } catch (e) {}
+    localStorage.clear();
   });
   await page.goto('/');
 });
@@ -58,6 +56,7 @@ test.describe('E2E Workspace User Journey', () => {
     await expect(apiKeyDialog).toBeVisible();
     await apiKeyDialog.getByLabel('Name', {exact: true}).fill('Test Key');
     await apiKeyDialog.getByLabel('API Key', {exact: true}).fill('test-api-key');
+    await page.keyboard.press('Tab');
     await apiKeyDialog.getByRole('button', {name: 'Add', exact: true}).click();
     await expect(apiKeyDialog).toBeHidden();
 
@@ -69,14 +68,11 @@ test.describe('E2E Workspace User Journey', () => {
     // 7. Wait for Monaco to load and enter malformed JSON
     await waitForMonacoEditor(page);
 
-    await page.waitForTimeout(500); // Give Monaco time to fully attach event listeners
-
     await setMonacoContent(page, 'invalid json {');
 
     // 8. Assert that snackbar appears and no empty text bubbles are created in chat panel
     const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
     await expect(snackbarLocator).toContainText('Invalid JSON syntax detected.');
-    await page.waitForTimeout(400); // Allow debounce to settle
     await expect(page.locator('.chat-history-log .bubble-text')).toHaveCount(0);
 
     // 9. Correct JSON and verify snackbar disappears
@@ -90,9 +86,9 @@ test.describe('E2E Workspace User Journey', () => {
 
   test('prevents empty chat bubbles when invalid JSON is entered in editor', async ({page}) => {
     await page.addInitScript(() => {
-      try {
+      if (window === window.top) {
         localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
-      } catch (e) {}
+      }
     });
     await page.goto('/');
 
@@ -105,8 +101,9 @@ test.describe('E2E Workspace User Journey', () => {
     // Set invalid JSON
     await setMonacoContent(page, 'invalid json {');
 
-    // Wait for debounce period (300ms)
-    await page.waitForTimeout(400);
+    // Wait for debounce period by checking the visible snackbar error
+    const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
+    await expect(snackbarLocator).toContainText('Invalid JSON syntax detected.');
 
     // Verify no empty text bubbles are created and existing snapshot is preserved
     await expect(page.locator('.chat-history-log .bubble-text')).toHaveCount(0);

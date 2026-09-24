@@ -42,6 +42,7 @@ import {
 import {signal} from '@angular/core';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -221,34 +222,6 @@ describe('ComposerWorkspace Dashboard', () => {
 
       expect(fixture.componentInstance.unreadErrorsCount()).toBe(1);
     });
-
-    it('increments Errors unread count when a DATA_MODEL_CHANGE validation error arrives and Errors tab is inactive', () => {
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
-
-      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
-        type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-        payload: {validationErrors: ['Invalid type']},
-        origin: 'http://localhost',
-        timestamp: Date.now(),
-      });
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(1);
-    });
-
-    it('does not increment Errors unread count when a DATA_MODEL_CHANGE arrives with empty validationErrors', () => {
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
-
-      hostComm.TEST_ONLY.triggerMessageStreamForTesting({
-        type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-        payload: {validationErrors: []}, // Empty errors!
-        origin: 'http://localhost',
-        timestamp: Date.now(),
-      });
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
-    });
   });
 
   it('sets isExtensionMode correctly', async () => {
@@ -342,7 +315,7 @@ describe('ComposerWorkspace Dashboard', () => {
 
       it('preserves a real saved layout when leaving and returning to the workspace', async () => {
         const manager = fixture.debugElement.injector.get(ComposerDockview);
-        const errorSpy = vi.spyOn(console, 'error');
+        const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
         manager.setPanelTitle(ComposerPanelId.Rendered, 'My preview');
         vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
         manager.openPanel(ComposerPanelId.Events);
@@ -380,7 +353,7 @@ describe('ComposerWorkspace Dashboard', () => {
           const savedLayout = JSON.stringify(layout);
           storage.setItem(LocalStorageKey.DOCKVIEW_LAYOUT, savedLayout);
           const restoreSpy = vi.spyOn(DockviewComponent.prototype, 'fromJSON');
-          const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+          const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
 
           const restored = await returnToWorkspace();
 
@@ -393,7 +366,10 @@ describe('ComposerWorkspace Dashboard', () => {
           );
           restored.openPanel(ComposerPanelId.DataModel);
           expect(restored.api.getGroupPanel(ComposerPanelId.DataModel)?.api.isActive).toBe(true);
-          expect(errorSpy).toHaveBeenCalledExactlyOnceWith('Failed to restore dockview layout');
+          expect(errorSpy).toHaveBeenCalledExactlyOnceWith({
+            message: 'Failed to restore dockview layout',
+            sourceTag: '[Shell]',
+          });
           expect(storage.getItem(LocalStorageKey.DOCKVIEW_LAYOUT)).toBe(savedLayout);
         },
       );

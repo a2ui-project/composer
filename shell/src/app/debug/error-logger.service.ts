@@ -146,13 +146,13 @@ export class ErrorLogger {
     };
     return {
       error: (message: string, ...args: unknown[]) =>
-        this.error({message: buildMessage(message, args), sourceTag, level: 'error'}),
+        this.error({message: buildMessage(message, args), sourceTag}),
       warn: (message: string, ...args: unknown[]) =>
-        this.warn({message: buildMessage(message, args), sourceTag, level: 'warn'}),
+        this.warn({message: buildMessage(message, args), sourceTag}),
       info: (message: string, ...args: unknown[]) =>
-        this.info({message: buildMessage(message, args), sourceTag, level: 'info'}),
+        this.info({message: buildMessage(message, args), sourceTag}),
       log: (message: string, ...args: unknown[]) =>
-        this.log({message: buildMessage(message, args), sourceTag, level: 'log'}),
+        this.log({message: buildMessage(message, args), sourceTag}),
     };
   }
 
@@ -209,7 +209,8 @@ export class ErrorLogger {
     const sourceTag = '[Shell]';
 
     if (isErrorLike(arg1)) {
-      message = arg1.message;
+      const name = String(arg1.name || 'Error').slice(0, 100);
+      message = arg1.message ? `${name}: ${arg1.message}` : name;
       stack = arg1.stack;
     } else if (typeof arg1 === 'string') {
       message = arg1;
@@ -233,6 +234,9 @@ export class ErrorLogger {
   }
 
   private isPartialErrorLogItem(val: unknown): val is Partial<ErrorLogItem> {
+    if (typeof val === 'object' && val !== null && 'sourceTag' in val) {
+      return Object.keys(val).length > 0;
+    }
     if (isErrorLike(val)) {
       return false;
     }

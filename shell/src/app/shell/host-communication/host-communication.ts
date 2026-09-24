@@ -99,17 +99,12 @@ export class HostCommunication implements OnDestroy {
   }> = [];
 
   /**
-   * Retrieves a snapshot copy of the recent message history buffer.
+   * Returns a snapshot copy of the recent message history buffer. Non-destructive: several debug panels hydrate from this same buffer during construction. Use `clearHistoryBuffer()` for a genuine reset.
    * @return Array of stored message envelopes
    */
-  getHistoryBuffer(): MessageEnvelope[] {
+  getEnvelopeHistory(): readonly MessageEnvelope[] {
     return [...this.messageHistoryBuffer];
   }
-
-  /**
-   * Retrieves the most recent catalog message envelope received from the preview frame.
-   * @return Latest catalog envelope or null if none received
-   */
 
   /**
    * Clears the historical message buffer and resets the tracked catalog state.
@@ -118,11 +113,32 @@ export class HostCommunication implements OnDestroy {
     this.messageHistoryBuffer.length = 0;
   }
 
+  private handleConsoleLog(payload: unknown): void {
+    const payloadObj = payload as {level?: string; message?: string; stack?: string} | undefined;
+    const levelStr = payloadObj?.level || 'log';
+    const msg = payloadObj?.message || '';
+    const stackStr = payloadObj?.stack;
+    let level: ErrorLogLevel = 'log';
+    if (levelStr === 'error') level = 'error';
+    else if (levelStr === 'warn') level = 'warn';
+    else if (levelStr === 'info') level = 'info';
+
+    this.errorLogger.log({
+      level,
+      message: msg,
+      sourceTag: '[Preview]',
+      ...(stackStr !== undefined ? {stack: stackStr} : {}),
+    });
+  }
+
   /**
    * Triggers a message stream envelope update. Primarily exposed for testing specifications
    * to safely simulate incoming guest frame postMessages without unsafe casting bypasses.
    */
   private triggerMessageStreamForTesting(envelope: MessageEnvelope): void {
+    if (envelope.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+      this.handleConsoleLog(envelope.payload);
+    }
     this.messageStreamSubject.next(envelope);
   }
 
@@ -147,7 +163,35 @@ export class HostCommunication implements OnDestroy {
         event.data &&
         typeof event.data === 'object' &&
         Object.values(PreviewBridgeMessageType).includes(event.data.type);
-      if (!isBridgeMessage || event.data.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+
+      if (event.data?.type === PreviewBridgeMessageType.CONSOLE_LOG) {
+        const expectedUrl = this.startupResolution.getResolvedRendererUrl();
+        if (!expectedUrl) {
+          return;
+        }
+
+        try {
+          const expectedOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
+          if (event.origin !== expectedOrigin) {
+            return;
+          }
+        } catch {
+          return;
+        }
+
+        const envelope: MessageEnvelope = {
+          type: event.data.type,
+          payload: event.data.payload,
+          origin: event.origin,
+          timestamp: Date.now(),
+          sourceWindow: (event.source as Window) ?? null,
+        };
+        this.handleConsoleLog(event.data.payload);
+        this.messageStreamSubject.next(envelope);
+        return;
+      }
+
+      if (!isBridgeMessage) {
         return;
       }
       this.earlyMessageBuffer.push(event);
@@ -201,21 +245,7 @@ export class HostCommunication implements OnDestroy {
         }
       }
       if (type === PreviewBridgeMessageType.CONSOLE_LOG) {
-        const payloadObj = data.payload as {level?: string; message?: string; stack?: string};
-        const levelStr = payloadObj?.level || 'log';
-        const msg = payloadObj?.message || '';
-        const stackStr = payloadObj?.stack;
-        let level: ErrorLogLevel = 'log';
-        if (levelStr === 'error') level = 'error';
-        else if (levelStr === 'warn') level = 'warn';
-        else if (levelStr === 'info') level = 'info';
-
-        this.errorLogger.log({
-          level,
-          message: msg,
-          sourceTag: '[Previewer]',
-          ...(stackStr !== undefined ? {stack: stackStr} : {}),
-        });
+        this.handleConsoleLog(data.payload);
         this.messageStreamSubject.next(envelope);
         return;
       }
@@ -239,12 +269,18 @@ export class HostCommunication implements OnDestroy {
             );
           })
           .catch((err: unknown) => {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            this.errorLogger.log({
+              level: 'error',
+              message: `MCP tool execution failed for "${req.toolName}": ${errorMessage}`,
+              sourceTag: '[McpBridge]',
+            });
             this.sendMessage(
               {
                 type: PreviewBridgeMessageType.MCP_RESPONSE,
                 payload: {
                   requestId: req.requestId,
-                  error: err instanceof Error ? err.message : String(err),
+                  error: errorMessage,
                 },
               },
               sourceTarget,

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {Injectable, inject} from '@angular/core';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 /**
  * A resilient Angular service encapsulating browser sessionStorage operations.
@@ -23,6 +24,7 @@ import {Injectable} from '@angular/core';
  */
 @Injectable({providedIn: 'root'})
 export class SessionStorageInteractions {
+  private readonly logger = inject(ErrorLogger).withTag('[Storage]');
   private readonly storage: Storage | null = null;
 
   constructor() {
@@ -31,7 +33,7 @@ export class SessionStorageInteractions {
         this.storage = window.sessionStorage;
       }
     } catch (err) {
-      console.warn('Failed to access window.sessionStorage safely in environment:', err);
+      this.logger.warn('Failed to access window.sessionStorage safely in environment:', err);
       this.storage = null;
     }
   }
@@ -46,7 +48,7 @@ export class SessionStorageInteractions {
     try {
       return this.storage.getItem(key);
     } catch (err) {
-      console.warn(`Failed to read key "${key}" from sessionStorage safely:`, err);
+      this.logger.warn(`Failed to read key "${key}" from sessionStorage safely:`, err);
       return null;
     }
   }
@@ -61,7 +63,7 @@ export class SessionStorageInteractions {
     try {
       this.storage.setItem(key, value);
     } catch (err) {
-      console.warn(`Failed to write key "${key}" to sessionStorage safely:`, err);
+      this.logger.warn(`Failed to write key "${key}" to sessionStorage safely:`, err);
     }
   }
 
@@ -74,7 +76,7 @@ export class SessionStorageInteractions {
     try {
       this.storage.removeItem(key);
     } catch (err) {
-      console.warn(`Failed to remove key "${key}" from sessionStorage safely:`, err);
+      this.logger.warn(`Failed to remove key "${key}" from sessionStorage safely:`, err);
     }
   }
 
@@ -86,7 +88,7 @@ export class SessionStorageInteractions {
     try {
       this.storage.clear();
     } catch (err) {
-      console.warn('Failed to clear sessionStorage safely:', err);
+      this.logger.warn('Failed to clear sessionStorage safely:', err);
     }
   }
 }

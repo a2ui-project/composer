@@ -72,6 +72,8 @@ export class Errors {
     );
 
     this.errorLogger.errorStream$.pipe(takeUntilDestroyed()).subscribe((item: ErrorLogItem) => {
+      // Intentionally empty. Telemetry has been moved to ErrorTelemetryReporter.
+      // Badge count changes are handled centrally.
       const mapped = this.mapToDisplayItem(item);
       this.errorsLog.update(logs => {
         const newLogs = [mapped, ...logs];
