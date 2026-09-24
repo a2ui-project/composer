@@ -221,6 +221,53 @@ gh run download "$RUN_ID" --name visual-baselines --dir shell/src
 
 Commit the PNGs it produces alongside the change.
 
+## GA4 Telemetry & Custom Dimensions Provisioning
+
+A2UI Composer integrates Google Analytics 4 (GA4) with custom dimensions and custom metrics to monitor user workflows, catalog usage, prompt turns, and client-side error telemetry.
+
+Custom dimensions and metrics must be registered in the target GA4 property before they can be queried in GA4 Explorations and custom reports.
+
+### Provisioning Dimensions & Metrics via Script
+
+The script `scripts/create_ga4_dimensions.sh` idempotently registers all custom dimensions and custom metrics in GA4 Property `549078235` (or any configured property ID) via the Google Analytics Admin API (`v1beta`).
+
+#### Option A: Authenticate via `gcloud`
+
+```bash
+# Log in with the required Google Analytics Edit scope:
+gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.edit,https://www.googleapis.com/auth/cloud-platform
+
+# Run the provisioning script:
+./scripts/create_ga4_dimensions.sh
+```
+
+#### Option B: Authenticate via Google OAuth 2.0 Playground (No `gcloud` Required)
+
+If `gcloud` is not installed or you prefer browser-based authentication:
+
+1. Open [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground/).
+2. In **Step 1 (Select & authorize APIs)**, input `https://www.googleapis.com/auth/analytics.edit` and click **Authorize APIs**.
+3. In **Step 2 (Exchange authorization code for tokens)**, click **Exchange authorization code for tokens** and copy the **Access token**.
+4. Run the provisioning script with the access token:
+   ```bash
+   ACCESS_TOKEN="<your_access_token>" ./scripts/create_ga4_dimensions.sh
+   ```
+
+### Synchronizing Dimensions & Metrics from Source Code
+
+When adding new telemetry events or parameters to `shell/src/app/usage-tracking/ga4-usage-tracking.service.ts`, use `scripts/update_ga4_dimensions.mjs` to keep `scripts/create_ga4_dimensions.sh` synchronized with the codebase:
+
+```bash
+# Automatically scan source code and add newly discovered dimensions/metrics:
+node scripts/update_ga4_dimensions.mjs
+
+# Dry-run mode (preview changes without writing to disk):
+node scripts/update_ga4_dimensions.mjs --dry-run
+
+# Verification mode (returns exit code 1 if definitions are out of date):
+node scripts/update_ga4_dimensions.mjs --check
+```
+
 ## License
 
 This software is distributed under the **Apache 2.0 License**. See
