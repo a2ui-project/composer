@@ -48,12 +48,52 @@
     <div class="gallery-cards">
       <div class="preview-slot" [class.hidden-frame]="!selectedComponentKey()">
         <mat-card class="preview-card">
-          <mat-card-header>
-            <mat-card-title>Preview</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
-          </mat-card-content>
+          <!-- preserveContent keeps the renderer iframe mounted while the JSON tab is open. -->
+          <mat-tab-group
+            class="example-tabs"
+            aria-label="Example"
+            mat-stretch-tabs="false"
+            mat-align-tabs="start"
+            [preserveContent]="true"
+          >
+            <mat-tab label="Preview">
+              <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
+            </mat-tab>
+            <mat-tab label="Edit JSON">
+              <div class="json-tab">
+                @if (draft().preset) {
+                  <label class="draft-label" for="gallery-draft"
+                    >Edit components and optional data</label
+                  >
+                  <p id="gallery-draft-json-help" class="draft-help">
+                    Changes here update the preview and the properties. Reset example restores the
+                    original.
+                  </p>
+                  <textarea
+                    matInput
+                    id="gallery-draft"
+                    class="draft-json"
+                    spellcheck="false"
+                    [ngModel]="draft().text"
+                    (ngModelChange)="editDraft($event)"
+                    [attr.aria-invalid]="!!draft().error"
+                    aria-describedby="gallery-draft-json-help gallery-draft-error"
+                  ></textarea>
+                  @if (draft().error; as error) {
+                    <p id="gallery-draft-error" class="draft-error" role="alert">{{ error }}</p>
+                  }
+                } @else {
+                  <p class="draft-help" role="status">
+                    {{
+                      loadingUsages()
+                        ? 'Loading usage samples...'
+                        : 'No example is available for this component.'
+                    }}
+                  </p>
+                }
+              </div>
+            </mat-tab>
+          </mat-tab-group>
         </mat-card>
       </div>
 
@@ -84,77 +124,134 @@
                 @if (draft().preset) {
                   <h3 class="edit-heading">Edit example</h3>
                   <p id="gallery-draft-help" class="draft-help">
-                    Change properties below. Use JSON for nested properties and bound data.
+                    Change properties below, or edit the whole example in the Edit JSON tab.
                   </p>
-                  @if (simpleProperties().length) {
-                    <div class="simple-properties">
-                      @for (prop of simpleProperties(); track prop.name) {
-                        <label class="simple-property">
-                          <span>{{ prop.name }}</span>
-                          @if (prop.options; as options) {
-                            <select
-                              [attr.aria-label]="prop.name"
-                              [attr.data-property]="prop.name"
-                              [ngModel]="prop.value"
-                              (ngModelChange)="editProperty(prop.name, $event)"
+                  @if (draft().error) {
+                    <p class="draft-help" role="status">
+                      Fix the JSON in the Edit JSON tab to edit properties again.
+                    </p>
+                  }
+                  @if (editableProperties().length) {
+                    <div class="property-list">
+                      @for (prop of editableProperties(); track prop.name) {
+                        @if (prop.firstCommon) {
+                          <h4 class="property-section-heading">Common properties</h4>
+                        }
+                        <div
+                          class="property-row"
+                          [attr.data-property-row]="prop.name"
+                          [class.property-row-stacked]="prop.kind === 'json' || prop.note"
+                        >
+                          <label
+                            class="property-name"
+                            [attr.for]="prop.note ? null : 'gallery-property-' + prop.name"
+                          >
+                            <span>{{ prop.name }}</span>
+                            @if (prop.required) {
+                              <span class="required-marker">required</span>
+                            }
+                          </label>
+                          <div class="property-control">
+                            @if (prop.note) {
+                              <p class="property-note" [attr.data-property-note]="prop.name">
+                                {{ prop.note }}
+                              </p>
+                            } @else if (prop.kind === 'enum') {
+                              <select
+                                [id]="'gallery-property-' + prop.name"
+                                [attr.aria-label]="prop.name"
+                                [attr.data-property]="prop.name"
+                                [ngModel]="prop.value ?? null"
+                                (ngModelChange)="editProperty(prop.name, $event ?? undefined)"
+                                [disabled]="!!draft().error"
+                              >
+                                @if (!prop.required) {
+                                  <option [ngValue]="null">(not set)</option>
+                                }
+                                @for (option of prop.options; track option) {
+                                  <option [ngValue]="option">{{ option }}</option>
+                                }
+                              </select>
+                            } @else if (prop.kind === 'boolean') {
+                              <input
+                                type="checkbox"
+                                [id]="'gallery-property-' + prop.name"
+                                [attr.aria-label]="prop.name"
+                                [attr.data-property]="prop.name"
+                                [ngModel]="prop.value === true"
+                                (ngModelChange)="editProperty(prop.name, $event)"
+                                [disabled]="!!draft().error"
+                              />
+                            } @else if (prop.kind === 'number') {
+                              <input
+                                matInput
+                                type="number"
+                                [id]="'gallery-property-' + prop.name"
+                                [attr.aria-label]="prop.name"
+                                [attr.data-property]="prop.name"
+                                [placeholder]="prop.required ? '' : 'Not set'"
+                                [ngModel]="prop.value ?? null"
+                                (ngModelChange)="editNumberProperty(prop, $event)"
+                                [disabled]="!!draft().error"
+                              />
+                            } @else if (prop.kind === 'string') {
+                              <input
+                                matInput
+                                type="text"
+                                [id]="'gallery-property-' + prop.name"
+                                [attr.aria-label]="prop.name"
+                                [attr.data-property]="prop.name"
+                                [placeholder]="prop.required ? '' : 'Not set'"
+                                [ngModel]="prop.value ?? ''"
+                                (ngModelChange)="editTextProperty(prop, $event)"
+                                [disabled]="!!draft().error"
+                              />
+                            } @else {
+                              <textarea
+                                #jsonField
+                                class="property-json"
+                                spellcheck="false"
+                                [id]="'gallery-property-' + prop.name"
+                                [attr.aria-label]="prop.name + ' (JSON)'"
+                                [attr.data-property]="prop.name"
+                                [placeholder]="prop.required ? '' : 'Not set'"
+                                [value]="jsonFieldErrors()[prop.name]?.text ?? prop.json"
+                                (change)="editJsonProperty(prop, jsonField.value)"
+                                [attr.aria-invalid]="!!jsonFieldErrors()[prop.name]"
+                                [attr.aria-describedby]="
+                                  jsonFieldErrors()[prop.name]
+                                    ? 'gallery-property-error-' + prop.name
+                                    : null
+                                "
+                                [disabled]="!!draft().error"
+                              ></textarea>
+                            }
+                          </div>
+                          @if (!prop.required && prop.value !== undefined && prop.kind !== 'enum') {
+                            <button
+                              mat-icon-button
+                              type="button"
+                              class="remove-property"
+                              [attr.aria-label]="'Remove ' + prop.name"
+                              [attr.data-remove-property]="prop.name"
+                              (click)="editProperty(prop.name, undefined)"
                               [disabled]="!!draft().error"
                             >
-                              @for (option of options; track option) {
-                                <option [ngValue]="option">{{ option }}</option>
-                              }
-                            </select>
-                          } @else if (prop.type === 'boolean') {
-                            <input
-                              type="checkbox"
-                              [attr.aria-label]="prop.name"
-                              [attr.data-property]="prop.name"
-                              [ngModel]="prop.value"
-                              (ngModelChange)="editProperty(prop.name, $event)"
-                              [disabled]="!!draft().error"
-                            />
-                          } @else if (prop.type === 'number') {
-                            <input
-                              matInput
-                              type="number"
-                              [attr.aria-label]="prop.name"
-                              [attr.data-property]="prop.name"
-                              [ngModel]="prop.value"
-                              (ngModelChange)="editProperty(prop.name, $event)"
-                              [disabled]="!!draft().error"
-                            />
-                          } @else {
-                            <input
-                              matInput
-                              type="text"
-                              [attr.aria-label]="prop.name"
-                              [attr.data-property]="prop.name"
-                              [ngModel]="prop.value"
-                              (ngModelChange)="editProperty(prop.name, $event)"
-                              [disabled]="!!draft().error"
-                            />
+                              <mat-icon>close</mat-icon>
+                            </button>
                           }
-                        </label>
+                          @if (jsonFieldErrors()[prop.name]; as fieldError) {
+                            <p
+                              class="property-error"
+                              [id]="'gallery-property-error-' + prop.name"
+                              role="alert"
+                            >
+                              {{ fieldError.message }}
+                            </p>
+                          }
+                        </div>
                       }
                     </div>
-                  }
-                  <details class="draft-editor" [open]="simpleProperties().length === 0">
-                    <summary>Example JSON</summary>
-                    <label class="draft-label" for="gallery-draft"
-                      >Components and optional data</label
-                    >
-                    <textarea
-                      matInput
-                      id="gallery-draft"
-                      class="draft-json"
-                      spellcheck="false"
-                      [ngModel]="draft().text"
-                      (ngModelChange)="editDraft($event)"
-                      [attr.aria-invalid]="!!draft().error"
-                      aria-describedby="gallery-draft-help gallery-draft-error"
-                    ></textarea>
-                  </details>
-                  @if (draft().error; as error) {
-                    <p id="gallery-draft-error" class="draft-error" role="alert">{{ error }}</p>
                   }
                   <div class="draft-actions">
                     <button
@@ -170,12 +267,6 @@
                   @if (actionMessage()) {
                     <p class="draft-help" role="status">{{ actionMessage() }}</p>
                   }
-                  <details class="usage-details">
-                    <summary>Current component JSON</summary>
-                    <pre
-                      class="usage-code-block"
-                    ><code class="usage-code">{{ currentUsage() }}</code></pre>
-                  </details>
                 } @else {
                   <p class="draft-help" [class.draft-error]="draft().error" role="status">
                     {{ draft().error || 'No example is available for this component.' }}
