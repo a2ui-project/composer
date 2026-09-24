@@ -608,15 +608,14 @@ describe('Settings', () => {
       const addDialogs = await rootLoader.getAllHarnesses(MatDialogHarness);
       expect(addDialogs.length).toBe(1);
       const addInputs = await addDialogs[0].getAllHarnesses(MatInputHarness);
-      expect(addInputs.length).toBe(2);
-      await addInputs[0].setValue('My Filesystem Server');
-      await addInputs[1].setValue('http://localhost:3001/mcp');
+      expect(addInputs.length).toBe(1);
+      await addInputs[0].setValue('http://localhost:3001/mcp');
 
       const addBtn = await addDialogs[0].getHarness(MatButtonHarness.with({text: 'Add'}));
       await addBtn.click();
       fixture.detectChanges();
 
-      expect(addSpy).toHaveBeenCalledWith('http://localhost:3001/mcp', 'My Filesystem Server');
+      expect(addSpy).toHaveBeenCalledWith('http://localhost:3001/mcp');
 
       const serverItem = {
         id: 'srv-1',
@@ -642,19 +641,15 @@ describe('Settings', () => {
       const editDialogs = await rootLoader.getAllHarnesses(MatDialogHarness);
       expect(editDialogs.length).toBe(1);
       const editInputs = await editDialogs[0].getAllHarnesses(MatInputHarness);
-      expect(await editInputs[0].getValue()).toBe('filesystem-server');
-      expect(await editInputs[1].getValue()).toBe('http://localhost:3001/mcp');
-      await editInputs[1].setValue('http://localhost:3002/mcp');
+      expect(editInputs.length).toBe(1);
+      expect(await editInputs[0].getValue()).toBe('http://localhost:3001/mcp');
+      await editInputs[0].setValue('http://localhost:3002/mcp');
 
       const saveBtn = await editDialogs[0].getHarness(MatButtonHarness.with({text: 'Save'}));
       await saveBtn.click();
       fixture.detectChanges();
 
-      expect(updateUrlSpy).toHaveBeenCalledWith(
-        'srv-1',
-        'http://localhost:3002/mcp',
-        'filesystem-server',
-      );
+      expect(updateUrlSpy).toHaveBeenCalledWith('srv-1', 'http://localhost:3002/mcp');
 
       const toggleSpy = vi.spyOn(component['mcpManager'], 'toggleServer').mockResolvedValue();
       await component.toggleMcpServer('srv-1', false);
@@ -683,7 +678,7 @@ describe('Settings', () => {
       const dialogs = await rootLoader.getAllHarnesses(MatDialogHarness);
       expect(dialogs.length).toBe(1);
       const inputs = await dialogs[0].getAllHarnesses(MatInputHarness);
-      await inputs[1].setValue('not-a-valid-url');
+      await inputs[0].setValue('not-a-valid-url');
 
       const addBtn = await dialogs[0].getHarness(MatButtonHarness.with({text: 'Add'}));
       expect(await addBtn.isDisabled()).toBe(true);

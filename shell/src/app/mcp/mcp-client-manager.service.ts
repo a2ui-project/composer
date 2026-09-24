@@ -118,10 +118,9 @@ export class McpClientManagerService {
     this.storage.setItem(LocalStorageKey.MCP_SERVERS, JSON.stringify(toSave));
   }
 
-  async addServer(url: string, name?: string): Promise<void> {
+  async addServer(url: string): Promise<void> {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) return;
-    const trimmedName = name?.trim();
 
     const id =
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -130,7 +129,7 @@ export class McpClientManagerService {
 
     const newServer: McpServerConfig = {
       id,
-      name: trimmedName || trimmedUrl,
+      name: trimmedUrl,
       url: trimmedUrl,
       enabled: true,
       status: 'disconnected',
@@ -142,29 +141,19 @@ export class McpClientManagerService {
     await this.connectServer(id);
   }
 
-  async updateServerUrl(id: string, url: string, name?: string): Promise<void> {
+  async updateServerUrl(id: string, url: string): Promise<void> {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) return;
-    const trimmedName = name !== undefined ? name.trim() : undefined;
 
     const existing = this.servers().find(s => s.id === id);
-    if (!existing) return;
-
-    const nextName = trimmedName || trimmedUrl;
-    if (existing.url === trimmedUrl) {
-      if (trimmedName !== undefined && existing.name !== nextName) {
-        this.servers.update(list => list.map(s => (s.id === id ? {...s, name: nextName} : s)));
-        this.persistServers();
-      }
-      return;
-    }
+    if (!existing || existing.url === trimmedUrl) return;
 
     this.servers.update(list =>
       list.map(s =>
         s.id === id
           ? {
               ...s,
-              name: nextName,
+              name: trimmedUrl,
               url: trimmedUrl,
               status: 'disconnected',
               errorMessage: undefined,
@@ -219,12 +208,8 @@ export class McpClientManagerService {
       await client.connect(transport);
       const serverInfo = client.getServerVersion?.();
       const rawName = serverInfo?.name;
-      const hasCustomName = Boolean(server.name && server.name !== server.url);
       const resolvedName =
-        (hasCustomName ? server.name : '') ||
-        (typeof rawName === 'string' ? rawName.trim() : '') ||
-        server.name ||
-        server.url;
+        (typeof rawName === 'string' ? rawName.trim() : '') || server.name || server.url;
       const toolsRes = await client.listTools();
       const discoveredTools: McpToolInfo[] = (toolsRes?.tools ?? []).map(t => ({
         name: t.name,
@@ -291,12 +276,8 @@ export class McpClientManagerService {
       await client.connect(transport);
       const serverInfo = client.getServerVersion?.();
       const rawName = serverInfo?.name;
-      const hasCustomName = Boolean(server.name && server.name !== server.url);
       const resolvedName =
-        (hasCustomName ? server.name : '') ||
-        (typeof rawName === 'string' ? rawName.trim() : '') ||
-        server.name ||
-        server.url;
+        (typeof rawName === 'string' ? rawName.trim() : '') || server.name || server.url;
       const toolsRes = await client.listTools();
       const discoveredTools: McpToolInfo[] = (toolsRes.tools ?? []).map(t => ({
         name: t.name,

@@ -196,7 +196,7 @@ export class Settings implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(result => {
         if (result?.url) {
-          void this.mcpManager.addServer(result.url, result.name);
+          void this.mcpManager.addServer(result.url);
         }
       });
   }
@@ -216,7 +216,7 @@ export class Settings implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(result => {
         if (result?.url) {
-          void this.mcpManager.updateServerUrl(server.id, result.url, result.name);
+          void this.mcpManager.updateServerUrl(server.id, result.url);
         }
       });
   }

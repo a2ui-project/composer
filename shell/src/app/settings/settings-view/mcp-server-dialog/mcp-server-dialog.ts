@@ -34,7 +34,6 @@ export interface McpServerDialogData {
  * Result returned when McpServerDialogComponent is confirmed.
  */
 export interface McpServerDialogResult {
-  name: string;
   url: string;
 }
 
@@ -64,22 +63,16 @@ export class McpServerDialogComponent {
   readonly errorMessage = signal<string | null>(null);
 
   readonly form = this.fb.group({
-    name: [
-      this.data?.server?.name && this.data.server.name !== this.data.server.url
-        ? this.data.server.name
-        : '',
-    ],
     url: [this.data?.server?.url ?? '', [Validators.required, urlValidator]],
   });
 
   /**
-   * Closes the dialog with the trimmed name and URL.
+   * Closes the dialog with the trimmed URL.
    */
   onConfirm(): void {
     this.errorMessage.set(null);
-    const name = this.form.controls.name.value.trim();
     const url = this.form.controls.url.value.trim();
 
-    this.dialogRef.close({name, url});
+    this.dialogRef.close({url});
   }
 }

@@ -18,16 +18,6 @@
 <mat-dialog-content>
   <form [formGroup]="form" (ngSubmit)="$event.preventDefault(); onConfirm()">
     <mat-form-field appearance="outline" class="full-width">
-      <mat-label>Name (optional)</mat-label>
-      <input
-        matInput
-        id="mcp-server-name-input"
-        formControlName="name"
-        placeholder="Auto-detected from server if left blank"
-      />
-    </mat-form-field>
-
-    <mat-form-field appearance="outline" class="full-width">
       <mat-label>Server URL</mat-label>
       <input
         matInput
@@ -35,6 +25,7 @@
         formControlName="url"
         placeholder="http://localhost:3001/mcp"
       />
+      <mat-hint>Server name is auto-detected upon connection</mat-hint>
     </mat-form-field>
 
     @if (errorMessage()) {
