@@ -146,9 +146,7 @@ export class McpClientManagerService {
     if (!trimmedUrl) return;
 
     const existing = this.servers().find(s => s.id === id);
-    if (!existing) return;
-
-    await this.disconnectServer(id);
+    if (!existing || existing.url === trimmedUrl) return;
 
     this.servers.update(list =>
       list.map(s =>
@@ -165,6 +163,8 @@ export class McpClientManagerService {
       ),
     );
     this.persistServers();
+
+    await this.disconnectServer(id);
 
     const updated = this.servers().find(s => s.id === id);
     if (updated?.enabled) {
@@ -201,9 +201,10 @@ export class McpClientManagerService {
       list.map(s => (s.id === id ? {...s, status: 'connecting', errorMessage: undefined} : s)),
     );
 
+    let client: Client | undefined;
     try {
       const transport = new StreamableHTTPClientTransport(new URL(server.url));
-      const client = new Client({name: 'a2ui-composer', version: '1.0.0'});
+      client = new Client({name: 'a2ui-composer', version: '1.0.0'});
       await client.connect(transport);
       const serverInfo = client.getServerVersion?.();
       const rawName = serverInfo?.name;
@@ -216,12 +217,6 @@ export class McpClientManagerService {
         inputSchema: t.inputSchema as Record<string, unknown> | undefined,
         outputSchema: (t as unknown as {outputSchema?: Record<string, unknown>}).outputSchema,
       }));
-
-      try {
-        await client.close();
-      } catch {
-        // Ignore close errors after test
-      }
 
       this.servers.update(list =>
         list.map(s =>
@@ -251,6 +246,14 @@ export class McpClientManagerService {
             : s,
         ),
       );
+    } finally {
+      if (client) {
+        try {
+          await client.close();
+        } catch {
+          // Ignore close errors after test
+        }
+      }
     }
   }
 
