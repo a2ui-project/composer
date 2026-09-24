@@ -165,3 +165,36 @@ test('Material configuration controls use the shell palette in light and dark mo
     await expect(endpoint).toHaveValue('http://mock-agent.local');
   }
 });
+
+test('Workspace panels, the JSON editor, and the chat panel share one surface in both themes', async ({
+  page,
+}) => {
+  const rendererUrl = 'http://localhost:3456';
+  await page.route('**/config.json', route =>
+    route.fulfill({json: {renderers: {default: {rendererUrl}}}}),
+  );
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('a2ui_composer_force_1p', 'true');
+  });
+  await page.goto(`/?renderer=${rendererUrl}`);
+  await expect(page.locator('.monaco-editor .monaco-editor-background')).toBeVisible();
+
+  for (const theme of ['light', 'dark']) {
+    if (theme === 'dark') {
+      await page.getByRole('button', {name: 'Switch to dark theme'}).click();
+      await expect(page.locator('body')).toHaveClass(/dark-theme/);
+    }
+    const surface = await themeColor(page, '--mat-sys-surface');
+    // Dockview's own theme classes sit below the workspace root; the group
+    // background proves the shell's variables still reach them.
+    for (const group of await page.locator('.dv-groupview').all()) {
+      await expect(group).toHaveCSS('background-color', surface);
+    }
+    await expect(page.locator('.monaco-editor .monaco-editor-background')).toHaveCSS(
+      'background-color',
+      surface,
+    );
+    await expect(page.locator('.disabled-chat-panel')).toHaveCSS('background-color', surface);
+  }
+});

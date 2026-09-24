@@ -52,19 +52,24 @@
     min-height: 0;
   }
 
-  --dv-activegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container);
-  --dv-activegroup-hiddenpanel-tab-color: var(--mat-sys-on-surface-variant);
-  --dv-activegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
-  --dv-activegroup-visiblepanel-tab-color: var(--mat-sys-primary);
-  --dv-group-view-background-color: var(--mat-sys-surface);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container);
-  --dv-inactivegroup-hiddenpanel-tab-color: var(--mat-sys-on-surface-variant);
-  --dv-inactivegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
-  --dv-inactivegroup-visiblepanel-tab-color: var(--mat-sys-on-surface-variant);
-  --dv-paneview-header-border-color: var(--mat-sys-outline-variant);
-  --dv-separator-border: var(--mat-sys-outline-variant);
-  --dv-tab-divider-color: var(--mat-sys-outline-variant);
-  --dv-tabs-and-actions-container-background-color: var(--mat-sys-surface-container);
+  // Dockview puts its own theme classes on inner elements (the shell and the
+  // grid), which would otherwise redefine these variables below the root.
+  &,
+  [class*='dockview-theme-'] {
+    --dv-activegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container);
+    --dv-activegroup-hiddenpanel-tab-color: var(--mat-sys-on-surface-variant);
+    --dv-activegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
+    --dv-activegroup-visiblepanel-tab-color: var(--mat-sys-primary);
+    --dv-group-view-background-color: var(--mat-sys-surface);
+    --dv-inactivegroup-hiddenpanel-tab-background-color: var(--mat-sys-surface-container);
+    --dv-inactivegroup-hiddenpanel-tab-color: var(--mat-sys-on-surface-variant);
+    --dv-inactivegroup-visiblepanel-tab-background-color: var(--mat-sys-surface-container);
+    --dv-inactivegroup-visiblepanel-tab-color: var(--mat-sys-on-surface-variant);
+    --dv-paneview-header-border-color: var(--mat-sys-outline-variant);
+    --dv-separator-border: var(--mat-sys-outline-variant);
+    --dv-tab-divider-color: var(--mat-sys-outline-variant);
+    --dv-tabs-and-actions-container-background-color: var(--mat-sys-surface-container);
+  }
 
   // We use Dockview's `defaultRenderer: 'always'` configuration option,
   // which keeps all the tabs always mounted. In order to ensure the tabs

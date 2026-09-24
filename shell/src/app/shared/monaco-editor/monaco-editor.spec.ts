@@ -29,6 +29,7 @@ import {ErrorLogger} from '../../debug/error-logger.service';
 import {MonacoEditorHarness} from './test/monaco-editor.harness';
 
 const {
+  mockDefineTheme,
   mockGetModel,
   mockCreateModel,
   mockSetValue,
@@ -51,6 +52,7 @@ const {
   mockSetDiagnosticsOptions,
 } = vi.hoisted(() => {
   const mockSetValue = vi.fn();
+  const mockDefineTheme = vi.fn();
   const mockGetModel = vi.fn();
   const mockCreateModel = vi.fn((val: string, lang: string, uri: unknown) => ({
     setValue: mockSetValue,
@@ -114,6 +116,7 @@ const {
     mockKeyDownDisposable,
     mockMouseDownDisposable,
     mockSetDiagnosticsOptions,
+    mockDefineTheme,
   };
 });
 
@@ -125,6 +128,7 @@ vi.mock('@monaco-editor/loader', () => ({
         parse: vi.fn((uri: string) => ({toString: () => uri})),
       },
       editor: {
+        defineTheme: mockDefineTheme,
         getModel: mockGetModel,
         createModel: mockCreateModel,
         create: mockEditorCreate,
@@ -387,6 +391,35 @@ describe('MonacoEditor component', () => {
     vi.clearAllTimers();
     vi.useRealTimers();
     fixture?.destroy();
+  });
+
+  it('registers editor themes on the shell surface token for each theme', async () => {
+    const style = document.createElement('style');
+    style.textContent =
+      '.light-theme { --mat-sys-surface: #f7f8fa; } .dark-theme { --mat-sys-surface: #1c1e22; }';
+    document.head.appendChild(style);
+    fixture = TestBed.createComponent(MonacoEditor);
+    fixture.detectChanges();
+    await Promise.resolve();
+    // The tokens are read once, when Monaco loads, so the stylesheet can go now.
+    style.remove();
+
+    expect(mockDefineTheme).toHaveBeenCalledWith('composer-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [],
+      colors: {'editor.background': '#f7f8fa', 'editorGutter.background': '#f7f8fa'},
+    });
+    expect(mockDefineTheme).toHaveBeenCalledWith('composer-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [],
+      colors: {'editor.background': '#1c1e22', 'editorGutter.background': '#1c1e22'},
+    });
+    expect(mockEditorCreate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({theme: 'composer-light'}),
+    );
   });
 
   it('creates a new model when getModel returns null', async () => {

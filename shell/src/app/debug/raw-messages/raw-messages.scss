@@ -80,6 +80,10 @@
     }
     .origin {
       margin-left: auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       font-weight: normal;
     }
   }
@@ -140,6 +144,7 @@ mat-expansion-panel.llm-log-panel {
       display: flex;
       align-items: center;
       gap: 12px;
+      min-width: 0;
       font-size: 11px !important;
       color: var(--mat-sys-on-surface-variant) !important;
 
@@ -156,8 +161,19 @@ mat-expansion-panel.llm-log-panel {
         }
       }
 
+      .timestamp,
+      .message-type {
+        flex-shrink: 0;
+      }
+
+      // The header row has a fixed height, so a long origin must truncate rather
+      // than wrap onto the next row.
       .origin {
         margin-left: auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         font-weight: normal;
         opacity: 0.8;
       }
