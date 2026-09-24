@@ -59,6 +59,11 @@ vi.mock('safevalues/dom', () => {
 describe('Settings', () => {
   let mockPlatformLocation: {
     getBaseHrefFromDOM: Mock<() => string | null>;
+    onPopState: Mock;
+    onHashChange: Mock;
+    pathname: string;
+    search: string;
+    hash: string;
   };
   let mockResolvedUrl: WritableSignal<string | null>;
   let mockRenderers: WritableSignal<Record<string, RendererConfig>>;
@@ -121,6 +126,11 @@ describe('Settings', () => {
     };
     mockPlatformLocation = {
       getBaseHrefFromDOM: vi.fn().mockReturnValue('/composer/pr/44/'),
+      onPopState: vi.fn(() => () => {}),
+      onHashChange: vi.fn(() => () => {}),
+      pathname: '/',
+      search: '',
+      hash: '',
     };
     mockResolvedUrl = signal<string | null>('http://resolved-url.com');
     mockRenderers = signal<Record<string, RendererConfig>>({});
@@ -582,42 +592,97 @@ describe('Settings', () => {
   });
 
   describe('MCP Servers section', () => {
-    it('renders MCP Servers in a separate card and displays server name and tool names', async () => {
+    it('renders MCP Servers card and supports adding, testing, editing via dialog, toggling, and removing servers', async () => {
+      const {MatDialogHarness} = await import('@angular/material/dialog/testing');
+      const {MatInputHarness} = await import('@angular/material/input/testing');
+      const {MatButtonHarness} = await import('@angular/material/button/testing');
       const {fixture, component, harness} = await setupComponent();
+      const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
       expect(await harness.hasMcpCard()).toBe(true);
+      expect(await harness.hasMcpEmptyState()).toBe(true);
 
       const addSpy = vi.spyOn(component['mcpManager'], 'addServer').mockResolvedValue();
-      component.newMcpServerUrl.set('http://localhost:3001/mcp');
-      await component.addMcpServer();
-      expect(addSpy).toHaveBeenCalledWith('http://localhost:3001/mcp');
-      expect(component.newMcpServerUrl()).toBe('');
-
-      component['mcpManager'].servers.set([
-        {
-          id: 'srv-1',
-          name: 'filesystem-server',
-          url: 'http://localhost:3001/mcp',
-          enabled: true,
-          status: 'connected',
-          tools: [{name: 'read_file'}, {name: 'list_directory'}],
-        },
-      ]);
+      await harness.clickAddMcpServerButton();
       fixture.detectChanges();
 
+      const addDialogs = await rootLoader.getAllHarnesses(MatDialogHarness);
+      expect(addDialogs.length).toBe(1);
+      const addInputs = await addDialogs[0].getAllHarnesses(MatInputHarness);
+      expect(addInputs.length).toBe(1);
+      await addInputs[0].setValue('http://localhost:3001/mcp');
+
+      const addBtn = await addDialogs[0].getHarness(MatButtonHarness.with({text: 'Add'}));
+      await addBtn.click();
+      fixture.detectChanges();
+
+      expect(addSpy).toHaveBeenCalledWith('http://localhost:3001/mcp');
+
+      const serverItem = {
+        id: 'srv-1',
+        name: 'filesystem-server',
+        url: 'http://localhost:3001/mcp',
+        enabled: true,
+        status: 'connected' as const,
+        tools: [{name: 'read_file'}, {name: 'list_directory'}],
+      };
+      component['mcpManager'].servers.set([serverItem]);
+      fixture.detectChanges();
+
+      expect(await harness.hasMcpEmptyState()).toBe(false);
       expect(await harness.getMcpServerNames()).toEqual(['filesystem-server']);
+      expect(await harness.getMcpServerUrls()).toEqual(['http://localhost:3001/mcp']);
       expect(await harness.getMcpServerToolNames()).toEqual(['read_file', 'list_directory']);
+      expect(await harness.hasMcpTestButtons()).toBe(true);
+
+      const updateUrlSpy = vi.spyOn(component['mcpManager'], 'updateServerUrl').mockResolvedValue();
+      await harness.clickEditMcpServerButton();
+      fixture.detectChanges();
+
+      const editDialogs = await rootLoader.getAllHarnesses(MatDialogHarness);
+      expect(editDialogs.length).toBe(1);
+      const editInputs = await editDialogs[0].getAllHarnesses(MatInputHarness);
+      expect(editInputs.length).toBe(1);
+      expect(await editInputs[0].getValue()).toBe('http://localhost:3001/mcp');
+      await editInputs[0].setValue('http://localhost:3002/mcp');
+
+      const saveBtn = await editDialogs[0].getHarness(MatButtonHarness.with({text: 'Save'}));
+      await saveBtn.click();
+      fixture.detectChanges();
+
+      expect(updateUrlSpy).toHaveBeenCalledWith('srv-1', 'http://localhost:3002/mcp');
 
       const toggleSpy = vi.spyOn(component['mcpManager'], 'toggleServer').mockResolvedValue();
       await component.toggleMcpServer('srv-1', false);
       expect(toggleSpy).toHaveBeenCalledWith('srv-1', false);
 
-      const reconnectSpy = vi.spyOn(component['mcpManager'], 'connectServer').mockResolvedValue();
-      await component.reconnectMcpServer('srv-1');
-      expect(reconnectSpy).toHaveBeenCalledWith('srv-1');
+      const testSpy = vi.spyOn(component['mcpManager'], 'testServer').mockResolvedValue();
+      await component.testMcpServer('srv-1');
+      expect(testSpy).toHaveBeenCalledWith('srv-1');
 
       const removeSpy = vi.spyOn(component['mcpManager'], 'removeServer').mockResolvedValue();
       await component.removeMcpServer('srv-1');
       expect(removeSpy).toHaveBeenCalledWith('srv-1');
+    });
+
+    it('disables the Add button in McpServerDialogComponent when an invalid URL is entered', async () => {
+      const {MatDialogHarness} = await import('@angular/material/dialog/testing');
+      const {MatInputHarness} = await import('@angular/material/input/testing');
+      const {MatButtonHarness} = await import('@angular/material/button/testing');
+      const {fixture, component, harness} = await setupComponent();
+      const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
+
+      const addSpy = vi.spyOn(component['mcpManager'], 'addServer').mockResolvedValue();
+      await harness.clickAddMcpServerButton();
+      fixture.detectChanges();
+
+      const dialogs = await rootLoader.getAllHarnesses(MatDialogHarness);
+      expect(dialogs.length).toBe(1);
+      const inputs = await dialogs[0].getAllHarnesses(MatInputHarness);
+      await inputs[0].setValue('not-a-valid-url');
+
+      const addBtn = await dialogs[0].getHarness(MatButtonHarness.with({text: 'Add'}));
+      expect(await addBtn.isDisabled()).toBe(true);
+      expect(addSpy).not.toHaveBeenCalled();
     });
   });
 });

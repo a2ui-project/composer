@@ -67,7 +67,10 @@ export const JmespathImplementation: FunctionImplementation = createFunctionImpl
         );
       }
       try {
-        return searchJmespath(settled['data'] ?? null, expr);
+        return searchJmespath(
+          (settled['data'] ?? null) as Parameters<typeof searchJmespath>[0],
+          expr,
+        );
       } catch (error) {
         throw new A2uiExpressionError(
           `${error instanceof Error ? error.message : String(error)} in JMESPath expression: ${expr}`,

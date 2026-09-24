@@ -44,8 +44,8 @@ import {
   createErrorEvent,
   createReceivedEvent,
   createSentMessageEvent,
-  parseA2aStreamEvent,
 } from './converters/a2a-ui-converter';
+import {A2aStreamEventParser} from './converters/a2a-stream-event-parser.service';
 import {
   A2UI_MIME_TYPE,
   A2UI_PROTOCOL_VERSION,
@@ -125,6 +125,7 @@ export class A2aChatView implements OnInit {
   private readonly a2aTransport = inject(A2A_TRANSPORT);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly streamEventParser = inject(A2aStreamEventParser);
   private readonly initTimestamp = Date.now();
 
   /** Discovered A2A AgentCard metadata for the connected agent. */
@@ -591,7 +592,7 @@ export class A2aChatView implements OnInit {
   }
 
   private handleStreamEvent(event: TaskStatusUpdateEvent, agentMessageId: string): void {
-    const parsed = parseA2aStreamEvent(event);
+    const parsed = this.streamEventParser.parse(event);
 
     if (parsed.contextId) {
       this.activeContextId.set(parsed.contextId);

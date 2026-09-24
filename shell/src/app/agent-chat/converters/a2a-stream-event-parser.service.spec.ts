@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {TestBed} from '@angular/core/testing';
 import {A2aStreamEventParser} from './a2a-stream-event-parser.service';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
 
 describe('A2aStreamEventParser', () => {
@@ -113,6 +114,35 @@ describe('A2aStreamEventParser', () => {
     expect(parsed.toolCalls?.length).toBe(1);
     expect(parsed.toolCalls?.[0].name).toBe('show_vacation_booking_form');
     expect(parsed.toolCalls?.[0].id).toBe('call_3478204');
+  });
+
+  it('reports discarded legacy v0.8 payloads through the injected error logger', () => {
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const warn = vi.spyOn(errorLogger, 'warn');
+    const legacyPayload = {beginRendering: {surfaceId: 'surf-legacy'}};
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-legacy',
+      message: {
+        role: 'agent',
+        parts: [
+          {data: legacyPayload},
+          {data: {createSurface: {surfaceId: 'surf-1', catalogId: 'cat-1'}}},
+        ],
+      },
+    };
+
+    const parsed = parser.parse(event);
+
+    expect(parsed.a2uiItems.length).toBe(1);
+    expect(parsed.a2uiItems[0].createSurface?.surfaceId).toBe('surf-1');
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      {
+        message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9.',
+        sourceTag: '[A2UI]',
+      },
+      legacyPayload,
+    );
   });
 
   it('detects terminal completed states', () => {
@@ -621,5 +651,146 @@ describe('A2aStreamEventParser', () => {
     const parsed = parser.parse(event);
     expect(parsed.textChunk).toBeUndefined();
     expect(parsed.thoughtChunk).toBeUndefined();
+  });
+
+  describe('event shape handling', () => {
+    it('parses text, thought, and a2ui data items', () => {
+      const event: TaskStatusUpdateEvent = {
+        taskId: 'task-stream-1',
+        contextId: 'ctx-1',
+        message: {
+          role: 'agent',
+          parts: [
+            {metadata: {adk_thought: 'true'}, text: 'Thinking step...'},
+            {thought: 'Direct thought...'},
+            {text: 'Final text response'},
+            {
+              data: {
+                data: JSON.stringify([{createSurface: {surfaceId: 's1', catalogId: 'c1'}}]),
+              },
+            },
+          ],
+        },
+        status: 'COMPLETED',
+      };
+
+      const parsed = parser.parse(event);
+      expect(parsed.taskId).toBe('task-stream-1');
+      expect(parsed.contextId).toBe('ctx-1');
+      expect(parsed.thoughtChunk).toContain('Thinking step...');
+      expect(parsed.thoughtChunk).toContain('Direct thought...');
+      expect(parsed.textChunk).toBe('Final text response');
+      expect(parsed.a2uiItems.length).toBe(1);
+      expect(parsed.isCompleted).toBe(true);
+    });
+
+    it('parses artifact data items in message parts and root event', () => {
+      const event: TaskStatusUpdateEvent = {
+        taskId: 'task-art',
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              artifact: {
+                parts: [{data: {createSurface: {surfaceId: 's1', catalogId: 'c1'}}}],
+              },
+            },
+          ],
+        },
+        artifact: {
+          parts: [{data: [{createSurface: {surfaceId: 's2', catalogId: 'c2'}}]}],
+        },
+        status: {state: 'SUCCESS'},
+      };
+
+      const parsed = parser.parse(event);
+      expect(parsed.a2uiItems.length).toBe(2);
+      expect(parsed.isCompleted).toBe(true);
+    });
+
+    it('handles string status states and failure/cancellation', () => {
+      const eventDone: TaskStatusUpdateEvent = {status: 'DONE'};
+      expect(parser.parse(eventDone).isCompleted).toBe(true);
+
+      const eventSuccess: TaskStatusUpdateEvent = {status: 'SUCCESS'};
+      expect(parser.parse(eventSuccess).isCompleted).toBe(true);
+
+      const eventFailed: TaskStatusUpdateEvent = {status: 'FAILED'};
+      expect(parser.parse(eventFailed).isCompleted).toBe(true);
+
+      const eventCancelled: TaskStatusUpdateEvent = {status: {state: 'CANCELLED'}};
+      expect(parser.parse(eventCancelled).isCompleted).toBe(true);
+
+      const eventOther: TaskStatusUpdateEvent = {status: 'IN_PROGRESS'};
+      expect(parser.parse(eventOther).isCompleted).toBe(false);
+
+      const eventNullStatus = parser.parse({});
+      expect(eventNullStatus.isCompleted).toBe(false);
+    });
+
+    it('handles JSON-RPC result wrapping and string messages', () => {
+      const wrapped = {
+        result: {
+          taskId: 't-wrapped',
+          message: 'Direct string message',
+          final: true,
+        },
+      };
+      const parsed = parser.parse(wrapped);
+      expect(parsed.taskId).toBe('t-wrapped');
+      expect(parsed.textChunk).toBe('Direct string message');
+      expect(parsed.isCompleted).toBe(true);
+    });
+
+    it('handles task/message kind payloads and metadata thought flags (string and boolean)', () => {
+      const taskEvent = {
+        kind: 'task',
+        id: 't-kind-1',
+        message: {
+          role: 'agent',
+          parts: [
+            {metadata: {thought: 'true'}, text: 'Flagged thought'},
+            {metadata: {adk_thought: true}, text: 'Boolean thought'},
+            {kind: 'thought', thought: 'Kind thought'},
+            {data: {createSurface: {surfaceId: 's3'}}},
+          ],
+        },
+      };
+      const parsed = parser.parse(taskEvent);
+      expect(parsed.taskId).toBe('t-kind-1');
+      expect(parsed.thoughtChunk).toContain('Flagged thought');
+      expect(parsed.thoughtChunk).toContain('Boolean thought');
+      expect(parsed.thoughtChunk).toContain('Kind thought');
+      expect(parsed.a2uiItems.length).toBe(1);
+
+      const msgEvent = {
+        kind: 'message',
+        role: 'agent',
+        parts: [{text: 'Direct message payload'}],
+      };
+      const parsedMsg = parser.parse(msgEvent);
+      expect(parsedMsg.textChunk).toBe('Direct message payload');
+    });
+
+    it('marks isCompleted true for terminal states including canceled and rejected', () => {
+      for (const state of ['canceled', 'rejected', 'completed', 'failed']) {
+        const evt = {
+          taskId: 't-term',
+          status: {state},
+        };
+        const parsed = parser.parse(evt);
+        expect(parsed.isCompleted).toBe(true);
+      }
+    });
+
+    it('handles non-array artifact parts', () => {
+      const event = {
+        artifact: {
+          parts: [{data: {createSurface: {surfaceId: 's4'}}}],
+        },
+      };
+      const parsed = parser.parse(event);
+      expect(parsed.a2uiItems.length).toBe(1);
+    });
   });
 });

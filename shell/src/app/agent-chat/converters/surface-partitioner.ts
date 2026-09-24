@@ -15,6 +15,7 @@
  */
 
 import {A2UI_UPDATE_KEYS, RenderA2uiItem} from 'a2ui-bridge';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {CanvasArtifact} from '../chat-message/types';
 
 interface ExtractedCanvasInfo {
@@ -303,18 +304,52 @@ export function isA2uiItem(item: unknown): boolean {
   return A2UI_UPDATE_KEYS.some(key => key in obj && obj[key] !== undefined && obj[key] !== null);
 }
 
+/** Legacy operation keys from A2UI v0.8 that are superseded in v0.9. */
+const LEGACY_A2UI_KEYS = ['beginRendering', 'surfaceUpdate', 'dataModelUpdate'] as const;
+
+/**
+ * Checks whether a candidate object is an A2UI v0.8 update that v0.9 no longer accepts.
+ *
+ * Counterpart to {@link isA2uiItem}: an item that satisfies neither is not A2UI traffic at all
+ * (a tool call, an action echo, or arbitrary structured data) and is dropped without comment.
+ */
+function isLegacyA2uiItem(item: unknown): boolean {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  return LEGACY_A2UI_KEYS.some(key => key in item);
+}
+
 /**
  * Normalizes an array of raw layout updates into valid `RenderA2uiItem` specifications,
  * filtering out any non-A2UI objects and deduplicating redundant createSurface commands.
+ *
+ * @param items Raw layout updates as received from the agent.
+ * @param errorLogger Reports payloads dropped for using superseded v0.8 operations. Optional
+ *     because `mergeA2uiItems`, `partitionA2uiSurfacePayload`, and `unwrapCanvasForRenderer`
+ *     re-normalize `RenderA2uiItem[]` that already passed this function, where a legacy payload
+ *     cannot occur. Ingestion callers should always pass one.
  */
-export function normalizeA2uiItems(items: readonly unknown[]): RenderA2uiItem[] {
+export function normalizeA2uiItems(
+  items: readonly unknown[],
+  errorLogger?: ErrorLogger,
+): RenderA2uiItem[] {
   if (!items || !Array.isArray(items)) return [];
 
   const seenSurfaces = new Set<string>();
   const normalized: RenderA2uiItem[] = [];
 
   for (const raw of items) {
-    if (!isA2uiItem(raw)) continue;
+    if (!isA2uiItem(raw)) {
+      if (isLegacyA2uiItem(raw)) {
+        errorLogger?.warn(
+          {
+            message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9.',
+            sourceTag: '[A2UI]',
+          },
+          raw,
+        );
+      }
+      continue;
+    }
     const itemObj = raw as Record<string, unknown>;
     const item = {
       version:
@@ -470,7 +505,7 @@ function formatCanvasComponents(
     const rootId = Array.from(childRootIds)[0];
     return components.map(c => {
       if (c['id'] === rootId) {
-        return {...c, id: 'root'};
+        return {...c, ['id']: 'root'};
       }
       return c;
     });
@@ -479,9 +514,9 @@ function formatCanvasComponents(
   if (childRootIds.size > 1) {
     return [
       {
-        id: 'root',
-        component: 'Column',
-        children: Array.from(childRootIds),
+        ['id']: 'root',
+        ['component']: 'Column',
+        ['children']: Array.from(childRootIds),
       },
       ...components,
     ];

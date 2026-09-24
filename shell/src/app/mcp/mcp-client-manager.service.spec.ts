@@ -235,4 +235,112 @@ describe('McpClientManagerService', () => {
     expect(closeMock).toHaveBeenCalled();
     expect(service.servers()[0].status).toBe('disconnected');
   });
+
+  it('updates server URL, reconnects if enabled, and ignores empty, unchanged, or unknown IDs', async () => {
+    await service.addServer('http://localhost:3001/mcp');
+    const id = service.servers()[0].id;
+    closeMock.mockClear();
+    connectMock.mockClear();
+
+    // Unchanged URL should return early without disconnecting or reconnecting
+    await service.updateServerUrl(id, '  http://localhost:3001/mcp  ');
+    expect(closeMock).not.toHaveBeenCalled();
+    expect(connectMock).not.toHaveBeenCalled();
+
+    await service.updateServerUrl(id, '   ');
+    expect(service.servers()[0].url).toBe('http://localhost:3001/mcp');
+
+    await service.updateServerUrl('non-existent-id', 'http://localhost:3009/mcp');
+    expect(service.servers()[0].url).toBe('http://localhost:3001/mcp');
+
+    let resolveDisconnect!: () => void;
+    closeMock.mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          resolveDisconnect = resolve;
+        }),
+    );
+    getServerVersionMock.mockReturnValueOnce({name: 'updated-mcp-server', version: '1.0.0'});
+
+    const updatePromise = service.updateServerUrl(id, 'http://localhost:3005/mcp');
+    // URL should be updated synchronously in the signal before disconnectServer completes
+    expect(service.servers()[0].url).toBe('http://localhost:3005/mcp');
+    expect(service.servers()[0].name).toBe('http://localhost:3005/mcp');
+    expect(service.servers()[0].status).toBe('disconnected');
+
+    resolveDisconnect();
+    await updatePromise;
+    expect(service.servers()[0].url).toBe('http://localhost:3005/mcp');
+    expect(service.servers()[0].name).toBe('updated-mcp-server');
+    expect(service.servers()[0].status).toBe('connected');
+  });
+
+  it('tests server connection when enabled or disabled, including error handling and closing client in finally block', async () => {
+    await service.addServer('http://localhost:3001/mcp');
+    const id = service.servers()[0].id;
+
+    // Test when enabled (happy path)
+    await service.testServer(id);
+    expect(service.servers()[0].status).toBe('connected');
+
+    // Test when enabled (connection failure)
+    connectMock.mockRejectedValueOnce(new Error('Enabled test failed'));
+    await service.testServer(id);
+    expect(service.servers()[0].status).toBe('error');
+    expect(service.servers()[0].errorMessage).toContain('Enabled test failed');
+
+    // Test when disabled (connects, lists tools, and closes client)
+    await service.toggleServer(id, false);
+    expect(service.servers()[0].status).toBe('disconnected');
+    closeMock.mockClear();
+    await service.testServer(id);
+    expect(service.servers()[0].status).toBe('connected');
+    expect(closeMock).toHaveBeenCalledTimes(1);
+
+    // Test when disabled and listTools throws: client.close() must still be called in finally block
+    closeMock.mockClear();
+    listToolsMock.mockRejectedValueOnce(new Error('listTools failed after connect'));
+    await service.testServer(id);
+    expect(service.servers()[0].status).toBe('error');
+    expect(service.servers()[0].errorMessage).toContain('listTools failed after connect');
+    expect(closeMock).toHaveBeenCalledTimes(1);
+
+    // Test failure when disabled (connect fails)
+    connectMock.mockRejectedValueOnce(new Error('Test connection failed'));
+    await service.testServer(id);
+    expect(service.servers()[0].status).toBe('error');
+    expect(service.servers()[0].errorMessage).toContain('Test connection failed');
+  });
+
+  it('handles malformed localStorage JSON, multiple servers in list updates, and testServer with unknown ID', async () => {
+    storageMap.set(LocalStorageKey.MCP_SERVERS, '{invalid-json');
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        McpClientManagerService,
+        {provide: LocalStorageInteractions, useValue: mockStorage},
+      ],
+    });
+    const malformedService = TestBed.inject(McpClientManagerService);
+    expect(malformedService.servers()).toEqual([]);
+
+    await malformedService.addServer('http://localhost:3001/mcp');
+    await malformedService.addServer('http://localhost:3002/mcp');
+    const firstId = malformedService.servers()[0].id;
+    await malformedService.updateServerUrl(firstId, 'http://localhost:3003/mcp');
+    expect(malformedService.servers()[0].url).toBe('http://localhost:3003/mcp');
+    expect(malformedService.servers()[1].url).toBe('http://localhost:3002/mcp');
+
+    await malformedService.testServer('non-existent');
+    expect(malformedService.servers()).toHaveLength(2);
+  });
+
+  it('checks whether a catalog supports MCP via doesCatalogSupportMcp', () => {
+    expect(service.doesCatalogSupportMcp(null)).toBe(false);
+    expect(service.doesCatalogSupportMcp(undefined)).toBe(false);
+    expect(service.doesCatalogSupportMcp({functions: {required: {}}})).toBe(false);
+    expect(service.doesCatalogSupportMcp({functions: {callMcpTool: {}}})).toBe(true);
+    expect(service.doesCatalogSupportMcp({$defs: {callMcpTool: {}}})).toBe(true);
+    expect(service.doesCatalogSupportMcp({$defs: {catalog_callMcpTool: {}}})).toBe(true);
+  });
 });

@@ -17,6 +17,7 @@
 // @vitest-environment jsdom
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {AppComponent} from './app/app.component';
+import {BasicWithMcpCatalog} from './app/basic-with-mcp.catalog';
 import {A2uiSandboxConnection, provideA2uiSandbox} from 'a2ui-bridge/angular';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {A2uiRendererService, A2UI_RENDERER_CONFIG, BasicCatalog} from '@a2ui/angular/v0_9';
@@ -34,8 +35,10 @@ vi.mock('a2ui-bridge', () => ({
     attachRenderer: vi.fn().mockReturnValue({unsubscribe: vi.fn()}),
     sendMessage: vi.fn(),
     sendAction: vi.fn(),
+    getMcpClient: vi.fn(),
   },
   ERROR_OVERLAY_DEBOUNCE_MS: 350,
+  createMcpCatalogFunctions: vi.fn().mockReturnValue([]),
 }));
 
 describe('A2uiSandbox', () => {
@@ -55,7 +58,7 @@ describe('A2uiSandbox', () => {
       imports: [AppComponent],
       providers: [
         provideZonelessChangeDetection(),
-        provideA2uiSandbox([BasicCatalog], {catalogJson: {items: ['Grid']}}), // Injects dynamically linked dynamic manager
+        provideA2uiSandbox([BasicWithMcpCatalog], {catalogJson: {items: ['Grid']}}), // Injects dynamically linked dynamic manager
       ],
     }).compileComponents();
 

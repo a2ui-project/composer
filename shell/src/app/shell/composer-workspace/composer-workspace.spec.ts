@@ -16,7 +16,11 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ComposerPanelId, ComposerWorkspace} from './composer-workspace';
-import {ComposerDockview} from './composer-dockview.service';
+import {
+  ComposerDockview,
+  DEFAULT_CONTAINER_WIDTH,
+  DEFAULT_CONTAINER_HEIGHT,
+} from './composer-dockview.service';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
@@ -26,7 +30,7 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
-import {DockviewComponent} from 'dockview';
+import {DockviewComponent} from 'dockview-core';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {LlmClient, LlmMessage} from '../../chat/llm-client/llm-client';
@@ -449,14 +453,17 @@ describe('ComposerWorkspace Dashboard', () => {
       const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
       const heightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
 
-      const newFixture = TestBed.createComponent(ComposerWorkspace);
-      newFixture.detectChanges();
-      await newFixture.whenStable();
+      try {
+        const newFixture = TestBed.createComponent(ComposerWorkspace);
+        newFixture.detectChanges();
+        await newFixture.whenStable();
 
-      expect(layoutSpy).toHaveBeenCalledWith(1200, 800);
-      layoutSpy.mockRestore();
-      widthSpy.mockRestore();
-      heightSpy.mockRestore();
+        expect(layoutSpy).toHaveBeenCalledWith(1200, 800);
+      } finally {
+        layoutSpy.mockRestore();
+        widthSpy.mockRestore();
+        heightSpy.mockRestore();
+      }
     });
 
     it('activates panel and triggers change detection when pointerdown occurs on tab element', () => {
@@ -623,6 +630,112 @@ describe('ComposerWorkspace Dashboard', () => {
       )['_onDidActivePanelChange'].fire({panel: eventsPanel});
 
       expect(trackSpy).toHaveBeenCalledWith({panelId: ComposerPanelId.Events});
+    });
+
+    describe('Initial Layout Configuration', () => {
+      it('groups Data Model, Events, Errors, and Raw Messages together with Data Model active', () => {
+        const manager = fixture.debugElement.injector.get(ComposerDockview);
+        const dataModelPanel = manager.api.getGroupPanel(ComposerPanelId.DataModel);
+        const eventsPanel = manager.api.getGroupPanel(ComposerPanelId.Events);
+        const errorsPanel = manager.api.getGroupPanel(ComposerPanelId.Errors);
+        const rawMessagesPanel = manager.api.getGroupPanel(ComposerPanelId.RawMessages);
+
+        expect(dataModelPanel).toBeDefined();
+        expect(eventsPanel).toBeDefined();
+        expect(errorsPanel).toBeDefined();
+        expect(rawMessagesPanel).toBeDefined();
+
+        const debugGroup = dataModelPanel!.group;
+        expect(eventsPanel!.group).toBe(debugGroup);
+        expect(errorsPanel!.group).toBe(debugGroup);
+        expect(rawMessagesPanel!.group).toBe(debugGroup);
+
+        const debugPanelIds = debugGroup.panels.map(p => p.id);
+        expect(debugPanelIds).toEqual([
+          ComposerPanelId.DataModel,
+          ComposerPanelId.Events,
+          ComposerPanelId.Errors,
+          ComposerPanelId.RawMessages,
+        ]);
+        expect(debugGroup.activePanel?.id).toBe(ComposerPanelId.DataModel);
+      });
+
+      it('allocates less vertical space to the debug drawer group relative to the preview group', () => {
+        const manager = fixture.debugElement.injector.get(ComposerDockview);
+        const renderedPanel = manager.api.getGroupPanel(ComposerPanelId.Rendered);
+        const dataModelPanel = manager.api.getGroupPanel(ComposerPanelId.DataModel);
+
+        expect(renderedPanel).toBeDefined();
+        expect(dataModelPanel).toBeDefined();
+
+        const previewHeight = renderedPanel!.group.height;
+        const debugHeight = dataModelPanel!.group.height;
+
+        expect(debugHeight).toBeLessThan(previewHeight);
+        expect(debugHeight).toBeLessThanOrEqual(Math.round(DEFAULT_CONTAINER_HEIGHT * 0.35));
+        expect(dataModelPanel!.group.width).toBeGreaterThan(renderedPanel!.group.width);
+      });
+
+      it('balances initial widths equally between Rendered A2UI Preview and A2UI JSON Editor', () => {
+        const manager = fixture.debugElement.injector.get(ComposerDockview);
+        const renderedPanel = manager.api.getGroupPanel(ComposerPanelId.Rendered);
+        const rawPanel = manager.api.getGroupPanel(ComposerPanelId.Raw);
+        const dataModelPanel = manager.api.getGroupPanel(ComposerPanelId.DataModel);
+
+        expect(renderedPanel).toBeDefined();
+        expect(rawPanel).toBeDefined();
+        expect(dataModelPanel).toBeDefined();
+        expect(rawPanel!.group.width).toBe(renderedPanel!.group.width);
+        expect(dataModelPanel!.group.width).toBe(
+          renderedPanel!.group.width + rawPanel!.group.width,
+        );
+      });
+
+      it('limits Gemini Assistant initial width to not exceed 1/3 of the overall page width', () => {
+        const manager = fixture.debugElement.injector.get(ComposerDockview);
+        const chatPanel = manager.api.getGroupPanel(ComposerPanelId.Chat);
+
+        expect(chatPanel).toBeDefined();
+        const chatWidth = chatPanel!.group.width;
+
+        expect(chatWidth).toBeLessThanOrEqual(Math.ceil(DEFAULT_CONTAINER_WIDTH / 3));
+      });
+
+      it('enforces Gemini Assistant initial width and debug drawer initial height on layout initialization', async () => {
+        const storageSpy = vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
+        const widthSpy = vi
+          .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+          .mockReturnValue(1200);
+        const heightSpy = vi
+          .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+          .mockReturnValue(900);
+
+        try {
+          const newFixture = TestBed.createComponent(ComposerWorkspace);
+          newFixture.detectChanges();
+          await newFixture.whenStable();
+
+          const manager = newFixture.debugElement.injector.get(ComposerDockview);
+          const chatPanel = manager.api.getGroupPanel(ComposerPanelId.Chat);
+          const dataModelPanel = manager.api.getGroupPanel(ComposerPanelId.DataModel);
+          const renderedPanel = manager.api.getGroupPanel(ComposerPanelId.Rendered);
+
+          expect(chatPanel).toBeDefined();
+          expect(dataModelPanel).toBeDefined();
+          expect(renderedPanel).toBeDefined();
+
+          // Chat <= 1/3 of 1200 (400)
+          expect(chatPanel!.group.width).toBeLessThanOrEqual(400);
+
+          // Debug height ~28% of 900 (252), preview ~648
+          expect(dataModelPanel!.group.height).toBeLessThan(renderedPanel!.group.height);
+          expect(dataModelPanel!.group.height).toBeLessThanOrEqual(300);
+        } finally {
+          storageSpy.mockRestore();
+          widthSpy.mockRestore();
+          heightSpy.mockRestore();
+        }
+      });
     });
   });
 });

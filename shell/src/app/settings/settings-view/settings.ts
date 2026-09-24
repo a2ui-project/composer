@@ -17,6 +17,7 @@
 import {
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   OnInit,
@@ -25,6 +26,7 @@ import {
   untracked,
   WritableSignal,
 } from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule, NonNullableFormBuilder, ReactiveFormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
@@ -34,6 +36,7 @@ import {MatCardModule} from '@angular/material/card';
 import {MatChipsModule} from '@angular/material/chips';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {MatTooltipModule} from '@angular/material/tooltip';
+import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -43,7 +46,12 @@ import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tok
 import {SettingsService, RendererOption} from '../settings-service/settings.service';
 import {RendererSelectorComponent} from '../renderer-selector/renderer-selector';
 import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
-import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
+import {McpClientManagerService, McpServerConfig} from '../../mcp/mcp-client-manager.service';
+import {
+  McpServerDialogComponent,
+  McpServerDialogData,
+  McpServerDialogResult,
+} from './mcp-server-dialog/mcp-server-dialog';
 
 /**
  * Renders the user settings view, allowing configuration of target URL endpoints,
@@ -63,6 +71,7 @@ import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
     MatChipsModule,
     MatSlideToggleModule,
     MatTooltipModule,
+    MatDialogModule,
     RendererSelectorComponent,
     ApiKeySelectorComponent,
   ],
@@ -71,6 +80,8 @@ import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 })
 export class Settings implements OnInit {
   private readonly fb = inject(NonNullableFormBuilder);
+  private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly startupResolution = inject(StartupResolution);
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly hostCommunication = inject(HostCommunication);
@@ -78,8 +89,6 @@ export class Settings implements OnInit {
   private readonly configProvider = inject(AppConfigProvider);
   protected readonly settingsService = inject(SettingsService);
   protected readonly mcpManager = inject(McpClientManagerService);
-
-  readonly newMcpServerUrl = signal('');
 
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
@@ -173,11 +182,43 @@ export class Settings implements OnInit {
     this.isThirdParty.set(this.startupResolution.isThirdPartyEnvironment());
   }
 
-  async addMcpServer(): Promise<void> {
-    const url = this.newMcpServerUrl().trim();
-    if (!url) return;
-    this.newMcpServerUrl.set('');
-    await this.mcpManager.addServer(url);
+  openAddMcpServerDialog(): void {
+    const dialogRef = this.dialog.open<
+      McpServerDialogComponent,
+      McpServerDialogData,
+      McpServerDialogResult
+    >(McpServerDialogComponent, {
+      width: '450px',
+    });
+
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(result => {
+        if (result?.url) {
+          void this.mcpManager.addServer(result.url);
+        }
+      });
+  }
+
+  openEditMcpServerDialog(server: McpServerConfig): void {
+    const dialogRef = this.dialog.open<
+      McpServerDialogComponent,
+      McpServerDialogData,
+      McpServerDialogResult
+    >(McpServerDialogComponent, {
+      width: '450px',
+      data: {server},
+    });
+
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(result => {
+        if (result?.url) {
+          void this.mcpManager.updateServerUrl(server.id, result.url);
+        }
+      });
   }
 
   async removeMcpServer(id: string): Promise<void> {
@@ -188,7 +229,7 @@ export class Settings implements OnInit {
     await this.mcpManager.toggleServer(id, enabled);
   }
 
-  async reconnectMcpServer(id: string): Promise<void> {
-    await this.mcpManager.connectServer(id);
+  async testMcpServer(id: string): Promise<void> {
+    await this.mcpManager.testServer(id);
   }
 }

@@ -94,10 +94,10 @@ export default tseslint.config(
   // 4. Angular Sample Catalog Rules
   ...angular.configs.tsRecommended.map(c => ({
     ...c,
-    files: ['samples/ng-basic-catalog/**/*.ts', 'samples/ng-basic-with-mcp-catalog/**/*.ts'],
+    files: ['samples/ng-basic-catalog/**/*.ts'],
   })),
   {
-    files: ['samples/ng-basic-catalog/**/*.ts', 'samples/ng-basic-with-mcp-catalog/**/*.ts'],
+    files: ['samples/ng-basic-catalog/**/*.ts'],
     processor: angular.processInlineTemplates,
     rules: {
       '@angular-eslint/directive-selector': [
@@ -120,10 +120,10 @@ export default tseslint.config(
   },
   ...angular.configs.templateRecommended.map(c => ({
     ...c,
-    files: ['samples/ng-basic-catalog/**/*.html', 'samples/ng-basic-with-mcp-catalog/**/*.html'],
+    files: ['samples/ng-basic-catalog/**/*.html'],
   })),
   {
-    files: ['samples/ng-basic-catalog/**/*.html', 'samples/ng-basic-with-mcp-catalog/**/*.html'],
+    files: ['samples/ng-basic-catalog/**/*.html'],
     rules: {},
   },
 );

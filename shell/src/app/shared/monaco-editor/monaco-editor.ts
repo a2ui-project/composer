@@ -31,6 +31,7 @@ import {
 import loader from '@monaco-editor/loader';
 import type * as monaco from 'monaco-editor';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {generateUuid} from '../../utils/uuid';
 import {
   AppConfigProvider,
   ThemePreference,
@@ -92,7 +93,7 @@ function registerSurfaceThemes(monacoInstance: typeof monaco): void {
   styleUrl: './monaco-editor.scss',
 })
 export class MonacoEditor {
-  private readonly modelUri = 'inmemory://model/layout-' + crypto.randomUUID() + '.json';
+  private readonly modelUri = 'inmemory://model/layout-' + generateUuid() + '.json';
   readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
 
   readonly value = input<string>('');

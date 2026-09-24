@@ -19,6 +19,7 @@ import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
+import {Catalog} from '../storage/models/catalog-storage.model';
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
 
 export interface McpToolInfo {
@@ -62,6 +63,25 @@ export class McpClientManagerService {
         void this.connectServer(server.id);
       }
     }
+  }
+
+  /**
+   * Checks whether the active catalog includes `callMcpTool` to determine if the renderer supports MCP mode.
+   */
+  doesCatalogSupportMcp(catalog: Catalog | null | undefined): boolean {
+    if (!catalog) {
+      return false;
+    }
+    if (catalog.functions && 'callMcpTool' in catalog.functions) {
+      return true;
+    }
+    if (
+      catalog.$defs &&
+      ('callMcpTool' in catalog.$defs || 'catalog_callMcpTool' in catalog.$defs)
+    ) {
+      return true;
+    }
+    return false;
   }
 
   private loadFromStorage(): void {
@@ -121,6 +141,37 @@ export class McpClientManagerService {
     await this.connectServer(id);
   }
 
+  async updateServerUrl(id: string, url: string): Promise<void> {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) return;
+
+    const existing = this.servers().find(s => s.id === id);
+    if (!existing || existing.url === trimmedUrl) return;
+
+    this.servers.update(list =>
+      list.map(s =>
+        s.id === id
+          ? {
+              ...s,
+              name: trimmedUrl,
+              url: trimmedUrl,
+              status: 'disconnected',
+              errorMessage: undefined,
+              tools: [],
+            }
+          : s,
+      ),
+    );
+    this.persistServers();
+
+    await this.disconnectServer(id);
+
+    const updated = this.servers().find(s => s.id === id);
+    if (updated?.enabled) {
+      await this.connectServer(id);
+    }
+  }
+
   async removeServer(id: string): Promise<void> {
     await this.disconnectServer(id);
     this.servers.update(list => list.filter(s => s.id !== id));
@@ -134,6 +185,75 @@ export class McpClientManagerService {
       await this.connectServer(id);
     } else {
       await this.disconnectServer(id);
+    }
+  }
+
+  async testServer(id: string): Promise<void> {
+    const server = this.servers().find(s => s.id === id);
+    if (!server) return;
+
+    if (server.enabled) {
+      await this.connectServer(id);
+      return;
+    }
+
+    this.servers.update(list =>
+      list.map(s => (s.id === id ? {...s, status: 'connecting', errorMessage: undefined} : s)),
+    );
+
+    let client: Client | undefined;
+    try {
+      const transport = new StreamableHTTPClientTransport(new URL(server.url));
+      client = new Client({name: 'a2ui-composer', version: '1.0.0'});
+      await client.connect(transport);
+      const serverInfo = client.getServerVersion?.();
+      const rawName = serverInfo?.name;
+      const resolvedName =
+        (typeof rawName === 'string' ? rawName.trim() : '') || server.name || server.url;
+      const toolsRes = await client.listTools();
+      const discoveredTools: McpToolInfo[] = (toolsRes?.tools ?? []).map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema as Record<string, unknown> | undefined,
+        outputSchema: (t as unknown as {outputSchema?: Record<string, unknown>}).outputSchema,
+      }));
+
+      this.servers.update(list =>
+        list.map(s =>
+          s.id === id
+            ? {
+                ...s,
+                name: resolvedName,
+                status: 'connected',
+                errorMessage: undefined,
+                tools: discoveredTools,
+              }
+            : s,
+        ),
+      );
+      this.persistServers();
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.servers.update(list =>
+        list.map(s =>
+          s.id === id
+            ? {
+                ...s,
+                status: 'error',
+                errorMessage,
+                tools: [],
+              }
+            : s,
+        ),
+      );
+    } finally {
+      if (client) {
+        try {
+          await client.close();
+        } catch {
+          // Ignore close errors after test
+        }
+      }
     }
   }
 

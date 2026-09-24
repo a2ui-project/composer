@@ -17,7 +17,7 @@
 /**
  * A discrete skill, tool, or capability exposed by an A2A Agent.
  */
-export interface AgentSkill {
+export declare interface AgentSkill {
   /** Unique skill identifier. */
   id: string;
   /** Human-readable skill name. */
@@ -51,7 +51,7 @@ export interface AgentCapability {
 /**
  * Supported network interface exposed by an A2A Agent (v1.0 specification).
  */
-export interface AgentInterface {
+export declare interface AgentInterface {
   /** Target service endpoint URL for this interface. */
   url: string;
   /** Primary protocol binding (e.g. 'JSONRPC', 'HTTP_JSON', 'GRPC'). */
@@ -65,7 +65,7 @@ export interface AgentInterface {
  * Specification schema for an AgentCard manifest published by an A2A compliant service.
  * Supports both v0.3 (top-level 'url') and v1.0 ('supportedInterfaces') schemas.
  */
-export interface AgentCard {
+export declare interface AgentCard {
   /** Target service URL if different from discovery endpoint (v0.3 format). */
   url?: string;
   /** Supported protocol interfaces and endpoints exposed by the agent (v1.0 format). */
@@ -111,7 +111,7 @@ export interface AgentCard {
 /**
  * Tool call invocation inside an A2A message turn.
  */
-export interface A2aToolCall {
+export declare interface A2aToolCall {
   name: string;
   id?: string;
   args?: Record<string, unknown>;
@@ -121,7 +121,7 @@ export interface A2aToolCall {
 /**
  * Tool result return inside an A2A message turn.
  */
-export interface A2aToolResult {
+export declare interface A2aToolResult {
   name?: string;
   id?: string;
   result?: unknown;
@@ -132,7 +132,7 @@ export interface A2aToolResult {
 /**
  * Artifact payload attached or generated in an A2A task.
  */
-export interface A2aArtifact {
+export declare interface A2aArtifact {
   id?: string;
   artifactId?: string;
   name?: string;
@@ -152,7 +152,7 @@ export interface A2aArtifact {
  * - File (v0.3 nested): { file: { uri?: string, bytes?: string, mimeType?: string, name?: string } }
  * - Data part: { data: object }
  */
-export interface A2aPart {
+export declare interface A2aPart {
   /** Text content (v0.3 / v1.0). */
   text?: string;
   /** File URI oneof (v1.0 flat format). */
@@ -196,7 +196,7 @@ export interface A2aPart {
 /**
  * Message object exchanged within an A2A task session.
  */
-export interface A2aMessage {
+export declare interface A2aMessage {
   role: 'user' | 'agent' | 'assistant' | 'system' | 'ROLE_USER' | 'ROLE_AGENT' | string;
   parts: A2aPart[];
   contextId?: string;
@@ -421,7 +421,7 @@ export function isTerminalTaskState(stateOrEvent: unknown): boolean {
  * / Python SDKs) field names, as well as Protobuf StreamResponse oneof wrappers
  * (`task`, `status_update`, `artifact_update`).
  */
-export interface TaskStatusUpdateEvent {
+export declare interface TaskStatusUpdateEvent {
   kind?: 'task' | 'status-update' | 'artifact-update' | 'message' | string;
   id?: string;
   taskId?: string;

@@ -35,8 +35,14 @@ import {Catalog} from '../../storage/models/catalog-storage.model';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
 import {FailureParseResult} from '../a2ui-payload-parser/a2ui-payload-parser';
-import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {ComposerPanelId} from '../../shell/composer-workspace/composer-panel-id';
+import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
+import {
+  ChatPromptFactoryService,
+  CustomInstructionPreset,
+  CustomInstructionsState,
+} from '../chat-prompt-factory/chat-prompt-factory.service';
+import {CustomInstructionsDialogHarness} from '../custom-instructions-dialog/test/custom-instructions-dialog.harness';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -97,6 +103,22 @@ class MockChatCoordinator {
   cancelActiveStream = vi.fn();
 }
 
+class MockChatPromptFactoryService {
+  readonly systemPrompt = signal<string>('Initial system prompt instructions block');
+  readonly customInstructionsState = signal<CustomInstructionsState>({
+    presets: [],
+    activePresetId: null,
+  });
+  readonly activePreset = signal<CustomInstructionPreset | null>(null);
+  readonly hasCustomInstructions = signal<boolean>(false);
+  setCustomInstructionsState = vi.fn((state: CustomInstructionsState) => {
+    this.customInstructionsState.set(state);
+    const preset = state.presets.find(p => p.id === state.activePresetId) ?? null;
+    this.activePreset.set(preset);
+    this.hasCustomInstructions.set(!!preset && preset.content.trim().length > 0);
+  });
+}
+
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>({}); // non-null by default
 }
@@ -126,6 +148,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   let configProviderMock: MockAppConfigProvider;
   let hostCommunicationMock: MockHostCommunication;
   let screenshotServiceMock: ScreenshotCaptureService;
+  let promptFactoryMock: MockChatPromptFactoryService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -140,6 +163,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
         provideNoopAnimations(),
         provideRouter([]),
         {provide: ChatCoordinator, useClass: MockChatCoordinator},
+        {provide: ChatPromptFactoryService, useClass: MockChatPromptFactoryService},
         {provide: ChatState, useClass: MockChatState},
         {provide: CatalogManagement, useClass: MockCatalogManagement},
         {provide: StartupResolution, useClass: MockStartupResolution},
@@ -149,6 +173,9 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     }).compileComponents();
 
     chatServiceMock = TestBed.inject(ChatCoordinator) as unknown as MockChatCoordinator;
+    promptFactoryMock = TestBed.inject(
+      ChatPromptFactoryService,
+    ) as unknown as MockChatPromptFactoryService;
     chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
     catalogManagementServiceMock = TestBed.inject(
       CatalogManagement,
@@ -671,6 +698,57 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     const dialog = dialogs[0];
     expect(await dialog.getTitleText()).toBe('System Instructions');
+  });
+
+  it('renders custom instructions link and updates text based on active custom preset', async () => {
+    expect(await harness.hasCustomInstructionsLink()).toBe(true);
+    expect(await harness.getCustomInstructionsLinkText()).toBe('Custom Instructions');
+
+    promptFactoryMock.setCustomInstructionsState({
+      presets: [{id: 'preset-1', name: 'Concise Mode', content: 'Be concise'}],
+      activePresetId: 'preset-1',
+    });
+    fixture.detectChanges();
+
+    expect(await harness.getCustomInstructionsLinkText()).toBe('Custom Instructions: Concise Mode');
+  });
+
+  it('opens the custom instructions dialog when the custom instructions link is clicked', async () => {
+    expect(await harness.hasCustomInstructionsLink()).toBe(true);
+    const documentRootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
+
+    await harness.clickCustomInstructionsLink();
+    fixture.detectChanges();
+
+    const dialogs = await documentRootLoader.getAllHarnesses(MatDialogHarness);
+    expect(dialogs.length).toBe(1);
+
+    const dialog = dialogs[0];
+    expect(await dialog.getTitleText()).toBe('Custom Instructions');
+  });
+
+  it('saves updated custom instructions state to prompt factory when dialog saves', async () => {
+    const documentRootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
+    await harness.clickCustomInstructionsLink();
+    fixture.detectChanges();
+
+    const customDialog = await documentRootLoader.getHarness(CustomInstructionsDialogHarness);
+    await customDialog.setPresetName('Dark Theme');
+    await customDialog.setInstructions('Always generate dark theme.');
+    await customDialog.clickSave();
+    fixture.detectChanges();
+
+    expect(promptFactoryMock.setCustomInstructionsState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        presets: [
+          expect.objectContaining({
+            name: 'Dark Theme',
+            content: 'Always generate dark theme.',
+          }),
+        ],
+        activePresetId: expect.any(String),
+      }),
+    );
   });
 
   it('disables the Send button when the catalog handshake is pending, and enables it when complete', async () => {

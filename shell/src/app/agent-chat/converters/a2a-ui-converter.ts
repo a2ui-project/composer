@@ -24,7 +24,6 @@ import {generateUuid as uuid} from '../../utils/uuid';
 import {UiAgentInfo} from '../agent-header/types';
 import {MessageInspectorEvent} from '../message-inspector/message-inspector-event';
 import {inferMessageKind, validateMessage} from '../../chat/a2a/a2a-validators';
-import {A2aStreamEventParser, type ParsedA2aStreamEvent} from './a2a-stream-event-parser.service';
 
 /**
  * Brand asset icon URL for A2A Protocol representations.
@@ -157,15 +156,4 @@ export function createErrorEvent(err: unknown): MessageInspectorEvent {
     payload: err instanceof Error ? {message: err.message, stack: err.stack, name: err.name} : err,
     validationErrors: [msg],
   };
-}
-
-const defaultStreamEventParser = new A2aStreamEventParser();
-
-/**
- * Parses an incoming TaskStatusUpdateEvent into textual chunks, thoughts, and layout items.
- */
-export function parseA2aStreamEvent(
-  event: TaskStatusUpdateEvent | Record<string, unknown>,
-): ParsedA2aStreamEvent {
-  return defaultStreamEventParser.parse(event);
 }

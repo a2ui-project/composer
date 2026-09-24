@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {inject, Injectable} from '@angular/core';
 import {RenderA2uiItem} from 'a2ui-bridge';
 
 import {renderBase64Data, renderMultimediaContent} from '../../chat/a2a/a2a-media';
@@ -28,6 +28,7 @@ import {
   normalizeTaskState,
   TaskStatusUpdateEvent,
 } from '../../chat/a2a/a2a-types';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {UiToolCall} from '../chat-message/types';
 import {asRecord} from '../../utils/json';
 
@@ -163,6 +164,8 @@ export interface ParsedA2aStreamEvent {
   providedIn: 'root',
 })
 export class A2aStreamEventParser {
+  private readonly errorLogger = inject(ErrorLogger);
+
   /**
    * Parses an incoming TaskStatusUpdateEvent into textual chunks, thoughts, and layout items.
    */
@@ -552,7 +555,7 @@ export class A2aStreamEventParser {
         : [];
 
     // Extract declarative A2UI items
-    const a2uiNormalized = normalizeA2uiItems(items);
+    const a2uiNormalized = normalizeA2uiItems(items, this.errorLogger);
     if (a2uiNormalized.length > 0) {
       result.a2uiItems.push(...a2uiNormalized);
     }
@@ -602,11 +605,14 @@ export class A2aStreamEventParser {
       return {unwrappedData: data, isMedia: false};
     }
 
-    const envelope = data as {mimeType?: string; data?: unknown; name?: string};
+    const envelope = data as Record<string, unknown>;
+    const rawData = envelope['data'];
+    const rawMimeType = typeof envelope['mimeType'] === 'string' ? envelope['mimeType'] : undefined;
+    const rawName = typeof envelope['name'] === 'string' ? envelope['name'] : undefined;
 
     // Case 1: Stringified JSON (e.g. a serialized A2UI component list or action)
-    if (typeof envelope.data === 'string') {
-      const trimmed = envelope.data.trim();
+    if (typeof rawData === 'string') {
+      const trimmed = rawData.trim();
       if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
         try {
           return {unwrappedData: JSON.parse(trimmed), isMedia: false};
@@ -618,8 +624,8 @@ export class A2aStreamEventParser {
     }
 
     // Case 2: Base64 media data payload (image, audio, video, PDF)
-    if (envelope.mimeType && typeof envelope.data === 'string') {
-      const mime = envelope.mimeType.toLowerCase();
+    if (rawMimeType && typeof rawData === 'string') {
+      const mime = rawMimeType.toLowerCase();
       if (
         mime.startsWith('image/') ||
         mime.startsWith('audio/') ||
@@ -627,15 +633,14 @@ export class A2aStreamEventParser {
         mime === 'application/pdf'
       ) {
         result.textChunk =
-          (result.textChunk || '') +
-          renderBase64Data(envelope.data, envelope.mimeType, envelope.name);
-        return {unwrappedData: envelope.data, isMedia: true};
+          (result.textChunk || '') + renderBase64Data(rawData, rawMimeType, rawName);
+        return {unwrappedData: rawData, isMedia: true};
       }
     }
 
     // Case 3: Inner data payload
-    if (envelope.data !== undefined) {
-      return {unwrappedData: envelope.data, isMedia: false};
+    if (rawData !== undefined) {
+      return {unwrappedData: rawData, isMedia: false};
     }
 
     return {unwrappedData: data, isMedia: false};

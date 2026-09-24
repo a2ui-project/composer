@@ -92,11 +92,11 @@ flowchart TD
 The ecosystem is architected as a modular, highly cohesive monorepo utilizing
 **Yarn v4 Workspaces**:
 
-| Workspace      | Package Name                                                                                      | Description & Core Responsibilities                                                                                                                                                                      |
-| :------------- | :------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`shell/`**   | `a2ui-composer-shell`                                                                             | Standalone web application hosting chat panel, live JSON editors, real-time iframe preview wrapper, debugging suite, interactive mock rules manager, and IndexedDB storage engines.                      |
-| **`bridge/`**  | `a2ui-bridge`                                                                                     | ESBuild-bundled lightweight cross-frame JavaScript library embedded inside child rendering iframes.                                                                                                      |
-| **`samples/`** | `ng-basic-catalog`<br>`ng-basic-with-mcp-catalog`<br>`lit-basic-catalog`<br>`react-basic-catalog` | Plug-and-play developer renderer sandbox applications demonstrating zero-boilerplate integration across Lit, Angular, and React rendering stacks, plus an Angular renderer with MCP catalog integration. |
+| Workspace      | Package Name                                                       | Description & Core Responsibilities                                                                                                                                                 |
+| :------------- | :----------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`shell/`**   | `a2ui-composer-shell`                                              | Standalone web application hosting chat panel, live JSON editors, real-time iframe preview wrapper, debugging suite, interactive mock rules manager, and IndexedDB storage engines. |
+| **`bridge/`**  | `a2ui-bridge`                                                      | ESBuild-bundled lightweight cross-frame JavaScript library embedded inside child rendering iframes.                                                                                 |
+| **`samples/`** | `ng-basic-catalog`<br>`lit-basic-catalog`<br>`react-basic-catalog` | Plug-and-play developer renderer sandbox applications demonstrating zero-boilerplate integration across Lit, Angular, and React rendering stacks.                                   |
 
 ## Getting Started
 
@@ -118,19 +118,13 @@ yarn install
 #   ng-basic-catalog starts on localhost:3456
 #   lit-basic-catalog starts on localhost:3457
 #   react-basic-catalog starts on localhost:3458
-#   ng-basic-with-mcp-catalog starts on localhost:3459
 yarn --cwd samples/ng-basic-catalog start
 yarn --cwd samples/lit-basic-catalog start
 yarn --cwd samples/react-basic-catalog start
-yarn --cwd samples/ng-basic-with-mcp-catalog start
 
 # Launch standalone interactive development shell on http://localhost:4200
 yarn --cwd shell start
 ```
-
-### Angular Basic with MCP Renderer (`ng-basic-with-mcp-catalog`)
-
-`samples/ng-basic-with-mcp-catalog` provides a standalone Angular renderer configured with the `basic_with_mcp` catalog (`https://a2ui.org/specification/v0_9/catalogs/basic_with_mcp/catalog.json`). Unlike the standard basic catalog renderers (`ng-basic-catalog`, `lit-basic-catalog`, and `react-basic-catalog`), this renderer exposes the Model Context Protocol (**MCP**) catalog functions (`callMcpTool`, `jmespath`, `split`, `regexCapture`, `regexReplace`, and `updateDataModel`). When selected in Settings alongside active HTTP MCP servers, the Gemini assistant automatically includes the discovered MCP tools in its system instructions so generated A2UI surfaces can invoke live MCP tools directly.
 
 When the A2UI Composer starts, if this is your first time using it, you'll be
 automatically routed to the Settings page, where you will need to enter the URL
@@ -226,6 +220,53 @@ gh run download "$RUN_ID" --name visual-baselines --dir shell/src
 ```
 
 Commit the PNGs it produces alongside the change.
+
+## GA4 Telemetry & Custom Dimensions Provisioning
+
+A2UI Composer integrates Google Analytics 4 (GA4) with custom dimensions and custom metrics to monitor user workflows, catalog usage, prompt turns, and client-side error telemetry.
+
+Custom dimensions and metrics must be registered in the target GA4 property before they can be queried in GA4 Explorations and custom reports.
+
+### Provisioning Dimensions & Metrics via Script
+
+The script `scripts/create_ga4_dimensions.sh` idempotently registers all custom dimensions and custom metrics in GA4 Property `549078235` (or any configured property ID) via the Google Analytics Admin API (`v1beta`).
+
+#### Option A: Authenticate via `gcloud`
+
+```bash
+# Log in with the required Google Analytics Edit scope:
+gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.edit,https://www.googleapis.com/auth/cloud-platform
+
+# Run the provisioning script:
+./scripts/create_ga4_dimensions.sh
+```
+
+#### Option B: Authenticate via Google OAuth 2.0 Playground (No `gcloud` Required)
+
+If `gcloud` is not installed or you prefer browser-based authentication:
+
+1. Open [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground/).
+2. In **Step 1 (Select & authorize APIs)**, input `https://www.googleapis.com/auth/analytics.edit` and click **Authorize APIs**.
+3. In **Step 2 (Exchange authorization code for tokens)**, click **Exchange authorization code for tokens** and copy the **Access token**.
+4. Run the provisioning script with the access token:
+   ```bash
+   ACCESS_TOKEN="<your_access_token>" ./scripts/create_ga4_dimensions.sh
+   ```
+
+### Synchronizing Dimensions & Metrics from Source Code
+
+When adding new telemetry events or parameters to `shell/src/app/usage-tracking/ga4-usage-tracking.service.ts`, use `scripts/update_ga4_dimensions.mjs` to keep `scripts/create_ga4_dimensions.sh` synchronized with the codebase:
+
+```bash
+# Automatically scan source code and add newly discovered dimensions/metrics:
+node scripts/update_ga4_dimensions.mjs
+
+# Dry-run mode (preview changes without writing to disk):
+node scripts/update_ga4_dimensions.mjs --dry-run
+
+# Verification mode (returns exit code 1 if definitions are out of date):
+node scripts/update_ga4_dimensions.mjs --check
+```
 
 ## License
 

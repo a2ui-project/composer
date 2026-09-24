@@ -79,7 +79,7 @@ mat-form-field {
 }
 
 .overlay-logs {
-  h4 {
+  h3 {
     margin-bottom: 8px;
     font-size: 14px;
   }
@@ -164,23 +164,38 @@ mat-card-header {
   padding-bottom: 12px;
 }
 
-.mcp-add-row {
+.mcp-card-header {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
-  align-items: center;
-  margin-top: 16px;
 
-  .mcp-url-field {
+  ::ng-deep .mat-mdc-card-header-text {
+    display: none;
+  }
+
+  .mcp-header-text {
     flex: 1;
+    min-width: 0;
   }
 
   .mcp-add-btn {
-    height: 56px;
-    padding: 0 24px;
-    border-radius: 8px;
-    white-space: nowrap;
     flex-shrink: 0;
+    margin-top: -4px;
+    margin-right: -8px;
   }
+}
+
+.mcp-empty-state {
+  margin-top: 16px;
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--mat-sys-on-surface-variant);
+  border-radius: 8px;
+  border: 1px dashed var(--mat-sys-outline-variant);
+  background-color: var(--mat-sys-surface-container-lowest);
 }
 
 .mcp-server-list {
@@ -223,7 +238,7 @@ mat-card-header {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 2px;
+  gap: 4px;
 }
 
 .mcp-server-header {
@@ -234,9 +249,12 @@ mat-card-header {
 }
 
 .mcp-server-name {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 14px;
   color: var(--mat-sys-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mcp-server-status {

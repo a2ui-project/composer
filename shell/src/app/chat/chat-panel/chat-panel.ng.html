@@ -290,6 +290,13 @@
               Instructions
             }
           </button>
+          <button type="button" class="custom-instructions-link" (click)="showCustomInstructions()">
+            @if (hasCustomInstructions()) {
+              Custom Instructions: {{ activeCustomPreset()?.name }}
+            } @else {
+              Custom Instructions
+            }
+          </button>
         </div>
         @if (isLocked()) {
           <button

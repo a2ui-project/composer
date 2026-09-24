@@ -46,8 +46,36 @@ declare global {
 }
 
 /**
+ * Key used to persist the GA4 client ID in localStorage.
+ *
+ * Storing the client ID in origin-isolated localStorage ensures persistent user identification
+ * across browser sessions. Unlike cookies on shared parent domains (such as `.corp.google.com`),
+ * localStorage is strictly origin-isolated (scoped to `a2ui-composer.corp.google.com`), making it
+ * immune to cross-app cookie collisions, overwrites, or Chrome's 180-cookie-per-domain eviction limit.
+ */
+export const LOCAL_STORAGE_CLIENT_ID_KEY = 'a2ui_ga4_client_id';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
  * Google Analytics 4 implementation of UsageTrackingService with safe script injection
  * and baseline dimensions enrichment.
+ *
+ * ### Custom Dimensions & Metrics Provisioning
+ * All custom event parameters emitted by this service must be provisioned as Custom Dimensions
+ * or Custom Metrics in the target GA4 property to be visible in GA4 reports and explorations.
+ *
+ * - Use `scripts/create_ga4_dimensions.sh` to idempotently provision all dimensions and metrics
+ *   via the GA4 Admin API (`v1beta`).
+ *   - Authenticate with `gcloud`:
+ *     `gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.edit,https://www.googleapis.com/auth/cloud-platform`
+ *   - Or authenticate without `gcloud` using Google OAuth 2.0 Playground:
+ *     Authorize `https://www.googleapis.com/auth/analytics.edit`, exchange for an access token,
+ *     and run `ACCESS_TOKEN="<token>" ./scripts/create_ga4_dimensions.sh`.
+ *
+ * - Use `scripts/update_ga4_dimensions.mjs` to automatically scan this service for new
+ *   event parameters and update `scripts/create_ga4_dimensions.sh` (with `--check` and `--dry-run`
+ *   flags available for automated CI verification and change previews).
  */
 @Injectable({
   providedIn: 'root',
@@ -60,7 +88,24 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly document = inject(DOCUMENT);
 
+  /**
+   * Ephemeral session identifier generated per tab load and regenerated upon workspace reset.
+   *
+   * NOTE: This is distinct from GA4's `client_id`. `composer_session_id` is sent solely as a
+   * custom event parameter (via `getBaselineDimensions()`) to correlate turns and interactions
+   * within a single Composer workspace run, whereas `client_id` tracks persistent unique users/devices
+   * across multiple visits over time.
+   */
   private _composerSessionId: string = generateUuid();
+
+  /**
+   * In-memory cache for the resolved persistent client ID.
+   *
+   * Guarantees idempotency on this service instance, ensuring repeated calls return the identical
+   * UUID even in sandboxed iframes or restricted environments where accessing `localStorage` throws
+   * a `SecurityError`.
+   */
+  private _persistentClientId?: string;
 
   get composerSessionId(): string {
     return this._composerSessionId;
@@ -68,6 +113,43 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
 
   resetSession(): void {
     this._composerSessionId = generateUuid();
+  }
+
+  /**
+   * Retrieves, validates, or generates the persistent client ID stored in localStorage.
+   *
+   * LocalStorage is origin-isolated, preventing returning users from being treated as new visitors
+   * due to cookie churn or eviction on shared domains. Validates existing values against a strict
+   * UUID v4 regex to prevent poisoned or malformed data. If localStorage throws a `SecurityError`
+   * (e.g. in restricted iframes or sandboxed environments), gracefully falls back to a generated
+   * UUID and caches it in `_persistentClientId` for in-memory session stability.
+   */
+  private getOrCreatePersistentClientId(): string {
+    if (this._persistentClientId) {
+      return this._persistentClientId;
+    }
+
+    const windowObj = this.document.defaultView;
+    try {
+      const storage =
+        windowObj?.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null);
+      if (storage) {
+        const storedId = storage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY);
+        if (storedId && UUID_REGEX.test(storedId.trim())) {
+          this._persistentClientId = storedId.trim();
+          return this._persistentClientId;
+        }
+        const newId = generateUuid();
+        storage.setItem(LOCAL_STORAGE_CLIENT_ID_KEY, newId);
+        this._persistentClientId = newId;
+        return this._persistentClientId;
+      }
+    } catch {
+      // LocalStorage might throw SecurityError in restricted iframe or sandbox contexts.
+    }
+
+    this._persistentClientId = generateUuid();
+    return this._persistentClientId;
   }
 
   initialize(): void {
@@ -103,9 +185,32 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     }
   }
 
+  /**
+   * Configuration options passed to `gtag('config', measurementId, options)`.
+   *
+   * Includes essential safeguards against cookie churn and multi-app collisions:
+   * - `send_page_view: false`: Disables gtag.js's automatic initial `page_view` so events are dispatched
+   *   explicitly via Angular Router / `trackPageView()` with custom baseline dimensions attached.
+   * - `cookie_prefix: 'a2ui_composer'`: Prefixes GA4 cookies (e.g. `a2ui_composer_ga` instead of `_ga`)
+   *   to prevent collisions or overwrites with other applications sharing the parent domain.
+   * - `cookie_domain: hostname || 'auto'`: Locks cookies to the exact application hostname (e.g.
+   *   `a2ui-composer.corp.google.com`) rather than defaulting to `'auto'` (which writes to the shared
+   *   `.corp.google.com` superdomain where Chrome's 180-cookie limit frequently evicts cookies).
+   * - `client_id: this.getOrCreatePersistentClientId()`: Supplies the origin-isolated `localStorage` UUID
+   *   so returning users on the same browser are consistently counted as the same unique user even if
+   *   browser cookies are cleared or evicted.
+   */
   protected getConfigOptions(): Record<string, unknown> {
+    const hostname = this.document.defaultView?.location?.hostname;
     return {
+      // Disable automatic page view so trackPageView() can attach baseline dimensions.
       ['send_page_view']: false,
+      // Prefix cookies to avoid collisions with other apps sharing parent domains (e.g. .corp.google.com).
+      ['cookie_prefix']: 'a2ui_composer',
+      // Lock cookies to the exact hostname rather than writing to .corp.google.com superdomain.
+      ['cookie_domain']: hostname || 'auto',
+      // Supply stable, origin-isolated client ID from localStorage to survive cookie eviction.
+      ['client_id']: this.getOrCreatePersistentClientId(),
     };
   }
 

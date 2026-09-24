@@ -17,6 +17,7 @@
 import {
   Component,
   computed,
+  DestroyRef,
   Directive,
   effect,
   ElementRef,
@@ -24,6 +25,7 @@ import {
   input,
   signal,
 } from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FileIngestionService, AttachedFile} from '../file-ingestion/file-ingestion.service';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
@@ -38,7 +40,6 @@ import {HostCommunication} from '../../shell/host-communication/host-communicati
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {doesCatalogSupportMcp} from '../../storage/models/catalog-storage.model';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
 import {
   FailureParseResult,
@@ -50,6 +51,11 @@ import {ChatState} from '../chat-state/chat-state';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
+import {CustomInstructionsDialog} from '../custom-instructions-dialog/custom-instructions-dialog';
+import {
+  ChatPromptFactoryService,
+  CustomInstructionsState,
+} from '../chat-prompt-factory/chat-prompt-factory.service';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 
 /**
@@ -97,6 +103,7 @@ export class AutoScroll {
   styleUrl: './chat-panel.scss',
 })
 export class ChatPanel {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly chatCoordinator = inject(ChatCoordinator);
   private readonly chatCleaner = inject(ChatCleaner);
   private readonly chatState = inject(ChatState);
@@ -107,11 +114,12 @@ export class ChatPanel {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly fileIngestionService = inject(FileIngestionService);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
+  private readonly promptFactory = inject(ChatPromptFactoryService);
   protected readonly mcpManager = inject(McpClientManagerService);
 
   protected readonly includeScreenshot = signal<boolean>(false);
   protected readonly isMcpSupported = computed(() =>
-    doesCatalogSupportMcp(this.catalogManagement.activeCatalog()),
+    this.mcpManager.doesCatalogSupportMcp(this.catalogManagement.activeCatalog()),
   );
   protected readonly activeMcpServerCount = computed(
     () => this.mcpManager.getActiveServersWithTools().length,
@@ -126,6 +134,8 @@ export class ChatPanel {
    * text.
    */
   protected readonly systemPrompt = this.chatCoordinator.systemPrompt;
+  protected readonly hasCustomInstructions = this.promptFactory.hasCustomInstructions;
+  protected readonly activeCustomPreset = this.promptFactory.activePreset;
   protected readonly isHandshakeComplete = computed(
     () => this.catalogManagement.activeCatalog() !== null,
   );
@@ -341,6 +351,26 @@ export class ChatPanel {
       data: this.chatCoordinator.systemPrompt(),
       maxWidth: '90vw',
     });
+  }
+
+  /**
+   * Opens the custom instructions configuration modal dialog.
+   */
+  protected showCustomInstructions(): void {
+    const dialogRef = this.dialog.open(CustomInstructionsDialog, {
+      data: this.promptFactory.customInstructionsState(),
+      width: '600px',
+      maxWidth: '90vw',
+    });
+
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((result: CustomInstructionsState | undefined) => {
+        if (result) {
+          this.promptFactory.setCustomInstructionsState(result);
+        }
+      });
   }
 
   /**

@@ -18,7 +18,7 @@ import {DOCUMENT} from '@angular/common';
 import {signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   AppConfigProvider,
   EnvMode,
@@ -28,7 +28,7 @@ import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
-import {Ga4UsageTrackingService} from './ga4-usage-tracking.service';
+import {Ga4UsageTrackingService, LOCAL_STORAGE_CLIENT_ID_KEY} from './ga4-usage-tracking.service';
 import {
   ApiKeyAction,
   PromptTurnType,
@@ -42,6 +42,8 @@ describe('Ga4UsageTrackingService', () => {
   let mockWindow: {
     dataLayer: unknown[];
     gtag?: (...args: unknown[]) => void;
+    location?: Partial<Location>;
+    localStorage?: Storage;
   };
   let mockDocument: Partial<Document>;
 
@@ -63,11 +65,17 @@ describe('Ga4UsageTrackingService', () => {
   };
 
   beforeEach(() => {
+    localStorage.clear();
+
     mockWindow = {
       dataLayer: [],
       gtag: vi.fn((...args: unknown[]) => {
         mockWindow.dataLayer.push(args);
       }),
+      location: {
+        hostname: 'a2ui-composer.corp.google.com',
+      } as Location,
+      localStorage: window.localStorage,
     };
 
     mockDocument = {
@@ -97,6 +105,11 @@ describe('Ga4UsageTrackingService', () => {
     service = TestBed.inject(Ga4UsageTrackingService);
   });
 
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
   it('initializes gtag dataLayer and appends script tag when enabled', () => {
     service.initialize();
     expect(mockWindow.dataLayer.length).toBeGreaterThanOrEqual(1);
@@ -117,6 +130,109 @@ describe('Ga4UsageTrackingService', () => {
       mockWindow.dataLayer[mockWindow.dataLayer.length - 1] as ArrayLike<unknown>,
     );
     expect(lastPushed).toEqual(['event', 'test_event', {key: 'value'}]);
+  });
+
+  it('configures gtag with isolated cookie prefix and hostname in getConfigOptions', () => {
+    service.initialize();
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'config',
+      'G-TEST1234',
+      expect.objectContaining({
+        send_page_view: false,
+        cookie_prefix: 'a2ui_composer',
+        cookie_domain: 'a2ui-composer.corp.google.com',
+      }),
+    );
+  });
+
+  it('generates and persists valid UUID client_id in localStorage when empty', () => {
+    expect(localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY)).toBeNull();
+    service.initialize();
+    const storedId = localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY);
+    expect(storedId).toBeTruthy();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    expect(storedId).toMatch(uuidRegex);
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'config',
+      'G-TEST1234',
+      expect.objectContaining({
+        client_id: storedId,
+      }),
+    );
+  });
+
+  it('reuses existing persistent client_id from localStorage when valid', () => {
+    const existingId = '22222222-2222-4222-8222-222222222222';
+    localStorage.setItem(LOCAL_STORAGE_CLIENT_ID_KEY, existingId);
+    service.initialize();
+    expect(localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY)).toBe(existingId);
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'config',
+      'G-TEST1234',
+      expect.objectContaining({
+        client_id: existingId,
+      }),
+    );
+  });
+
+  it('regenerates and replaces client_id if existing localStorage value is malformed', () => {
+    localStorage.setItem(LOCAL_STORAGE_CLIENT_ID_KEY, 'corrupted<script>');
+    service.initialize();
+    const storedId = localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY);
+    expect(storedId).not.toBe('corrupted<script>');
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    expect(storedId).toMatch(uuidRegex);
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'config',
+      'G-TEST1234',
+      expect.objectContaining({
+        client_id: storedId,
+      }),
+    );
+  });
+
+  it('does not set client_id to ephemeral composerSessionId', () => {
+    service.initialize();
+    const calls = (mockWindow.gtag as ReturnType<typeof vi.fn>).mock.calls;
+    const configCall = calls.find(call => call[0] === 'config');
+    expect(configCall).toBeDefined();
+    const configOptions = configCall![2] as Record<string, unknown>;
+    expect(configOptions['client_id']).toBeDefined();
+    expect(configOptions['client_id']).not.toBe(service.composerSessionId);
+  });
+
+  it('falls back to auto cookie_domain when hostname is unavailable', () => {
+    mockDocument.defaultView = {
+      ...mockWindow,
+      location: undefined,
+    } as unknown as Window;
+    service.initialize();
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'config',
+      'G-TEST1234',
+      expect.objectContaining({
+        cookie_domain: 'auto',
+      }),
+    );
+  });
+
+  it('falls back to generated UUID without throwing if localStorage throws SecurityError', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError: Access is denied');
+    });
+    expect(() => service.initialize()).not.toThrow();
+    const calls = (mockWindow.gtag as ReturnType<typeof vi.fn>).mock.calls;
+    const configCall = calls.find(call => call[0] === 'config');
+    expect(configCall).toBeDefined();
+    const configOptions = configCall![2] as Record<string, unknown>;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    expect(configOptions['client_id']).toMatch(uuidRegex);
+
+    // Verify in-memory caching ensures idempotency on the same service instance
+    const secondConfig = (
+      service as unknown as {getConfigOptions: () => Record<string, unknown>}
+    ).getConfigOptions();
+    expect(secondConfig['client_id']).toBe(configOptions['client_id']);
   });
 
   it('resets session uuid when resetSession is called', () => {

@@ -5996,7 +5996,7 @@ __metadata:
     typescript: "npm:6.0.3"
     typescript-eslint: "npm:8.65.0"
     vitest: "npm:4.1.11"
-    zod: "npm:^4.1.12"
+    zod: "npm:4.6.5"
   peerDependencies:
     "@angular/core": 22.0.7
     lit: 3.3.3
@@ -6052,7 +6052,7 @@ __metadata:
     "@vitest/coverage-v8": "npm:4.1.10"
     a2ui-bridge: "npm:0.1.0"
     angular-eslint: "npm:22.1.0"
-    dockview: "npm:7.0.3"
+    dockview-core: "npm:7.0.3"
     dompurify: "npm:3.4.14"
     eslint: "npm:10.7.0"
     jsdom: "npm:29.1.1"
@@ -7268,19 +7268,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"dockview-core@npm:^7.0.3":
+"dockview-core@npm:7.0.3":
   version: 7.0.3
   resolution: "dockview-core@npm:7.0.3"
   checksum: 10c0/11805b9378c1798027c956b3935ad9ee1b6a46dd1d0bbb43ead4d5152863991de073fd78f6f723cc1393ca741299b12130a530b4b9837e278158e7fc0b993051
-  languageName: node
-  linkType: hard
-
-"dockview@npm:7.0.3":
-  version: 7.0.3
-  resolution: "dockview@npm:7.0.3"
-  dependencies:
-    dockview-core: "npm:^7.0.3"
-  checksum: 10c0/1b6d48b9fdb35f3da626208e84cd6cb2c48891dcc860ab928f7b4edc483d965d5cc8b202962838185272ba2ec8e6d2a2e6b3bf2f52bcd01d09dd22d2ef4bca13
   languageName: node
   linkType: hard
 
@@ -10201,40 +10192,6 @@ __metadata:
     "@angular/animations": "npm:22.0.7"
     "@angular/build": "npm:22.0.7"
     "@angular/cdk": "npm:22.0.5"
-    "@angular/cli": "npm:22.0.7"
-    "@angular/common": "npm:22.0.7"
-    "@angular/compiler": "npm:22.0.7"
-    "@angular/compiler-cli": "npm:22.0.7"
-    "@angular/core": "npm:22.0.7"
-    "@angular/forms": "npm:22.0.7"
-    "@angular/platform-browser": "npm:22.0.7"
-    "@angular/platform-browser-dynamic": "npm:22.0.7"
-    "@angular/router": "npm:22.0.7"
-    "@types/jsdom": "npm:28.0.3"
-    a2ui-bridge: "npm:0.1.0"
-    angular-eslint: "npm:22.1.0"
-    eslint: "npm:10.7.0"
-    jsdom: "npm:29.1.1"
-    prettier: "npm:3.9.6"
-    rxjs: "npm:7.8.2"
-    tslib: "npm:2.8.1"
-    typescript: "npm:6.0.3"
-    typescript-eslint: "npm:8.65.0"
-    vitest: "npm:4.1.11"
-  languageName: unknown
-  linkType: soft
-
-"ng-basic-with-mcp-catalog@workspace:samples/ng-basic-with-mcp-catalog":
-  version: 0.0.0-use.local
-  resolution: "ng-basic-with-mcp-catalog@workspace:samples/ng-basic-with-mcp-catalog"
-  dependencies:
-    "@a2ui/angular": "npm:0.10.4"
-    "@a2ui/markdown-it": "npm:0.1.0"
-    "@a2ui/web_core": "npm:0.10.5"
-    "@analogjs/vite-plugin-angular": "npm:2.6.3"
-    "@angular-devkit/build-angular": "npm:22.0.7"
-    "@angular/animations": "npm:22.0.7"
-    "@angular/build": "npm:22.0.7"
     "@angular/cli": "npm:22.0.7"
     "@angular/common": "npm:22.0.7"
     "@angular/compiler": "npm:22.0.7"
@@ -13658,16 +13615,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"zod@npm:4.6.5":
+  version: 4.6.5
+  resolution: "zod@npm:4.6.5"
+  checksum: 10c0/32eb6c5e98becbe045675b2141c3611451c16ba567f9779231d79af41c4d651ca1c22f154aef7e6c6e77b929f23e43f1154ca05b82e119e922353725d6776af5
+  languageName: node
+  linkType: hard
+
 "zod@npm:^3.25.76":
   version: 3.25.76
   resolution: "zod@npm:3.25.76"
   checksum: 10c0/5718ec35e3c40b600316c5b4c5e4976f7fee68151bc8f8d90ec18a469be9571f072e1bbaace10f1e85cf8892ea12d90821b200e980ab46916a6166a4260a983c
-  languageName: node
-  linkType: hard
-
-"zod@npm:^4.1.12":
-  version: 4.6.5
-  resolution: "zod@npm:4.6.5"
-  checksum: 10c0/32eb6c5e98becbe045675b2141c3611451c16ba567f9779231d79af41c4d651ca1c22f154aef7e6c6e77b929f23e43f1154ca05b82e119e922353725d6776af5
   languageName: node
   linkType: hard

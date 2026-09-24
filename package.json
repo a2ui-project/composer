@@ -4,7 +4,6 @@
   "workspaces": [
     "shell",
     "samples/ng-basic-catalog",
-    "samples/ng-basic-with-mcp-catalog",
     "samples/lit-basic-catalog",
     "samples/react-basic-catalog",
     "bridge"

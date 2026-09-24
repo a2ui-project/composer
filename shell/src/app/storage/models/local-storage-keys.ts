@@ -50,6 +50,8 @@ export enum LocalStorageKey {
   A2A_BACKEND_MODE = 'a2ui_composer_a2a_backend_mode',
   /** Key for storing configured MCP servers. */
   MCP_SERVERS = 'a2ui_composer_mcp_servers',
+  /** Key for storing user custom instruction presets and active preset selection. */
+  CUSTOM_INSTRUCTIONS = 'a2ui_composer_custom_instructions',
 
   /** @deprecated Key for retrieving the active workspace prompt in-progress draft content. */
   ACTIVE_DRAFT = 'a2ui_composer_active_draft',

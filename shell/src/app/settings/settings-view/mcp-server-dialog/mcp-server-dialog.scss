@@ -14,5 +14,18 @@
  * limitations under the License.
  */
 
-declare const catalogJson: unknown;
-export default catalogJson;
+mat-dialog-content {
+  padding-top: 12px;
+}
+
+.full-width {
+  width: 100%;
+  margin-bottom: 12px;
+  margin-top: 4px;
+}
+
+.error-message {
+  color: var(--mat-sys-error, #b3261e);
+  font-size: 0.875rem;
+  margin-top: 8px;
+}

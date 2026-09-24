@@ -195,7 +195,7 @@ export class Standalone3pLlmClient extends LlmClient {
     const {systemInstruction, contents} = this.parseMessages(messages);
     const config = this.buildGenerateContentConfig(systemInstruction, abortSignal);
     return {
-      model: 'gemini-3.7-flash',
+      model: 'gemini-flash-latest',
       contents,
       config,
     };

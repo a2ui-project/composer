@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
+import {TestBed} from '@angular/core/testing';
 import {RenderA2uiItem} from 'a2ui-bridge';
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {
   hasA2uiCanvasComponent,
   isA2uiItem,
@@ -521,6 +523,44 @@ describe('SurfacePartitioner', () => {
       expect(
         partitioned.inlinePayload?.some(item => item.deleteSurface?.surfaceId === 'surf-old'),
       ).toBe(true);
+    });
+  });
+
+  describe('legacy v0.8 update operation diagnostics', () => {
+    const legacyItem = {beginRendering: {surfaceId: 's1'}};
+    let errorLogger: ErrorLogger;
+
+    beforeEach(() => {
+      TestBed.configureTestingModule({});
+      errorLogger = TestBed.inject(ErrorLogger);
+    });
+
+    it('reports an item with legacy v0.8 update keys to the error logger', () => {
+      const warn = vi.spyOn(errorLogger, 'warn');
+
+      const normalized = normalizeA2uiItems(
+        [
+          legacyItem,
+          {name: 'show_vacation_booking_form', args: {}},
+          {createSurface: {surfaceId: 's2', catalogId: 'c1'}},
+        ],
+        errorLogger,
+      );
+
+      expect(normalized.length).toBe(1);
+      expect(normalized[0].createSurface?.surfaceId).toBe('s2');
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        {
+          message: 'Discarded legacy A2UI v0.8 payload; Composer requires v0.9.',
+          sourceTag: '[A2UI]',
+        },
+        legacyItem,
+      );
+    });
+
+    it('discards the item without throwing when no error logger is supplied', () => {
+      expect(normalizeA2uiItems([legacyItem])).toEqual([]);
     });
   });
 

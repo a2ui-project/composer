@@ -77,6 +77,12 @@ export class ChatCoordinator {
   /** Turn index counter for telemetry. */
   readonly currentTurnIndex = signal(0);
 
+  /**
+   * A dynamic, reactive, computed signal property constructing conformed JSON
+   * catalog schema specifications system instructions.
+   */
+  readonly systemPrompt = this.promptFactory.systemPrompt;
+
   private activePromptId: string | null = null;
 
   constructor() {
@@ -484,10 +490,4 @@ export class ChatCoordinator {
       return updated;
     });
   }
-
-  /**
-   * A dynamic, reactive, computed signal property constructing conformed JSON
-   * catalog schema specifications system instructions.
-   */
-  readonly systemPrompt = this.promptFactory.systemPrompt;
 }
