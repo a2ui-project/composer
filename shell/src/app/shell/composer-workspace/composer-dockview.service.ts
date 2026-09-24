@@ -521,20 +521,12 @@ export class ComposerDockview {
   private enforceInitialProportions(width: number, height: number): void {
     const chatWidth = Math.floor(width * CHAT_PANEL_MAX_WIDTH_FRACTION);
     const debugHeight = Math.round(height * DEBUG_DRAWER_HEIGHT_RATIO);
-    const halfRightWidth = Math.floor((width - chatWidth) / 2);
 
     const chatPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Chat);
     chatPanel?.api.setSize({width: chatWidth});
 
     const dataModelPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.DataModel);
     dataModelPanel?.api.setSize({height: debugHeight});
-
-    const rawPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Raw);
-    const renderedPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Rendered);
-    if (rawPanel && renderedPanel && rawPanel.group !== renderedPanel.group) {
-      rawPanel.api.setSize({width: halfRightWidth});
-      renderedPanel.api.setSize({width: halfRightWidth});
-    }
   }
 
   /**
