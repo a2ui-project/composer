@@ -158,6 +158,7 @@ export class ComposerDockview {
     });
 
     this.dockviewApi.onDidActivePanelChange(event => {
+      if (!this.isInitialized) return;
       onActivePanelChange?.(event.panel?.id);
       this.checkTabOverflow();
       this.cdr.markForCheck();
@@ -171,6 +172,7 @@ export class ComposerDockview {
 
     // Debounced layout persistence to localStorage
     this.dockviewApi.onDidLayoutChange(() => {
+      if (!this.isInitialized) return;
       this.checkTabOverflow();
       if (this.saveTimeout !== undefined) {
         clearTimeout(this.saveTimeout);
@@ -499,12 +501,11 @@ export class ComposerDockview {
           referencePanel: ComposerPanelId.Rendered,
         },
         initialWidth: halfRightWidth,
+        minimumWidth: PREVIEW_PANEL_MIN_WIDTH,
+        minimumHeight: PREVIEW_PANEL_MIN_HEIGHT,
       });
 
       // Explicitly activate default primary tabs
-      const dataModelPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.DataModel);
-      dataModelPanel?.api.setActive();
-
       const chatPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat);
       chatPanel?.api.setActive();
     }

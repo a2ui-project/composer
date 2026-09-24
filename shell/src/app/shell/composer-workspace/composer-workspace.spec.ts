@@ -702,7 +702,7 @@ describe('ComposerWorkspace Dashboard', () => {
       });
 
       it('enforces Gemini Assistant initial width and debug drawer initial height on layout initialization', async () => {
-        vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
+        const storageSpy = vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
         const widthSpy = vi
           .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
           .mockReturnValue(1200);
@@ -731,6 +731,7 @@ describe('ComposerWorkspace Dashboard', () => {
           expect(dataModelPanel!.group.height).toBeLessThan(renderedPanel!.group.height);
           expect(dataModelPanel!.group.height).toBeLessThanOrEqual(300);
         } finally {
+          storageSpy.mockRestore();
           widthSpy.mockRestore();
           heightSpy.mockRestore();
         }
