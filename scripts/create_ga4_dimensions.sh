@@ -67,7 +67,7 @@ else
   echo "To authenticate, run either:"
   echo "  gcloud auth application-default login --scopes=${REQUIRED_SCOPE}"
   echo "  or"
-  echo "  gcloud auth login --enable-gdrive-access"
+  echo "  gcloud auth login --scopes=${REQUIRED_SCOPE}"
   echo ""
   echo "Then re-run this script, or export ACCESS_TOKEN:"
   echo "  export ACCESS_TOKEN=\"\$(gcloud auth print-access-token)\""
@@ -92,8 +92,8 @@ fi
 echo ""
 echo "Fetching existing custom dimensions and metrics..."
 
-EXISTING_DIMS=$(curl -s -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" "${API_BASE}/customDimensions")
-EXISTING_METS=$(curl -s -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" "${API_BASE}/customMetrics")
+EXISTING_DIMS=$(curl -s -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" "${API_BASE}/customDimensions?pageSize=200")
+EXISTING_METS=$(curl -s -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" "${API_BASE}/customMetrics?pageSize=200")
 
 dimension_exists() {
   local param="$1"
@@ -108,6 +108,8 @@ metric_exists() {
 # ------------------------------------------------------------------------------
 # 3. Create Custom Dimensions
 # ------------------------------------------------------------------------------
+FAILURES=0
+
 create_dimension() {
   local param="$1"
   local display="$2"
@@ -147,7 +149,8 @@ EOF
   elif [[ "${http_code}" == "409" ]] || echo "${body}" | grep -q "ALREADY_EXISTS"; then
     echo "ALREADY_EXISTS (409) - Skipped"
   else
-    echo "FAILED (${http_code}): ${body}"
+    echo "FAILED (${http_code}): ${body}" >&2
+    FAILURES=$((FAILURES + 1))
   fi
 }
 
@@ -195,7 +198,8 @@ EOF
   elif [[ "${http_code}" == "409" ]] || echo "${body}" | grep -q "ALREADY_EXISTS"; then
     echo "ALREADY_EXISTS (409) - Skipped"
   else
-    echo "FAILED (${http_code}): ${body}"
+    echo "FAILED (${http_code}): ${body}" >&2
+    FAILURES=$((FAILURES + 1))
   fi
 }
 
@@ -242,6 +246,11 @@ create_metric "compressed_length_chars" "Share Compressed Length" "STANDARD" "Ch
 create_metric "line" "Error Line Number" "STANDARD" "Line number of error"
 create_metric "column" "Error Column Number" "STANDARD" "Column offset of error"
 #### END METRICS
+
+if [[ ${FAILURES} -gt 0 ]]; then
+  echo "Error: ${FAILURES} dimension/metric provisioning requests failed." >&2
+  exit 1
+fi
 
 echo ""
 echo "=== Provisioning Complete ==="

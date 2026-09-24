@@ -26,12 +26,8 @@ import {
   classifyParameter,
   mergeDefinitions,
   generateScriptContent,
+  generateBashScript,
   syncDimensions,
-  createParsedScriptResult,
-  createMergedDefinitionsResult,
-  createDimensionDefinition,
-  createMetricDefinition,
-  createParameterClassification,
   escapeBashString,
   unescapeBashString,
   formatHelpText,
@@ -217,6 +213,40 @@ describe('update_ga4_dimensions', () => {
         'Expected typed_error_code from typed customParams',
       );
     });
+
+    it('never extracts config options from non-telemetry methods like getConfigOptions', () => {
+      const mockSource = `
+        protected getConfigOptions(): Record<string, unknown> {
+          const hostname = this.document.defaultView?.location?.hostname;
+          return {
+            ['send_page_view']: false,
+            ['cookie_prefix']: 'a2ui_composer',
+            ['cookie_domain']: hostname || 'auto',
+            ['client_id']: this.getOrCreatePersistentClientId(),
+            ['non_excluded_config_option']: 'value',
+          };
+        }
+      `;
+      const extracted = extractParametersFromSource(mockSource);
+      assert.equal(extracted.size, 0, 'No parameters should be extracted from getConfigOptions');
+      assert.ok(!extracted.has('non_excluded_config_option'));
+    });
+
+    it('does not let JSDoc comments mentioning getBaselineDimensions break extraction of the real method', () => {
+      const mockSource = `
+        /**
+         * Comments describing getBaselineDimensions() with dummy ['commented_param']: 123
+         */
+        protected getBaselineDimensions(): Record<string, unknown> {
+          return {
+            ['actual_baseline_param']: 'test',
+          };
+        }
+      `;
+      const extracted = extractParametersFromSource(mockSource);
+      assert.ok(extracted.has('actual_baseline_param'));
+      assert.ok(!extracted.has('commented_param'));
+    });
   });
 
   describe('c) Parameter classification', () => {
@@ -357,66 +387,106 @@ describe('update_ga4_dimensions', () => {
 
       assert.ok(typeof result.isUpToDate === 'boolean');
     });
-  });
 
-  describe('e) Explicit return interface and factory', () => {
-    it('creates an initialized ParsedScriptResult using createParsedScriptResult', () => {
-      const dimMap = new Map([
-        ['test_dim', createDimensionDefinition('test_dim', 'Test Dim', 'Desc')],
-      ]);
-      const metMap = new Map([
-        ['test_met', createMetricDefinition('test_met', 'Test Met', 'STANDARD', 'Desc')],
-      ]);
-      const result = createParsedScriptResult(dimMap, metMap);
+    it('prunes obsolete dimensions and metrics from existing definitions when no longer in extractedParams', () => {
+      const existing = {
+        dimensions: new Map([
+          [
+            'active_dim',
+            {
+              paramName: 'active_dim',
+              displayName: 'Curated Active Dim',
+              description: 'Custom curated description',
+            },
+          ],
+          [
+            'stale_dim',
+            {
+              paramName: 'stale_dim',
+              displayName: 'Stale Dim',
+              description: 'Should be removed',
+            },
+          ],
+        ]),
+        metrics: new Map([
+          [
+            'active_metric',
+            {
+              paramName: 'active_metric',
+              displayName: 'Curated Active Metric',
+              measurementUnit: 'STANDARD',
+              description: 'Custom metric description',
+            },
+          ],
+          [
+            'stale_metric',
+            {
+              paramName: 'stale_metric',
+              displayName: 'Stale Metric',
+              measurementUnit: 'SECONDS',
+              description: 'Should be removed',
+            },
+          ],
+        ]),
+      };
 
-      assert.equal(result.dimensions, dimMap);
-      assert.equal(result.metrics, metMap);
-      assert.ok(result.dimensions instanceof Map);
-      assert.ok(result.metrics instanceof Map);
+      const extractedParams = new Set(['active_dim', 'active_metric', 'brand_new_dim']);
+      const merged = mergeDefinitions(existing, extractedParams);
+
+      // Pruning verification
+      assert.equal(merged.dimensions.length, 2);
+      assert.equal(merged.metrics.length, 1);
+      assert.ok(!merged.dimensions.some(d => d.paramName === 'stale_dim'));
+      assert.ok(!merged.metrics.some(m => m.paramName === 'stale_metric'));
+
+      // Preserved curated metadata
+      const activeDim = merged.dimensions.find(d => d.paramName === 'active_dim');
+      assert.equal(activeDim?.displayName, 'Curated Active Dim');
+      assert.equal(activeDim?.description, 'Custom curated description');
+
+      const activeMetric = merged.metrics.find(m => m.paramName === 'active_metric');
+      assert.equal(activeMetric?.displayName, 'Curated Active Metric');
+
+      // Newly discovered param
+      const brandNewDim = merged.dimensions.find(d => d.paramName === 'brand_new_dim');
+      assert.ok(brandNewDim);
+      assert.deepEqual(merged.addedDimensions, ['brand_new_dim']);
+      assert.deepEqual(merged.addedMetrics, []);
     });
 
-    it('creates an initialized MergedDefinitionsResult using createMergedDefinitionsResult', () => {
-      const dims = [createDimensionDefinition('test_dim', 'Test Dim', 'Desc')];
-      const mets = [createMetricDefinition('test_met', 'Test Met', 'STANDARD', 'Desc')];
-      const addedDims = ['test_dim'];
-      const addedMets = ['test_met'];
-
-      const result = createMergedDefinitionsResult(dims, mets, addedDims, addedMets);
-
-      assert.deepEqual(result.dimensions, dims);
-      assert.deepEqual(result.metrics, mets);
-      assert.deepEqual(result.addedDimensions, addedDims);
-      assert.deepEqual(result.addedMetrics, addedMets);
+    it('returns isUpToDate false when a stale parameter exists in the script', () => {
+      const scriptWithStale = `#!/usr/bin/env bash
+${DIMENSIONS_START}
+create_dimension "stale_parameter_that_does_not_exist" "Stale" "Desc"
+${DIMENSIONS_END}
+${METRICS_START}
+${METRICS_END}
+`;
+      const tempScript = path.resolve(__dirname, 'temp_stale_test.sh');
+      fs.writeFileSync(tempScript, scriptWithStale, 'utf-8');
+      try {
+        const result = syncDimensions({
+          scriptPath: tempScript,
+          sourcePath: SERVICE_PATH,
+          check: true,
+        });
+        assert.equal(result.isUpToDate, false);
+        assert.equal(result.hasChanges, true);
+      } finally {
+        if (fs.existsSync(tempScript)) {
+          fs.unlinkSync(tempScript);
+        }
+      }
     });
 
-    it('creates dimension and metric definition objects with expected shapes', () => {
-      const dim = createDimensionDefinition('dim1', 'Dim 1', 'Desc 1');
-      assert.deepEqual(dim, {
-        paramName: 'dim1',
-        displayName: 'Dim 1',
-        description: 'Desc 1',
-      });
-
-      const met = createMetricDefinition('met1', 'Met 1', 'SECONDS', 'Desc 2');
-      assert.deepEqual(met, {
-        paramName: 'met1',
-        displayName: 'Met 1',
-        measurementUnit: 'SECONDS',
-        description: 'Desc 2',
-      });
-
-      const classif = createParameterClassification('METRIC', 'STANDARD', 'EVENT');
-      assert.deepEqual(classif, {
-        type: 'METRIC',
-        measurementUnit: 'STANDARD',
-        scope: 'EVENT',
-      });
-    });
-
-    it('mergeDefinitions returns an explicit MergedDefinitionsResult tracking added parameters', () => {
+    it('mergeDefinitions tracks added parameters explicitly', () => {
       const scriptContent = fs.readFileSync(SCRIPT_PATH, 'utf-8');
       const existing = parseExistingScript(scriptContent);
-      const extractedParams = new Set(['env_mode', 'duration_seconds', 'new_test_param']);
+      const extractedParams = new Set([
+        ...existing.dimensions.keys(),
+        ...existing.metrics.keys(),
+        'new_test_param',
+      ]);
 
       const merged = mergeDefinitions(existing, extractedParams);
 
@@ -426,6 +496,48 @@ describe('update_ga4_dimensions', () => {
       assert.ok(Array.isArray(merged.addedMetrics));
       assert.deepEqual(merged.addedDimensions, ['new_test_param']);
       assert.deepEqual(merged.addedMetrics, []);
+    });
+  });
+
+  describe('e) Generated Bash script structure, error handling, and parameters', () => {
+    it('generates bash script with correct scopes, pageSize, failure tracking, and error routing', () => {
+      const script = generateBashScript();
+
+      // Scopes hint
+      assert.ok(
+        script.includes('gcloud auth login --scopes=${REQUIRED_SCOPE}'),
+        'Must recommend gcloud auth login with explicit REQUIRED_SCOPE',
+      );
+      assert.ok(
+        !script.includes('--enable-gdrive-access'),
+        'Must not contain outdated --enable-gdrive-access flag',
+      );
+
+      // Page size
+      assert.ok(
+        script.includes('${API_BASE}/customDimensions?pageSize=200'),
+        'Must fetch custom dimensions with pageSize=200',
+      );
+      assert.ok(
+        script.includes('${API_BASE}/customMetrics?pageSize=200'),
+        'Must fetch custom metrics with pageSize=200',
+      );
+
+      // Error handling and failure tracking
+      assert.ok(script.includes('FAILURES=0'), 'Must initialize FAILURES counter');
+      assert.ok(
+        script.includes('FAILURES=$((FAILURES + 1))'),
+        'Must increment FAILURES on HTTP failure',
+      );
+      assert.ok(
+        script.includes('echo "FAILED (${http_code}): ${body}" >&2'),
+        'Must route HTTP failure output to stderr',
+      );
+      assert.ok(
+        script.includes('if [[ ${FAILURES} -gt 0 ]]; then'),
+        'Must check for failures before completion',
+      );
+      assert.ok(script.includes('exit 1'), 'Must exit with code 1 if failures occurred');
     });
   });
 

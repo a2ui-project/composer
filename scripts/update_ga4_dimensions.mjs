@@ -67,17 +67,7 @@ export const METRICS_END = '#### END METRICS';
  * @property {string} paramName
  * @property {string} displayName
  * @property {string} description
- *
- * Creates a DimensionDefinition object.
- *
- * @param {string} paramName
- * @param {string} displayName
- * @param {string} description
- * @returns {DimensionDefinition}
  */
-export function createDimensionDefinition(paramName, displayName, description) {
-  return {paramName, displayName, description};
-}
 
 /**
  * @typedef {Object} MetricDefinition
@@ -85,54 +75,20 @@ export function createDimensionDefinition(paramName, displayName, description) {
  * @property {string} displayName
  * @property {'STANDARD' | 'SECONDS'} measurementUnit
  * @property {string} description
- *
- * Creates a MetricDefinition object.
- *
- * @param {string} paramName
- * @param {string} displayName
- * @param {'STANDARD' | 'SECONDS'} measurementUnit
- * @param {string} description
- * @returns {MetricDefinition}
  */
-export function createMetricDefinition(paramName, displayName, measurementUnit, description) {
-  return {paramName, displayName, measurementUnit, description};
-}
 
 /**
  * @typedef {Object} ParameterClassification
  * @property {'METRIC' | 'DIMENSION'} type
  * @property {'STANDARD' | 'SECONDS'} [measurementUnit]
  * @property {'EVENT'} scope
- *
- * Creates a ParameterClassification object.
- *
- * @param {'METRIC' | 'DIMENSION'} type
- * @param {'STANDARD' | 'SECONDS'} [measurementUnit]
- * @param {'EVENT'} [scope]
- * @returns {ParameterClassification}
  */
-export function createParameterClassification(type, measurementUnit, scope = 'EVENT') {
-  const result = {type, scope};
-  if (measurementUnit) {
-    result.measurementUnit = measurementUnit;
-  }
-  return result;
-}
 
 /**
  * @typedef {Object} ParsedScriptResult
  * @property {Map<string, DimensionDefinition>} dimensions
  * @property {Map<string, MetricDefinition>} metrics
- *
- * Creates a ParsedScriptResult object.
- *
- * @param {Map<string, DimensionDefinition>} [dimensions]
- * @param {Map<string, MetricDefinition>} [metrics]
- * @returns {ParsedScriptResult}
  */
-export function createParsedScriptResult(dimensions = new Map(), metrics = new Map()) {
-  return {dimensions, metrics};
-}
 
 /**
  * @typedef {Object} MergedDefinitionsResult
@@ -140,23 +96,7 @@ export function createParsedScriptResult(dimensions = new Map(), metrics = new M
  * @property {MetricDefinition[]} metrics
  * @property {string[]} addedDimensions
  * @property {string[]} addedMetrics
- *
- * Creates a MergedDefinitionsResult object.
- *
- * @param {DimensionDefinition[]} [dimensions]
- * @param {MetricDefinition[]} [metrics]
- * @param {string[]} [addedDimensions]
- * @param {string[]} [addedMetrics]
- * @returns {MergedDefinitionsResult}
  */
-export function createMergedDefinitionsResult(
-  dimensions = [],
-  metrics = [],
-  addedDimensions = [],
-  addedMetrics = [],
-) {
-  return {dimensions, metrics, addedDimensions, addedMetrics};
-}
 
 /**
  * Defensively escapes double quotes in bash strings for create_dimension and create_metric calls.
@@ -207,7 +147,7 @@ export function parseExistingScript(scriptContent) {
     const paramName = unescapeBashString(rawParamName);
     const displayName = unescapeBashString(rawDisplayName);
     const description = unescapeBashString(rawDescription);
-    dimensions.set(paramName, createDimensionDefinition(paramName, displayName, description));
+    dimensions.set(paramName, {paramName, displayName, description});
   }
 
   let metSection = scriptContent;
@@ -226,13 +166,10 @@ export function parseExistingScript(scriptContent) {
     const displayName = unescapeBashString(rawDisplayName);
     const measurementUnit = unescapeBashString(rawUnit);
     const description = unescapeBashString(rawDescription);
-    metrics.set(
-      paramName,
-      createMetricDefinition(paramName, displayName, measurementUnit, description),
-    );
+    metrics.set(paramName, {paramName, displayName, measurementUnit, description});
   }
 
-  return createParsedScriptResult(dimensions, metrics);
+  return {dimensions, metrics};
 }
 
 /**
@@ -247,22 +184,13 @@ export function parseExistingScript(scriptContent) {
  */
 export function extractParametersFromSource(sourceContent) {
   const params = new Set();
-
-  // 1. Match bracketed object keys like ['composer_session_id']: ... across the file
-  const bracketKeyRegex = /\[['"]([a-zA-Z0-9_]+)['"]\]\s*:/g;
-  let match;
-  while ((match = bracketKeyRegex.exec(sourceContent)) !== null) {
-    const param = match[1];
-    if (!EXCLUDED_PARAMS.has(param)) {
-      params.add(param);
-    }
-  }
-
-  // 2. Identify target payload regions: getBaselineDimensions, dispatchGtagEvent, customParams
   const payloadRegions = [];
 
-  // getBaselineDimensions block
-  const baselineRegex = /getBaselineDimensions\s*\([^)]*\)[^{]*\{([\s\S]*?)\n\s*\}/g;
+  // 1. Identify target payload regions: getBaselineDimensions, dispatchGtagEvent, customParams
+  // Anchor getBaselineDimensions to method signature so JSDoc comments mentioning it are ignored
+  const baselineRegex =
+    /(?:protected|public|private)\s+getBaselineDimensions\s*\([^)]*\)[^{]*\{([\s\S]*?\n\s*\})/g;
+  let match;
   while ((match = baselineRegex.exec(sourceContent)) !== null) {
     payloadRegions.push(match[1]);
   }
@@ -296,11 +224,11 @@ export function extractParametersFromSource(sourceContent) {
     'undefined',
   ]);
 
-  // 3. Scan payload regions for quoted or unquoted snake_case property keys
+  // 2. Scan payload regions for bracketed, quoted, or unquoted property keys
   for (const region of payloadRegions) {
-    // Quoted keys: 'param_name': or "param_name":
-    const quotedRegex = /(?:['"])([a-zA-Z0-9_]+)(?:['"])\s*:/g;
-    while ((match = quotedRegex.exec(region)) !== null) {
+    // Bracketed keys: ['param_name']: or quoted keys: 'param_name': or "param_name":
+    const bracketedOrQuotedRegex = /(?:\[\s*['"]|['"])([a-zA-Z0-9_]+)(?:['"]\s*\]|['"])\s*:/g;
+    while ((match = bracketedOrQuotedRegex.exec(region)) !== null) {
       const param = match[1];
       if (!EXCLUDED_PARAMS.has(param) && !IGNORED_IDENTIFIERS.has(param)) {
         params.add(param);
@@ -342,14 +270,14 @@ export function classifyParameter(paramName) {
     paramName === 'column';
 
   if (isMetric) {
-    return createParameterClassification(
-      'METRIC',
-      paramName.endsWith('_seconds') ? 'SECONDS' : 'STANDARD',
-      'EVENT',
-    );
+    return {
+      type: 'METRIC',
+      measurementUnit: paramName.endsWith('_seconds') ? 'SECONDS' : 'STANDARD',
+      scope: 'EVENT',
+    };
   }
 
-  return createParameterClassification('DIMENSION', undefined, 'EVENT');
+  return {type: 'DIMENSION', scope: 'EVENT'};
 }
 
 /**
@@ -381,15 +309,20 @@ export function formatDescription(paramName, displayName) {
 
 /**
  * Merges existing definitions with extracted parameters, preserving existing metadata
- * and ordering while appending newly discovered parameters.
+ * and ordering while pruning obsolete parameters and appending newly discovered parameters.
  *
  * @param {ParsedScriptResult} existing
  * @param {Set<string>} extractedParams
  * @returns {MergedDefinitionsResult}
  */
 export function mergeDefinitions(existing, extractedParams) {
-  const dimensions = Array.from(existing.dimensions.values());
-  const metrics = Array.from(existing.metrics.values());
+  // Prune obsolete dimensions and metrics that are no longer present in extractedParams
+  const dimensions = Array.from(existing.dimensions.values()).filter(d =>
+    extractedParams.has(d.paramName),
+  );
+  const metrics = Array.from(existing.metrics.values()).filter(m =>
+    extractedParams.has(m.paramName),
+  );
   const addedDimensions = [];
   const addedMetrics = [];
 
@@ -408,23 +341,27 @@ export function mergeDefinitions(existing, extractedParams) {
     const description = formatDescription(param, displayName);
 
     if (classification.type === 'METRIC') {
-      const metricDef = createMetricDefinition(
-        param,
+      const metricDef = {
+        paramName: param,
         displayName,
-        classification.measurementUnit || 'STANDARD',
+        measurementUnit: classification.measurementUnit || 'STANDARD',
         description,
-      );
+      };
       metrics.push(metricDef);
       addedMetrics.push(param);
     } else {
-      const dimensionDef = createDimensionDefinition(param, displayName, description);
+      const dimensionDef = {
+        paramName: param,
+        displayName,
+        description,
+      };
       dimensions.push(dimensionDef);
       addedDimensions.push(param);
     }
     knownParams.add(param);
   }
 
-  return createMergedDefinitionsResult(dimensions, metrics, addedDimensions, addedMetrics);
+  return {dimensions, metrics, addedDimensions, addedMetrics};
 }
 
 /**
@@ -511,9 +448,32 @@ ${METRICS_START}
 ${metricLines}
 ${METRICS_END}
 
+if [[ \${FAILURES} -gt 0 ]]; then
+  echo "Error: \${FAILURES} dimension/metric provisioning requests failed." >&2
+  exit 1
+fi
+
 echo ""
 echo "=== Provisioning Complete ==="
 `;
+}
+
+/**
+ * Generates the full bash script content for create_ga4_dimensions.sh.
+ *
+ * @param {MergedDefinitionsResult | {dimensions: Array<DimensionDefinition>, metrics: Array<MetricDefinition>} | null} [definitions]
+ * @param {string} [baseScriptContent]
+ * @returns {string}
+ */
+export function generateBashScript(
+  definitions = null,
+  baseScriptContent = fs.readFileSync(DEFAULT_SCRIPT_PATH, 'utf-8'),
+) {
+  if (!definitions) {
+    const existing = parseExistingScript(baseScriptContent);
+    definitions = mergeDefinitions(existing, new Set(existing.dimensions.keys()));
+  }
+  return generateScriptContent(baseScriptContent, definitions);
 }
 
 /**
