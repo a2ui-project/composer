@@ -17,6 +17,7 @@
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {McpClientManagerService} from './mcp-client-manager.service';
+import {ErrorLogger} from '../debug/error-logger.service';
 import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
 
@@ -49,6 +50,13 @@ describe('McpClientManagerService', () => {
     getItem: ReturnType<typeof vi.fn>;
     setItem: ReturnType<typeof vi.fn>;
   };
+  let mockErrorLogger: {
+    error: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+    info: ReturnType<typeof vi.fn>;
+    log: ReturnType<typeof vi.fn>;
+    withTag: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,6 +66,14 @@ describe('McpClientManagerService', () => {
       setItem: vi.fn((key: string, val: string) => {
         storageMap.set(key, val);
       }),
+    };
+
+    mockErrorLogger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      log: vi.fn(),
+      withTag: vi.fn().mockReturnThis(),
     };
 
     connectMock.mockResolvedValue(undefined);
@@ -80,6 +96,7 @@ describe('McpClientManagerService', () => {
       providers: [
         McpClientManagerService,
         {provide: LocalStorageInteractions, useValue: mockStorage},
+        {provide: ErrorLogger, useValue: mockErrorLogger},
       ],
     });
     service = TestBed.inject(McpClientManagerService);
@@ -121,9 +138,18 @@ describe('McpClientManagerService', () => {
     await service.addServer('http://localhost:9999/mcp');
     expect(service.servers()[0].status).toBe('error');
     expect(service.servers()[0].errorMessage).toContain('Connection refused');
+    expect(mockErrorLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Failed to connect to MCP server "http://localhost:9999/mcp": Connection refused',
+      ),
+      expect.any(Error),
+    );
 
     await expect(service.callTool('unknown-tool', {})).rejects.toThrow(
       /No connected MCP server found/,
+    );
+    expect(mockErrorLogger.error).toHaveBeenCalledWith(
+      'No connected MCP server found for tool "unknown-tool".',
     );
   });
 
@@ -145,11 +171,42 @@ describe('McpClientManagerService', () => {
       providers: [
         McpClientManagerService,
         {provide: LocalStorageInteractions, useValue: mockStorage},
+        {provide: ErrorLogger, useValue: mockErrorLogger},
       ],
     });
     const hydratedService = TestBed.inject(McpClientManagerService);
     expect(hydratedService.servers()).toHaveLength(1);
     expect(hydratedService.servers()[0].name).toBe('saved-fs');
+  });
+
+  it('logs warning to ErrorLogger when persisted servers JSON is corrupted', () => {
+    storageMap.set(LocalStorageKey.MCP_SERVERS, 'invalid-json{{{');
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        McpClientManagerService,
+        {provide: LocalStorageInteractions, useValue: mockStorage},
+        {provide: ErrorLogger, useValue: mockErrorLogger},
+      ],
+    });
+    const hydratedService = TestBed.inject(McpClientManagerService);
+    expect(hydratedService.servers()).toHaveLength(0);
+    expect(mockErrorLogger.warn).toHaveBeenCalledWith(
+      'Failed to parse persisted MCP servers:',
+      expect.any(SyntaxError),
+    );
+  });
+
+  it('logs error to ErrorLogger and rethrows when client callTool fails', async () => {
+    await service.addServer('http://localhost:3001/mcp');
+    callToolMock.mockRejectedValueOnce(new Error('Tool RPC crashed'));
+
+    await expect(service.callTool('list_directory', {})).rejects.toThrow('Tool RPC crashed');
+    expect(mockErrorLogger.error).toHaveBeenCalledWith(
+      'Failed to call MCP tool "list_directory" on server "filesystem-mcp-server":',
+      expect.any(Error),
+    );
   });
 
   it('falls back to server name or url if getServerVersion returns a non-string name', async () => {

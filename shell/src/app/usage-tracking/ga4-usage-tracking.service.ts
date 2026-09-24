@@ -32,6 +32,7 @@ import {
   PromptTurnType,
   ShareTrackingStatus,
   UsageType,
+  ComposerErrorTelemetryParams,
   USAGE_TRACKING_CONFIG,
   UsageTrackingService,
 } from './usage-tracking.service';
@@ -138,7 +139,14 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ...(params || {}),
     };
 
-    windowObj.gtag('event', name, payload);
+    try {
+      windowObj.gtag('event', name, payload);
+    } catch {
+      // Suppress runtime exceptions silently. Otherwise, we could get into an
+      // infinite loop where this throws, and we want to log an error somewhere
+      // which sends the error back to the trackComposerError() method, which
+      // calls this method, which then fails, etc...
+    }
   }
 
   trackPageView(params: {pagePath: string}): void {
@@ -295,5 +303,30 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ['duration_seconds']: params.durationSeconds,
       ['interface_count']: params.interfaceCount,
     });
+  }
+
+  trackComposerError(params: ComposerErrorTelemetryParams): void {
+    if (!this.config.enabled) return;
+    const sanitizedInvalidProperty =
+      params.invalidProperty && // Second line of defense: bounds SHAPE and LENGTH only.
+      // Primary defense against PII is the context-bound extraction in ErrorTelemetryReporter.
+      /^[a-zA-Z0-9_$-]{1,64}$/.test(params.invalidProperty)
+        ? params.invalidProperty
+        : 'none_or_redacted';
+
+    const customParams = {
+      ['event_category']: 'error',
+      ['event_label']: params.errorCategory,
+      ['source_tag']:
+        params.sourceTag && /^\[[a-zA-Z0-9_-]{1,64}\]$/.test(params.sourceTag)
+          ? params.sourceTag
+          : '[Unknown]',
+      ['error_type']: params.errorCategory,
+      ['error_category']: params.errorCategory,
+      ['line']: params.line ?? -1,
+      ['column']: params.column ?? -1,
+      ['invalid_property']: sanitizedInvalidProperty,
+    };
+    this.dispatchGtagEvent('composer_error', customParams);
   }
 }

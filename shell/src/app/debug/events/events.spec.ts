@@ -49,7 +49,7 @@ describe('Events', () => {
     mockHostComm = {
       messageStream: mockMessageStream.asReadonly(),
       messageStream$: messageStreamSubject.asObservable(),
-      getHistoryBuffer: () => [],
+      getEnvelopeHistory: () => [],
     };
 
     await TestBed.configureTestingModule({
@@ -295,7 +295,7 @@ describe('Events', () => {
     expect(await harness.hasPlaceholder()).toBe(true);
   });
 
-  it('hydrates eventsLog with pre-existing SEND_TO_SERVER events from HostCommunication.getHistoryBuffer()', async () => {
+  it('hydrates eventsLog with pre-existing SEND_TO_SERVER events from HostCommunication.getEnvelopeHistory()', async () => {
     const historicalTimestamp1 = new Date('2026-05-18T10:00:00.000Z').getTime();
     const historicalTimestamp2 = new Date('2026-05-18T10:05:00.000Z').getTime();
 
@@ -346,7 +346,7 @@ describe('Events', () => {
           useValue: {
             messageStream: signal<MessageEnvelope | null>(null).asReadonly(),
             messageStream$: new Subject<MessageEnvelope>().asObservable(),
-            getHistoryBuffer: () => historicalEnvelopes,
+            getEnvelopeHistory: () => historicalEnvelopes,
           },
         },
       ],

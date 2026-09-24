@@ -15,7 +15,7 @@
  */
 
 import {TestBed} from '@angular/core/testing';
-import {RawFrame, IFRAME_UNRESPONSIVE_ERROR} from './raw-frame';
+import {RawFrame, IFRAME_UNRESPONSIVE_ERROR_PREFIX} from './raw-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
@@ -37,7 +37,6 @@ import type * as monaco from 'monaco-editor';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
-
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() => {
@@ -303,7 +302,10 @@ describe('RawFrame JSON Source Editor View', () => {
   let chatStateMock: MockChatState;
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
   let messageStreamSubject: Subject<unknown>;
-  let errorLoggerMock: {error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>};
+  let errorLoggerMock: {
+    error: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     sendRenderA2UIMock = vi.fn();
@@ -877,25 +879,25 @@ describe('RawFrame JSON Source Editor View', () => {
       component.TEST_ONLY.startWatchdog();
 
       vi.advanceTimersByTime(15000);
-      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+      expect(errorLoggerMock.warn).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Preview frame did not respond within 15 seconds.',
-          sourceTag: '[Previewer]',
+          sourceTag: '[Preview]',
         }),
       );
     });
 
-    it('logs IFRAME_UNRESPONSIVE_ERROR when renderer is ready but watchdog timeout fires', async () => {
+    it('logs warning with prefix when renderer is ready but watchdog timeout fires', async () => {
       vi.useFakeTimers();
       const {component} = await setup(false);
       TestBed.inject(HostCommunication).isRendererReady.mockReturnValue(true);
       component.TEST_ONLY.startWatchdog();
 
       vi.advanceTimersByTime(15000);
-      expect(errorLoggerMock.error).toHaveBeenCalledWith(
+      expect(errorLoggerMock.warn).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: `${IFRAME_UNRESPONSIVE_ERROR}: Preview frame failed to process payload within 15 seconds.`,
-          sourceTag: '[Previewer]',
+          message: `${IFRAME_UNRESPONSIVE_ERROR_PREFIX}Preview frame failed to process payload within 15 seconds.`,
+          sourceTag: '[Preview]',
         }),
       );
     });
@@ -915,6 +917,7 @@ describe('RawFrame JSON Source Editor View', () => {
       vi.advanceTimersByTime(15000);
 
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
     });
 
     it('clears watchdog timer when render completion message arrives', async () => {
@@ -1019,6 +1022,7 @@ describe('RawFrame JSON Source Editor View', () => {
       component.TEST_ONLY.startWatchdog();
       vi.advanceTimersByTime(15000);
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
     });
 
     it('suspends watchdog when document is hidden', async () => {
@@ -1029,6 +1033,10 @@ describe('RawFrame JSON Source Editor View', () => {
       component.TEST_ONLY.startWatchdog();
       vi.advanceTimersByTime(15000);
       expect(errorLoggerMock.error).not.toHaveBeenCalled();
+      expect(errorLoggerMock.warn).not.toHaveBeenCalled();
+
+      // Reset
+      Object.defineProperty(document, 'hidden', {value: false, configurable: true});
     });
   });
 

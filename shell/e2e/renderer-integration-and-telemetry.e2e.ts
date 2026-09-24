@@ -72,8 +72,8 @@ const CONFIGS: IntegrationConfig[] = [
     fillDate: async (locator, value) => {
       await locator.evaluate((el: HTMLInputElement, val) => {
         el.value = val;
-        el.dispatchEvent(new Event('input', {bubbles: true}));
-        el.dispatchEvent(new Event('change', {bubbles: true}));
+        el.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
       }, value);
     },
   },
@@ -289,8 +289,7 @@ for (const config of CONFIGS) {
       page,
     }) => {
       await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const historyHandle = await page.evaluateHandle(() => {
+      await page.evaluateHandle(() => {
         const log: CapturedBridgeEnvelope[] = [];
         window.addEventListener('message', e =>
           log.push({...(e.data || {}), __timeMs: performance.now()}),

@@ -35,6 +35,7 @@ describe('HostCommunication', () => {
     error: ReturnType<typeof vi.fn>;
     warn: ReturnType<typeof vi.fn>;
     info: ReturnType<typeof vi.fn>;
+    withTag: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -48,6 +49,7 @@ describe('HostCommunication', () => {
       error: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),
+      withTag: vi.fn().mockReturnThis(),
     };
 
     TestBed.configureTestingModule({
@@ -359,7 +361,7 @@ describe('HostCommunication', () => {
       }),
     );
 
-    const history = service.getHistoryBuffer();
+    const history = service.getEnvelopeHistory();
     expect(history.length).toBe(1);
     expect(history[0].type).toBe(PreviewBridgeMessageType.RENDERER_READY);
   });
@@ -386,6 +388,83 @@ describe('HostCommunication', () => {
       timestamp: expect.any(Number),
       sourceWindow: mockIframeWindow,
     });
+  });
+
+  it('retains early CONSOLE_LOG messages in the buffer prior to target registration', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+
+    const event = new MessageEvent('message', {
+      source: mockIframeWindow,
+      origin: 'http://localhost:3000',
+      data: {
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {level: 'log', message: 'Early crash data'},
+      },
+    });
+
+    window.dispatchEvent(event);
+
+    expect(service.latestEnvelope()).toBeNull();
+
+    service.registerIframe(mockIframeWindow);
+
+    expect(mockErrorLogger.log).toHaveBeenCalledWith({
+      level: 'log',
+      message: 'Early crash data',
+      sourceTag: '[Preview]',
+    });
+  });
+
+  it('drops early CONSOLE_LOG messages prior to target registration if origin does not match expected renderer origin', () => {
+    startupResolutionMock.getResolvedRendererUrl.mockReturnValue('http://localhost:3000/renderer');
+
+    const event = new MessageEvent('message', {
+      origin: 'http://malicious-origin.com',
+      data: {
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {level: 'error', message: 'Spoofed error'},
+      },
+    });
+
+    window.dispatchEvent(event);
+
+    expect(mockErrorLogger.log).not.toHaveBeenCalled();
+  });
+
+  it('processes early CONSOLE_LOG messages prior to target registration when origin matches expected renderer origin', () => {
+    startupResolutionMock.getResolvedRendererUrl.mockReturnValue('http://localhost:3000/renderer');
+
+    const event = new MessageEvent('message', {
+      origin: 'http://localhost:3000',
+      data: {
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {level: 'error', message: 'Legitimate early error'},
+      },
+    });
+
+    window.dispatchEvent(event);
+
+    expect(mockErrorLogger.log).toHaveBeenCalledWith({
+      level: 'error',
+      message: 'Legitimate early error',
+      sourceTag: '[Preview]',
+    });
+  });
+
+  it('drops early CONSOLE_LOG messages prior to target registration if expected renderer URL is missing or malformed', () => {
+    startupResolutionMock.getResolvedRendererUrl.mockReturnValue(null);
+
+    const event = new MessageEvent('message', {
+      origin: 'http://localhost:3000',
+      data: {
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {level: 'error', message: 'Early error with null url'},
+      },
+    });
+
+    window.dispatchEvent(event);
+
+    expect(mockErrorLogger.log).not.toHaveBeenCalled();
   });
 
   it('buffers early messages when no iframe is registered and replays them upon element registration', () => {
@@ -430,7 +509,7 @@ describe('HostCommunication', () => {
 
     service.registerIframe(mockIframeWindow);
 
-    const history = service.getHistoryBuffer();
+    const history = service.getEnvelopeHistory();
     expect(history.length).toBe(20);
     expect(history[0].payload).toEqual({index: 5});
     expect(history[19].payload).toEqual({index: 24});
@@ -546,7 +625,7 @@ describe('HostCommunication', () => {
 
     window.dispatchEvent(event);
 
-    const history = service.getHistoryBuffer();
+    const history = service.getEnvelopeHistory();
     expect(history.length).toBe(1);
     expect(history[0].type).toBe(PreviewBridgeMessageType.A2UI_CATALOG);
   });
@@ -568,10 +647,40 @@ describe('HostCommunication', () => {
       );
     }
 
-    const history = service.getHistoryBuffer();
+    const history = service.getEnvelopeHistory();
     expect(history.length).toBe(100);
     expect(history[0].payload).toEqual({index: 5});
     expect(history[99].payload).toEqual({index: 104});
+  });
+
+  it('returns snapshot copy non-destructively on getEnvelopeHistory without clearing the buffer', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {
+          type: PreviewBridgeMessageType.RENDERER_READY,
+          payload: {ready: true},
+        },
+      }),
+    );
+
+    const firstRead = service.getEnvelopeHistory();
+    expect(firstRead.length).toBe(1);
+    expect(firstRead[0].type).toBe(PreviewBridgeMessageType.RENDERER_READY);
+
+    // Multiple consumers reading from the buffer must receive identical data without draining it
+    const secondRead = service.getEnvelopeHistory();
+    expect(secondRead.length).toBe(1);
+    expect(secondRead).not.toBe(firstRead);
+    expect(secondRead[0]).toEqual(firstRead[0]);
+
+    // Explicit clearing works via clearHistoryBuffer
+    service.clearHistoryBuffer();
+    expect(service.getEnvelopeHistory().length).toBe(0);
   });
 
   it('dispatches SET_THEME message via sendTheme', () => {
@@ -651,6 +760,31 @@ describe('HostCommunication', () => {
       origin: 'http://localhost:3000',
       timestamp: expect.any(Number),
       sourceWindow: mockIframeWindow,
+    });
+  });
+
+  it('retains early CONSOLE_LOG messages in the buffer prior to target registration', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+
+    const event = new MessageEvent('message', {
+      source: mockIframeWindow,
+      origin: 'http://localhost:3000',
+      data: {
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {level: 'log', message: 'Early crash data'},
+      },
+    });
+
+    window.dispatchEvent(event);
+
+    expect(service.latestEnvelope()).toBeNull();
+
+    service.registerIframe(mockIframeWindow);
+
+    expect(mockErrorLogger.log).toHaveBeenCalledWith({
+      level: 'log',
+      message: 'Early crash data',
+      sourceTag: '[Preview]',
     });
   });
 
@@ -858,7 +992,7 @@ describe('HostCommunication', () => {
     });
 
     describe('consolidation with ErrorLogger', () => {
-      it('pushes CONSOLE_LOG to ErrorLogger with [Previewer] tag', () => {
+      it('pushes CONSOLE_LOG to ErrorLogger with [Preview] tag', () => {
         const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
         service.registerIframe(mockIframeWindow);
 
@@ -879,7 +1013,7 @@ describe('HostCommunication', () => {
         expect(mockErrorLogger.log).toHaveBeenCalledWith({
           level: 'error',
           message: 'Cannot read properties {"line":5}',
-          sourceTag: '[Previewer]',
+          sourceTag: '[Preview]',
         });
       });
 
@@ -1024,10 +1158,28 @@ describe('HostCommunication', () => {
           }),
         );
 
-        const history = service.getHistoryBuffer();
+        const history = service.getEnvelopeHistory();
         expect(history.length).toBe(1);
         expect(history[0].type).toBe(PreviewBridgeMessageType.DATA_MODEL_CHANGE);
         expect(service.latestEnvelope()?.type).toBe(PreviewBridgeMessageType.DATA_MODEL_CHANGE);
+      });
+
+      it('dispatches CONSOLE_LOG to ErrorLogger when simulated via triggerMessageStreamForTesting', () => {
+        service.TEST_ONLY.triggerMessageStreamForTesting({
+          type: PreviewBridgeMessageType.CONSOLE_LOG,
+          payload: {
+            level: 'error',
+            message: 'Simulated error log',
+          },
+          origin: 'http://localhost',
+          timestamp: Date.now(),
+        });
+
+        expect(mockErrorLogger.log).toHaveBeenCalledWith({
+          level: 'error',
+          message: 'Simulated error log',
+          sourceTag: '[Preview]',
+        });
       });
     });
   });
@@ -1258,7 +1410,7 @@ describe('HostCommunication', () => {
           'http://localhost:3000',
         );
         const successEnvelope = service
-          .getHistoryBuffer()
+          .getEnvelopeHistory()
           .find(
             env =>
               env.type === PreviewBridgeMessageType.MCP_RESPONSE &&
@@ -1299,8 +1451,13 @@ describe('HostCommunication', () => {
           },
           'http://localhost:3000',
         );
+        expect(mockErrorLogger.log).toHaveBeenCalledWith({
+          level: 'error',
+          message: 'MCP tool execution failed for "list_directory": Tool failure',
+          sourceTag: '[McpBridge]',
+        });
         const errorEnvelope = service
-          .getHistoryBuffer()
+          .getEnvelopeHistory()
           .find(
             env =>
               env.type === PreviewBridgeMessageType.MCP_RESPONSE &&

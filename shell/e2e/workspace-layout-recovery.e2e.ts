@@ -37,13 +37,7 @@ test.beforeEach(async ({page}) => {
 for (const invalidState of ['retired panel', 'mismatched panel ID']) {
   test(`opens usable default panels after rejecting a saved ${invalidState}`, async ({page}) => {
     const pageErrors: string[] = [];
-    const recoveryErrors: string[] = [];
     page.on('pageerror', error => pageErrors.push(error.message));
-    page.on('console', message => {
-      if (message.type() === 'error' && message.text() === 'Failed to restore dockview layout') {
-        recoveryErrors.push(message.text());
-      }
-    });
     await page.goto(`/?renderer=${rendererUrl}`);
     await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
     await expect
@@ -81,7 +75,12 @@ for (const invalidState of ['retired panel', 'mismatched panel ID']) {
     await expect(page.locator('.dv-tab', {hasText: /^Events/})).toContainText('(1)');
     await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
     await expect(page.locator('.data-model-container textarea')).toBeVisible();
-    expect(recoveryErrors).toEqual(['Failed to restore dockview layout']);
+    await page.locator('.dv-tab', {hasText: /^Errors/}).click();
+    await expect(
+      page.locator('.errors-container tr.element-row', {
+        hasText: 'Failed to restore dockview layout',
+      }),
+    ).toHaveCount(1);
     expect(pageErrors).toEqual([]);
   });
 }

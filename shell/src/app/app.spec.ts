@@ -76,6 +76,7 @@ describe('appConfig UsageTracking wiring', () => {
     const mockTrackingService = {
       initialize: vi.fn().mockResolvedValue(undefined),
       trackPageView: vi.fn(),
+      trackComposerError: vi.fn(),
     };
 
     TestBed.resetTestingModule();
@@ -95,6 +96,7 @@ describe('appConfig UsageTracking wiring', () => {
     const mockTrackingService = {
       initialize: vi.fn().mockResolvedValue(undefined),
       trackPageView: vi.fn(),
+      trackComposerError: vi.fn(),
     };
 
     TestBed.resetTestingModule();
