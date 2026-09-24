@@ -282,7 +282,7 @@ for (const config of CONFIGS) {
       await expect(searchButton).toHaveCSS('border-radius', '24px');
       await expect(searchButton).toHaveCSS('background-color', 'rgb(63, 81, 181)');
 
-      await expect(styledFrame.locator('body')).toHaveCSS('background-color', 'rgb(247, 248, 250)');
+      await expect(styledFrame.locator('body')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     });
 
     test('validates startup telemetry handshake messages and catalog properties', async ({
