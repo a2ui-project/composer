@@ -539,6 +539,30 @@ ${METRICS_END}
       );
       assert.ok(script.includes('exit 1'), 'Must exit with code 1 if failures occurred');
     });
+
+    it('preserves both custom dimensions and custom metrics when called with default arguments', () => {
+      const script = generateBashScript();
+
+      // Custom dimensions preserved
+      assert.ok(
+        script.includes('create_dimension "prompt_id"'),
+        'Must preserve existing custom dimensions like prompt_id',
+      );
+
+      // Custom metrics preserved
+      assert.ok(
+        script.includes('create_metric "duration_seconds"'),
+        'Must preserve existing custom metrics like duration_seconds',
+      );
+      assert.ok(
+        script.includes('create_metric "line"'),
+        'Must preserve existing custom metrics like line',
+      );
+      assert.ok(
+        script.includes('create_metric "column"'),
+        'Must preserve existing custom metrics like column',
+      );
+    });
   });
 
   describe('f) Sentinel-scoped parsing and surgical replacement', () => {

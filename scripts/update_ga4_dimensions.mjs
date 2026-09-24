@@ -471,7 +471,10 @@ export function generateBashScript(
 ) {
   if (!definitions) {
     const existing = parseExistingScript(baseScriptContent);
-    definitions = mergeDefinitions(existing, new Set(existing.dimensions.keys()));
+    definitions = mergeDefinitions(
+      existing,
+      new Set([...existing.dimensions.keys(), ...existing.metrics.keys()]),
+    );
   }
   return generateScriptContent(baseScriptContent, definitions);
 }
