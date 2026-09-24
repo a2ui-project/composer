@@ -156,22 +156,6 @@ export interface ParsedA2aStreamEvent {
 }
 
 /**
- * Resolves the logger when the injector builds this service, and tolerates it being absent.
- *
- * Consumers should inject `A2aStreamEventParser`, which resolves the logger normally. The fallback
- * exists for `a2a-ui-converter`, which holds a module-scope instance built with `new` to back the
- * `parseA2aStreamEvent` helper; `inject` throws there, and without the guard merely importing that
- * module would fail. Payloads discarded by that instance go unreported.
- */
-function resolveErrorLogger(): ErrorLogger | undefined {
-  try {
-    return inject(ErrorLogger);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
  * Service responsible for parsing incoming A2A streaming chunks (TaskStatusUpdateEvent),
  * unwrapping JSON-RPC result and protobuf StreamResponse envelopes, extracting text chunks,
  * model reasoning/thoughts, multimedia files, tool invocations, and declarative A2UI UI payloads.
@@ -180,7 +164,7 @@ function resolveErrorLogger(): ErrorLogger | undefined {
   providedIn: 'root',
 })
 export class A2aStreamEventParser {
-  private readonly errorLogger = resolveErrorLogger();
+  private readonly errorLogger = inject(ErrorLogger);
 
   /**
    * Parses an incoming TaskStatusUpdateEvent into textual chunks, thoughts, and layout items.
