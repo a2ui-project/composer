@@ -155,6 +155,61 @@ describe('CustomInstructionsDialog', () => {
         activePresetId: null,
       });
     });
+
+    it('preserves edits to existing preset when switching between options before clicking save', async () => {
+      await harness.setPresetName('Concise Updated');
+      await harness.setInstructions('Updated concise rules.');
+
+      // Switch away to another preset
+      await harness.selectOption('Verbose');
+      expect(await harness.getPresetName()).toBe('Verbose');
+      expect(await harness.getInstructions()).toBe('Provide extensive explanations.');
+
+      // Switch back to Concise Updated
+      await harness.selectOption('Concise Updated');
+      expect(await harness.getPresetName()).toBe('Concise Updated');
+      expect(await harness.getInstructions()).toBe('Updated concise rules.');
+
+      await harness.clickSave();
+      expect(mockDialogRef.close).toHaveBeenCalledWith({
+        presets: [
+          {id: 'p-1', name: 'Concise Updated', content: 'Updated concise rules.'},
+          {id: 'p-2', name: 'Verbose', content: 'Provide extensive explanations.'},
+        ],
+        activePresetId: 'p-1',
+      });
+    });
+
+    it('preserves draft preset inputs when switching to an existing preset and back to "+ New preset..."', async () => {
+      await harness.selectOption('+ New preset...');
+      await harness.setPresetName('Draft Preset');
+      await harness.setInstructions('Draft instruction body');
+
+      // Switch to existing preset
+      await harness.selectOption('Concise');
+      expect(await harness.getPresetName()).toBe('Concise');
+
+      // Switch back to "+ New preset..."
+      await harness.selectOption('+ New preset...');
+      expect(await harness.getPresetName()).toBe('Draft Preset');
+      expect(await harness.getInstructions()).toBe('Draft instruction body');
+
+      await harness.clickSave();
+      expect(mockDialogRef.close).toHaveBeenCalledTimes(1);
+      const result: CustomInstructionsState = mockDialogRef.close.mock.calls[0][0];
+      expect(result.presets.length).toBe(3);
+      expect(result.presets[2].name).toBe('Draft Preset');
+      expect(result.presets[2].content).toBe('Draft instruction body');
+      expect(result.activePresetId).toBe(result.presets[2].id);
+    });
+
+    it('discards preset deletion when dialog is cancelled', async () => {
+      await harness.clickDelete();
+      expect(await harness.getSelectedPresetOptionText()).toBe('None (Off)');
+
+      await harness.clickCancel();
+      expect(mockDialogRef.close).toHaveBeenCalledWith();
+    });
   });
 
   describe('When presets exist but activePresetId is null', () => {

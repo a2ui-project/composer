@@ -58,9 +58,9 @@ mat-dialog-content {
 }
 
 .instructions-textarea {
-  width: calc(600px - 32px);
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
-  min-width: 300px;
   min-height: 180px;
   height: 210px;
   resize: vertical;

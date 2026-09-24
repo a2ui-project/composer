@@ -65,6 +65,8 @@ export class CustomInstructionsDialog {
   protected readonly selectedOption = signal<string>(this.computeInitialOption());
   protected readonly presetName = signal<string>(this.computeInitialName());
   protected readonly instructionsContent = signal<string>(this.computeInitialContent());
+  protected readonly draftName = signal<string>('');
+  protected readonly draftContent = signal<string>('');
 
   protected readonly isExistingPreset = computed(() => {
     const opt = this.selectedOption();
@@ -74,6 +76,12 @@ export class CustomInstructionsDialog {
   protected readonly isNoneSelected = computed(() => this.selectedOption() === NONE_OPTION);
 
   protected readonly isSaveDisabled = computed(() => {
+    const anyInvalidExistingPreset = this.presets().some(
+      p => p.name.trim().length === 0 || p.content.trim().length === 0,
+    );
+    if (anyInvalidExistingPreset) {
+      return true;
+    }
     if (this.isNoneSelected()) {
       return false;
     }
@@ -112,7 +120,10 @@ export class CustomInstructionsDialog {
 
   protected onOptionChange(option: string): void {
     this.selectedOption.set(option);
-    if (option === NEW_OPTION || option === NONE_OPTION) {
+    if (option === NEW_OPTION) {
+      this.presetName.set(this.draftName());
+      this.instructionsContent.set(this.draftContent());
+    } else if (option === NONE_OPTION) {
       this.presetName.set('');
       this.instructionsContent.set('');
     } else {
@@ -124,10 +135,22 @@ export class CustomInstructionsDialog {
 
   protected onNameChange(value: string): void {
     this.presetName.set(value);
+    if (this.selectedOption() === NEW_OPTION) {
+      this.draftName.set(value);
+    } else if (this.isExistingPreset()) {
+      const currentId = this.selectedOption();
+      this.presets.update(list => list.map(p => (p.id === currentId ? {...p, name: value} : p)));
+    }
   }
 
   protected onContentChange(value: string): void {
     this.instructionsContent.set(value);
+    if (this.selectedOption() === NEW_OPTION) {
+      this.draftContent.set(value);
+    } else if (this.isExistingPreset()) {
+      const currentId = this.selectedOption();
+      this.presets.update(list => list.map(p => (p.id === currentId ? {...p, content: value} : p)));
+    }
   }
 
   protected deletePreset(): void {
