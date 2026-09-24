@@ -242,8 +242,14 @@ describe('McpClientManagerService', () => {
     closeMock.mockClear();
     connectMock.mockClear();
 
-    // Unchanged URL should return early without disconnecting or reconnecting
+    // Unchanged URL and name should return early without disconnecting or reconnecting
     await service.updateServerUrl(id, '  http://localhost:3001/mcp  ');
+    expect(closeMock).not.toHaveBeenCalled();
+    expect(connectMock).not.toHaveBeenCalled();
+
+    // Updating only the custom name should update name and persist without reconnecting
+    await service.updateServerUrl(id, 'http://localhost:3001/mcp', 'Custom Server Name');
+    expect(service.servers()[0].name).toBe('Custom Server Name');
     expect(closeMock).not.toHaveBeenCalled();
     expect(connectMock).not.toHaveBeenCalled();
 

@@ -1,0 +1,50 @@
+<!--
+  Copyright 2026 Google LLC
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<h2 mat-dialog-title>{{ data?.server ? 'Edit MCP Server' : 'Add MCP Server' }}</h2>
+<mat-dialog-content>
+  <form [formGroup]="form" (ngSubmit)="$event.preventDefault(); onConfirm()">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Name (optional)</mat-label>
+      <input
+        matInput
+        id="mcp-server-name-input"
+        formControlName="name"
+        placeholder="Auto-detected from server if left blank"
+      />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Server URL</mat-label>
+      <input
+        matInput
+        id="mcp-server-url-input"
+        formControlName="url"
+        placeholder="http://localhost:3001/mcp"
+      />
+    </mat-form-field>
+
+    @if (errorMessage()) {
+      <div class="error-message" role="alert">{{ errorMessage() }}</div>
+    }
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" mat-dialog-close>Cancel</button>
+  <button mat-button type="button" color="primary" [disabled]="form.invalid" (click)="onConfirm()">
+    {{ data?.server ? 'Save' : 'Add' }}
+  </button>
+</mat-dialog-actions>

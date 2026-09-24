@@ -165,6 +165,20 @@ export class SettingsHarness extends ComponentHarness {
     return !!(await this.locatorForOptional('.mcp-card')());
   }
 
+  async hasMcpEmptyState(): Promise<boolean> {
+    return !!(await this.locatorForOptional('.mcp-empty-state')());
+  }
+
+  async clickAddMcpServerButton(): Promise<void> {
+    const btn = await this.locatorFor(MatButtonHarness.with({selector: '.mcp-add-btn'}))();
+    await btn.click();
+  }
+
+  async clickEditMcpServerButton(): Promise<void> {
+    const btn = await this.locatorFor(MatButtonHarness.with({selector: '.mcp-edit-btn'}))();
+    await btn.click();
+  }
+
   async getMcpServerNames(): Promise<string[]> {
     const els = await this.locatorForAll('.mcp-server-name')();
     return Promise.all(els.map(e => e.text()));
@@ -183,9 +197,5 @@ export class SettingsHarness extends ComponentHarness {
   async hasMcpTestButtons(): Promise<boolean> {
     const btns = await this.locatorForAll('.mcp-test-btn')();
     return btns.length > 0;
-  }
-
-  async hasMcpEditRow(): Promise<boolean> {
-    return !!(await this.locatorForOptional('.mcp-edit-row')());
   }
 }
