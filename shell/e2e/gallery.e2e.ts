@@ -72,7 +72,8 @@ test.describe('Components Gallery User Journey', () => {
 
     // Assert card headers are visible
     const cardHeaders = page.locator('mat-card-header mat-card-title');
-    await expect(cardHeaders).toHaveText(['Preview', 'Usage', 'Properties']);
+    await expect(cardHeaders).toHaveText(['Usage', 'Properties']);
+    await expect(page.getByRole('tab')).toHaveText(['Preview', 'Edit JSON']);
 
     // 7. Assert properties table is populated
     const propertiesTable = page.getByRole('table');
@@ -80,17 +81,17 @@ test.describe('Components Gallery User Journey', () => {
     const rows = propertiesTable.locator('tbody tr');
     await expect(rows.first()).toBeVisible();
 
-    // 8. Assert usage card renders the usage JSON block representing a raw components array
-    await page.locator('.usage-details summary').click();
-    const usageCode = page.locator('pre code');
-    await expect(usageCode).toBeVisible();
-    await expect(usageCode).toContainText(`"component": "${firstComponentName!}"`);
-    const usageCodeText = (await usageCode.textContent()) || '';
-    expect(usageCodeText.trim().startsWith('[')).toBe(true);
-    expect(usageCodeText.trim().endsWith(']')).toBe(true);
-    expect(usageCodeText).not.toContain('"usage": [');
-    expect(usageCodeText).not.toContain('createSurface');
-    expect(usageCodeText).not.toContain('updateComponents');
+    // 8. Assert the Edit JSON tab holds the editable example as a raw components array
+    await page.getByRole('tab', {name: 'Edit JSON'}).click();
+    const draftJson = page.locator('textarea.draft-json');
+    await expect(draftJson).toBeVisible();
+    await expect(draftJson).toHaveValue(new RegExp(`"component": "${firstComponentName!}"`));
+    const draftText = await draftJson.inputValue();
+    expect(Array.isArray(JSON.parse(draftText).components)).toBe(true);
+    expect(draftText).not.toContain('"usage": [');
+    expect(draftText).not.toContain('createSurface');
+    expect(draftText).not.toContain('updateComponents');
+    await page.getByRole('tab', {name: 'Preview'}).click();
 
     // Explicitly select AudioPlayer to verify its custom usages rendering
     const audioPlayerItem = page
@@ -98,9 +99,10 @@ test.describe('Components Gallery User Journey', () => {
       .getByRole('button', {name: 'AudioPlayer', exact: true});
     await expect(audioPlayerItem).toBeVisible();
     await audioPlayerItem.click();
-    await expect(page.locator('pre code')).toContainText('"description": "Deep dive into A2UI"');
-    const audioUsageCodeText = (await page.locator('pre code').textContent()) || '';
-    expect(audioUsageCodeText).not.toContain('Audio Clip');
+    await page.getByRole('tab', {name: 'Edit JSON'}).click();
+    await expect(draftJson).toHaveValue(/"description": "Deep dive into A2UI"/);
+    expect(await draftJson.inputValue()).not.toContain('Audio Clip');
+    await page.getByRole('tab', {name: 'Preview'}).click();
 
     // Click back to first component to continue the rest of the test flow
     await navItems.first().click();
@@ -179,13 +181,16 @@ test.describe('Components Gallery User Journey', () => {
       page.getByRole('heading', {name: secondComponentName!, exact: true}),
     ).toBeVisible();
 
-    await expect(page.locator('pre code')).toContainText(`"component": "${secondComponentName!}"`);
-    const secondUsageCodeText = (await page.locator('pre code').textContent()) || '';
-    expect(secondUsageCodeText.trim().startsWith('[')).toBe(true);
-    expect(secondUsageCodeText.trim().endsWith(']')).toBe(true);
-    expect(secondUsageCodeText).not.toContain('"usage": [');
-    expect(secondUsageCodeText).not.toContain('createSurface');
-    expect(secondUsageCodeText).not.toContain('updateComponents');
+    // The Edit JSON tab holds the selected component's editable example.
+    await page.getByRole('tab', {name: 'Edit JSON'}).click();
+    const secondDraftJson = page.locator('.draft-json');
+    await expect(secondDraftJson).toHaveValue(new RegExp(`"component": "${secondComponentName!}"`));
+    const secondDraft = JSON.parse(await secondDraftJson.inputValue()) as Record<string, unknown>;
+    expect(Array.isArray(secondDraft['components'])).toBe(true);
+    const secondDraftText = await secondDraftJson.inputValue();
+    expect(secondDraftText).not.toContain('createSurface');
+    expect(secondDraftText).not.toContain('updateComponents');
+    await page.getByRole('tab', {name: 'Preview'}).click();
 
     // Assert that the marker is still present, proving the DOM element was reused in-place
     await expect(detailsPanel).toHaveAttribute('data-test-marker', 'in-place-verify');
@@ -224,7 +229,9 @@ test.describe('Components Gallery User Journey', () => {
       .poll(async () => {
         const cardBounds = await page.locator('.preview-card').boundingBox();
         const frameBounds = await frame.boundingBox();
-        if (!cardBounds || !frameBounds) return -1;
+        if (!cardBounds || !frameBounds) {
+          return -1;
+        }
         return cardBounds.y + cardBounds.height - frameBounds.y - frameBounds.height;
       })
       .toBeGreaterThanOrEqual(0);
@@ -273,11 +280,12 @@ test.describe('Components Gallery User Journey', () => {
     const preview = page.frameLocator('.preview-card iframe');
     await expect(preview.getByText(edited, {exact: true})).toBeVisible();
 
-    await page.locator('.draft-editor summary').click();
+    await page.getByRole('tab', {name: 'Edit JSON'}).click();
     const draft = page.getByLabel('Components and optional data');
     await expect(draft).toHaveValue(new RegExp(edited));
     await draft.fill('{invalid');
     await expect(page.getByRole('alert').filter({hasText: 'last valid example'})).toBeVisible();
+    await page.getByRole('tab', {name: 'Preview'}).click();
     await expect(preview.getByText(edited, {exact: true})).toBeVisible();
     await page.getByRole('button', {name: 'Copy JSON', exact: true}).click();
     const copied = await page.evaluate(() => navigator.clipboard.readText());

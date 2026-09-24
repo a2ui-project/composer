@@ -15,8 +15,13 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {parseGalleryExample} from './gallery-example';
-import {Catalog} from '../storage/models/catalog-storage.model';
+import {
+  describeUneditableValue,
+  galleryPropertyControl,
+  parseGalleryExample,
+} from './gallery-example';
+import {ErrorLogger} from '../debug/error-logger.service';
+import {Catalog, CatalogComponentSchema} from '../storage/models/catalog-storage.model';
 
 const catalog: Catalog = {
   catalogId: 'custom://notice',
@@ -41,11 +46,13 @@ const component = {
   emphasis: 'normal',
 };
 
+const errorLogger = new ErrorLogger();
+
 describe('parseGalleryExample', () => {
   it('preserves custom components, path bindings and data without changing catalog identity', () => {
     const components = [{...component, text: {path: '/name'}}];
     const data = {name: 'Edited'};
-    expect(parseGalleryExample(JSON.stringify({components, data}), catalog)).toEqual({
+    expect(parseGalleryExample(JSON.stringify({components, data}), catalog, errorLogger)).toEqual({
       usage: components,
       data,
     });
@@ -75,6 +82,58 @@ describe('parseGalleryExample', () => {
     ['invalid enum', JSON.stringify({components: [{...component, emphasis: 'other'}]}), 'emphasis'],
     ['invalid binding union', JSON.stringify({components: [{...component, text: 3}]}), 'text'],
   ])('rejects %s', (_name, text, reason) => {
-    expect(() => parseGalleryExample(text, catalog)).toThrow(reason);
+    expect(() => parseGalleryExample(text, catalog, errorLogger)).toThrow(reason);
+  });
+});
+
+// Shapes as CatalogSchemaResolver returns them for the basic catalog's common types.
+const binding: CatalogComponentSchema = {type: 'object', properties: {path: {type: 'string'}}};
+const call: CatalogComponentSchema = {type: 'object', properties: {call: {type: 'string'}}};
+const dynamic = (literal: CatalogComponentSchema): CatalogComponentSchema => ({
+  oneOf: [literal, binding, call],
+});
+
+describe('galleryPropertyControl', () => {
+  it.each([
+    ['a string enum', {type: 'string', enum: ['checkbox', 'chips']}, 'enum'],
+    ['a boolean', {type: 'boolean'}, 'boolean'],
+    ['an integer', {type: 'integer'}, 'number'],
+    ['a string', {type: 'string'}, 'string'],
+    ['a DynamicString', dynamic({type: 'string'}), 'string'],
+    ['a DynamicBoolean', dynamic({type: 'boolean'}), 'boolean'],
+    ['a DynamicNumber', dynamic({type: 'number'}), 'number'],
+    ['an enum inside a union', {anyOf: [{type: 'string', enum: ['a', 'b']}, binding]}, 'enum'],
+    ['an array of options', {type: 'array', items: {type: 'object'}}, 'json'],
+    ['a DynamicStringList', dynamic({type: 'array', items: {type: 'string'}}), 'json'],
+    ['a ChildList', {oneOf: [{type: 'array'}, {type: 'object'}]}, 'json'],
+    ['a DynamicValue', {oneOf: [{type: 'string'}, {type: 'number'}, binding]}, 'json'],
+    ['an untyped schema', {}, 'json'],
+    ['a missing schema', undefined, 'json'],
+  ])('edits %s with a %s control', (_name, schema, kind) => {
+    expect(galleryPropertyControl(schema as CatalogComponentSchema | undefined).kind).toBe(kind);
+  });
+
+  it('keeps enum options in catalog order', () => {
+    expect(galleryPropertyControl({type: 'string', enum: ['checkbox', 'chips']}).options).toEqual([
+      'checkbox',
+      'chips',
+    ]);
+  });
+});
+
+describe('describeUneditableValue', () => {
+  const text = galleryPropertyControl(dynamic({type: 'string'}));
+
+  it('allows literals and unset values that the control can edit', () => {
+    expect(describeUneditableValue('Hello', text)).toBeNull();
+    expect(describeUneditableValue(undefined, text)).toBeNull();
+    expect(describeUneditableValue({any: 'shape'}, {kind: 'json', options: []})).toBeNull();
+  });
+
+  it('protects bindings, function calls and values outside the control', () => {
+    expect(describeUneditableValue({path: '/user/name'}, text)).toContain('Bound to /user/name');
+    expect(describeUneditableValue({call: 'formatDate'}, text)).toContain('formatDate()');
+    expect(describeUneditableValue(3, text)).toContain('JSON tab');
+    expect(describeUneditableValue('other', {kind: 'enum', options: ['a']})).toContain('JSON tab');
   });
 });

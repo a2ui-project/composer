@@ -18,6 +18,7 @@ import {ComponentHarness} from '@angular/cdk/testing';
 import {MatNavListHarness} from '@angular/material/list/testing';
 import {MatTableHarness} from '@angular/material/table/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
+import {MatTabGroupHarness} from '@angular/material/tabs/testing';
 import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
 
 /**
@@ -32,7 +33,9 @@ export class GalleryHarness extends ComponentHarness {
   private readonly getTable = this.locatorForOptional(MatTableHarness);
   private readonly getTitle = this.locatorForOptional('.component-title');
   private readonly getDescription = this.locatorForOptional('.component-description');
-  private readonly getUsageCode = this.locatorForOptional('.usage-code');
+  private readonly getExampleTabs = this.locatorFor(
+    MatTabGroupHarness.with({selector: '.example-tabs'}),
+  );
   private readonly getCopyButton = this.locatorForOptional(
     MatButtonHarness.with({selector: '.copy-button'}),
   );
@@ -87,12 +90,26 @@ export class GalleryHarness extends ComponentHarness {
     return descEl ? descEl.text() : null;
   }
 
-  /**
-   * Retrieves the current usage code block content.
-   */
-  async getUsageCodeText(): Promise<string | null> {
-    const codeEl = await this.getUsageCode();
-    return codeEl ? codeEl.text() : null;
+  /** Retrieves the labels of the Preview card tabs. */
+  async getExampleTabLabels(): Promise<string[]> {
+    const tabs = await (await this.getExampleTabs()).getTabs();
+    return Promise.all(tabs.map(tab => tab.getLabel()));
+  }
+
+  /** Switches the Preview card to one of its tabs. */
+  async selectExampleTab(label: string): Promise<void> {
+    await (await this.getExampleTabs()).selectTab({label});
+  }
+
+  /** Whether the editable example JSON is shown in the Edit JSON tab. */
+  async hasDraftEditor(): Promise<boolean> {
+    await this.selectExampleTab('Edit JSON');
+    return !!(await this.locatorForOptional('.draft-json')());
+  }
+
+  /** Whether any collapsible group or read-only component JSON block is rendered. */
+  async hasCollapsibleJson(): Promise<boolean> {
+    return (await this.locatorForAll('details, .usage-code')()).length > 0;
   }
 
   /**
@@ -152,8 +169,9 @@ export class GalleryHarness extends ComponentHarness {
     }
     return records;
   }
-  /** Replaces the editable example JSON through the rendered form. */
+  /** Replaces the editable example JSON through the Edit JSON tab. */
   async editDraft(text: string): Promise<void> {
+    await this.selectExampleTab('Edit JSON');
     const input = await this.locatorFor('.draft-json')();
     await input.setInputValue(text);
     await input.dispatchEvent('input');
@@ -161,6 +179,7 @@ export class GalleryHarness extends ComponentHarness {
 
   /** Reads the retained text, including an invalid edit. */
   async getDraftText(): Promise<string> {
+    await this.selectExampleTab('Edit JSON');
     return (await this.locatorFor('.draft-json')()).getProperty<string>('value');
   }
 
@@ -188,8 +207,88 @@ export class GalleryHarness extends ComponentHarness {
     await select.dispatchEvent('change');
   }
 
+  /** Reads the option labels of an enum property, including "(not set)" when optional. */
+  async getPropertyOptions(name: string): Promise<string[]> {
+    const options = await this.locatorForAll(`select[data-property="${name}"] option`)();
+    return Promise.all(options.map(option => option.text()));
+  }
+
   /** Toggles a boolean property through its native checkbox. */
   async toggleProperty(name: string): Promise<void> {
     await (await this.locatorFor(`[data-property="${name}"]`)()).click();
+  }
+
+  /** Lists the editable property names in display order. */
+  async getPropertySectionHeadings(): Promise<string[]> {
+    const headings = await this.locatorForAll('.property-section-heading')();
+    return Promise.all(headings.map(async heading => (await heading.text()).trim()));
+  }
+
+  async getPropertyNames(): Promise<string[]> {
+    const names = await this.locatorForAll('.property-name > span:first-child')();
+    return Promise.all(names.map(name => name.text()));
+  }
+
+  /** Reads which kind of control a property renders: select, checkbox, number, text or json. */
+  async getPropertyControlKind(name: string): Promise<string | null> {
+    const control = await this.locatorForOptional(`[data-property="${name}"]`)();
+    if (!control) {
+      return null;
+    }
+    const tagName = await control.getProperty<string>('tagName');
+    if (tagName === 'TEXTAREA') {
+      return 'json';
+    }
+    if (tagName === 'SELECT') {
+      return 'select';
+    }
+    return control.getAttribute('type');
+  }
+
+  /** Whether a property shows the "required" marker. */
+  async isPropertyRequired(name: string): Promise<boolean> {
+    return !!(await this.locatorForOptional(`[data-property-row="${name}"] .required-marker`)());
+  }
+
+  /** Whether a property offers a remove action. */
+  async canRemoveProperty(name: string): Promise<boolean> {
+    return !!(await this.locatorForOptional(`[data-remove-property="${name}"]`)());
+  }
+
+  /** Removes an optional property through its remove action. */
+  async removeProperty(name: string): Promise<void> {
+    await (await this.locatorFor(`[data-remove-property="${name}"]`)()).click();
+  }
+
+  /** Replaces a structured property's JSON and commits it like a blur would. */
+  async editJsonProperty(name: string, text: string): Promise<void> {
+    const field = await this.locatorFor(`textarea[data-property="${name}"]`)();
+    await field.setInputValue(text);
+    await field.dispatchEvent('change');
+  }
+
+  /** Reads the text shown in a structured property's JSON field. */
+  async getJsonPropertyText(name: string): Promise<string> {
+    return (await this.locatorFor(`textarea[data-property="${name}"]`)()).getProperty<string>(
+      'value',
+    );
+  }
+
+  /** Reads the inline error under a property, if any. */
+  async getPropertyError(name: string): Promise<string | null> {
+    const error = await this.locatorForOptional(`[data-property-row="${name}"] .property-error`)();
+    return error ? error.text() : null;
+  }
+
+  /** Reads the read-only note shown for a bound or computed value, if any. */
+  async getPropertyNote(name: string): Promise<string | null> {
+    const note = await this.locatorForOptional(`[data-property-note="${name}"]`)();
+    return note ? note.text() : null;
+  }
+
+  /** Whether a property keeps its name and control on one row rather than stacking them. */
+  async isPropertyInline(name: string): Promise<boolean> {
+    const row = await this.locatorFor(`[data-property-row="${name}"]`)();
+    return !(await row.hasClass('property-row-stacked'));
   }
 }

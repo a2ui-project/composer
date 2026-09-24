@@ -38,6 +38,7 @@ import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatTabsModule} from '@angular/material/tabs';
 import {GalleryCatalog} from './services/gallery-catalog';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
@@ -49,7 +50,13 @@ import {StartupConfigStateService} from '../shell/startup-resolution/state/start
 import {stableStringify} from '../storage/stable-stringify/stable-stringify';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {CatalogSchemaResolver} from './schema/catalog-schema-resolver';
-import {parseGalleryExample} from './gallery-example';
+import {
+  describeUneditableValue,
+  galleryPropertyControl,
+  GalleryPropertyControl,
+  parseGalleryExample,
+} from './gallery-example';
+import {ErrorLogger} from '../debug/error-logger.service';
 import {GalleryLauncher} from './gallery-launcher';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 
@@ -60,11 +67,27 @@ interface ExampleDraft {
   error: string | null;
 }
 
-interface SimpleProperty {
+interface EditableProperty {
   name: string;
-  type: 'string' | 'number' | 'boolean';
-  value: string | number | boolean;
-  options: Array<string | number | boolean> | null;
+  required: boolean;
+  kind: GalleryPropertyControl['kind'];
+  options: GalleryPropertyControl['options'];
+  /** The current value, or undefined when the example omits the property. */
+  value: unknown;
+  /** The formatted value for JSON controls. */
+  json: string;
+  /** Set when the value is a binding or call that only the JSON tab can edit. */
+  note: string | null;
+  /** True for properties every component in the catalog shares, such as accessibility. */
+  common: boolean;
+  /** True on the first common property, where the list starts its common section. */
+  firstCommon: boolean;
+}
+
+/** An unparsed JSON property edit, kept so the field shows what was typed. */
+interface JsonFieldError {
+  text: string;
+  message: string;
 }
 
 /**
@@ -86,6 +109,7 @@ interface SimpleProperty {
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
+    MatTabsModule,
     RenderedFrame,
   ],
   templateUrl: './gallery.ng.html',
@@ -100,6 +124,7 @@ export class Gallery implements OnInit, OnDestroy {
   private readonly startupResolution = inject(StartupResolution);
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly launcher = inject(GalleryLauncher);
+  private readonly errorLogger = inject(ErrorLogger);
   protected readonly opening = signal(false);
   protected readonly actionMessage = signal('');
   protected readonly rendererUrl = this.startupResolution.resolvedUrl;
@@ -122,46 +147,76 @@ export class Gallery implements OnInit, OnDestroy {
   protected readonly draft = linkedSignal({
     source: this.draftSource,
     computation: (source, previous): ExampleDraft => {
-      if (previous?.source.identity === source.identity && previous.value.preset)
+      if (previous?.source.identity === source.identity && previous.value.preset) {
         return previous.value;
+      }
       return this.createDraft(source.preset, source.catalog);
     },
+  });
+  /** Invalid per-property JSON edits by property name; cleared when the draft is replaced. */
+  protected readonly jsonFieldErrors = linkedSignal({
+    source: this.draftSource,
+    computation: (): Partial<Record<string, JsonFieldError>> => ({}),
   });
   private readonly validPayload = computed(() => this.draft().payload);
   protected readonly validPayloadJson = computed(() => {
     const payload = this.validPayload();
     return payload ? formatJson(payload) : '';
   });
-  protected readonly currentUsage = computed(() => {
-    const preset = this.draft().preset;
-    return preset ? formatJson(preset.usage) : '';
-  });
-  protected readonly simpleProperties = computed<SimpleProperty[]>(() => {
+  /** Every catalog property of the selected component except its identity and constants. */
+  protected readonly editableProperties = computed<EditableProperty[]>(() => {
     const target = this.editableComponent();
     const catalog = this.catalogManagement.activeCatalog();
-    if (!target || !catalog) return [];
-    const schemas = new CatalogSchemaResolver(catalog).resolveComponentPropertiesSchema(
-      String(target['component']),
-    );
-    return this.catalogService.selectedComponentProperties().flatMap(prop => {
-      if (
-        prop.name === 'id' ||
-        prop.name === 'component' ||
-        schemas[prop.name]?.['const'] !== undefined
-      )
+    if (!target || !catalog) {
+      return [];
+    }
+    const resolver = new CatalogSchemaResolver(catalog, this.errorLogger);
+    const schemas = resolver.resolveComponentPropertiesSchema(String(target['component']));
+    const common = this.commonPropertyNames(resolver, catalog);
+    const properties = this.catalogService.selectedComponentProperties().flatMap(prop => {
+      const schema = schemas[prop.name];
+      if (prop.name === 'id' || prop.name === 'component' || schema?.['const'] !== undefined) {
         return [];
+      }
+      const control = galleryPropertyControl(schema);
       const value = target[prop.name];
-      const type = typeof value;
-      if (type !== 'string' && type !== 'number' && type !== 'boolean') return [];
-      const choices = schemas[prop.name]?.['enum'];
-      const options =
-        Array.isArray(choices) &&
-        choices.every(option => ['string', 'number', 'boolean'].includes(typeof option))
-          ? (choices as Array<string | number | boolean>)
-          : null;
-      return [{name: prop.name, type, value: value as string | number | boolean, options}];
+      return [
+        {
+          name: prop.name,
+          required: prop.required,
+          kind: control.kind,
+          options: control.options,
+          value,
+          json: value === undefined ? '' : formatJson(value),
+          note: describeUneditableValue(value, control),
+          common: !prop.required && common.has(prop.name),
+          firstCommon: false,
+        },
+      ];
     });
+    // Required properties first, then the component's own, then the shared ones.
+    const rank = (prop: EditableProperty) => (prop.required ? 0 : prop.common ? 2 : 1);
+    const sorted = properties
+      .map((prop, index) => ({prop, index}))
+      .sort((a, b) => rank(a.prop) - rank(b.prop) || a.index - b.index)
+      .map(({prop}) => prop);
+    const firstCommon = sorted.findIndex(prop => prop.common);
+    return sorted.map((prop, index) =>
+      index === firstCommon ? {...prop, firstCommon: true} : prop,
+    );
   });
+
+  /** Property names every component in the catalog declares. */
+  private commonPropertyNames(resolver: CatalogSchemaResolver, catalog: Catalog): Set<string> {
+    const names = Object.keys(catalog.components ?? {});
+    if (names.length < 2) {
+      return new Set();
+    }
+    const [first, ...rest] = names.map(
+      name => new Set(Object.keys(resolver.resolveComponentPropertiesSchema(name))),
+    );
+    return new Set([...first].filter(prop => rest.every(set => set.has(prop))));
+  }
 
   private editableComponent(): Record<string, unknown> | undefined {
     const key = this.catalogService.selectedComponentKey();
@@ -199,10 +254,12 @@ export class Gallery implements OnInit, OnDestroy {
   protected editDraft(text: string, propertyEdit = false): void {
     const catalog = this.catalogManagement.activeCatalog();
     const id = this.catalogId();
-    if (!catalog || !id) return;
+    if (!catalog || !id) {
+      return;
+    }
     this.actionMessage.set('');
     try {
-      const preset = parseGalleryExample(text, catalog);
+      const preset = parseGalleryExample(text, catalog, this.errorLogger);
       this.draft.set({
         text,
         preset,
@@ -228,18 +285,23 @@ export class Gallery implements OnInit, OnDestroy {
     }
   }
 
-  /** Changes a literal property without replacing path bindings or nested values. */
-  protected editProperty(name: string, value: string | number | boolean | null): void {
-    if (value === null) {
-      this.actionMessage.set(`Enter a number for ${name}. Preview keeps its previous value.`);
-      return;
-    }
+  /** Sets one property on the selected component, or removes it when value is undefined. */
+  protected editProperty(name: string, value: unknown): void {
     const preset = this.draft().preset;
     const target = this.editableComponent();
-    if (!preset || !target || this.draft().error) return;
-    const components = preset.usage.map(component =>
-      component === target ? {...component, [name]: value} : component,
-    );
+    if (!preset || !target || this.draft().error) {
+      return;
+    }
+    const components = preset.usage.map(component => {
+      if (component !== target) {
+        return component;
+      }
+      if (value !== undefined) {
+        return {...component, [name]: value};
+      }
+      const {[name]: _removed, ...rest} = component;
+      return rest;
+    });
     this.editDraft(
       formatJson({
         ['components']: components,
@@ -249,8 +311,49 @@ export class Gallery implements OnInit, OnDestroy {
     );
   }
 
+  /** Empty optional text removes the property; required text may be empty. */
+  protected editTextProperty(prop: EditableProperty, value: string): void {
+    this.editProperty(prop.name, value === '' && !prop.required ? undefined : value);
+  }
+
+  /** Empty optional numbers remove the property; a required number keeps its value. */
+  protected editNumberProperty(prop: EditableProperty, value: number | null): void {
+    if (value !== null) {
+      this.editProperty(prop.name, value);
+    } else if (!prop.required) {
+      this.editProperty(prop.name, undefined);
+    } else {
+      this.actionMessage.set(`Enter a number for ${prop.name}. Preview keeps its previous value.`);
+    }
+  }
+
+  /** Parses a structured property; invalid JSON stays in its field and leaves the draft alone. */
+  protected editJsonProperty(prop: EditableProperty, text: string): void {
+    const setError = (message: string) => {
+      this.jsonFieldErrors.update(errors => ({...errors, [prop.name]: {text, message}}));
+    };
+    let value: unknown;
+    if (!text.trim()) {
+      if (prop.required) {
+        setError(`${prop.name} is required.`);
+        return;
+      }
+      value = undefined;
+    } else {
+      try {
+        value = JSON.parse(text);
+      } catch {
+        setError('Invalid JSON. The example keeps its previous value.');
+        return;
+      }
+    }
+    this.jsonFieldErrors.update(({[prop.name]: _cleared, ...errors}) => errors);
+    this.editProperty(prop.name, value);
+  }
+
   protected resetDraft(): void {
     this.actionMessage.set('');
+    this.jsonFieldErrors.set({});
     this.draft.set(
       this.createDraft(
         this.catalogService.selectedComponentPreset(),
@@ -262,7 +365,9 @@ export class Gallery implements OnInit, OnDestroy {
   protected async openInComposer(): Promise<void> {
     const payload = this.validPayloadJson();
     const renderer = this.rendererUrl();
-    if (!payload || !renderer || this.opening()) return;
+    if (!payload || !renderer || this.opening()) {
+      return;
+    }
     this.opening.set(true);
     this.actionMessage.set('');
     try {
@@ -333,7 +438,9 @@ export class Gallery implements OnInit, OnDestroy {
 
   private dispatchSelectedComponentPayload(): void {
     const payload = this.validPayload();
-    if (!payload) return;
+    if (!payload) {
+      return;
+    }
     try {
       this.hostCommunication.sendRenderA2UI(payload);
     } catch (error) {
@@ -368,7 +475,9 @@ export class Gallery implements OnInit, OnDestroy {
 
   protected readonly catalogId = computed<string | null>(() => {
     const catalog = this.catalogManagement.activeCatalog();
-    if (!catalog) return null;
+    if (!catalog) {
+      return null;
+    }
     return catalog.catalogId || catalog.$id || null;
   });
 
@@ -402,7 +511,9 @@ export class Gallery implements OnInit, OnDestroy {
   }
 
   private getComponentsPayload(components: Record<string, unknown>[]): Record<string, unknown>[] {
-    if (components.some(component => component['id'] === 'root')) return components;
+    if (components.some(component => component['id'] === 'root')) {
+      return components;
+    }
 
     // Legacy usage examples name their root "target". Keep the authored tree and
     // properties intact; A2UI v0.9 only requires its root component to be named "root".
@@ -416,7 +527,9 @@ export class Gallery implements OnInit, OnDestroy {
    */
   protected copyToClipboard(): void {
     const payload = this.validPayloadJson();
-    if (!payload) return;
+    if (!payload) {
+      return;
+    }
     try {
       if (this.clipboard.copy(payload)) {
         this.actionMessage.set('Copied the last valid example JSON.');
