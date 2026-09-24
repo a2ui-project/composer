@@ -503,8 +503,6 @@ export class ComposerDockview {
       });
 
       // Explicitly activate default primary tabs
-      const renderedPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Rendered);
-      renderedPanel?.api.setActive();
       const chatPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat);
       chatPanel?.api.setActive();
     }

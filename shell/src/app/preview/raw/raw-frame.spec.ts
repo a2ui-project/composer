@@ -38,6 +38,7 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 
 const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() => {
   const undoStack: string[] = [];
@@ -1054,6 +1055,7 @@ describe('RawFrame JSON Source Editor View', () => {
 
       const editor = component.monacoEditor();
       const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
 
       component.TEST_ONLY.notifySchemaErrors(markers as unknown[] as monaco.editor.IMarker[]);
 
@@ -1062,7 +1064,14 @@ describe('RawFrame JSON Source Editor View', () => {
         'Go to line 4, col 10',
         expect.any(Object),
       );
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: OpenPanelEvent.TYPE,
+          detail: {panelId: ComposerPanelId.Raw},
+        }),
+      );
       expect(navigateSpy).toHaveBeenCalledWith(4, 10);
+      dispatchSpy.mockRestore();
     });
 
     it('displays schema error snackbar and provides navigation for severity 4 warning markers', async () => {
@@ -1070,6 +1079,7 @@ describe('RawFrame JSON Source Editor View', () => {
       const editor = component.monacoEditor();
       expect(editor).toBeTruthy();
       const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
 
       const warningMarkers: monaco.editor.IMarker[] = [
         {
@@ -1089,7 +1099,14 @@ describe('RawFrame JSON Source Editor View', () => {
           panelClass: 'schema-error-snackbar',
         }),
       );
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: OpenPanelEvent.TYPE,
+          detail: {panelId: ComposerPanelId.Raw},
+        }),
+      );
       expect(navigateSpy).toHaveBeenCalledWith(8, 15);
+      dispatchSpy.mockRestore();
     });
   });
 
@@ -1124,6 +1141,7 @@ describe('RawFrame JSON Source Editor View', () => {
 
     const editor = component.monacoEditor();
     const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
 
     await harness.setJsonText('{"a": 1}\n{"syntax_error": }');
     fixture.detectChanges();
@@ -1137,7 +1155,14 @@ describe('RawFrame JSON Source Editor View', () => {
       'Go to line 2',
       expect.any(Object),
     );
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: OpenPanelEvent.TYPE,
+        detail: {panelId: ComposerPanelId.Raw},
+      }),
+    );
     expect(navigateSpy).toHaveBeenCalledWith(2, 1);
+    dispatchSpy.mockRestore();
   });
 
   it('falls back to Monaco getFirstErrorMarker when syntax error coordinates are missing from V8', async () => {
@@ -1146,6 +1171,7 @@ describe('RawFrame JSON Source Editor View', () => {
     expect(editor).toBeTruthy();
     vi.spyOn(editor!, 'getFirstErrorMarker').mockReturnValue({line: 5, column: 12});
     const navigateSpy = vi.spyOn(editor!, 'navigateToPosition');
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
 
     component['lastSyntaxError'] = null;
     component['showJsonSyntaxError']();
@@ -1157,6 +1183,13 @@ describe('RawFrame JSON Source Editor View', () => {
         duration: 5000,
       }),
     );
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: OpenPanelEvent.TYPE,
+        detail: {panelId: ComposerPanelId.Raw},
+      }),
+    );
     expect(navigateSpy).toHaveBeenCalledWith(5, 12);
+    dispatchSpy.mockRestore();
   });
 });
