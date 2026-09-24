@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {HtmlSanitizerBuilder, unwrapHtml} from 'safevalues';
+import DOMPurify from 'dompurify';
 import {marked} from 'marked';
 
 /**
@@ -78,24 +78,27 @@ export function sanitizeUrl(url: string): string {
   return '#';
 }
 
-const htmlSanitizer = new HtmlSanitizerBuilder().allowClassAttributes().build();
-
 /**
  * Parses and renders inline markdown formatting:
  */
 export function renderInlineMarkdown(text: string): string {
   if (!text) return '';
   const rawHtml = marked.parseInline(text, {async: false}) as string;
-  return unwrapHtml(htmlSanitizer.sanitize(rawHtml)).toString();
+  return DOMPurify.sanitize(rawHtml, {
+    ADD_ATTR: ['target', 'rel'],
+  });
 }
 
 /**
- * Parses markdown into sanitized HTML using Marked (GFM) and safevalues.
+ * Parses markdown into sanitized HTML using Marked (GFM) and DOMPurify.
  * Supports headings, blockquotes, fenced code blocks, tables, task lists, and inline formatting,
  * as well as multimedia audio/video elements with data URIs consistent with A2A inspector.
  */
 export function renderMarkdown(markdown: string): string {
   if (!markdown) return '';
   const rawHtml = marked.parse(markdown, {async: false}) as string;
-  return unwrapHtml(htmlSanitizer.sanitize(rawHtml)).toString();
+  return DOMPurify.sanitize(rawHtml, {
+    ADD_ATTR: ['target', 'rel', 'controls'],
+    ADD_DATA_URI_TAGS: ['img', 'audio', 'video', 'source', 'a'],
+  });
 }
