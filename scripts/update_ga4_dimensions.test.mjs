@@ -32,6 +32,8 @@ import {
   createDimensionDefinition,
   createMetricDefinition,
   createParameterClassification,
+  escapeBashString,
+  unescapeBashString,
   formatHelpText,
   DIMENSIONS_START,
   DIMENSIONS_END,
@@ -187,6 +189,32 @@ describe('update_ga4_dimensions', () => {
       assert.ok(
         !extracted.has('actionName'),
         'CamelCase parameter should not be extracted as snake_case parameter',
+      );
+    });
+
+    it('extracts parameters from customParams declared with TypeScript type annotations', () => {
+      const mockSource = `
+        trackTypedError(params: ComposerErrorTelemetryParams): void {
+          const customParams: Record<string, unknown> = {
+            ['typed_error_category']: params.errorCategory,
+            typed_error_source: params.sourceTag,
+            'typed_error_code': 'ERR_404',
+          };
+          this.dispatchGtagEvent('composer_error', customParams);
+        }
+      `;
+      const extracted = extractParametersFromSource(mockSource);
+      assert.ok(
+        extracted.has('typed_error_category'),
+        'Expected typed_error_category from typed customParams',
+      );
+      assert.ok(
+        extracted.has('typed_error_source'),
+        'Expected typed_error_source from typed customParams',
+      );
+      assert.ok(
+        extracted.has('typed_error_code'),
+        'Expected typed_error_code from typed customParams',
       );
     });
   });
@@ -464,6 +492,60 @@ POST_VAR="untouched"
       );
       assert.ok(!updated.includes('old_dim'));
       assert.ok(!updated.includes('old_metric'));
+    });
+
+    it('defensively escapes double quotes and preserves round-trip idempotency across parse and generate', () => {
+      assert.equal(escapeBashString('Hello "World"'), 'Hello \\"World\\"');
+      assert.equal(escapeBashString('Hello \\"World\\"'), 'Hello \\"World\\"');
+      assert.equal(unescapeBashString('Hello \\"World\\"'), 'Hello "World"');
+
+      const scriptWithQuotes = `#!/usr/bin/env bash
+${DIMENSIONS_START}
+create_dimension "quote_param" "Display \\"Name\\"" "Description with \\"quotes\\" inside"
+${DIMENSIONS_END}
+
+${METRICS_START}
+create_metric "quote_metric" "Metric \\"Duration\\"" "SECONDS" "Time in \\"seconds\\""
+${METRICS_END}
+`;
+
+      const parsed = parseExistingScript(scriptWithQuotes);
+      const dim = parsed.dimensions.get('quote_param');
+      assert.equal(dim?.displayName, 'Display "Name"');
+      assert.equal(dim?.description, 'Description with "quotes" inside');
+
+      const met = parsed.metrics.get('quote_metric');
+      assert.equal(met?.displayName, 'Metric "Duration"');
+      assert.equal(met?.description, 'Time in "seconds"');
+
+      // Regenerate and verify escaped quotes in output
+      const generated = generateScriptContent(scriptWithQuotes, {
+        dimensions: Array.from(parsed.dimensions.values()),
+        metrics: Array.from(parsed.metrics.values()),
+      });
+
+      assert.ok(
+        generated.includes(
+          'create_dimension "quote_param" "Display \\"Name\\"" "Description with \\"quotes\\" inside"',
+        ),
+      );
+      assert.ok(
+        generated.includes(
+          'create_metric "quote_metric" "Metric \\"Duration\\"" "SECONDS" "Time in \\"seconds\\""',
+        ),
+      );
+
+      // Re-parse the generated content and verify exact match
+      const reParsed = parseExistingScript(generated);
+      assert.deepEqual(reParsed.dimensions.get('quote_param'), dim);
+      assert.deepEqual(reParsed.metrics.get('quote_metric'), met);
+
+      // Re-generate and verify identical string output (100% idempotent)
+      const reGenerated = generateScriptContent(generated, {
+        dimensions: Array.from(reParsed.dimensions.values()),
+        metrics: Array.from(reParsed.metrics.values()),
+      });
+      assert.equal(generated, reGenerated);
     });
   });
 

@@ -159,10 +159,31 @@ export function createMergedDefinitionsResult(
 }
 
 /**
+ * Defensively escapes double quotes in bash strings for create_dimension and create_metric calls.
+ *
+ * @param {string} str
+ * @returns {string}
+ */
+export function escapeBashString(str) {
+  return str.replace(/\\"/g, '"').replace(/"/g, '\\"');
+}
+
+/**
+ * Unescapes escaped double quotes from bash strings.
+ *
+ * @param {string} str
+ * @returns {string}
+ */
+export function unescapeBashString(str) {
+  return str.replace(/\\"/g, '"');
+}
+
+/**
  * Parses existing custom dimensions and custom metrics from create_ga4_dimensions.sh.
  *
  * When sentinel comments are present, extracts only within DIMENSIONS_START..DIMENSIONS_END
  * and METRICS_START..METRICS_END. Falls back to full-file scanning if sentinels are not present.
+ * Unescapes escaped double quotes (`\"` -> `"`) in parameter names, display names, and descriptions.
  *
  * @param {string} scriptContent
  * @returns {ParsedScriptResult}
@@ -178,10 +199,14 @@ export function parseExistingScript(scriptContent) {
     dimSection = scriptContent.slice(dimStartIdx + DIMENSIONS_START.length, dimEndIdx);
   }
 
-  const dimensionRegex = /create_dimension\s+"([^"]+)"\s+"([^"]*)"\s+"([^"]*)"/g;
+  const dimensionRegex =
+    /create_dimension\s+"((?:\\.|[^"])+)"\s+"((?:\\.|[^"])*)"\s+"((?:\\.|[^"])*)"/g;
   let dimMatch;
   while ((dimMatch = dimensionRegex.exec(dimSection)) !== null) {
-    const [, paramName, displayName, description] = dimMatch;
+    const [, rawParamName, rawDisplayName, rawDescription] = dimMatch;
+    const paramName = unescapeBashString(rawParamName);
+    const displayName = unescapeBashString(rawDisplayName);
+    const description = unescapeBashString(rawDescription);
     dimensions.set(paramName, createDimensionDefinition(paramName, displayName, description));
   }
 
@@ -192,10 +217,15 @@ export function parseExistingScript(scriptContent) {
     metSection = scriptContent.slice(metStartIdx + METRICS_START.length, metEndIdx);
   }
 
-  const metricRegex = /create_metric\s+"([^"]+)"\s+"([^"]*)"\s+"([^"]*)"\s+"([^"]*)"/g;
+  const metricRegex =
+    /create_metric\s+"((?:\\.|[^"])+)"\s+"((?:\\.|[^"])*)"\s+"((?:\\.|[^"])*)"\s+"((?:\\.|[^"])*)"/g;
   let metMatch;
   while ((metMatch = metricRegex.exec(metSection)) !== null) {
-    const [, paramName, displayName, measurementUnit, description] = metMatch;
+    const [, rawParamName, rawDisplayName, rawUnit, rawDescription] = metMatch;
+    const paramName = unescapeBashString(rawParamName);
+    const displayName = unescapeBashString(rawDisplayName);
+    const measurementUnit = unescapeBashString(rawUnit);
+    const description = unescapeBashString(rawDescription);
     metrics.set(
       paramName,
       createMetricDefinition(paramName, displayName, measurementUnit, description),
@@ -243,8 +273,9 @@ export function extractParametersFromSource(sourceContent) {
     payloadRegions.push(match[0]);
   }
 
-  // customParams object declarations
-  const customParamsRegex = /(?:const|let|var)\s+customParams\s*=\s*\{([\s\S]*?)\};/g;
+  // customParams object declarations (supporting optional TypeScript type annotation)
+  const customParamsRegex =
+    /(?:const|let|var)\s+customParams(?:\s*:\s*[^=]+)?\s*=\s*\{([\s\S]*?)\};/g;
   while ((match = customParamsRegex.exec(sourceContent)) !== null) {
     payloadRegions.push(match[1]);
   }
@@ -427,13 +458,16 @@ Options:
  */
 export function generateScriptContent(originalScriptContent, definitions) {
   const dimensionLines = definitions.dimensions
-    .map(d => `create_dimension "${d.paramName}" "${d.displayName}" "${d.description}"`)
+    .map(
+      d =>
+        `create_dimension "${d.paramName}" "${escapeBashString(d.displayName)}" "${escapeBashString(d.description)}"`,
+    )
     .join('\n');
 
   const metricLines = definitions.metrics
     .map(
       m =>
-        `create_metric "${m.paramName}" "${m.displayName}" "${m.measurementUnit}" "${m.description}"`,
+        `create_metric "${m.paramName}" "${escapeBashString(m.displayName)}" "${m.measurementUnit}" "${escapeBashString(m.description)}"`,
     )
     .join('\n');
 

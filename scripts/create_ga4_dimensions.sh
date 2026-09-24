@@ -81,6 +81,7 @@ else
       exit 1
     fi
   else
+    echo "Error: Non-interactive shell and no valid active token found." >&2
     exit 1
   fi
 fi
