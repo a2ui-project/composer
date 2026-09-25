@@ -264,6 +264,35 @@ test.describe('Components Gallery User Journey', () => {
     await expect(page.locator('.gallery-sidenav')).toHaveCSS('width', '208px');
     await expect(page.locator('.gallery-content')).toHaveCSS('margin-left', '208px');
   });
+  test('lays out every property with its name beside its control, JSON fields included', async ({
+    page,
+  }) => {
+    await page.goto('/?renderer=http://localhost:3456');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await page.getByRole('link', {name: 'Components Gallery'}).click();
+    await page.locator('.catalog-list').getByRole('button', {name: 'Modal', exact: true}).click();
+    await expect(page.locator('[data-property-row="accessibility"]')).toBeVisible();
+
+    const rows = await page.locator('[data-property-row]').evaluateAll(elements =>
+      elements.map(row => {
+        const name = row.querySelector('.property-name')!.getBoundingClientRect();
+        const control = row.querySelector('.property-control')!.getBoundingClientRect();
+        return {
+          property: row.getAttribute('data-property-row'),
+          nameRight: name.right,
+          controlLeft: control.left,
+          topOffset: Math.abs(name.top - control.top),
+        };
+      }),
+    );
+    expect(rows.map(row => row.property)).toContain('accessibility');
+    for (const row of rows) {
+      // A JSON field sits in the same column as every other control, not below its name.
+      expect(row.nameRight, row.property ?? '').toBeLessThanOrEqual(row.controlLeft);
+      expect(row.topOffset, row.property ?? '').toBeLessThan(16);
+    }
+  });
+
   test('edits selected-catalog Text and opens the same valid example with its renderer', async ({
     page,
     context,

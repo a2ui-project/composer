@@ -286,9 +286,14 @@ export class GalleryHarness extends ComponentHarness {
     return note ? note.text() : null;
   }
 
-  /** Whether a property keeps its name and control on one row rather than stacking them. */
+  /** Whether a required property is flagged as missing from the example. */
+  async isPropertyMissing(name: string): Promise<boolean> {
+    return (await this.locatorForOptional(`[data-property-missing="${name}"]`)()) !== null;
+  }
+
+  /** Whether a property uses a single-line control rather than a JSON field or note. */
   async isPropertyInline(name: string): Promise<boolean> {
     const row = await this.locatorFor(`[data-property-row="${name}"]`)();
-    return !(await row.hasClass('property-row-stacked'));
+    return !(await row.hasClass('property-row-multiline'));
   }
 }
