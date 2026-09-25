@@ -189,7 +189,11 @@ function matchesSimpleSchema(value: unknown, schema: CatalogComponentSchema): bo
   if ('const' in schema && JSON.stringify(schema['const']) !== JSON.stringify(value)) {
     return false;
   }
-  switch (schema['type']) {
+  const type = schema['type'];
+  if (Array.isArray(type)) {
+    return type.some(option => matchesSimpleSchema(value, {...schema, ['type']: option}));
+  }
+  switch (type) {
     case 'string':
       return typeof value === 'string';
     case 'number':
