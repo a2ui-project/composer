@@ -783,5 +783,42 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       await expect(iterator.next()).rejects.toThrow('Cancelled');
       await expect(streamResponse.complete).rejects.toThrow('Cancelled');
     });
+
+    it('normalizes SDK AbortError thrown after user cancellation to CancelError', async () => {
+      let abortSignal!: AbortSignal;
+      mockGenerateContentStream.mockImplementation(async params => {
+        abortSignal = params.config?.abortSignal;
+        return {
+          async *[Symbol.asyncIterator]() {
+            yield {text: 'Chunk'};
+            while (!abortSignal.aborted) {
+              await new Promise(resolve => setTimeout(resolve, 0));
+            }
+            throw new DOMException('signal is aborted without reason', 'AbortError');
+          },
+        };
+      });
+
+      const streamResponse = await client.chatStream([
+        {role: MessageRole.USER, content: 'Cancel test'},
+      ]);
+
+      const iterator = streamResponse.contentStream[Symbol.asyncIterator]();
+      await expect(iterator.next()).resolves.toEqual({
+        value: {content: 'Chunk', thinking: '', isComplete: false},
+        done: false,
+      });
+
+      streamResponse.cancel?.();
+
+      await expect(iterator.next()).rejects.toMatchObject({
+        name: CANCEL_ERROR_NAME,
+        message: 'Cancelled',
+      });
+      await expect(streamResponse.complete).rejects.toMatchObject({
+        name: CANCEL_ERROR_NAME,
+        message: 'Cancelled',
+      });
+    });
   });
 });

@@ -22,7 +22,7 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {PromptTurnType, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
-import {formatJson} from '../../utils/json';
+import {formatJson, tryParseJsonArray} from '../../utils/json';
 import {ChatState, LlmLogType} from '../chat-state/chat-state';
 import {
   Attachment,
@@ -202,6 +202,9 @@ export class ChatCoordinator {
     }
     const trimmed = prompt.trim();
     if (!trimmed && attachments.length === 0) return;
+
+    // Include the latest canvas even before the debounced editor/history sync fires.
+    this.stateSync.syncActiveDraftToHistory();
 
     const promptId = this.emitPromptTracking(trimmed, attachments, options);
     this.activePromptId = promptId;
@@ -396,7 +399,9 @@ export class ChatCoordinator {
         this.chatState.setPipelineStatus(PipelineStatus.HEALING);
       }
 
-      // Stage 3: Ready & Commit Layout Wipes
+      // Validate surface references before replacing the editor. A delta must
+      // retain the creation and component messages needed to replay the draft.
+      parsedBlocks = this.resolveLayoutUpdate(parsedBlocks);
       this.chatState.setPipelineStatus(PipelineStatus.READY);
 
       // Turn list of updates back into raw formatted JSON text to write to
@@ -429,6 +434,83 @@ export class ChatCoordinator {
       this.finalizeStream(PipelineStatus.FAILED);
       throw err;
     }
+  }
+
+  /**
+   * Turns a model response into the complete message list for the editor.
+   *
+   * The model can answer an edit in two ways:
+   * - A full replacement: the response starts a surface with `createSurface`.
+   *   It replaces the draft, so it is returned unchanged.
+   * - An incremental edit: the response only sends `updateComponents`,
+   *   `updateDataModel`, or `deleteSurface` for surfaces the draft already has.
+   *   Written to the editor on its own, it would erase the draft, because the
+   *   editor replays the whole message list to render the preview. So the
+   *   edit is appended to the current draft instead.
+   *
+   * Before appending, every surface an update targets is checked against the
+   * surfaces the draft and the response create (minus the ones they delete).
+   * If the model invents a surface ID, for example by copying one from the
+   * prompt's examples, this throws. The caller reports it like any other
+   * validation failure, and the draft in the editor is left unchanged.
+   */
+  private resolveLayoutUpdate(updates: unknown[]): unknown[] {
+    // Reads `item[command].surfaceId` when `item` is that kind of A2UI message.
+    const surfaceId = (item: unknown, command: string): string | undefined => {
+      if (!item || typeof item !== 'object' || !(command in item)) {
+        return undefined;
+      }
+      const payload: unknown = Reflect.get(item, command);
+      return payload &&
+        typeof payload === 'object' &&
+        'surfaceId' in payload &&
+        typeof payload.surfaceId === 'string'
+        ? payload.surfaceId
+        : undefined;
+    };
+
+    // A response that creates a surface is a full replacement; otherwise it
+    // builds on the current draft, when the draft parses.
+    const replacesDraft = updates.some(item => surfaceId(item, 'createSurface') !== undefined);
+    const current = tryParseJsonArray(this.stateSync.activeDraft());
+    const base = !replacesDraft && current.success ? current.data : [];
+
+    // Surfaces that exist once the base draft has been replayed.
+    const activeSurfaces = new Set<string>();
+    for (const item of base) {
+      const created = surfaceId(item, 'createSurface');
+      const deleted = surfaceId(item, 'deleteSurface');
+      if (created !== undefined) {
+        activeSurfaces.add(created);
+      }
+      if (deleted !== undefined) {
+        activeSurfaces.delete(deleted);
+      }
+    }
+
+    // Replay the response in order, so an update may target a surface created
+    // earlier in the same response but not one deleted before it.
+    for (const item of updates) {
+      const created = surfaceId(item, 'createSurface');
+      if (created !== undefined) {
+        activeSurfaces.add(created);
+      }
+      for (const command of ['updateComponents', 'updateDataModel', 'deleteSurface']) {
+        const id = surfaceId(item, command);
+        if (id === undefined) {
+          continue;
+        }
+        if (!activeSurfaces.has(id)) {
+          throw new Error(
+            `Surface validation failed: cannot apply ${command}: surface "${id}" does not exist in the current draft. The draft was preserved.`,
+          );
+        }
+        if (command === 'deleteSurface') {
+          activeSurfaces.delete(id);
+        }
+      }
+    }
+    return [...base, ...updates];
   }
 
   private handleConnectivityError(
