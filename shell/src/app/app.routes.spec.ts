@@ -157,6 +157,11 @@ describe('App Routes Active Verification', () => {
     expect(router.url).toBe('/gallery');
   });
 
+  it('activates demos pathway on demos route navigation', async () => {
+    await harness.navigateByUrl('/demos');
+    expect(router.url).toBe('/demos');
+  });
+
   it('redirects to settings view when environment evaluates as invalid', async () => {
     mockStartupResolution.isEnvironmentValid.mockReturnValue(false);
     await harness.navigateByUrl('/');

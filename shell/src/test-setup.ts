@@ -75,6 +75,30 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'ResizeObserver', {value: MockResizeObserver, writable: true});
   Object.defineProperty(global, 'ResizeObserver', {value: MockResizeObserver, writable: true});
 
+  class MockIntersectionObserver {
+    constructor(private callback: (entries: unknown[]) => void) {}
+    observe(target: Element) {
+      // Trigger callback asynchronously to simulate real IntersectionObserver behavior
+      setTimeout(() => {
+        this.callback([{isIntersecting: true, target}]);
+      }, 0);
+    }
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+  }
+
+  Object.defineProperty(window, 'IntersectionObserver', {
+    value: MockIntersectionObserver,
+    writable: true,
+  });
+  Object.defineProperty(global, 'IntersectionObserver', {
+    value: MockIntersectionObserver,
+    writable: true,
+  });
+
   Object.defineProperty(window, 'localStorage', {value: localStorageMock, writable: true});
   Object.defineProperty(window, 'sessionStorage', {value: sessionStorageMock, writable: true});
   Object.defineProperty(global, 'localStorage', {value: localStorageMock, writable: true});

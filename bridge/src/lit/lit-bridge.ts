@@ -33,6 +33,7 @@ import {
   CatalogDetails,
   ERROR_OVERLAY_DEBOUNCE_MS,
   type ComponentUsages,
+  type Demo,
 } from '../index.js';
 
 /**
@@ -50,6 +51,8 @@ export interface LitSandboxOptions {
   getComponentUsages?: () => Promise<ComponentUsages>;
   /** Optional callback when theme changes. */
   onThemeChange?: (theme: ThemePreference) => void;
+  /** Optional callback to retrieve the renderer's demos. */
+  getDemos?: () => Promise<Demo[]>;
 }
 
 /**
@@ -79,6 +82,8 @@ export class A2uiSandboxRoot extends LitElement {
   static getComponentUsages?: () => Promise<ComponentUsages> = undefined;
   /** Optional callback when theme changes shared statically */
   static onThemeChange?: (theme: ThemePreference) => void = undefined;
+  /** Optional callback to retrieve the renderer's demos shared statically */
+  static getDemos?: () => Promise<Demo[]> = undefined;
 
   static override styles = css`
     :host {
@@ -169,6 +174,7 @@ export class A2uiSandboxRoot extends LitElement {
       surfaceGroup: this.processor.model,
       catalogJson: (this.constructor as typeof A2uiSandboxRoot).catalogJson,
       getComponentUsages: (this.constructor as typeof A2uiSandboxRoot).getComponentUsages,
+      getDemos: (this.constructor as typeof A2uiSandboxRoot).getDemos,
       onThemeChange: (this.constructor as typeof A2uiSandboxRoot).onThemeChange,
       onCatalogResolved: catalogId => {
         for (const catalog of (this.constructor as typeof A2uiSandboxRoot).catalogs) {
@@ -180,6 +186,9 @@ export class A2uiSandboxRoot extends LitElement {
       onSurfaceReady: surfaceId => {
         this.surface = this.processor.model.getSurface(surfaceId);
         this.requestUpdate();
+      },
+      whenSurfaceRendered: async () => {
+        await this.updateComplete;
       },
       onSurfaceCleared: () => {
         this.surface = undefined;
@@ -248,7 +257,11 @@ export class A2uiSandboxRoot extends LitElement {
  * configuration schemas, and injects optional preloaded static catalog payloads.
  *
  * @param catalogs The array of component catalogs defining local layouts.
- * @param options Optional configuration options block holding the HTML tag name and preloaded catalog JSON data.
+ * @param options Optional configuration options block holding `elementTagName` (the custom HTML
+ *   tag name), `markdownRenderer` (custom markdown rendering delegate), `catalogJson` (preloaded
+ *   catalog JSON), `getComponentUsages` (component usage sample retrieval callback),
+ *   `onThemeChange` (theme preference change callback), and `getDemos` (renderer demos retrieval
+ *   callback).
  * @return The A2uiSandboxRoot custom element constructor value ready for nominal references.
  */
 export function bootstrapLitSandbox<T extends ComponentApi>(
@@ -265,6 +278,7 @@ export function bootstrapLitSandbox<T extends ComponentApi>(
     clazz.catalogJson = options?.catalogJson;
     clazz.markdownRenderer = options?.markdownRenderer;
     clazz.getComponentUsages = options?.getComponentUsages;
+    clazz.getDemos = options?.getDemos;
     clazz.onThemeChange = options?.onThemeChange;
   };
 
