@@ -2417,6 +2417,50 @@ describe('PreviewBridge Core API Runtime', () => {
       );
     });
 
+    it('sends the first report of a burst at once and coalesces the rest into the latest', () => {
+      vi.useFakeTimers();
+      const spy = vi.spyOn(window.parent, 'postMessage');
+      const resizeMessages = () =>
+        spy.mock.calls
+          .map(([message]) => message as {type: string; payload: {height: number}})
+          .filter(message => message.type === PreviewBridgeMessageType.SURFACE_RESIZE);
+
+      for (const height of [100, 120, 140]) {
+        Object.defineProperty(document.body, 'scrollHeight', {value: height, configurable: true});
+        bridge.dispatchSurfaceResize();
+      }
+      expect(resizeMessages().map(message => message.payload.height)).toEqual([100]);
+
+      vi.advanceTimersByTime(16);
+      expect(resizeMessages().map(message => message.payload.height)).toEqual([100, 140]);
+      vi.useRealTimers();
+    });
+
+    it('drops a forced report that repeats the last one but sends a readiness change', () => {
+      vi.useFakeTimers();
+      const spy = vi.spyOn(window.parent, 'postMessage');
+      const resizeMessages = () =>
+        spy.mock.calls
+          .map(([message]) => message as {type: string; payload: Record<string, unknown>})
+          .filter(message => message.type === PreviewBridgeMessageType.SURFACE_RESIZE);
+      Object.defineProperty(document.body, 'scrollHeight', {value: 300, configurable: true});
+
+      bridge.dispatchSurfaceResize(true);
+      vi.advanceTimersByTime(16);
+      bridge.dispatchSurfaceResize(true);
+      vi.advanceTimersByTime(16);
+      expect(resizeMessages()).toHaveLength(1);
+
+      bridge['contentReady'] = true;
+      bridge.dispatchSurfaceResize(true);
+      vi.advanceTimersByTime(16);
+      expect(resizeMessages().map(message => message.payload['contentReady'])).toEqual([
+        undefined,
+        true,
+      ]);
+      vi.useRealTimers();
+    });
+
     it('triggers dispatchSurfaceResize upon attachRenderer', () => {
       const resizeSpy = vi.spyOn(bridge, 'dispatchSurfaceResize');
       const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};

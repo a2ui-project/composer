@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {test, expect} from '@playwright/test';
+import {test, expect, type Page} from '@playwright/test';
 import {WindowWithMonaco} from './helpers';
 
 test.beforeEach(async ({page}) => {
@@ -100,8 +100,9 @@ for (const renderer of [
           return {x: rect.x, y: rect.y};
         }),
       );
-      expect(positions[0].y).toBe(positions[1].y);
-      expect(positions[2].y).toBe(positions[3].y);
+      // Cards in a row share a top edge; sub-pixel layout rounding can differ slightly.
+      expect(positions[0].y).toBeCloseTo(positions[1].y, 0);
+      expect(positions[2].y).toBeCloseTo(positions[3].y, 0);
       expect(positions[0].x).toBeLessThan(positions[1].x);
       const open = cards.first().getByRole('button', {name: 'Open in Composer: Flight status'});
       await expect(open).toHaveCSS('opacity', '1');
@@ -191,6 +192,10 @@ for (const renderer of [
       await page.getByRole('button', {name: 'Open in Composer: Product checkout'}).click();
       await page.waitForURL(url => url.hash.includes('a2ui=d1.'));
       const frame = page.frameLocator('iframe.preview-iframe');
+      await expect(frame.locator('input[type="text"]')).toBeVisible();
+      // Opening a shared design can render the preview more than once; a late render
+      // would reset the fields to the demo's defaults after they have been edited.
+      await waitForPreviewToSettle(page);
       await frame.locator('input[type="text"]').fill('456 Mission Street');
       await frame.getByRole('checkbox', {name: 'Billing address same as shipping'}).uncheck();
       await frame.getByRole('button', {name: 'Place order · $199.99'}).click();
@@ -255,4 +260,32 @@ for (const renderer of [
       await expect(page.frameLocator('iframe').first().locator('body')).toContainText('Sign In');
     });
   });
+}
+
+interface WindowWithPreviewActivity extends Window {
+  __lastPreviewMessageAt?: number;
+}
+
+/** Waits until the workspace preview has sent the shell no messages for 800ms. */
+async function waitForPreviewToSettle(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const activity = window as WindowWithPreviewActivity;
+    activity.__lastPreviewMessageAt = performance.now();
+    window.addEventListener('message', event => {
+      const frame = document.querySelector<HTMLIFrameElement>('iframe.preview-iframe');
+      if (frame && event.source === frame.contentWindow) {
+        activity.__lastPreviewMessageAt = performance.now();
+      }
+    });
+  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            performance.now() - ((window as WindowWithPreviewActivity).__lastPreviewMessageAt ?? 0),
+        ),
+      {timeout: 15_000, intervals: [100]},
+    )
+    .toBeGreaterThan(800);
 }
