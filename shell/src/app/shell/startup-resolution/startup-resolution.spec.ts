@@ -708,6 +708,14 @@ describe('StartupResolution', () => {
       expect(service.resolvedUrl()).toBe('/standard/');
     });
 
+    it('selects the configured path-relative Lit renderer without origin confirmation', async () => {
+      const confirmation = vi.spyOn(service, 'confirmOrigin');
+      expect(await service.setSelectedRendererId('lit')).toBe(true);
+      expect(stateService.selectedRendererId()).toBe('lit');
+      expect(service.resolvedUrl()).toBe('samples/lit-basic-catalog/');
+      expect(confirmation).not.toHaveBeenCalled();
+    });
+
     it.each(['javascript:alert(1)', 'data:text/html,preview', 'ftp://localhost/renderer'])(
       'rejects non-HTTP renderer URL %s',
       async rendererUrl => {
