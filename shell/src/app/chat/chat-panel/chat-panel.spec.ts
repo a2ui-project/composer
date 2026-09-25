@@ -908,6 +908,59 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     expect(await harness.hasAttachmentPreviews()).toBe(false);
   });
 
+  it('stages clipboard images when pasted into the prompt input and displays attachment previews', async () => {
+    const component = fixture.componentInstance;
+    const file = new File(['dummy image bytes'], 'clipboard-image.png', {type: 'image/png'});
+    const preventDefault = vi.fn();
+    const pasteEvent = {
+      clipboardData: {
+        items: [
+          {
+            kind: 'file',
+            type: 'image/png',
+            getAsFile: () => file,
+          },
+        ],
+        files: [file],
+      },
+      preventDefault,
+    } as unknown as ClipboardEvent;
+
+    await component.onPaste(pasteEvent);
+    fixture.detectChanges();
+
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(component.attachedFiles().length).toBe(1);
+    expect(component.attachedFiles()[0].name).toBe('clipboard-image.png');
+    expect(component.attachedFiles()[0].mimeType).toBe('image/png');
+    expect(await harness.hasAttachmentPreviews()).toBe(true);
+    expect(await harness.getAttachmentNames()).toContain('clipboard-image.png');
+  });
+
+  it('does not prevent default or stage attachments when pasting plain text without images', async () => {
+    const component = fixture.componentInstance;
+    const preventDefault = vi.fn();
+    const pasteEvent = {
+      clipboardData: {
+        items: [
+          {
+            kind: 'string',
+            type: 'text/plain',
+            getAsFile: () => null,
+          },
+        ],
+        files: [],
+      },
+      preventDefault,
+    } as unknown as ClipboardEvent;
+
+    await component.onPaste(pasteEvent);
+    fixture.detectChanges();
+
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(component.attachedFiles().length).toBe(0);
+  });
+
   it('submits prompts with attached files successfully', async () => {
     const component = fixture.componentInstance;
     const submitSpy = chatServiceMock.submitPrompt;
