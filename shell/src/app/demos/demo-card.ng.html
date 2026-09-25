@@ -1,0 +1,70 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<mat-card class="demo-card" [class.is-error]="state() === 'error'">
+  <header class="demo-card-header">
+    <div class="demo-card-heading">
+      <h2 class="demo-card-title">{{ demo().name }}</h2>
+      <!-- Preserve the full renderer description for assistive technology and hover. -->
+      <p class="demo-card-subtitle" [title]="demo().description">{{ demo().description }}</p>
+    </div>
+
+    <!-- Keep navigation separate from the interactive preview and first in tab order. -->
+    <button
+      mat-button
+      type="button"
+      class="demo-card-open"
+      [attr.aria-label]="openLabel()"
+      (click)="openInWorkspace()"
+    >
+      <mat-icon class="demo-card-open-icon" aria-hidden="true">north_east</mat-icon>
+      Open in Composer
+    </button>
+  </header>
+
+  <mat-card-content class="demo-card-content">
+    <div
+      #demoSurface
+      class="demo-card-surface"
+      [class.is-measured]="cardHeight() !== null"
+      [attr.aria-busy]="showPlaceholder() && state() !== 'error'"
+      [style.height.px]="surfaceHeight()"
+    >
+      @if (mount() && safeRendererUrl()) {
+        <iframe
+          #demoIframe
+          [src]="safeRendererUrl()"
+          sandbox="allow-scripts allow-same-origin allow-forms"
+          class="demo-card-frame"
+          [title]="demo().name + ' live demo'"
+          (load)="onFrameLoad()"
+        ></iframe>
+      }
+
+      @if (showPlaceholder()) {
+        <div class="demo-card-placeholder" aria-hidden="true">
+          <span class="preview-skeleton-title"></span>
+          <span class="preview-skeleton-line"></span>
+          <span class="preview-skeleton-block"></span>
+          <span class="preview-skeleton-line short"></span>
+        </div>
+      }
+
+      @if (state() === 'error') {
+        <div class="demo-card-error" role="status">This demo could not be loaded.</div>
+      }
+    </div>
+  </mat-card-content>
+</mat-card>
