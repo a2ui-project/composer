@@ -113,12 +113,10 @@ export abstract class ChatPanelBase {
 
   protected readonly rendererSelection = inject(RendererSelection);
 
-  protected readonly rendererLabel = computed(() => {
-    const renderer = this.rendererSelection.activeRenderer();
-    if (!renderer) return 'Renderer';
-    if (renderer.id === 'default' || renderer.id === 'angular-dev') return 'A2UI';
-    return renderer.name;
-  });
+  /** The active renderer's configured display name, so no renderer is special-cased. */
+  protected readonly rendererLabel = computed(
+    () => this.rendererSelection.activeRenderer()?.name ?? 'Renderer',
+  );
 
   protected readonly isRendererSwitchDisabled = computed(
     () => this.isLocked() || this.isReadingFiles() || this.rendererSelection.isSwitching(),
