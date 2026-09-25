@@ -22,7 +22,7 @@ import {A2aTransport} from './a2a-types';
  * Backend option representation for selecting A2A transports.
  */
 export interface A2aBackendOption {
-  id: string;
+  id: A2aBackendMode;
   label: string;
   description?: string;
 }

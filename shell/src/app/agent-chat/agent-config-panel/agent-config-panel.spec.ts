@@ -114,11 +114,11 @@ describe('AgentConfigPanel', () => {
     expect(el.querySelector('.cancel-btn')).toBeNull();
   });
 
-  it('trims whitespace and handles null/undefined values on save', () => {
+  it('trims whitespace from the endpoint and tenant ID on save', () => {
     const spy = vi.spyOn(fixture.componentInstance.saveAndConnect, 'emit');
     fixture.componentInstance['form'].setValue({
       endpoint: '  http://localhost:8088  ',
-      tenantId: null,
+      tenantId: '   ',
       backendMode: A2aBackendMode.HTTP_JSONRPC,
     });
     fixture.componentInstance['saveAndConnectAgent']();

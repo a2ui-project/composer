@@ -95,7 +95,7 @@ export class AgentConfigPanel implements OnInit {
   /** Emitted when the user clears the configured agent endpoint and settings. */
   readonly clearConfig = output<void>();
 
-  private readonly defaultBackendMode: string =
+  private readonly defaultBackendMode: A2aBackendMode =
     this.backendOptions.length > 0 ? this.backendOptions[0].id : A2aBackendMode.HTTP_JSONRPC;
 
   // Controls are bound in the template via `[formControl]="form.controls.x"` rather than
@@ -129,8 +129,8 @@ export class AgentConfigPanel implements OnInit {
     const val = this.form.getRawValue();
     this.saveAndConnect.emit({
       endpoint: normalizeHttpUrl(val.endpoint),
-      tenantId: (val.tenantId || '').trim(),
-      backendMode: val.backendMode as A2aBackendMode,
+      tenantId: val.tenantId.trim(),
+      backendMode: val.backendMode,
     });
   }
 
