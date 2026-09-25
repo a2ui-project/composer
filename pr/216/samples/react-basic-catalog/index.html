@@ -20,40 +20,41 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A2UI React Sandbox</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+      rel="stylesheet"
+    />
     <style>
-      :root {
-        color-scheme: light dark;
-        --a2ui-color-surface: #ffffff;
-        --a2ui-color-on-surface: #1c1b1c;
-        --a2ui-color-background: #ffffff;
-        --a2ui-color-on-background: #1c1b1c;
-        --a2ui-color-input: #ffffff;
-        --a2ui-color-on-input: #1c1b1c;
-        --a2ui-color-border: #cccccc;
-      }
-
-      html.dark-theme,
-      [data-theme='dark'],
-      .dark-theme body {
-        --a2ui-color-surface: #1e1e1e;
-        --a2ui-color-on-surface: #e5e2e2;
-        --a2ui-color-background: #121212;
-        --a2ui-color-on-background: #e5e2e2;
-        --a2ui-color-input: #2a2a2a;
-        --a2ui-color-on-input: #e5e2e2;
-        --a2ui-color-border: #444444;
-      }
-
-      body {
-        margin: 0;
-        padding: 16px;
-        font-family: system-ui, sans-serif;
-        background-color: var(--a2ui-color-background, canvas);
-        color: var(--a2ui-color-on-background, canvastext);
+      .error-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        inset: 0;
+        z-index: 9999;
+        background-color: color-mix(in srgb, var(--a2ui-color-surface, canvas) 95%, transparent);
+        color: var(--a2ui-color-error, #d32f2f);
+        padding: 24px;
+        font-family: monospace;
+        overflow: auto;
         box-sizing: border-box;
       }
+
+      .error-overlay h3 {
+        margin-top: 0;
+      }
+
+      .error-overlay pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+      }
     </style>
-    <script type="module" crossorigin src="/composer/pr/216/samples/react-basic-catalog/assets/index-BbGHAAb9.js"></script>
+    <script type="module" crossorigin src="/composer/pr/216/samples/react-basic-catalog/assets/index-BQUQS8Lr.js"></script>
+    <link rel="stylesheet" crossorigin href="/composer/pr/216/samples/react-basic-catalog/assets/index-CllBcJEQ.css">
   </head>
   <body>
     <div id="app-root"></div>
