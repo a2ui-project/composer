@@ -36,129 +36,330 @@
   </mat-sidenav>
 
   <mat-sidenav-content class="gallery-content">
-    <div [class.hidden-frame]="!selectedComponentKey()">
-      <mat-card class="preview-card">
-        <mat-card-header>
-          <mat-card-title>Preview</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
-        </mat-card-content>
-      </mat-card>
-    </div>
-
     @if (selectedComponentKey() && catalogManagement.activeCatalog()) {
-      <div class="details-panel">
-        <div class="details-header">
-          <h2 class="component-title">{{ selectedComponentKey() }}</h2>
-          @if (selectedComponentDescription()) {
-            <p class="component-description">{{ selectedComponentDescription() }}</p>
-          }
-        </div>
-
-        <mat-card class="usage-card">
-          <mat-card-header class="usage-header">
-            <mat-card-title>Usage</mat-card-title>
-            @if (!loadingUsages()) {
-              <button
-                mat-icon-button
-                (click)="copyToClipboard()"
-                aria-label="Copy to Clipboard"
-                class="copy-button"
-              >
-                <mat-icon>content_copy</mat-icon>
-              </button>
-            }
-          </mat-card-header>
-          <mat-card-content>
-            @if (loadingUsages()) {
-              <div class="usage-loading-spinner">
-                <mat-spinner diameter="32"></mat-spinner>
-                <span>Loading usage samples...</span>
-              </div>
-            } @else {
-              <pre
-                class="usage-code-block"
-              ><code class="usage-code">{{ selectedComponentUsage() }}</code></pre>
-            }
-          </mat-card-content>
-        </mat-card>
-
-        <mat-card class="properties-card">
-          <mat-card-header>
-            <mat-card-title>Properties</mat-card-title>
-          </mat-card-header>
-          <mat-card-content class="properties-content">
-            <table mat-table [dataSource]="selectedComponentProperties()" class="properties-table">
-              <!-- Name Column -->
-              <ng-container matColumnDef="name">
-                <th mat-header-cell *matHeaderCellDef>Name</th>
-                <td mat-cell *matCellDef="let prop" class="prop-name">{{ prop.name }}</td>
-              </ng-container>
-
-              <!-- Description Column -->
-              <ng-container matColumnDef="description">
-                <th mat-header-cell *matHeaderCellDef>Description</th>
-                <td mat-cell *matCellDef="let prop" class="prop-description">
-                  {{ prop.description || '-' }}
-                </td>
-              </ng-container>
-
-              <!-- Type Column -->
-              <ng-container matColumnDef="type">
-                <th mat-header-cell *matHeaderCellDef>Type</th>
-                <td mat-cell *matCellDef="let prop" class="prop-type">
-                  <code>{{ prop.type }}</code>
-                </td>
-              </ng-container>
-
-              <!-- Required Column -->
-              <ng-container matColumnDef="required">
-                <th mat-header-cell *matHeaderCellDef>Required</th>
-                <td mat-cell *matCellDef="let prop" class="prop-required">
-                  @if (prop.required) {
-                    <mat-icon color="primary">check_circle</mat-icon>
-                  } @else {
-                    <span class="optional-label">optional</span>
-                  }
-                </td>
-              </ng-container>
-
-              <!-- Default Value Column -->
-              <ng-container matColumnDef="defaultValue">
-                <th mat-header-cell *matHeaderCellDef>Default</th>
-                <td mat-cell *matCellDef="let prop" class="prop-default">
-                  @if (prop.defaultValue !== undefined) {
-                    <code>{{ prop.defaultValue | json }}</code>
-                  } @else {
-                    -
-                  }
-                </td>
-              </ng-container>
-
-              <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-              <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-            </table>
-          </mat-card-content>
-        </mat-card>
-      </div>
-    } @else if (catalogManagement.catalogError()) {
-      <div class="empty-state error-state">
-        <mat-icon class="empty-icon text-danger">error_outline</mat-icon>
-        <h3 class="empty-title">Catalog Configuration Required</h3>
-        <p class="empty-subtitle">
-          {{ catalogManagement.catalogError() }}
-        </p>
-      </div>
-    } @else {
-      <div class="empty-state">
-        <mat-icon class="empty-icon">analytics</mat-icon>
-        <h3 class="empty-title">No Component Selected</h3>
-        <p class="empty-subtitle">
-          Choose a component from the sidebar catalog to view its schema details, presets, and usage
-          snippet.
-        </p>
+      <div class="details-header">
+        <h2 class="component-title">{{ selectedComponentKey() }}</h2>
+        @if (selectedComponentDescription()) {
+          <p class="component-description">{{ selectedComponentDescription() }}</p>
+        }
       </div>
     }
+
+    <div class="gallery-cards">
+      <div class="preview-slot" [class.hidden-frame]="!selectedComponentKey()">
+        <mat-card class="preview-card">
+          <!-- preserveContent keeps the renderer iframe mounted while the JSON tab is open. -->
+          <mat-tab-group
+            class="example-tabs"
+            aria-label="Example"
+            mat-stretch-tabs="false"
+            mat-align-tabs="start"
+            [preserveContent]="true"
+          >
+            <mat-tab label="Preview">
+              <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
+            </mat-tab>
+            <mat-tab label="Edit JSON">
+              <div class="json-tab">
+                @if (draft().preset) {
+                  <label class="draft-label" for="gallery-draft"
+                    >Edit components and optional data</label
+                  >
+                  <p id="gallery-draft-json-help" class="draft-help">
+                    Changes here update the preview and the properties. Reset example restores the
+                    original.
+                  </p>
+                  <textarea
+                    matInput
+                    id="gallery-draft"
+                    class="draft-json"
+                    spellcheck="false"
+                    [ngModel]="draft().text"
+                    (ngModelChange)="editDraft($event)"
+                    [attr.aria-invalid]="!!draft().error"
+                    aria-describedby="gallery-draft-json-help gallery-draft-error"
+                  ></textarea>
+                  @if (draft().error; as error) {
+                    <p id="gallery-draft-error" class="draft-error" role="alert">{{ error }}</p>
+                  }
+                } @else {
+                  <p class="draft-help" role="status">
+                    {{
+                      loadingUsages()
+                        ? 'Loading usage samples...'
+                        : 'No example is available for this component.'
+                    }}
+                  </p>
+                }
+              </div>
+            </mat-tab>
+          </mat-tab-group>
+        </mat-card>
+      </div>
+
+      @if (selectedComponentKey() && catalogManagement.activeCatalog()) {
+        <div class="details-panel">
+          <mat-card class="usage-card">
+            <mat-card-header class="usage-header">
+              <mat-card-title>Usage</mat-card-title>
+              @if (!loadingUsages()) {
+                <button
+                  mat-icon-button
+                  (click)="copyToClipboard()"
+                  aria-label="Copy JSON"
+                  [disabled]="!validPayloadJson()"
+                  class="copy-button"
+                >
+                  <mat-icon>content_copy</mat-icon>
+                </button>
+              }
+            </mat-card-header>
+            <mat-card-content>
+              @if (loadingUsages()) {
+                <div class="usage-loading-spinner">
+                  <mat-spinner diameter="32"></mat-spinner>
+                  <span>Loading usage samples...</span>
+                </div>
+              } @else {
+                @if (draft().preset) {
+                  <h3 class="edit-heading">Edit example</h3>
+                  <p id="gallery-draft-help" class="draft-help">
+                    Change properties below, or edit the whole example in the Edit JSON tab.
+                  </p>
+                  @if (draft().error) {
+                    <p class="draft-help" role="status">
+                      Fix the JSON in the Edit JSON tab to edit properties again.
+                    </p>
+                  }
+                  @if (editableProperties().length) {
+                    <div class="property-list">
+                      @for (prop of editableProperties(); track prop.name) {
+                        @if (prop.firstCommon) {
+                          <h4 class="property-section-heading">Common properties</h4>
+                        }
+                        <div
+                          class="property-row"
+                          [attr.data-property-row]="prop.name"
+                          [class.property-row-multiline]="prop.kind === 'json' || prop.note"
+                        >
+                          <label
+                            class="property-name"
+                            [attr.for]="prop.note ? null : 'gallery-property-' + prop.name"
+                          >
+                            <span>{{ prop.name }}</span>
+                            @if (prop.required) {
+                              <span class="required-marker">required</span>
+                            }
+                          </label>
+                          <div class="property-control">
+                            @if (prop.note) {
+                              <p class="property-note" [attr.data-property-note]="prop.name">
+                                {{ prop.note }}
+                              </p>
+                            } @else if (prop.kind === 'enum') {
+                              <select
+                                [id]="'gallery-property-' + prop.name"
+                                [attr.aria-label]="prop.name"
+                                [attr.data-property]="prop.name"
+                                [ngModel]="prop.value ?? null"
+                                (ngModelChange)="editProperty(prop.name, $event ?? undefined)"
+                                [disabled]="!!draft().error"
+                              >
+                                @if (!prop.required) {
+                                  <option [ngValue]="null">(not set)</option>
+                                }
+                                @for (option of prop.options; track option) {
+                                  <option [ngValue]="option">{{ option }}</option>
+                                }
+                              </select>
+                            } @else if (prop.kind === 'boolean') {
+                              <input
+                                type="checkbox"
+                                [id]="'gallery-property-' + prop.name"
+                                [attr.aria-label]="prop.name"
+                                [attr.data-property]="prop.name"
+                                [ngModel]="prop.value === true"
+                                (ngModelChange)="editProperty(prop.name, $event)"
+                                [disabled]="!!draft().error"
+                              />
+                            } @else if (prop.kind === 'number') {
+                              <input
+                                matInput
+                                type="number"
+                                [id]="'gallery-property-' + prop.name"
+                                [attr.aria-label]="prop.name"
+                                [attr.data-property]="prop.name"
+                                [placeholder]="prop.required ? '' : 'Not set'"
+                                [ngModel]="prop.value ?? null"
+                                (ngModelChange)="editNumberProperty(prop, $event)"
+                                [disabled]="!!draft().error"
+                              />
+                            } @else if (prop.kind === 'string') {
+                              <input
+                                matInput
+                                type="text"
+                                [id]="'gallery-property-' + prop.name"
+                                [attr.aria-label]="prop.name"
+                                [attr.data-property]="prop.name"
+                                [placeholder]="prop.required ? '' : 'Not set'"
+                                [ngModel]="prop.value ?? ''"
+                                (ngModelChange)="editTextProperty(prop, $event)"
+                                [disabled]="!!draft().error"
+                              />
+                            } @else {
+                              <textarea
+                                #jsonField
+                                class="property-json"
+                                spellcheck="false"
+                                [id]="'gallery-property-' + prop.name"
+                                [attr.aria-label]="prop.name + ' (JSON)'"
+                                [attr.data-property]="prop.name"
+                                [placeholder]="prop.required ? '' : 'Not set'"
+                                [value]="jsonFieldErrors()[prop.name]?.text ?? prop.json"
+                                (change)="editJsonProperty(prop, jsonField.value)"
+                                [attr.aria-invalid]="!!jsonFieldErrors()[prop.name]"
+                                [attr.aria-describedby]="
+                                  jsonFieldErrors()[prop.name]
+                                    ? 'gallery-property-error-' + prop.name
+                                    : null
+                                "
+                                [disabled]="!!draft().error"
+                              ></textarea>
+                            }
+                          </div>
+                          @if (!prop.required && prop.value !== undefined && prop.kind !== 'enum') {
+                            <button
+                              mat-icon-button
+                              type="button"
+                              class="remove-property"
+                              [attr.aria-label]="'Remove ' + prop.name"
+                              [attr.data-remove-property]="prop.name"
+                              (click)="editProperty(prop.name, undefined)"
+                              [disabled]="!!draft().error"
+                            >
+                              <mat-icon>close</mat-icon>
+                            </button>
+                          }
+                          @if (jsonFieldErrors()[prop.name]; as fieldError) {
+                            <p
+                              class="property-error"
+                              [id]="'gallery-property-error-' + prop.name"
+                              role="alert"
+                            >
+                              {{ fieldError.message }}
+                            </p>
+                          } @else if (prop.required && prop.value === undefined) {
+                            <p class="property-missing" [attr.data-property-missing]="prop.name">
+                              Required, but this example doesn't set it.
+                            </p>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                  <div class="draft-actions">
+                    <button
+                      mat-flat-button
+                      color="primary"
+                      (click)="openInComposer()"
+                      [disabled]="!validPayloadJson() || !rendererUrl() || opening()"
+                    >
+                      Open in Composer
+                    </button>
+                    <button mat-button color="primary" (click)="resetDraft()">Reset example</button>
+                  </div>
+                  @if (actionMessage()) {
+                    <p class="draft-help" role="status">{{ actionMessage() }}</p>
+                  }
+                } @else {
+                  <p class="draft-help" [class.draft-error]="draft().error" role="status">
+                    {{ draft().error || 'No example is available for this component.' }}
+                  </p>
+                }
+              }
+            </mat-card-content>
+          </mat-card>
+
+          <mat-card class="properties-card">
+            <mat-card-header>
+              <mat-card-title>Properties</mat-card-title>
+            </mat-card-header>
+            <mat-card-content class="properties-content">
+              <table
+                mat-table
+                [dataSource]="selectedComponentProperties()"
+                class="properties-table"
+              >
+                <!-- Name Column -->
+                <ng-container matColumnDef="name">
+                  <th mat-header-cell *matHeaderCellDef>Name</th>
+                  <td mat-cell *matCellDef="let prop" class="prop-name">{{ prop.name }}</td>
+                </ng-container>
+
+                <!-- Description Column -->
+                <ng-container matColumnDef="description">
+                  <th mat-header-cell *matHeaderCellDef>Description</th>
+                  <td mat-cell *matCellDef="let prop" class="prop-description">
+                    {{ prop.description || '-' }}
+                  </td>
+                </ng-container>
+
+                <!-- Type Column -->
+                <ng-container matColumnDef="type">
+                  <th mat-header-cell *matHeaderCellDef>Type</th>
+                  <td mat-cell *matCellDef="let prop" class="prop-type">
+                    <code>{{ prop.type }}</code>
+                  </td>
+                </ng-container>
+
+                <!-- Required Column -->
+                <ng-container matColumnDef="required">
+                  <th mat-header-cell *matHeaderCellDef>Required</th>
+                  <td mat-cell *matCellDef="let prop" class="prop-required">
+                    @if (prop.required) {
+                      <mat-icon color="primary">check_circle</mat-icon>
+                    } @else {
+                      <span class="optional-label">optional</span>
+                    }
+                  </td>
+                </ng-container>
+
+                <!-- Default Value Column -->
+                <ng-container matColumnDef="defaultValue">
+                  <th mat-header-cell *matHeaderCellDef>Default</th>
+                  <td mat-cell *matCellDef="let prop" class="prop-default">
+                    @if (prop.defaultValue !== undefined) {
+                      <code>{{ prop.defaultValue | json }}</code>
+                    } @else {
+                      -
+                    }
+                  </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+                <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+              </table>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      } @else if (catalogManagement.catalogError()) {
+        <div class="empty-state error-state">
+          <mat-icon class="empty-icon text-danger">error_outline</mat-icon>
+          <h3 class="empty-title">Catalog Configuration Required</h3>
+          <p class="empty-subtitle">
+            {{ catalogManagement.catalogError() }}
+          </p>
+        </div>
+      } @else {
+        <div class="empty-state">
+          <mat-icon class="empty-icon">analytics</mat-icon>
+          <h3 class="empty-title">No Component Selected</h3>
+          <p class="empty-subtitle">
+            Choose a component from the sidebar catalog to view its schema details, presets, and
+            usage snippet.
+          </p>
+        </div>
+      }
+    </div>
   </mat-sidenav-content>
 </mat-sidenav-container>
