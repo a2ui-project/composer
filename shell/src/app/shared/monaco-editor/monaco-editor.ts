@@ -49,6 +49,43 @@ import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
  */
 const ERROR_MARKER_DEBOUNCE_MS = 3000;
 
+const COMPOSER_LIGHT_THEME = 'composer-light';
+const COMPOSER_DARK_THEME = 'composer-dark';
+
+/**
+ * Reads a Material system token as defined for the given theme class. A detached
+ * probe is used so the value does not depend on which theme is currently active.
+ */
+function readThemeToken(themeClass: string, token: string): string {
+  const probe = document.createElement('div');
+  probe.className = themeClass;
+  probe.hidden = true;
+  document.body.appendChild(probe);
+  const value = getComputedStyle(probe).getPropertyValue(token).trim();
+  probe.remove();
+  return value;
+}
+
+/**
+ * Registers light and dark editor themes that sit on the shell's surface color,
+ * so the editor matches the panels around it instead of Monaco's own white or
+ * near-black background. Monaco only accepts hex colors, so a token that does
+ * not resolve to one leaves the base theme's background in place.
+ */
+function registerSurfaceThemes(monacoInstance: typeof monaco): void {
+  const themes = [
+    {name: COMPOSER_LIGHT_THEME, base: 'vs', themeClass: 'light-theme'},
+    {name: COMPOSER_DARK_THEME, base: 'vs-dark', themeClass: 'dark-theme'},
+  ] as const;
+  for (const {name, base, themeClass} of themes) {
+    const surface = readThemeToken(themeClass, '--mat-sys-surface');
+    const colors: Record<string, string> = /^#[0-9a-f]{6}$/i.test(surface)
+      ? {'editor.background': surface, 'editorGutter.background': surface}
+      : {};
+    monacoInstance.editor.defineTheme(name, {base, inherit: true, rules: [], colors});
+  }
+}
+
 @Component({
   selector: 'a2ui-composer-monaco-editor',
   standalone: true,
@@ -80,7 +117,9 @@ export class MonacoEditor {
   protected readonly isDarkTheme = computed(
     () => this.configProvider.themePreference() === ThemePreference.DARK,
   );
-  protected readonly monacoTheme = computed(() => (this.isDarkTheme() ? 'vs-dark' : 'vs-light'));
+  protected readonly monacoTheme = computed(() =>
+    this.isDarkTheme() ? COMPOSER_DARK_THEME : COMPOSER_LIGHT_THEME,
+  );
 
   /**
    * Resolves a JSON Pointer RFC 6901 compliant path against an object payload.
@@ -476,6 +515,7 @@ export class MonacoEditor {
           return;
         }
         this.monacoInstance.set(monacoInstance);
+        registerSurfaceThemes(monacoInstance);
 
         const modelUri = monacoInstance.Uri.parse(this.modelUri);
         let model = monacoInstance.editor.getModel(modelUri);

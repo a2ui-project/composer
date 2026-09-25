@@ -369,7 +369,7 @@
 /* Input prompt textareas & submits button footer bar */
 .chat-controllers-panel {
   padding: 12px 8px;
-  background-color: var(--mat-sys-surface-container-high);
+  background-color: var(--mat-sys-surface);
   border-top: 1px solid var(--mat-sys-outline-variant);
   display: flex;
   flex-direction: column;
@@ -519,13 +519,13 @@
 
   /* Themes maps variations representing dynamic Angular status Signals */
   &.healing {
-    background-color: color-mix(in srgb, var(--mat-sys-tertiary-container) 88%, transparent);
+    background-color: color-mix(in srgb, var(--mat-sys-primary-container) 88%, transparent);
     .status-badge-text {
-      color: var(--mat-sys-on-tertiary-container);
+      color: var(--mat-sys-on-primary-container);
     }
     mat-spinner {
       ::ng-deep circle {
-        stroke: var(--mat-sys-tertiary) !important;
+        stroke: var(--mat-sys-primary) !important;
       }
     }
   }
@@ -629,7 +629,7 @@
   flex: 1;
   text-align: center;
   padding: 32px;
-  background-color: var(--mat-sys-surface-container-low);
+  background-color: var(--mat-sys-surface);
   box-sizing: border-box;
 
   .disabled-key-icon {

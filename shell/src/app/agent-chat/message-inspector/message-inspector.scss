@@ -105,7 +105,7 @@
     gap: 8px;
     padding: 10px 16px;
     border-bottom: 1px solid var(--mat-sys-outline-variant, #f1f3f4);
-    background: var(--mat-sys-surface-container-lowest, #fafafa);
+    background: var(--mat-sys-surface-container-low);
 
     .search-box {
       display: flex;
@@ -218,6 +218,8 @@
       gap: 8px;
 
       .event-panel {
+        background: var(--mat-sys-surface);
+        color: var(--mat-sys-on-surface);
         border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
         border-radius: 8px !important;
         box-shadow: none !important;
@@ -291,15 +293,15 @@
               }
 
               &-status-update {
-                background-color: var(--mat-sys-tertiary-container, #fefce8);
+                background-color: var(--mat-sys-primary-container);
                 border-color: var(--mat-sys-outline-variant, #fde047);
-                color: var(--mat-sys-on-tertiary-container, #713f12);
+                color: var(--mat-sys-on-primary-container);
               }
 
               &-artifact-update {
-                background-color: var(--mat-sys-secondary-container, #dcfce7);
+                background-color: var(--mat-sys-primary-container);
                 border-color: var(--mat-sys-outline-variant, #86efac);
-                color: var(--mat-sys-on-secondary-container, #14532d);
+                color: var(--mat-sys-on-primary-container);
               }
 
               &-message {
@@ -371,7 +373,7 @@
 
         .event-body {
           padding: 8px 0;
-          background: var(--mat-sys-surface-container-lowest, #fafafa);
+          background: var(--mat-sys-surface-container-low);
           border-top: 1px solid var(--mat-sys-outline-variant, #f1f3f4);
 
           .validation-errors-banner {
@@ -437,7 +439,7 @@
 
               .line-text {
                 white-space: pre;
-                color: var(--mat-sys-primary, #1a73e8);
+                color: var(--mat-sys-on-surface);
                 flex: 1;
               }
             }

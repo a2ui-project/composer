@@ -155,6 +155,7 @@ vi.mock('@monaco-editor/loader', () => {
           parse: vi.fn((uri: string) => ({toString: () => uri})),
         },
         editor: {
+          defineTheme: vi.fn(),
           create: createMock,
           getModel: vi.fn(() => null),
           onDidChangeMarkers: vi.fn(() => ({dispose: vi.fn()})),
@@ -716,25 +717,25 @@ describe('RawFrame JSON Source Editor View', () => {
     expect(lastCall[1].ariaLabel).toBe('Raw layout JSON');
   });
 
-  it('initializes monaco with vs-dark theme when dark mode is active', async () => {
+  it('initializes monaco with the composer-dark theme when dark mode is active', async () => {
     mockThemePreference.set(ThemePreference.DARK);
     await setup(false);
     expect(createMock).toHaveBeenCalled();
     const lastCall = createMock.mock.calls[createMock.mock.calls.length - 1];
-    expect(lastCall[1].theme).toBe('vs-dark');
+    expect(lastCall[1].theme).toBe('composer-dark');
   });
 
   it('updates monaco theme dynamically when dark mode preference changes', async () => {
     const {fixture} = await setup(false);
     expect(createMock).toHaveBeenCalled();
     const lastCall = createMock.mock.calls[createMock.mock.calls.length - 1];
-    expect(lastCall[1].theme).toBe('vs-light');
+    expect(lastCall[1].theme).toBe('composer-light');
 
     mockThemePreference.set(ThemePreference.DARK);
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(mockEditor.updateOptions).toHaveBeenCalledWith({theme: 'vs-dark'});
+    expect(mockEditor.updateOptions).toHaveBeenCalledWith({theme: 'composer-dark'});
   });
 
   it('preserves undo and redo history allowing undo to restore previous content when stateSync activeDraft changes', async () => {

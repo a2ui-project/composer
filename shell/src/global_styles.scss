@@ -24,9 +24,11 @@ $light-theme: mat.define-theme(
     color: (
       theme-type: light,
       primary: mat.$violet-palette,
+      use-system-variables: true,
     ),
     typography: (
-      plain-family: 'Roboto, sans-serif',
+      plain-family: 'Plus Jakarta Sans, sans-serif',
+      brand-family: 'Plus Jakarta Sans, sans-serif',
     ),
   )
 );
@@ -36,9 +38,11 @@ $dark-theme: mat.define-theme(
     color: (
       theme-type: dark,
       primary: mat.$violet-palette,
+      use-system-variables: true,
     ),
     typography: (
-      plain-family: 'Roboto, sans-serif',
+      plain-family: 'Plus Jakarta Sans, sans-serif',
+      brand-family: 'Plus Jakarta Sans, sans-serif',
     ),
   )
 );
@@ -46,6 +50,7 @@ $dark-theme: mat.define-theme(
 @include mat.all-component-bases($light-theme);
 
 :root {
+  color-scheme: light;
   @include mat.all-component-typographies($light-theme);
   @include mat.system-level-typography($light-theme);
 }
@@ -80,24 +85,24 @@ $dark-theme: mat.define-theme(
       tertiary-fixed-dim: #ffa9fd,
       on-tertiary-fixed: #37003c,
       on-tertiary-fixed-variant: #702974,
-      background: #fefbff,
-      on-background: #1c1b1c,
-      surface: #fefbff,
-      surface-dim: #ddd9d9,
-      surface-bright: #fefbff,
+      background: #f4f4f5,
+      on-background: #202124,
+      surface: #ffffff,
+      surface-dim: #e4e4e7,
+      surface-bright: #ffffff,
       surface-container-lowest: #ffffff,
-      surface-container-low: #f7f3f3,
-      surface-container: #f1eded,
-      surface-container-high: #ebe7e7,
-      surface-container-highest: #e5e2e2,
-      on-surface: #1c1b1c,
+      surface-container-low: #fafafa,
+      surface-container: #f4f4f5,
+      surface-container-high: #eeeef0,
+      surface-container-highest: #e7e7ea,
+      on-surface: #202124,
       shadow: #000000,
       scrim: #000000,
       surface-tint: #5e5e65,
       inverse-surface: #313031,
       inverse-on-surface: #f4f0f0,
       outline: #78767c,
-      outline-variant: #c7c5cc,
+      outline-variant: #e4e4e7,
       neutral: #787676,
       neutral10: #1c1b1c,
       error: #ba1a1a,
@@ -105,7 +110,7 @@ $dark-theme: mat.define-theme(
       on-error: #ffffff,
       on-error-container: #410002,
       surface-variant: #e4e1e8,
-      on-surface-variant: #46464c,
+      on-surface-variant: #5f6368,
       neutral-variant: #77767c,
       neutral-variant20: #303035,
       inverse-secondary: #bec4f2,
@@ -115,6 +120,7 @@ $dark-theme: mat.define-theme(
 }
 
 .dark-theme {
+  color-scheme: dark;
   @include mat.all-component-colors($dark-theme);
 
   @include mat.theme-overrides(
@@ -144,24 +150,24 @@ $dark-theme: mat.define-theme(
       tertiary-fixed-dim: #ffa9fd,
       on-tertiary-fixed: #37003c,
       on-tertiary-fixed-variant: #702974,
-      background: #141314,
-      on-background: #e5e2e2,
-      surface: #141314,
-      surface-dim: #141314,
-      surface-bright: #3a3939,
-      surface-container-lowest: #0e0e0e,
-      surface-container-low: #1c1b1c,
-      surface-container: #201f20,
-      surface-container-high: #2a2a2a,
-      surface-container-highest: #353435,
-      on-surface: #e5e2e2,
+      background: #111214,
+      on-background: #eef0f3,
+      surface: #1c1e22,
+      surface-dim: #111214,
+      surface-bright: #34373d,
+      surface-container-lowest: #151619,
+      surface-container-low: #191b1f,
+      surface-container: #222429,
+      surface-container-high: #2a2d33,
+      surface-container-highest: #34373e,
+      on-surface: #eef0f3,
       shadow: #000000,
       scrim: #000000,
       surface-tint: #c7c5ce,
       inverse-surface: #e5e2e2,
       inverse-on-surface: #313031,
       outline: #929095,
-      outline-variant: #46464c,
+      outline-variant: #35383f,
       neutral: #787676,
       neutral10: #1c1b1c,
       error: #ffb4ab,
@@ -169,7 +175,7 @@ $dark-theme: mat.define-theme(
       on-error: #690005,
       on-error-container: #ffdad6,
       surface-variant: #46464c,
-      on-surface-variant: #c7c5cc,
+      on-surface-variant: #b9bec8,
       neutral-variant: #77767c,
       neutral-variant20: #303035,
       inverse-secondary: #555c84,
@@ -245,8 +251,16 @@ body {
   padding: 0;
   overflow: hidden;
   background-color: var(--mat-sys-background);
-  color: var(--mat-sys-on-background);
-  font-family: Roboto, 'Helvetica Neue', sans-serif;
+  color: var(--mat-sys-on-surface);
+  font-family: var(--mat-sys-body-medium-font);
+}
+
+code,
+pre,
+kbd,
+samp {
+  // Material typography has no monospace role for source code.
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
 }
 
 /* High-specificity global overrides resolving slide toggle M2/M3 token and label collisions */

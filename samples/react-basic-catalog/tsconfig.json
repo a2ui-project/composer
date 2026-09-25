@@ -9,7 +9,7 @@
     "sourceMap": true,
     "jsx": "react-jsx",
     "noEmit": true,
-    "types": []
+    "types": ["vite/client"]
   },
   "include": ["src/**/*"],
   "exclude": ["src/**/*.spec.ts", "src/**/*.spec.tsx"]
