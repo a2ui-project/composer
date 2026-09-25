@@ -22,6 +22,7 @@ import {provideA2uiSandbox} from 'a2ui-bridge/angular';
 import catalogJson from './assets/catalog.json';
 
 import {COMPONENT_USAGES} from './assets/usages.js';
+import {DEMOS} from './demos.js';
 
 bootstrapApplication(AppComponent, {
   providers: [
@@ -29,6 +30,7 @@ bootstrapApplication(AppComponent, {
     provideA2uiSandbox([BasicWithMcpCatalog], {
       catalogJson,
       getComponentUsages: async () => COMPONENT_USAGES,
+      getDemos: async () => DEMOS,
     }),
   ],
 }).catch(err => console.error('A2UI Sandbox Bootstrap Failed:', err));

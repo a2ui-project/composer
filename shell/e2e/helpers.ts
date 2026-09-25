@@ -16,12 +16,12 @@
 
 import {expect, Page} from '@playwright/test';
 
-interface MonacoModel {
+export interface MonacoModel {
   getValue(): string;
   setValue(value: string): void;
 }
 
-interface WindowWithMonaco extends Window {
+export interface WindowWithMonaco extends Window {
   monaco?: {
     editor: {
       getModels(): MonacoModel[];

@@ -44,6 +44,11 @@
   --a2ui-card-border: none;
   --a2ui-card-margin: 0;
   --a2ui-card-box-shadow: none;
+  --a2ui-button-margin: 0;
+  --a2ui-checkbox-margin: 0;
+  --a2ui-checkbox-gap: 10px;
+  --a2ui-checkbox-label-font-weight: 400;
+  --a2ui-divider-spacing: 0;
   --a2ui-button-padding: 10px 18px;
   --a2ui-button-border-radius: 24px;
   --a2ui-button-font-weight: 500;

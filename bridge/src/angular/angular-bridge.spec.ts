@@ -19,7 +19,7 @@ import '@angular/compiler';
 // @vitest-environment jsdom
 import {describe, it, expect, afterEach, vi} from 'vitest';
 import {getTestBed, TestBed} from '@angular/core/testing';
-import {Type} from '@angular/core';
+import {Component, Type, inject} from '@angular/core';
 import {BrowserTestingModule, platformBrowserTesting} from '@angular/platform-browser/testing';
 import {A2uiSandboxConnection, provideA2uiSandbox} from './angular-bridge';
 import {A2UI_RENDERER_CONFIG, A2uiRendererService} from '@a2ui/angular/v0_9';
@@ -140,6 +140,41 @@ describe('Angular Sandbox Connection Spec', () => {
     connection.ngOnDestroy();
   });
 
+  it('acknowledges content after Angular renders the active surface', async () => {
+    @Component({template: '{{connection.surfaceId()}}'})
+    class TestHost {
+      readonly connection = inject(A2uiSandboxConnection);
+    }
+    TestBed.configureTestingModule({
+      imports: [TestHost],
+      providers: [
+        {
+          provide: A2uiRendererService,
+          useValue: {
+            surfaceGroup: {onSurfaceCreated: {subscribe: () => ({unsubscribe() {}})}},
+            processMessages() {},
+          },
+        },
+        {provide: A2UI_RENDERER_CONFIG, useValue: {}},
+        {provide: A2uiSandboxConnection, useFactory: () => new A2uiSandboxConnection()},
+      ],
+    });
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.detectChanges();
+    const config = attachSpy.mock.lastCall![1];
+    expect(config.whenSurfaceRendered).toBeDefined();
+    config.onSurfaceReady('ready');
+    const committed = vi.fn();
+    const pending = config.whenSurfaceRendered!().then(committed);
+    expect(committed).not.toHaveBeenCalled();
+    await fixture.whenStable();
+    await pending;
+    expect(committed).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.textContent).toBe('ready');
+    fixture.destroy();
+  });
+
   it('configures standalone DI providers via provideA2uiSandbox and routes actions to a2uiBridge.sendAction', () => {
     class MockCatalog {}
     const mockCatalogInstance = new MockCatalog();
@@ -206,6 +241,34 @@ describe('Angular Sandbox Connection Spec', () => {
     expect(attachSpy).toHaveBeenCalled();
     const configPassed = attachSpy.mock.lastCall![1];
     expect(configPassed.onThemeChange).toBe(onThemeChange);
+
+    connInstance.ngOnDestroy();
+  });
+
+  it('passes getDemos option through sandbox configuration to attachRenderer', () => {
+    const getDemos = async () => [
+      {id: 'demo-a', name: 'Demo A', description: 'First demo.', a2ui: []},
+    ];
+    const mockRendererService = {
+      surfaceGroup: {
+        onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
+      },
+      processMessages: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideA2uiSandbox([], {getDemos}),
+        {provide: A2uiRendererService, useValue: mockRendererService},
+      ],
+    });
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const connInstance = TestBed.inject(A2uiSandboxConnection);
+
+    expect(attachSpy).toHaveBeenCalled();
+    const configPassed = attachSpy.mock.lastCall![1];
+    expect(configPassed.getDemos).toBe(getDemos);
 
     connInstance.ngOnDestroy();
   });
