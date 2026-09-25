@@ -37,7 +37,7 @@ import {
 
 import {IframeMcpClient} from './iframe-mcp-client';
 
-import {SurfaceResizeObserver} from './surface-resize-observer';
+import {SurfaceResizeObserver, type SurfaceDimensions} from './surface-resize-observer';
 export * from './surface-resize-observer';
 
 import type {
@@ -54,6 +54,12 @@ import type {
  * Suppresses transient syntax error popups during rapid typing.
  */
 export const ERROR_OVERLAY_DEBOUNCE_MS = 350;
+
+/** Window, in milliseconds, over which consecutive SURFACE_RESIZE reports are coalesced. */
+const SURFACE_RESIZE_COALESCE_MS = 16;
+
+/** A SURFACE_RESIZE payload: the measured dimensions, plus readiness once the renderer reports it. */
+type SurfaceResizePayload = SurfaceDimensions & {contentReady?: boolean};
 
 /**
  * Determines whether a given value resembles an Error object.
@@ -248,16 +254,61 @@ export class PreviewBridge {
   /** Tracks the currently applied theme in the DOM to avoid redundant DOM mutations. */
   private currentAppliedTheme?: ThemePreference;
 
+  /**
+   * The last SURFACE_RESIZE payload sent, serialized. Forced measurements exist so that
+   * readiness changes reach the host even when the dimensions do not; comparing the whole
+   * payload keeps that guarantee while dropping reports that repeat the last one.
+   */
+  private lastSurfaceResizePayload: string | null = null;
+  private lastSurfaceResizeSentAt = Number.NEGATIVE_INFINITY;
+  private pendingSurfaceResize: SurfaceResizePayload | null = null;
+  private surfaceResizeFlushId?: ReturnType<typeof setTimeout>;
+
   /** Handles DOM mutations and window viewport resizing to broadcast dimension updates to the host. */
   private readonly surfaceResizeObserver = new SurfaceResizeObserver(dimensions => {
-    this.sendMessage({
-      type: PreviewBridgeMessageType.SURFACE_RESIZE,
-      payload:
-        this.contentReady === undefined
-          ? dimensions
-          : {...dimensions, contentReady: this.contentReady},
-    });
+    this.queueSurfaceResize(
+      this.contentReady === undefined
+        ? dimensions
+        : {...dimensions, contentReady: this.contentReady},
+    );
   });
+
+  /**
+   * Sends the first report of a burst at once and coalesces the rest into one trailing report
+   * per SURFACE_RESIZE_COALESCE_MS. A mount settles through several layout passes within a few
+   * milliseconds; reporting each one gives the host a stream of intermediate sizes it would
+   * immediately overwrite, and is the cadence a resize feedback loop is detected by.
+   */
+  private queueSurfaceResize(payload: SurfaceResizePayload): void {
+    this.pendingSurfaceResize = payload;
+    if (this.surfaceResizeFlushId !== undefined) {
+      return;
+    }
+    const wait = this.lastSurfaceResizeSentAt + SURFACE_RESIZE_COALESCE_MS - Date.now();
+    if (wait <= 0) {
+      this.flushSurfaceResize();
+      return;
+    }
+    this.surfaceResizeFlushId = setTimeout(() => {
+      this.surfaceResizeFlushId = undefined;
+      this.flushSurfaceResize();
+    }, wait);
+  }
+
+  private flushSurfaceResize(): void {
+    const payload = this.pendingSurfaceResize;
+    this.pendingSurfaceResize = null;
+    if (!payload) {
+      return;
+    }
+    const serialized = JSON.stringify(payload);
+    if (serialized === this.lastSurfaceResizePayload) {
+      return;
+    }
+    this.lastSurfaceResizePayload = serialized;
+    this.lastSurfaceResizeSentAt = Date.now();
+    this.sendMessage({type: PreviewBridgeMessageType.SURFACE_RESIZE, payload});
+  }
 
   private readonly cachedParentOrigin: string | null = null;
 
@@ -490,6 +541,11 @@ export class PreviewBridge {
     this.resetContentReadiness();
     teardownInstrumentationOverrides();
     this.surfaceResizeObserver.destroy();
+    if (this.surfaceResizeFlushId !== undefined) {
+      clearTimeout(this.surfaceResizeFlushId);
+      this.surfaceResizeFlushId = undefined;
+    }
+    this.pendingSurfaceResize = null;
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);
     }
