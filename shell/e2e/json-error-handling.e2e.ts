@@ -149,6 +149,11 @@ test.describe('JSON Error Handling & Diagnostics', () => {
   test('recovers gracefully from malformed JSON stream blocks in chat and renders an inline diagnostic error card', async ({
     page,
   }) => {
+    // The assistant only submits once a renderer has announced its catalog, which the
+    // stub renderer above never does, so use a real sample renderer here.
+    await page.goto('/?renderer=http://localhost:3456');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+
     // Navigate to Chat
     await page.getByRole('tab', {name: 'Gemini Assistant'}).click();
 

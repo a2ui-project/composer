@@ -140,6 +140,11 @@ export class Standalone3pLlmClient extends LlmClient {
       resolveComplete = resolve;
       rejectComplete = reject;
     });
+    complete.catch(() => {
+      // The stream is consumed from a background task. Mark the returned
+      // promise as handled until callers await it so expected cancellations
+      // and transport failures do not surface as unhandled rejections.
+    });
 
     // Notify all active listeners of updates
     const notifyListeners = () => {
@@ -152,6 +157,7 @@ export class Standalone3pLlmClient extends LlmClient {
     // Eager background thread to pull chunks from standard SDK stream instantly
     void this.consumeStream(
       responseStream,
+      abortController.signal,
       state,
       buffer,
       notifyListeners,
@@ -226,8 +232,31 @@ export class Standalone3pLlmClient extends LlmClient {
     return {chunkContent, nativeThoughtVal};
   }
 
+  private normalizeStreamError(err: unknown, abortSignal: AbortSignal): unknown {
+    if (!abortSignal.aborted) return err;
+
+    const abortReason = abortSignal.reason;
+    if (
+      abortReason &&
+      typeof abortReason === 'object' &&
+      'name' in abortReason &&
+      abortReason.name === CANCEL_ERROR_NAME
+    ) {
+      return abortReason;
+    }
+
+    if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
+      const cancelErr = new Error('Cancelled');
+      cancelErr.name = CANCEL_ERROR_NAME;
+      return cancelErr;
+    }
+
+    return err;
+  }
+
   private async consumeStream(
     responseStream: AsyncIterable<GenerateContentResponse>,
+    abortSignal: AbortSignal,
     state: StreamProcessingState,
     buffer: LlmResponse[],
     notify: () => void,
@@ -260,10 +289,7 @@ export class Standalone3pLlmClient extends LlmClient {
       resolveComplete(state.accumulatedText);
       notify();
     } catch (err: unknown) {
-      let finalErr = err;
-      if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
-        finalErr = err;
-      }
+      const finalErr = this.normalizeStreamError(err, abortSignal);
 
       if (
         finalErr &&

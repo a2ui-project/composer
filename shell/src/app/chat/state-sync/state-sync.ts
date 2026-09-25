@@ -65,6 +65,7 @@ export class StateSync {
   //   `_activeDraft` directly, bypassing history sync.
   private previousCatalogId: string | null = null;
   private isDraftModified = false;
+  private lastSynchronizedLayout: string | null = null;
   private readonly _activeDraft = signal<string>('');
   /**
    * Volatile, read-only reactive Signal exposing the currently buffered
@@ -140,6 +141,11 @@ export class StateSync {
     this._draftInput.set(value);
   }
 
+  /** Synchronizes the current sanitized canvas before a prompt is submitted. */
+  syncActiveDraftToHistory(): void {
+    this.syncLayoutToHistory(this._activeDraft());
+  }
+
   /**
    * Retrieves the current volatile in-memory draft configuration state
    * on panel re-hydration cycles.
@@ -154,6 +160,8 @@ export class StateSync {
    */
   commitLayoutFromLlm(value: string): void {
     this.isDraftModified = true;
+    // Restoring a previous draft after this response must update context again.
+    this.lastSynchronizedLayout = null;
     this._activeDraft.set(value);
   }
 
@@ -163,6 +171,7 @@ export class StateSync {
    */
   flushDraft(): void {
     this.isDraftModified = false;
+    this.lastSynchronizedLayout = null;
     this.previousCatalogId = null;
     const catalog = this.catalogManagement.activeCatalog();
     let catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
@@ -204,11 +213,16 @@ export class StateSync {
    * history context node.
    */
   private syncLayoutToHistory(layout: string): void {
+    // A model commit may have superseded an editor update still in the debounce queue.
+    if (layout !== this._activeDraft()) return;
     const sanitizedLayoutString = this.sanitizeLayout(layout);
     if (!sanitizedLayoutString) {
       return;
     }
     const history = this.chatState.chatHistory();
+    // Prompt submission can already have synchronized this pending editor update.
+    if (history.length > 0 && sanitizedLayoutString === this.lastSynchronizedLayout) return;
+    this.lastSynchronizedLayout = sanitizedLayoutString;
 
     if (history.length === 0) {
       // Initialize logs context if empty
