@@ -18,7 +18,6 @@ import {Component, HostListener, inject, input, OnInit, output} from '@angular/c
 import {
   AbstractControl,
   FormBuilder,
-  FormGroup,
   ReactiveFormsModule,
   ValidationErrors,
   ValidatorFn,
@@ -96,7 +95,16 @@ export class AgentConfigPanel implements OnInit {
   /** Emitted when the user clears the configured agent endpoint and settings. */
   readonly clearConfig = output<void>();
 
-  protected form!: FormGroup;
+  private readonly defaultBackendMode: string =
+    this.backendOptions.length > 0 ? this.backendOptions[0].id : A2aBackendMode.HTTP_JSONRPC;
+
+  // Controls are bound in the template via `[formControl]="form.controls.x"` rather than
+  // `formControlName="x"`: string-based lookups break when JSCompiler renames the keys below.
+  protected readonly form = this.fb.nonNullable.group({
+    endpoint: ['', [Validators.required, httpUrlValidator()]],
+    tenantId: [''],
+    backendMode: [this.defaultBackendMode],
+  });
 
   @HostListener('keydown.escape')
   protected handleEscape(): void {
@@ -106,15 +114,10 @@ export class AgentConfigPanel implements OnInit {
   }
 
   ngOnInit(): void {
-    this.form = this.fb.group({
-      endpoint: [this.initialEndpoint() || '', [Validators.required, httpUrlValidator()]],
-      tenantId: [this.initialTenantId() || ''],
-      backendMode: [
-        this.initialBackendMode() ||
-          (this.backendOptions.length > 0
-            ? this.backendOptions[0].id
-            : A2aBackendMode.HTTP_JSONRPC),
-      ],
+    this.form.setValue({
+      endpoint: this.initialEndpoint() || '',
+      tenantId: this.initialTenantId() || '',
+      backendMode: this.initialBackendMode() || this.defaultBackendMode,
     });
   }
 
@@ -135,8 +138,7 @@ export class AgentConfigPanel implements OnInit {
     this.form.reset({
       endpoint: '',
       tenantId: '',
-      backendMode:
-        this.backendOptions.length > 0 ? this.backendOptions[0].id : A2aBackendMode.HTTP_JSONRPC,
+      backendMode: this.defaultBackendMode,
     });
     this.clearConfig.emit();
   }

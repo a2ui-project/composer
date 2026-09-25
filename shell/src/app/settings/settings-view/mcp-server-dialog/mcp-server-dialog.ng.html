@@ -22,7 +22,7 @@
       <input
         matInput
         id="mcp-server-url-input"
-        formControlName="url"
+        [formControl]="form.controls.url"
         placeholder="http://localhost:3001/mcp"
       />
     </mat-form-field>

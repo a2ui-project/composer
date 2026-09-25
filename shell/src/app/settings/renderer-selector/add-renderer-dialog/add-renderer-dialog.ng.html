@@ -19,7 +19,12 @@
   <form [formGroup]="form" (ngSubmit)="$event.preventDefault(); onConfirm()">
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>Name</mat-label>
-      <input matInput id="renderer-name-input" formControlName="name" placeholder="My Renderer" />
+      <input
+        matInput
+        id="renderer-name-input"
+        [formControl]="form.controls.name"
+        placeholder="My Renderer"
+      />
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="full-width">
@@ -27,7 +32,7 @@
       <input
         matInput
         id="renderer-url-input"
-        formControlName="rendererUrl"
+        [formControl]="form.controls.rendererUrl"
         placeholder="http://localhost:3000"
       />
     </mat-form-field>

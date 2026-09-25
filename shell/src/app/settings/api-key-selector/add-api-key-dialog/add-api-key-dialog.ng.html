@@ -19,7 +19,12 @@
   <form [formGroup]="form" (ngSubmit)="$event.preventDefault(); onConfirm()">
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>Name</mat-label>
-      <input matInput id="api-key-name-input" formControlName="name" placeholder="My Gemini Key" />
+      <input
+        matInput
+        id="api-key-name-input"
+        [formControl]="form.controls.name"
+        placeholder="My Gemini Key"
+      />
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="full-width">
@@ -28,7 +33,7 @@
         matInput
         id="api-key-value-input"
         [type]="hideApiKey() ? 'password' : 'text'"
-        formControlName="apiKey"
+        [formControl]="form.controls.apiKey"
         placeholder="Paste your API key here"
       />
       <button
