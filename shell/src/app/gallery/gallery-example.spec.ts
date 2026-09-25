@@ -58,6 +58,71 @@ describe('parseGalleryExample', () => {
     });
   });
 
+  it('validates every allowed type in an array-valued catalog property schema', () => {
+    const nullableCatalog: Catalog = {
+      components: {
+        Notice: {
+          properties: {
+            text: {type: ['string', 'null']},
+            count: {type: ['integer', 'boolean']},
+          },
+        },
+      },
+    };
+    for (const text of ['Hello', null]) {
+      for (const count of [2, false]) {
+        const components = [{...component, text, count}];
+        expect(
+          parseGalleryExample(JSON.stringify({components}), nullableCatalog, errorLogger),
+        ).toEqual({
+          usage: components,
+        });
+      }
+    }
+    for (const text of [2, false, {}, []]) {
+      expect(() =>
+        parseGalleryExample(
+          JSON.stringify({components: [{...component, text}]}),
+          nullableCatalog,
+          errorLogger,
+        ),
+      ).toThrow('"text"');
+    }
+    expect(() =>
+      parseGalleryExample(
+        JSON.stringify({components: [{...component, count: 1.5}]}),
+        nullableCatalog,
+        errorLogger,
+      ),
+    ).toThrow('"count"');
+  });
+
+  it('accepts boolean JSON Schema sub-schemas without throwing on the `in` operator', () => {
+    const booleanSchemaCatalog: Catalog = {
+      components: {
+        Notice: {
+          properties: {
+            // `true` and `false` are valid JSON Schemas. The catalog resolver normalizes
+            // them to `{}` before validation, so neither reaches the `'const' in schema`
+            // check as a primitive.
+            text: true,
+            count: {anyOf: [true, {type: 'integer'}]},
+            enabled: false,
+          },
+        },
+      },
+    };
+    const components = [{...component, text: 'Hello', count: 2, enabled: true}];
+    expect(() =>
+      parseGalleryExample(JSON.stringify({components}), booleanSchemaCatalog, errorLogger),
+    ).not.toThrow();
+    expect(
+      parseGalleryExample(JSON.stringify({components}), booleanSchemaCatalog, errorLogger),
+    ).toEqual({
+      usage: components,
+    });
+  });
+
   it.each([
     ['invalid JSON', '{', 'JSON'],
     ['message envelope', JSON.stringify([{createSurface: {catalogId: 'other'}}]), 'components'],
