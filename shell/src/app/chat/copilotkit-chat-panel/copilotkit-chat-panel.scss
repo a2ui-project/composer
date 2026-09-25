@@ -1,0 +1,363 @@
+/**
+ * @license
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// Unencapsulated (see CopilotKitChatPanel), so every rule is scoped to the panel.
+a2ui-composer-chat-panel {
+  & {
+    display: block;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .preview-frame-container {
+    position: relative;
+    height: 100%;
+    min-width: 0;
+    overflow: hidden;
+    background: var(--mat-sys-surface);
+    color: var(--mat-sys-on-surface);
+  }
+
+  .chat-history-log {
+    padding: 20px 16px 0;
+  }
+
+  .chat-bubble-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    gap: 6px;
+    overflow-wrap: anywhere;
+  }
+
+  .bubble-header-bar {
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .bubble-body {
+    min-width: 0;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .bubble-user:not(.bubble-layout) .bubble-header-bar {
+    text-align: right;
+  }
+
+  .bubble-layout .bubble-body,
+  .bubble-model:has(.bubble-text-content) .bubble-body {
+    padding: 14px 16px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 14px;
+    background: var(--mat-sys-surface-container-low);
+
+    .bubble-text-content {
+      margin: 0;
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+
+  .thinking-block {
+    margin-bottom: 10px;
+    border-left: 2px solid var(--mat-sys-outline-variant);
+    padding: 4px 0 4px 12px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 12px;
+
+    .thinking-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+    }
+
+    mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+    .thinking-text-content {
+      margin: 6px 0 0;
+      white-space: pre-wrap;
+      max-height: 150px;
+      overflow: auto;
+    }
+  }
+
+  .error-bubble-content,
+  .parse-error-card {
+    padding: 14px;
+    border: 1px solid var(--mat-sys-error);
+    border-radius: 14px;
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .error-title {
+    margin-bottom: 6px;
+    font-weight: 700;
+  }
+
+  .error-message {
+    white-space: pre-wrap;
+  }
+  .error-tip {
+    margin-top: 8px;
+  }
+  .error-details {
+    margin-top: 10px;
+
+    summary {
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    pre {
+      margin: 8px 0 0;
+      max-height: 160px;
+      overflow: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font: 11px/1.6 monospace;
+    }
+  }
+
+  .parse-error-card {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .retry-action-container {
+    margin-top: 12px;
+  }
+
+  .pipeline-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    background: color-mix(in srgb, var(--mat-sys-surface) 92%, transparent);
+    color: var(--mat-sys-on-surface);
+    cursor: pointer;
+    padding: 24px;
+    text-align: center;
+    font-size: 14px;
+  }
+
+  .chat-controllers-panel {
+    padding: 12px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 24px;
+    background: var(--mat-sys-surface);
+    box-shadow: 0 3px 16px color-mix(in srgb, var(--mat-sys-on-surface) 7%, transparent);
+
+    &:focus-within {
+      border-color: var(--mat-sys-primary);
+    }
+
+    .prompt-form-field {
+      width: 100%;
+    }
+
+    textarea {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      padding: 6px 8px;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--mat-sys-on-surface);
+      font: inherit;
+      font-size: 14px;
+      line-height: 1.5;
+      resize: none;
+      min-height: 64px;
+      max-height: 160px;
+
+      &::placeholder {
+        color: var(--mat-sys-on-surface-variant);
+        opacity: 0.8;
+      }
+    }
+  }
+
+  .submit-action-bar,
+  .action-bar-left,
+  .action-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .submit-action-bar {
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+
+  .action-bar-left,
+  .action-bar-right {
+    min-width: 0;
+  }
+
+  .action-bar-left {
+    gap: 0;
+  }
+
+  .renderer-selector {
+    min-width: 0;
+    max-width: 180px;
+    padding: 0 10px;
+    border-radius: 24px;
+    background: var(--mat-sys-surface-container);
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 12px;
+  }
+
+  .renderer-selector-label {
+    display: inline-block;
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .renderer-feedback {
+    margin: 8px 8px 0;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .renderer-error {
+    color: var(--mat-sys-error);
+  }
+
+  .add-prompt-button.has-screenshot {
+    color: var(--mat-sys-primary);
+    background: var(--mat-sys-primary-container);
+  }
+
+  .screenshot-indicator {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--mat-sys-primary);
+  }
+
+  .send-button:not(:disabled) {
+    color: var(--mat-sys-on-primary);
+    background: var(--mat-sys-primary);
+  }
+
+  .stop-button {
+    color: var(--mat-sys-error);
+    background: var(--mat-sys-error-container);
+  }
+
+  .disabled-chat-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    box-sizing: border-box;
+    text-align: center;
+    color: var(--mat-sys-on-surface-variant);
+    background-color: var(--mat-sys-surface);
+
+    .disabled-key-icon {
+      font-size: 40px;
+      width: 40px;
+      height: 40px;
+    }
+    .disabled-notice-text {
+      max-width: 260px;
+      margin: 20px 0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+  }
+
+  .attachment-previews,
+  .bubble-attachments-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .attachment-previews {
+    max-height: 120px;
+    overflow: auto;
+  }
+  .attachment-preview-card,
+  .bubble-attachment-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    max-width: 100%;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 10px;
+    background: var(--mat-sys-surface-container-low);
+    font-size: 12px;
+    color: var(--mat-sys-on-surface);
+  }
+
+  .attachment-thumbnail,
+  .bubble-attachment-thumbnail {
+    width: 32px;
+    height: 32px;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+
+  .attachment-name,
+  .bubble-attachment-name {
+    display: block;
+    max-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .attachment-file-icon,
+  .bubble-attachment-icon {
+    color: var(--mat-sys-primary);
+  }
+}
