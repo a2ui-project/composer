@@ -19,6 +19,8 @@ import {
   LlmClient,
   LlmMessage,
   LlmResponse,
+  LlmRequestOptions,
+  LlmToolCall,
   LlmStreamResponse,
   MessageRole,
   CANCEL_ERROR_NAME,
@@ -110,7 +112,10 @@ export class Standalone3pLlmClient extends LlmClient {
    * Generates a streamed, incremental response for the provided chat
    * history.
    */
-  override async chatStream(messages: LlmMessage[]): Promise<LlmStreamResponse> {
+  override async chatStream(
+    messages: LlmMessage[],
+    options?: LlmRequestOptions,
+  ): Promise<LlmStreamResponse> {
     const apiKeyVal = this.config.geminiApiKey();
 
     const ai = new GoogleGenAI({
@@ -118,7 +123,7 @@ export class Standalone3pLlmClient extends LlmClient {
     });
 
     const abortController = new AbortController();
-    const params = this.buildGenerateContentParams(messages, abortController.signal);
+    const params = this.buildGenerateContentParams(messages, abortController.signal, options);
 
     // Instantiate response generator stream eagerly
     const responseStream = await ai.models.generateContentStream(params);
@@ -140,6 +145,11 @@ export class Standalone3pLlmClient extends LlmClient {
       resolveComplete = resolve;
       rejectComplete = reject;
     });
+    complete.catch(() => {
+      // The stream is consumed from a background task. Mark the returned
+      // promise as handled until callers await it so expected cancellations
+      // and transport failures do not surface as unhandled rejections.
+    });
 
     // Notify all active listeners of updates
     const notifyListeners = () => {
@@ -152,6 +162,7 @@ export class Standalone3pLlmClient extends LlmClient {
     // Eager background thread to pull chunks from standard SDK stream instantly
     void this.consumeStream(
       responseStream,
+      abortController.signal,
       state,
       buffer,
       notifyListeners,
@@ -191,9 +202,13 @@ export class Standalone3pLlmClient extends LlmClient {
   private buildGenerateContentParams(
     messages: LlmMessage[],
     abortSignal: AbortSignal,
+    options?: LlmRequestOptions,
   ): GenerateContentParameters {
     const {systemInstruction, contents} = this.parseMessages(messages);
     const config = this.buildGenerateContentConfig(systemInstruction, abortSignal);
+    if (options?.tools?.length) {
+      config.tools = [{functionDeclarations: options.tools}];
+    }
     return {
       model: 'gemini-flash-latest',
       contents,
@@ -204,12 +219,20 @@ export class Standalone3pLlmClient extends LlmClient {
   private parseChunkParts(chunk: GenerateContentResponse): {
     chunkContent: string;
     nativeThoughtVal: string;
+    toolCalls: LlmToolCall[];
   } {
+    const toolCalls: LlmToolCall[] = [];
     let chunkContent = '';
     let nativeThoughtVal = '';
     const parts = chunk.candidates?.[0]?.content?.parts;
     if (parts && parts.length > 0) {
       for (const part of parts) {
+        if (part.functionCall) {
+          toolCalls.push({
+            name: part.functionCall.name || '',
+            args: part.functionCall.args || {},
+          });
+        }
         if (part.thought === true) {
           if (part.text) {
             nativeThoughtVal += part.text;
@@ -223,11 +246,36 @@ export class Standalone3pLlmClient extends LlmClient {
     } else {
       chunkContent = chunk.text || '';
     }
-    return {chunkContent, nativeThoughtVal};
+    return {chunkContent, nativeThoughtVal, toolCalls};
+  }
+
+  private normalizeStreamError(err: unknown, abortSignal: AbortSignal): unknown {
+    if (!abortSignal.aborted) {
+      return err;
+    }
+
+    const abortReason = abortSignal.reason;
+    if (
+      abortReason &&
+      typeof abortReason === 'object' &&
+      'name' in abortReason &&
+      abortReason.name === CANCEL_ERROR_NAME
+    ) {
+      return abortReason;
+    }
+
+    if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
+      const cancelErr = new Error('Cancelled');
+      cancelErr.name = CANCEL_ERROR_NAME;
+      return cancelErr;
+    }
+
+    return err;
   }
 
   private async consumeStream(
     responseStream: AsyncIterable<GenerateContentResponse>,
+    abortSignal: AbortSignal,
     state: StreamProcessingState,
     buffer: LlmResponse[],
     notify: () => void,
@@ -236,7 +284,7 @@ export class Standalone3pLlmClient extends LlmClient {
   ): Promise<void> {
     try {
       for await (const chunk of responseStream) {
-        const {chunkContent, nativeThoughtVal} = this.parseChunkParts(chunk);
+        const {chunkContent, nativeThoughtVal, toolCalls} = this.parseChunkParts(chunk);
 
         state.accumulatedRawText += chunkContent;
 
@@ -253,17 +301,19 @@ export class Standalone3pLlmClient extends LlmClient {
 
         state.accumulatedText += contentVal;
 
-        buffer.push({content: contentVal, thinking: thoughtVal, isComplete: false});
+        buffer.push({
+          content: contentVal,
+          thinking: thoughtVal,
+          isComplete: false,
+          ...(toolCalls.length ? {toolCalls} : {}),
+        });
         notify();
       }
       state.isDone = true;
       resolveComplete(state.accumulatedText);
       notify();
     } catch (err: unknown) {
-      let finalErr = err;
-      if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
-        finalErr = err;
-      }
+      const finalErr = this.normalizeStreamError(err, abortSignal);
 
       if (
         finalErr &&

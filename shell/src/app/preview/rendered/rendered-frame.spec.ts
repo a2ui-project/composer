@@ -198,6 +198,52 @@ describe('RenderedFrame Live Preview Viewport', () => {
     );
   });
 
+  it('resolves catalog-relative renderer URLs against a GitHub Pages base path', async () => {
+    fixture.destroy();
+    const base = document.createElement('base');
+    base.href = 'http://localhost:3000/composer/';
+    document.head.appendChild(base);
+
+    try {
+      resolvedUrlSignal.set('samples/react-slack-catalog/');
+      const relativeFixture = TestBed.createComponent(RenderedFrame);
+      relativeFixture.detectChanges();
+      const relativeHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        relativeFixture,
+        RenderedFrameHarness,
+      );
+
+      expect(await relativeHarness.getIframeSrc()).toBe(
+        'http://localhost:3000/composer/samples/react-slack-catalog/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    } finally {
+      base.remove();
+    }
+  });
+
+  it('resolves catalog-relative renderer URLs against a PR preview base path', async () => {
+    fixture.destroy();
+    const base = document.createElement('base');
+    base.href = 'http://localhost:3000/composer/pr/216/';
+    document.head.appendChild(base);
+
+    try {
+      resolvedUrlSignal.set('samples/react-slack-catalog/');
+      const relativeFixture = TestBed.createComponent(RenderedFrame);
+      relativeFixture.detectChanges();
+      const relativeHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        relativeFixture,
+        RenderedFrameHarness,
+      );
+
+      expect(await relativeHarness.getIframeSrc()).toBe(
+        'http://localhost:3000/composer/pr/216/samples/react-slack-catalog/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    } finally {
+      base.remove();
+    }
+  });
+
   it('appends all ancestor origins and base origin to the renderer URL query params', async () => {
     fixture.destroy();
     vi.stubGlobal('location', {

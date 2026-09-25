@@ -27,7 +27,7 @@ import {ErrorLogger} from '../../debug/error-logger.service';
 import {DockviewComponent} from 'dockview-core';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
-import {ChatPanel} from '../../chat/chat-panel/chat-panel';
+import {CHAT_PANEL_COMPONENT} from '../../chat/chat-panel/chat-panel-component.token';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {DataModel} from '../../debug/data-model/data-model';
@@ -113,6 +113,7 @@ export class ComposerDockview {
   private readonly destroyRef = inject(DestroyRef);
   private readonly viewContainerRef = inject(ViewContainerRef);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly chatPanelComponent = inject(CHAT_PANEL_COMPONENT);
 
   private rootEl?: HTMLElement;
   private dockviewApi!: DockviewComponent;
@@ -311,7 +312,7 @@ export class ComposerDockview {
     let type: Type<unknown> | undefined;
     switch (panelId) {
       case ComposerPanelId.Chat:
-        type = ChatPanel;
+        type = this.chatPanelComponent;
         break;
       case ComposerPanelId.Rendered:
         type = RenderedFrame;
@@ -406,6 +407,8 @@ export class ComposerDockview {
               // Grid groups reference these records, so reject the whole layout rather than
               // leaving dangling references by removing retired or invalid panels.
               throw new Error(`Unsupported saved dockview panel: ${key}`);
+            } else if (panel.id === ComposerPanelId.Chat) {
+              panel.title = 'Assistant';
             }
           }
         }
@@ -429,7 +432,7 @@ export class ComposerDockview {
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Chat,
         component: ComposerPanelId.Chat,
-        title: 'Gemini Assistant',
+        title: 'Assistant',
         initialWidth: chatWidth,
         minimumWidth: CHAT_PANEL_MIN_WIDTH,
       });

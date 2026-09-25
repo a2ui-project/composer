@@ -22,7 +22,7 @@ import {AppConfigProvider} from '../../settings/app-config-provider/app-config-p
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {PromptTurnType, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
-import {formatJson} from '../../utils/json';
+import {formatJson, tryParseJsonArray} from '../../utils/json';
 import {ChatState, LlmLogType} from '../chat-state/chat-state';
 import {
   Attachment,
@@ -30,6 +30,7 @@ import {
   LlmClient,
   LlmMessage,
   LlmStreamResponse,
+  LlmToolCall,
   MessageRole,
 } from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
@@ -42,6 +43,7 @@ import {
 import {ChatPromptFactoryService} from '../chat-prompt-factory/chat-prompt-factory.service';
 import {ChatErrorFormatterService} from '../chat-error-formatter/chat-error-formatter.service';
 import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
+import {RendererTool} from '../renderer-selection/renderer-tool';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 /**
@@ -59,6 +61,7 @@ export class ChatCoordinator {
   private readonly stateSync = inject(StateSync);
   private readonly chatState = inject(ChatState);
   private readonly llmClient = inject(LlmClient);
+  private readonly rendererTool = inject(RendererTool);
   private readonly errorLogger = inject(ErrorLogger);
   private readonly chatCleaner = inject(ChatCleaner);
   private readonly usageTrackingService = inject(UsageTrackingService);
@@ -84,6 +87,9 @@ export class ChatCoordinator {
   readonly systemPrompt = this.promptFactory.systemPrompt;
 
   private activePromptId: string | null = null;
+  private activeRequestId = 0;
+  private expectedToolRendererUrl: string | undefined;
+  private toolAbortController?: AbortController;
 
   constructor() {
     // Effect monitoring dynamic host preview configurations mapping cache
@@ -91,7 +97,11 @@ export class ChatCoordinator {
     toObservable(this.configProvider.rendererUrl)
       // skip(1) prevents wiping the cache on the initial startup signal emission
       .pipe(skip(1), takeUntilDestroyed())
-      .subscribe(() => {
+      .subscribe(url => {
+        if (url === this.expectedToolRendererUrl) {
+          this.expectedToolRendererUrl = undefined;
+          return;
+        }
         queueMicrotask(() => this.wipeEnvironmentCache());
       });
   }
@@ -100,6 +110,11 @@ export class ChatCoordinator {
    * Resets turns logs history, overlays milestones, and locks indicators.
    */
   wipeEnvironmentCache(): void {
+    this.activeRequestId++;
+    this.toolAbortController?.abort(this.cancelError());
+    this.expectedToolRendererUrl = undefined;
+    this.activeStreamResponse?.cancel?.();
+    this.activeStreamResponse = undefined;
     this.currentTurnIndex.set(0);
     this.activePromptId = null;
     this.chatState.setChatHistory([]);
@@ -134,6 +149,7 @@ export class ChatCoordinator {
    */
   cancelActiveStream(): void {
     this.isCancelRequested = true;
+    this.toolAbortController?.abort(this.cancelError());
     if (this.activePromptId) {
       this.usageTrackingService.trackChatCancel({
         promptId: this.activePromptId,
@@ -203,8 +219,14 @@ export class ChatCoordinator {
     const trimmed = prompt.trim();
     if (!trimmed && attachments.length === 0) return;
 
+    // Include the latest canvas even before the debounced editor/history sync fires.
+    this.stateSync.syncActiveDraftToHistory();
+
     const promptId = this.emitPromptTracking(trimmed, attachments, options);
     this.activePromptId = promptId;
+    const requestId = ++this.activeRequestId;
+    let rendererUrlAtSubmit = this.configProvider.rendererUrl();
+    let catalogIdAtSubmit = this.getActiveCatalogId();
 
     // Lock UI controls and transition state indicators to receiving stream
     this.chatState.setProgrammaticStreamActive(true);
@@ -221,7 +243,7 @@ export class ChatCoordinator {
     ]);
 
     // Construct system-prepended context matching conversational bounds
-    const fullContext = this.getFullMessageContext();
+    let fullContext = this.getFullMessageContext();
 
     this.chatState.addRawLlmLog(LlmLogType.REQUEST, fullContext);
 
@@ -234,66 +256,164 @@ export class ChatCoordinator {
       },
     ]);
 
+    let responseStream: LlmStreamResponse | undefined;
     try {
       this.isCancelRequested = false;
-      // Trigger streaming GenAI completions call using client facade
-      const responseStream = await this.llmClient.chatStream(fullContext);
+      const toolAbortController = new AbortController();
+      this.toolAbortController = toolAbortController;
+      // A tool call starts a fresh generation request with the new catalog. One
+      // transition per prompt prevents a model from cycling between renderers.
+      for (let pass = 0; pass < 2; pass++) {
+        // Trigger streaming GenAI completions call using client facade
+        responseStream = await this.llmClient.chatStream(
+          fullContext,
+          pass === 0 ? {tools: [this.rendererTool.definition()]} : undefined,
+        );
 
-      // If a cancel was requested while the stream connection was establishing
-      if (this.isCancelRequested) {
-        if (responseStream.cancel) responseStream.cancel();
-        const err = new Error('Cancelled');
-        err.name = CANCEL_ERROR_NAME;
-        throw err;
-      }
-
-      this.activeStreamResponse = responseStream;
-
-      // Loop asynchronously over incoming stream packets to compile text
-      let accumulatedRawText = '';
-      let accumulatedThinking = '';
-      for await (const chunk of responseStream.contentStream) {
-        accumulatedRawText += chunk.content;
-        if (chunk.thinking) {
-          accumulatedThinking += chunk.thinking;
+        if (
+          !this.isPromptContextStillActive(
+            requestId,
+            promptId,
+            rendererUrlAtSubmit,
+            catalogIdAtSubmit,
+          )
+        ) {
+          responseStream.cancel?.();
+          return;
         }
 
-        // Update history bubble in real-time with trailing pulse indicator
+        // If a cancel was requested while the stream connection was establishing
+        if (this.isCancelRequested) {
+          if (responseStream.cancel) {
+            responseStream.cancel();
+          }
+          const err = new Error('Cancelled');
+          err.name = CANCEL_ERROR_NAME;
+          throw err;
+        }
+
+        this.activeStreamResponse = responseStream;
+
+        // Loop asynchronously over incoming stream packets to compile text
+        const toolCalls: LlmToolCall[] = [];
+        let accumulatedRawText = '';
+        let accumulatedThinking = '';
+        for await (const chunk of responseStream.contentStream) {
+          if (
+            !this.isPromptContextStillActive(
+              requestId,
+              promptId,
+              rendererUrlAtSubmit,
+              catalogIdAtSubmit,
+            )
+          ) {
+            responseStream.cancel?.();
+            return;
+          }
+          if (chunk.toolCalls) {
+            toolCalls.push(...chunk.toolCalls);
+          }
+          accumulatedRawText += chunk.content;
+          if (chunk.thinking) {
+            accumulatedThinking += chunk.thinking;
+          }
+
+          // Update history bubble in real-time with trailing pulse indicator
+          this.chatState.updateChatHistory(history => {
+            const updated = [...history];
+            const lastIdx = updated.length - 1;
+            if (updated[lastIdx]?.role === MessageRole.MODEL) {
+              updated[lastIdx] = {
+                role: MessageRole.MODEL,
+                content: this.chatCleaner.appendPulse(accumulatedRawText),
+                thinking: accumulatedThinking,
+              };
+            }
+            return updated;
+          });
+        }
+
+        // Stream exhausted, resolve final complete text and remove visual loading indicator
+        const finalRawText = await responseStream.complete;
+        this.assertPromptContextStillActive(
+          requestId,
+          promptId,
+          rendererUrlAtSubmit,
+          catalogIdAtSubmit,
+        );
+
+        if (toolCalls.length) {
+          if (pass > 0 || toolCalls.length !== 1) {
+            throw new Error('The assistant must request one renderer change at a time.');
+          }
+          if (this.isCancelRequested) {
+            throw this.cancelError();
+          }
+          const targetUrl = this.rendererTool.targetUrl(toolCalls[0]);
+          const changedRenderer = targetUrl !== rendererUrlAtSubmit;
+          this.expectedToolRendererUrl = changedRenderer ? targetUrl : undefined;
+          try {
+            await this.rendererTool.execute(toolCalls[0], toolAbortController.signal);
+          } finally {
+            if (requestId === this.activeRequestId) {
+              this.expectedToolRendererUrl = undefined;
+            }
+          }
+          if (requestId !== this.activeRequestId) {
+            return;
+          }
+          if (this.isCancelRequested) {
+            throw this.cancelError();
+          }
+          rendererUrlAtSubmit = this.configProvider.rendererUrl();
+          catalogIdAtSubmit = this.getActiveCatalogId();
+          if (changedRenderer) {
+            this.stateSync.flushDraft();
+          }
+          // Retain the user's intent and attachments. Earlier layouts remain
+          // reference material, while only the newly selected catalog is allowed.
+          fullContext = [
+            {
+              role: MessageRole.SYSTEM,
+              content:
+                this.promptFactory.systemPrompt() +
+                '\nThe renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a complete createSurface/updateComponents/updateDataModel sequence.',
+            },
+            ...fullContext.filter(message => message.role !== MessageRole.SYSTEM),
+          ];
+          this.chatState.addRawLlmLog(LlmLogType.REQUEST, fullContext);
+          continue;
+        }
+
+        // Log the raw LLM response telemetry
+        this.chatState.addRawLlmLog(LlmLogType.RESPONSE, finalRawText);
         this.chatState.updateChatHistory(history => {
           const updated = [...history];
           const lastIdx = updated.length - 1;
           if (updated[lastIdx]?.role === MessageRole.MODEL) {
             updated[lastIdx] = {
               role: MessageRole.MODEL,
-              content: this.chatCleaner.appendPulse(accumulatedRawText),
+              content: finalRawText,
               thinking: accumulatedThinking,
             };
           }
           return updated;
         });
+
+        this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
+        await this.processRawLlmPayload(
+          finalRawText,
+          requestId,
+          promptId,
+          rendererUrlAtSubmit,
+          catalogIdAtSubmit,
+        );
+        break;
       }
-
-      // Stream exhausted, resolve final complete text and remove visual loading indicator
-      const finalRawText = await responseStream.complete;
-
-      // Log the raw LLM response telemetry
-      this.chatState.addRawLlmLog(LlmLogType.RESPONSE, finalRawText);
-      this.chatState.updateChatHistory(history => {
-        const updated = [...history];
-        const lastIdx = updated.length - 1;
-        if (updated[lastIdx]?.role === MessageRole.MODEL) {
-          updated[lastIdx] = {
-            role: MessageRole.MODEL,
-            content: finalRawText,
-            thinking: accumulatedThinking,
-          };
-        }
-        return updated;
-      });
-
-      this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
-      await this.processRawLlmPayload(finalRawText, promptId);
     } catch (err: unknown) {
+      if (requestId !== this.activeRequestId) {
+        return;
+      }
       // If it was cancelled, don't show an error. Just leave what was generated or remove the bubble.
       // But we probably want to just reset the UI lock.
       if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
@@ -314,14 +434,31 @@ export class ChatCoordinator {
         this.handleConnectivityError(err, trimmed, attachments, promptId);
       }
     } finally {
-      this.activeStreamResponse = undefined;
+      if (this.activeRequestId === requestId) {
+        this.toolAbortController = undefined;
+      }
+      if (this.activeRequestId === requestId && this.activeStreamResponse === responseStream) {
+        this.activeStreamResponse = undefined;
+      }
     }
+  }
+
+  private cancelError(): Error {
+    const error = new Error('Cancelled');
+    error.name = CANCEL_ERROR_NAME;
+    return error;
   }
 
   /**
    * Post-processes, extracts, syntax heals, and validates raw JSON lines.
    */
-  private async processRawLlmPayload(rawText: string, promptId?: string): Promise<void> {
+  private async processRawLlmPayload(
+    rawText: string,
+    requestId: number,
+    promptId?: string,
+    rendererUrlAtSubmit?: string,
+    catalogIdAtSubmit?: string,
+  ): Promise<void> {
     // Stage 1: Parse and Syntax Healing
     let parsedBlocks: unknown[] = [];
     let componentCount = 0;
@@ -333,6 +470,12 @@ export class ChatCoordinator {
       const parseResult = parseAndHealJsonLines(cleanedText);
 
       if (parseResult.success && parseResult.isConversational) {
+        this.assertPromptContextStillActive(
+          requestId,
+          promptId,
+          rendererUrlAtSubmit,
+          catalogIdAtSubmit,
+        );
         this.finalizeStream(PipelineStatus.IDLE);
         return;
       }
@@ -396,7 +539,15 @@ export class ChatCoordinator {
         this.chatState.setPipelineStatus(PipelineStatus.HEALING);
       }
 
-      // Stage 3: Ready & Commit Layout Wipes
+      // Validate surface references before replacing the editor. A delta must
+      // retain the creation and component messages needed to replay the draft.
+      parsedBlocks = this.resolveLayoutUpdate(parsedBlocks);
+      this.assertPromptContextStillActive(
+        requestId,
+        promptId,
+        rendererUrlAtSubmit,
+        catalogIdAtSubmit,
+      );
       this.chatState.setPipelineStatus(PipelineStatus.READY);
 
       // Turn list of updates back into raw formatted JSON text to write to
@@ -429,6 +580,126 @@ export class ChatCoordinator {
       this.finalizeStream(PipelineStatus.FAILED);
       throw err;
     }
+  }
+
+  private getActiveCatalogId(): string {
+    const catalog = this.catalogManagement.activeCatalog();
+    return catalog ? catalog.catalogId || catalog.$id || '' : '';
+  }
+
+  private assertPromptContextStillActive(
+    requestId: number,
+    promptId?: string,
+    rendererUrlAtSubmit?: string,
+    catalogIdAtSubmit?: string,
+  ): void {
+    if (
+      this.isPromptContextStillActive(requestId, promptId, rendererUrlAtSubmit, catalogIdAtSubmit)
+    ) {
+      return;
+    }
+    throw new Error(
+      'Renderer changed while the assistant response was in flight. The new active draft was preserved. Please retry your prompt against the selected renderer.',
+    );
+  }
+
+  private isPromptContextStillActive(
+    requestId: number,
+    promptId?: string,
+    rendererUrlAtSubmit?: string,
+    catalogIdAtSubmit?: string,
+  ): boolean {
+    if (!promptId) {
+      return true;
+    }
+    const rendererChanged =
+      rendererUrlAtSubmit !== undefined &&
+      this.configProvider.rendererUrl() !== rendererUrlAtSubmit;
+    const catalogChanged =
+      catalogIdAtSubmit !== undefined && this.getActiveCatalogId() !== catalogIdAtSubmit;
+    return (
+      this.activeRequestId === requestId &&
+      this.activePromptId === promptId &&
+      !rendererChanged &&
+      !catalogChanged
+    );
+  }
+
+  /**
+   * Turns a model response into the complete message list for the editor.
+   *
+   * The model can answer an edit in two ways:
+   * - A full replacement: the response starts a surface with `createSurface`.
+   *   It replaces the draft, so it is returned unchanged.
+   * - An incremental edit: the response only sends `updateComponents`,
+   *   `updateDataModel`, or `deleteSurface` for surfaces the draft already has.
+   *   Written to the editor on its own, it would erase the draft, because the
+   *   editor replays the whole message list to render the preview. So the
+   *   edit is appended to the current draft instead.
+   *
+   * Before appending, every surface an update targets is checked against the
+   * surfaces the draft and the response create (minus the ones they delete).
+   * If the model invents a surface ID, for example by copying one from the
+   * prompt's examples, this throws. The caller reports it like any other
+   * validation failure, and the draft in the editor is left unchanged.
+   */
+  private resolveLayoutUpdate(updates: unknown[]): unknown[] {
+    // Reads `item[command].surfaceId` when `item` is that kind of A2UI message.
+    const surfaceId = (item: unknown, command: string): string | undefined => {
+      if (!item || typeof item !== 'object' || !(command in item)) {
+        return undefined;
+      }
+      const payload: unknown = Reflect.get(item, command);
+      return payload &&
+        typeof payload === 'object' &&
+        'surfaceId' in payload &&
+        typeof payload.surfaceId === 'string'
+        ? payload.surfaceId
+        : undefined;
+    };
+
+    // A response that creates a surface is a full replacement; otherwise it
+    // builds on the current draft, when the draft parses.
+    const replacesDraft = updates.some(item => surfaceId(item, 'createSurface') !== undefined);
+    const current = tryParseJsonArray(this.stateSync.activeDraft());
+    const base = !replacesDraft && current.success ? current.data : [];
+
+    // Surfaces that exist once the base draft has been replayed.
+    const activeSurfaces = new Set<string>();
+    for (const item of base) {
+      const created = surfaceId(item, 'createSurface');
+      const deleted = surfaceId(item, 'deleteSurface');
+      if (created !== undefined) {
+        activeSurfaces.add(created);
+      }
+      if (deleted !== undefined) {
+        activeSurfaces.delete(deleted);
+      }
+    }
+
+    // Replay the response in order, so an update may target a surface created
+    // earlier in the same response but not one deleted before it.
+    for (const item of updates) {
+      const created = surfaceId(item, 'createSurface');
+      if (created !== undefined) {
+        activeSurfaces.add(created);
+      }
+      for (const command of ['updateComponents', 'updateDataModel', 'deleteSurface']) {
+        const id = surfaceId(item, command);
+        if (id === undefined) {
+          continue;
+        }
+        if (!activeSurfaces.has(id)) {
+          throw new Error(
+            `Surface validation failed: cannot apply ${command}: surface "${id}" does not exist in the current draft. The draft was preserved.`,
+          );
+        }
+        if (command === 'deleteSurface') {
+          activeSurfaces.delete(id);
+        }
+      }
+    }
+    return [...base, ...updates];
   }
 
   private handleConnectivityError(

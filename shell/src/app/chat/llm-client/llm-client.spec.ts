@@ -36,6 +36,7 @@ interface MockGenAiConfig {
 }
 
 interface MockPart {
+  functionCall?: {name: string; args: Record<string, unknown>};
   text?: string;
   thought?: boolean;
   inlineData?: {
@@ -51,6 +52,7 @@ interface MockContent {
 
 interface MockGenerateContentConfig {
   systemInstruction?: string;
+  abortSignal?: AbortSignal;
 }
 
 interface MockGenerateContentParameters {
@@ -189,6 +191,33 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
   // ---------------------------------------------------------
   // DYNAMIC CONFIGURATION MAPPINGS
   // ---------------------------------------------------------
+
+  it('advertises native frontend tools and keeps function calls out of canvas JSON', async () => {
+    const call = {name: 'switchRenderer', args: {rendererId: 'slack'}};
+    const definition = {
+      name: call.name,
+      description: 'Switch renderer',
+      parametersJsonSchema: {type: 'object'},
+    };
+    mockGenerateContentStream.mockResolvedValue(
+      (async function* () {
+        yield {candidates: [{content: {parts: [{functionCall: call}]}}]};
+      })(),
+    );
+    const response = await client.chatStream(
+      [{role: MessageRole.USER, content: 'Make this a Slack message'}],
+      {tools: [definition]},
+    );
+    const chunks: LlmResponse[] = [];
+    for await (const chunk of response.contentStream) {
+      chunks.push(chunk);
+    }
+    expect(mockGenerateContentStream.mock.calls[0][0].config).toMatchObject({
+      tools: [{functionDeclarations: [definition]}],
+    });
+    expect(chunks).toEqual([{content: '', thinking: '', isComplete: false, toolCalls: [call]}]);
+    expect(await response.complete).toBe('');
+  });
 
   describe('Dynamic SDK Initialization context resolution', () => {
     it('initializes GoogleGenAI constructor upon static chat', async () => {
@@ -782,6 +811,43 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       // Verify that further iterator pulls reject with CancelError
       await expect(iterator.next()).rejects.toThrow('Cancelled');
       await expect(streamResponse.complete).rejects.toThrow('Cancelled');
+    });
+
+    it('normalizes SDK AbortError thrown after user cancellation to CancelError', async () => {
+      let abortSignal!: AbortSignal;
+      mockGenerateContentStream.mockImplementation(async params => {
+        abortSignal = params.config?.abortSignal;
+        return {
+          async *[Symbol.asyncIterator]() {
+            yield {text: 'Chunk'};
+            while (!abortSignal.aborted) {
+              await new Promise(resolve => setTimeout(resolve, 0));
+            }
+            throw new DOMException('signal is aborted without reason', 'AbortError');
+          },
+        };
+      });
+
+      const streamResponse = await client.chatStream([
+        {role: MessageRole.USER, content: 'Cancel test'},
+      ]);
+
+      const iterator = streamResponse.contentStream[Symbol.asyncIterator]();
+      await expect(iterator.next()).resolves.toEqual({
+        value: {content: 'Chunk', thinking: '', isComplete: false},
+        done: false,
+      });
+
+      streamResponse.cancel?.();
+
+      await expect(iterator.next()).rejects.toMatchObject({
+        name: CANCEL_ERROR_NAME,
+        message: 'Cancelled',
+      });
+      await expect(streamResponse.complete).rejects.toMatchObject({
+        name: CANCEL_ERROR_NAME,
+        message: 'Cancelled',
+      });
     });
   });
 });

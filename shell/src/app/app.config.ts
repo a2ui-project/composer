@@ -35,6 +35,8 @@ import {USAGE_TRACKING_CONFIG, UsageTrackingService} from './usage-tracking/usag
 import {Ga4UsageTrackingService} from './usage-tracking/ga4-usage-tracking.service';
 import {NoopUsageTrackingService} from './usage-tracking/noop-usage-tracking.service';
 import {ErrorTelemetryReporter} from './usage-tracking/error-telemetry-reporter.service';
+import {CHAT_PANEL_COMPONENT} from './chat/chat-panel/chat-panel-component.token';
+import {CopilotKitChatPanel} from './chat/copilotkit-chat-panel/copilotkit-chat-panel';
 
 /**
  * Application-wide Angular configuration defining core providers,
@@ -77,6 +79,12 @@ export const appConfig: ApplicationConfig = {
     {
       provide: LlmClient,
       useExisting: Standalone3pLlmClient,
+    },
+    // The open-source app uses the CopilotKit chat panel. Remove this provider
+    // to fall back to the dependency-free ChatPanel.
+    {
+      provide: CHAT_PANEL_COMPONENT,
+      useValue: CopilotKitChatPanel,
     },
     {
       provide: UsageTrackingService,

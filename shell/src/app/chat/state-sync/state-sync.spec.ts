@@ -140,6 +140,58 @@ describe('StateSync Autosave Draft Integrations', () => {
     expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
   });
 
+  it('resynchronizes a restored draft after the model changed the canvas', () => {
+    const original = '[{"version":"v0.9","text":"original flight"}]';
+    const generated = '[{"version":"v0.9","text":"changed flight"}]';
+    service.injectExternalDraft(original);
+    service.syncActiveDraftToHistory();
+    service.commitLayoutFromLlm(generated);
+    chatStateMock.updateChatHistory(history => [
+      ...history,
+      {role: MessageRole.MODEL, content: generated},
+    ]);
+    service.updateDraft(original);
+    service.syncActiveDraftToHistory();
+    expect(chatStateMock.chatHistory().at(-1)?.role).toBe(MessageRole.USER);
+    expect(chatStateMock.chatHistory().at(-1)?.content).toContain('original flight');
+  });
+
+  it('syncs an injected draft before its initial observable emission', () => {
+    const draft = '[{"version":"v0.9","text":"edited gallery draft","mockRules":[]} ]';
+    service.injectExternalDraft(draft);
+
+    service.syncActiveDraftToHistory();
+
+    expect(chatStateMock.chatHistory()).toHaveLength(1);
+    expect(chatStateMock.chatHistory()[0].content).toContain('edited gallery draft');
+  });
+
+  it('does not append a delayed draft snapshot after the prompt and model placeholder', () => {
+    service.updateDraft('[{"version":"v0.9","text":"edited canvas"}]');
+    TestBed.tick();
+    service.syncActiveDraftToHistory();
+    chatStateMock.updateChatHistory(history => [
+      ...history,
+      {role: MessageRole.USER, content: 'Make this blue'},
+      {role: MessageRole.MODEL, content: ' ●●●'},
+    ]);
+
+    vi.advanceTimersByTime(300);
+
+    expect(chatStateMock.chatHistory()).toHaveLength(3);
+    expect(chatStateMock.chatHistory().at(-1)?.role).toBe(MessageRole.MODEL);
+  });
+
+  it('does not restore an older pending edit after a model commits a new canvas', () => {
+    service.updateDraft('[{"version":"v0.9","text":"old canvas"}]');
+    TestBed.tick();
+    service.commitLayoutFromLlm('[{"version":"v0.9","text":"new canvas"}]');
+
+    vi.advanceTimersByTime(300);
+
+    expect(chatStateMock.chatHistory()).toEqual([]);
+  });
+
   it('triggers history sync after 300ms debouncing, appending a new node', () => {
     service.updateDraft('[{"version": "v0.9"}]');
     TestBed.tick(); // Flush toObservable event boundaries instantly!
@@ -154,6 +206,39 @@ describe('StateSync Autosave Draft Integrations', () => {
         content: '[\n  {\n    "version": "v0.9"\n  }\n]',
       },
     ]);
+  });
+
+  it('synchronizes active draft immediately and skips the later duplicate debounce', () => {
+    service.updateDraft('[{"version": "v0.9", "live": true}]');
+    TestBed.tick();
+
+    service.syncActiveDraftToHistory();
+
+    expect(chatStateMock.setChatHistory).toHaveBeenCalledWith([
+      {
+        role: MessageRole.USER,
+        content: '[\n  {\n    "version": "v0.9",\n    "live": true\n  }\n]',
+      },
+    ]);
+
+    chatStateMock.setChatHistory.mockClear();
+    chatStateMock.updateChatHistory.mockClear();
+    vi.advanceTimersByTime(300);
+
+    expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+    expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+  });
+
+  it('ignores stale delayed draft syncs after an LLM commit replaces the active draft', () => {
+    service.updateDraft('[{"version": "v0.9", "stale": true}]');
+    TestBed.tick();
+
+    service.commitLayoutFromLlm('[{"version": "v0.9", "fromLlm": true}]');
+    vi.advanceTimersByTime(300);
+
+    expect(service.activeDraft()).toBe('[{"version": "v0.9", "fromLlm": true}]');
+    expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+    expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
   });
 
   it('updates target layout node in-place if last message is also user layout snapshot', () => {

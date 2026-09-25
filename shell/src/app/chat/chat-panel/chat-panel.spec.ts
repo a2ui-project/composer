@@ -43,6 +43,7 @@ import {
   CustomInstructionsState,
 } from '../chat-prompt-factory/chat-prompt-factory.service';
 import {CustomInstructionsDialogHarness} from '../custom-instructions-dialog/test/custom-instructions-dialog.harness';
+import {RendererSelection} from '../renderer-selection/renderer-selection';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -134,6 +135,10 @@ class MockAppConfigProvider {
   geminiApiKey = signal<string>('AIzaSyValidKey');
 }
 
+class MockRendererSelection {
+  readonly isSwitching = signal(false);
+}
+
 class MockHostCommunication {
   getIframeElement = vi.fn().mockReturnValue(null);
 }
@@ -168,6 +173,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
         {provide: CatalogManagement, useClass: MockCatalogManagement},
         {provide: StartupResolution, useClass: MockStartupResolution},
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
+        {provide: RendererSelection, useClass: MockRendererSelection},
         {provide: HostCommunication, useClass: MockHostCommunication},
       ],
     }).compileComponents();
@@ -424,7 +430,8 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     expect(bubbles.length).toBe(1);
     expect(bubbleTypes[0]).toBe('layout-snapshot');
-    expect(bubbles[0]).toBe('Received 3 A2UI JSON Components');
+    // Only updateComponents entries count; createSurface is not a component.
+    expect(bubbles[0]).toBe('Received 2 A2UI JSON Components');
   });
 
   it('renders snapshot badges instead of text bubbles for streaming partial JSON arrays during streaming', async () => {
@@ -660,19 +667,17 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       // Milestone 2: Received Raw
       chatStateMock.pipelineStatus.set(PipelineStatus.RECEIVED_RAW);
       fixture.detectChanges();
-      expect(await harness.getLoadingOverlayText()).toBe('Received A2UI JSON.');
+      expect(await harness.getLoadingOverlayText()).toBe('Preparing your canvas…');
 
       // Milestone 3: Validation checks running
       chatStateMock.pipelineStatus.set(PipelineStatus.VALIDATING);
       fixture.detectChanges();
-      expect(await harness.getLoadingOverlayText()).toBe('Validating A2UI JSON catalog schemas...');
+      expect(await harness.getLoadingOverlayText()).toBe('Checking your layout…');
 
       // Milestone 4: Self-repair auto-healing active
       chatStateMock.pipelineStatus.set(PipelineStatus.HEALING);
       fixture.detectChanges();
-      expect(await harness.getLoadingOverlayText()).toBe(
-        'Fixing A2UI JSON (Self-repair loop active)...',
-      );
+      expect(await harness.getLoadingOverlayText()).toBe('Repairing the layout…');
 
       // Milestone 5: Layout Ready (overlay is hidden, inputs are active)
       chatStateMock.pipelineStatus.set(PipelineStatus.READY);
