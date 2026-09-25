@@ -49,7 +49,9 @@ declare global {
 }
 
 function installFixtureInBrowser(fakeApiKey: string): void {
-  if (window.__a2uiGeminiFixtureInstalled) return;
+  if (window.__a2uiGeminiFixtureInstalled) {
+    return;
+  }
   window.__a2uiGeminiFixtureInstalled = true;
 
   const originalFetch = window.fetch.bind(window);
@@ -64,7 +66,9 @@ function installFixtureInBrowser(fakeApiKey: string): void {
 
   const normalizeHeaders = (headersInit: HeadersInit | undefined): Record<string, string> => {
     const headers: Record<string, string> = {};
-    if (!headersInit) return headers;
+    if (!headersInit) {
+      return headers;
+    }
     const source = new Headers(headersInit);
     source.forEach((value, key) => {
       headers[key.toLowerCase()] = value;
@@ -88,9 +92,13 @@ function installFixtureInBrowser(fakeApiKey: string): void {
         signal?.addEventListener('abort', onAbort, {once: true});
         try {
           for (const chunk of scenario.chunks) {
-            if (signal?.aborted) return;
+            if (signal?.aborted) {
+              return;
+            }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-            if (scenario.delayMs) await sleep(scenario.delayMs);
+            if (scenario.delayMs) {
+              await sleep(scenario.delayMs);
+            }
           }
           if (scenario.hangAfterChunks) {
             await new Promise<void>(resolve => {

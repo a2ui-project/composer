@@ -233,7 +233,9 @@ export class Standalone3pLlmClient extends LlmClient {
   }
 
   private normalizeStreamError(err: unknown, abortSignal: AbortSignal): unknown {
-    if (!abortSignal.aborted) return err;
+    if (!abortSignal.aborted) {
+      return err;
+    }
 
     const abortReason = abortSignal.reason;
     if (

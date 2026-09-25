@@ -911,7 +911,9 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
     await harness.setPromptText('Keep this draft while the renderer changes');
     const host: HTMLElement = fixture.nativeElement;
     const prompt = host.querySelector('textarea');
-    if (!prompt) throw new Error('Expected the chat prompt');
+    if (!prompt) {
+      throw new Error('Expected the chat prompt');
+    }
     prompt.focus();
     expect(document.activeElement).toBe(prompt);
 

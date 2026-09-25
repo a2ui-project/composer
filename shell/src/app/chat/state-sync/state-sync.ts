@@ -214,14 +214,18 @@ export class StateSync {
    */
   private syncLayoutToHistory(layout: string): void {
     // A model commit may have superseded an editor update still in the debounce queue.
-    if (layout !== this._activeDraft()) return;
+    if (layout !== this._activeDraft()) {
+      return;
+    }
     const sanitizedLayoutString = this.sanitizeLayout(layout);
     if (!sanitizedLayoutString) {
       return;
     }
     const history = this.chatState.chatHistory();
     // Prompt submission can already have synchronized this pending editor update.
-    if (history.length > 0 && sanitizedLayoutString === this.lastSynchronizedLayout) return;
+    if (history.length > 0 && sanitizedLayoutString === this.lastSynchronizedLayout) {
+      return;
+    }
     this.lastSynchronizedLayout = sanitizedLayoutString;
 
     if (history.length === 0) {
