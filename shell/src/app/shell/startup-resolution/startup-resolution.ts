@@ -468,10 +468,15 @@ export class StartupResolution {
     }
   }
 
-  /** Parses a renderer URL, resolving root-relative paths against Composer's origin. */
+  /**
+   * Parses a renderer URL. Relative URLs resolve against the page's base URL, so a
+   * bundled renderer configured as "samples/react-slack-catalog/" stays under the
+   * sub-path Composer is served from (/composer/ on GitHub Pages, /composer/pr/<n>/
+   * for PR previews). Root-relative URLs resolve against Composer's origin either way.
+   */
   private parseRendererUrl(url: string): URL {
-    const baseOrigin = this.environmentContext.getBaseOrigin();
-    const parsed = url.startsWith('/') ? new URL(url, baseOrigin) : new URL(url);
+    const baseUrl = globalThis.document?.baseURI || this.environmentContext.getBaseOrigin();
+    const parsed = new URL(url, baseUrl);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new Error('Renderer URLs must use HTTP or HTTPS.');
     }
