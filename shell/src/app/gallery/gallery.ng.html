@@ -140,7 +140,7 @@
                         <div
                           class="property-row"
                           [attr.data-property-row]="prop.name"
-                          [class.property-row-stacked]="prop.kind === 'json' || prop.note"
+                          [class.property-row-multiline]="prop.kind === 'json' || prop.note"
                         >
                           <label
                             class="property-name"
@@ -247,6 +247,10 @@
                               role="alert"
                             >
                               {{ fieldError.message }}
+                            </p>
+                          } @else if (prop.required && prop.value === undefined) {
+                            <p class="property-missing" [attr.data-property-missing]="prop.name">
+                              Required, but this example doesn't set it.
                             </p>
                           }
                         </div>
