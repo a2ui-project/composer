@@ -52,91 +52,70 @@
       </a>
     </div>
   } @else {
-    <!-- The canvas session is already active; keep its input mounted across history resets. -->
-    <copilot-chat-view
-      [hasExplicitThreadId]="true"
-      [messages]="chatMessages()"
-      [messageViewTemplate]="historyView"
-      [inputTemplate]="composerInput"
-      disclaimerText="Review changes in your canvas."
-      inputContainerClass="composer-input-container"
-    />
-
-    <ng-template #historyView let-messages="messages">
-      <div class="chat-history-log" role="log" aria-label="Conversation" aria-live="polite">
-        <copilot-chat-message-view
-          [messages]="messages"
-          [isLoading]="isLocked()"
-          [userMessageTemplate]="messageView"
-          [assistantMessageTemplate]="messageView"
-          inputClass="composer-message-list"
-        />
-      </div>
-    </ng-template>
-
-    <ng-template #messageView let-message="message">
-      @if (turnsById().get(message.id); as turn) {
-        <div class="chat-bubble-container" [class]="getBubbleClass(turn)">
-          @if (turn.role !== 'error') {
-            <div class="bubble-header-bar">
-              @if (turn.role === 'user') {
-                <span class="bubble-author-name">{{
-                  turn.isSnapshot ? 'Canvas snapshot' : 'You'
-                }}</span>
-              } @else if (turn.role === 'model') {
-                <span class="bubble-author-name">Assistant</span>
-              }
-            </div>
-          }
-
-          <div class="bubble-body">
-            @if (turn.attachments && turn.attachments.length > 0) {
-              <div class="bubble-attachments-container">
-                @for (file of turn.attachments; track $index) {
-                  <div class="bubble-attachment-card">
-                    @if (isImage(file.mimeType)) {
-                      <img
-                        [src]="'data:' + file.mimeType + ';base64,' + file.data"
-                        class="bubble-attachment-thumbnail"
-                        alt="Attached image"
-                      />
-                    } @else {
-                      <mat-icon class="bubble-attachment-icon">description</mat-icon>
-                    }
-                    <span class="bubble-attachment-name" [title]="file.name">{{ file.name }}</span>
-                  </div>
+    <div class="frame-body chat-history-log">
+      @if (visibleChatHistory().length === 0) {
+        <div class="empty-state-notice">
+          <span class="empty-state-icon">💬</span>
+          <p class="empty-state-text">
+            Ask Gemini to shape your layout interfaces or generate dynamic mock configurations
+            schemas. Let's get started!
+          </p>
+        </div>
+      } @else {
+        @for (turn of visibleChatHistory(); track $index) {
+          <div class="chat-bubble-container" [class]="getBubbleClass(turn)">
+            @if (turn.role !== 'error') {
+              <div class="bubble-header-bar">
+                @if (turn.role === 'user') {
+                  <span class="bubble-author-name">{{
+                    turn.isSnapshot ? 'Canvas Revision Snapshot' : 'You'
+                  }}</span>
+                } @else if (turn.role === 'model') {
+                  <span class="bubble-author-name">Gemini AI</span>
                 }
               </div>
             }
-            @if (turn.isSnapshot) {
-              @if (turn.thinking) {
-                <div class="thinking-block">
-                  <div class="thinking-header">
-                    <mat-icon inline="true">psychology</mat-icon> Thinking
-                  </div>
-                  <p class="thinking-text-content" [a2uiComposerAutoScroll]="turn.thinking">
-                    {{ turn.thinking }}
-                  </p>
-                </div>
-              }
-              <p class="bubble-text-content">
-                {{ turn.displayContent }}
-              </p>
-            } @else if (turn.role === 'error') {
-              <div class="error-bubble-content">
-                <div class="error-title">⚠ {{ turn.errorTitle || 'Error' }}</div>
-                <div class="error-message">
-                  @for (part of parseMessage(turn.errorMessage || turn.content); track $index) {
-                    @if (part.isRedacted) {
-                      <i>{{ part.text }}</i>
-                    } @else {
-                      {{ part.text }}
-                    }
+
+            <div class="bubble-body">
+              @if (turn.attachments && turn.attachments.length > 0) {
+                <div class="bubble-attachments-container">
+                  @for (file of turn.attachments; track $index) {
+                    <div class="bubble-attachment-card">
+                      @if (isImage(file.mimeType)) {
+                        <img
+                          [src]="'data:' + file.mimeType + ';base64,' + file.data"
+                          class="bubble-attachment-thumbnail"
+                          alt="Attached image"
+                        />
+                      } @else {
+                        <mat-icon class="bubble-attachment-icon">description</mat-icon>
+                      }
+                      <span class="bubble-attachment-name" [title]="file.name">{{
+                        file.name
+                      }}</span>
+                    </div>
                   }
                 </div>
-                @if (turn.errorTip) {
-                  <div class="error-tip">
-                    @for (part of parseMessage(turn.errorTip); track $index) {
+              }
+              @if (turn.isSnapshot) {
+                @if (turn.thinking) {
+                  <div class="thinking-block">
+                    <div class="thinking-header">
+                      <mat-icon inline="true">psychology</mat-icon> Thinking
+                    </div>
+                    <p class="thinking-text-content" [a2uiComposerAutoScroll]="turn.thinking">
+                      {{ turn.thinking }}
+                    </p>
+                  </div>
+                }
+                <p class="bubble-text-content">
+                  Received {{ turn.componentCount }} A2UI JSON Components
+                </p>
+              } @else if (turn.role === 'error') {
+                <div class="error-bubble-content">
+                  <div class="error-title">⚠ {{ turn.errorTitle || 'Error' }}</div>
+                  <div class="error-message">
+                    @for (part of parseMessage(turn.errorMessage || turn.content); track $index) {
                       @if (part.isRedacted) {
                         <i>{{ part.text }}</i>
                       } @else {
@@ -144,12 +123,70 @@
                       }
                     }
                   </div>
+                  @if (turn.errorTip) {
+                    <div class="error-tip">
+                      @for (part of parseMessage(turn.errorTip); track $index) {
+                        @if (part.isRedacted) {
+                          <i>{{ part.text }}</i>
+                        } @else {
+                          {{ part.text }}
+                        }
+                      }
+                    </div>
+                  }
+                  @if (turn.errorDetails) {
+                    <details class="error-details">
+                      <summary>Technical Details</summary>
+                      <pre>@for (part of parseMessage(turn.errorDetails); track $index) {@if (part.isRedacted) {<i>{{ part.text }}</i>} @else { {{ part.text }} }}</pre>
+                    </details>
+                  }
+                  @if (turn.isRetryable) {
+                    <div class="retry-action-container">
+                      <button
+                        mat-stroked-button
+                        color="primary"
+                        class="retry-button"
+                        [disabled]="isLocked()"
+                        (click)="
+                          retryPrompt(turn.originalPrompt || '', turn.attachments || [], {
+                            promptId: turn.promptId,
+                          })
+                        "
+                      >
+                        <mat-icon aria-hidden="true">refresh</mat-icon>
+                        Retry Request
+                      </button>
+                    </div>
+                  }
+                </div>
+              } @else {
+                @if (turn.thinking) {
+                  <div class="thinking-block">
+                    <div class="thinking-header">
+                      <mat-icon inline="true">psychology</mat-icon> Thinking
+                    </div>
+                    <p class="thinking-text-content" [a2uiComposerAutoScroll]="turn.thinking">
+                      {{ turn.thinking }}
+                    </p>
+                  </div>
                 }
-                @if (turn.errorDetails) {
-                  <details class="error-details">
-                    <summary>Technical Details</summary>
-                    <pre>@for (part of parseMessage(turn.errorDetails); track $index) {@if (part.isRedacted) {<i>{{ part.text }}</i>} @else { {{ part.text }} }}</pre>
-                  </details>
+                <p class="bubble-text-content">{{ turn.content }}</p>
+                @if (turn.parseError && !turn.isStreaming) {
+                  <div class="parse-error-card" role="alert" aria-live="assertive">
+                    <mat-icon color="warn" aria-hidden="true">error_outline</mat-icon>
+                    <span class="error-notice"
+                      ><strong>JSON Syntax Error:</strong>
+                      {{ getParseErrorMessage(turn.parseError) }}</span
+                    >
+                    <button
+                      mat-flat-button
+                      color="warn"
+                      aria-label="View parse error details in Errors tab"
+                      (click)="viewParseErrorDetails()"
+                    >
+                      View in Errors Tab
+                    </button>
+                  </div>
                 }
                 @if (turn.isRetryable) {
                   <div class="retry-action-container">
@@ -158,297 +195,138 @@
                       color="primary"
                       class="retry-button"
                       [disabled]="isLocked()"
-                      (click)="
-                        retryPrompt(turn.originalPrompt || '', turn.attachments || [], {
-                          promptId: turn.promptId,
-                        })
-                      "
+                      (click)="retryPrompt(turn.originalPrompt || '', turn.attachments || [])"
                     >
                       <mat-icon aria-hidden="true">refresh</mat-icon>
                       Retry Request
                     </button>
                   </div>
                 }
-              </div>
-            } @else {
-              @if (turn.thinking) {
-                <div class="thinking-block">
-                  <div class="thinking-header">
-                    <mat-icon inline="true">psychology</mat-icon> Thinking
-                  </div>
-                  <p class="thinking-text-content" [a2uiComposerAutoScroll]="turn.thinking">
-                    {{ turn.thinking }}
-                  </p>
-                </div>
               }
-              @if (message.role === 'user') {
-                <copilot-chat-user-message
-                  [message]="message"
-                  inputClass="composer-native-message"
-                  messageRendererClass="composer-user-text"
-                >
-                  <ng-template #toolbar>
-                    <copilot-chat-user-message-copy-button [content]="message.content" />
-                  </ng-template>
-                </copilot-chat-user-message>
-              } @else {
-                <copilot-chat-assistant-message
-                  [message]="message"
-                  [messages]="chatMessages()"
-                  [isLoading]="turn.isStreaming"
-                  inputClass="composer-native-message"
-                >
-                  <ng-template #toolbar>
-                    <copilot-chat-assistant-message-copy-button [content]="message.content" />
-                  </ng-template>
-                </copilot-chat-assistant-message>
-              }
-              @if (turn.parseError && !turn.isStreaming) {
-                <div class="parse-error-card" role="alert" aria-live="assertive">
-                  <mat-icon color="warn" aria-hidden="true">error_outline</mat-icon>
-                  <span class="error-notice"
-                    ><strong>JSON Syntax Error:</strong>
-                    {{ getParseErrorMessage(turn.parseError) }}</span
-                  >
-                  <button
-                    mat-flat-button
-                    color="warn"
-                    aria-label="View parse error details in Errors tab"
-                    (click)="viewParseErrorDetails()"
-                  >
-                    View in Errors Tab
-                  </button>
-                </div>
-              }
-              @if (turn.isRetryable) {
-                <div class="retry-action-container">
-                  <button
-                    mat-stroked-button
-                    color="primary"
-                    class="retry-button"
-                    [disabled]="isLocked()"
-                    (click)="
-                      retryPrompt(turn.originalPrompt || '', turn.attachments || [], {
-                        promptId: turn.promptId,
-                      })
-                    "
-                  >
-                    <mat-icon aria-hidden="true">refresh</mat-icon>
-                    Retry Request
-                  </button>
-                </div>
-              }
-            }
+            </div>
           </div>
+        }
+      }
+    </div>
+
+    <!-- Footer Prompts textareas and lockout submits controls block -->
+    <div class="chat-controllers-panel">
+      @if (attachedFiles().length > 0) {
+        <div class="attachment-previews">
+          @for (file of attachedFiles(); track file) {
+            <div class="attachment-preview-card">
+              @if (isImage(file.mimeType)) {
+                <img [src]="file.previewUrl" class="attachment-thumbnail" alt="Preview" />
+              } @else {
+                <mat-icon class="attachment-file-icon">description</mat-icon>
+              }
+              <div class="attachment-details">
+                <span class="attachment-name">{{ file.name }}</span>
+              </div>
+              <button
+                mat-icon-button
+                class="remove-attachment-button"
+                (click)="removeAttachment($index)"
+                aria-label="Remove attachment"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+          }
         </div>
       }
-    </ng-template>
-
-    <ng-template #composerInput>
-      <!-- Footer Prompts textareas and lockout submits controls block -->
-      <div class="chat-controllers-panel">
-        @if (attachedFiles().length > 0) {
-          <div class="attachment-previews">
-            @for (file of attachedFiles(); track file) {
-              <div class="attachment-preview-card">
-                @if (isImage(file.mimeType)) {
-                  <img [src]="file.previewUrl" class="attachment-thumbnail" alt="Preview" />
-                } @else {
-                  <mat-icon class="attachment-file-icon">description</mat-icon>
-                }
-                <div class="attachment-details">
-                  <span class="attachment-name">{{ file.name }}</span>
-                </div>
-                <button
-                  mat-icon-button
-                  class="remove-attachment-button"
-                  (click)="removeAttachment($index)"
-                  aria-label="Remove attachment"
-                >
-                  <mat-icon>close</mat-icon>
-                </button>
-              </div>
-            }
-          </div>
-        }
-        <div class="prompt-form-field">
-          <textarea
-            matInput
-            aria-label="Chat prompt"
-            [ngModel]="userPrompt()"
-            (ngModelChange)="userPrompt.set($event)"
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="prompt-form-field">
+        <textarea
+          matInput
+          aria-label="Chat prompt"
+          [ngModel]="userPrompt()"
+          (ngModelChange)="userPrompt.set($event)"
+          [disabled]="isLocked()"
+          (keydown)="onKeyDown($event)"
+          placeholder="Type instruction to shape your screen (e.g. 'Add a checkbox column')..."
+          rows="2"
+        ></textarea>
+      </mat-form-field>
+      <div class="submit-action-bar">
+        <div class="action-bar-left">
+          <button
+            mat-icon-button
+            class="attach-file-button"
+            [disabled]="isLocked() || isReadingFiles()"
+            (click)="fileInput.click()"
+            type="button"
+            title="Upload attachment"
+            aria-label="Upload attachment"
+          >
+            <mat-icon>attach_file</mat-icon>
+          </button>
+          <input
+            #fileInput
+            type="file"
+            multiple
+            style="display: none"
+            [disabled]="isReadingFiles()"
+            (change)="onFilesSelected($event)"
+          />
+          <button
+            mat-icon-button
+            class="screenshot-toggle-button"
+            [class.active]="includeScreenshot()"
+            [attr.aria-pressed]="includeScreenshot()"
             [disabled]="isLocked()"
-            (keydown)="onKeyDown($event)"
-            placeholder="Describe a change to your canvas…"
-            rows="2"
-          ></textarea>
-        </div>
-        <div class="submit-action-bar">
-          <div class="action-bar-left">
-            <button
-              mat-icon-button
-              class="add-prompt-button"
-              [class.has-screenshot]="includeScreenshot()"
-              [matMenuTriggerFor]="addPromptMenu"
-              [attr.aria-description]="
-                includeScreenshot()
-                  ? 'A canvas screenshot will be included with your prompt.'
-                  : null
-              "
-              type="button"
-              [title]="
-                includeScreenshot() ? 'Add to prompt · Screenshot included' : 'Add to prompt'
-              "
-              aria-label="Add to prompt"
-            >
-              <mat-icon aria-hidden="true">add</mat-icon>
-              @if (includeScreenshot()) {
-                <span class="screenshot-indicator" aria-hidden="true"></span>
-              }
-            </button>
-            <input
-              #fileInput
-              type="file"
-              multiple
-              style="display: none"
-              [disabled]="isReadingFiles()"
-              (change)="onFilesSelected($event)"
-            />
-            <mat-menu
-              #addPromptMenu="matMenu"
-              class="composer-add-menu"
-              yPosition="above"
-              xPosition="after"
-            >
-              <button
-                mat-menu-item
-                class="attach-file-button"
-                [disabled]="isLocked() || isReadingFiles()"
-                (click)="fileInput.click()"
-                type="button"
-              >
-                <mat-icon aria-hidden="true">attach_file</mat-icon>
-                Attach files
-              </button>
-              <button
-                mat-menu-item
-                class="screenshot-toggle-button"
-                role="menuitemcheckbox"
-                [attr.aria-checked]="includeScreenshot()"
-                [disabled]="isLocked() || isReadingFiles()"
-                (click)="onIncludeScreenshotChange(!includeScreenshot())"
-                type="button"
-              >
-                <mat-icon aria-hidden="true">{{
-                  includeScreenshot() ? 'check' : 'photo_camera'
-                }}</mat-icon>
-                Include screenshot
-              </button>
-              <button
-                mat-menu-item
-                type="button"
-                class="system-instructions-link"
-                (click)="showSystemInstructions()"
-              >
-                <mat-icon aria-hidden="true">tune</mat-icon>
-                <span class="system-instructions-label">
-                  @if (isMcpSupported()) {
-                    Instructions (includes {{ activeMcpServerCount() }} MCP Server{{
-                      activeMcpServerCount() === 1 ? '' : 's'
-                    }})
-                  } @else {
-                    Instructions
-                  }
-                </span>
-              </button>
-              <button
-                mat-menu-item
-                type="button"
-                class="custom-instructions-link"
-                (click)="showCustomInstructions()"
-              >
-                <mat-icon aria-hidden="true">edit_note</mat-icon>
-                <span class="custom-instructions-label">
-                  @if (hasCustomInstructions()) {
-                    Custom Instructions: {{ activeCustomPreset()?.name }}
-                  } @else {
-                    Custom Instructions
-                  }
-                </span>
-              </button>
-            </mat-menu>
-          </div>
-          <div class="action-bar-right">
-            <button
-              mat-button
-              type="button"
-              class="renderer-selector"
-              [matMenuTriggerFor]="rendererMenu"
-              [disabled]="isRendererSwitchDisabled()"
-              [attr.aria-label]="'Choose renderer, current: ' + rendererLabel()"
-              [title]="rendererSelection.activeRenderer()?.name || 'Choose renderer'"
-            >
-              <span class="renderer-selector-label">{{ rendererLabel() }}</span>
-              <mat-icon iconPositionEnd aria-hidden="true">expand_more</mat-icon>
-            </button>
-            <mat-menu
-              #rendererMenu="matMenu"
-              class="composer-renderer-menu"
-              yPosition="above"
-              xPosition="before"
-            >
-              @for (renderer of rendererSelection.renderers(); track renderer.id) {
-                <button
-                  mat-menu-item
-                  role="menuitemradio"
-                  [attr.aria-checked]="renderer.id === rendererSelection.selectedRendererId()"
-                  [disabled]="isRendererSwitchDisabled()"
-                  (click)="selectRenderer(renderer.id)"
-                >
-                  <mat-icon aria-hidden="true">{{
-                    renderer.id === rendererSelection.selectedRendererId() ? 'check' : ''
-                  }}</mat-icon>
-                  {{ renderer.name }}
-                </button>
-              }
-            </mat-menu>
-            @if (isLocked()) {
-              <button
-                mat-icon-button
-                color="warn"
-                class="submit-button stop-button"
-                (click)="cancelPrompt()"
-                title="Stop generating"
-                aria-label="Stop generating"
-              >
-                <mat-icon>stop_circle</mat-icon>
-              </button>
+            (click)="onIncludeScreenshotChange(!includeScreenshot())"
+            type="button"
+            title="Add screenshot"
+            aria-label="Add screenshot"
+          >
+            <mat-icon>photo_camera</mat-icon>
+          </button>
+          <button type="button" class="system-instructions-link" (click)="showSystemInstructions()">
+            @if (isMcpSupported()) {
+              Instructions (includes {{ activeMcpServerCount() }} MCP Server{{
+                activeMcpServerCount() === 1 ? '' : 's'
+              }})
             } @else {
-              <button
-                mat-icon-button
-                color="primary"
-                class="submit-button send-button"
-                [disabled]="
-                  isReadingFiles() ||
-                  rendererSelection.isSwitching() ||
-                  !isHandshakeComplete() ||
-                  (!userPrompt().trim() && attachedFiles().length === 0)
-                "
-                (click)="submitPrompt()"
-                title="Send prompt"
-                aria-label="Send prompt"
-              >
-                <mat-icon>send</mat-icon>
-              </button>
+              Instructions
             }
-          </div>
+          </button>
+          <button type="button" class="custom-instructions-link" (click)="showCustomInstructions()">
+            @if (hasCustomInstructions()) {
+              Custom Instructions: {{ activeCustomPreset()?.name }}
+            } @else {
+              Custom Instructions
+            }
+          </button>
         </div>
-        @if (rendererSelection.error(); as error) {
-          <p class="renderer-feedback renderer-error" role="alert">{{ error }}</p>
-        } @else if (rendererSelection.isSwitching()) {
-          <p class="renderer-feedback" role="status">Switching renderer…</p>
+        @if (isLocked()) {
+          <button
+            mat-icon-button
+            color="warn"
+            class="submit-button stop-button"
+            (click)="cancelPrompt()"
+            title="Stop generating"
+            aria-label="Stop generating"
+          >
+            <mat-icon>stop_circle</mat-icon>
+          </button>
+        } @else {
+          <button
+            mat-icon-button
+            color="primary"
+            class="submit-button send-button"
+            [disabled]="
+              isReadingFiles() ||
+              !isHandshakeComplete() ||
+              (!userPrompt().trim() && attachedFiles().length === 0)
+            "
+            (click)="submitPrompt()"
+            title="Send prompt"
+            aria-label="Send prompt"
+          >
+            <mat-icon>send</mat-icon>
+          </button>
         }
       </div>
-    </ng-template>
+    </div>
   }
 </div>

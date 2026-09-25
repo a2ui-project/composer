@@ -18,22 +18,99 @@
 import {ComponentHarness} from '@angular/cdk/testing';
 import {MatInputHarness} from '@angular/material/input/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
+import {MatMenuHarness} from '@angular/material/menu/testing';
 
 /**
  * Harness for interacting with the chat drawer view.
  * Exposes visual locator assertions and text modifier actions.
  */
-export class ChatPanelHarness extends ComponentHarness {
+export class CopilotKitChatPanelHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-chat-panel';
 
   protected getPromptInput = this.locatorForOptional(MatInputHarness);
   protected getSubmitButton = this.locatorForOptional(
     MatButtonHarness.with({selector: '.send-button'}),
   );
-  protected getScreenshotToggleButton = this.locatorForOptional('.screenshot-toggle-button');
+  protected getAddPromptMenu = this.locatorFor(
+    MatMenuHarness.with({selector: '.add-prompt-button'}),
+  );
   protected getStopButton = this.locatorForOptional(
     MatButtonHarness.with({selector: '.stop-button'}),
   );
+
+  async getRendererLabel(): Promise<string> {
+    return (await this.locatorFor('.renderer-selector-label')()).text();
+  }
+
+  async isRendererSelectorDisabled(): Promise<boolean> {
+    return (
+      await this.locatorFor(MatButtonHarness.with({selector: '.renderer-selector'}))()
+    ).isDisabled();
+  }
+
+  async selectRenderer(name: string): Promise<void> {
+    const menu = await this.locatorFor(MatMenuHarness.with({selector: '.renderer-selector'}))();
+    await menu.open();
+    await menu.clickItem({text: new RegExp(name)});
+  }
+
+  async getRendererChoices(): Promise<{label: string; selected: boolean}[]> {
+    const menu = await this.locatorFor(MatMenuHarness.with({selector: '.renderer-selector'}))();
+    await menu.open();
+    const items = await menu.getItems();
+    const choices = await Promise.all(
+      items.map(async item => ({
+        label: await item.getText(),
+        selected: (await (await item.host()).getAttribute('aria-checked')) === 'true',
+      })),
+    );
+    await menu.close();
+    return choices;
+  }
+
+  async getRendererFeedback(): Promise<string | null> {
+    const feedback = await this.locatorForOptional('.renderer-feedback')();
+    return feedback ? feedback.text() : null;
+  }
+
+  async getAddPromptActions(): Promise<{text: string; disabled: boolean}[]> {
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const items = await menu.getItems();
+    const actions = await Promise.all(
+      items.map(async item => ({text: await item.getText(), disabled: await item.isDisabled()})),
+    );
+    await menu.close();
+    return actions;
+  }
+
+  async clickAttachFiles(): Promise<void> {
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    await menu.clickItem({text: /Attach files/});
+  }
+
+  async getAddPromptDescription(): Promise<string | null> {
+    return (await this.locatorFor('.add-prompt-button')()).getAttribute('aria-description');
+  }
+
+  /** Confirms the controlled CopilotKit view is the visible chat surface. */
+  async hasCopilotChatView(): Promise<boolean> {
+    return (await this.locatorForOptional('copilot-chat-view')()) !== null;
+  }
+
+  /** Reads the actual CopilotKit message primitives rendered for conversational turns. */
+  async getCopilotMessageRoles(): Promise<string[]> {
+    const messages = await this.locatorForAll('[data-message-role]')();
+    return Promise.all(
+      messages.map(async message => (await message.getAttribute('data-message-role')) || ''),
+    );
+  }
+
+  /** Checks the parser recovery action without accessing the fixture DOM. */
+  async hasParseErrorAction(): Promise<boolean> {
+    return (await this.locatorForOptional('.parse-error-card button')()) !== null;
+  }
 
   async getBubblesText(): Promise<string[]> {
     const bubbles = await this.locatorForAll('.bubble-body')();
@@ -147,7 +224,7 @@ export class ChatPanelHarness extends ComponentHarness {
    * Checks if the welcome empty state card notice is shown.
    */
   async hasWelcomeNotice(): Promise<boolean> {
-    const notice = await this.locatorForOptional('.empty-state-notice')();
+    const notice = await this.locatorForOptional('[data-testid="copilot-welcome-screen"]')();
     return notice !== null;
   }
 
@@ -155,40 +232,58 @@ export class ChatPanelHarness extends ComponentHarness {
    * Retrieves the empty state card welcome notice text content.
    */
   async getWelcomeNoticeText(): Promise<string | null> {
-    const notice = await this.locatorForOptional('.empty-state-notice')();
+    const notice = await this.locatorForOptional('[data-testid="copilot-welcome-screen"]')();
     if (!notice) return null;
     return notice.text();
   }
   async clickSystemInstructionsLink(): Promise<void> {
-    const link = await this.locatorFor('.system-instructions-link')();
-    await link.click();
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    await menu.clickItem({text: /Instructions/});
   }
 
   async hasSystemInstructionsLink(): Promise<boolean> {
-    const link = await this.locatorForOptional('.system-instructions-link')();
-    return link !== null;
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const items = await menu.getItems({text: /Instructions/});
+    await menu.close();
+    return items.length > 0;
   }
 
   async getSystemInstructionsLinkText(): Promise<string | null> {
-    const link = await this.locatorForOptional('.system-instructions-link')();
-    if (!link) return null;
-    return (await link.text()).trim();
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const label = await this.documentRootLocatorFactory().locatorForOptional(
+      '.system-instructions-link .system-instructions-label',
+    )();
+    const text = label ? (await label.text()).trim() : null;
+    await menu.close();
+    return text;
   }
 
   async clickCustomInstructionsLink(): Promise<void> {
-    const link = await this.locatorFor('.custom-instructions-link')();
-    await link.click();
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    await menu.clickItem({text: /Custom Instructions/});
   }
 
   async hasCustomInstructionsLink(): Promise<boolean> {
-    const link = await this.locatorForOptional('.custom-instructions-link')();
-    return link !== null;
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const items = await menu.getItems({text: /Custom Instructions/});
+    await menu.close();
+    return items.length > 0;
   }
 
   async getCustomInstructionsLinkText(): Promise<string | null> {
-    const link = await this.locatorForOptional('.custom-instructions-link')();
-    if (!link) return null;
-    return (await link.text()).trim();
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const label = await this.documentRootLocatorFactory().locatorForOptional(
+      '.custom-instructions-link .custom-instructions-label',
+    )();
+    const text = label ? (await label.text()).trim() : null;
+    await menu.close();
+    return text;
   }
 
   async getRetryButtonsCount(): Promise<number> {
@@ -246,23 +341,18 @@ export class ChatPanelHarness extends ComponentHarness {
   }
 
   async hasErrorDetailsAt(index: number): Promise<boolean> {
-    const selector = `.chat-bubble-container:nth-child(${index + 1}) .error-details`;
-    const details = await this.locatorForOptional(selector)();
-    return details !== null;
+    const turns = await this.locatorForAll(ChatTurnHarness)();
+    return turns[index].hasErrorDetails();
   }
 
   async getErrorDetailsTextAt(index: number): Promise<string | null> {
-    const selector = `.chat-bubble-container:nth-child(${index + 1}) .error-details pre`;
-    const pre = await this.locatorForOptional(selector)();
-    if (!pre) return null;
-    return pre.text();
+    const turns = await this.locatorForAll(ChatTurnHarness)();
+    return turns[index].getErrorDetailsText();
   }
 
   async toggleErrorDetailsAt(index: number): Promise<void> {
-    const selector = `.chat-bubble-container:nth-child(${index + 1}) .error-details summary`;
-    const summary = await this.locatorForOptional(selector)();
-    if (!summary) throw new Error(`Error details summary not found for bubble ${index}.`);
-    await summary.click();
+    const turns = await this.locatorForAll(ChatTurnHarness)();
+    await turns[index].toggleErrorDetails();
   }
 
   async isRedactedTextItalicizedAt(index: number): Promise<boolean> {
@@ -298,20 +388,29 @@ export class ChatPanelHarness extends ComponentHarness {
   }
 
   async hasScreenshotCheckbox(): Promise<boolean> {
-    const btn = await this.getScreenshotToggleButton();
-    return btn !== null;
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const items = await menu.getItems({text: /Include screenshot/});
+    const role = items.length ? await (await items[0].host()).getAttribute('role') : null;
+    await menu.close();
+    return role === 'menuitemcheckbox';
   }
 
   async isScreenshotChecked(): Promise<boolean> {
-    const btn = await this.getScreenshotToggleButton();
-    if (!btn) return false;
-    return btn.hasClass('active');
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    const items = await menu.getItems({text: /Include screenshot/});
+    const checked = items.length
+      ? await (await items[0].host()).getAttribute('aria-checked')
+      : null;
+    await menu.close();
+    return checked === 'true';
   }
 
   async toggleScreenshot(): Promise<void> {
-    const btn = await this.getScreenshotToggleButton();
-    if (!btn) throw new Error('Screenshot toggle button not found.');
-    await btn.click();
+    const menu = await this.getAddPromptMenu();
+    await menu.open();
+    await menu.clickItem({text: /Include screenshot/});
   }
 
   async hasParseErrorCard(): Promise<boolean> {
@@ -337,5 +436,22 @@ export class ChatPanelHarness extends ComponentHarness {
     const btn = await this.locatorForOptional('.parse-error-card button')();
     if (!btn) throw new Error('Parse error details button not found.');
     await btn.click();
+  }
+}
+
+class ChatTurnHarness extends ComponentHarness {
+  static hostSelector = '.chat-bubble-container';
+
+  async hasErrorDetails(): Promise<boolean> {
+    return (await this.locatorForOptional('.error-details')()) !== null;
+  }
+
+  async getErrorDetailsText(): Promise<string | null> {
+    const details = await this.locatorForOptional('.error-details pre')();
+    return details ? details.text() : null;
+  }
+
+  async toggleErrorDetails(): Promise<void> {
+    await (await this.locatorFor('.error-details summary')()).click();
   }
 }
