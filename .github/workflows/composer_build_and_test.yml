@@ -51,6 +51,9 @@ jobs:
         # finishes the install from the partially populated cache.
         run: yarn install --immutable || yarn install --immutable
 
+      - name: Check generated demos
+        run: yarn generate:demos:check
+
       - name: Build
         run: yarn build
 

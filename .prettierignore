@@ -25,3 +25,7 @@ coverage
 **/.angular/
 **/test-results/
 **/playwright-report/**
+
+# Generated demo sets: one compact line per demo keeps the diff reviewable.
+# Regenerate with `yarn generate:demos`; do not hand-edit.
+samples/*/src/demos.ts
