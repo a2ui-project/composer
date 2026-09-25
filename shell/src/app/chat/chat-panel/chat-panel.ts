@@ -418,12 +418,71 @@ export class ChatPanel {
       return;
     }
 
+    try {
+      await this.ingestFiles(Array.from(input.files));
+    } finally {
+      input.value = '';
+    }
+  }
+
+  protected async onPaste(event: ClipboardEvent): Promise<void> {
+    if (this.isLocked() || this.isReadingFiles()) {
+      return;
+    }
+
+    const clipboardData = event.clipboardData;
+    if (!clipboardData) {
+      return;
+    }
+
+    const imageFiles: File[] = [];
+    if (clipboardData.items && clipboardData.items.length > 0) {
+      for (let i = 0; i < clipboardData.items.length; i++) {
+        const item = clipboardData.items[i];
+        if (item.kind === 'file' && this.isImage(item.type)) {
+          const file = item.getAsFile();
+          if (file) {
+            imageFiles.push(this.ensureFileName(file));
+          }
+        }
+      }
+    }
+
+    if (imageFiles.length === 0 && clipboardData.files && clipboardData.files.length > 0) {
+      for (let i = 0; i < clipboardData.files.length; i++) {
+        const file = clipboardData.files[i];
+        if (this.isImage(file.type)) {
+          imageFiles.push(this.ensureFileName(file));
+        }
+      }
+    }
+
+    if (imageFiles.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    await this.ingestFiles(imageFiles);
+  }
+
+  private ensureFileName(file: File): File {
+    if (file.name) {
+      return file;
+    }
+    const subtype = (file.type.split('/')[1] || 'png').split('+')[0];
+    return new File([file], `pasted-image.${subtype}`, {type: file.type});
+  }
+
+  private async ingestFiles(files: File[]): Promise<void> {
+    if (files.length === 0) {
+      return;
+    }
+
     this.isReadingFiles.set(true);
     try {
       const newFiles: AttachedFile[] = [];
-      const filesArray = Array.from(input.files);
 
-      for (const file of filesArray) {
+      for (const file of files) {
         if (file.size > 10 * 1024 * 1024) {
           console.warn(`File ${file.name} exceeds the 10MB size limit.`);
           continue;
@@ -440,7 +499,6 @@ export class ChatPanel {
       this.attachedFiles.update(current => [...current, ...newFiles]);
     } finally {
       this.isReadingFiles.set(false);
-      input.value = '';
     }
   }
 
