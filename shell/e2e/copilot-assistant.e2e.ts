@@ -287,7 +287,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
       'true',
     );
     await page.getByRole('menuitemradio', {name: 'Angular Basic'}).click();
-    await expect(selector).toHaveAccessibleName('Choose renderer, current: A2UI');
+    await expect(selector).toHaveAccessibleName('Choose renderer, current: Angular Basic');
     await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
     await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
     await expect(prompt).toHaveValue('Create a simple card in this renderer');

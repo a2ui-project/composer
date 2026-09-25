@@ -224,7 +224,7 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
 
   it('switches the renderer through the shared service without discarding the typed prompt', async () => {
     await harness.setPromptText('Create a score card');
-    expect(await harness.getRendererLabel()).toBe('A2UI');
+    expect(await harness.getRendererLabel()).toBe('Angular Basic');
     await harness.selectRenderer('Lit Basic');
     expect(rendererSelectionMock.selectRenderer).toHaveBeenCalledWith('lit');
     expect(await harness.getRendererLabel()).toBe('Lit Basic');
