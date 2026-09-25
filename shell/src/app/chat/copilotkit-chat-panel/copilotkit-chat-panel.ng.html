@@ -279,6 +279,7 @@
             (ngModelChange)="userPrompt.set($event)"
             [disabled]="isLocked()"
             (keydown)="onKeyDown($event)"
+            (paste)="onPaste($event)"
             placeholder="Describe a change to your canvas…"
             rows="2"
           ></textarea>
