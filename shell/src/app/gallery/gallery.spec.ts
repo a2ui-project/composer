@@ -1306,6 +1306,14 @@ describe('Gallery Component', () => {
     };
     const target = async () => JSON.parse(await harness.getDraftText()).components[0];
 
+    it('flags a required property the example does not set, and only that one', async () => {
+      const {value: _value, ...withoutValue} = choicePicker;
+      select('ChoicePicker', [withoutValue]);
+      expect(await harness.isPropertyMissing('value')).toBe(true);
+      expect(await harness.isPropertyMissing('options')).toBe(false);
+      expect(await harness.isPropertyMissing('displayStyle')).toBe(false);
+    });
+
     it('lists every catalog property, including required and unset optional ones', async () => {
       select('ChoicePicker', [choicePicker]);
       // Required first, then ChoicePicker's own, then those every component shares.

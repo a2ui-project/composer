@@ -367,7 +367,9 @@
 
 .property-row {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  // The last column is reserved for the remove button on every row, so a control keeps
+  // its width when a value is set or cleared and the button appears or disappears.
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 40px;
   align-items: center;
   column-gap: 16px;
   row-gap: 8px;
@@ -427,7 +429,7 @@
   }
 
   .property-json {
-    min-height: 96px;
+    min-height: 88px;
     resize: vertical;
     font-family: 'Spline Sans Mono', monospace;
   }
@@ -436,23 +438,34 @@
 .remove-property {
   grid-column: 3;
   color: var(--mat-sys-on-surface-variant);
+  --mat-icon-button-state-layer-size: 40px;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
 }
 
-.property-row-stacked {
-  .property-name,
-  .remove-property {
-    grid-row: 1;
-  }
+// JSON fields and binding notes keep the same two columns as every other property, so
+// names stay aligned down the list; only their vertical alignment changes, pinning the
+// name and remove button to the first line of the taller control.
+.property-row-multiline {
+  align-items: start;
 
-  .property-control {
-    grid-column: 1 / -1;
-    grid-row: 2;
+  .property-name {
+    padding-top: 10px;
   }
 }
 
 .property-note {
   margin: 0;
   color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
+.property-missing {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--mat-sys-error);
   font: var(--mat-sys-body-small);
   letter-spacing: var(--mat-sys-body-small-tracking);
 }
