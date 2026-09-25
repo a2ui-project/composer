@@ -208,6 +208,39 @@ describe('StateSync Autosave Draft Integrations', () => {
     ]);
   });
 
+  it('synchronizes active draft immediately and skips the later duplicate debounce', () => {
+    service.updateDraft('[{"version": "v0.9", "live": true}]');
+    TestBed.tick();
+
+    service.syncActiveDraftToHistory();
+
+    expect(chatStateMock.setChatHistory).toHaveBeenCalledWith([
+      {
+        role: MessageRole.USER,
+        content: '[\n  {\n    "version": "v0.9",\n    "live": true\n  }\n]',
+      },
+    ]);
+
+    chatStateMock.setChatHistory.mockClear();
+    chatStateMock.updateChatHistory.mockClear();
+    vi.advanceTimersByTime(300);
+
+    expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+    expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+  });
+
+  it('ignores stale delayed draft syncs after an LLM commit replaces the active draft', () => {
+    service.updateDraft('[{"version": "v0.9", "stale": true}]');
+    TestBed.tick();
+
+    service.commitLayoutFromLlm('[{"version": "v0.9", "fromLlm": true}]');
+    vi.advanceTimersByTime(300);
+
+    expect(service.activeDraft()).toBe('[{"version": "v0.9", "fromLlm": true}]');
+    expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+    expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+  });
+
   it('updates target layout node in-place if last message is also user layout snapshot', () => {
     // Prime the mock history with user snapshot
     chatStateMock.setChatHistory([

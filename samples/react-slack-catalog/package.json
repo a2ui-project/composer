@@ -1,0 +1,47 @@
+{
+  "name": "react-slack-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "vite --port 3460",
+    "dev": "vite --port 3460",
+    "build": "yarn lint && tsc && vite build",
+    "preview": "vite preview",
+    "test": "NODE_ENV=test vitest run",
+    "prettier": "prettier --ignore-path ../../.prettierignore --write .",
+    "prettier:check": "prettier --ignore-path ../../.prettierignore --check .",
+    "clean": "rm -rf dist node_modules/.vite",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@a2ui/web_core": "0.10.5",
+    "@copilotkit/channels": "0.10.0",
+    "@copilotkit/channels-slack": "0.10.0",
+    "@copilotkit/channels-ui": "0.10.0",
+    "@slack/types": "2.21.1",
+    "@tightknitai/storybook-addon-slack-block-kit": "0.1.1",
+    "a2ui-bridge": "0.1.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "slack-blocks-to-jsx": "1.1.2",
+    "zod": "4.4.3",
+    "zod-to-json-schema": "3.25.2"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "10.6.0",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "eslint": "10.7.0",
+    "jsdom": "29.1.1",
+    "prettier": "3.9.6",
+    "storybook": "10.6.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0",
+    "vite": "8.1.5",
+    "vitest": "4.1.11"
+  }
+}

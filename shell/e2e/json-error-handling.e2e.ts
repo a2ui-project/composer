@@ -155,7 +155,7 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
 
     // Navigate to Chat
-    await page.getByRole('tab', {name: 'Gemini Assistant'}).click();
+    await page.getByRole('tab', {name: 'Assistant', exact: true}).click();
 
     await page.route('https://generativelanguage.googleapis.com/**', async route => {
       if (route.request().url().includes('/models?')) {

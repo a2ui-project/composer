@@ -80,6 +80,7 @@ export interface PresentedTurn extends LlmMessage {
   isStreaming: boolean;
   componentCount: number | null;
   displayContent: string;
+  snapshotSignature: string | null;
 }
 
 /**
@@ -179,7 +180,7 @@ export abstract class ChatPanelBase {
    */
   protected readonly visibleChatHistory = computed<PresentedTurn[]>(() => {
     const history = this.chatState.chatHistory();
-    return history.flatMap((message, index) => {
+    const turns = history.flatMap((message, index) => {
       if (
         message.role === MessageRole.SYSTEM ||
         (!message.content?.trim() &&
@@ -211,6 +212,8 @@ export abstract class ChatPanelBase {
               .filter(isRenderA2uiItem)
               .reduce((count, block) => count + (block.updateComponents?.components.length ?? 0), 0)
           : null;
+      const snapshotSignature =
+        isSnapshot && parsed?.success ? this.stableSnapshotSignature(parsed.blocks) : null;
       const displayContent = parseError
         ? 'This response could not update the canvas.'
         : isSnapshot
@@ -227,10 +230,59 @@ export abstract class ChatPanelBase {
           componentCount,
           parseError,
           displayContent,
+          snapshotSignature,
         },
       ];
     });
+    return this.filterTranscriptSnapshots(turns);
   });
+
+  private filterTranscriptSnapshots(turns: PresentedTurn[]): PresentedTurn[] {
+    const visibleTurns: PresentedTurn[] = [];
+    for (const turn of turns) {
+      if (
+        turn.isSnapshot &&
+        !turn.isStreaming &&
+        !this.isLocked() &&
+        turn.componentCount === 0 &&
+        visibleTurns.length === 0
+      ) {
+        continue;
+      }
+
+      const previousTurn = visibleTurns[visibleTurns.length - 1];
+      const duplicatesPreviousAssistantSnapshot =
+        turn.isSnapshot &&
+        !!turn.snapshotSignature &&
+        previousTurn?.role === MessageRole.MODEL &&
+        previousTurn.isSnapshot &&
+        previousTurn.snapshotSignature === turn.snapshotSignature;
+      if (duplicatesPreviousAssistantSnapshot) {
+        continue;
+      }
+
+      visibleTurns.push(turn);
+    }
+    return visibleTurns;
+  }
+
+  private stableSnapshotSignature(value: unknown): string {
+    return JSON.stringify(this.sortSnapshotValue(value));
+  }
+
+  private sortSnapshotValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map(item => this.sortSnapshotValue(item));
+    }
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value)
+          .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+          .map(([key, item]) => [key, this.sortSnapshotValue(item)]),
+      );
+    }
+    return value;
+  }
 
   /** Reactively resolved milestones overlay text badges maps. */
   protected readonly pipelineStatusText = computed<string>(() => {

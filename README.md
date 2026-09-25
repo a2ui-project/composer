@@ -92,11 +92,11 @@ flowchart TD
 The ecosystem is architected as a modular, highly cohesive monorepo utilizing
 **Yarn v4 Workspaces**:
 
-| Workspace      | Package Name                                                       | Description & Core Responsibilities                                                                                                                                                 |
-| :------------- | :----------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`shell/`**   | `a2ui-composer-shell`                                              | Standalone web application hosting chat panel, live JSON editors, real-time iframe preview wrapper, debugging suite, interactive mock rules manager, and IndexedDB storage engines. |
-| **`bridge/`**  | `a2ui-bridge`                                                      | ESBuild-bundled lightweight cross-frame JavaScript library embedded inside child rendering iframes.                                                                                 |
-| **`samples/`** | `ng-basic-catalog`<br>`lit-basic-catalog`<br>`react-basic-catalog` | Plug-and-play developer renderer sandbox applications demonstrating zero-boilerplate integration across Lit, Angular, and React rendering stacks.                                   |
+| Workspace      | Package Name                                                                                | Description & Core Responsibilities                                                                                                                                                               |
+| :------------- | :------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`shell/`**   | `a2ui-composer-shell`                                                                       | Standalone web application hosting chat panel, live JSON editors, real-time iframe preview wrapper, debugging suite, interactive mock rules manager, and IndexedDB storage engines.               |
+| **`bridge/`**  | `a2ui-bridge`                                                                               | ESBuild-bundled lightweight cross-frame JavaScript library embedded inside child rendering iframes.                                                                                               |
+| **`samples/`** | `ng-basic-catalog`<br>`lit-basic-catalog`<br>`react-basic-catalog`<br>`react-slack-catalog` | Plug-and-play developer renderer sandbox applications demonstrating zero-boilerplate integration across Lit, Angular, and React rendering stacks, plus a credential-free Slack Block Kit preview. |
 
 ## Getting Started
 
@@ -114,13 +114,18 @@ Ensure your local workspace is configured with the following dependencies:
 # Install monorepo workspace dependencies via Yarn v4
 yarn install
 
+# Build the shared iframe bridge package used by sample renderer apps
+yarn workspace a2ui-bridge build
+
 # Launch one (or more) of the sample renderer apps. By default:
 #   ng-basic-catalog starts on localhost:3456
 #   lit-basic-catalog starts on localhost:3457
 #   react-basic-catalog starts on localhost:3458
+#   react-slack-catalog starts on localhost:3460
 yarn --cwd samples/ng-basic-catalog start
 yarn --cwd samples/lit-basic-catalog start
 yarn --cwd samples/react-basic-catalog start
+yarn --cwd samples/react-slack-catalog start
 
 # Launch standalone interactive development shell on http://localhost:4200
 yarn --cwd shell start
@@ -130,14 +135,35 @@ When the A2UI Composer starts, if this is your first time using it, you'll be
 automatically routed to the Settings page, where you will need to enter the URL
 of the renderer app you want to use (e.g., "http://localhost:3456).
 
-You'll also need to enter a Gemini API key. If you don't plan on using the chat
-panel to help build A2UI interfaces, you can just enter any text; know that in
-this case you'll get an error if you try to use the chat.
+The Slack sample can be selected through the normal Composer renderer selection
+flow as `Slack Block Kit Preview`, registered directly as `http://localhost:3460`,
+or opened through the local static shell profile `slack-dev`, which serves
+`http://localhost:4200/samples/react-slack-catalog/`. It previews the current
+A2UI surface as Slack Block Kit, exposes Button and MarketSnapshot Gallery
+workflows, serves complete example message arrays from
+`/examples/data-bound-action.json` and `/examples/market-snapshot.json`, and can
+be built as static assets from `samples/react-slack-catalog/dist`. The
+standalone `http://localhost:3460` server remains useful for direct renderer
+testing.
+
+You'll also need to enter a valid Gemini API key before using the chat panel to
+build or refine A2UI interfaces. Local and CI Playwright tests may install a
+deterministic Gemini fixture for repeatable happy-path validation; that fixture
+does not call live Gemini and should not be treated as a real model response.
 
 ### Using A2UI Composer
 
 After configuring the renderer app (see above) and your Gemini API key, you can
-use the chat panel on the left to describe the interface you want created.
+use the chat panel on the left to describe the interface you want created. The
+renderer pill in the input toolbar opens the configured renderer choices. Choose
+**Slack Block Kit Preview** to generate Slack-oriented A2UI, or an Angular, React,
+or Lit renderer for standard A2UI.
+
+You can also ask the assistant to change formats, for example: “Create a Slack
+approval message with an Approve button.” Its `switchRenderer` frontend tool
+selects the renderer and waits for its catalog before generating. Both controls
+use the same selection; switching renderer starts a new canvas for that catalog.
+Subsequent edits use the selected catalog and current canvas.
 
 Use **+ Add to prompt** in the input pill to attach files, include a screenshot of
 the current canvas, or inspect the assistant's instructions. When screenshot
@@ -158,6 +184,8 @@ Once the A2UI JSON for your interface is rendered, you can:
 - See console.log/warn/error and window.onerror messages in the Errors tab
 - Follow all the details, including messages being sent to and received from the
   LLM in the chat panel, by following the Raw Messages.
+- Inspect or copy the generated Slack Block Kit from the Slack preview when the
+  Slack renderer is selected.
 
 Once you are happy with the A2UI JSON, you can copy it and then integrate it as
 a template in your Agent or Skill.

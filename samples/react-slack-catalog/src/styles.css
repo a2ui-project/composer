@@ -1,0 +1,158 @@
+/*
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.sandbox-shell,
+.slack-preview-shell,
+.slack-preview-state,
+.slack-preview-shell [aria-label='Slack preview'] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.slack-preview-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The upstream message body shares a flex row with the avatar. Let it shrink
+   within the card, then scroll wide tables inside their own block. */
+.slack-preview-shell #slack_blocks_to_jsx > section.slack_blocks_to_jsx > .flex {
+  flex: 1;
+  min-width: 0;
+}
+
+.slack-preview-shell #slack_blocks_to_jsx .slack_blocks_to_jsx__table {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.slack-preview-state {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.slack-preview-shell [role='status'],
+.slack-preview-shell [role='alert'] {
+  margin: 0;
+  padding: 24px;
+  color: #666666;
+  font-family: system-ui, sans-serif;
+  text-align: center;
+}
+
+.slack-preview-shell .slack-preview-empty[role='status'] {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-height: min(480px, calc(100dvh - 32px));
+  padding: 40px 20px;
+  color: var(--a2ui-color-on-background, canvastext);
+}
+
+.slack-preview-empty-content {
+  width: min(100%, 380px);
+}
+
+.slack-preview-example {
+  margin: 0 0 28px;
+  padding: 20px;
+  border: 1px solid var(--a2ui-color-border, #cccccc);
+  border-radius: 12px;
+  background: var(--a2ui-color-surface, canvas);
+  text-align: left;
+}
+
+.slack-preview-example figcaption {
+  margin-bottom: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.65;
+}
+
+.slack-preview-shell[data-theme='dark'] .slack-preview-example {
+  background: #1a1d21;
+}
+
+.slack-preview-empty h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.slack-preview-empty p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  opacity: 0.75;
+}
+
+.slack-preview-shell [aria-label='Preview diagnostics'] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-inline-start: 20px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.slack-preview-shell details {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.slack-preview-shell summary {
+  cursor: pointer;
+}
+
+.slack-preview-shell button {
+  max-width: 100%;
+}
+
+.slack-preview-shell pre {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--a2ui-color-border, #cccccc);
+  border-radius: 8px;
+  padding: 12px;
+  background-color: var(--a2ui-color-input, #ffffff);
+  color: var(--a2ui-color-on-input, #1c1b1c);
+  white-space: pre;
+}
+
+@media (max-width: 420px) {
+  body {
+    padding: 8px;
+  }
+
+  .slack-preview-shell {
+    gap: 12px;
+  }
+
+  .slack-preview-shell [role='status'],
+  .slack-preview-shell [role='alert'] {
+    padding: 16px 8px;
+  }
+
+  .slack-preview-shell pre {
+    padding: 8px;
+  }
+}

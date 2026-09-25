@@ -533,9 +533,9 @@ describe('SettingsService', () => {
           displayName: 'Development',
           rendererUrl: 'http://dev.com',
         },
-        lit: {
-          displayName: 'Lit Block Kit Preview',
-          rendererUrl: 'samples/react-lit-catalog/',
+        slack: {
+          displayName: 'Slack Block Kit Preview',
+          rendererUrl: 'samples/react-slack-catalog/',
         },
         prod: {
           displayName: 'Production',
@@ -558,9 +558,9 @@ describe('SettingsService', () => {
           readOnly: true,
         },
         {
-          id: 'lit',
-          name: 'Lit Block Kit Preview',
-          rendererUrl: 'samples/react-lit-catalog/',
+          id: 'slack',
+          name: 'Slack Block Kit Preview',
+          rendererUrl: 'samples/react-slack-catalog/',
           readOnly: true,
         },
         {
