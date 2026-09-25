@@ -6,6 +6,7 @@
     "samples/ng-basic-catalog",
     "samples/lit-basic-catalog",
     "samples/react-basic-catalog",
+    "samples/react-slack-catalog",
     "bridge"
   ],
   "scripts": {

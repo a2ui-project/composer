@@ -72,16 +72,18 @@ jobs:
         env:
           PR_NUM: ${{ github.event.pull_request.number }}
         run: |
-          yarn workspace ng-basic-catalog run build --base-href=/composer/pr/${PR_NUM}/samples/ng-basic-catalog/
-          yarn workspace a2ui-composer-shell run build --base-href=/composer/pr/${PR_NUM}/
-          yarn workspace lit-basic-catalog run build --base=/composer/pr/${PR_NUM}/samples/lit-basic-catalog/
-          yarn workspace react-basic-catalog run build --base=/composer/pr/${PR_NUM}/samples/react-basic-catalog/
+          yarn workspace ng-basic-catalog run build --base-href="/composer/pr/${PR_NUM}/samples/ng-basic-catalog/"
+          yarn workspace a2ui-composer-shell run build --base-href="/composer/pr/${PR_NUM}/"
+          yarn workspace lit-basic-catalog run build --base="/composer/pr/${PR_NUM}/samples/lit-basic-catalog/"
+          yarn workspace react-basic-catalog run build --base="/composer/pr/${PR_NUM}/samples/react-basic-catalog/"
+          yarn workspace react-slack-catalog run build --base="/composer/pr/${PR_NUM}/samples/react-slack-catalog/"
 
       - name: Assemble Staging Directory (deploy_dist)
         run: |
           mkdir -p deploy_dist/samples/ng-basic-catalog
           mkdir -p deploy_dist/samples/lit-basic-catalog
           mkdir -p deploy_dist/samples/react-basic-catalog
+          mkdir -p deploy_dist/samples/react-slack-catalog
 
           if [ -d "shell/dist/a2ui-composer/browser" ]; then
             cp -r shell/dist/a2ui-composer/browser/. deploy_dist/
@@ -97,6 +99,7 @@ jobs:
 
           cp -r samples/lit-basic-catalog/dist/. deploy_dist/samples/lit-basic-catalog/
           cp -r samples/react-basic-catalog/dist/. deploy_dist/samples/react-basic-catalog/
+          cp -r samples/react-slack-catalog/dist/. deploy_dist/samples/react-slack-catalog/
 
           touch deploy_dist/.nojekyll
 
