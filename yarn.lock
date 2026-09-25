@@ -11205,6 +11205,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "react-basic-catalog@workspace:samples/react-basic-catalog"
   dependencies:
+    "@a2ui/markdown-it": "npm:0.1.0"
     "@a2ui/react": "patch:@a2ui/react@npm%3A0.10.2#~/.yarn/patches/@a2ui-react-npm-0.10.2-877cbd9ad2.patch"
     "@a2ui/web_core": "npm:0.10.5"
     "@types/react": "npm:19.2.17"

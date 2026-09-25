@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {useState, useEffect} from 'react';
+import {useState, useEffect, useLayoutEffect, useRef} from 'react';
 import {
   MessageProcessor,
   SurfaceModel,
@@ -22,7 +22,7 @@ import {
   ComponentApi,
   A2uiClientAction,
 } from '@a2ui/web_core/v0_9';
-import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages} from '../index.js';
+import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages, Demo} from '../index.js';
 
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   /** The reactive dynamic surface drawing model representing the active canvas. */
@@ -38,6 +38,8 @@ export interface ReactSandboxOptions {
   getComponentUsages?: () => Promise<ComponentUsages>;
   /** Optional callback when theme changes. */
   onThemeChange?: (theme: ThemePreference) => void;
+  /** Optional callback to retrieve the renderer's demos. */
+  getDemos?: () => Promise<Demo[]>;
 }
 
 /**
@@ -55,6 +57,21 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
 ): UseA2uiSandboxResult<C> {
   const [surface, setSurface] = useState<SurfaceModel<C> | undefined>(undefined);
   const [error, setError] = useState<Error | null>(null);
+  const [contentRenderRequest, setContentRenderRequest] = useState(0);
+  const contentRenderWaiters = useRef<Array<() => void>>([]);
+
+  useLayoutEffect(() => {
+    for (const resolve of contentRenderWaiters.current.splice(0)) resolve();
+  }, [contentRenderRequest]);
+
+  // The attach effect below deliberately runs exactly once (see the comment at its end), so the
+  // callbacks it hands to the bridge must not close over `catalogs`/`options` directly. These refs
+  // are reassigned on every render and are what those callbacks read, so a host that re-renders
+  // with fresher closures is honoured without tearing the renderer down.
+  const catalogsRef = useRef(catalogs);
+  catalogsRef.current = catalogs;
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   useEffect(() => {
     // Instantiates a new dynamic MessageProcessor mapping outbound event actions
@@ -66,10 +83,25 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     const connection = a2uiBridge.attachRenderer(processor, {
       surfaceGroup: processor.model,
       catalogJson: options?.catalogJson,
-      getComponentUsages: options?.getComponentUsages,
-      onThemeChange: options?.onThemeChange,
+      // Each optional callback is installed only when the host supplied one at mount, because
+      // `PreviewBridge` reads an absent config property as "this renderer does not implement it"
+      // (`if (this.activeRenderer?.config.getDemos)`). An unconditional wrapper would make the
+      // property always defined and silently turn that signal into "implemented, answers with
+      // nothing". When one is installed it delegates through `optionsRef`, so a re-render with a
+      // fresh closure is picked up; the `?? …` guards the case where the host later drops the
+      // callback it mounted with, answering with the same empty result the bridge would have
+      // produced for an unimplemented renderer.
+      getComponentUsages: options?.getComponentUsages
+        ? async () => (await optionsRef.current?.getComponentUsages?.()) ?? {}
+        : undefined,
+      getDemos: options?.getDemos
+        ? async () => (await optionsRef.current?.getDemos?.()) ?? []
+        : undefined,
+      onThemeChange: options?.onThemeChange
+        ? theme => optionsRef.current?.onThemeChange?.(theme)
+        : undefined,
       onCatalogResolved: catalogId => {
-        for (const catalog of catalogs) {
+        for (const catalog of catalogsRef.current) {
           if (catalog) {
             (catalog as unknown as CatalogDetails).id = catalogId;
           }
@@ -78,6 +110,13 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
       onSurfaceReady: surfaceId => {
         setSurface(processor.model.getSurface(surfaceId));
       },
+      whenSurfaceRendered: () =>
+        new Promise<void>(resolve => {
+          contentRenderWaiters.current.push(resolve);
+          // Request a commit even when a streamed root arrives after createSurface
+          // and the surface object itself has not changed.
+          setContentRenderRequest(request => request + 1);
+        }),
       onSurfaceCleared: () => {
         setSurface(undefined);
       },
@@ -87,7 +126,25 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     // Standard React Hook cleanup: disposes connections and releases event listener subscriptions
     return () => {
       connection.unsubscribe();
+      for (const resolve of contentRenderWaiters.current.splice(0)) resolve();
     };
+    // Intentionally empty: `catalogs` and `options` are expected to be fresh array/object
+    // literals (and fresh arrow function callbacks) on every render from typical call sites.
+    // Listing them as dependencies would tear down and re-attach the renderer on every render,
+    // producing an infinite attach/detach loop and a stream of duplicate `RENDERER_READY`
+    // handshakes. Staleness is handled without dependencies instead: the callbacks installed
+    // above read `catalogsRef`/`optionsRef`, which every render reassigns, so this effect can
+    // attach once while the bridge still invokes the host's current closures over its current
+    // state. What does stay pinned to the first attach is the mount-time shape of the config —
+    // the `MessageProcessor` is constructed from the catalogs present at mount, and whether each
+    // optional callback property exists at all is decided once, from the options present at
+    // mount (see the note above it) — so adding or removing a callback still requires a remount.
+    //
+    // TODO(jerelvelarde): `eslint-plugin-react-hooks` is not configured in this repo. If it ever is, do not
+    // let its `exhaustive-deps` autofix rewrite this array — that would reintroduce the loop
+    // described above. Add the suppression explicitly instead, verbatim as its own comment line:
+    // "eslint-disable-next-line react-hooks/exhaustive-deps" (omitted as a live directive today
+    // because ESLint's flat config fails the build on a disable comment for an unregistered rule).
   }, []);
 
   return {surface, error};

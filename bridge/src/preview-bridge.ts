@@ -46,6 +46,7 @@ import type {
   RendererConfig,
   SurfaceStateSubscription,
   ComponentUsages,
+  Demo,
 } from './render-config';
 
 /**
@@ -174,12 +175,20 @@ interface ActiveRenderer {
  *    - `DATA_MODEL_CHANGE`: Incremental state mutations synchronized across frame contexts.
  *    - `SET_BLOCKING_STATE`: Blocks browser interactions by launching a full-screen dynamic overlay.
  *    - `GET_CATALOG`: Fetches catalog metadata definitions, stripping potential JS security prefixes.
+ *    - `GET_COMPONENT_USAGES`: Requests the active renderer's registered component usage samples.
+ *    - `GET_DEMOS`: Requests the active renderer's registered named demos.
+ *    - `SET_THEME`: Applies a light/dark theme preference and notifies the active renderer.
  *
  * 2. **Bridge ➡️ Shell (Outgoing Messages)**:
  *    - `RENDERER_READY`: Bootstrap handshake signal dispatched when the sandbox window is ready.
  *    - `SEND_TO_SERVER`: Relays user inputs and interactions (clicks, keyups) from components back to the composer.
  *    - `DATA_MODEL_CHANGE`: Transmits state value modifications back upward for cross-surface bindings.
  *    - `FORCE_UNBLOCK`: Emergency override signal allowing users to force-unblock locked frames.
+ *    - `A2UI_CATALOG`: Response to `GET_CATALOG`, carrying the resolved catalog JSON or an error.
+ *    - `COMPONENT_USAGES`: Response to `GET_COMPONENT_USAGES`, carrying the resolved usage samples.
+ *    - `SURFACE_RESIZE`: Broadcasts updated content dimensions whenever the rendered surface resizes.
+ *    - `CONSOLE_LOG`: Forwards intercepted `console.*` output and uncaught errors to the host.
+ *    - `DEMOS`: Response to `GET_DEMOS`, carrying the resolved list of named demos.
  *
  * ### 🕒 Lifecycle Phases
  *
@@ -227,6 +236,12 @@ export class PreviewBridge {
   /** The scheduled macro-task timer identifier deferred for layout payload processing. */
   private renderTimeoutId?: ReturnType<typeof setTimeout>;
 
+  private surfaceResizeTimeoutId?: ReturnType<typeof setTimeout>;
+  private forceNextSurfaceResize = false;
+  private contentReady?: boolean;
+  private awaitingContentRender = false;
+  private contentRenderGeneration = 0;
+
   /** The registry of active framework surface connections currently linked and managed by the bridge. */
   private activeConnections = new Set<{unsubscribe(): void}>();
 
@@ -237,7 +252,10 @@ export class PreviewBridge {
   private readonly surfaceResizeObserver = new SurfaceResizeObserver(dimensions => {
     this.sendMessage({
       type: PreviewBridgeMessageType.SURFACE_RESIZE,
-      payload: dimensions,
+      payload:
+        this.contentReady === undefined
+          ? dimensions
+          : {...dimensions, contentReady: this.contentReady},
     });
   });
 
@@ -296,6 +314,59 @@ export class PreviewBridge {
    */
   dispatchSurfaceResize(force = false): void {
     this.surfaceResizeObserver.measureAndDispatch(force);
+  }
+
+  private scheduleSurfaceResize(force = false): void {
+    if (this.surfaceResizeTimeoutId !== undefined) clearTimeout(this.surfaceResizeTimeoutId);
+    this.forceNextSurfaceResize ||= force;
+    this.surfaceResizeTimeoutId = setTimeout(() => {
+      this.surfaceResizeTimeoutId = undefined;
+      const shouldForce = this.forceNextSurfaceResize;
+      this.forceNextSurfaceResize = false;
+      this.dispatchSurfaceResize(shouldForce);
+    }, 0);
+  }
+
+  private resetContentReadiness(): void {
+    this.contentRenderGeneration++;
+    this.awaitingContentRender = false;
+    this.contentReady = this.activeRenderer?.config.whenSurfaceRendered ? false : undefined;
+    if (this.surfaceResizeTimeoutId !== undefined) {
+      clearTimeout(this.surfaceResizeTimeoutId);
+      this.surfaceResizeTimeoutId = undefined;
+    }
+    this.forceNextSurfaceResize = false;
+  }
+
+  private waitForInitialContent(messages: A2uiMessage[]): void {
+    const renderer = this.activeRenderer;
+    if (this.contentReady !== false || this.awaitingContentRender || !renderer) return;
+    const hasRoot = messages.some(
+      message =>
+        'updateComponents' in message &&
+        renderer.activeSurfaceIds.has(message.updateComponents.surfaceId) &&
+        message.updateComponents.components.some(component => component.id === 'root'),
+    );
+    const whenSurfaceRendered = renderer.config.whenSurfaceRendered;
+    if (!hasRoot || !whenSurfaceRendered) return;
+
+    this.awaitingContentRender = true;
+    const generation = this.contentRenderGeneration;
+    void (async () => {
+      try {
+        await whenSurfaceRendered();
+        if (generation !== this.contentRenderGeneration || renderer !== this.activeRenderer) return;
+        this.awaitingContentRender = false;
+        this.contentReady = true;
+        // A readiness transition must reach the host even if the startup screen
+        // and the first rendered content happen to have identical dimensions.
+        this.scheduleSurfaceResize(true);
+      } catch (error) {
+        if (generation !== this.contentRenderGeneration || renderer !== this.activeRenderer) return;
+        this.awaitingContentRender = false;
+        console.error('PreviewBridge: Error waiting for surface content to render:', error);
+      }
+    })();
   }
 
   /**
@@ -363,6 +434,7 @@ export class PreviewBridge {
       config,
       activeSurfaceIds,
     };
+    this.resetContentReadiness();
 
     if (this.currentAppliedTheme) {
       this.applyThemeToDom(this.currentAppliedTheme);
@@ -387,11 +459,16 @@ export class PreviewBridge {
       type: PreviewBridgeMessageType.RENDERER_READY,
     });
 
-    this.dispatchSurfaceResize();
+    this.dispatchSurfaceResize(true);
 
     const attachConnection = {
       unsubscribe: () => {
         if (this.activeRenderer?.processor === processor) {
+          this.resetContentReadiness();
+          if (this.renderTimeoutId !== undefined) {
+            clearTimeout(this.renderTimeoutId);
+            this.renderTimeoutId = undefined;
+          }
           this.activeRenderer = null;
         }
         surfaceConnection.unsubscribe();
@@ -410,6 +487,7 @@ export class PreviewBridge {
    * Highly critical to invoke in hot-reloads or test tear-downs to avoid memory leaks and test pollution.
    */
   destroy(): void {
+    this.resetContentReadiness();
     teardownInstrumentationOverrides();
     this.surfaceResizeObserver.destroy();
     if (typeof window !== 'undefined') {
@@ -527,6 +605,10 @@ export class PreviewBridge {
         void this.handleGetComponentUsages();
         break;
 
+      case PreviewBridgeMessageType.GET_DEMOS:
+        void this.handleGetDemos();
+        break;
+
       case PreviewBridgeMessageType.MCP_RESPONSE:
         this.handleMcpResponse(data.payload);
         break;
@@ -630,6 +712,7 @@ export class PreviewBridge {
         clearTimeout(this.renderTimeoutId);
       }
       this.renderTimeoutId = setTimeout(() => {
+        this.renderTimeoutId = undefined;
         try {
           this.handleRenderA2ui(payload, isStreaming);
         } catch (err) {
@@ -734,9 +817,10 @@ export class PreviewBridge {
         this.activeRenderer.config.onSurfaceReady(surfaceId);
       }
 
+      this.waitForInitialContent(payload as A2uiMessage[]);
       // Defer measurement to the next event loop tick so asynchronous framework
       // rendering and DOM attachment complete.
-      setTimeout(() => this.dispatchSurfaceResize(), 0);
+      this.scheduleSurfaceResize();
     } else {
       console.warn('PreviewBridge: Unexpected non-array RENDER_A2UI payload received:', payload);
     }
@@ -746,6 +830,11 @@ export class PreviewBridge {
    * Resets active renderer properties, clearing tracking handles and posting delete signals.
    */
   private resetActiveRendererState(): void {
+    this.resetContentReadiness();
+    if (this.renderTimeoutId !== undefined) {
+      clearTimeout(this.renderTimeoutId);
+      this.renderTimeoutId = undefined;
+    }
     if (!this.activeRenderer) return;
 
     const {processor, config, activeSurfaceIds} = this.activeRenderer;
@@ -770,7 +859,7 @@ export class PreviewBridge {
     }
 
     // Defer measurement to allow framework component unmounting and DOM cleanup to settle.
-    setTimeout(() => this.dispatchSurfaceResize(), 0);
+    this.scheduleSurfaceResize(true);
   }
 
   /**
@@ -1059,6 +1148,29 @@ export class PreviewBridge {
     this.sendMessage({
       type: PreviewBridgeMessageType.COMPONENT_USAGES,
       payload: usages,
+    });
+  }
+
+  /**
+   * Invokes the getDemos callback and returns the resolved demos.
+   */
+  private async handleGetDemos(): Promise<void> {
+    let demos: Demo[] = [];
+    if (this.activeRenderer?.config.getDemos) {
+      try {
+        demos = await this.activeRenderer.config.getDemos();
+      } catch (error) {
+        console.error('PreviewBridge: Error invoking getDemos:', error);
+        this.sendMessage({
+          type: PreviewBridgeMessageType.DEMOS,
+          payload: {error: 'DEMOS_PROVIDER_FAILED'},
+        });
+        return;
+      }
+    }
+    this.sendMessage({
+      type: PreviewBridgeMessageType.DEMOS,
+      payload: demos,
     });
   }
 
