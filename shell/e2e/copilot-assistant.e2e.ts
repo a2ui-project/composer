@@ -151,12 +151,16 @@ interface RgbColor {
 
 function parseCssColor(value: string): RgbColor | null {
   const match = value.match(/rgba?\(([^)]+)\)/);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   const parts = match[1]
     .split(',')
     .map(part => part.trim())
     .map(Number);
-  if (parts.length < 3 || parts.some(Number.isNaN)) return null;
+  if (parts.length < 3 || parts.some(Number.isNaN)) {
+    return null;
+  }
   return {r: parts[0], g: parts[1], b: parts[2], a: parts[3] ?? 1};
 }
 
@@ -182,7 +186,9 @@ function contrastRatio(foreground: RgbColor, background: RgbColor): number {
 async function expectReadableUserMessageContrast(page: Page, theme: 'light' | 'dark') {
   const colors = await page.evaluate(() => {
     const textElement = document.querySelector('a2ui-composer-chat-panel .composer-user-text');
-    if (!textElement) throw new Error('Unable to locate rendered user message text.');
+    if (!textElement) {
+      throw new Error('Unable to locate rendered user message text.');
+    }
 
     const textStyle = getComputedStyle(textElement);
     let backgroundElement: Element | null = textElement;
@@ -413,8 +419,9 @@ test.describe('Copilot assistant replacement browser journey', () => {
         'text' in component &&
         component.text === DRAFT_TEXT,
     );
-    if (!components || !target)
+    if (!components || !target) {
       throw new Error('Expected the selected Text component in the draft.');
+    }
     await setGeminiScenarios(page, [
       {
         chunks: [

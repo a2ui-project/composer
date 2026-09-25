@@ -97,7 +97,9 @@ export class StartupResolution {
       ) {
         throw new Error('Renderer selection was superseded before approval completed.');
       }
-      if (!isAllowed) return false;
+      if (!isAllowed) {
+        return false;
+      }
       // Commit both values in the same synchronous turn after approval. Selecting
       // an unapproved renderer must not trigger draft/history reset effects.
       this.startupConfigState.setSelectedRendererId(rendererId);

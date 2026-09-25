@@ -125,7 +125,9 @@ export abstract class ChatPanelBase {
   );
 
   protected async selectRenderer(rendererId: string): Promise<void> {
-    if (this.isRendererSwitchDisabled()) return;
+    if (this.isRendererSwitchDisabled()) {
+      return;
+    }
     try {
       await this.rendererSelection.selectRenderer(rendererId);
     } catch {
@@ -186,8 +188,9 @@ export abstract class ChatPanelBase {
           !message.attachments?.length &&
           !message.thinking &&
           message.role !== MessageRole.ERROR)
-      )
+      ) {
         return [];
+      }
 
       const isStreaming =
         message.role === MessageRole.MODEL && index === history.length - 1 && this.isLocked();
@@ -409,7 +412,9 @@ export abstract class ChatPanelBase {
   }
 
   protected parseMessage(text: string | undefined): Array<{text: string; isRedacted: boolean}> {
-    if (!text) return [];
+    if (!text) {
+      return [];
+    }
     const delimiter = 'redacted for your protection';
     const parts = text.split(delimiter);
     const result: Array<{text: string; isRedacted: boolean}> = [];

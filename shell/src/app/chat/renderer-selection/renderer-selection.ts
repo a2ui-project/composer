@@ -66,7 +66,9 @@ export class RendererSelection {
       throw this.abortReason(signal);
     }
     const reuseCatalog = this.isReady(renderer);
-    if (this.selectedRendererId() === id && reuseCatalog) return;
+    if (this.selectedRendererId() === id && reuseCatalog) {
+      return;
+    }
 
     this.switching.set(true);
     const wait = this.waitForCatalog(renderer, reuseCatalog, signal);
@@ -78,7 +80,9 @@ export class RendererSelection {
     ).then(
       allowed => {
         selectionSettled = true;
-        if (!allowed) throw new Error('The selected renderer was not approved.');
+        if (!allowed) {
+          throw new Error('The selected renderer was not approved.');
+        }
         wait.acceptSelection();
       },
       error => {
@@ -97,12 +101,14 @@ export class RendererSelection {
       throw error;
     } finally {
       wait.dispose();
-      if (selectionSettled) this.switching.set(false);
-      else
+      if (selectionSettled) {
+        this.switching.set(false);
+      } else {
         void selection.then(
           () => this.switching.set(false),
           () => this.switching.set(false),
         );
+      }
     }
   }
 
@@ -125,7 +131,9 @@ export class RendererSelection {
 
   private frameMatches(renderer: RendererOption): boolean {
     const frame = this.host.getIframeElement();
-    if (!frame) return false;
+    if (!frame) {
+      return false;
+    }
     try {
       const actual = new URL(frame.src, document.baseURI);
       const expected = new URL(renderer.rendererUrl, document.baseURI);
@@ -158,7 +166,9 @@ export class RendererSelection {
       reject = onReject;
     });
     const fail = (error: Error) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
       reject(error);
     };
@@ -168,8 +178,12 @@ export class RendererSelection {
       const activeCatalog = this.catalog.activeCatalog();
       const handshakeInProgress = this.catalog.isHandshakeInProgress();
       const catalogError = this.catalog.catalogError();
-      if (settled) return;
-      if (selectedId === renderer.id) targetSelected = true;
+      if (settled) {
+        return;
+      }
+      if (selectedId === renderer.id) {
+        targetSelected = true;
+      }
       if (
         (targetSelected && selectedId !== renderer.id) ||
         (accepted && resolvedUrl !== renderer.rendererUrl) ||
@@ -206,10 +220,13 @@ export class RendererSelection {
         this.selectedRendererId() !== renderer.id ||
         this.startup.resolvedUrl() !== renderer.rendererUrl ||
         !this.frameMatches(renderer)
-      )
+      ) {
         return;
+      }
       const frameWindow = this.host.getIframeElement()?.contentWindow;
-      if (!frameWindow || envelope.sourceWindow !== frameWindow) return;
+      if (!frameWindow || envelope.sourceWindow !== frameWindow) {
+        return;
+      }
       if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
         readySource = frameWindow;
       } else if (
@@ -255,7 +272,9 @@ export class RendererSelection {
     return {
       promise,
       acceptSelection: () => {
-        if (settled) return;
+        if (settled) {
+          return;
+        }
         accepted = true;
         targetSelected = true;
         check();
