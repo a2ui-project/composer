@@ -41,10 +41,10 @@ export const RENDERER_URLS = {
   react: 'http://localhost:3458',
 } as const;
 
-/** Waits until the Raw A2UI editor is visible and has a Monaco model. */
+/** Waits until the Raw A2UI editor is attached and has a Monaco model. */
 export async function waitForMonacoEditor(page: Page): Promise<void> {
   const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
-  await expect(editorLocator).toBeVisible();
+  await expect(editorLocator).toBeAttached();
 
   await page.waitForFunction(() => {
     const monaco = (window as unknown as WindowWithMonaco).monaco;

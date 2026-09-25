@@ -68,7 +68,9 @@ for (const invalidState of ['retired panel', 'mismatched panel ID']) {
     await expect(page.locator('.workspace-container')).toBeVisible();
     await expect(page.locator('.dv-tab')).toHaveCount(7);
     await expect(page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/})).toBeVisible();
+    await page.locator('.dv-tab', {hasText: /^A2UI JSON Editor/}).click();
     await expect(page.locator('.monaco-editor').first()).toBeVisible();
+    await page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/}).click();
 
     const preview = page.frameLocator('iframe.preview-iframe');
     await preview.getByRole('button', {name: 'Search Cars'}).click();

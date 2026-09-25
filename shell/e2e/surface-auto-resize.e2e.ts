@@ -81,10 +81,11 @@ const SHORT_ROW_COUNT = 3;
 
 /**
  * How much taller than its starting height the frame must get before the tall
- * surface counts as rendered. Measured growth is roughly 7x the 280px floor;
- * 3x leaves room for a narrower panel without depending on where text wraps.
+ * surface counts as rendered. Baseline height depends on the initial preview
+ * panel layout; 2x leaves room for a taller preview panel while ensuring the
+ * tall surface has expanded significantly.
  */
-const MIN_GROWTH_FACTOR = 3;
+const MIN_GROWTH_FACTOR = 2;
 
 /** Budget for the frame to follow a payload change, in milliseconds. */
 const RESIZE_POLL_TIMEOUT_MS = 10_000;
