@@ -49,16 +49,14 @@
 
   h2 {
     margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 1.4;
-    letter-spacing: -0.5px;
+    font: var(--mat-sys-title-large);
+    letter-spacing: var(--mat-sys-title-large-tracking);
   }
 
-  h3[mat-card-subtitle] {
-    margin: 8px 0;
-    font-size: 13px;
-    font-weight: 400;
+  [mat-card-subtitle] {
+    margin: 8px 0 0;
+    font: var(--mat-sys-body-medium);
+    letter-spacing: var(--mat-sys-body-medium-tracking);
     color: var(--mat-sys-on-surface-variant);
   }
 }
@@ -68,8 +66,8 @@
 
   h3 {
     margin: 0 0 12px;
-    font-size: 14px;
-    font-weight: 600;
+    font: var(--mat-sys-title-small);
+    letter-spacing: var(--mat-sys-title-small-tracking);
   }
 }
 
@@ -205,8 +203,8 @@ mat-card-header {
 .get-api-key {
   padding: 24px 28px;
   border-top: 1px solid var(--mat-sys-outline-variant);
-  font-size: 12px;
-  line-height: 1.7;
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
   color: var(--mat-sys-on-surface-variant);
 
   ol {
@@ -222,6 +220,17 @@ mat-card-header {
 @container settings (min-width: 980px) {
   .settings-container {
     grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+
+  // Configuration fills the left column; connection status and MCP servers, both
+  // about what Composer is connected to, stack on the right.
+  .settings-card {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .status-card {
+    grid-column: 2;
   }
 }
 
