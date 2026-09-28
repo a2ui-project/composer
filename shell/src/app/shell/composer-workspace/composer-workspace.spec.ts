@@ -633,6 +633,21 @@ describe('ComposerWorkspace Dashboard', () => {
     });
 
     describe('Initial Layout Configuration', () => {
+      it('places Rendered A2UI Preview and A2UI JSON Editor in the same panel group with Rendered active', () => {
+        const manager = fixture.debugElement.injector.get(ComposerDockview);
+        const renderedPanel = manager.api.getGroupPanel(ComposerPanelId.Rendered);
+        const rawPanel = manager.api.getGroupPanel(ComposerPanelId.Raw);
+
+        expect(renderedPanel).toBeDefined();
+        expect(rawPanel).toBeDefined();
+        expect(renderedPanel!.group).toBe(rawPanel!.group);
+
+        const panelIds = renderedPanel!.group.panels.map(p => p.id);
+        expect(panelIds).toContain(ComposerPanelId.Rendered);
+        expect(panelIds).toContain(ComposerPanelId.Raw);
+        expect(renderedPanel!.group.activePanel?.id).toBe(ComposerPanelId.Rendered);
+      });
+
       it('groups Data Model, Events, Errors, and Raw Messages together with Data Model active', () => {
         const manager = fixture.debugElement.injector.get(ComposerDockview);
         const dataModelPanel = manager.api.getGroupPanel(ComposerPanelId.DataModel);
@@ -673,22 +688,17 @@ describe('ComposerWorkspace Dashboard', () => {
 
         expect(debugHeight).toBeLessThan(previewHeight);
         expect(debugHeight).toBeLessThanOrEqual(Math.round(DEFAULT_CONTAINER_HEIGHT * 0.35));
-        expect(dataModelPanel!.group.width).toBeGreaterThan(renderedPanel!.group.width);
+        expect(dataModelPanel!.group.width).toBeGreaterThanOrEqual(renderedPanel!.group.width);
       });
 
-      it('balances initial widths equally between Rendered A2UI Preview and A2UI JSON Editor', () => {
+      it('matches debug drawer width with the shared preview and editor tab group width', () => {
         const manager = fixture.debugElement.injector.get(ComposerDockview);
         const renderedPanel = manager.api.getGroupPanel(ComposerPanelId.Rendered);
-        const rawPanel = manager.api.getGroupPanel(ComposerPanelId.Raw);
         const dataModelPanel = manager.api.getGroupPanel(ComposerPanelId.DataModel);
 
         expect(renderedPanel).toBeDefined();
-        expect(rawPanel).toBeDefined();
         expect(dataModelPanel).toBeDefined();
-        expect(rawPanel!.group.width).toBe(renderedPanel!.group.width);
-        expect(dataModelPanel!.group.width).toBe(
-          renderedPanel!.group.width + rawPanel!.group.width,
-        );
+        expect(dataModelPanel!.group.width).toBe(renderedPanel!.group.width);
       });
 
       it('limits Gemini Assistant initial width to not exceed 1/3 of the overall page width', () => {

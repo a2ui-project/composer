@@ -38,6 +38,7 @@ import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {tryParseJsonArray} from '../../utils/json';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
 import type {editor} from 'monaco-editor';
 
 export const IFRAME_UNRESPONSIVE_ERROR_PREFIX = 'IFRAME_UNRESPONSIVE_ERROR: ';
@@ -361,6 +362,7 @@ export class RawFrame {
 
     if (action && line !== undefined) {
       snackBarRef.onAction().subscribe(() => {
+        window.dispatchEvent(new OpenPanelEvent(ComposerPanelId.Raw));
         this.monacoEditor()?.navigateToPosition(line, col ?? 1);
       });
     }
@@ -415,6 +417,7 @@ export class RawFrame {
 
     if (action && line !== undefined) {
       snackBarRef.onAction().subscribe(() => {
+        window.dispatchEvent(new OpenPanelEvent(ComposerPanelId.Raw));
         this.monacoEditor()?.navigateToPosition(line!, column ?? 1);
       });
     }
