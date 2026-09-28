@@ -15,13 +15,19 @@
  */
 
 import {Component, inject, signal} from '@angular/core';
-import {NonNullableFormBuilder, ReactiveFormsModule, Validators} from '@angular/forms';
+import {
+  AbstractControl,
+  NonNullableFormBuilder,
+  ReactiveFormsModule,
+  ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import {MAT_DIALOG_DATA, MatDialogModule, MatDialogRef} from '@angular/material/dialog';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {MatButtonModule} from '@angular/material/button';
 import {McpServerConfig} from '../../../mcp/mcp-client-manager.service';
-import {urlValidator} from '../../renderer-selector/add-renderer-dialog/add-renderer-dialog';
+import {MCP_SERVER_CONNECTOR} from '../../../mcp/mcp-server-connector';
 
 /**
  * Data passed to McpServerDialogComponent when editing an existing server.
@@ -38,7 +44,7 @@ export interface McpServerDialogResult {
 }
 
 /**
- * Dialog component for adding or editing an HTTP MCP server configuration.
+ * Dialog component for adding or editing an MCP server configuration.
  */
 @Component({
   selector: 'a2ui-composer-mcp-server-dialog',
@@ -58,12 +64,19 @@ export class McpServerDialogComponent {
   private readonly dialogRef = inject(
     MatDialogRef<McpServerDialogComponent, McpServerDialogResult>,
   );
+  private readonly connector = inject(MCP_SERVER_CONNECTOR);
   readonly data = inject<McpServerDialogData | null>(MAT_DIALOG_DATA, {optional: true});
 
   readonly errorMessage = signal<string | null>(null);
+  readonly addressHint = this.connector.addressHint ?? '';
+
+  private readonly addressValidator = (
+    control: AbstractControl<string>,
+  ): ValidationErrors | null =>
+    !control.value || this.connector.supports(control.value.trim()) ? null : {invalidUrl: true};
 
   readonly form = this.fb.group({
-    url: [this.data?.server?.url ?? '', [Validators.required, urlValidator]],
+    url: [this.data?.server?.url ?? '', [Validators.required, this.addressValidator]],
   });
 
   /**

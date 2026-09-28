@@ -49,6 +49,7 @@ import {
   CustomApiKey,
 } from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {SettingsService} from '../settings-service/settings.service';
+import {MCP_SERVER_CONNECTOR} from '../../mcp/mcp-server-connector';
 
 vi.mock('safevalues/dom', () => {
   return {
@@ -683,6 +684,39 @@ describe('Settings', () => {
       const addBtn = await dialogs[0].getHarness(MatButtonHarness.with({text: 'Add'}));
       expect(await addBtn.isDisabled()).toBe(true);
       expect(addSpy).not.toHaveBeenCalled();
+    });
+
+    it('validates McpServerDialogComponent addresses with the configured MCP_SERVER_CONNECTOR', async () => {
+      const {MatDialogHarness} = await import('@angular/material/dialog/testing');
+      const {MatInputHarness} = await import('@angular/material/input/testing');
+      const {MatButtonHarness} = await import('@angular/material/button/testing');
+      TestBed.overrideProvider(MCP_SERVER_CONNECTOR, {
+        useValue: {
+          addressHint: 'custom:server-name',
+          supports: (address: string) => address.startsWith('custom:'),
+          connect: vi.fn(),
+        },
+      });
+      const {fixture, component, harness} = await setupComponent();
+      const rootLoader = TestbedHarnessEnvironment.documentRootLoader(fixture);
+
+      const addSpy = vi.spyOn(component['mcpManager'], 'addServer').mockResolvedValue();
+      await harness.clickAddMcpServerButton();
+      fixture.detectChanges();
+
+      const dialogs = await rootLoader.getAllHarnesses(MatDialogHarness);
+      expect(dialogs.length).toBe(1);
+      const input = await dialogs[0].getHarness(MatInputHarness);
+      expect(await input.getPlaceholder()).toBe('custom:server-name');
+      const addBtn = await dialogs[0].getHarness(MatButtonHarness.with({text: 'Add'}));
+
+      await input.setValue('http://localhost:3001/mcp');
+      expect(await addBtn.isDisabled()).toBe(true);
+
+      await input.setValue('  custom:my-server ');
+      expect(await addBtn.isDisabled()).toBe(false);
+      await addBtn.click();
+      expect(addSpy).toHaveBeenCalledWith('custom:my-server');
     });
   });
 });

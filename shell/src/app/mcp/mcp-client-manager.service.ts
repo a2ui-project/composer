@@ -15,12 +15,11 @@
  */
 
 import {Injectable, inject, signal} from '@angular/core';
-import {Client} from '@modelcontextprotocol/sdk/client/index.js';
-import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
+import {MCP_SERVER_CONNECTOR, McpServerConnection} from './mcp-server-connector';
 
 export interface McpToolInfo {
   name: string;
@@ -52,7 +51,8 @@ interface PersistedMcpServer {
 export class McpClientManagerService {
   private readonly storage = inject(LocalStorageInteractions);
   private readonly errorLogger = inject(ErrorLogger).withTag('[McpClientManager]');
-  private readonly clients = new Map<string, Client>();
+  private readonly connector = inject(MCP_SERVER_CONNECTOR);
+  private readonly connections = new Map<string, McpServerConnection>();
 
   readonly servers = signal<McpServerConfig[]>([]);
 
@@ -201,22 +201,11 @@ export class McpClientManagerService {
       list.map(s => (s.id === id ? {...s, status: 'connecting', errorMessage: undefined} : s)),
     );
 
-    let client: Client | undefined;
+    let connection: McpServerConnection | undefined;
     try {
-      const transport = new StreamableHTTPClientTransport(new URL(server.url));
-      client = new Client({name: 'a2ui-composer', version: '1.0.0'});
-      await client.connect(transport);
-      const serverInfo = client.getServerVersion?.();
-      const rawName = serverInfo?.name;
-      const resolvedName =
-        (typeof rawName === 'string' ? rawName.trim() : '') || server.name || server.url;
-      const toolsRes = await client.listTools();
-      const discoveredTools: McpToolInfo[] = (toolsRes?.tools ?? []).map(t => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema as Record<string, unknown> | undefined,
-        outputSchema: (t as unknown as {outputSchema?: Record<string, unknown>}).outputSchema,
-      }));
+      connection = await this.connector.connect(server.url);
+      const resolvedName = connection.serverName?.trim() || server.name || server.url;
+      const discoveredTools = await connection.listTools();
 
       this.servers.update(list =>
         list.map(s =>
@@ -247,9 +236,9 @@ export class McpClientManagerService {
         ),
       );
     } finally {
-      if (client) {
+      if (connection) {
         try {
-          await client.close();
+          await connection.close();
         } catch {
           // Ignore close errors after test
         }
@@ -271,25 +260,14 @@ export class McpClientManagerService {
     );
 
     try {
-      const transport = new StreamableHTTPClientTransport(new URL(server.url));
-      const client = new Client({name: 'a2ui-composer', version: '1.0.0'});
-      await client.connect(transport);
-      const serverInfo = client.getServerVersion?.();
-      const rawName = serverInfo?.name;
-      const resolvedName =
-        (typeof rawName === 'string' ? rawName.trim() : '') || server.name || server.url;
-      const toolsRes = await client.listTools();
-      const discoveredTools: McpToolInfo[] = (toolsRes.tools ?? []).map(t => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema as Record<string, unknown> | undefined,
-        outputSchema: (t as unknown as {outputSchema?: Record<string, unknown>}).outputSchema,
-      }));
+      const connection = await this.connector.connect(server.url);
+      const resolvedName = connection.serverName?.trim() || server.name || server.url;
+      const discoveredTools = await connection.listTools();
 
       const currentServer = this.servers().find(s => s.id === id);
       if (!currentServer || !currentServer.enabled) {
         try {
-          await client.close();
+          await connection.close();
         } catch (err) {
           this.errorLogger.warn(
             `Failed to close client during connect abort for server "${server.name || server.url}":`,
@@ -299,7 +277,7 @@ export class McpClientManagerService {
         return;
       }
 
-      this.clients.set(id, client);
+      this.connections.set(id, connection);
       this.servers.update(list =>
         list.map(s =>
           s.id === id
@@ -336,9 +314,9 @@ export class McpClientManagerService {
   }
 
   async disconnectServer(id: string): Promise<void> {
-    const existing = this.clients.get(id);
+    const existing = this.connections.get(id);
     if (existing) {
-      this.clients.delete(id);
+      this.connections.delete(id);
       try {
         await existing.close();
       } catch (err) {
@@ -359,18 +337,15 @@ export class McpClientManagerService {
       throw new Error(message);
     }
 
-    const client = this.clients.get(targetServer.id);
-    if (!client) {
+    const connection = this.connections.get(targetServer.id);
+    if (!connection) {
       const message = `MCP client for server "${targetServer.name || targetServer.url}" is not initialized.`;
       this.errorLogger.error(message);
       throw new Error(message);
     }
 
     try {
-      return await client.callTool({
-        name: toolName,
-        arguments: args,
-      });
+      return await connection.callTool(toolName, args);
     } catch (err) {
       this.errorLogger.error(
         `Failed to call MCP tool "${toolName}" on server "${targetServer.name || targetServer.url}":`,

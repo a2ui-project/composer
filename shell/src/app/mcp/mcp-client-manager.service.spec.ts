@@ -14,34 +14,32 @@
  * limitations under the License.
  */
 
+import {Provider} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {McpClientManagerService} from './mcp-client-manager.service';
+import {MCP_SERVER_CONNECTOR, McpServerConnection} from './mcp-server-connector';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../storage/models/local-storage-keys';
 
+const supportsMock = vi.fn();
 const connectMock = vi.fn();
-const getServerVersionMock = vi.fn();
 const listToolsMock = vi.fn();
 const callToolMock = vi.fn();
 const closeMock = vi.fn();
 
-vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
-  Client: class {
-    connect = connectMock;
-    getServerVersion = getServerVersionMock;
-    listTools = listToolsMock;
-    callTool = callToolMock;
-    close = closeMock;
-  },
-}));
+const fakeConnector = {supports: supportsMock, connect: connectMock};
 
-vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
-  StreamableHTTPClientTransport: class {
-    constructor(readonly url: URL) {}
-  },
-}));
+function fakeConnection(overrides: Partial<McpServerConnection> = {}): McpServerConnection {
+  return {
+    serverName: 'filesystem-mcp-server',
+    listTools: listToolsMock,
+    callTool: callToolMock,
+    close: closeMock,
+    ...overrides,
+  };
+}
 
 describe('McpClientManagerService', () => {
   let service: McpClientManagerService;
@@ -57,6 +55,19 @@ describe('McpClientManagerService', () => {
     log: ReturnType<typeof vi.fn>;
     withTag: ReturnType<typeof vi.fn>;
   };
+
+  function createService(providers: Provider[] = []): McpClientManagerService {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        McpClientManagerService,
+        {provide: LocalStorageInteractions, useValue: mockStorage},
+        {provide: MCP_SERVER_CONNECTOR, useValue: fakeConnector},
+        ...providers,
+      ],
+    });
+    return TestBed.inject(McpClientManagerService);
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,34 +87,26 @@ describe('McpClientManagerService', () => {
       withTag: vi.fn().mockReturnThis(),
     };
 
-    connectMock.mockResolvedValue(undefined);
-    getServerVersionMock.mockReturnValue({name: 'filesystem-mcp-server', version: '1.0.0'});
-    listToolsMock.mockResolvedValue({
-      tools: [
-        {
-          name: 'list_directory',
-          description: 'Lists directory entries',
-          inputSchema: {type: 'object'},
-        },
-      ],
-    });
+    supportsMock.mockImplementation((address: string) => address.startsWith('http'));
+    connectMock.mockImplementation(async () => fakeConnection());
+    listToolsMock.mockResolvedValue([
+      {
+        name: 'list_directory',
+        description: 'Lists directory entries',
+        inputSchema: {type: 'object'},
+      },
+    ]);
     callToolMock.mockResolvedValue({
       content: [{type: 'text', text: 'ok'}],
     });
     closeMock.mockResolvedValue(undefined);
 
-    TestBed.configureTestingModule({
-      providers: [
-        McpClientManagerService,
-        {provide: LocalStorageInteractions, useValue: mockStorage},
-        {provide: ErrorLogger, useValue: mockErrorLogger},
-      ],
-    });
-    service = TestBed.inject(McpClientManagerService);
+    service = createService([{provide: ErrorLogger, useValue: mockErrorLogger}]);
   });
 
   it('adds by URL, populates name from serverInfo, toggles, calls tool, and removes an MCP server', async () => {
     await service.addServer('http://localhost:3001/mcp');
+    expect(connectMock).toHaveBeenCalledWith('http://localhost:3001/mcp');
     const servers = service.servers();
     expect(servers).toHaveLength(1);
     expect(servers[0].name).toBe('filesystem-mcp-server');
@@ -112,15 +115,13 @@ describe('McpClientManagerService', () => {
     expect(service.getActiveServersWithTools()).toHaveLength(1);
 
     const res = await service.callTool('list_directory', {path: '/tmp'});
-    expect(callToolMock).toHaveBeenCalledWith({
-      name: 'list_directory',
-      arguments: {path: '/tmp'},
-    });
+    expect(callToolMock).toHaveBeenCalledWith('list_directory', {path: '/tmp'});
     expect(res).toEqual({content: [{type: 'text', text: 'ok'}]});
 
     await service.toggleServer(servers[0].id, false);
     expect(service.servers()[0].enabled).toBe(false);
     expect(service.servers()[0].status).toBe('disconnected');
+    expect(closeMock).toHaveBeenCalledTimes(1);
 
     await service.toggleServer(servers[0].id, true);
     expect(service.servers()[0].enabled).toBe(true);
@@ -131,6 +132,45 @@ describe('McpClientManagerService', () => {
 
     await service.removeServer(servers[0].id);
     expect(service.servers()).toHaveLength(0);
+  });
+
+  it('passes non-HTTP addresses to the connector unchanged and persists them', async () => {
+    await service.addServer('  custom:my-server  ');
+    expect(connectMock).toHaveBeenCalledWith('custom:my-server');
+    expect(service.servers()[0].status).toBe('connected');
+    expect(JSON.parse(storageMap.get(LocalStorageKey.MCP_SERVERS)!)).toEqual([
+      {
+        id: service.servers()[0].id,
+        name: 'filesystem-mcp-server',
+        url: 'custom:my-server',
+        enabled: true,
+      },
+    ]);
+  });
+
+  it('routes callTool to the connection that owns the tool', async () => {
+    const otherCallTool = vi.fn().mockResolvedValue({content: [{type: 'text', text: 'other'}]});
+    connectMock.mockImplementation(async (address: string) =>
+      address === 'http://other/mcp'
+        ? fakeConnection({
+            serverName: 'other-server',
+            listTools: async () => [{name: 'other_tool'}],
+            callTool: otherCallTool,
+          })
+        : fakeConnection(),
+    );
+    await service.addServer('http://localhost:3001/mcp');
+    await service.addServer('http://other/mcp');
+
+    expect(await service.callTool('other_tool', {q: 1})).toEqual({
+      content: [{type: 'text', text: 'other'}],
+    });
+    expect(otherCallTool).toHaveBeenCalledWith('other_tool', {q: 1});
+    expect(callToolMock).not.toHaveBeenCalled();
+
+    await service.callTool('list_directory', {});
+    expect(callToolMock).toHaveBeenCalledWith('list_directory', {});
+    expect(otherCallTool).toHaveBeenCalledTimes(1);
   });
 
   it('handles connection failure and missing server callTool', async () => {
@@ -166,31 +206,16 @@ describe('McpClientManagerService', () => {
       ]),
     );
 
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [
-        McpClientManagerService,
-        {provide: LocalStorageInteractions, useValue: mockStorage},
-        {provide: ErrorLogger, useValue: mockErrorLogger},
-      ],
-    });
-    const hydratedService = TestBed.inject(McpClientManagerService);
+    const hydratedService = createService([{provide: ErrorLogger, useValue: mockErrorLogger}]);
     expect(hydratedService.servers()).toHaveLength(1);
     expect(hydratedService.servers()[0].name).toBe('saved-fs');
+    expect(connectMock).not.toHaveBeenCalled();
   });
 
   it('logs warning to ErrorLogger when persisted servers JSON is corrupted', () => {
     storageMap.set(LocalStorageKey.MCP_SERVERS, 'invalid-json{{{');
 
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [
-        McpClientManagerService,
-        {provide: LocalStorageInteractions, useValue: mockStorage},
-        {provide: ErrorLogger, useValue: mockErrorLogger},
-      ],
-    });
-    const hydratedService = TestBed.inject(McpClientManagerService);
+    const hydratedService = createService([{provide: ErrorLogger, useValue: mockErrorLogger}]);
     expect(hydratedService.servers()).toHaveLength(0);
     expect(mockErrorLogger.warn).toHaveBeenCalledWith(
       'Failed to parse persisted MCP servers:',
@@ -198,7 +223,7 @@ describe('McpClientManagerService', () => {
     );
   });
 
-  it('logs error to ErrorLogger and rethrows when client callTool fails', async () => {
+  it('logs error to ErrorLogger and rethrows when connection callTool fails', async () => {
     await service.addServer('http://localhost:3001/mcp');
     callToolMock.mockRejectedValueOnce(new Error('Tool RPC crashed'));
 
@@ -209,14 +234,14 @@ describe('McpClientManagerService', () => {
     );
   });
 
-  it('falls back to server name or url if getServerVersion returns a non-string name', async () => {
-    getServerVersionMock.mockReturnValueOnce({name: {unexpected: 'object'}});
+  it('falls back to server name or url if the connection reports no server name', async () => {
+    connectMock.mockImplementationOnce(async () => fakeConnection({serverName: '  '}));
     await service.addServer('http://localhost:3002/mcp');
     expect(service.servers()[0].name).toBe('http://localhost:3002/mcp');
   });
 
-  it('closes client and aborts connectServer if server is disabled while connecting', async () => {
-    let resolveListTools!: (val: {tools: []}) => void;
+  it('closes connection and aborts connectServer if server is disabled while connecting', async () => {
+    let resolveListTools!: (val: []) => void;
     listToolsMock.mockImplementationOnce(
       () =>
         new Promise(resolve => {
@@ -229,11 +254,14 @@ describe('McpClientManagerService', () => {
     await Promise.resolve();
     const id = service.servers()[0].id;
     await service.toggleServer(id, false);
-    resolveListTools({tools: []});
+    resolveListTools([]);
     await addPromise;
 
     expect(closeMock).toHaveBeenCalled();
     expect(service.servers()[0].status).toBe('disconnected');
+    await expect(service.callTool('list_directory', {})).rejects.toThrow(
+      /No connected MCP server found/,
+    );
   });
 
   it('updates server URL, reconnects if enabled, and ignores empty, unchanged, or unknown IDs', async () => {
@@ -260,7 +288,9 @@ describe('McpClientManagerService', () => {
           resolveDisconnect = resolve;
         }),
     );
-    getServerVersionMock.mockReturnValueOnce({name: 'updated-mcp-server', version: '1.0.0'});
+    connectMock.mockImplementationOnce(async () =>
+      fakeConnection({serverName: 'updated-mcp-server'}),
+    );
 
     const updatePromise = service.updateServerUrl(id, 'http://localhost:3005/mcp');
     // URL should be updated synchronously in the signal before disconnectServer completes
@@ -270,12 +300,13 @@ describe('McpClientManagerService', () => {
 
     resolveDisconnect();
     await updatePromise;
+    expect(connectMock).toHaveBeenCalledWith('http://localhost:3005/mcp');
     expect(service.servers()[0].url).toBe('http://localhost:3005/mcp');
     expect(service.servers()[0].name).toBe('updated-mcp-server');
     expect(service.servers()[0].status).toBe('connected');
   });
 
-  it('tests server connection when enabled or disabled, including error handling and closing client in finally block', async () => {
+  it('tests server connection when enabled or disabled, including error handling and closing connection in finally block', async () => {
     await service.addServer('http://localhost:3001/mcp');
     const id = service.servers()[0].id;
 
@@ -289,7 +320,7 @@ describe('McpClientManagerService', () => {
     expect(service.servers()[0].status).toBe('error');
     expect(service.servers()[0].errorMessage).toContain('Enabled test failed');
 
-    // Test when disabled (connects, lists tools, and closes client)
+    // Test when disabled (connects, lists tools, and closes connection)
     await service.toggleServer(id, false);
     expect(service.servers()[0].status).toBe('disconnected');
     closeMock.mockClear();
@@ -297,7 +328,7 @@ describe('McpClientManagerService', () => {
     expect(service.servers()[0].status).toBe('connected');
     expect(closeMock).toHaveBeenCalledTimes(1);
 
-    // Test when disabled and listTools throws: client.close() must still be called in finally block
+    // Test when disabled and listTools throws: close() must still be called in finally block
     closeMock.mockClear();
     listToolsMock.mockRejectedValueOnce(new Error('listTools failed after connect'));
     await service.testServer(id);
@@ -314,14 +345,7 @@ describe('McpClientManagerService', () => {
 
   it('handles malformed localStorage JSON, multiple servers in list updates, and testServer with unknown ID', async () => {
     storageMap.set(LocalStorageKey.MCP_SERVERS, '{invalid-json');
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [
-        McpClientManagerService,
-        {provide: LocalStorageInteractions, useValue: mockStorage},
-      ],
-    });
-    const malformedService = TestBed.inject(McpClientManagerService);
+    const malformedService = createService();
     expect(malformedService.servers()).toEqual([]);
 
     await malformedService.addServer('http://localhost:3001/mcp');

@@ -23,8 +23,11 @@
         matInput
         id="mcp-server-url-input"
         [formControl]="form.controls.url"
-        placeholder="http://localhost:3001/mcp"
+        [placeholder]="addressHint"
       />
+      @if (form.controls.url.hasError('invalidUrl')) {
+        <mat-error>Enter a supported MCP server address</mat-error>
+      }
     </mat-form-field>
 
     @if (errorMessage()) {
