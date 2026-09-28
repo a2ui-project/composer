@@ -34,14 +34,17 @@ import {
 export const RegexReplaceApi: FunctionApiDefinition = {
   name: 'regexReplace',
   returnType: 'any',
+  // Computed keys keep argument names stable under Closure Compiler property renaming (payloads
+  // and `validateFunctionArgs` refer to them by their literal string names) without needing
+  // `prettier-ignore` to stop the formatter from unquoting them.
   schema: z.object({
-    value: asyncable(z.any()).describe(
+    ['value']: asyncable(z.any()).describe(
       'The string or array of strings to perform replacements on.',
     ),
-    pattern: asyncable(z.any()).describe(
+    ['pattern']: asyncable(z.any()).describe(
       'An RE2 regular expression matching substrings to replace.',
     ),
-    replacement: asyncable(z.any()).describe(
+    ['replacement']: asyncable(z.any()).describe(
       'Literal replacement string. Capture group references like $1 are treated as literal text.',
     ),
   }) as unknown as FunctionApiDefinition['schema'],
