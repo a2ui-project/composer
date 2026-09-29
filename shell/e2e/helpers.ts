@@ -41,15 +41,37 @@ export const RENDERER_URLS = {
   react: 'http://localhost:3458',
 } as const;
 
+/**
+ * Timeout in milliseconds waiting for dockview tabs or frame containers to be visible.
+ */
+export const TAB_VISIBILITY_TIMEOUT_MS = 10_000;
+
+/**
+ * Timeout in milliseconds waiting for Monaco editor models to initialize.
+ */
+export const MONACO_MODEL_TIMEOUT_MS = 10_000;
+
 /** Waits until the Raw A2UI editor is visible and has a Monaco model. */
 export async function waitForMonacoEditor(page: Page): Promise<void> {
-  const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
-  await expect(editorLocator).toBeVisible();
+  const editorTab = page.locator('.dv-tab:has-text("A2UI JSON Editor")');
+  if (await editorTab.isVisible()) {
+    const isActive = await editorTab.evaluate(el => el.classList.contains('dv-active-tab'));
+    if (!isActive) {
+      await editorTab.click();
+    }
+  }
 
-  await page.waitForFunction(() => {
-    const monaco = (window as unknown as WindowWithMonaco).monaco;
-    return (monaco?.editor?.getModels()?.length ?? 0) > 0;
-  });
+  const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
+  await expect(editorLocator).toBeVisible({timeout: TAB_VISIBILITY_TIMEOUT_MS});
+
+  await page.waitForFunction(
+    () => {
+      const monaco = (window as unknown as WindowWithMonaco).monaco;
+      return (monaco?.editor?.getModels()?.length ?? 0) > 0;
+    },
+    undefined,
+    {timeout: MONACO_MODEL_TIMEOUT_MS},
+  );
 }
 
 /** Replaces the contents of the Raw A2UI editor. */
