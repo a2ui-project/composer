@@ -15,11 +15,73 @@
  */
 
 import {defineConfig} from 'vitest/config';
+import {createLogger} from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+/**
+ * Emitted by Vite when a sourcemap references a source file outside its package root.
+ * Safe to suppress in unit tests as sourcemap resolution outside the package does not affect test execution.
+ */
+const SOURCEMAP_OUTSIDE_PACKAGE_WARNING = 'points to a source file outside its package';
+
+const SUPPRESSED_VITE_WARNINGS = [SOURCEMAP_OUTSIDE_PACKAGE_WARNING];
+
+function isSuppressedViteWarning(msg: string): boolean {
+  return SUPPRESSED_VITE_WARNINGS.some(warning => msg.includes(warning));
+}
+
+/**
+ * Emitted by @a2ui/react's useMarkdown hook when rendering text without a custom markdown
+ * renderer provider configured in unit tests. Safe to suppress in unit tests; keeps 3P
+ * framework noise out of failing test output while silent: 'passed-only' handles passing tests.
+ */
+const A2UI_USE_MARKDOWN_WARNING = '[useMarkdown]';
+
+const customLogger = createLogger();
+const originalWarn = customLogger.warn;
+const originalWarnOnce = customLogger.warnOnce;
+customLogger.warn = (msg, options) => {
+  // Suppress external sourcemap warnings originating from upstream packages.
+  if (isSuppressedViteWarning(msg)) {
+    return;
+  }
+  originalWarn(msg, options);
+};
+customLogger.warnOnce = (msg, options) => {
+  // Suppress external sourcemap warnings originating from upstream packages.
+  if (isSuppressedViteWarning(msg)) {
+    return;
+  }
+  originalWarnOnce(msg, options);
+};
+
 export default defineConfig({
-  plugins: [react()],
+  customLogger,
+  plugins: [
+    react(),
+    {
+      name: 'suppress-sourcemap-warnings',
+      configResolved(config) {
+        const originalWarn = config.logger.warn;
+        const originalWarnOnce = config.logger.warnOnce;
+        config.logger.warn = (msg, options) => {
+          // Suppress external sourcemap warnings originating from upstream packages.
+          if (isSuppressedViteWarning(msg)) {
+            return;
+          }
+          originalWarn(msg, options);
+        };
+        config.logger.warnOnce = (msg, options) => {
+          // Suppress external sourcemap warnings originating from upstream packages.
+          if (isSuppressedViteWarning(msg)) {
+            return;
+          }
+          originalWarnOnce(msg, options);
+        };
+      },
+    },
+  ],
   resolve: {
     alias: {
       'react/jsx-runtime': path.resolve(__dirname, '../../node_modules/react/jsx-runtime'),
@@ -30,6 +92,13 @@ export default defineConfig({
     },
   },
   test: {
+    silent: 'passed-only',
+    onConsoleLog(log) {
+      // Filter out third-party useMarkdown warnings from failing test console logs.
+      if (log.includes(A2UI_USE_MARKDOWN_WARNING)) {
+        return false;
+      }
+    },
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],

@@ -344,6 +344,7 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
   });
 
   it('renders error overlay with error-overlay class on debounced error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     await act(async () => {
       if (container) {
         root = createRoot(container);

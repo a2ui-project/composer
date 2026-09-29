@@ -1429,6 +1429,8 @@ describe('PreviewBridge Core API Runtime', () => {
 
     it('logs error when deferred RENDER_A2UI layout processing throws in macro-task timer', () => {
       vi.useFakeTimers();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'debug').mockImplementation(() => {});
       const mockGroup = {
         onSurfaceCreated: {subscribe: vi.fn().mockReturnValue({unsubscribe: vi.fn()})},
       };

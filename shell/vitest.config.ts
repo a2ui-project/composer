@@ -15,11 +15,77 @@
  */
 
 import {defineConfig} from 'vitest/config';
+import {createLogger} from 'vite';
 import angular from '@analogjs/vite-plugin-angular';
 
+/**
+ * Deprecation warning emitted by Vite/AnalogJS regarding optimizeDeps.esbuildOptions.
+ * Safe to suppress in unit tests as the build configuration is managed upstream by AnalogJS.
+ */
+const OPTIMIZE_DEPS_ESBUILD_OPTIONS_WARNING = 'optimizeDeps.esbuildOptions';
+
+/**
+ * Emitted by Vite when a sourcemap references a source file outside its package root.
+ * Safe to suppress in unit tests as sourcemap resolution outside the package does not affect test execution.
+ */
+const SOURCEMAP_OUTSIDE_PACKAGE_WARNING = 'points to a source file outside its package';
+
+const SUPPRESSED_VITE_WARNINGS = [
+  OPTIMIZE_DEPS_ESBUILD_OPTIONS_WARNING,
+  SOURCEMAP_OUTSIDE_PACKAGE_WARNING,
+];
+
+function isSuppressedViteWarning(msg: string): boolean {
+  return SUPPRESSED_VITE_WARNINGS.some(warning => msg.includes(warning));
+}
+
+const customLogger = createLogger();
+const originalWarn = customLogger.warn;
+const originalWarnOnce = customLogger.warnOnce;
+customLogger.warn = (msg, options) => {
+  // Suppress third-party build and sourcemap warnings originating from dependencies.
+  if (isSuppressedViteWarning(msg)) {
+    return;
+  }
+  originalWarn(msg, options);
+};
+customLogger.warnOnce = (msg, options) => {
+  // Suppress third-party build and sourcemap warnings originating from dependencies.
+  if (isSuppressedViteWarning(msg)) {
+    return;
+  }
+  originalWarnOnce(msg, options);
+};
+
 export default defineConfig({
-  plugins: [angular({jit: true, tsconfig: './tsconfig.spec.json'})],
+  esbuild: false,
+  customLogger,
+  plugins: [
+    angular({jit: true, tsconfig: './tsconfig.spec.json', oxc: false}),
+    {
+      name: 'suppress-sourcemap-warnings',
+      configResolved(config) {
+        const originalWarn = config.logger.warn;
+        const originalWarnOnce = config.logger.warnOnce;
+        config.logger.warn = (msg, options) => {
+          // Suppress third-party build and sourcemap warnings originating from dependencies.
+          if (isSuppressedViteWarning(msg)) {
+            return;
+          }
+          originalWarn(msg, options);
+        };
+        config.logger.warnOnce = (msg, options) => {
+          // Suppress third-party build and sourcemap warnings originating from dependencies.
+          if (isSuppressedViteWarning(msg)) {
+            return;
+          }
+          originalWarnOnce(msg, options);
+        };
+      },
+    },
+  ],
   test: {
+    silent: 'passed-only',
     pool: 'threads',
     environment: 'jsdom',
     environmentOptions: {
