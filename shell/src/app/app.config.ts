@@ -35,6 +35,9 @@ import {USAGE_TRACKING_CONFIG, UsageTrackingService} from './usage-tracking/usag
 import {Ga4UsageTrackingService} from './usage-tracking/ga4-usage-tracking.service';
 import {NoopUsageTrackingService} from './usage-tracking/noop-usage-tracking.service';
 import {ErrorTelemetryReporter} from './usage-tracking/error-telemetry-reporter.service';
+import {LocalStorageInteractions} from './storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from './storage/models/local-storage-keys';
+import {ChatPanel} from './chat/chat-panel/chat-panel';
 import {CHAT_PANEL_COMPONENT} from './chat/chat-panel/chat-panel-component.token';
 import {CopilotKitChatPanel} from './chat/copilotkit-chat-panel/copilotkit-chat-panel';
 
@@ -81,10 +84,14 @@ export const appConfig: ApplicationConfig = {
       useExisting: Standalone3pLlmClient,
     },
     // The open-source app uses the CopilotKit chat panel. Remove this provider
-    // to fall back to the dependency-free ChatPanel.
+    // to fall back to the dependency-free ChatPanel. Browser tests set the
+    // FORCE_PLAIN_CHAT_PANEL flag to cover the plain panel as well.
     {
       provide: CHAT_PANEL_COMPONENT,
-      useValue: CopilotKitChatPanel,
+      useFactory: () =>
+        inject(LocalStorageInteractions).getItem(LocalStorageKey.FORCE_PLAIN_CHAT_PANEL) === 'true'
+          ? ChatPanel
+          : CopilotKitChatPanel,
     },
     {
       provide: UsageTrackingService,

@@ -58,7 +58,6 @@ export class StartupResolution {
   readonly sharedA2uiError = this.startupConfigState.sharedA2uiError;
 
   private readonly destroyRef = inject(DestroyRef);
-  private rendererSelectionRequest = 0;
 
   constructor() {
     if (typeof globalThis.window !== 'undefined' && globalThis.window.addEventListener) {
@@ -72,41 +71,19 @@ export class StartupResolution {
     }
   }
 
-  async setSelectedRendererId(rendererId: string | null, signal?: AbortSignal): Promise<boolean> {
-    signal?.throwIfAborted();
-    const request = ++this.rendererSelectionRequest;
-    const previousId = this.startupConfigState.selectedRendererId();
-    const previousUrl = this.resolvedUrl();
+  async setSelectedRendererId(rendererId: string | null): Promise<boolean> {
+    this.startupConfigState.setSelectedRendererId(rendererId);
     const active = rendererId
       ? this.getRendererById(rendererId, this.startupConfigState.renderers())
       : null;
-    const rendererUrl = active?.rendererUrl;
-    if (rendererUrl) {
-      const isAllowed = signal
-        ? await this.isOriginAllowed(rendererUrl, signal)
-        : await this.isOriginAllowed(rendererUrl);
-      signal?.throwIfAborted();
-      const currentRenderer = rendererId
-        ? this.getRendererById(rendererId, this.startupConfigState.renderers())
-        : null;
-      if (
-        request !== this.rendererSelectionRequest ||
-        this.startupConfigState.selectedRendererId() !== previousId ||
-        this.resolvedUrl() !== previousUrl ||
-        currentRenderer?.rendererUrl !== rendererUrl
-      ) {
-        throw new Error('Renderer selection was superseded before approval completed.');
+    if (active?.rendererUrl) {
+      const isAllowed = await this.isOriginAllowed(active.rendererUrl);
+      if (isAllowed) {
+        this.startupConfigState.setResolvedUrl(active.rendererUrl);
+        return true;
       }
-      if (!isAllowed) {
-        return false;
-      }
-      // Commit both values in the same synchronous turn after approval. Selecting
-      // an unapproved renderer must not trigger draft/history reset effects.
-      this.startupConfigState.setSelectedRendererId(rendererId);
-      this.startupConfigState.setResolvedUrl(rendererUrl);
-      return true;
+      return false;
     }
-    this.startupConfigState.setSelectedRendererId(rendererId);
     return true;
   }
 
@@ -120,7 +97,6 @@ export class StartupResolution {
    * @return A Promise resolving to the resolved renderer URL, or null if unresolvable.
    */
   async resolveStartupConfiguration(): Promise<string | null> {
-    this.rendererSelectionRequest++;
     this.startupConfigState.setResolvedUrl(null);
     this.startupConfigState.setSelectedRendererId(null);
     this.startupConfigState.setSharedA2uiPayload(null);
@@ -283,7 +259,6 @@ export class StartupResolution {
   }
 
   async resolveRenderer(staticConfig?: AppConfig | null): Promise<string | null> {
-    this.rendererSelectionRequest++;
     let config = staticConfig;
     if (config === undefined) {
       config = await this.fetchStaticConfig();
@@ -455,28 +430,20 @@ export class StartupResolution {
     }
 
     try {
-      const u = this.parseRendererUrl(urlStr);
+      const baseOrigin = this.environmentContext.getBaseOrigin();
+      const u = urlStr.startsWith('/') ? new URL(urlStr, baseOrigin) : new URL(urlStr);
       return u.origin + u.pathname.replace(/\/+$/, '') + u.search;
     } catch {
       return urlStr.replace(/\/+$/, '');
     }
   }
 
-  private parseRendererUrl(url: string): URL {
-    const baseUrl = globalThis.document?.baseURI || this.environmentContext.getBaseOrigin();
-    const parsed = new URL(url, baseUrl);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new Error('Renderer URLs must use HTTP or HTTPS.');
-    }
-    return parsed;
-  }
-
-  async isOriginAllowed(url: string, signal?: AbortSignal): Promise<boolean> {
-    signal?.throwIfAborted();
+  async isOriginAllowed(url: string): Promise<boolean> {
     let origin: string;
     let hostname: string;
     try {
-      const parsedUrl = this.parseRendererUrl(url);
+      const baseOrigin = this.environmentContext.getBaseOrigin();
+      const parsedUrl = url.startsWith('/') ? new URL(url, baseOrigin) : new URL(url);
       origin = parsedUrl.origin;
       hostname = parsedUrl.hostname;
     } catch (e) {
@@ -490,7 +457,10 @@ export class StartupResolution {
     const isStaticConfigOrigin = Object.values(this.startupConfigState.renderers()).some(r => {
       if (!r?.rendererUrl) return false;
       try {
-        const parsed = this.parseRendererUrl(r.rendererUrl);
+        const baseOrigin = this.environmentContext.getBaseOrigin();
+        const parsed = r.rendererUrl.startsWith('/')
+          ? new URL(r.rendererUrl, baseOrigin)
+          : new URL(r.rendererUrl);
         return parsed.origin === origin;
       } catch {
         return false;
@@ -518,10 +488,7 @@ export class StartupResolution {
       return true;
     }
 
-    const confirmed = signal
-      ? await this.confirmOrigin(origin, signal)
-      : await this.confirmOrigin(origin);
-    signal?.throwIfAborted();
+    const confirmed = await this.confirmOrigin(origin);
     if (confirmed) {
       allowedOrigins.push(origin);
       this.localStorageInteractions.setItem(
@@ -534,21 +501,13 @@ export class StartupResolution {
     return false;
   }
 
-  async confirmOrigin(origin: string, signal?: AbortSignal): Promise<boolean> {
-    signal?.throwIfAborted();
+  async confirmOrigin(origin: string): Promise<boolean> {
     const dialogRef = this.dialog.open(OriginConfirmationDialog, {
       data: {origin},
       width: '450px',
     });
-    const onAbort = () => dialogRef.close(false);
-    signal?.addEventListener('abort', onAbort, {once: true});
-    try {
-      const result = await firstValueFrom(dialogRef.afterClosed());
-      signal?.throwIfAborted();
-      return !!result;
-    } finally {
-      signal?.removeEventListener('abort', onAbort);
-    }
+    const result = await firstValueFrom(dialogRef.afterClosed());
+    return !!result;
   }
 
   getResolvedRendererUrl(): string | null {
@@ -556,7 +515,6 @@ export class StartupResolution {
   }
 
   setResolvedRendererUrl(url: string | null): void {
-    this.rendererSelectionRequest++;
     this.startupConfigState.setResolvedUrl(url);
   }
 

@@ -35,7 +35,6 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
 import {
   FailureParseResult,
-  isRenderA2uiItem,
   parseAndHealJsonLines,
 } from '../a2ui-payload-parser/a2ui-payload-parser';
 import {ComposerPanelId, OpenPanelEvent} from '../../shell/composer-workspace/composer-panel-id';
@@ -44,7 +43,6 @@ import {ChatState} from '../chat-state/chat-state';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
-import {RendererSelection} from '../renderer-selection/renderer-selection';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {CustomInstructionsDialog} from '../custom-instructions-dialog/custom-instructions-dialog';
@@ -74,26 +72,20 @@ export class AutoScroll {
   }
 }
 
-/** A visible chat turn with the display state both panels render. */
-export interface PresentedTurn extends LlmMessage {
-  id: string;
-  isSnapshot: boolean;
-  isStreaming: boolean;
-  componentCount: number | null;
-  displayContent: string;
-}
-
 /**
  * State and actions shared by every chat panel implementation. Subclasses
  * supply only the presentation, so the plain panel and the CopilotKit panel
- * submit, retry, attach files, and switch renderers the same way.
+ * submit, retry, and attach files the same way.
+ *
+ * This is main's ChatPanel logic, unchanged apart from the guards in
+ * `submitPrompt`. The CopilotKit panel prepares its own view of the history.
  */
 @Directive()
 export abstract class ChatPanelBase {
   private readonly destroyRef = inject(DestroyRef);
   private readonly chatCoordinator = inject(ChatCoordinator);
-  private readonly chatCleaner = inject(ChatCleaner);
-  private readonly chatState = inject(ChatState);
+  protected readonly chatCleaner = inject(ChatCleaner);
+  protected readonly chatState = inject(ChatState);
   private readonly dialog = inject(MatDialog);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly startupResolution = inject(StartupResolution);
@@ -101,41 +93,17 @@ export abstract class ChatPanelBase {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly fileIngestionService = inject(FileIngestionService);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
-  protected readonly mcpManager = inject(McpClientManagerService);
   private readonly promptFactory = inject(ChatPromptFactoryService);
   private readonly logger = inject(ErrorLogger).withTag('[ChatPanel]');
-  protected readonly hasCustomInstructions = this.promptFactory.hasCustomInstructions;
-  protected readonly activeCustomPreset = this.promptFactory.activePreset;
+  protected readonly mcpManager = inject(McpClientManagerService);
+
+  protected readonly includeScreenshot = signal<boolean>(false);
   protected readonly isMcpSupported = computed(() =>
     this.mcpManager.doesCatalogSupportMcp(this.catalogManagement.activeCatalog()),
   );
   protected readonly activeMcpServerCount = computed(
     () => this.mcpManager.getActiveServersWithTools().length,
   );
-
-  protected readonly rendererSelection = inject(RendererSelection);
-
-  /** The active renderer's configured display name, so no renderer is special-cased. */
-  protected readonly rendererLabel = computed(
-    () => this.rendererSelection.activeRenderer()?.name ?? 'Renderer',
-  );
-
-  protected readonly isRendererSwitchDisabled = computed(
-    () => this.isLocked() || this.isReadingFiles() || this.rendererSelection.isSwitching(),
-  );
-
-  protected async selectRenderer(rendererId: string): Promise<void> {
-    if (this.isRendererSwitchDisabled()) {
-      return;
-    }
-    try {
-      await this.rendererSelection.selectRenderer(rendererId);
-    } catch {
-      // The shared selection service exposes the failure beside the composer controls.
-    }
-  }
-
-  protected readonly includeScreenshot = signal<boolean>(false);
 
   protected onIncludeScreenshotChange(checked: boolean): void {
     this.includeScreenshot.set(checked);
@@ -146,6 +114,8 @@ export abstract class ChatPanelBase {
    * text.
    */
   protected readonly systemPrompt = this.chatCoordinator.systemPrompt;
+  protected readonly hasCustomInstructions = this.promptFactory.hasCustomInstructions;
+  protected readonly activeCustomPreset = this.promptFactory.activePreset;
   protected readonly isHandshakeComplete = computed(
     () => this.catalogManagement.activeCatalog() !== null,
   );
@@ -179,59 +149,59 @@ export abstract class ChatPanelBase {
    * Reactively computed visible logs history turns log list excluding
    * system specs.
    */
-  protected readonly visibleChatHistory = computed<PresentedTurn[]>(() => {
-    const history = this.chatState.chatHistory();
-    return history.flatMap((message, index) => {
-      if (
-        message.role === MessageRole.SYSTEM ||
-        (!message.content?.trim() &&
-          !message.attachments?.length &&
-          !message.thinking &&
-          message.role !== MessageRole.ERROR)
-      ) {
-        return [];
-      }
-
-      const isStreaming =
-        message.role === MessageRole.MODEL && index === history.length - 1 && this.isLocked();
-      const cleaned = message.content ? this.chatCleaner.cleanPayload(message.content) : '';
-      const parsed = cleaned ? parseAndHealJsonLines(cleaned) : null;
-      const isLayout =
-        message.role !== MessageRole.ERROR &&
-        ((parsed?.success && !parsed.isConversational) ||
-          this.chatCleaner.isLayoutSnapshot(message.content) ||
-          (message.role === MessageRole.MODEL && isStreaming && /^\s*[\[{]/.test(cleaned)));
-      const parseError =
-        message.parseError ||
-        (message.role === MessageRole.MODEL && isLayout && !isStreaming && parsed && !parsed.success
-          ? parsed
-          : undefined);
-      const isSnapshot = !!isLayout && !parseError;
-      const componentCount =
-        isSnapshot && parsed?.success
-          ? parsed.blocks
-              .filter(isRenderA2uiItem)
-              .reduce((count, block) => count + (block.updateComponents?.components.length ?? 0), 0)
-          : null;
-      const displayContent = parseError
-        ? 'This response could not update the canvas.'
-        : isSnapshot
-          ? isStreaming
-            ? 'Updating the canvas…'
-            : `${componentCount ?? 0} ${componentCount === 1 ? 'component' : 'components'} in this canvas`
-          : message.content || '';
-      return [
-        {
-          ...message,
-          id: `${message.promptId || 'turn'}-${index}`,
-          isSnapshot,
-          isStreaming,
-          componentCount,
-          parseError,
-          displayContent,
-        },
-      ];
-    });
+  protected readonly visibleChatHistory = computed<
+    Array<LlmMessage & {isSnapshot: boolean; isStreaming?: boolean; componentCount?: number | null}>
+  >(() => {
+    return this.chatState
+      .chatHistory()
+      .filter(
+        m =>
+          m.role !== MessageRole.SYSTEM &&
+          (!!m.content?.trim() ||
+            (m.attachments && m.attachments.length > 0) ||
+            !!m.thinking ||
+            m.role === MessageRole.ERROR),
+      )
+      .map(m => {
+        const isStreaming =
+          m.role === MessageRole.MODEL && this.chatState.isProgrammaticStreamActive();
+        if (isStreaming) {
+          return {
+            ...m,
+            isSnapshot: false,
+            isStreaming: true,
+            componentCount: null,
+          };
+        }
+        if (m.isSnapshot !== undefined) {
+          return {
+            ...m,
+            isSnapshot: m.isSnapshot,
+            isStreaming: false,
+            componentCount: m.componentCount ?? null,
+          };
+        }
+        const cleaned = m.content ? this.chatCleaner.cleanPayload(m.content) : '';
+        const parseResult = cleaned ? parseAndHealJsonLines(cleaned) : null;
+        let isSnapshot = false;
+        if (m.content && parseResult && parseResult.success) {
+          isSnapshot = !parseResult.isConversational;
+        }
+        if (isSnapshot && m.content) {
+          return {
+            ...m,
+            isSnapshot: true,
+            isStreaming: false,
+            componentCount: parseResult?.success ? parseResult.count : 0,
+          };
+        }
+        return {
+          ...m,
+          isSnapshot: false,
+          isStreaming: false,
+          componentCount: null,
+        };
+      });
   });
 
   /** Reactively resolved milestones overlay text badges maps. */
@@ -239,17 +209,17 @@ export abstract class ChatPanelBase {
     const status = this.pipelineStatus();
     switch (status) {
       case PipelineStatus.RECEIVING_STREAM:
-        return 'Updating your canvas…';
+        return 'Receiving A2UI JSON stream...';
       case PipelineStatus.RECEIVED_RAW:
-        return 'Preparing your canvas…';
+        return 'Received A2UI JSON.';
       case PipelineStatus.VALIDATING:
-        return 'Checking your layout…';
+        return 'Validating A2UI JSON catalog schemas...';
       case PipelineStatus.HEALING:
-        return 'Repairing the layout…';
+        return 'Fixing A2UI JSON (Self-repair loop active)...';
       case PipelineStatus.READY:
-        return 'Your canvas is ready.';
+        return 'Raw A2UI JSON is ready.';
       case PipelineStatus.FAILED:
-        return 'The layout needs attention.';
+        return 'A2UI JSON validation failed.';
       default:
         return '';
     }
@@ -265,11 +235,11 @@ export abstract class ChatPanelBase {
   }): Promise<void> {
     const textVal = this.userPrompt().trim();
     const attachments = [...this.attachedFiles()];
+    // Pressing Enter calls this directly, so it repeats the Send button's checks.
     if (
       (!textVal && attachments.length === 0) ||
       this.isLocked() ||
       this.isReadingFiles() ||
-      this.rendererSelection.isSwitching() ||
       this.isChatDisabled() ||
       !this.isHandshakeComplete()
     ) {
@@ -334,9 +304,11 @@ export abstract class ChatPanelBase {
   /**
    * Classifies dialogue turn bubbles mapping semantic CSS layout classes.
    */
-  protected getBubbleClass(message: PresentedTurn): string {
+  protected getBubbleClass(message: LlmMessage): string {
     if (message.role === MessageRole.USER) {
-      return message.isSnapshot ? 'bubble-user bubble-layout' : 'bubble-user bubble-text';
+      return message.content && this.chatCleaner.isLayoutSnapshot(message.content)
+        ? 'bubble-user bubble-layout'
+        : 'bubble-user bubble-text';
     }
     if (message.role === MessageRole.MODEL) {
       return 'bubble-model';
@@ -359,6 +331,16 @@ export abstract class ChatPanelBase {
   }
 
   /**
+   * Opens the system instructions modal dialog.
+   */
+  protected showSystemInstructions(): void {
+    this.dialog.open(SystemInstructionsDialog, {
+      data: this.chatCoordinator.systemPrompt(),
+      maxWidth: '90vw',
+    });
+  }
+
+  /**
    * Opens the custom instructions configuration modal dialog.
    */
   protected showCustomInstructions(): void {
@@ -376,16 +358,6 @@ export abstract class ChatPanelBase {
           this.promptFactory.setCustomInstructionsState(result);
         }
       });
-  }
-
-  /**
-   * Opens the system instructions modal dialog.
-   */
-  protected showSystemInstructions(): void {
-    this.dialog.open(SystemInstructionsDialog, {
-      data: this.chatCoordinator.systemPrompt(),
-      maxWidth: '90vw',
-    });
   }
 
   /**
@@ -412,9 +384,7 @@ export abstract class ChatPanelBase {
   }
 
   protected parseMessage(text: string | undefined): Array<{text: string; isRedacted: boolean}> {
-    if (!text) {
-      return [];
-    }
+    if (!text) return [];
     const delimiter = 'redacted for your protection';
     const parts = text.split(delimiter);
     const result: Array<{text: string; isRedacted: boolean}> = [];

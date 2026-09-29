@@ -131,12 +131,14 @@ export class RenderedFrame {
     if (!currentUrl) return null;
 
     try {
+      // Fallback to undefined if globalThis.location is undefined
+      // (e.g., in Server-Side Rendering).
       const baseOrigin = globalThis.location?.origin || undefined;
-      const baseUrl = globalThis.location
-        ? globalThis.document?.baseURI || globalThis.location.href || baseOrigin
-        : undefined;
 
-      const url = new URL(currentUrl, baseUrl);
+      // Construct a URL object. Passing baseOrigin as the second argument ensures that
+      // relative URLs (e.g., "/renderer") are parsed correctly relative to the current
+      // domain. Absolute URLs will ignore this base parameter.
+      const url = new URL(currentUrl, baseOrigin);
 
       // Prevent unauthorized cross-site framing by appending parent and
       // ancestor origins.
