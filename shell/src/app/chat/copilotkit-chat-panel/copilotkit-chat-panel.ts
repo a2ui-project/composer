@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, computed, ViewEncapsulation} from '@angular/core';
+import {Component, computed, inject, ViewEncapsulation} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {
   CopilotChatView,
@@ -35,6 +35,7 @@ import {RouterLink} from '@angular/router';
 import {AutoScroll, ChatPanelBase} from '../chat-panel/chat-panel-base';
 import {isRenderA2uiItem, parseAndHealJsonLines} from '../a2ui-payload-parser/a2ui-payload-parser';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
+import {RendererSelection} from '../renderer-selection/renderer-selection';
 
 /** A chat turn as the CopilotKit panel presents it. */
 export interface PresentedTurn extends LlmMessage {
@@ -80,6 +81,42 @@ export interface PresentedTurn extends LlmMessage {
   encapsulation: ViewEncapsulation.None,
 })
 export class CopilotKitChatPanel extends ChatPanelBase {
+  // The renderer menu in the prompt pill makes switching output formats, for
+  // example to the Slack renderer, one step instead of a trip to Settings.
+  protected readonly rendererSelection = inject(RendererSelection);
+
+  /** The active renderer's configured display name, so no renderer is special-cased. */
+  protected readonly rendererLabel = computed(
+    () => this.rendererSelection.activeRenderer()?.name ?? 'Renderer',
+  );
+
+  protected readonly isRendererSwitchDisabled = computed(
+    () => this.isLocked() || this.isReadingFiles() || this.rendererSelection.isSwitching(),
+  );
+
+  protected async selectRenderer(rendererId: string): Promise<void> {
+    if (this.isRendererSwitchDisabled()) {
+      return;
+    }
+    try {
+      await this.rendererSelection.selectRenderer(rendererId);
+    } catch {
+      // RendererSelection publishes the failure, which the template shows under the menu.
+    }
+  }
+
+  /** Waits for a renderer switch to finish, so the prompt uses the new renderer's catalog. */
+  protected override async submitPrompt(options?: {
+    promptId?: string;
+    promptTurnIndex?: number;
+    retryOfPromptId?: string;
+  }): Promise<void> {
+    if (this.rendererSelection.isSwitching()) {
+      return;
+    }
+    await super.submitPrompt(options);
+  }
+
   /**
    * The visible conversation, prepared for CopilotKit.
    *
