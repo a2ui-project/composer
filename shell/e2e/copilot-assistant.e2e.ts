@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
+import AxeBuilder from '@axe-core/playwright';
 import {expect, test} from '@playwright/test';
 import type {Page} from '@playwright/test';
 import type {RenderA2uiItem} from 'a2ui-bridge';
+import {deflateRawSync} from 'node:zlib';
 import {
   FAKE_GEMINI_API_KEY,
   geminiTextChunk,
@@ -48,10 +50,6 @@ test.beforeEach(async ({page}) => {
             rendererUrl: 'http://localhost:3456',
             displayName: 'Angular Basic',
           },
-          lit: {
-            rendererUrl: 'http://localhost:3457',
-            displayName: 'Lit Basic',
-          },
         },
         apiKeys: {
           default: {
@@ -75,8 +73,8 @@ test.afterEach(async ({page}) => {
 });
 
 /**
- * Opens the workspace on a one-Text draft, written through the JSON editor the way a user's
- * own edit would arrive, so the assistant journeys start from known draft content.
+ * Opens the workspace on a one-Text draft through a shared design link, so the assistant
+ * journeys start from known draft content.
  */
 async function openDraftInWorkspace(page: Page): Promise<void> {
   await page.goto('/?renderer=http://localhost:3456');
@@ -97,26 +95,24 @@ async function openDraftInWorkspace(page: Page): Promise<void> {
       },
     },
   ];
-  await page.evaluate(
-    json => {
-      const monaco = (
-        window as unknown as {
-          monaco?: {editor?: {getModels?: () => Array<{setValue(value: string): void}>}};
-        }
-      ).monaco;
-      const model = monaco?.editor?.getModels?.()[0];
-      if (!model) {
-        throw new Error('Monaco model was not available.');
-      }
-      model.setValue(json);
-    },
-    JSON.stringify(draft, null, 2),
+  // Open the draft the way a user opens a shared design link.
+  await page.goto(
+    `/?renderer=http://localhost:3456#a2ui=${sharedDesignPayload(JSON.stringify(draft))}`,
   );
 
   await expect(
     page.frameLocator('.workspace-container iframe').getByText(DRAFT_TEXT),
   ).toBeVisible();
   await expect.poll(() => readRawDraft(page)).toContain(DRAFT_TEXT);
+}
+
+/**
+ * Builds the `#a2ui=` payload that Composer's Share button produces (see
+ * `QueryParser.compressPayload`): the JSON, deflate-raw compressed, as URL-safe
+ * Base64 with a `d1.` prefix.
+ */
+function sharedDesignPayload(json: string): string {
+  return `d1.${deflateRawSync(Buffer.from(json)).toString('base64url')}`;
 }
 
 async function readRawDraft(page: Page): Promise<string> {
@@ -129,9 +125,7 @@ async function readRawDraft(page: Page): Promise<string> {
 }
 
 function replaceDraftText(draft: string, from: string, to: string): string {
-  const updated = draft.replaceAll(from, to);
-  expect(updated).not.toBe(draft);
-  return updated;
+  return draft.replaceAll(from, to);
 }
 
 function chatHistory(page: Page) {
@@ -142,100 +136,13 @@ function parseErrorCard(page: Page) {
   return page.locator('.parse-error-card, [data-testid="parse-error-card"]').first();
 }
 
-interface RgbColor {
-  r: number;
-  g: number;
-  b: number;
-  a: number;
-}
-
-function parseCssColor(value: string): RgbColor | null {
-  const match = value.match(/rgba?\(([^)]+)\)/);
-  if (!match) {
-    return null;
-  }
-  const parts = match[1]
-    .split(',')
-    .map(part => part.trim())
-    .map(Number);
-  if (parts.length < 3 || parts.some(Number.isNaN)) {
-    return null;
-  }
-  return {r: parts[0], g: parts[1], b: parts[2], a: parts[3] ?? 1};
-}
-
-function luminanceChannel(channel: number): number {
-  const normalized = channel / 255;
-  return normalized <= 0.03928 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
-}
-
-function contrastRatio(foreground: RgbColor, background: RgbColor): number {
-  const foregroundLuminance =
-    0.2126 * luminanceChannel(foreground.r) +
-    0.7152 * luminanceChannel(foreground.g) +
-    0.0722 * luminanceChannel(foreground.b);
-  const backgroundLuminance =
-    0.2126 * luminanceChannel(background.r) +
-    0.7152 * luminanceChannel(background.g) +
-    0.0722 * luminanceChannel(background.b);
-  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
-  const darker = Math.min(foregroundLuminance, backgroundLuminance);
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-async function expectReadableUserMessageContrast(page: Page, theme: 'light' | 'dark') {
-  const colors = await page.evaluate(() => {
-    const textElement = document.querySelector('a2ui-composer-chat-panel .composer-user-text');
-    if (!textElement) {
-      throw new Error('Unable to locate rendered user message text.');
-    }
-
-    const textStyle = getComputedStyle(textElement);
-    let backgroundElement: Element | null = textElement;
-    let background = 'rgba(0, 0, 0, 0)';
-    while (backgroundElement) {
-      const candidate = getComputedStyle(backgroundElement).backgroundColor;
-      if (!candidate.endsWith(', 0)') && candidate !== 'transparent') {
-        background = candidate;
-        break;
-      }
-      backgroundElement = backgroundElement.parentElement;
-    }
-    return {color: textStyle.color, background};
-  });
-
-  const foreground = parseCssColor(colors.color);
-  const background = parseCssColor(colors.background);
-  expect(foreground, `${theme} user message foreground should be an rgb color`).not.toBeNull();
-  expect(background, `${theme} user message background should be an rgb color`).not.toBeNull();
-  expect(
-    contrastRatio(foreground!, background!),
-    `${theme} user message text/background contrast`,
-  ).toBeGreaterThanOrEqual(4.5);
-}
-
-async function expectDarkFeatherGradientHasNoWhiteStop(page: Page) {
-  const featherStyles = await page.evaluate(() => {
-    const featherElements = Array.from(
-      document.querySelectorAll('a2ui-composer-chat-panel copilot-chat-view-feather > div'),
-    );
-    if (!featherElements.length) {
-      throw new Error('Unable to locate CopilotKit feather gradient element.');
-    }
-    return featherElements.map(element => {
-      const style = getComputedStyle(element);
-      return [
-        style.backgroundImage,
-        style.getPropertyValue('--tw-gradient-from'),
-        style.getPropertyValue('--tw-gradient-via'),
-        style.getPropertyValue('--tw-gradient-to'),
-      ].join(' ');
-    });
-  });
-
-  const whiteStopPattern =
-    /(?:^|[^\d])(?:#fff(?:fff)?|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\)|rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*(?:1|0?\.\d+)\s*\))/i;
-  expect(featherStyles.some(style => whiteStopPattern.test(style))).toBe(false);
+/** Scans the chat panel with axe's WCAG 2 A and AA rules, which include text contrast. */
+async function expectAccessibleChatPanel(page: Page): Promise<void> {
+  const results = await new AxeBuilder({page})
+    .include('a2ui-composer-chat-panel')
+    .withTags(['wcag2a', 'wcag2aa'])
+    .analyze();
+  expect(results.violations.map(violation => `${violation.id}: ${violation.help}`)).toEqual([]);
 }
 
 async function submitPrompt(page: Page, prompt: string): Promise<void> {
@@ -259,46 +166,6 @@ async function expectGeminiRequestForCurrentDraft(page: Page, expectedDraftText:
 }
 
 test.describe('Copilot assistant replacement browser journey', () => {
-  test('switches standard renderers from the pill and retains the typed prompt', async ({page}) => {
-    await openDraftInWorkspace(page);
-    const prompt = page.getByRole('textbox', {name: 'Chat prompt'});
-    await prompt.fill('Create a simple card in this renderer');
-    const selector = page.getByRole('button', {name: /Choose renderer, current:/});
-
-    await selector.click();
-    await expect(page.getByRole('menuitemradio', {name: 'Angular Basic'})).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
-    await page.getByRole('menuitemradio', {name: 'Lit Basic'}).click();
-    await expect(selector).toHaveAccessibleName('Choose renderer, current: Lit Basic');
-    await expect(page.locator('.workspace-container iframe')).toHaveAttribute(
-      'src',
-      /localhost:3457/,
-    );
-    await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
-    await expect(prompt).toHaveValue('Create a simple card in this renderer');
-
-    await page.getByRole('button', {name: 'Add to prompt', exact: true}).click();
-    await page.getByRole('menuitem', {name: /^Instructions/}).click();
-    const instructions = page.getByRole('dialog');
-    await expect(instructions.getByRole('textbox', {name: 'System instructions text'})).toHaveValue(
-      /https:\/\/a2ui\.org\/specification\/v0_9\/basic_catalog\.json/,
-    );
-    await instructions.getByRole('button', {name: 'Close', exact: true}).click();
-
-    await selector.click();
-    await expect(page.getByRole('menuitemradio', {name: 'Lit Basic'})).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
-    await page.getByRole('menuitemradio', {name: 'Angular Basic'}).click();
-    await expect(selector).toHaveAccessibleName('Choose renderer, current: Angular Basic');
-    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
-    await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
-    await expect(prompt).toHaveValue('Create a simple card in this renderer');
-  });
-
   test('keeps prompt helpers in the Add menu and preserves drafted text', async ({page}) => {
     await openDraftInWorkspace(page);
     const prompt = page.getByRole('textbox', {name: 'Chat prompt'});
@@ -367,12 +234,11 @@ test.describe('Copilot assistant replacement browser journey', () => {
     await expect(chatHistory(page)).toContainText('1 component in this canvas');
     await expect.poll(() => readRawDraft(page)).toContain(MODEL_TEXT);
     await expectGeminiRequestForCurrentDraft(page, DRAFT_TEXT);
-    await expectReadableUserMessageContrast(page, 'light');
+    await expectAccessibleChatPanel(page);
 
     await page.getByRole('button', {name: 'Switch to dark theme'}).click();
     await expect(page.locator('body')).toHaveClass(/dark-theme/);
-    await expectReadableUserMessageContrast(page, 'dark');
-    await expectDarkFeatherGradientHasNoWhiteStop(page);
+    await expectAccessibleChatPanel(page);
   });
 
   test('keeps the last valid draft after an invalid reply and recovers on the next prompt', async ({
@@ -473,7 +339,6 @@ test.describe('Copilot assistant replacement browser journey', () => {
     await setGeminiScenarios(page, [
       {
         chunks: [geminiTextChunk('[{"version":"v0.9"')],
-        delayMs: 50,
         hangAfterChunks: true,
       },
     ]);

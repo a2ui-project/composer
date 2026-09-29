@@ -14,6 +14,22 @@
  * limitations under the License.
  */
 
+/**
+ * A deterministic stand-in for the Gemini API in browser tests.
+ *
+ * Composer calls Gemini from the browser through the `@google/genai` SDK, which
+ * streams responses as server-sent events over `fetch`. Playwright's
+ * `page.route` can only answer a request with a complete body, so it can't send
+ * a response chunk by chunk or hold a stream open until the app cancels it,
+ * which the Stop journey needs. Instead, this fixture replaces `window.fetch`
+ * inside the page before the app loads:
+ * - Requests to Gemini's `streamGenerateContent` endpoint are recorded (URL,
+ *   headers, and JSON body) so tests can assert what the app sent, and are
+ *   answered from a queue of scripted scenarios.
+ * - Every other request goes to the real `fetch` unchanged.
+ * No request leaves the machine and no real API key is needed.
+ */
+
 import type {Page} from '@playwright/test';
 
 /** Fake API key accepted by the deterministic Gemini browser fixture. */
@@ -23,8 +39,6 @@ export const FAKE_GEMINI_API_KEY = 'fake-e2e-gemini-key';
 export interface GeminiFixtureScenario {
   /** Raw Gemini SSE payload objects emitted as `data:` events. */
   chunks: unknown[];
-  /** Optional delay after each emitted chunk. */
-  delayMs?: number;
   /** Keeps the stream open after all chunks until the request AbortSignal fires. */
   hangAfterChunks?: boolean;
   /** HTTP status for the intercepted fixture response. */
@@ -39,6 +53,8 @@ export interface CapturedGeminiRequest {
   body: unknown;
 }
 
+// The fixture's state lives on `window` so the test process can reach it through
+// `page.evaluate`, and so a second install on the same page is a no-op.
 declare global {
   interface Window {
     __a2uiGeminiFixtureInstalled?: boolean;
@@ -48,6 +64,11 @@ declare global {
   }
 }
 
+/**
+ * Runs inside the page (via `page.addInitScript`) before any app code, so the
+ * SDK picks up the replaced `fetch`. It can't use imports or closures from this
+ * file; everything it needs is defined inside it.
+ */
 function installFixtureInBrowser(fakeApiKey: string): void {
   if (window.__a2uiGeminiFixtureInstalled) {
     return;
@@ -55,6 +76,7 @@ function installFixtureInBrowser(fakeApiKey: string): void {
   window.__a2uiGeminiFixtureInstalled = true;
 
   const originalFetch = window.fetch.bind(window);
+  // Scripted responses, consumed one per Gemini request in order.
   let scenarios: GeminiFixtureScenario[] = [];
   window.__a2uiGeminiFixtureRequests = [];
   window.__a2uiGeminiFixtureSetScenarios = nextScenarios => {
@@ -64,6 +86,8 @@ function installFixtureInBrowser(fakeApiKey: string): void {
     window.__a2uiGeminiFixtureRequests = [];
   };
 
+  // The SDK may pass headers as a Headers object, an array, or a plain object;
+  // flatten them to lower-case keys so tests can read them directly.
   const normalizeHeaders = (headersInit: HeadersInit | undefined): Record<string, string> => {
     const headers: Record<string, string> = {};
     if (!headersInit) {
@@ -76,8 +100,10 @@ function installFixtureInBrowser(fakeApiKey: string): void {
     return headers;
   };
 
-  const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
-
+  // Builds the response body for one scenario as a server-sent event stream: each
+  // chunk becomes one `data:` event, which is how Gemini's streaming API frames
+  // them. If the app aborts the request (the Stop button), the stream errors
+  // with the abort reason, just as a real network stream would.
   const streamForScenario = (scenario: GeminiFixtureScenario, signal?: AbortSignal | null) => {
     const encoder = new TextEncoder();
     return new ReadableStream<Uint8Array>({
@@ -96,10 +122,8 @@ function installFixtureInBrowser(fakeApiKey: string): void {
               return;
             }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-            if (scenario.delayMs) {
-              await sleep(scenario.delayMs);
-            }
           }
+          // Hold the stream open, as a slow model would, until the app cancels it.
           if (scenario.hangAfterChunks) {
             await new Promise<void>(resolve => {
               signal?.addEventListener('abort', () => resolve(), {once: true});
@@ -116,6 +140,7 @@ function installFixtureInBrowser(fakeApiKey: string): void {
     });
   };
 
+  // Answers Gemini stream requests from the scenario queue; passes everything else through.
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
@@ -148,6 +173,8 @@ function installFixtureInBrowser(fakeApiKey: string): void {
       body,
     });
 
+    // Mirror Gemini's own failures so a missing key or an unscripted request
+    // shows up in the app the way a real error would, instead of hanging.
     if (headers['x-goog-api-key'] !== fakeApiKey) {
       return new Response(
         `data: ${JSON.stringify({error: {code: 401, status: 'UNAUTHENTICATED'}})}\n\n`,

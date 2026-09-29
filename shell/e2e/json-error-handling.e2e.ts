@@ -15,6 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {CHAT_PANELS, useChatPanel} from './helpers';
 
 interface MonacoModel {
   getValue(): string;
@@ -146,63 +147,66 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     expect(cursorPosition?.lineNumber).toBe(4);
   });
 
-  test('recovers gracefully from malformed JSON stream blocks in chat and renders an inline diagnostic error card', async ({
-    page,
-  }) => {
-    // The assistant only submits once a renderer has announced its catalog, which the
-    // stub renderer above never does, so use a real sample renderer here.
-    await page.goto('/?renderer=http://localhost:3456');
-    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+  for (const panel of CHAT_PANELS) {
+    test(`recovers gracefully from malformed JSON stream blocks in chat and renders an inline diagnostic error card (${panel} panel)`, async ({
+      page,
+    }) => {
+      await useChatPanel(page, panel);
+      // The assistant only submits once a renderer has announced its catalog, which the
+      // stub renderer above never does, so use a real sample renderer here.
+      await page.goto('/?renderer=http://localhost:3456');
+      await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
 
-    // Navigate to Chat
-    await page.getByRole('tab', {name: 'Gemini Assistant'}).click();
+      // Navigate to Chat
+      await page.getByRole('tab', {name: 'Gemini Assistant'}).click();
 
-    await page.route('https://generativelanguage.googleapis.com/**', async route => {
-      if (route.request().url().includes('/models?')) {
+      await page.route('https://generativelanguage.googleapis.com/**', async route => {
+        if (route.request().url().includes('/models?')) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({models: [{name: 'models/gemini-1.5-pro', version: '1.5'}]}),
+          });
+          return;
+        }
+        const chunk = JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: 'Formatting layout:\n```json\n{"version": "v0.9", "invalid": }\n```\nDone.',
+                  },
+                ],
+              },
+            },
+          ],
+        });
         await route.fulfill({
           status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({models: [{name: 'models/gemini-1.5-pro', version: '1.5'}]}),
-        });
-        return;
-      }
-      const chunk = JSON.stringify({
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  text: 'Formatting layout:\n```json\n{"version": "v0.9", "invalid": }\n```\nDone.',
-                },
-              ],
-            },
+          headers: {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
           },
-        ],
+          body: `data: ${chunk}\n\n`,
+        });
       });
-      await route.fulfill({
-        status: 200,
-        headers: {
-          'Content-Type': 'text/event-stream; charset=utf-8',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
-        },
-        body: `data: ${chunk}\n\n`,
-      });
+
+      const chatInput = page.locator('a2ui-composer-chat-panel textarea').first();
+      await chatInput.fill('Generate malformed payload');
+      await chatInput.press('Enter');
+
+      // Expected inline error card
+      const errorCard = page.locator('.parse-error-card');
+      await expect(errorCard).toBeVisible({timeout: 5000});
+      await expect(errorCard).toContainText('JSON Syntax Error');
+
+      // The "View in Errors Tab" action inside the error card navigates automatically
+      await errorCard.getByRole('button', {name: /Errors Tab/i}).click();
+      await expect(page.getByRole('tab', {name: 'Errors', selected: true})).toBeVisible();
     });
-
-    const chatInput = page.locator('a2ui-composer-chat-panel textarea').first();
-    await chatInput.fill('Generate malformed payload');
-    await chatInput.press('Enter');
-
-    // Expected inline error card
-    const errorCard = page.locator('.parse-error-card');
-    await expect(errorCard).toBeVisible({timeout: 5000});
-    await expect(errorCard).toContainText('JSON Syntax Error');
-
-    // The "View in Errors Tab" action inside the error card navigates automatically
-    await errorCard.getByRole('button', {name: /Errors Tab/i}).click();
-    await expect(page.getByRole('tab', {name: 'Errors', selected: true})).toBeVisible();
-  });
+  }
 
   test('captures cross-frame preview errors, renders non-crashing 350ms debounced UI error overlay, and assigns [Preview] log provenance', async ({
     page,
