@@ -51,6 +51,12 @@ export const TAB_VISIBILITY_TIMEOUT_MS = 10_000;
  */
 export const MONACO_MODEL_TIMEOUT_MS = 10_000;
 
+/**
+ * Duration in milliseconds to wait for the shell's draft synchronization debouncer
+ * (300ms) to process editor content changes before switching tabs.
+ */
+export const MONACO_DRAFT_DEBOUNCE_MS = 350;
+
 /** Waits until the Raw A2UI editor is visible and has a Monaco model. */
 export async function waitForMonacoEditor(page: Page): Promise<void> {
   const editorTab = page.locator('.dv-tab:has-text("A2UI JSON Editor")');
@@ -74,8 +80,27 @@ export async function waitForMonacoEditor(page: Page): Promise<void> {
   );
 }
 
+/** Waits until the Rendered A2UI Preview tab is visible and selected. */
+export async function waitForPreviewTab(page: Page): Promise<void> {
+  const previewTab = page.locator('.dv-tab:has-text("Rendered A2UI Preview")');
+  if (await previewTab.isVisible()) {
+    const isActive = await previewTab.evaluate(el => el.classList.contains('dv-active-tab'));
+    if (!isActive) {
+      await previewTab.click();
+    }
+  }
+  await expect(page.locator('.rendered-frame-container')).toBeVisible({
+    timeout: TAB_VISIBILITY_TIMEOUT_MS,
+  });
+}
+
 /** Replaces the contents of the Raw A2UI editor. */
 export async function setMonacoContent(page: Page, contents: string): Promise<void> {
+  const previewTab = page.locator('.dv-tab:has-text("Rendered A2UI Preview")');
+  const wasPreviewActive =
+    (await previewTab.isVisible()) &&
+    (await previewTab.evaluate(el => el.classList.contains('dv-active-tab')));
+
   await waitForMonacoEditor(page);
 
   await page.evaluate(value => {
@@ -84,6 +109,11 @@ export async function setMonacoContent(page: Page, contents: string): Promise<vo
       model.setValue(value);
     }
   }, contents);
+
+  if (wasPreviewActive) {
+    await page.waitForTimeout(MONACO_DRAFT_DEBOUNCE_MS);
+    await waitForPreviewTab(page);
+  }
 }
 
 /** Returns the contents of the Raw A2UI editor once it is no longer empty. */

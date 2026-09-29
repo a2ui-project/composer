@@ -15,7 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
-import {RENDERER_URLS, setMonacoContent} from './helpers';
+import {RENDERER_URLS, setMonacoContent, waitForPreviewTab} from './helpers';
 
 function generateSurfacePayload(rowCount: number): string {
   const children: string[] = [];
@@ -62,8 +62,17 @@ test.beforeEach(async ({page}) => {
   });
 
   await page.addInitScript(() => {
-    if (window === window.top) {
-      localStorage.setItem('a2ui_composer_force_1p', 'true');
+    try {
+      if (window === window.top) {
+        localStorage.setItem('a2ui_composer_force_1p', 'true');
+      }
+    } catch (e: unknown) {
+      // In sandboxed frames (e.g. preview iframe or about:blank with opaque origin),
+      // accessing localStorage throws DOMException: SecurityError. Ignore only
+      // this expected sandbox restriction and rethrow any unexpected errors.
+      if (!(e instanceof DOMException && e.name === 'SecurityError')) {
+        throw e;
+      }
     }
   });
 });
@@ -89,6 +98,12 @@ const MIN_GROWTH_FACTOR = 3;
 /** Budget for the frame to follow a payload change, in milliseconds. */
 const RESIZE_POLL_TIMEOUT_MS = 10_000;
 
+/** Timeout for tests measuring multi-payload surface growth and shrink cycles. */
+const AUTO_RESIZE_TEST_TIMEOUT_MS = 60_000;
+
+/** Timeout for polling container height to match or exceed guest scrollHeight. */
+const CONTAINER_SCROLL_HEIGHT_TIMEOUT_MS = 5_000;
+
 /** Allowance for sub-pixel rounding between guest and host measurements. */
 const FRAME_HEIGHT_TOLERANCE_PX = 2;
 
@@ -106,15 +121,30 @@ test.describe('Surface Auto-Resize & Height Latch Prevention', () => {
     }) => {
       // Two payload round trips against a possibly cold dev server. Under the
       // default 30s a slow start is indistinguishable from a real height latch.
-      test.setTimeout(60_000);
+      test.setTimeout(AUTO_RESIZE_TEST_TIMEOUT_MS);
 
-      await page.goto(`/?renderer=${renderer.url}`);
+      await page.goto(`/?renderer=${renderer.url}`, {waitUntil: 'commit'});
+      await page.waitForLoadState('load');
       await expect(page.locator('.workspace-container')).toBeVisible();
+
+      await waitForPreviewTab(page);
 
       const container = page.locator('.rendered-frame-container');
       await expect(container).toBeVisible();
-      const frameHeight = async () => (await container.boundingBox())?.height ?? 0;
+      const frameHeight = async () => {
+        await waitForPreviewTab(page);
+        return (await container.boundingBox())?.height ?? 0;
+      };
 
+      // Render short surface first to establish a deterministic baseline height,
+      // avoiding a startup race with the default demo form.
+      await setMonacoContent(page, generateSurfacePayload(SHORT_ROW_COUNT));
+      await waitForPreviewTab(page);
+
+      const iframe = page.frameLocator('iframe.preview-iframe');
+      await expect(iframe.locator('body')).toBeVisible();
+
+      await expect.poll(frameHeight, {timeout: RESIZE_POLL_TIMEOUT_MS}).toBeGreaterThan(0);
       const baselineHeight = await frameHeight();
 
       // 1. Render a tall surface and let the frame follow it up. The target is
@@ -122,6 +152,7 @@ test.describe('Surface Auto-Resize & Height Latch Prevention', () => {
       // how tall 40 rows render depends on where the text wraps, which depends
       // on the panel width of the day.
       await setMonacoContent(page, generateSurfacePayload(TALL_ROW_COUNT));
+      await waitForPreviewTab(page);
       await expect
         .poll(frameHeight, {timeout: RESIZE_POLL_TIMEOUT_MS})
         .toBeGreaterThan(baselineHeight * MIN_GROWTH_FACTOR);
@@ -129,6 +160,7 @@ test.describe('Surface Auto-Resize & Height Latch Prevention', () => {
 
       // 2. Replace it with a short surface. The frame has to come back down.
       await setMonacoContent(page, generateSurfacePayload(SHORT_ROW_COUNT));
+      await waitForPreviewTab(page);
       await expect
         .poll(frameHeight, {timeout: RESIZE_POLL_TIMEOUT_MS})
         .toBeLessThan(grownHeight / 2);
@@ -136,49 +168,70 @@ test.describe('Surface Auto-Resize & Height Latch Prevention', () => {
       // It must land on the content, not merely somewhere lower. Asserting
       // `>= 280` instead would be a tautology: rendered-frame.scss applies that
       // min-height unconditionally.
-      const guestContentHeight = await page
-        .frameLocator('iframe.preview-iframe')
-        .locator('body')
-        .evaluate(() => document.body.scrollHeight);
-      const expectedHeight = guestContentHeight;
-      const finalHeight = await frameHeight();
-      expect(
-        Math.abs(finalHeight - expectedHeight),
-        `frame: ${finalHeight}px, guest content: ${guestContentHeight}px, grown to: ${grownHeight}px`,
-      ).toBeLessThanOrEqual(FRAME_HEIGHT_TOLERANCE_PX);
+      await expect
+        .poll(
+          async () => {
+            await waitForPreviewTab(page);
+            const guestContentHeight = await page
+              .frameLocator('iframe.preview-iframe')
+              .locator('body')
+              .evaluate(() => document.body.scrollHeight);
+            const finalHeight = await frameHeight();
+            return Math.abs(finalHeight - guestContentHeight);
+          },
+          {timeout: RESIZE_POLL_TIMEOUT_MS},
+        )
+        .toBeLessThanOrEqual(FRAME_HEIGHT_TOLERANCE_PX);
     });
   }
 
   test('renders tall surface content without clipping', async ({page}) => {
-    test.setTimeout(60_000);
+    test.setTimeout(AUTO_RESIZE_TEST_TIMEOUT_MS);
 
-    await page.goto(`/?renderer=${RENDERER_URLS.angular}`);
+    await page.goto(`/?renderer=${RENDERER_URLS.angular}`, {waitUntil: 'commit'});
+    await page.waitForLoadState('load');
     await expect(page.locator('.workspace-container')).toBeVisible();
+
+    await waitForPreviewTab(page);
 
     const container = page.locator('.rendered-frame-container');
     await expect(container).toBeVisible();
-    const frameHeight = async () => (await container.boundingBox())?.height ?? 0;
+    const frameHeight = async () => {
+      await waitForPreviewTab(page);
+      return (await container.boundingBox())?.height ?? 0;
+    };
 
+    // Render short surface first to establish a deterministic baseline height,
+    // avoiding a startup race with the default demo form.
+    await setMonacoContent(page, generateSurfacePayload(SHORT_ROW_COUNT));
+    await waitForPreviewTab(page);
+
+    const iframe = page.frameLocator('iframe.preview-iframe');
+    await expect(iframe.locator('body')).toBeVisible();
+
+    await expect.poll(frameHeight, {timeout: RESIZE_POLL_TIMEOUT_MS}).toBeGreaterThan(0);
     const baselineHeight = await frameHeight();
+
     await setMonacoContent(page, generateSurfacePayload(TALL_ROW_COUNT));
+    await waitForPreviewTab(page);
     await expect
       .poll(frameHeight, {timeout: RESIZE_POLL_TIMEOUT_MS})
       .toBeGreaterThan(baselineHeight * MIN_GROWTH_FACTOR);
 
     // Verify container height is >= guest body scrollHeight
-    const iframe = page.frameLocator('iframe.preview-iframe');
     const guestBody = iframe.locator('body');
     await expect(guestBody).toBeVisible();
 
     await expect
       .poll(
         async () => {
+          await waitForPreviewTab(page);
           const guestScrollHeight = await guestBody.evaluate(el => el.scrollHeight);
           const containerBox = await container.boundingBox();
           const containerHeight = containerBox?.height ?? 0;
           return containerHeight >= guestScrollHeight;
         },
-        {timeout: 5000},
+        {timeout: CONTAINER_SCROLL_HEIGHT_TIMEOUT_MS},
       )
       .toBe(true);
   });

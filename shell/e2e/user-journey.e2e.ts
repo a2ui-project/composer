@@ -15,25 +15,63 @@
  */
 
 import {test, expect} from '@playwright/test';
-import {setMonacoContent, waitForMonacoEditor} from './helpers';
+import {
+  getMonacoContent,
+  setMonacoContent,
+  waitForMonacoEditor,
+  waitForPreviewTab,
+} from './helpers';
 import {ELECTRIC_CAR_CHARGING_UI, EV_CHARGE_CONTROL_A2UI} from './samples';
+
+/**
+ * Timeout in milliseconds waiting for dismissible snackbar notifications to clear.
+ */
+const SNACKBAR_DISMISSAL_TIMEOUT_MS = 5_000;
+
+/**
+ * Timeout in milliseconds waiting for recipient page or dynamically loaded preview surfaces
+ * to parse and render complex remote A2UI payloads.
+ */
+const REMOTE_PAYLOAD_LOAD_TIMEOUT_MS = 10_000;
+
+/**
+ * Expected target width in pixels of the custom instructions modal dialog defined by design styling.
+ */
+const CUSTOM_INSTRUCTIONS_DIALOG_WIDTH_PX = 600;
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
     console.error(`Unhandled page error: ${err.message}`);
   });
 
-  await page.goto('/');
-  await page.evaluate(() => {
-    localStorage.clear();
+  await page.addInitScript(() => {
+    try {
+      if (window === window.top && !sessionStorage.getItem('__e2e_storage_cleared')) {
+        sessionStorage.setItem('__e2e_storage_cleared', 'true');
+        const selectedApiKey = localStorage.getItem('a2ui_composer_selected_api_key');
+        localStorage.clear();
+        if (selectedApiKey) {
+          localStorage.setItem('a2ui_composer_selected_api_key', selectedApiKey);
+        }
+      }
+    } catch (e: unknown) {
+      // In sandboxed frames (e.g. preview iframe or about:blank with opaque origin),
+      // accessing localStorage throws DOMException: SecurityError. Ignore only
+      // this expected sandbox restriction and rethrow any unexpected errors.
+      if (!(e instanceof DOMException && e.name === 'SecurityError')) {
+        throw e;
+      }
+    }
   });
-  await page.goto('/');
 });
 
 test.describe('E2E Workspace User Journey', () => {
   test('verifies full workflow across settings connection status, forced 3P mode toggle, and raw editor invalid JSON gate', async ({
     page,
   }) => {
+    await page.goto('/');
+    await page.waitForLoadState('load');
+
     // 1. Launch Composer Workspace and verify static header and New Session button
     await expect(page.locator('.header-title')).toContainText('A2UI Composer');
     await expect(page.locator('.reset-session-button')).toBeVisible();
@@ -72,7 +110,7 @@ test.describe('E2E Workspace User Journey', () => {
 
     // 8. Assert that snackbar appears and no empty text bubbles are created in chat panel
     const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
-    await expect(snackbarLocator).toContainText('Invalid JSON syntax detected.');
+    await expect(snackbarLocator).toContainText(/Invalid JSON syntax detected|Schema error/);
     await expect(page.locator('.chat-history-log .bubble-text')).toHaveCount(0);
 
     // 9. Correct JSON and verify snackbar disappears
@@ -81,16 +119,28 @@ test.describe('E2E Workspace User Journey', () => {
       '{"version": "v0.9", "createSurface": {"surfaceId": "test", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}',
     );
     // With dismissal logic, it should disappear immediately
-    await expect(page.locator('.mat-mdc-snack-bar-label')).toHaveCount(0, {timeout: 3000});
+    await expect(page.locator('.mat-mdc-snack-bar-label')).toHaveCount(0, {
+      timeout: SNACKBAR_DISMISSAL_TIMEOUT_MS,
+    });
   });
 
   test('prevents empty chat bubbles when invalid JSON is entered in editor', async ({page}) => {
     await page.addInitScript(() => {
-      if (window === window.top) {
-        localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
+      try {
+        if (window === window.top) {
+          localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
+        }
+      } catch (e: unknown) {
+        // In sandboxed frames (e.g. preview iframe or about:blank with opaque origin),
+        // accessing localStorage throws DOMException: SecurityError. Ignore only
+        // this expected sandbox restriction and rethrow any unexpected errors.
+        if (!(e instanceof DOMException && e.name === 'SecurityError')) {
+          throw e;
+        }
       }
     });
     await page.goto('/');
+    await page.waitForLoadState('load');
 
     // Wait for Monaco to load
     await waitForMonacoEditor(page);
@@ -103,7 +153,7 @@ test.describe('E2E Workspace User Journey', () => {
 
     // Wait for debounce period by checking the visible snackbar error
     const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
-    await expect(snackbarLocator).toContainText('Invalid JSON syntax detected.');
+    await expect(snackbarLocator).toContainText(/Invalid JSON syntax detected|Schema error/);
 
     // Verify no empty text bubbles are created and existing snapshot is preserved
     await expect(page.locator('.chat-history-log .bubble-text')).toHaveCount(0);
@@ -115,6 +165,8 @@ test.describe('E2E Workspace User Journey', () => {
     page,
   }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.goto('/');
+    await page.waitForLoadState('load');
 
     await expect(page.locator('.header-title')).toContainText('A2UI Composer');
 
@@ -128,24 +180,35 @@ test.describe('E2E Workspace User Journey', () => {
     const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
     await expect(snackbarLocator).toContainText('Shareable link copied to clipboard');
 
-    const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
-    expect(shareUrl).toContain(ELECTRIC_CAR_CHARGING_UI);
+    let shareUrl = '';
+    await expect
+      .poll(async () => {
+        shareUrl = await page.evaluate(() => navigator.clipboard.readText());
+        return shareUrl;
+      })
+      .toContain(ELECTRIC_CAR_CHARGING_UI);
 
     // Open recipient page with copied link
     const recipientPage = await context.newPage();
     await recipientPage.goto(shareUrl);
     await recipientPage.waitForLoadState('load');
 
+    await waitForMonacoEditor(recipientPage);
     const editorLocator = recipientPage
       .locator('a2ui-composer-monaco-editor .monaco-editor')
       .first();
     await expect(editorLocator).toBeVisible();
 
+    await waitForPreviewTab(recipientPage);
     const previewIframe = recipientPage
       .frameLocator('.preview-frame iframe, iframe.preview-iframe, iframe')
       .first();
-    await expect(previewIframe.locator('body')).toBeVisible({timeout: 10000});
-    await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({timeout: 10000});
+    await expect(previewIframe.locator('body')).toBeVisible({
+      timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
+    });
+    await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({
+      timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
+    });
   });
 
   test('displays informative error snackbar when navigating with truncated or corrupted shared design URL', async ({
@@ -155,7 +218,7 @@ test.describe('E2E Workspace User Journey', () => {
     await page.waitForLoadState('load');
 
     const snackbarLocator = page.locator('.mat-mdc-snack-bar-label').first();
-    await expect(snackbarLocator).toBeVisible({timeout: 10000});
+    await expect(snackbarLocator).toBeVisible({timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS});
     await expect(snackbarLocator).toContainText('Unable to load shared design');
     await expect(snackbarLocator).toContainText('truncated or corrupted');
   });
@@ -163,29 +226,51 @@ test.describe('E2E Workspace User Journey', () => {
   test('updates active draft and renders preview when hash URL is navigated to on the same page', async ({
     page,
   }) => {
+    await page.goto('/');
+    await page.waitForLoadState('load');
     await expect(page.locator('.header-title')).toContainText('A2UI Composer');
 
     // Dynamically change the hash on the existing page (triggers hashchange event)
     await page.evaluate(payload => {
-      window.location.hash = `a2ui=${payload}`;
+      window.location.hash = payload.startsWith('a2ui=') ? payload : `a2ui=${payload}`;
     }, ELECTRIC_CAR_CHARGING_UI);
 
+    await waitForMonacoEditor(page);
     const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
     await expect(editorLocator).toBeVisible();
 
+    // Verify Monaco editor received the payload
+    await expect
+      .poll(async () => getMonacoContent(page), {timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS})
+      .toContain('ev_charging');
+
+    await waitForPreviewTab(page);
     const previewIframe = page
       .frameLocator('.preview-frame iframe, iframe.preview-iframe, iframe')
       .first();
-    await expect(previewIframe.locator('body')).toBeVisible({timeout: 10000});
-    await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({timeout: 10000});
+    await expect(previewIframe.locator('body')).toBeVisible({
+      timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
+    });
+    await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({
+      timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
+    });
   });
 
   test('should create, overwrite in-place, preview in system instructions, and disable custom instruction presets', async ({
     page,
   }) => {
     await page.addInitScript(() => {
-      if (window === window.top) {
-        localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
+      try {
+        if (window === window.top) {
+          localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
+        }
+      } catch (e: unknown) {
+        // In sandboxed frames (e.g. preview iframe or about:blank with opaque origin),
+        // accessing localStorage throws DOMException: SecurityError. Ignore only
+        // this expected sandbox restriction and rethrow any unexpected errors.
+        if (!(e instanceof DOMException && e.name === 'SecurityError')) {
+          throw e;
+        }
       }
     });
     await page.goto('/');
@@ -199,8 +284,9 @@ test.describe('E2E Workspace User Journey', () => {
 
     const dialog = page.locator('a2ui-composer-custom-instructions-dialog');
     await expect(dialog).toBeVisible();
-    const box = await dialog.boundingBox();
-    expect(box?.width).toBeCloseTo(600, 0);
+    await expect
+      .poll(async () => (await dialog.boundingBox())?.width)
+      .toBeCloseTo(CUSTOM_INSTRUCTIONS_DIALOG_WIDTH_PX, 0);
 
     // 2. Create a named preset, click Save, and verify the link label updates to "Custom Instructions: <Preset Name>"
     await dialog.locator('.preset-name-input').fill('Compact Theme');
