@@ -60,7 +60,7 @@ export const MONACO_DRAFT_DEBOUNCE_MS = 350;
 /** Waits until the Raw A2UI editor is visible and has a Monaco model. */
 export async function waitForMonacoEditor(page: Page): Promise<void> {
   const editorTab = page.locator('.dv-tab:has-text("A2UI JSON Editor")');
-  if (await editorTab.isVisible()) {
+  if ((await editorTab.count()) > 0) {
     const isActive = await editorTab.evaluate(el => el.classList.contains('dv-active-tab'));
     if (!isActive) {
       await editorTab.click();
@@ -83,7 +83,7 @@ export async function waitForMonacoEditor(page: Page): Promise<void> {
 /** Waits until the Rendered A2UI Preview tab is visible and selected. */
 export async function waitForPreviewTab(page: Page): Promise<void> {
   const previewTab = page.locator('.dv-tab:has-text("Rendered A2UI Preview")');
-  if (await previewTab.isVisible()) {
+  if ((await previewTab.count()) > 0) {
     const isActive = await previewTab.evaluate(el => el.classList.contains('dv-active-tab'));
     if (!isActive) {
       await previewTab.click();
@@ -98,7 +98,7 @@ export async function waitForPreviewTab(page: Page): Promise<void> {
 export async function setMonacoContent(page: Page, contents: string): Promise<void> {
   const previewTab = page.locator('.dv-tab:has-text("Rendered A2UI Preview")');
   const wasPreviewActive =
-    (await previewTab.isVisible()) &&
+    (await previewTab.count()) > 0 &&
     (await previewTab.evaluate(el => el.classList.contains('dv-active-tab')));
 
   await waitForMonacoEditor(page);

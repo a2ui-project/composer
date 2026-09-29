@@ -16,7 +16,7 @@
 
 import {test, expect, Locator, FrameLocator, Page, JSHandle} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {RENDERER_URLS, getMonacoContent, setMonacoContent} from './helpers';
+import {RENDERER_URLS, getMonacoContent, setMonacoContent, waitForPreviewTab} from './helpers';
 
 /** A single SURFACE_RESIZE message observed on the postMessage wire. */
 interface SurfaceResizeLogEntry {
@@ -464,10 +464,7 @@ for (const config of CONFIGS) {
       );
       await setMonacoContent(page, updatedRawJson);
 
-      const previewTab = page.locator('.dv-tab:has-text("Rendered A2UI Preview")');
-      if (await previewTab.isVisible()) {
-        await previewTab.click();
-      }
+      await waitForPreviewTab(page);
 
       const iframe = page.frameLocator('iframe.preview-iframe');
       const searchButton = iframe.getByRole('button', {name: 'Search Rental Cars'});
