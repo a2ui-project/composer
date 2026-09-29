@@ -621,6 +621,123 @@ describe('StartupResolution', () => {
     expect(stateService.selectedRendererId()).toBeNull();
   });
 
+  describe('interactive renderer approval', () => {
+    beforeEach(() => {
+      stateService.setRenderers({
+        standard: {rendererUrl: '/standard/'},
+        lit: {rendererUrl: '/lit/'},
+        other: {rendererUrl: '/other/'},
+      });
+      stateService.setSelectedRendererId('standard');
+      stateService.setResolvedUrl('/standard/');
+    });
+
+    it('keeps the current selection intact until approval succeeds', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed').mockReturnValue(
+        new Promise(resolve => {
+          approve = resolve;
+        }),
+      );
+      const selection = service.setSelectedRendererId('lit');
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+      approve(true);
+      expect(await selection).toBe(true);
+      expect(stateService.selectedRendererId()).toBe('lit');
+      expect(service.resolvedUrl()).toBe('/lit/');
+    });
+
+    it('does not reset the current renderer when approval is denied', async () => {
+      vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(false);
+      expect(await service.setSelectedRendererId('lit')).toBe(false);
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
+    it('does not apply a renderer after the caller cancels pending approval', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed').mockReturnValue(
+        new Promise(resolve => {
+          approve = resolve;
+        }),
+      );
+      const controller = new AbortController();
+      const cancellation = new Error('Stopped');
+      cancellation.name = 'CancelError';
+      const selection = service.setSelectedRendererId('lit', controller.signal);
+      const rejection = expect(selection).rejects.toBe(cancellation);
+      controller.abort(cancellation);
+      approve(true);
+      await rejection;
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
+    it('does not overwrite a newer selection when an older approval completes', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed')
+        .mockReturnValueOnce(
+          new Promise(resolve => {
+            approve = resolve;
+          }),
+        )
+        .mockResolvedValue(true);
+      const selection = service.setSelectedRendererId('lit');
+      const rejection = expect(selection).rejects.toThrow('waiting for approval');
+      await service.setSelectedRendererId('other');
+      approve(true);
+      await rejection;
+      expect(stateService.selectedRendererId()).toBe('other');
+      expect(service.resolvedUrl()).toBe('/other/');
+    });
+
+    it('rejects pending approval when the target URL is edited', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed').mockReturnValue(
+        new Promise(resolve => {
+          approve = resolve;
+        }),
+      );
+      const selection = service.setSelectedRendererId('lit');
+      const rejection = expect(selection).rejects.toThrow('waiting for approval');
+      stateService.setRenderers({lit: {rendererUrl: 'https://other.example/renderer'}});
+      approve(true);
+      await rejection;
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
+    it.each(['javascript:alert(1)', 'data:text/html,preview', 'ftp://localhost/renderer'])(
+      'rejects non-HTTP renderer URL %s',
+      async rendererUrl => {
+        stateService.setRenderers({lit: {rendererUrl}});
+        expect(await service.setSelectedRendererId('lit')).toBe(false);
+        expect(stateService.selectedRendererId()).toBe('standard');
+        expect(service.resolvedUrl()).toBe('/standard/');
+      },
+    );
+
+    it('closes a pending origin dialog when the selection is canceled', async () => {
+      localStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'external', name: 'External', rendererUrl: 'https://external.example/preview'},
+        ]),
+      );
+      const controller = new AbortController();
+      const selection = service.setSelectedRendererId('external', controller.signal);
+      const rejection = expect(selection).rejects.toMatchObject({name: 'AbortError'});
+      expect(service.dialog.openDialogs).toHaveLength(1);
+      controller.abort();
+      await rejection;
+      expect(service.dialog.openDialogs).toHaveLength(0);
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+      expect(localStorage.getItem(LocalStorageKey.ALLOWED_ORIGINS)).toBeNull();
+    });
+  });
+
   describe('renderer resolution', () => {
     it('loads default profile when no profile query parameter is provided', async () => {
       mockFetchConfig({
@@ -1442,7 +1559,7 @@ describe('StartupResolution', () => {
       const isAllowed = await service.isOriginAllowed('http://custom-renderer.com:3000/test');
 
       expect(isAllowed).toBe(true);
-      expect(confirmSpy).toHaveBeenCalledWith('http://custom-renderer.com:3000');
+      expect(confirmSpy).toHaveBeenCalledWith('http://custom-renderer.com:3000', undefined);
     });
 
     it('2a3. does not auto-allow custom-renderer.com without confirmation', async () => {
@@ -1450,7 +1567,7 @@ describe('StartupResolution', () => {
       const isAllowed = await service.isOriginAllowed('http://custom-renderer.com:3000/test');
 
       expect(isAllowed).toBe(false);
-      expect(confirmSpy).toHaveBeenCalledWith('http://custom-renderer.com:3000');
+      expect(confirmSpy).toHaveBeenCalledWith('http://custom-renderer.com:3000', undefined);
     });
 
     it('2b. auto-allows origin present in LocalStorage a2ui_composer_allowed_origins', async () => {
@@ -1470,7 +1587,7 @@ describe('StartupResolution', () => {
 
       const isAllowed = await service.isOriginAllowed('https://untrusted.example.com/app');
       expect(isAllowed).toBe(true);
-      expect(confirmSpy).toHaveBeenCalledWith('https://untrusted.example.com');
+      expect(confirmSpy).toHaveBeenCalledWith('https://untrusted.example.com', undefined);
 
       const storedOrigins = JSON.parse(
         localStorage.getItem(LocalStorageKey.ALLOWED_ORIGINS) || '[]',

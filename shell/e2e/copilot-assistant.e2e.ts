@@ -50,6 +50,10 @@ test.beforeEach(async ({page}) => {
             rendererUrl: 'http://localhost:3456',
             displayName: 'Angular Basic',
           },
+          lit: {
+            rendererUrl: 'http://localhost:3457',
+            displayName: 'Lit Basic',
+          },
         },
         apiKeys: {
           default: {
@@ -166,6 +170,68 @@ async function expectGeminiRequestForCurrentDraft(page: Page, expectedDraftText:
 }
 
 test.describe('Copilot assistant replacement browser journey', () => {
+  test('switches between configured renderers from the pill and keeps the typed prompt', async ({
+    page,
+  }) => {
+    await openDraftInWorkspace(page);
+    const prompt = page.getByRole('textbox', {name: 'Chat prompt'});
+    await prompt.fill('Create a simple card in this renderer');
+    const selector = page.getByRole('button', {name: /Choose renderer, current:/});
+
+    await selector.click();
+    await expect(page.getByRole('menuitemradio', {name: 'Angular Basic'})).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await page.getByRole('menuitemradio', {name: 'Lit Basic'}).click();
+    await expect(selector).toHaveAccessibleName('Choose renderer, current: Lit Basic');
+    await expect(page.locator('.workspace-container iframe')).toHaveAttribute(
+      'src',
+      /localhost:3457/,
+    );
+    // Only Lit Basic's catalog has this title; Angular Basic's is "my_basic_catalog A2UI Catalog".
+    await expect(page.locator('.header-title')).toHaveText('A2UI Composer - Basic Catalog');
+    await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
+    await expect(prompt).toHaveValue('Create a simple card in this renderer');
+
+    await selector.click();
+    await expect(page.getByRole('menuitemradio', {name: 'Lit Basic'})).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await page.getByRole('menuitemradio', {name: 'Angular Basic'}).click();
+    await expect(selector).toHaveAccessibleName('Choose renderer, current: Angular Basic');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
+    await expect(prompt).toHaveValue('Create a simple card in this renderer');
+  });
+
+  test('explains under the renderer menu why a renderer could not be selected', async ({page}) => {
+    // Seed in every frame: the shared setup clears storage in each same-origin frame as it loads.
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'a2ui_composer_custom_renderers',
+        JSON.stringify([
+          {id: 'legacy', name: 'Legacy preview', rendererUrl: 'ftp://files.example/renderer'},
+        ]),
+      );
+    });
+    await openDraftInWorkspace(page);
+    const selector = page.getByRole('button', {name: /Choose renderer, current:/});
+
+    await selector.click();
+    await page.getByRole('menuitemradio', {name: 'Legacy preview'}).click();
+
+    await expect(page.locator('a2ui-composer-chat-panel').getByRole('alert')).toHaveText(
+      "Couldn't switch to Legacy preview because its URL isn't an http or https address. Fix its URL in Settings, or choose another renderer.",
+    );
+    await expect(selector).toHaveAccessibleName('Choose renderer, current: Angular Basic');
+    await expect(page.locator('.workspace-container iframe')).toHaveAttribute(
+      'src',
+      /localhost:3456/,
+    );
+  });
+
   test('keeps prompt helpers in the Add menu and preserves drafted text', async ({page}) => {
     await openDraftInWorkspace(page);
     const prompt = page.getByRole('textbox', {name: 'Chat prompt'});
