@@ -23,17 +23,16 @@ import {
   DATA_BOUND_ACTION_JSON,
   expectBlockKitJsonToContain,
   getBlockKitTextMatches,
-  getSevereMonacoMarkers,
+  getJsonValidationProblems,
   MARKET_SNAPSHOT_JSON,
-  MONACO_MARKER_DEBOUNCE_MS,
   openComposerWithSlackRenderer,
   replaceMonacoJson,
   waitForPreviewToSettle,
   SLACK_RENDERER_URL,
   slackPreviewFrame,
   slackPreviewSurface,
-  waitForMonaco,
 } from './slack-renderer.helpers';
+import {waitForMonacoEditor} from './helpers';
 
 export type KnownBlock = Record<string, unknown>;
 
@@ -71,7 +70,7 @@ test.describe('Slack renderer update flows in Composer', () => {
     const unexpectedErrors = collectUnexpectedErrors(page);
 
     await openComposerWithSlackRenderer(page);
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
 
     const updatedMarketJson = MARKET_SNAPSHOT_JSON.replace(
       '"Illustrative historical energy market snapshot"',
@@ -92,8 +91,7 @@ test.describe('Slack renderer update flows in Composer', () => {
       await getBlockKitTextMatches(page, ['Closing energy market snapshot', '$83.57/bbl']),
     ).toEqual(['Closing energy market snapshot', '$83.57/bbl']);
 
-    await page.waitForTimeout(MONACO_MARKER_DEBOUNCE_MS + 600);
-    expect(await getSevereMonacoMarkers(page)).toEqual([]);
+    expect(await getJsonValidationProblems(page)).toEqual([]);
     expect(unexpectedErrors).toEqual([]);
   });
 
@@ -103,7 +101,7 @@ test.describe('Slack renderer update flows in Composer', () => {
     const unexpectedErrors = collectUnexpectedErrors(page);
 
     await openComposerWithSlackRenderer(page);
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
 
     const updatedDataJson = DATA_BOUND_ACTION_JSON.replace(
       '"Ready for review"',
@@ -121,8 +119,7 @@ test.describe('Slack renderer update flows in Composer', () => {
       'Ready for release review',
     ]);
 
-    await page.waitForTimeout(MONACO_MARKER_DEBOUNCE_MS + 600);
-    expect(await getSevereMonacoMarkers(page)).toEqual([]);
+    expect(await getJsonValidationProblems(page)).toEqual([]);
     expect(unexpectedErrors).toEqual([]);
   });
 
@@ -132,7 +129,7 @@ test.describe('Slack renderer update flows in Composer', () => {
     const unexpectedErrors = collectUnexpectedErrors(page);
 
     await openComposerWithSlackRenderer(page);
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
     await expect(slackPreviewFrame(page).getByText('Your Slack preview starts here')).toBeVisible();
     await waitForPreviewToSettle(page);
 
