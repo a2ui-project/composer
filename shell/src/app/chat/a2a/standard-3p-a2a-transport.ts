@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import {Injectable} from '@angular/core';
+import {Injectable, inject} from '@angular/core';
 import {generateUuid as uuid} from '../../utils/uuid';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {
   A2aMessage,
   A2aTransport,
@@ -33,6 +34,7 @@ import {
   providedIn: 'root',
 })
 export class Standard3pA2aTransport implements A2aTransport {
+  private readonly logger = inject(ErrorLogger).withTag('[Standard3pA2aTransport]');
   private readonly endpointCache = new Map<string, string>();
 
   private validateAndNormalizeBaseUrl(baseUrl: string): URL {
@@ -366,6 +368,10 @@ export class Standard3pA2aTransport implements A2aTransport {
     const decoder = new TextDecoder();
     let buffer = '';
 
+    // Generator functions (`function*`) do not support arrow syntax and do not lexically bind
+    // `this`, so capture `this.logger` for use inside `processBlocks`.
+    const logger = this.logger;
+
     /**
      * Generator helper that parses raw SSE blocks (`\n\n` delimited), extracts `data:` lines,
      * yields deserialized events, and signals when a terminal state is encountered.
@@ -399,7 +405,7 @@ export class Standard3pA2aTransport implements A2aTransport {
         try {
           parsed = JSON.parse(combinedData) as Record<string, unknown>;
         } catch (err: unknown) {
-          console.warn(
+          logger.warn(
             'Failed to parse A2A SSE data chunk:',
             combinedData,
             err instanceof Error ? err.message : String(err),

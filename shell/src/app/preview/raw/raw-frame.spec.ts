@@ -306,6 +306,7 @@ describe('RawFrame JSON Source Editor View', () => {
   let errorLoggerMock: {
     error: ReturnType<typeof vi.fn>;
     warn: ReturnType<typeof vi.fn>;
+    withTag: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -324,7 +325,16 @@ describe('RawFrame JSON Source Editor View', () => {
       }),
       dismiss: vi.fn(),
     };
-    errorLoggerMock = {error: vi.fn(), warn: vi.fn()};
+    errorLoggerMock = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      withTag: vi.fn().mockImplementation((sourceTag: string) => ({
+        error: (msg: string, ...args: unknown[]) =>
+          errorLoggerMock.error({message: msg, sourceTag}, ...args),
+        warn: (msg: string, ...args: unknown[]) =>
+          errorLoggerMock.warn({message: msg, sourceTag}, ...args),
+      })),
+    };
     messageStreamSubject = new Subject<unknown>();
 
     undoStack.length = 0;

@@ -19,6 +19,7 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {A2aMessageInspector} from './message-inspector';
 import {A2aMessageInspectorHarness} from './test/message-inspector.harness';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 describe('A2aMessageInspector', () => {
   let fixture: ComponentFixture<A2aMessageInspector>;
@@ -141,7 +142,8 @@ describe('A2aMessageInspector', () => {
   });
 
   it('handles clipboard copy error gracefully', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const errorSpy = vi.spyOn(errorLogger, 'error');
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockRejectedValue(new Error('Permission denied')),
@@ -149,8 +151,7 @@ describe('A2aMessageInspector', () => {
     });
 
     await fixture.componentInstance['copyEventJsonToClipboard'](mockEvents[0]);
-    expect(consoleErrorSpy).toHaveBeenCalled();
-    consoleErrorSpy.mockRestore();
+    expect(errorSpy).toHaveBeenCalled();
   });
 
   it('formats timestamp into localized time string', () => {

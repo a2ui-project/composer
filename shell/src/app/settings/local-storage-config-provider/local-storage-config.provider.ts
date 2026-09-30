@@ -47,6 +47,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
   /** Central type-safe browser persistent storage service provider. */
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly errorLogger = inject(ErrorLogger);
+  private readonly logger = this.errorLogger.withTag('[LocalStorageConfigProvider]');
 
   /** Highly secure credentials asynchronous storage engine. */
   private readonly secureCredentialsStorage = inject(SecureCredentialsStorage);
@@ -224,7 +225,7 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
       return;
     }
     if (!isValidEndpointUrl(trimmed)) {
-      console.warn(`Refusing to persist invalid or non-HTTP A2A agent URL: ${trimmed}`);
+      this.logger.warn(`Refusing to persist invalid or non-HTTP A2A agent URL: ${trimmed}`);
       return;
     }
     const normalized = normalizeHttpUrl(trimmed);

@@ -119,12 +119,12 @@ export class StartupResolution {
     if (!rawParam) {
       return;
     }
-    const queryRendererUrl = QueryParser.parseRendererUrl(rawParam);
+    const queryRendererUrl = QueryParser.parseRendererUrl(rawParam, this.logger);
     const queryRendererId = QueryParser.parseRendererId(rawParam);
     if (queryRendererUrl || queryRendererId) {
       await this.resolveRenderer();
     }
-    const {payload, error} = await QueryParser.parseSharedA2ui(rawParam);
+    const {payload, error} = await QueryParser.parseSharedA2ui(rawParam, this.logger);
     if (payload) {
       this.logger.info('Using shared A2UI payload from URL.');
       this.startupConfigState.setSharedA2uiPayload(payload);
@@ -294,8 +294,8 @@ export class StartupResolution {
 
     // Tier 1 & 2: renderer param from hash or query (subject to origin allowlist check)
     const queryRendererUrl =
-      QueryParser.parseRendererUrl(this.getWindowHash()) ||
-      QueryParser.parseRendererUrl(this.getWindowSearch());
+      QueryParser.parseRendererUrl(this.getWindowHash(), this.logger) ||
+      QueryParser.parseRendererUrl(this.getWindowSearch(), this.logger);
     if (queryRendererUrl) {
       const isAllowed = await this.isOriginAllowed(queryRendererUrl);
       if (isAllowed) {

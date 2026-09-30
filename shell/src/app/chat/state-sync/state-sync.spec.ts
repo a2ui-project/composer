@@ -25,6 +25,7 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {signal} from '@angular/core';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 class MockChatState {
   private readonly _chatHistory: LlmMessage[] = [];
@@ -322,7 +323,8 @@ describe('StateSync Autosave Draft Integrations', () => {
     });
 
     it('discards syntax-corrupt layout without syncing to history and outputs warning diagnostics', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const errorLogger = TestBed.inject(ErrorLogger);
+      const warnSpy = vi.spyOn(errorLogger, 'warn');
       const badLayout = '[ {"version": "v0.9"}, corrupt... ]';
 
       service.updateDraft(badLayout);

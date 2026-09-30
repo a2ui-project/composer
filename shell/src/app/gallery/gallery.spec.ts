@@ -38,6 +38,7 @@ import {
 import {ChatState} from '../chat/chat-state/chat-state';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../usage-tracking/noop-usage-tracking.service';
+import {ErrorLogger} from '../debug/error-logger.service';
 
 interface TestFriendlyGallery {
   catalogId: () => string | null;
@@ -295,7 +296,8 @@ describe('Gallery Component', () => {
   });
 
   it('logs an error when CDK Clipboard copy returns false', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const errorSpy = vi.spyOn(errorLogger, 'error');
     mockClipboard.copy.mockReturnValue(false);
 
     catalogServiceMock.selectedComponentKey.set('Text');
@@ -307,15 +309,15 @@ describe('Gallery Component', () => {
       await harness.clickCopyButton();
     } catch (e) {}
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to copy A2UI component usage to clipboard.',
-    );
-
-    consoleErrorSpy.mockRestore();
+    expect(errorSpy).toHaveBeenCalledWith({
+      message: 'Failed to copy A2UI component usage to clipboard.',
+      sourceTag: '[Gallery]',
+    });
   });
 
   it('logs an error when building A2UI payload throws an error', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const errorSpy = vi.spyOn(errorLogger, 'error');
     vi.spyOn(
       fixture.componentInstance as unknown as Record<string, () => unknown>,
       'buildA2UIPayload',
@@ -332,12 +334,12 @@ describe('Gallery Component', () => {
       await harness.clickCopyButton();
     } catch (e) {}
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to parse or format A2UI usage payload: ',
-      expect.any(Error),
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Failed to parse or format A2UI usage payload:'),
+        sourceTag: '[Gallery]',
+      }),
     );
-
-    consoleErrorSpy.mockRestore();
   });
 
   it('returns gracefully when selectedComponentPreset is null or missing usage array', async () => {
@@ -854,7 +856,8 @@ describe('Gallery Component', () => {
     fixture.detectChanges();
     TestBed.tick();
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const errorSpy = vi.spyOn(errorLogger, 'error');
     vi.spyOn(fixture.componentInstance, 'buildA2UIPayload').mockImplementationOnce(() => {
       throw new Error('Payload construction error');
     });
@@ -867,9 +870,11 @@ describe('Gallery Component', () => {
       timestamp: Date.now(),
     });
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to parse component usage JSON:',
-      expect.any(Error),
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Failed to parse component usage JSON:'),
+        sourceTag: '[Gallery]',
+      }),
     );
     expect(hostCommunicationMock.sendRenderA2UI).not.toHaveBeenCalled();
 
@@ -881,8 +886,6 @@ describe('Gallery Component', () => {
     });
 
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledTimes(1);
-
-    consoleErrorSpy.mockRestore();
   });
 
   it('dispatches preview payload when default component auto-selection sets selectedComponentPreset', () => {
@@ -978,12 +981,13 @@ describe('Gallery Component', () => {
     expect(rawJson).toContain('"component":"Column"');
   });
 
-  it('catches payload dispatch errors in dispatchSelectedComponentPayload and logs them via console.error without rethrowing', () => {
+  it('catches payload dispatch errors in dispatchSelectedComponentPayload and logs them via errorLogger.error without rethrowing', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     fixture.detectChanges();
     TestBed.tick();
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const errorSpy = vi.spyOn(errorLogger, 'error');
     vi.spyOn(
       fixture.componentInstance as unknown as Record<string, () => unknown>,
       'buildA2UIPayload',
@@ -997,12 +1001,12 @@ describe('Gallery Component', () => {
       ]();
     }).not.toThrow();
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to parse component usage JSON:',
-      expect.any(Error),
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Failed to parse component usage JSON:'),
+        sourceTag: '[Gallery]',
+      }),
     );
-
-    consoleErrorSpy.mockRestore();
   });
 
   describe('Usage Tracking Instrumentation', () => {
@@ -1055,7 +1059,8 @@ describe('Gallery Component', () => {
     it('does not track copying usage snippet to clipboard on failure', async () => {
       const trackingService = TestBed.inject(UsageTrackingService);
       const trackSpy = vi.spyOn(trackingService, 'trackGalleryCopyUsage');
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorLogger = TestBed.inject(ErrorLogger);
+      const errorSpy = vi.spyOn(errorLogger, 'error');
 
       catalogServiceMock.selectedComponentPreset.set({
         usage: [{id: 'target', component: 'Text'}],
@@ -1069,11 +1074,10 @@ describe('Gallery Component', () => {
       await Promise.resolve();
 
       expect(trackSpy).not.toHaveBeenCalled();
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to copy A2UI component usage to clipboard.',
-      );
-
-      consoleErrorSpy.mockRestore();
+      expect(errorSpy).toHaveBeenCalledWith({
+        message: 'Failed to copy A2UI component usage to clipboard.',
+        sourceTag: '[Gallery]',
+      });
     });
   });
 });

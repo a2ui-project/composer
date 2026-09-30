@@ -16,8 +16,22 @@
 
 import {defineConfig} from 'vitest/config';
 
+/**
+ * Emitted by Lit in development mode to advise developers not to deploy dev builds to production.
+ * Safe to suppress in unit tests where running development builds is standard; keeps 3P
+ * framework noise out of failing test output while silent: 'passed-only' handles passing tests.
+ */
+const LIT_DEV_MODE_LOG = 'Lit is in dev mode';
+
 export default defineConfig({
   test: {
+    silent: 'passed-only',
+    onConsoleLog(log) {
+      // Filter out third-party Lit dev mode notices from failing test console logs.
+      if (log.includes(LIT_DEV_MODE_LOG)) {
+        return false;
+      }
+    },
     environment: 'jsdom',
     include: ['src/**/*.spec.ts'],
   },

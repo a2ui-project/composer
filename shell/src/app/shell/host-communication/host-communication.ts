@@ -55,6 +55,7 @@ export class HostCommunication implements OnDestroy {
   private readonly startupResolution = inject(StartupResolution);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly errorLogger = inject(ErrorLogger);
+  private readonly logger = this.errorLogger.withTag('[HostCommunication]');
   private readonly mcpManager = inject(McpClientManagerService);
   private iframeWindow: Window | null = null;
   private iframeElement: HTMLIFrameElement | null = null;
@@ -441,13 +442,13 @@ export class HostCommunication implements OnDestroy {
     message: {type: PreviewBridgeMessageType; payload?: unknown},
     target?: HTMLIFrameElement | Window | null,
   ): void {
-    if (!CrossFrameValidator.validateOutgoingMessage(message)) {
-      console.error('Blocked dispatch of malformed message type...', message);
+    if (!CrossFrameValidator.validateOutgoingMessage(message, undefined, this.logger)) {
+      this.logger.error('Blocked dispatch of malformed message type...', message);
       return;
     }
 
     if (!this.isRendererReady()) {
-      console.debug('Queueing outbound message; renderer is not yet ready.', message);
+      this.logger.info('Queueing outbound message; renderer is not yet ready.', message);
       this.outboundMessageBuffer.push({message, target});
       return;
     }

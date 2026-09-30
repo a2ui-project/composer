@@ -19,6 +19,7 @@ import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatSnackBar} from '@angular/material/snack-bar';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 @Component({
   selector: 'a2ui-composer-system-instructions-dialog',
@@ -31,6 +32,7 @@ export class SystemInstructionsDialog implements OnDestroy {
   protected readonly data = inject<string | null>(MAT_DIALOG_DATA);
   protected readonly copied = signal(false);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly logger = inject(ErrorLogger).withTag('[SystemInstructionsDialog]');
   private copyTimeoutId?: ReturnType<typeof setTimeout>;
 
   ngOnDestroy(): void {
@@ -43,7 +45,7 @@ export class SystemInstructionsDialog implements OnDestroy {
     if (!this.data) return;
 
     if (!navigator.clipboard) {
-      console.error('Clipboard API is not available in this environment.');
+      this.logger.error('Clipboard API is not available in this environment.');
       this.snackBar.open('Clipboard copy is not supported in this environment', undefined, {
         duration: 3000,
       });
@@ -65,7 +67,7 @@ export class SystemInstructionsDialog implements OnDestroy {
         }, 2000);
       })
       .catch(err => {
-        console.error('Failed to copy system instructions to clipboard: ', err);
+        this.logger.error('Failed to copy system instructions to clipboard: ', err);
       });
   }
 }

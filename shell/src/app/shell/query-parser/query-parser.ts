@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import type {TaggedLogger} from '../../debug/error-logger.service';
+
 export interface SharedA2uiParseResult {
   payload: string | null;
   error: string | null;
@@ -27,7 +29,10 @@ export class QueryParser {
   private static readonly PAYLOAD_PREFIX = 'd1.';
 
   /** @nocollapse */
-  static parseRendererUrl(searchOrHashString: string): string | null {
+  static parseRendererUrl(
+    searchOrHashString: string,
+    logger: Pick<TaggedLogger, 'warn'>,
+  ): string | null {
     const clean = searchOrHashString ? searchOrHashString.replace(/^[?#]/, '') : '';
     const params = new URLSearchParams(clean);
     const renderers = params.getAll('renderer');
@@ -45,7 +50,7 @@ export class QueryParser {
           return validUrl.toString();
         }
       } catch (err) {
-        console.warn(
+        logger.warn(
           `Malformed renderer parameter string encountered: '${uriCandidate}'. Stripping invalid URI.`,
         );
       }
@@ -101,6 +106,7 @@ export class QueryParser {
    */
   static async decodeSharedPayload(
     encodedPayload: string | null | undefined,
+    logger: Pick<TaggedLogger, 'warn'>,
   ): Promise<string | null> {
     if (!encodedPayload || !encodedPayload.startsWith(QueryParser.PAYLOAD_PREFIX)) {
       return null;
@@ -123,7 +129,7 @@ export class QueryParser {
       const [, buf] = await Promise.all([writePromise, responsePromise]);
       return new TextDecoder().decode(buf);
     } catch (err) {
-      console.warn('Failed to decompress shared A2UI payload:', err);
+      logger.warn('Failed to decompress shared A2UI payload:', err);
       return null;
     }
   }
@@ -134,6 +140,7 @@ export class QueryParser {
    */
   static async parseSharedA2ui(
     hashString: string | null | undefined,
+    logger: Pick<TaggedLogger, 'warn'>,
   ): Promise<SharedA2uiParseResult> {
     if (!hashString) {
       return {payload: null, error: null};
@@ -144,7 +151,7 @@ export class QueryParser {
       return {payload: null, error: null};
     }
     if (candidate.startsWith(QueryParser.PAYLOAD_PREFIX)) {
-      const decompressed = await QueryParser.decodeSharedPayload(candidate);
+      const decompressed = await QueryParser.decodeSharedPayload(candidate, logger);
       if (decompressed === null) {
         return {
           payload: null,

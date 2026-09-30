@@ -14,7 +14,16 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, DestroyRef, effect, Signal} from '@angular/core';
+import {
+  Injectable,
+  inject,
+  signal,
+  DestroyRef,
+  Signal,
+  computed,
+  linkedSignal,
+  resource,
+} from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {
   HostCommunication,
@@ -30,6 +39,12 @@ import {StartupResolution} from '../../shell/startup-resolution/startup-resoluti
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {stableStringify} from '../stable-stringify/stable-stringify';
 
+interface HydratedCatalog {
+  catalog: Catalog;
+  catalogString: string;
+  checksumHash: string;
+}
+
 /**
  * Coordinates client sidepanel integration, managing live visual schemas,
  * remote catalog assets, and establishing active rendering contexts.
@@ -43,20 +58,112 @@ export class CatalogManagement {
   private readonly indexedDbStorage = inject(IndexedDbStorage);
   private readonly startupResolution = inject(StartupResolution);
 
-  private readonly _isHandshakeInProgress = signal<boolean>(false);
+  private watchdogTimerId: ReturnType<typeof setTimeout> | null = null;
+  private previousUrl: string | null | undefined = this.startupResolution.resolvedUrl();
+
+  /**
+   * Declarative Angular `resource` that asynchronously loads and sanitizes a cached catalog
+   * from IndexedDB whenever `startupResolution.resolvedUrl()` changes to a new non-null URL.
+   */
+  private readonly cachedCatalogResource = resource<HydratedCatalog | null, string | undefined>({
+    defaultValue: null,
+    params: () => {
+      const rendererUrl = this.startupResolution.resolvedUrl();
+      if (rendererUrl === this.previousUrl) {
+        return undefined;
+      }
+      this.previousUrl = rendererUrl;
+      if (this.watchdogTimerId !== null) {
+        clearTimeout(this.watchdogTimerId);
+        this.watchdogTimerId = null;
+      }
+      return rendererUrl ?? undefined;
+    },
+    loader: async ({params: targetUrl}): Promise<HydratedCatalog | null> => {
+      try {
+        const record = await this.indexedDbStorage.getCatalogRecord(targetUrl);
+        if (!record) {
+          return null;
+        }
+        let catalogObj: Catalog | null = null;
+        try {
+          catalogObj = JSON.parse(record.catalogString) as Catalog | null;
+        } catch {
+          catalogObj = null;
+        }
+        if (!catalogObj) {
+          return null;
+        }
+        if (typeof catalogObj.title === 'string') {
+          catalogObj.title = sanitizeHtml(catalogObj.title).toString();
+        }
+        if (typeof catalogObj.description === 'string') {
+          catalogObj.description = sanitizeHtml(catalogObj.description).toString();
+        }
+        return {
+          catalog: catalogObj,
+          catalogString: record.catalogString,
+          checksumHash: record.checksumHash,
+        };
+      } catch (err: unknown) {
+        this.logger.warn(
+          'Failed to fetch catalog record from IndexedDB for rendererUrl:',
+          targetUrl,
+          err,
+        );
+        return null;
+      }
+    },
+  });
+
+  /**
+   * Combined reactive source tracking both the active renderer URL and any cached catalog
+   * resolved asynchronously by `cachedCatalogResource`.
+   */
+  private readonly catalogSource = computed(() => ({
+    url: this.startupResolution.resolvedUrl(),
+    cached: this.cachedCatalogResource.value(),
+  }));
+
   /**
    * Conceptual state indicator tracking whether the remote visualization
    * bridge is actively negotiating and establishing its catalog metadata
-   * synchronizations. Resolves to true when catalog discovery handshakes
-   * are currently in progress.
+   * synchronizations.
+   *
+   * Managed via `linkedSignal` tied to `startupResolution.resolvedUrl`:
+   * automatically resets to `false` whenever the renderer URL changes, while
+   * remaining imperatively writable during live handshake negotiations.
    */
+  private readonly _isHandshakeInProgress = linkedSignal<string | null, boolean>({
+    source: this.startupResolution.resolvedUrl,
+    computation: () => false,
+  });
   readonly isHandshakeInProgress = this._isHandshakeInProgress.asReadonly();
 
-  private readonly _handshakeState = signal<'idle' | 'in-progress' | 'settled'>('idle');
   /**
    * Internal lifecycle state of the catalog indexing handshake.
    * Exposed as a DOM attribute by ComposerWorkspace for E2E synchronization.
+   *
+   * Managed via `linkedSignal` tied to `catalogSource`:
+   * - Resets to `'idle'` whenever the renderer URL changes (`source.url !== previous.source?.url`).
+   * - Transitions to `'settled'` when a cached catalog is hydrated from IndexedDB while still `'idle'`.
+   * - Preserves imperative updates (`'in-progress'` / `'settled'`) during live bridge handshakes.
    */
+  private readonly _handshakeState = linkedSignal<
+    {url: string | null; cached: HydratedCatalog | null | undefined},
+    'idle' | 'in-progress' | 'settled'
+  >({
+    source: this.catalogSource,
+    computation: (source, previous) => {
+      if (previous && source.url !== previous.source.url) {
+        return 'idle';
+      }
+      if (source.cached && (previous?.value === 'idle' || !previous)) {
+        return 'settled';
+      }
+      return previous?.value ?? 'idle';
+    },
+  });
   readonly handshakeState: Signal<'idle' | 'in-progress' | 'settled'> =
     this._handshakeState.asReadonly();
 
@@ -68,36 +175,100 @@ export class CatalogManagement {
    */
   readonly watchdogFired = this._watchdogFired.asReadonly();
 
-  private readonly _catalogError = signal<string | null>(null);
   /**
    * Conceptual state containing the latest diagnostic issue or syntax failure
    * encountered while resolving catalog representations. Resolves to the
    * textual description of the failure, or null if context is fully healthy.
+   *
+   * Managed via `linkedSignal` tied to `startupResolution.resolvedUrl`:
+   * automatically resets to `null` whenever the renderer URL changes, while
+   * remaining imperatively writable when handshake or validation errors occur.
    */
+  private readonly _catalogError = linkedSignal<string | null, string | null>({
+    source: this.startupResolution.resolvedUrl,
+    computation: () => null,
+  });
   readonly catalogError = this._catalogError.asReadonly();
 
-  private readonly _lastCatalogString = signal<string>('');
   /**
    * Conceptual representation of the raw structured catalog source content
    * successfully received under active synchronization.
+   *
+   * Managed via `linkedSignal` tied to `catalogSource`:
+   * - Resets to `''` whenever the renderer URL changes (`source.url !== previous.source?.url`).
+   * - Hydrates from `source.cached.catalogString` when IndexedDB resolves if not already set.
+   * - Remains imperatively writable on live `A2UI_CATALOG` bridge responses.
    */
+  private readonly _lastCatalogString = linkedSignal<
+    {url: string | null; cached: HydratedCatalog | null | undefined},
+    string
+  >({
+    source: this.catalogSource,
+    computation: (source, previous) => {
+      if (previous && source.url !== previous.source.url) {
+        return '';
+      }
+      if (source.cached && (!previous || previous.value === '')) {
+        return source.cached.catalogString;
+      }
+      return previous?.value ?? '';
+    },
+  });
   readonly lastCatalogString = this._lastCatalogString.asReadonly();
 
-  private readonly _lastChecksumHash = signal<string>('');
   /**
    * Conceptual secure verification fingerprint matching the last successfully
    * integrated catalog structure. Utilized to ensure structural consistency
    * and tracking remote delta changes.
+   *
+   * Managed via `linkedSignal` tied to `catalogSource`:
+   * - Resets to `''` whenever the renderer URL changes (`source.url !== previous.source?.url`).
+   * - Hydrates from `source.cached.checksumHash` when IndexedDB resolves if not already set.
+   * - Remains imperatively writable on live `A2UI_CATALOG` bridge responses.
    */
+  private readonly _lastChecksumHash = linkedSignal<
+    {url: string | null; cached: HydratedCatalog | null | undefined},
+    string
+  >({
+    source: this.catalogSource,
+    computation: (source, previous) => {
+      if (previous && source.url !== previous.source.url) {
+        return '';
+      }
+      if (source.cached && (!previous || previous.value === '')) {
+        return source.cached.checksumHash;
+      }
+      return previous?.value ?? '';
+    },
+  });
   readonly lastChecksumHash = this._lastChecksumHash.asReadonly();
 
-  private readonly _activeCatalog = signal<Catalog | null>(null);
   /**
    * Conceptual structured schema of the actively loaded preview catalog.
    * Resolves to the active parsed model representation containing valid
    * schemas, components, and configurations, or null if no catalog is
    * established.
+   *
+   * Managed via `linkedSignal` tied to `catalogSource`:
+   * - Resets to `null` whenever the renderer URL changes (`source.url !== previous.source?.url`).
+   * - Hydrates from `source.cached.catalog` when IndexedDB resolves if `previous.value` is still `null`.
+   * - Remains imperatively writable on live `A2UI_CATALOG` bridge responses.
    */
+  private readonly _activeCatalog = linkedSignal<
+    {url: string | null; cached: HydratedCatalog | null | undefined},
+    Catalog | null
+  >({
+    source: this.catalogSource,
+    computation: (source, previous) => {
+      if (previous && source.url !== previous.source.url) {
+        return null;
+      }
+      if (source.cached && (!previous || previous.value === null)) {
+        return source.cached.catalog;
+      }
+      return previous?.value ?? null;
+    },
+  });
   readonly activeCatalog = this._activeCatalog.asReadonly();
 
   private readonly _catalogHashDelta = signal<boolean>(false);
@@ -108,22 +279,17 @@ export class CatalogManagement {
    */
   readonly catalogHashDelta = this._catalogHashDelta.asReadonly();
 
-  private readonly _activeCatalogTitle = signal<string>('');
   /**
    * Conceptual descriptive name resolved for the actively established catalog
    * model.
    */
-  readonly activeCatalogTitle = this._activeCatalogTitle.asReadonly();
+  readonly activeCatalogTitle = computed(() => this._activeCatalog()?.title || '');
 
-  private readonly _activeCatalogDescription = signal<string>('');
   /**
    * Conceptual narrative description details clarifying the purpose, bounds,
    * and scope of the actively established catalog model.
    */
-  readonly activeCatalogDescription = this._activeCatalogDescription.asReadonly();
-
-  private watchdogTimerId: ReturnType<typeof setTimeout> | null = null;
-  private previousUrl: string | null | undefined = this.startupResolution.resolvedUrl();
+  readonly activeCatalogDescription = computed(() => this._activeCatalog()?.description || '');
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -133,72 +299,6 @@ export class CatalogManagement {
         this.watchdogTimerId = null;
       }
     });
-
-    effect(
-      () => {
-        const rendererUrl = this.startupResolution.resolvedUrl();
-        if (rendererUrl === this.previousUrl) {
-          return;
-        }
-        this.previousUrl = rendererUrl;
-
-        if (this.watchdogTimerId !== null) {
-          clearTimeout(this.watchdogTimerId);
-          this.watchdogTimerId = null;
-        }
-        this._isHandshakeInProgress.set(false);
-        this._handshakeState.set('idle');
-        this._catalogError.set(null);
-        this._activeCatalog.set(null);
-        this._activeCatalogTitle.set('');
-        this._activeCatalogDescription.set('');
-        this._lastCatalogString.set('');
-        this._lastChecksumHash.set('');
-
-        if (rendererUrl) {
-          const targetUrl = rendererUrl;
-          void this.indexedDbStorage
-            .getCatalogRecord(targetUrl)
-            .then(record => {
-              if (
-                this.startupResolution.resolvedUrl() === targetUrl &&
-                record &&
-                this._activeCatalog() === null
-              ) {
-                let catalogObj: Catalog | null = null;
-                try {
-                  catalogObj = JSON.parse(record.catalogString);
-                } catch {
-                  catalogObj = null;
-                }
-                if (catalogObj) {
-                  if (typeof catalogObj.title === 'string') {
-                    catalogObj.title = sanitizeHtml(catalogObj.title).toString();
-                  }
-                  if (typeof catalogObj.description === 'string') {
-                    catalogObj.description = sanitizeHtml(catalogObj.description).toString();
-                  }
-                  this._lastCatalogString.set(record.catalogString);
-                  this._lastChecksumHash.set(record.checksumHash);
-                  this._activeCatalog.set(catalogObj);
-                  this._activeCatalogTitle.set(catalogObj.title || '');
-                  this._activeCatalogDescription.set(catalogObj.description || '');
-                  this._catalogError.set(null);
-                  this._handshakeState.set('settled');
-                }
-              }
-            })
-            .catch(err => {
-              this.logger.warn(
-                'Failed to fetch catalog record from IndexedDB for rendererUrl:',
-                targetUrl,
-                err,
-              );
-            });
-        }
-      },
-      {allowSignalWrites: true},
-    );
 
     this.hostCommunication.messageStream$
       .pipe(
@@ -332,8 +432,6 @@ export class CatalogManagement {
                   }
 
                   this._activeCatalog.set(catalogObj);
-                  this._activeCatalogTitle.set(catalogObj.title || '');
-                  this._activeCatalogDescription.set(catalogObj.description || '');
 
                   this._catalogError.set(null);
                   this._isHandshakeInProgress.set(false);

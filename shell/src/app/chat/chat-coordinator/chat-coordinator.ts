@@ -60,6 +60,7 @@ export class ChatCoordinator {
   private readonly chatState = inject(ChatState);
   private readonly llmClient = inject(LlmClient);
   private readonly errorLogger = inject(ErrorLogger);
+  private readonly logger = inject(ErrorLogger).withTag('[ChatCoordinator]');
   private readonly chatCleaner = inject(ChatCleaner);
   private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly promptFactory = inject(ChatPromptFactoryService);
@@ -197,7 +198,7 @@ export class ChatCoordinator {
     options?: {promptId?: string; promptTurnIndex?: number; retryOfPromptId?: string},
   ): Promise<void> {
     if (this.chatState.isProgrammaticStreamActive()) {
-      console.warn('[ChatCoordinator] Blocked submitPrompt: programmatic stream is active.');
+      this.logger.warn('Blocked submitPrompt: programmatic stream is active.');
       return;
     }
     const trimmed = prompt.trim();
@@ -379,6 +380,7 @@ export class ChatCoordinator {
       const isValidEnvelope = CrossFrameValidator.validateOutgoingMessage(
         mockEnvMsg,
         validationErrors,
+        this.logger,
       );
 
       if (!isValidEnvelope) {
@@ -467,7 +469,7 @@ export class ChatCoordinator {
     const redactedErrorDetails = parsed.showDetails ? redactApiKey(combinedDetails) : undefined;
     const redactedErrorTip = parsed.showDetails ? redactApiKey(parsed.errorTip) : undefined;
 
-    console.error('Gemini chat execution failed:', err);
+    this.logger.error('Gemini chat execution failed:', err);
 
     this.chatState.updateChatHistory(history => {
       const updated = [...history];

@@ -49,7 +49,40 @@ describe('HostCommunication', () => {
       error: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),
-      withTag: vi.fn().mockReturnThis(),
+      withTag: vi.fn().mockImplementation((sourceTag: string) => ({
+        error: (message: string, ...args: unknown[]) =>
+          mockErrorLogger.error({
+            message:
+              args.length > 0
+                ? `${message} ${args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}`
+                : message,
+            sourceTag,
+          }),
+        warn: (message: string, ...args: unknown[]) =>
+          mockErrorLogger.warn({
+            message:
+              args.length > 0
+                ? `${message} ${args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}`
+                : message,
+            sourceTag,
+          }),
+        info: (message: string, ...args: unknown[]) =>
+          mockErrorLogger.info({
+            message:
+              args.length > 0
+                ? `${message} ${args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}`
+                : message,
+            sourceTag,
+          }),
+        log: (message: string, ...args: unknown[]) =>
+          mockErrorLogger.log({
+            message:
+              args.length > 0
+                ? `${message} ${args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}`
+                : message,
+            sourceTag,
+          }),
+      })),
     };
 
     TestBed.configureTestingModule({
@@ -180,7 +213,6 @@ describe('HostCommunication', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
     (mockIframeWindow.postMessage as ReturnType<typeof vi.fn>).mockClear();
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     service.sendMessage({
       type: PreviewBridgeMessageType.RENDER_A2UI,
@@ -188,26 +220,23 @@ describe('HostCommunication', () => {
     });
 
     expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalledWith('Blocked dispatch of malformed message type...', {
-      type: PreviewBridgeMessageType.RENDER_A2UI,
-      payload: {invalid: 'not an array'},
-    });
-
-    consoleSpy.mockRestore();
+    expect(mockErrorLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Blocked dispatch of malformed message type...'),
+        sourceTag: '[HostCommunication]',
+      }),
+    );
   });
 
   it('blocks sendRenderA2UI when array items lack version v0.9', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
     (mockIframeWindow.postMessage as ReturnType<typeof vi.fn>).mockClear();
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     service.sendRenderA2UI([{updateDataModel: {surfaceId: 's-1'}}]);
 
     expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalled();
-
-    consoleSpy.mockRestore();
+    expect(mockErrorLogger.error).toHaveBeenCalled();
   });
 
   it('successfully invokes postMessage when sendRenderA2UI is called with a valid payload', () => {
