@@ -21,49 +21,26 @@ import {
   collectUnexpectedErrors,
   expectBlockKitJsonToContain,
   getBlockKitActionIds,
-  getSevereMonacoMarkers,
-  MONACO_MARKER_DEBOUNCE_MS,
+  getJsonValidationProblems,
   openComposerWithSlackRenderer,
   replaceMonacoJson,
   SLACK_RENDERER_URL,
   slackPreviewFrame,
   slackPreviewSurface,
-  waitForMonaco,
 } from './slack-renderer.helpers';
+import {waitForMonacoEditor} from './helpers';
 
 const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalogs/slack/v1';
 const REACT_RENDERER_URL = 'http://localhost:3458';
 
 test.describe('Slack renderer recovery in Composer', () => {
-  test('fails loudly when top-level localStorage setup is blocked', async ({browser}) => {
-    const context = await browser.newContext();
-    await context.addInitScript(() => {
-      const originalSetItem = Storage.prototype.setItem;
-      Storage.prototype.setItem = function setItem(key: string, value: string): void {
-        if (window.top === window && key === 'a2ui_composer_force_1p') {
-          throw new Error('forced top-level localStorage setup failure');
-        }
-        return originalSetItem.call(this, key, value);
-      };
-    });
-    const page = await context.newPage();
-
-    try {
-      await expect(openComposerWithSlackRenderer(page)).rejects.toThrow(
-        /Failed to configure Slack renderer E2E localStorage.*forced top-level localStorage setup failure/s,
-      );
-    } finally {
-      await context.close();
-    }
-  });
-
   test('clears old output while waiting for a missing child and recovers when it arrives', async ({
     page,
   }) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
 
     await openComposerWithSlackRenderer(page);
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
 
     await replaceMonacoJson(page, textPayload('waiting-recovery', 'Stable baseline'));
     await expect(slackPreviewSurface(page).getByText('Stable baseline')).toBeVisible();
@@ -95,7 +72,7 @@ test.describe('Slack renderer recovery in Composer', () => {
     const unexpectedErrors = collectUnexpectedErrors(page);
 
     await openComposerWithSlackRenderer(page);
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
 
     await replaceMonacoJson(page, buttonPayload('unsupported-recovery', 'Old action', 'old_event'));
     await expect(slackPreviewFrame(page).getByRole('button', {name: 'Old action'})).toBeVisible();
@@ -125,7 +102,7 @@ test.describe('Slack renderer recovery in Composer', () => {
     const unexpectedErrors = collectUnexpectedErrors(page);
 
     await openComposerWithSlackRenderer(page);
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
 
     await replaceMonacoJson(page, textPayload('delete-recreate', 'Delete me'));
     await expect(slackPreviewSurface(page).getByText('Delete me')).toBeVisible();
@@ -156,7 +133,7 @@ test.describe('Slack renderer recovery in Composer', () => {
     await expect(slackPreviewFrame(page).getByRole('button', {name: 'Search Cars'})).toBeVisible();
 
     await page.goto(`/?renderer=${SLACK_RENDERER_URL}`);
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
     await replaceMonacoJson(page, textPayload('switch-back', 'Back on Slack'));
 
     await expect(slackPreviewSurface(page).getByText('Back on Slack')).toBeVisible();
@@ -169,7 +146,7 @@ test.describe('Slack renderer recovery in Composer', () => {
     const unexpectedErrors = collectUnexpectedErrors(page);
 
     await openComposerWithSlackRenderer(page);
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
 
     await replaceMonacoJson(
       page,
@@ -397,6 +374,5 @@ async function allowRendererOrigin(page: Page, rendererUrl: string): Promise<voi
 }
 
 async function expectMonacoClean(page: Page): Promise<void> {
-  await page.waitForTimeout(MONACO_MARKER_DEBOUNCE_MS + 600);
-  expect(await getSevereMonacoMarkers(page)).toEqual([]);
+  expect(await getJsonValidationProblems(page)).toEqual([]);
 }

@@ -86,12 +86,18 @@ describe('SlackPreview', () => {
     vi.spyOn(a2uiBridge, 'sendAction').mockImplementation(() => {});
   });
 
+  // Undoes global stubs a test installs, whether it passes or fails.
+  const restoreGlobals: Array<() => void> = [];
+
   afterEach(() => {
     act(() => {
       root?.unmount();
     });
     container.remove();
     vi.restoreAllMocks();
+    for (const restore of restoreGlobals.splice(0)) {
+      restore();
+    }
   });
 
   it('composes ready Slack rendering with a current Block Kit export', async () => {
@@ -139,6 +145,12 @@ describe('SlackPreview', () => {
 
   it('preserves the Block Kit copy status across ready preview revisions with unchanged JSON', async () => {
     const originalClipboard = navigator.clipboard;
+    restoreGlobals.push(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: originalClipboard,
+      });
+    });
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -156,54 +168,47 @@ describe('SlackPreview', () => {
       },
     ];
 
-    try {
-      await act(async () => {
-        root = createRoot(container);
-        root.render(
-          <SlackPreview
-            updateInput={vi.fn()}
-            dispatch={vi.fn()}
-            snapshot={{
-              revision: 1,
-              surfaceId: 'test-surface',
-              status: 'ready',
-              blocks,
-              diagnostics: [],
-            }}
-          />,
-        );
-      });
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <SlackPreview
+          updateInput={vi.fn()}
+          dispatch={vi.fn()}
+          snapshot={{
+            revision: 1,
+            surfaceId: 'test-surface',
+            status: 'ready',
+            blocks,
+            diagnostics: [],
+          }}
+        />,
+      );
+    });
 
-      await act(async () => {
-        container.querySelector('button')?.click();
-      });
+    await act(async () => {
+      container.querySelector('button')?.click();
+    });
 
-      expect(writeText).toHaveBeenCalledWith(JSON.stringify({blocks}, null, 2));
-      expect(container.querySelector('[role="status"]')?.textContent).toBe('Block Kit copied.');
+    expect(writeText).toHaveBeenCalledWith(JSON.stringify({blocks}, null, 2));
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Block Kit copied.');
 
-      await act(async () => {
-        root.render(
-          <SlackPreview
-            updateInput={vi.fn()}
-            dispatch={vi.fn()}
-            snapshot={{
-              revision: 2,
-              surfaceId: 'test-surface',
-              status: 'ready',
-              blocks,
-              diagnostics: [],
-            }}
-          />,
-        );
-      });
+    await act(async () => {
+      root.render(
+        <SlackPreview
+          updateInput={vi.fn()}
+          dispatch={vi.fn()}
+          snapshot={{
+            revision: 2,
+            surfaceId: 'test-surface',
+            status: 'ready',
+            blocks,
+            diagnostics: [],
+          }}
+        />,
+      );
+    });
 
-      expect(container.querySelector('[role="status"]')?.textContent).toBe('Block Kit copied.');
-    } finally {
-      Object.defineProperty(navigator, 'clipboard', {
-        configurable: true,
-        value: originalClipboard,
-      });
-    }
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Block Kit copied.');
   });
 
   it('forwards the shell theme from the bridge to the composed Tightknit renderer', async () => {

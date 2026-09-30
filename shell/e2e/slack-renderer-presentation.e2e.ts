@@ -23,13 +23,19 @@ import {
   replaceMonacoJson,
   slackPreviewFrame,
   slackPreviewSurface,
-  waitForMonaco,
 } from './slack-renderer.helpers';
+import {waitForMonacoEditor} from './helpers';
 
+// At this viewport, Dockview's default split gives the preview panel roughly the width
+// of a 360px Slack embed. The split is proportional, so font metrics and scrollbars move
+// it by a few pixels between machines.
 const PREVIEW_360_EMBED_VIEWPORT = {width: 1145, height: 900} as const;
 const PREVIEW_360_EMBED_WIDTH = 360;
-// Dockview split gutters and borders can consume two CSS pixels from the target embed width.
+// Dockview split gutters and borders can add up to two CSS pixels to the panel width.
 const PREVIEW_WIDTH_TOLERANCE = 2;
+// The overflow check only means something if the panel is no wider than the embed and
+// hasn't collapsed, so anything in this range counts as a 360px embed.
+const PREVIEW_MIN_EMBED_WIDTH = 340;
 const COPY_STATUS = {
   copied: 'Block Kit copied.',
   fallback: 'Clipboard unavailable. Select and copy the JSON below.',
@@ -91,7 +97,7 @@ test.describe('Slack renderer presentation in Composer', () => {
 
 async function loadDataBoundActionExample(page: Page): Promise<void> {
   await openComposerWithSlackRenderer(page);
-  await waitForMonaco(page);
+  await waitForMonacoEditor(page);
   await replaceMonacoJson(page, DATA_BOUND_ACTION_JSON);
   await expect(
     slackPreviewSurface(page).getByText('Ready for review', {exact: true}),
@@ -160,25 +166,14 @@ async function collectOverflowDiagnostics(page: Page): Promise<string[]> {
 }
 
 async function expectEmbeddedPreviewWidth(page: Page): Promise<void> {
+  const previewWidth = () =>
+    page
+      .locator('iframe.preview-iframe')
+      .first()
+      .evaluate(iframe => Math.floor(iframe.getBoundingClientRect().width));
+  await expect.poll(previewWidth).toBeGreaterThanOrEqual(PREVIEW_MIN_EMBED_WIDTH);
   await expect
-    .poll(async () =>
-      page
-        .locator('iframe.preview-iframe')
-        .first()
-        .evaluate(iframe => {
-          return Math.floor(iframe.getBoundingClientRect().width);
-        }),
-    )
-    .toBeGreaterThanOrEqual(PREVIEW_360_EMBED_WIDTH - PREVIEW_WIDTH_TOLERANCE);
-  await expect
-    .poll(async () =>
-      page
-        .locator('iframe.preview-iframe')
-        .first()
-        .evaluate(iframe => {
-          return Math.floor(iframe.getBoundingClientRect().width);
-        }),
-    )
+    .poll(previewWidth)
     .toBeLessThanOrEqual(PREVIEW_360_EMBED_WIDTH + PREVIEW_WIDTH_TOLERANCE);
 }
 

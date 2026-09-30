@@ -14,8 +14,8 @@ import {
   replaceMonacoJson,
   slackPreviewFrame,
   slackPreviewSurface,
-  waitForMonaco,
 } from './slack-renderer.helpers';
+import {waitForMonacoEditor} from './helpers';
 
 const bookingJson = readFileSync(
   new URL('../../samples/react-slack-catalog/public/examples/car-booking.json', import.meta.url),
@@ -127,7 +127,7 @@ test.describe('Slack native booking form', () => {
   }) => {
     const errors = collectUnexpectedErrors(page);
     await openComposerWithSlackRenderer(page, {rendererId: 'slack'});
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
     const preview = slackPreviewSurface(page);
     await preview.getByRole('textbox', {name: 'Pick-up Location'}).fill('Original location');
     const updated = bookingJson
@@ -144,7 +144,7 @@ test.describe('Slack native booking form', () => {
   });
   test('keeps shared field bindings in sync without losing the typing cursor', async ({page}) => {
     await openComposerWithSlackRenderer(page, {rendererId: 'slack'});
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
     const messages = A2uiMessageListSchema.parse(JSON.parse(bookingJson));
     const update = messages.find(message => 'updateComponents' in message);
     if (!update || !('updateComponents' in update)) {

@@ -112,31 +112,35 @@ const captureProcessorSurfaces = () => {
   const surfaces: SurfaceModel<ComponentApi>[] = [];
   const seen = new Set<SurfaceModel<ComponentApi>>();
   const originalProcessMessages = MessageProcessor.prototype.processMessages;
-  const processMessagesSpy = vi
-    .spyOn(MessageProcessor.prototype, 'processMessages')
-    .mockImplementation(function (
-      this: MessageProcessor<ComponentApi>,
-      messages: Parameters<MessageProcessor<ComponentApi>['processMessages']>[0],
-    ) {
-      originalProcessMessages.call(this, messages);
-      for (const surface of this.model.surfacesMap.values()) {
-        if (seen.has(surface)) {
-          continue;
-        }
-        seen.add(surface);
-        surfaces.push(surface);
+  // `vi.restoreAllMocks()` restores this spy after each test.
+  vi.spyOn(MessageProcessor.prototype, 'processMessages').mockImplementation(function (
+    this: MessageProcessor<ComponentApi>,
+    messages: Parameters<MessageProcessor<ComponentApi>['processMessages']>[0],
+  ) {
+    originalProcessMessages.call(this, messages);
+    for (const surface of this.model.surfacesMap.values()) {
+      if (seen.has(surface)) {
+        continue;
       }
-    });
+      seen.add(surface);
+      surfaces.push(surface);
+    }
+  });
 
-  return {
-    surfaces,
-    restore: () => {
-      processMessagesSpy.mockRestore();
-    },
-  };
+  return {surfaces};
 };
 
 describe('createSlackPreviewSession', () => {
+  // Sessions a test registers here are disposed after it, whether it passes or fails.
+  const sessionsToDispose: Array<{dispose(): void}> = [];
+
+  afterEach(() => {
+    for (const session of sessionsToDispose.splice(0)) {
+      session.dispose();
+    }
+    vi.restoreAllMocks();
+  });
+
   it('keeps one persistent processor across incremental components and data batches', () => {
     const session = createSlackPreviewSession();
 
@@ -672,193 +676,181 @@ describe('createSlackPreviewSession', () => {
     const actions: Array<{name: string; context?: unknown}> = [];
     const session = createSlackPreviewSession(action => {
       actions.push({name: action.name, context: action.context});
+      sessionsToDispose.push(session);
     });
 
-    try {
-      session.processMessages([
-        createSurface('live-surface'),
-        updateData('live-surface', {
-          message: 'First value',
-          record: {id: 'example-42'},
-        }),
-        updateComponents('live-surface', [
-          {
-            id: 'root',
-            component: 'Column',
-            children: ['copy', 'button'],
-          },
-          {
-            id: 'copy',
-            component: 'Text',
-            text: {path: '/message'},
-          },
-          {
-            id: 'button',
-            component: 'Button',
-            child: 'label',
-            action: {
-              event: {
-                name: 'confirm',
-                context: {
-                  recordId: {path: '/record/id'},
-                },
+    session.processMessages([
+      createSurface('live-surface'),
+      updateData('live-surface', {
+        message: 'First value',
+        record: {id: 'example-42'},
+      }),
+      updateComponents('live-surface', [
+        {
+          id: 'root',
+          component: 'Column',
+          children: ['copy', 'button'],
+        },
+        {
+          id: 'copy',
+          component: 'Text',
+          text: {path: '/message'},
+        },
+        {
+          id: 'button',
+          component: 'Button',
+          child: 'label',
+          action: {
+            event: {
+              name: 'confirm',
+              context: {
+                recordId: {path: '/record/id'},
               },
             },
           },
-          {
-            id: 'label',
-            component: 'Text',
-            text: 'Confirm',
-          },
-        ]),
-      ]);
-
-      const initialSnapshot = session.getSnapshot();
-      const staleActionId = actionIds(session)[0];
-      expect(processorSurfaces.surfaces).toHaveLength(1);
-      expect(initialSnapshot).toMatchObject({
-        surfaceId: 'live-surface',
-        status: 'ready',
-      });
-      expect(sectionText(session)).toBe('First value');
-
-      processorSurfaces.surfaces[0].dataModel.set('/message', 'Updated through live model');
-      processorSurfaces.surfaces[0].dataModel.set('/record/id', 'example-99');
-
-      const refreshedSnapshot = session.getSnapshot();
-      const currentActionId = actionIds(session)[0];
-      expect(refreshedSnapshot).toMatchObject({
-        surfaceId: 'live-surface',
-        status: 'ready',
-      });
-      expect(sectionText(session)).toBe('Updated through live model');
-      expect(refreshedSnapshot.revision).toBeGreaterThan(initialSnapshot.revision);
-      expect(refreshedSnapshot.blocks).not.toEqual(initialSnapshot.blocks);
-      expect(currentActionId).not.toBe(staleActionId);
-
-      await session.dispatch(staleActionId);
-      await session.dispatch(currentActionId);
-
-      expect(actions).toEqual([
-        {
-          name: 'confirm',
-          context: {recordId: 'example-99'},
         },
-      ]);
-    } finally {
-      session.dispose();
-      processorSurfaces.restore();
-    }
+        {
+          id: 'label',
+          component: 'Text',
+          text: 'Confirm',
+        },
+      ]),
+    ]);
+
+    const initialSnapshot = session.getSnapshot();
+    const staleActionId = actionIds(session)[0];
+    expect(processorSurfaces.surfaces).toHaveLength(1);
+    expect(initialSnapshot).toMatchObject({
+      surfaceId: 'live-surface',
+      status: 'ready',
+    });
+    expect(sectionText(session)).toBe('First value');
+
+    processorSurfaces.surfaces[0].dataModel.set('/message', 'Updated through live model');
+    processorSurfaces.surfaces[0].dataModel.set('/record/id', 'example-99');
+
+    const refreshedSnapshot = session.getSnapshot();
+    const currentActionId = actionIds(session)[0];
+    expect(refreshedSnapshot).toMatchObject({
+      surfaceId: 'live-surface',
+      status: 'ready',
+    });
+    expect(sectionText(session)).toBe('Updated through live model');
+    expect(refreshedSnapshot.revision).toBeGreaterThan(initialSnapshot.revision);
+    expect(refreshedSnapshot.blocks).not.toEqual(initialSnapshot.blocks);
+    expect(currentActionId).not.toBe(staleActionId);
+
+    await session.dispatch(staleActionId);
+    await session.dispatch(currentActionId);
+
+    expect(actions).toEqual([
+      {
+        name: 'confirm',
+        context: {recordId: 'example-99'},
+      },
+    ]);
   });
 
   it('stops live data-model refreshes after delete, clear, and dispose', () => {
     const processorSurfaces = captureProcessorSurfaces();
     const session = createSlackPreviewSession();
+    sessionsToDispose.push(session);
 
-    try {
-      session.processMessages([
-        createSurface('live-surface'),
-        updateData('live-surface', {message: 'Before delete'}),
-        updateComponents('live-surface', [
-          {
-            id: 'root',
-            component: 'Text',
-            text: {path: '/message'},
-          },
-        ]),
-      ]);
+    session.processMessages([
+      createSurface('live-surface'),
+      updateData('live-surface', {message: 'Before delete'}),
+      updateComponents('live-surface', [
+        {
+          id: 'root',
+          component: 'Text',
+          text: {path: '/message'},
+        },
+      ]),
+    ]);
 
-      const firstSurface = processorSurfaces.surfaces[0];
-      expect(sectionText(session)).toBe('Before delete');
+    const firstSurface = processorSurfaces.surfaces[0];
+    expect(sectionText(session)).toBe('Before delete');
 
-      session.processMessages([{version: 'v0.9', deleteSurface: {surfaceId: 'live-surface'}}]);
-      const afterDelete = session.getSnapshot();
-      firstSurface.dataModel.set('/message', 'Deleted surface update');
-      expect(session.getSnapshot()).toBe(afterDelete);
+    session.processMessages([{version: 'v0.9', deleteSurface: {surfaceId: 'live-surface'}}]);
+    const afterDelete = session.getSnapshot();
+    firstSurface.dataModel.set('/message', 'Deleted surface update');
+    expect(session.getSnapshot()).toBe(afterDelete);
 
-      session.processMessages([
-        createSurface('live-surface'),
-        updateData('live-surface', {message: 'Before clear'}),
-        updateComponents('live-surface', [
-          {
-            id: 'root',
-            component: 'Text',
-            text: {path: '/message'},
-          },
-        ]),
-      ]);
-      const secondSurface = processorSurfaces.surfaces[1];
-      session.clear();
-      const afterClear = session.getSnapshot();
-      secondSurface.dataModel.set('/message', 'Cleared surface update');
-      expect(session.getSnapshot()).toBe(afterClear);
+    session.processMessages([
+      createSurface('live-surface'),
+      updateData('live-surface', {message: 'Before clear'}),
+      updateComponents('live-surface', [
+        {
+          id: 'root',
+          component: 'Text',
+          text: {path: '/message'},
+        },
+      ]),
+    ]);
+    const secondSurface = processorSurfaces.surfaces[1];
+    session.clear();
+    const afterClear = session.getSnapshot();
+    secondSurface.dataModel.set('/message', 'Cleared surface update');
+    expect(session.getSnapshot()).toBe(afterClear);
 
-      session.processMessages([
-        createSurface('live-surface'),
-        updateData('live-surface', {message: 'Before dispose'}),
-        updateComponents('live-surface', [
-          {
-            id: 'root',
-            component: 'Text',
-            text: {path: '/message'},
-          },
-        ]),
-      ]);
-      const thirdSurface = processorSurfaces.surfaces[2];
-      session.dispose();
-      const afterDispose = session.getSnapshot();
-      thirdSurface.dataModel.set('/message', 'Disposed surface update');
-      expect(session.getSnapshot()).toBe(afterDispose);
-    } finally {
-      session.dispose();
-      processorSurfaces.restore();
-    }
+    session.processMessages([
+      createSurface('live-surface'),
+      updateData('live-surface', {message: 'Before dispose'}),
+      updateComponents('live-surface', [
+        {
+          id: 'root',
+          component: 'Text',
+          text: {path: '/message'},
+        },
+      ]),
+    ]);
+    const thirdSurface = processorSurfaces.surfaces[2];
+    session.dispose();
+    const afterDispose = session.getSnapshot();
+    thirdSurface.dataModel.set('/message', 'Disposed surface update');
+    expect(session.getSnapshot()).toBe(afterDispose);
   });
 
   it('moves live data-model refreshes to the surviving last surface when the active surface is deleted', () => {
     const processorSurfaces = captureProcessorSurfaces();
     const session = createSlackPreviewSession();
+    sessionsToDispose.push(session);
 
-    try {
-      session.processMessages([
-        createSurface('first-surface'),
-        updateData('first-surface', {message: 'First surface'}),
-        updateComponents('first-surface', [
-          {
-            id: 'root',
-            component: 'Text',
-            text: {path: '/message'},
-          },
-        ]),
-        createSurface('second-surface'),
-        updateData('second-surface', {message: 'Second surface'}),
-        updateComponents('second-surface', [
-          {
-            id: 'root',
-            component: 'Text',
-            text: {path: '/message'},
-          },
-        ]),
-      ]);
+    session.processMessages([
+      createSurface('first-surface'),
+      updateData('first-surface', {message: 'First surface'}),
+      updateComponents('first-surface', [
+        {
+          id: 'root',
+          component: 'Text',
+          text: {path: '/message'},
+        },
+      ]),
+      createSurface('second-surface'),
+      updateData('second-surface', {message: 'Second surface'}),
+      updateComponents('second-surface', [
+        {
+          id: 'root',
+          component: 'Text',
+          text: {path: '/message'},
+        },
+      ]),
+    ]);
 
-      expect(sectionText(session)).toBe('Second surface');
+    expect(sectionText(session)).toBe('Second surface');
 
-      session.processMessages([{version: 'v0.9', deleteSurface: {surfaceId: 'second-surface'}}]);
-      expect(session.getSnapshot()).toMatchObject({
-        surfaceId: 'first-surface',
-        status: 'ready',
-      });
-      expect(sectionText(session)).toBe('First surface');
+    session.processMessages([{version: 'v0.9', deleteSurface: {surfaceId: 'second-surface'}}]);
+    expect(session.getSnapshot()).toMatchObject({
+      surfaceId: 'first-surface',
+      status: 'ready',
+    });
+    expect(sectionText(session)).toBe('First surface');
 
-      const afterDelete = session.getSnapshot();
-      processorSurfaces.surfaces[0].dataModel.set('/message', 'First surface updated');
+    const afterDelete = session.getSnapshot();
+    processorSurfaces.surfaces[0].dataModel.set('/message', 'First surface updated');
 
-      expect(sectionText(session)).toBe('First surface updated');
-      expect(session.getSnapshot().revision).toBeGreaterThan(afterDelete.revision);
-    } finally {
-      session.dispose();
-      processorSurfaces.restore();
-    }
+    expect(sectionText(session)).toBe('First surface updated');
+    expect(session.getSnapshot().revision).toBeGreaterThan(afterDelete.revision);
   });
 });
 
