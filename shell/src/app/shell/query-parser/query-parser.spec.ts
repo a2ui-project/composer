@@ -15,31 +15,51 @@
  */
 
 import {QueryParser} from './query-parser';
-import {describe, it, expect, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
 describe('QueryParser', () => {
+  let mockLogger: {
+    warn: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+    info: ReturnType<typeof vi.fn>;
+    debug: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(() => {
+    mockLogger = {
+      warn: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+    };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('extracts the first valid renderer URI string', () => {
-    const url = QueryParser.parseRendererUrl('?renderer=http://localhost:3000');
+    const url = QueryParser.parseRendererUrl('?renderer=http://localhost:3000', mockLogger);
     expect(url).toBe('http://localhost:3000/');
   });
 
   it('extracts renderer URI string from URL hash fragment', () => {
-    const url = QueryParser.parseRendererUrl('#renderer=http://localhost:3000');
+    const url = QueryParser.parseRendererUrl('#renderer=http://localhost:3000', mockLogger);
     expect(url).toBe('http://localhost:3000/');
   });
 
   it('evaluates the first valid instance when multiple renderer parameters exist', () => {
     const url = QueryParser.parseRendererUrl(
       '?renderer=http://first:3000&renderer=http://second:3000',
+      mockLogger,
     );
     expect(url).toBe('http://first:3000/');
   });
 
-  it('strips malformed parameter strings and logs a console warning', () => {
-    const warnSpy = vi.spyOn(console, 'warn');
-    const url = QueryParser.parseRendererUrl('?renderer=not-a-url');
+  it('strips malformed parameter strings and logs a warning', () => {
+    const url = QueryParser.parseRendererUrl('?renderer=not-a-url', mockLogger);
     expect(url).toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(mockLogger.warn).toHaveBeenCalledWith(
       "Malformed renderer parameter string encountered: 'not-a-url'. Stripping invalid URI.",
     );
   });
@@ -47,21 +67,26 @@ describe('QueryParser', () => {
   it('resolves relative renderer paths starting with "/" against window.location.origin', () => {
     // Under Vitest/jsdom, location.origin defaults to http://localhost:3000 or similar.
     const expectedPrefix = globalThis.location?.origin || 'http://localhost';
-    const url = QueryParser.parseRendererUrl('?renderer=/samples/ng-basic-catalog/index.html');
+    const url = QueryParser.parseRendererUrl(
+      '?renderer=/samples/ng-basic-catalog/index.html',
+      mockLogger,
+    );
     expect(url).toBe(`${expectedPrefix}/samples/ng-basic-catalog/index.html`);
   });
 
   it('rejects relative renderer paths that do not start with "/"', () => {
-    const warnSpy = vi.spyOn(console, 'warn');
-    const url = QueryParser.parseRendererUrl('?renderer=samples/ng-basic-catalog/index.html');
+    const url = QueryParser.parseRendererUrl(
+      '?renderer=samples/ng-basic-catalog/index.html',
+      mockLogger,
+    );
     expect(url).toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(mockLogger.warn).toHaveBeenCalledWith(
       "Malformed renderer parameter string encountered: 'samples/ng-basic-catalog/index.html'. Stripping invalid URI.",
     );
   });
 
   it('returns null when no renderer parameter exists', () => {
-    expect(QueryParser.parseRendererUrl('')).toBeNull();
+    expect(QueryParser.parseRendererUrl('', mockLogger)).toBeNull();
   });
 
   describe('parseRendererId', () => {
@@ -90,7 +115,7 @@ describe('QueryParser', () => {
       ]);
       const encoded = await QueryParser.encodeSharedPayload(originalJson);
       expect(encoded.startsWith('d1.')).toBe(true);
-      const decoded = await QueryParser.decodeSharedPayload(encoded);
+      const decoded = await QueryParser.decodeSharedPayload(encoded, mockLogger);
       expect(decoded).toBe(originalJson);
     });
 
@@ -114,17 +139,19 @@ describe('QueryParser', () => {
     });
 
     it('returns null when decoding invalid, corrupt, or nullish deflate-raw payload', async () => {
-      expect(await QueryParser.decodeSharedPayload('not-d1-prefixed')).toBeNull();
-      expect(await QueryParser.decodeSharedPayload('d1.invalid_base64_content!!!')).toBeNull();
-      expect(await QueryParser.decodeSharedPayload('d1.AAAA')).toBeNull();
-      expect(await QueryParser.decodeSharedPayload(null)).toBeNull();
-      expect(await QueryParser.decodeSharedPayload(undefined)).toBeNull();
+      expect(await QueryParser.decodeSharedPayload('not-d1-prefixed', mockLogger)).toBeNull();
+      expect(
+        await QueryParser.decodeSharedPayload('d1.invalid_base64_content!!!', mockLogger),
+      ).toBeNull();
+      expect(await QueryParser.decodeSharedPayload('d1.AAAA', mockLogger)).toBeNull();
+      expect(await QueryParser.decodeSharedPayload(null, mockLogger)).toBeNull();
+      expect(await QueryParser.decodeSharedPayload(undefined, mockLogger)).toBeNull();
     });
 
     it('correctly roundtrips a large payload (>100KB) without stack overflow', async () => {
       const largePayload = JSON.stringify([{data: 'x'.repeat(150000)}]);
       const encoded = await QueryParser.encodeSharedPayload(largePayload);
-      const decoded = await QueryParser.decodeSharedPayload(encoded);
+      const decoded = await QueryParser.decodeSharedPayload(encoded, mockLogger);
       expect(decoded).toBe(largePayload);
     });
   });
@@ -135,7 +162,7 @@ describe('QueryParser', () => {
       const expectedFormattedJson = JSON.stringify([{version: 'v0.9', test: true}], null, 2);
       const encoded = await QueryParser.encodeSharedPayload(originalJson);
       const hashString = `#a2ui=${encodeURIComponent(encoded)}`;
-      const result = await QueryParser.parseSharedA2ui(hashString);
+      const result = await QueryParser.parseSharedA2ui(hashString, mockLogger);
       expect(result.payload).toBe(expectedFormattedJson);
       expect(result.error).toBeNull();
     });
@@ -145,7 +172,7 @@ describe('QueryParser', () => {
       const expectedFormattedJson = JSON.stringify([{version: 'v0.9', test: true}], null, 2);
       const encoded = await QueryParser.encodeSharedPayload(originalJson);
       const hashString = `a2ui=${encodeURIComponent(encoded)}`;
-      const result = await QueryParser.parseSharedA2ui(hashString);
+      const result = await QueryParser.parseSharedA2ui(hashString, mockLogger);
       expect(result.payload).toBe(expectedFormattedJson);
       expect(result.error).toBeNull();
     });
@@ -155,34 +182,47 @@ describe('QueryParser', () => {
       const encodedJson = encodeURIComponent(rawJson);
       // Intentionally corrupt the string.
       const corruptedJson = encodedJson.slice(0, encodedJson.length - 3);
-      const result = await QueryParser.parseSharedA2ui(`#a2ui=d1.${corruptedJson}`);
+      const result = await QueryParser.parseSharedA2ui(`#a2ui=d1.${corruptedJson}`, mockLogger);
       expect(result.payload).toBeNull();
       expect(result.error).toContain('truncated or corrupted');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to decompress shared A2UI payload:',
+        expect.anything(),
+      );
     });
 
     it('returns invalid JSON syntax error when decompressed payload is malformed JSON', async () => {
       vi.spyOn(QueryParser, 'decodeSharedPayload').mockResolvedValue(
         '[{"version":"v0.9", unclosed:',
       );
-      const result = await QueryParser.parseSharedA2ui('#a2ui=d1.mocked_corrupted_json');
+      const result = await QueryParser.parseSharedA2ui(
+        '#a2ui=d1.mocked_corrupted_json',
+        mockLogger,
+      );
       expect(result.payload).toBeNull();
       expect(result.error).toContain('invalid or incomplete JSON syntax');
     });
 
     it('returns unrecognized format error when payload format is unrecognized in hash fragment', async () => {
-      const result = await QueryParser.parseSharedA2ui('#a2ui=unknown-non-json-format');
+      const result = await QueryParser.parseSharedA2ui('#a2ui=unknown-non-json-format', mockLogger);
       expect(result.payload).toBeNull();
       expect(result.error).toContain('unrecognized or corrupted');
     });
 
     it('returns null payload and null error when hash fragment is missing, empty, or without a2ui param', async () => {
-      expect(await QueryParser.parseSharedA2ui(null)).toEqual({payload: null, error: null});
-      expect(await QueryParser.parseSharedA2ui(undefined)).toEqual({
+      expect(await QueryParser.parseSharedA2ui(null, mockLogger)).toEqual({
         payload: null,
         error: null,
       });
-      expect(await QueryParser.parseSharedA2ui('')).toEqual({payload: null, error: null});
-      expect(await QueryParser.parseSharedA2ui('#other=value')).toEqual({
+      expect(await QueryParser.parseSharedA2ui(undefined, mockLogger)).toEqual({
+        payload: null,
+        error: null,
+      });
+      expect(await QueryParser.parseSharedA2ui('', mockLogger)).toEqual({
+        payload: null,
+        error: null,
+      });
+      expect(await QueryParser.parseSharedA2ui('#other=value', mockLogger)).toEqual({
         payload: null,
         error: null,
       });

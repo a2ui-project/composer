@@ -18,6 +18,7 @@ import {Injectable, inject} from '@angular/core';
 import {LocalStorageInteractions} from '../../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../../storage/models/local-storage-keys';
 import {IS_1P_AUTH_ENABLED} from '../../environment-tokens/environment-tokens';
+import {ErrorLogger} from '../../../debug/error-logger.service';
 
 @Injectable({
   providedIn: 'root',
@@ -25,6 +26,7 @@ import {IS_1P_AUTH_ENABLED} from '../../environment-tokens/environment-tokens';
 export class EnvironmentContextService {
   private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
+  private readonly logger = inject(ErrorLogger).withTag('[EnvironmentContextService]');
 
   getBaseOrigin(): string {
     return globalThis.location?.origin || 'http://localhost';
@@ -113,7 +115,7 @@ export class EnvironmentContextService {
           globalThis.history.replaceState({}, '', cleanUrl.toString());
         }
       } catch (err) {
-        console.warn('Failed to clean shared A2UI URL:', err);
+        this.logger.warn('Failed to clean shared A2UI URL:', err);
       }
     }
   }

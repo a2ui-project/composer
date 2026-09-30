@@ -57,6 +57,7 @@ import {
   CustomInstructionsState,
 } from '../chat-prompt-factory/chat-prompt-factory.service';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 /**
  * Directive responsible for automatically scrolling a container to the bottom whenever its inputs change.
@@ -115,6 +116,7 @@ export class ChatPanel {
   private readonly fileIngestionService = inject(FileIngestionService);
   private readonly screenshotCaptureService = inject(ScreenshotCaptureService);
   private readonly promptFactory = inject(ChatPromptFactoryService);
+  private readonly logger = inject(ErrorLogger).withTag('[ChatPanel]');
   protected readonly mcpManager = inject(McpClientManagerService);
 
   protected readonly includeScreenshot = signal<boolean>(false);
@@ -277,7 +279,7 @@ export class ChatPanel {
           });
         }
       } catch (err) {
-        console.error('ChatPanel: Failed to capture screenshot context:', err);
+        this.logger.error('Failed to capture screenshot context:', err);
         screenshotSuccess = false;
       } finally {
         this.isReadingFiles.set(false);
@@ -425,7 +427,7 @@ export class ChatPanel {
 
       for (const file of filesArray) {
         if (file.size > 10 * 1024 * 1024) {
-          console.warn(`File ${file.name} exceeds the 10MB size limit.`);
+          this.logger.warn(`File ${file.name} exceeds the 10MB size limit.`);
           continue;
         }
 
@@ -433,7 +435,7 @@ export class ChatPanel {
           const attached = await this.fileIngestionService.readFileAsAttachment(file);
           newFiles.push(attached);
         } catch (err) {
-          console.error(`Failed to read file ${file.name}:`, err);
+          this.logger.error(`Failed to read file ${file.name}:`, err);
         }
       }
 

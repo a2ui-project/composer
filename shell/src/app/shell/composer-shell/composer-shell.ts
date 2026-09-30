@@ -40,6 +40,7 @@ import {SessionStorageInteractions} from '../../storage/session-storage-interact
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 /** Standard length for showing any snack bar notification. */
 const SNACK_BAR_DURATION_MS = 5000;
@@ -85,6 +86,7 @@ export class ComposerShell {
   private readonly snackBar = inject(MatSnackBar);
   private readonly document = inject(DOCUMENT);
   private readonly shareService = inject(ShareService);
+  private readonly logger = inject(ErrorLogger).withTag('[Shell]');
 
   activeCatalogTitle = this.catalogManagement.activeCatalogTitle;
   activeCatalogDescription = this.catalogManagement.activeCatalogDescription;
@@ -158,6 +160,6 @@ export class ComposerShell {
       url.hash = '';
       this.document.defaultView.location.href = url.toString();
     }
-    console.log('Session state cleared.');
+    this.logger.info('Session state cleared.');
   }
 }

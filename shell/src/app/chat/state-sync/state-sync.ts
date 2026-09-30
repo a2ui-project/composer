@@ -25,6 +25,7 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {RenderA2uiItem, A2uiComponentInstance, UpdateComponentsDetails} from 'a2ui-bridge';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {tryParseJsonArray, formatJson} from '../../utils/json';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 /**
  * Manages in-memory volatile autosave draft layouts and bidirectionally
@@ -51,6 +52,7 @@ export class StateSync {
   private readonly chatState = inject(ChatState);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly startupConfigState = inject(StartupConfigStateService);
+  private readonly logger = inject(ErrorLogger).withTag('[StateSync]');
 
   // A "draft" represents the volatile, unsaved in-memory JSON array
   // payload containing the active surface setup, component hierarchy,
@@ -273,8 +275,8 @@ export class StateSync {
       return formatJson(sanitized);
     }
 
-    console.warn(
-      '[StateSync] Discarding malformed layout JSON during sanitization: not a valid JSON array',
+    this.logger.warn(
+      'Discarding malformed layout JSON during sanitization: not a valid JSON array',
     );
     // Return empty fallback content if parsing or sanitization fails completely
     return '';

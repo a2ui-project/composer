@@ -610,8 +610,8 @@ describe('LocalStorageAppConfigProvider', () => {
     });
 
     it('rejects invalid or non-HTTP URLs in setA2aAgentUrl', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const provider = setupProvider();
+      const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
 
       for (const dangerousUrl of [
         'javascript:alert(1)',

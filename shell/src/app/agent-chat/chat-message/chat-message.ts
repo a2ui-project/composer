@@ -35,6 +35,7 @@ import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 import {renderMarkdown} from '../../utils/markdown';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 import {CanvasArtifact, UiAttachedImage, UiMessage} from './types';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 /**
  * A user's explicit expand/collapse choice for the thinking accordion, tagged with the
@@ -126,6 +127,7 @@ function imagePreviewSrc(file: UiAttachedImage): string {
 export class A2aChatMessage {
   private readonly document = inject(DOCUMENT);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly logger = inject(ErrorLogger).withTag('[ChatMessage]');
 
   /** UI message object containing sender role, text, thinking trace, and optional A2UI payload. */
   readonly message = input.required<UiMessage>();
@@ -318,7 +320,7 @@ export class A2aChatMessage {
       return;
     }
     navigator.clipboard.writeText(text).catch((err: unknown) => {
-      console.warn('Failed to copy message text to clipboard', err);
+      this.logger.warn('Failed to copy message text to clipboard', err);
     });
   }
 

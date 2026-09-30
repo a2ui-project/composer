@@ -34,6 +34,7 @@ import {HostCommunication} from '../shell/host-communication/host-communication'
 import {formatJson} from '../utils/json';
 import {PreviewBridgeMessageType, ComponentUsage, RenderA2uiItem} from 'a2ui-bridge';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
+import {ErrorLogger} from '../debug/error-logger.service';
 
 /**
  * Displays a split visual catalog gallery enabling search, interactive component selection,
@@ -63,6 +64,7 @@ export class Gallery implements OnInit, OnDestroy {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly clipboard = inject(Clipboard);
+  private readonly logger = inject(ErrorLogger).withTag('[Gallery]');
 
   constructor() {
     this.hostCommunication.messageStream$
@@ -132,7 +134,7 @@ export class Gallery implements OnInit, OnDestroy {
 
       this.hostCommunication.sendRenderA2UI(payload);
     } catch (e) {
-      console.error('Failed to parse component usage JSON:', e);
+      this.logger.error('Failed to parse component usage JSON:', e);
     }
   }
 
@@ -274,10 +276,10 @@ export class Gallery implements OnInit, OnDestroy {
           componentKey: this.selectedComponentKey() || '',
         });
       } else {
-        console.error('Failed to copy A2UI component usage to clipboard.');
+        this.logger.error('Failed to copy A2UI component usage to clipboard.');
       }
     } catch (err) {
-      console.error('Failed to parse or format A2UI usage payload: ', err);
+      this.logger.error('Failed to parse or format A2UI usage payload: ', err);
     }
   }
 }

@@ -74,6 +74,7 @@ export class RawFrame {
   private readonly chatState = inject(ChatState);
   private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly errorLogger = inject(ErrorLogger);
+  private readonly logger = this.errorLogger.withTag('[RawFrame]');
   private readonly destroyRef = inject(DestroyRef);
   private readonly snackBar = inject(MatSnackBar);
   private readonly layoutInput$ = new Subject<string>();
@@ -171,9 +172,9 @@ export class RawFrame {
           }
         } catch (err) {
           if (err instanceof SyntaxError) {
-            console.warn(`Syntax error in JSON:`, err);
+            this.logger.warn('Syntax error in JSON:', err);
           } else {
-            console.error('Unexpected error sending A2UI to renderer:', err);
+            this.logger.error('Unexpected error sending A2UI to renderer:', err);
           }
         }
       });

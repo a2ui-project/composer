@@ -81,6 +81,7 @@ export class RenderedFrame {
   private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
   private errorLogger = inject(ErrorLogger);
+  private readonly logger = this.errorLogger.withTag('[RenderedFrame]');
 
   /** Optional layout payload to render immediately into the guest iframe. */
   readonly payload = input<unknown[] | null | undefined>(null);
@@ -168,13 +169,13 @@ export class RenderedFrame {
 
       const urlString = url.toString();
       if (!isValidHttpUrl(urlString)) {
-        console.error('Renderer URL failed safe validation:', urlString);
+        this.logger.error('Renderer URL failed safe validation:', urlString);
         return null;
       }
 
       return this.sanitizer.bypassSecurityTrustResourceUrl(urlString);
     } catch (e) {
-      console.error('Failed to parse renderer URL:', e);
+      this.logger.error('Failed to parse renderer URL:', e);
       return null;
     }
   });
@@ -231,7 +232,7 @@ export class RenderedFrame {
             this.hostCommunication.sendRenderA2UI(payload, myIframe);
           }
         } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-          if (CrossFrameValidator.validateIncomingMessage(envelope)) {
+          if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
             const resizePayload = envelope.payload as {height: number; width?: number};
             this.dynamicHeight.set(this.capReportedHeight(resizePayload.height));
           }
@@ -280,7 +281,7 @@ export class RenderedFrame {
 
     if (
       envelope.type !== PreviewBridgeMessageType.SURFACE_RESIZE ||
-      !CrossFrameValidator.validateIncomingMessage(envelope)
+      !CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)
     ) {
       return;
     }

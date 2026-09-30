@@ -41,6 +41,7 @@ import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {ComposerShell} from './composer-shell';
 import {ComposerShellHarness} from './test/composer-shell.harness';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 describe('ComposerShell Layout', () => {
   let fixture: ComponentFixture<ComposerShell>;
@@ -204,7 +205,8 @@ describe('ComposerShell Layout', () => {
     const usageTracking = TestBed.inject(UsageTrackingService);
     const resetSpy = vi.spyOn(usageTracking, 'trackSessionReset');
     const sessionResetSpy = vi.spyOn(usageTracking, 'resetSession');
-    const consoleSpy = vi.spyOn(console, 'log');
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const infoSpy = vi.spyOn(errorLogger, 'info');
 
     await harness.clickResetButton();
 
@@ -220,7 +222,9 @@ describe('ComposerShell Layout', () => {
       LocalStorageKey.CUSTOM_INSTRUCTIONS,
     );
     expect(sessionStorageServiceMock.clear).toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalledWith('Session state cleared.');
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.objectContaining({message: 'Session state cleared.', sourceTag: '[Shell]'}),
+    );
   });
 
   it('toggles the dark theme SCSS class and tracks theme change on toggle', async () => {

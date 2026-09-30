@@ -22,6 +22,7 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SystemInstructionsDialogHarness} from './test/system-instructions-dialog.harness';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatSnackBar} from '@angular/material/snack-bar';
+import {ErrorLogger} from '../../debug/error-logger.service';
 
 describe('SystemInstructionsDialog', () => {
   let fixture: ComponentFixture<SystemInstructionsDialog>;
@@ -134,20 +135,27 @@ describe('SystemInstructionsDialog', () => {
       configurable: true,
       writable: true,
     });
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const errorSpy = vi.spyOn(errorLogger, 'error');
     await harness.clickCopy();
-    expect(consoleSpy).toHaveBeenCalledWith('Clipboard API is not available in this environment.');
+    expect(errorSpy).toHaveBeenCalledWith({
+      message: 'Clipboard API is not available in this environment.',
+      sourceTag: '[SystemInstructionsDialog]',
+    });
   });
 
   it('logs an error when copying to clipboard fails', async () => {
     writeTextSpy.mockRejectedValue(new Error('Clipboard failure'));
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorLogger = TestBed.inject(ErrorLogger);
+    const errorSpy = vi.spyOn(errorLogger, 'error');
     await harness.clickCopy();
     // Wait for promise microtask queue to run the .catch handler
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(consoleSpy).toHaveBeenCalledWith(
-      'Failed to copy system instructions to clipboard: ',
-      expect.any(Error),
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Failed to copy system instructions to clipboard:'),
+        sourceTag: '[SystemInstructionsDialog]',
+      }),
     );
   });
 });
