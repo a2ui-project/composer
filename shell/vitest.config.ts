@@ -39,6 +39,9 @@ function isSuppressedViteWarning(msg: string): boolean {
   return SUPPRESSED_VITE_WARNINGS.some(warning => msg.includes(warning));
 }
 
+const VITEST_ANGULAR_ESM_PLUGIN_NAME = '@analogjs/vitest-angular-esm-plugin';
+const NODE_MODULES_DIR = 'node_modules';
+
 const customLogger = createLogger();
 const originalWarn = customLogger.warn;
 const originalWarnOnce = customLogger.warnOnce;
@@ -81,6 +84,26 @@ export default defineConfig({
           }
           originalWarnOnce(msg, options);
         };
+
+        // @analogjs/vitest-angular-esm-plugin transforms files by wrapping module code inside
+        // a CommonJS-style factory function (function(exports, require, module, __filename, __dirname) { ... })
+        // to work around Node ESM module caching.
+        // When this transform runs on first-party .spec.ts files before Vitest's vi.mock / vi.hoisted
+        // hoisting pass, Vitest sees top-level vi.hoisted() and vi.mock() calls as nested inside
+        // that wrapper function and emits warnings that they are not at the top level of the module.
+        // Restricting the plugin's transform hook to node_modules (where Angular ESM packages actually
+        // need it) prevents wrapping first-party .spec.ts files so top-level vi.hoisted() and vi.mock()
+        // work cleanly without warnings.
+        const esmPlugin = config.plugins.find(p => p.name === VITEST_ANGULAR_ESM_PLUGIN_NAME);
+        if (esmPlugin?.transform) {
+          const originalTransform = esmPlugin.transform;
+          esmPlugin.transform = function (_code: string, id: string) {
+            if (!id.includes(NODE_MODULES_DIR)) {
+              return undefined;
+            }
+            return (originalTransform as Function).apply(this, arguments);
+          };
+        }
       },
     },
   ],
