@@ -19,16 +19,15 @@ import {
   collectUnexpectedErrors,
   DATA_BOUND_ACTION_JSON,
   expectBlockKitJsonToContain,
-  getSevereMonacoMarkers,
+  getJsonValidationProblems,
   MARKET_SNAPSHOT_JSON,
-  MONACO_MARKER_DEBOUNCE_MS,
   openComposerWithSlackRenderer,
   replaceMonacoJson,
   selectGalleryComponent,
   slackPreviewFrame,
   slackPreviewSurface,
-  waitForMonaco,
 } from './slack-renderer.helpers';
+import {waitForMonacoEditor} from './helpers';
 
 const EXPECTED_COMPONENTS = [
   'Button',
@@ -80,8 +79,13 @@ test.describe('Slack renderer in Composer', () => {
     await page.getByRole('button', {name: 'Copy to Clipboard'}).click();
     await expect
       .poll(async () => {
-        const commands = JSON.parse(await page.evaluate(() => navigator.clipboard.readText())) as
-          Array<Record<string, unknown>> | unknown;
+        // The copy can land after the first read on a slower machine, so an empty
+        // clipboard means "not yet" and the poll tries again.
+        const text = await page.evaluate(() => navigator.clipboard.readText());
+        if (!text) {
+          return {isArray: false};
+        }
+        const commands = JSON.parse(text) as Array<Record<string, unknown>> | unknown;
         if (!Array.isArray(commands)) {
           return {isArray: false};
         }
@@ -143,7 +147,7 @@ test.describe('Slack renderer in Composer', () => {
     const unexpectedErrors = collectUnexpectedErrors(page);
 
     await openComposerWithSlackRenderer(page);
-    await waitForMonaco(page);
+    await waitForMonacoEditor(page);
 
     await replaceMonacoJson(page, DATA_BOUND_ACTION_JSON);
     await expect(
@@ -151,8 +155,7 @@ test.describe('Slack renderer in Composer', () => {
     ).toBeVisible();
     await expect(slackPreviewFrame(page).getByRole('button', {name: 'Acknowledge'})).toBeVisible();
 
-    await page.waitForTimeout(MONACO_MARKER_DEBOUNCE_MS + 600);
-    expect(await getSevereMonacoMarkers(page)).toEqual([]);
+    expect(await getJsonValidationProblems(page)).toEqual([]);
 
     const updatedDataBoundJson = DATA_BOUND_ACTION_JSON.replace(
       '"Ready for review"',
@@ -163,8 +166,7 @@ test.describe('Slack renderer in Composer', () => {
     await expect(slackPreviewSurface(page).getByText('Ready for review')).toHaveCount(0);
     await expectBlockKitJsonToContain(page, 'Ready for detailed review');
 
-    await page.waitForTimeout(MONACO_MARKER_DEBOUNCE_MS + 600);
-    expect(await getSevereMonacoMarkers(page)).toEqual([]);
+    expect(await getJsonValidationProblems(page)).toEqual([]);
 
     const updatedMarketJson = MARKET_SNAPSHOT_JSON.replace(
       '"Illustrative historical energy market snapshot"',
@@ -182,8 +184,7 @@ test.describe('Slack renderer in Composer', () => {
     await expectBlockKitJsonToContain(page, 'Morning energy market snapshot');
     await expectBlockKitJsonToContain(page, '$81.03/bbl');
 
-    await page.waitForTimeout(MONACO_MARKER_DEBOUNCE_MS + 600);
-    expect(await getSevereMonacoMarkers(page)).toEqual([]);
+    expect(await getJsonValidationProblems(page)).toEqual([]);
 
     expect(unexpectedErrors).toEqual([]);
   });

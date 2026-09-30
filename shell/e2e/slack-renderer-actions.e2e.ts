@@ -23,8 +23,8 @@ import {
   replaceMonacoJson,
   slackPreviewFrame,
   slackPreviewSurface,
-  waitForMonaco,
 } from './slack-renderer.helpers';
+import {waitForMonacoEditor} from './helpers';
 
 const EXPECTED_ACTION = {
   name: 'acknowledge',
@@ -50,6 +50,7 @@ interface CapturedActionPayload {
 
 interface WindowWithCapturedSlackActions extends Window {
   __capturedSlackActions?: CapturedActionPayload[];
+  __catalogReplies?: number;
 }
 
 test.describe('Slack renderer actions in Composer', () => {
@@ -81,7 +82,7 @@ test.describe('Slack renderer actions in Composer', () => {
 
 async function loadDataBoundActionExample(page: Page): Promise<void> {
   await openComposerWithSlackRenderer(page);
-  await waitForMonaco(page);
+  await waitForMonacoEditor(page);
   await replaceMonacoJson(page, DATA_BOUND_ACTION_JSON);
   await expect(
     slackPreviewSurface(page).getByText('Ready for review', {exact: true}),
@@ -110,8 +111,37 @@ async function expectSingleActionMessage(page: Page): Promise<void> {
   expect(payload.action).toMatchObject(EXPECTED_ACTION);
   expect(payload.action?.timestamp).toEqual(expect.any(String));
 
-  await page.waitForTimeout(250);
+  await roundTripWithPreview(page);
   expect(await getCapturedActionMessages(page)).toHaveLength(1);
+}
+
+/**
+ * Asks the preview for its catalog and waits for the reply. The preview's messages
+ * arrive in the order it sends them, so a second action sent for the same click would
+ * be recorded before the reply.
+ */
+async function roundTripWithPreview(page: Page): Promise<void> {
+  await page.evaluate(
+    ({request, reply}) => {
+      const captureWindow = window as WindowWithCapturedSlackActions;
+      const frame = document.querySelector<HTMLIFrameElement>('iframe.preview-iframe');
+      if (!frame?.contentWindow) {
+        throw new Error('The preview iframe was not available.');
+      }
+      captureWindow.__catalogReplies = 0;
+      window.addEventListener('message', event => {
+        const data = event.data as {type?: unknown} | undefined;
+        if (event.source === frame.contentWindow && data?.type === reply) {
+          captureWindow.__catalogReplies = (captureWindow.__catalogReplies ?? 0) + 1;
+        }
+      });
+      frame.contentWindow.postMessage({type: request}, '*');
+    },
+    {request: PreviewBridgeMessageType.GET_CATALOG, reply: PreviewBridgeMessageType.A2UI_CATALOG},
+  );
+  await expect
+    .poll(() => page.evaluate(() => (window as WindowWithCapturedSlackActions).__catalogReplies))
+    .toBeGreaterThan(0);
 }
 
 async function getCapturedActionMessages(page: Page): Promise<CapturedActionPayload[]> {

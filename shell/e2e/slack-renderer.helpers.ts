@@ -16,10 +16,8 @@
 
 import {readFileSync} from 'node:fs';
 import {expect, type FrameLocator, type Locator, type Page} from '@playwright/test';
-import {type MonacoModel, type WindowWithMonaco} from './helpers';
 
 export const SLACK_RENDERER_URL = 'http://127.0.0.1:3460';
-export const MONACO_MARKER_DEBOUNCE_MS = 3000;
 
 export const DATA_BOUND_ACTION_JSON = readSlackExample('data-bound-action.json');
 export const MARKET_SNAPSHOT_JSON = readSlackExample('market-snapshot.json');
@@ -30,22 +28,24 @@ interface OpenSlackRendererOptions {
   selectedApiKeyId?: string;
 }
 
-interface MonacoMarker {
-  severity: number;
+/** A diagnostic from Monaco's JSON worker, in Language Server Protocol form. */
+interface JsonDiagnostic {
+  /** 1 is an error, 2 a warning, 3 information, and 4 a hint. */
+  severity?: number;
   message: string;
 }
 
-interface WindowWithMonacoMarkers extends Window {
+interface WindowWithMonacoJson extends Window {
   monaco?: {
-    editor?: {
-      getModels(): MonacoModel[];
-      getModelMarkers?: (options?: object) => MonacoMarker[];
+    editor?: {getModels(): Array<{uri: {toString(): string}}>};
+    languages?: {
+      json?: {
+        getWorker?: () => Promise<
+          (uri: unknown) => Promise<{doValidation(uri: string): Promise<JsonDiagnostic[]>}>
+        >;
+      };
     };
   };
-}
-
-interface WindowWithSlackRendererStorageSetupError extends Window {
-  __a2uiSlackRendererStorageSetupError?: string;
 }
 
 function readSlackExample(fileName: string): string {
@@ -64,41 +64,25 @@ export async function openComposerWithSlackRenderer(
   const selectedApiKeyId = options.selectedApiKeyId;
   await page.addInitScript(
     ({rendererOrigins, authMode, apiKeyId}) => {
-      let isTopLevel = false;
-      try {
-        isTopLevel = window.top === window;
-      } catch {
+      // Only the workspace page; the preview iframe keeps its own storage.
+      if (window.top !== window) {
         return;
       }
-
-      if (!isTopLevel) {
-        return;
-      }
-
-      try {
-        localStorage.clear();
-        if (authMode === '3p') {
-          localStorage.setItem('a2ui_composer_force_3p', 'true');
-          localStorage.removeItem('a2ui_composer_force_1p');
-          if (apiKeyId) {
-            localStorage.setItem('a2ui_composer_selected_api_key', apiKeyId);
-          } else {
-            localStorage.removeItem('a2ui_composer_selected_api_key');
-          }
+      localStorage.clear();
+      if (authMode === '3p') {
+        localStorage.setItem('a2ui_composer_force_3p', 'true');
+        localStorage.removeItem('a2ui_composer_force_1p');
+        if (apiKeyId) {
+          localStorage.setItem('a2ui_composer_selected_api_key', apiKeyId);
         } else {
-          localStorage.setItem('a2ui_composer_force_1p', 'true');
-          localStorage.removeItem('a2ui_composer_force_3p');
           localStorage.removeItem('a2ui_composer_selected_api_key');
         }
-        localStorage.setItem('a2ui_composer_allowed_origins', JSON.stringify(rendererOrigins));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const setupError = `Failed to configure Slack renderer E2E localStorage: ${message}`;
-        (
-          window as unknown as WindowWithSlackRendererStorageSetupError
-        ).__a2uiSlackRendererStorageSetupError = setupError;
-        throw new Error(setupError);
+      } else {
+        localStorage.setItem('a2ui_composer_force_1p', 'true');
+        localStorage.removeItem('a2ui_composer_force_3p');
+        localStorage.removeItem('a2ui_composer_selected_api_key');
       }
+      localStorage.setItem('a2ui_composer_allowed_origins', JSON.stringify(rendererOrigins));
     },
     {
       rendererOrigins: [new URL(SLACK_RENDERER_URL).origin, 'http://localhost:4200'],
@@ -108,13 +92,6 @@ export async function openComposerWithSlackRenderer(
   );
 
   await page.goto(rendererId ? `/?rendererId=${rendererId}` : `/?renderer=${SLACK_RENDERER_URL}`);
-  const storageSetupError = await page.evaluate(() => {
-    return (window as unknown as WindowWithSlackRendererStorageSetupError)
-      .__a2uiSlackRendererStorageSetupError;
-  });
-  if (storageSetupError) {
-    throw new Error(storageSetupError);
-  }
   await expect(page.locator('.workspace-container')).toBeVisible();
   await expect(page.locator('iframe.preview-iframe').first()).toBeVisible();
   // Wait for the catalog handshake, not just the frame. A cold dev server under parallel
@@ -142,14 +119,6 @@ export function slackPreviewSurface(page: Page): Locator {
 
 export function blockKitDetails(page: Page): Locator {
   return slackPreviewFrame(page).locator('details').filter({hasText: 'Generated Block Kit'});
-}
-
-export async function waitForMonaco(page: Page): Promise<void> {
-  await expect(page.locator('a2ui-composer-monaco-editor .monaco-editor').first()).toBeVisible();
-  await page.waitForFunction(() => {
-    const monaco = (window as unknown as WindowWithMonaco).monaco;
-    return (monaco?.editor?.getModels()?.length ?? 0) > 0;
-  });
 }
 
 interface WindowWithPreviewActivity extends Window {
@@ -196,34 +165,50 @@ export async function waitForPreviewToSettle(page: Page): Promise<void> {
 }
 
 /**
- * Replaces the editor JSON and waits for the preview to settle. The editor feeds the
- * preview through more than one debounced path, so a single edit can render twice;
- * without the wait, a late render can replace a field the test has started typing into.
+ * Replaces the editor JSON the way a user would, by selecting everything and pasting,
+ * then waits for the preview to settle. The editor feeds the preview through more than
+ * one debounced path, so a single edit can render twice; without the wait, a late
+ * render can replace a field the test has started typing into.
  */
 export async function replaceMonacoJson(page: Page, value: string): Promise<void> {
   await trackPreviewActivity(page);
-  await page.evaluate(json => {
-    const model = (window as unknown as WindowWithMonaco).monaco?.editor?.getModels()?.[0];
-    if (!model) {
-      throw new Error('Monaco model was not available.');
-    }
-    model.setValue(json);
+  await page.locator('a2ui-composer-monaco-editor .monaco-editor').first().click();
+  const input = page.getByRole('textbox', {name: 'Raw layout JSON'});
+  await expect(input).toBeFocused();
+  // The e2e project emulates Desktop Chrome, whose user agent reports Windows, so
+  // Monaco uses Windows key bindings on every host.
+  await page.keyboard.press('Control+a');
+  // Headless Chrome doesn't run the paste shortcut, so dispatch the paste event Monaco
+  // handles. Unlike typing, pasting doesn't trigger the editor's auto-closing brackets.
+  await input.evaluate((element, text) => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', text);
+    element.dispatchEvent(
+      new ClipboardEvent('paste', {clipboardData, bubbles: true, cancelable: true}),
+    );
   }, value);
   await waitForPreviewToSettle(page);
 }
 
-export async function getSevereMonacoMarkers(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const monaco = (window as unknown as WindowWithMonacoMarkers).monaco;
-    const getModelMarkers = monaco?.editor?.getModelMarkers;
-    if (typeof getModelMarkers !== 'function') {
-      throw new Error('Monaco marker API was not available.');
+/**
+ * Validates the editor's current JSON with the same Monaco JSON worker the editor uses,
+ * against the active catalog's schema, and returns the error and warning messages.
+ * Asking the worker directly gives a result for the current content without waiting
+ * out Composer's debounced error reporting.
+ */
+export async function getJsonValidationProblems(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const monaco = (window as unknown as WindowWithMonacoJson).monaco;
+    const model = monaco?.editor?.getModels()[0];
+    const getWorker = monaco?.languages?.json?.getWorker;
+    if (!model || !getWorker) {
+      throw new Error('Monaco JSON validation was not available.');
     }
-
-    const markers = getModelMarkers({});
-    return markers
-      .filter(marker => marker.severity === 8 || marker.severity === 4)
-      .map(marker => marker.message);
+    const worker = await (await getWorker())(model.uri);
+    const diagnostics = await worker.doValidation(model.uri.toString());
+    return diagnostics
+      .filter(diagnostic => diagnostic.severity === 1 || diagnostic.severity === 2)
+      .map(diagnostic => diagnostic.message);
   });
 }
 
