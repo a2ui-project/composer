@@ -31,7 +31,7 @@ import {
 import {z} from 'zod/v3';
 import {zodToJsonSchema} from 'zod-to-json-schema';
 import {SLACK_LIMITS} from '@copilotkit/channels-slack/render';
-import {CHART_TYPES} from './chart-image';
+import {ChartType} from './chart-image';
 import {InputComponentType, InputKind} from './form-input';
 import {MarketSnapshotSchema} from './market-snapshot';
 import {SLACK_TABLE_MAX_BODY_ROWS, SLACK_TEXT_INPUT_MAX_LENGTH} from './slack-limits';
@@ -241,7 +241,7 @@ const ChartSchema = z
   .object({
     ...CommonProps,
     type: z
-      .enum(CHART_TYPES)
+      .nativeEnum(ChartType)
       .optional()
       .describe(
         'Chart kind. Defaults to verticalBar. Use pie or donut for shares of a whole, line for trends, and bars to compare categories.',

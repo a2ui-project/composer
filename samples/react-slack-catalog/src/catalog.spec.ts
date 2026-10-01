@@ -588,6 +588,19 @@ describe('Slack Chart component', () => {
     expect(slackCatalogJson.description).toContain('Use Chart for bar, line, pie, or donut charts');
   });
 
+  it('publishes every chart type as a plain string, in order', () => {
+    expect(slackCatalogJson.components.Chart).toMatchObject({
+      allOf: [
+        expect.anything(),
+        {
+          properties: {
+            type: {type: 'string', enum: ['verticalBar', 'horizontalBar', 'line', 'pie', 'donut']},
+          },
+        },
+      ],
+    });
+  });
+
   it('accepts the Gallery example and bound labels and values', () => {
     const validateChart = compileComponentSchema(slackCatalogJson.components.Chart);
 

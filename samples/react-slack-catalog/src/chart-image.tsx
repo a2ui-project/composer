@@ -16,10 +16,14 @@
 
 import {renderToStaticMarkup} from 'react-dom/server';
 
-/** Chart kinds the Slack catalog accepts, matching Channels UI's `ChartType`. */
-export const CHART_TYPES = ['verticalBar', 'horizontalBar', 'line', 'pie', 'donut'] as const;
-
-export type ChartType = (typeof CHART_TYPES)[number];
+/** Chart kinds the Slack catalog accepts. The values match Channels UI's `ChartProps.type`. */
+export enum ChartType {
+  VERTICAL_BAR = 'verticalBar',
+  HORIZONTAL_BAR = 'horizontalBar',
+  LINE = 'line',
+  PIE = 'pie',
+  DONUT = 'donut',
+}
 
 export interface ChartPoint {
   readonly label: string;
@@ -95,11 +99,11 @@ const PALETTE = [
 ];
 
 const TYPE_NAMES: Record<ChartType, string> = {
-  verticalBar: 'Bar chart',
-  horizontalBar: 'Horizontal bar chart',
-  line: 'Line chart',
-  pie: 'Pie chart',
-  donut: 'Donut chart',
+  [ChartType.VERTICAL_BAR]: 'Bar chart',
+  [ChartType.HORIZONTAL_BAR]: 'Horizontal bar chart',
+  [ChartType.LINE]: 'Line chart',
+  [ChartType.PIE]: 'Pie chart',
+  [ChartType.DONUT]: 'Donut chart',
 };
 
 const VALUE_FORMAT = new Intl.NumberFormat('en-US', {maximumFractionDigits: 2});
@@ -173,9 +177,9 @@ function ChartSvg({chart}: {readonly chart: ChartImageProps}) {
           {truncate(chart.title, 60)}
         </text>
       ) : null}
-      {chart.type === 'pie' || chart.type === 'donut' ? (
+      {chart.type === ChartType.PIE || chart.type === ChartType.DONUT ? (
         <PieChart chart={chart} top={top} />
-      ) : chart.type === 'horizontalBar' ? (
+      ) : chart.type === ChartType.HORIZONTAL_BAR ? (
         <HorizontalBarChart chart={chart} top={top} />
       ) : (
         <VerticalChart chart={chart} top={top} />
@@ -223,7 +227,7 @@ function PieChart({chart, top}: ChartAreaProps) {
           />
         );
       })}
-      {chart.type === 'donut' ? (
+      {chart.type === ChartType.DONUT ? (
         <circle
           className="donut-hole"
           cx={round(cx)}
@@ -291,7 +295,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
           </text>
         </g>
       ))}
-      {chart.type === 'line' ? (
+      {chart.type === ChartType.LINE ? (
         <g>
           <polyline
             className="line"

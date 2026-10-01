@@ -16,6 +16,7 @@
 
 import {describe, expect, it, vi} from 'vitest';
 import {
+  ChartType,
   chartAltText,
   createBlobChartImageStore,
   renderChartSvg,
@@ -24,7 +25,7 @@ import {
 } from './chart-image';
 
 const possession: ChartImageProps = {
-  type: 'pie',
+  type: ChartType.PIE,
   title: 'Possession',
   data: [
     {label: 'Argentina', value: 70},
@@ -49,11 +50,11 @@ describe('renderChartSvg', () => {
   });
 
   it('cuts a hole in the middle of a donut chart', () => {
-    expect(renderChartSvg({...possession, type: 'donut'})).toContain('class="donut-hole"');
+    expect(renderChartSvg({...possession, type: ChartType.DONUT})).toContain('class="donut-hole"');
   });
 
   it('draws a full circle when one value holds the whole pie', () => {
-    const svg = renderChartSvg({type: 'pie', data: [{label: 'All', value: 5}]});
+    const svg = renderChartSvg({type: ChartType.PIE, data: [{label: 'All', value: 5}]});
 
     expect(countOf(svg, 'class="slice"')).toBe(1);
     expect(svg).toContain('<circle class="slice"');
@@ -66,7 +67,7 @@ describe('renderChartSvg', () => {
       {label: 'Q3', value: 9},
     ];
 
-    for (const type of ['verticalBar', 'horizontalBar'] as const) {
+    for (const type of [ChartType.VERTICAL_BAR, ChartType.HORIZONTAL_BAR]) {
       const svg = renderChartSvg({type, data, xAxisTitle: 'Quarter', yAxisTitle: 'Revenue'});
       expect(countOf(svg, 'class="bar"')).toBe(3);
       expect(svg).toContain('>18.5</text>');
@@ -78,7 +79,7 @@ describe('renderChartSvg', () => {
 
   it('draws bars below the zero line, leaving room under the lowest one for its label', () => {
     const svg = renderChartSvg({
-      type: 'verticalBar',
+      type: ChartType.VERTICAL_BAR,
       data: [
         {label: 'Gain', value: 4},
         {label: 'Loss', value: -2},
@@ -93,7 +94,7 @@ describe('renderChartSvg', () => {
 
   it('draws a line through every point', () => {
     const svg = renderChartSvg({
-      type: 'line',
+      type: ChartType.LINE,
       data: [
         {label: 'Mon', value: 3},
         {label: 'Tue', value: 5},
@@ -107,7 +108,7 @@ describe('renderChartSvg', () => {
 
   it('escapes labels instead of emitting markup', () => {
     const svg = renderChartSvg({
-      type: 'verticalBar',
+      type: ChartType.VERTICAL_BAR,
       data: [{label: '<script>alert(1)</script>', value: 1}],
     });
 
@@ -124,7 +125,7 @@ describe('chartAltText', () => {
   it('cuts long descriptions to the limit with an ellipsis', () => {
     const alt = chartAltText(
       {
-        type: 'line',
+        type: ChartType.LINE,
         data: Array.from({length: 20}, (_, index) => ({label: 'x'.repeat(200), value: index})),
       },
       100,
