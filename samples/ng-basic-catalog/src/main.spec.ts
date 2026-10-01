@@ -149,7 +149,7 @@ describe('A2uiSandbox', () => {
   });
 
   it('serves the full basic-catalog demo set', async () => {
-    const {DEMOS} = await import('./demos.js');
+    const {DEMOS} = await import('../../shared/demos');
     expect(DEMOS).toHaveLength(47);
     for (const demo of DEMOS) {
       expect(demo.id).toBeTruthy();
@@ -201,7 +201,7 @@ describe('A2uiSandbox', () => {
       const rendererConfig = attachRenderer.mock.calls[callsBefore][1];
       expect(rendererConfig.getDemos).toBeTypeOf('function');
 
-      const {DEMOS} = await import('./demos.js');
+      const {DEMOS} = await import('../../shared/demos');
       const served = await rendererConfig.getDemos!();
       expect(served).toHaveLength(47);
       expect(served).toBe(DEMOS);

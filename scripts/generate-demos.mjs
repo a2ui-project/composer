@@ -16,14 +16,15 @@
 
 // About this script:
 //
-// Reads the A2UI specification's basic-catalog examples out of the pinned
-// `@a2ui/web_core` dependency (resolved on disk, never fetched over the
-// network) and generates one `Demo[]` TypeScript module per sample
-// renderer. Run with `yarn generate:demos`.
+// Reads the showcase demos in `samples/shared/demos/*.json` and the A2UI
+// specification's basic-catalog examples out of the pinned `@a2ui/web_core`
+// dependency (resolved on disk, never fetched over the network), validates them,
+// and writes them as one `Demo[]` array to `samples/shared/demos/demos.json`,
+// which all three sample renderers import. Run with `yarn generate:demos`.
 //
-// Pass `--check` (`yarn generate:demos:check`) to verify that the committed
-// modules still match the local showcase and pinned upstream sources: nothing is
-// written, and the process exits non-zero naming every drifted output.
+// Pass `--check` (`yarn generate:demos:check`) to verify that the committed file
+// still matches those sources: nothing is written, and the process exits non-zero
+// if it has drifted.
 
 import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
@@ -56,23 +57,10 @@ const EXAMPLES_DIR = join(PKG_DIR, EXAMPLES_SUBPATH);
 
 const SHOWCASE_DIR = join(REPO_ROOT, 'samples/shared/demos');
 
-const OUTPUT_PATHS = [
-  'samples/ng-basic-catalog/src/demos.ts',
-  'samples/lit-basic-catalog/src/demos.ts',
-  'samples/react-basic-catalog/src/demos.ts',
-];
-
-// The number of leading lines of `bridge/src/bridge-message.ts` that make up
-// its Apache-2.0 license header block.
-const LICENSE_HEADER_LINE_COUNT = 15;
-
-// Markers every generated file's license header must contain. Checking the
-// text (not just the block's shape) is what stops an unrelated 15-line block
-// comment from being copied into all three outputs: `addlicense` would not
-// catch that, because it only adds headers to files that have none at all.
-const LICENSE_HEADER_MARKERS = ['Copyright', 'Licensed under the Apache License, Version 2.0'];
-
-const LICENSE_HEADER = readLicenseHeader();
+// One generated file, shared by all three sample renderers through
+// `samples/shared/demos/index.ts`. JSON carries no license header, so the
+// generator never has to write one.
+const OUTPUT_PATH = 'samples/shared/demos/demos.json';
 
 /**
  * Collapses CRLF and lone-CR line endings to LF.
@@ -103,39 +91,6 @@ function readJsonFile(filePath) {
   } catch (cause) {
     throw new Error(`Failed to parse JSON in ${filePath}: ${cause.message}`, {cause});
   }
-}
-
-function readLicenseHeader() {
-  const bridgeMessagePath = join(REPO_ROOT, 'bridge/src/bridge-message.ts');
-  // Normalize line endings before slicing: on a CRLF checkout `split('\n')`
-  // leaves a trailing `\r` on every header line (which `trimStart()` does not
-  // remove), producing generated files with a CRLF header and an LF body.
-  // These files are prettier-ignored, so nothing downstream normalizes them
-  // and contributors on other platforms get spurious whole-file diffs.
-  const bridgeMessageSource = toLf(readFileSync(bridgeMessagePath, 'utf8'));
-  const lines = bridgeMessageSource.split('\n').slice(0, LICENSE_HEADER_LINE_COUNT);
-  const lastLine = lines[lines.length - 1];
-  if (!lastLine.trimStart().startsWith('*/')) {
-    throw new Error(
-      `Expected the first ${LICENSE_HEADER_LINE_COUNT} lines of ${bridgeMessagePath} to end the ` +
-        `file's opening license comment block (a line starting with "*/"), but line ` +
-        `${LICENSE_HEADER_LINE_COUNT} was ${JSON.stringify(lastLine)}. The license header in ` +
-        'bridge-message.ts likely changed length; update the slice in readLicenseHeader() to match.',
-    );
-  }
-  const header = lines.join('\n');
-  for (const marker of LICENSE_HEADER_MARKERS) {
-    if (!header.includes(marker)) {
-      throw new Error(
-        `The first ${LICENSE_HEADER_LINE_COUNT} lines of ${bridgeMessagePath} form a comment ` +
-          `block that does not contain ${JSON.stringify(marker)}, so they are not the Apache-2.0 ` +
-          'license header this script copies into every generated demo module. The header was ' +
-          'likely moved, replaced, or preceded by another block comment; restore it (or point ' +
-          'readLicenseHeader() at wherever it now lives) before regenerating.',
-      );
-    }
-  }
-  return header;
 }
 
 function readPackageVersion() {
@@ -245,113 +200,73 @@ function buildDemos(filenames) {
 
 /** Validates the hand-authored examples before they enter any renderer bundle. */
 function readShowcaseDemos() {
-  return readdirSync(SHOWCASE_DIR)
-    .filter(filename => filename.endsWith('.json'))
-    .sort(compareFilenames)
-    .map(filename => {
-      const example = readJsonFile(join(SHOWCASE_DIR, filename));
-      if (typeof example.name !== 'string' || typeof example.description !== 'string') {
-        throw new Error(`${filename}: showcase name and description must be strings.`);
-      }
-      A2uiMessageListSchema.parse(example.messages);
-      const components = example.messages.flatMap(
-        message => message.updateComponents?.components ?? [],
-      );
-      const ids = new Set(components.map(component => component.id));
-      if (!ids.has('root') || ids.size !== components.length) {
-        throw new Error(`${filename}: showcase needs a root and unique component ids.`);
-      }
-      for (const {id, component, ...props} of components) {
-        const api = BASIC_COMPONENTS.find(api => api.name === component);
-        if (!api) throw new Error(`${filename}: unknown basic component ${component}.`);
-        api.schema.strict().parse(props);
-        const children = [props.child, ...(Array.isArray(props.children) ? props.children : [])];
-        for (const child of children.filter(Boolean)) {
-          if (!ids.has(child))
-            throw new Error(`${filename}: ${id} references missing child ${child}.`);
-        }
-      }
-      return {
-        id: `showcase-${idFromFilename(filename)}`,
-        name: example.name,
-        description: example.description,
-        a2ui: normalizeDemoHeadings(example.messages),
-      };
-    });
-}
-
-function renderModule(demos, version) {
-  const provenance = [
-    '/**',
-    ` * Auto-generated from samples/shared/demos and @a2ui/web_core@${version}'s basic-catalog examples`,
-    ` * (${EXAMPLES_SUBPATH}).`,
-    ' *',
-    ' * Regenerate with: yarn generate:demos',
-    ' */',
-  ].join('\n');
-
-  const entries = demos.map(demo => `  ${JSON.stringify(demo)},`).join('\n');
-
   return (
-    `${LICENSE_HEADER}\n` +
-    '\n' +
-    `${provenance}\n` +
-    '\n' +
-    "import {type Demo} from 'a2ui-bridge';\n" +
-    '\n' +
-    'export const DEMOS: Demo[] = [\n' +
-    `${entries}\n` +
-    '];\n'
+    readdirSync(SHOWCASE_DIR)
+      // Showcases are `NN_name.json`; the prefix orders them and keeps the generated
+      // `demos.json`, which lives in the same directory, out of the input.
+      .filter(filename => /^\d+_.+\.json$/.test(filename))
+      .sort(compareFilenames)
+      .map(filename => {
+        const example = readJsonFile(join(SHOWCASE_DIR, filename));
+        if (typeof example.name !== 'string' || typeof example.description !== 'string') {
+          throw new Error(`${filename}: showcase name and description must be strings.`);
+        }
+        A2uiMessageListSchema.parse(example.messages);
+        const components = example.messages.flatMap(
+          message => message.updateComponents?.components ?? [],
+        );
+        const ids = new Set(components.map(component => component.id));
+        if (!ids.has('root') || ids.size !== components.length) {
+          throw new Error(`${filename}: showcase needs a root and unique component ids.`);
+        }
+        for (const {id, component, ...props} of components) {
+          const api = BASIC_COMPONENTS.find(api => api.name === component);
+          if (!api) throw new Error(`${filename}: unknown basic component ${component}.`);
+          api.schema.strict().parse(props);
+          const children = [props.child, ...(Array.isArray(props.children) ? props.children : [])];
+          for (const child of children.filter(Boolean)) {
+            if (!ids.has(child))
+              throw new Error(`${filename}: ${id} references missing child ${child}.`);
+          }
+        }
+        return {
+          id: `showcase-${idFromFilename(filename)}`,
+          name: example.name,
+          description: example.description,
+          a2ui: normalizeDemoHeadings(example.messages),
+        };
+      })
   );
 }
 
-function writeOutputs(moduleSource, demoCount) {
-  // Validate every destination before writing any of them. The writes are
-  // sequential, so a failure partway through (missing directory, permissions,
-  // read-only filesystem) would leave the samples serving *different* demo
-  // sets -- and because these files are prettier-ignored, that mismatch gets
-  // little scrutiny in review.
-  for (const outputPath of OUTPUT_PATHS) {
-    const outputDir = dirname(join(REPO_ROOT, outputPath));
-    if (!existsSync(outputDir)) {
-      throw new Error(
-        `Cannot write ${outputPath}: its directory ${outputDir} does not exist. The sample was ` +
-          `likely renamed or removed; update the OUTPUT_PATHS constant in ${SCRIPT_PATH} to ` +
-          'match. No files were written.',
-      );
-    }
-  }
-
-  for (const outputPath of OUTPUT_PATHS) {
-    writeFileSync(join(REPO_ROOT, outputPath), moduleSource);
-    console.log(`wrote ${outputPath} (${demoCount} demos)`);
-  }
+/**
+ * Serializes the demos as a JSON array with one demo per line, so a change to one
+ * demo shows up as a one-line diff.
+ */
+function renderJson(demos) {
+  return `[\n${demos.map(demo => `  ${JSON.stringify(demo)}`).join(',\n')}\n]\n`;
 }
 
-function checkOutputs(moduleSource, demoCount, version) {
-  // Compare on LF-normalized text. `moduleSource` is LF-only by construction
-  // and `writeOutputs` keeps writing it that way; only this comparison has to
-  // tolerate a checkout that put CRLF on disk. See `toLf`.
-  const expected = toLf(moduleSource);
-  const drifted = OUTPUT_PATHS.filter(outputPath => {
-    const absolutePath = join(REPO_ROOT, outputPath);
-    return !existsSync(absolutePath) || toLf(readFileSync(absolutePath, 'utf8')) !== expected;
-  });
+function writeOutput(json, demoCount) {
+  writeFileSync(join(REPO_ROOT, OUTPUT_PATH), json);
+  console.log(`wrote ${OUTPUT_PATH} (${demoCount} demos)`);
+}
 
-  if (drifted.length > 0) {
+function checkOutput(json, demoCount, version) {
+  // Compare on LF-normalized text. `json` is LF-only by construction and
+  // `writeOutput` keeps writing it that way; only this comparison has to
+  // tolerate a checkout that put CRLF on disk. See `toLf`.
+  const absolutePath = join(REPO_ROOT, OUTPUT_PATH);
+  if (!existsSync(absolutePath) || toLf(readFileSync(absolutePath, 'utf8')) !== toLf(json)) {
     console.error(
-      `The committed demo modules no longer match local showcases and @a2ui/web_core@${version}'s basic-catalog ` +
-        `examples (${demoCount} demos). Out of date:\n` +
-        drifted.map(outputPath => `  - ${outputPath}`).join('\n') +
-        '\nRun `yarn generate:demos` and commit the result.',
+      `${OUTPUT_PATH} no longer matches the local showcases and @a2ui/web_core@${version}'s ` +
+        `basic-catalog examples (${demoCount} demos).\nRun \`yarn generate:demos\` and commit the result.`,
     );
     process.exitCode = 1;
     return;
   }
-
   console.log(
-    `up to date: ${OUTPUT_PATHS.length} generated demo modules match ` +
-      `local showcases + @a2ui/web_core@${version} (${demoCount} demos)`,
+    `up to date: ${OUTPUT_PATH} matches local showcases + @a2ui/web_core@${version} (${demoCount} demos)`,
   );
 }
 
@@ -359,14 +274,14 @@ function main() {
   const version = readPackageVersion();
   const filenames = readExampleFiles();
   const demos = [...readShowcaseDemos(), ...buildDemos(filenames)];
-  const moduleSource = renderModule(demos, version);
+  const json = renderJson(demos);
 
   if (CHECK_MODE) {
-    checkOutputs(moduleSource, demos.length, version);
+    checkOutput(json, demos.length, version);
     return;
   }
 
-  writeOutputs(moduleSource, demos.length);
+  writeOutput(json, demos.length);
 }
 
 main();
