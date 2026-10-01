@@ -34,9 +34,11 @@ const EXPECTED_COMPONENTS = [
   'TextField',
   'DateTimeInput',
   'Table',
+  'Chart',
   'MarketSnapshot',
 ].sort();
 const TableSchema = slackCatalog.components.get('Table')!.schema;
+const ChartSchema = slackCatalog.components.get('Chart')!.schema;
 const COMMON_TYPES_SCHEMA: SchemaObject = {
   $id: 'common_types.json',
   type: 'object',
@@ -233,7 +235,7 @@ describe('Slack catalog schema payload', () => {
     ).toBe('common_types.json#/$defs/ComponentId');
   });
 
-  it('contains the supported Slack basic components plus Table and MarketSnapshot', () => {
+  it('contains the supported Slack basic components plus Table, Chart, and MarketSnapshot', () => {
     expect(Object.keys(slackCatalogJson.components).sort()).toEqual(EXPECTED_COMPONENTS);
     expect([...slackCatalog.components.keys()].sort()).toEqual(EXPECTED_COMPONENTS);
   });
@@ -570,5 +572,41 @@ describe('Slack catalog schema payload', () => {
         },
       },
     ]);
+  });
+});
+
+describe('Slack Chart component', () => {
+  const usage = SLACK_COMPONENT_USAGES.Chart.usage[0];
+  const {id: _id, component: _component, ...usageProps} = usage;
+
+  it('publishes guidance telling the model to send numbers, not image URLs', () => {
+    expect(slackCatalogJson.components.Chart).toMatchObject({
+      description: expect.stringContaining(
+        'Slack has no chart block, so the Slack renderer draws the chart and sends it as an image. Give the numbers, not an image URL.',
+      ),
+    });
+    expect(slackCatalogJson.description).toContain('Use Chart for bar, line, pie, or donut charts');
+  });
+
+  it('accepts the Gallery example and bound labels and values', () => {
+    const validateChart = compileComponentSchema(slackCatalogJson.components.Chart);
+
+    expect(ChartSchema.safeParse(usageProps).success).toBe(true);
+    expect(validateChart(usage)).toBe(true);
+    expect(
+      ChartSchema.safeParse({
+        type: 'line',
+        data: [{label: {path: '/days/0'}, value: {path: '/visits/0'}}],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects unknown chart types and more than 20 points', () => {
+    expect(ChartSchema.safeParse({...usageProps, type: 'scatter'}).success).toBe(false);
+    expect(
+      ChartSchema.safeParse({
+        data: Array.from({length: 21}, (_, index) => ({label: `P${index}`, value: index})),
+      }).success,
+    ).toBe(false);
   });
 });

@@ -31,6 +31,7 @@ import {
 import {z} from 'zod/v3';
 import {zodToJsonSchema} from 'zod-to-json-schema';
 import {SLACK_LIMITS} from '@copilotkit/channels-slack/render';
+import {CHART_TYPES} from './chart-image';
 import {InputComponentType, InputKind} from './form-input';
 import {MarketSnapshotSchema} from './market-snapshot';
 import {SLACK_TABLE_MAX_BODY_ROWS, SLACK_TEXT_INPUT_MAX_LENGTH} from './slack-limits';
@@ -40,7 +41,7 @@ export const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalog
 const SLACK_CATALOG_SCHEMA = 'https://json-schema.org/draft/2019-09/schema';
 const SLACK_CATALOG_TITLE = 'Slack Preview Renderer Catalog';
 const SLACK_CATALOG_DESCRIPTION =
-  'A2UI catalog for Slack Block Kit preview messages. TextField and date-only DateTimeInput provide editable forms with writable data bindings. Use Table for aligned tabular data such as scores or comparisons. Row and Column flatten their children into sequential Slack blocks; they do not preserve horizontal alignment. MarketSnapshot provides a specialized market summary.';
+  'A2UI catalog for Slack Block Kit preview messages. TextField and date-only DateTimeInput provide editable forms with writable data bindings. Use Table for aligned tabular data such as scores or comparisons. Use Chart for bar, line, pie, or donut charts; Slack has no chart block, so the renderer draws the chart and sends it as an image. Row and Column flatten their children into sequential Slack blocks; they do not preserve horizontal alignment. MarketSnapshot provides a specialized market summary.';
 
 /**
  * Pairs a component name with its props schema. web_core types `ComponentApi`
@@ -221,6 +222,59 @@ const TableSchema = z
 
 const TableApi = slackComponentApi('Table', TableSchema);
 
+const DynamicNumberSchema = z.union([
+  z.number(),
+  z.object({path: z.string()}).strict(),
+  z
+    .object({
+      call: z.string(),
+      args: z.record(z.unknown()),
+      returnType: z
+        .enum(['string', 'number', 'boolean', 'array', 'object', 'any', 'void'])
+        .default('number')
+        .optional(),
+    })
+    .strict(),
+]);
+
+const ChartSchema = z
+  .object({
+    ...CommonProps,
+    type: z
+      .enum(CHART_TYPES)
+      .optional()
+      .describe(
+        'Chart kind. Defaults to verticalBar. Use pie or donut for shares of a whole, line for trends, and bars to compare categories.',
+      ),
+    title: DynamicStringSchema.optional().describe('Title drawn above the chart.'),
+    xAxisTitle: DynamicStringSchema.optional().describe(
+      'Axis title under bar and line charts. Ignored for pie and donut.',
+    ),
+    yAxisTitle: DynamicStringSchema.optional().describe(
+      'Axis title beside bar and line charts. Ignored for pie and donut.',
+    ),
+    data: z
+      .array(
+        z
+          .object({
+            label: DynamicStringSchema.describe('Category, slice name, or x value.'),
+            value: DynamicNumberSchema.describe(
+              'Number or binding. Pie and donut values must be zero or more.',
+            ),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20)
+      .describe('One entry per category, slice, or point, in display order (1 to 20).'),
+  })
+  .strict()
+  .describe(
+    'A bar, line, pie, or donut chart drawn from labeled values. Slack has no chart block, so the Slack renderer draws the chart and sends it as an image. Give the numbers, not an image URL.',
+  );
+
+const ChartApi = slackComponentApi('Chart', ChartSchema);
+
 const slackBasicComponents: ComponentApi[] = [
   TextApi,
   SlackImageApi,
@@ -240,6 +294,7 @@ const slackBasicFunctions = BASIC_FUNCTIONS.filter(({name}) => name !== 'openUrl
 const slackComponents = [
   ...slackBasicComponents,
   TableApi,
+  ChartApi,
   slackComponentApi('MarketSnapshot', MarketSnapshotSchema),
 ];
 
