@@ -42,16 +42,14 @@ export interface TrackedDemo extends Demo {
 }
 
 /**
- * Owns the request/cache/timeout lifecycle for demos fetched from the
- * renderer connected over the bridge.
+ * Fetches the connected renderer's demos for the demos page, and tracks
+ * whether that request is loading, done, or failed.
  *
- * Unlike `GalleryCatalog`, which is safe to broadcast to a single
- * primary iframe, the `/demos` route hosts a hidden coordinator frame
- * alongside N visible card frames. Requests are therefore targeted
- * explicitly at the registered coordinator element via
- * `HostCommunication.sendToFrame`, and incoming replies are filtered
- * by `sourceWindow` so that a card frame can never be mistaken for the
- * coordinator's response.
+ * The demos page renders each demo in its own iframe (a card), plus one more,
+ * hidden iframe: the coordinator. The coordinator loads the same renderer and
+ * exists only to answer GET_DEMOS, so requests go to it directly
+ * (`HostCommunication.sendToFrame`), and replies are accepted only from its
+ * window, never from a card's.
  */
 @Injectable({
   providedIn: 'root',
@@ -77,75 +75,47 @@ export class DemosCatalog {
   /** Whether the demos route/view is currently active. */
   readonly demosActive = this._demosActive.asReadonly();
 
-  /** The hidden coordinator iframe that answers demos requests. */
-  private readonly coordinatorSignal = signal<HTMLIFrameElement | null>(null);
+  /** The hidden coordinator iframe; see the class comment. */
+  private readonly coordinator = signal<HTMLIFrameElement | null>(null);
 
   private demosTimeoutId?: ReturnType<typeof setTimeout>;
 
   /**
-   * Windows that have reported RENDERER_READY at least once, i.e. "this
-   * coordinator has finished booting".
+   * Coordinator windows (an iframe's `contentWindow`) that have sent
+   * RENDERER_READY, meaning the renderer inside has loaded and can answer.
    *
-   * Membership is recorded unconditionally, the moment a window first
-   * reports ready, because booting is a property of the frame alone.
-   * {@link requestDemos} reads it to decide whether the 2s fallback timeout
-   * may be armed: a request sent to a frame that has never spoken cannot be
-   * answered, so timing it out would only flash "No Demos Available" over a
-   * renderer that is still coming up.
+   * A window is added as soon as it first reports ready, whatever else is
+   * going on. Two things read it:
+   * - {@link requestDemos} only starts the 2s timeout for a window in this set.
+   *   A request to a renderer that hasn't loaded yet can't be answered, and
+   *   timing it out would show "No Demos Available" while it is still loading.
+   * - The RENDERER_READY handler only re-requests demos the first time a window
+   *   reports ready. React's `<StrictMode>` sends RENDERER_READY twice per
+   *   mount, and the second must not trigger another request.
    *
-   * The same membership separately dedupes the re-request that readiness
-   * triggers: React `<StrictMode>` emits RENDERER_READY twice per frame
-   * mount, so only the first envelope from a given window identity
-   * re-requests demos.
-   *
-   * Caveat: a WindowProxy's identity is stable across the frame's own
-   * navigations, so this WeakSet cannot by itself distinguish a coordinator
-   * reload's fresh RENDERER_READY from a duplicate of the one before it —
-   * the same trap that was a live bug in `DemoCard` before it switched to a
-   * per-load flag reset on the frame's `load` event. It is not a live bug
-   * here only because the sole thing that reloads the coordinator frame
-   * (switching the active renderer) also clears `activeCatalog()` to null
-   * before the new renderer's catalog resolves, and that closing and
-   * reopening of the gate independently re-requests demos via the
-   * `effect()` below. If that coupling ever changes, this WeakSet will
-   * silently swallow the coordinator's post-reload readiness.
+   * A window keeps its identity when its iframe reloads, so this set can't tell
+   * a reloaded coordinator's RENDERER_READY from a repeat. That's safe today
+   * because the coordinator only reloads when the active renderer changes, and
+   * that clears the active catalog first, which re-requests demos through the
+   * effect in the constructor.
    */
   private readonly readyWindows = new WeakSet<Window>();
 
   /**
-   * Stable identity of the active catalog: its id, or null when no catalog is
-   * established.
+   * The active catalog's id, or null when there is no active catalog.
    *
-   * The gating effect below depends on this rather than on
-   * `CatalogManagement.activeCatalog()` directly, because that signal changes
-   * object identity on every completed catalog handshake even when the catalog
-   * is byte-identical: the A2UI_CATALOG handler `structuredClone`s the payload
-   * and sets the result. And handshakes happen repeatedly on this route —
-   * `CatalogManagement` subscribes to `messageStream$` with no `sourceWindow`
-   * filter, so a RENDERER_READY from any of the N demo card frames registered
-   * via `registerSecondaryIframe` can start a fresh one, not just one from the
-   * coordinator. Not every READY does: `CatalogManagement` ignores one that
-   * arrives while a handshake is still in flight (it warns 'Handshake already
-   * in progress. Ignoring RENDERER_READY.'), so a burst of cards mounting
-   * together collapses into fewer handshakes than cards. The ones that do land
-   * are the sequential READYs — cards mounting as the reader scrolls, each
-   * after the previous handshake has settled — and they are enough.
+   * The effect in the constructor re-requests demos when this changes. It keys
+   * on the id, not on `CatalogManagement.activeCatalog()`, because that signal
+   * gets a new object every time a catalog handshake completes, even when the
+   * catalog is identical, and handshakes keep happening on the demos page: each
+   * card's renderer sends RENDERER_READY when it loads, and `CatalogManagement`
+   * answers any frame's RENDERER_READY with a new handshake. Keyed on the
+   * object, every card that loaded would re-request demos, which clears the
+   * list, removes every card, and starts the loop again as they reload.
    *
-   * Keyed on the object, each of those replies re-entered `requestDemos()`,
-   * which sets `_demos` back to null; the route's `@else` branch was destroyed,
-   * every card torn down, and the remounted cards' frames booted and reported
-   * ready again — a wall that tore itself down and rebuilt on a loop. Keyed on
-   * the id, a re-handshake that yields the same catalog is a no-op.
-   *
-   * For the record: this does not stop the redundant per-card handshakes, which
-   * are still issued inside `CatalogManagement`. It only stops them from cycling
-   * the demos wall.
-   *
-   * `catalogId ?? $id` is the same identifier `CatalogManagement` requires before
-   * it will accept a catalog at all — an A2UI_CATALOG payload carrying neither is
-   * rejected outright — so a catalog reaching this signal always has one. The
-   * empty-string fallback only keeps a hypothetical id-less catalog reading as
-   * "present" here rather than collapsing into the null/absent case.
+   * `catalogId ?? $id` is the identifier `CatalogManagement` requires before it
+   * accepts a catalog, so an active catalog always has one; the empty-string
+   * fallback only keeps a catalog without one counting as present.
    */
   private readonly activeCatalogId = computed<string | null>(() => {
     const catalog = this.catalogManagement.activeCatalog();
@@ -166,7 +136,7 @@ export class DemosCatalog {
     effect(() => {
       const active = this._demosActive();
       const catalogId = this.activeCatalogId();
-      const coordinator = this.coordinatorSignal();
+      const coordinator = this.coordinator();
 
       if (active && catalogId !== null && coordinator) {
         this.requestDemos();
@@ -184,7 +154,7 @@ export class DemosCatalog {
     });
 
     this.hostCommunication.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
-      const coordinator = untracked(() => this.coordinatorSignal());
+      const coordinator = untracked(() => this.coordinator());
       if (!coordinator || envelope.sourceWindow !== coordinator.contentWindow) {
         return;
       }
@@ -202,12 +172,12 @@ export class DemosCatalog {
       } else if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
         const win = envelope.sourceWindow;
         if (win && !this.readyWindows.has(win)) {
-          // Record the boot before consulting the gate. On a cold load the
-          // gate is still shut here: `CatalogManagement` sends GET_CATALOG in
-          // response to this very RENDERER_READY and only sets
-          // `activeCatalog` when the A2UI_CATALOG reply lands. Recording the
-          // boot inside the gate would drop it on exactly the load where the
-          // fallback timeout matters most.
+          // Record that this window is ready before checking whether demos can be
+          // requested. On a first load there's no active catalog yet at this point:
+          // `CatalogManagement` requests it in response to this same RENDERER_READY,
+          // and the request is made from the effect once it arrives. That's the
+          // load where the timeout in requestDemos matters most, so the window has
+          // to be recorded even though no request is made here.
           this.readyWindows.add(win);
           if (this._demosActive() && this.catalogManagement.activeCatalog()) {
             this.requestDemos();
@@ -218,7 +188,7 @@ export class DemosCatalog {
   }
 
   private requestDemos(): void {
-    const coordinator = untracked(() => this.coordinatorSignal());
+    const coordinator = untracked(() => this.coordinator());
     if (!coordinator) {
       return;
     }
@@ -236,14 +206,11 @@ export class DemosCatalog {
 
     this.hostCommunication.sendToFrame({type: PreviewBridgeMessageType.GET_DEMOS}, coordinator);
 
-    // The very first GET_DEMOS after a fresh mount can never be answered:
-    // the coordinator iframe was created microseconds ago and is still on
-    // about:blank. The RENDERER_READY handler above is what actually
-    // rescues that case by re-requesting once the frame boots. Arming the
-    // fallback timeout for an unanswerable request would race that rescue —
-    // a cold dev bundle routinely takes longer than 2s to boot, so the
-    // timeout would fire first and flash "No Demos Available". Only arm it
-    // once this coordinator has proven it can respond at all.
+    // The first request after the coordinator is created can't be answered: its
+    // renderer hasn't loaded yet. The RENDERER_READY handler requests again once
+    // it has. A timeout on that first request would race the retry, and a cold
+    // development build often takes longer than 2s to load, so the page would
+    // flash "No Demos Available". Only time out a renderer that has reported ready.
     if (coordinator.contentWindow && this.readyWindows.has(coordinator.contentWindow)) {
       this.demosTimeoutId = setTimeout(() => {
         if (this._loadingDemos()) {
@@ -269,11 +236,12 @@ export class DemosCatalog {
   }
 
   /**
-   * Registers the hidden coordinator iframe that answers demos requests.
-   * @param el Coordinator iframe element, or null to clear it.
+   * Registers the coordinator: the hidden iframe that answers GET_DEMOS (see the
+   * class comment).
+   * @param el The coordinator iframe, or null to clear it.
    */
   setCoordinator(el: HTMLIFrameElement | null): void {
-    this.coordinatorSignal.set(el);
+    this.coordinator.set(el);
   }
 }
 

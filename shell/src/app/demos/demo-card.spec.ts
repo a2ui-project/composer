@@ -18,7 +18,7 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {signal, WritableSignal} from '@angular/core';
 import {afterEach, beforeEach, describe, expect, it, MockInstance, vi} from 'vitest';
 import {Demo, PreviewBridgeMessageType} from 'a2ui-bridge';
-import {DemoCard} from './demo-card';
+import {DemoCard, DemoCardState} from './demo-card';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {HostCommunication, MessageEnvelope} from '../shell/host-communication/host-communication';
 import {
@@ -220,7 +220,7 @@ describe('DemoCard sandboxed live demo frame', () => {
     const fixture = mountCard(false);
 
     expect(frameOf(fixture)).toBeNull();
-    expect(fixture.componentInstance.state()).toBe('idle');
+    expect(fixture.componentInstance.state()).toBe(DemoCardState.IDLE);
   });
 
   it('renders the sandboxed iframe once the card is mounted', () => {
@@ -250,7 +250,7 @@ describe('DemoCard sandboxed live demo frame', () => {
     // Targeted sends to this card's own frame must go through sendToFrame; sendMessage
     // broadcasts to every registered iframe and would leak this card's payload to others.
     expect(sendMessageSpy).not.toHaveBeenCalled();
-    expect(fixture.componentInstance.state()).toBe('ready');
+    expect(fixture.componentInstance.state()).toBe(DemoCardState.READY);
   });
 
   it('resends the demo payload after its own frame reloads', () => {
@@ -281,7 +281,7 @@ describe('DemoCard sandboxed live demo frame', () => {
       {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
       iframe,
     );
-    expect(fixture.componentInstance.state()).toBe('ready');
+    expect(fixture.componentInstance.state()).toBe(DemoCardState.READY);
   });
 
   it('commits the last height reported inside the measurement window, not the first', () => {
@@ -557,12 +557,12 @@ describe('DemoCard sandboxed live demo frame', () => {
     vi.useFakeTimers();
 
     const fixture = mountCard(true);
-    expect(fixture.componentInstance.state()).toBe('mounting');
+    expect(fixture.componentInstance.state()).toBe(DemoCardState.MOUNTING);
 
     vi.advanceTimersByTime(READY_TIMEOUT_MS);
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.state()).toBe('error');
+    expect(fixture.componentInstance.state()).toBe(DemoCardState.ERROR);
   });
 
   it('reports a failure when a ready renderer never commits its content', () => {
@@ -575,14 +575,14 @@ describe('DemoCard sandboxed live demo frame', () => {
       contentReady: false,
     });
     advance(fixture, READY_TIMEOUT_MS);
-    expect(fixture.componentInstance.state()).toBe('error');
+    expect(fixture.componentInstance.state()).toBe(DemoCardState.ERROR);
 
     emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {
       height: 250,
       width: 480,
       contentReady: true,
     });
-    expect(fixture.componentInstance.state()).toBe('ready');
+    expect(fixture.componentInstance.state()).toBe(DemoCardState.READY);
     expect(placeholderOf(fixture)).toBeNull();
   });
 
