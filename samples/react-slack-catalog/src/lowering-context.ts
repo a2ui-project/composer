@@ -17,6 +17,7 @@
 import {type Renderable} from '@copilotkit/channels-ui';
 import {type ActionDispatchEntry} from './action-dispatch';
 import {type InputComponentType, type InputDispatchEntry} from './form-input';
+import {type LoweredChart} from './lower-chart';
 import {type PreviewDiagnostic} from './preview-snapshot';
 
 /**
@@ -28,6 +29,7 @@ export interface LoweringState {
   readonly diagnostics: PreviewDiagnostic[];
   readonly actions: Map<string, ActionDispatchEntry>;
   readonly inputs: Map<string, InputDispatchEntry>;
+  readonly charts: Map<string, LoweredChart>;
   nextActionOrdinal: number;
 }
 
@@ -40,4 +42,6 @@ export interface LowerComponentContext {
   readonly dispatch: (action: unknown) => string;
   readonly input: (type: InputComponentType) => InputDispatchEntry;
   readonly diagnostics: PreviewDiagnostic[];
+  /** Records a chart to draw before Slack conversion and returns the key of its node. */
+  readonly registerChart: (chart: LoweredChart) => string;
 }
