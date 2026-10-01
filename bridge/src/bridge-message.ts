@@ -71,12 +71,13 @@ export declare interface SurfaceResizePayload {
   /**
    * Iframe viewport width measured at the same time as the content dimensions.
    * Compare width against this value to detect overflow across asynchronous resizes.
-   * Omitted when unavailable or supplied by a legacy renderer.
+   * Omitted when the viewport can't be measured.
    */
   viewportWidth?: number;
   /**
    * Whether the renderer has committed the first surface content to the DOM.
-   * False identifies startup/reset measurements; omitted by legacy renderers.
+   * False identifies startup/reset measurements. Omitted by renderers that don't
+   * implement `RendererConfig.onInitialRender`, which report dimensions only.
    */
   contentReady?: boolean;
 }

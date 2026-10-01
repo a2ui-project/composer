@@ -110,7 +110,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
       onSurfaceReady: surfaceId => {
         setSurface(processor.model.getSurface(surfaceId));
       },
-      whenSurfaceRendered: () =>
+      onInitialRender: () =>
         new Promise<void>(resolve => {
           contentRenderWaiters.current.push(resolve);
           // Request a commit even when a streamed root arrives after createSurface

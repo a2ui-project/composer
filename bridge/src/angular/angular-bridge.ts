@@ -89,22 +89,10 @@ export class A2uiSandboxConnection implements OnDestroy {
    * Subscribes to the global preview bridge singleton, mapping dynamic renderer callbacks
    * (onSurfaceReady and onSurfaceCleared) directly to local reactive state signals.
    *
-   * @param catalogJson Optional preloaded catalog JSON data, provided directly in memory.
-   * @param getComponentUsages Optional callback to retrieve component usage samples.
-   * @param onThemeChange Optional callback invoked when the theme preference changes.
-   * @param getDemos Optional callback to retrieve the renderer's demos.
-   *
-   * WARNING: These are positional parameters with no compile-time protection against
-   * mis-ordering. New parameters must be APPENDED here (never inserted between existing
-   * ones), and the `useFactory` call in `provideA2uiSandbox` below must be updated in the
-   * same edit to keep the argument order in lockstep.
+   * @param options The sandbox options from `provideA2uiSandbox`: the preloaded catalog
+   *     and the callbacks for component usages, theme changes, and demos.
    */
-  constructor(
-    catalogJson?: unknown,
-    getComponentUsages?: () => Promise<ComponentUsages>,
-    onThemeChange?: (theme: ThemePreference) => void,
-    getDemos?: () => Promise<Demo[]>,
-  ) {
+  constructor(options: AngularSandboxOptions = {}) {
     const processor: RendererProcessor = {
       processMessages: payload =>
         (this.rendererService as unknown as RendererProcessor).processMessages(payload),
@@ -124,7 +112,7 @@ export class A2uiSandboxConnection implements OnDestroy {
       onSurfaceReady: (surfaceId: string) => {
         this.surfaceId.set(surfaceId);
       },
-      whenSurfaceRendered: () =>
+      onInitialRender: () =>
         new Promise<void>(resolve => {
           this.pendingContentRender?.destroy();
           this.pendingContentRender = afterNextRender(
@@ -141,10 +129,10 @@ export class A2uiSandboxConnection implements OnDestroy {
       onError: (err: Error | null) => {
         this.error.set(err);
       },
-      catalogJson: catalogJson,
-      getComponentUsages: getComponentUsages,
-      onThemeChange: onThemeChange,
-      getDemos: getDemos,
+      catalogJson: options.catalogJson,
+      getComponentUsages: options.getComponentUsages,
+      onThemeChange: options.onThemeChange,
+      getDemos: options.getDemos,
     });
   }
 
@@ -182,15 +170,7 @@ export function provideA2uiSandbox(
     A2uiRendererService,
     {
       provide: A2uiSandboxConnection,
-      // NOTE: Argument order must match the A2uiSandboxConnection constructor exactly.
-      // New parameters must be appended (never inserted) on both sides in the same edit.
-      useFactory: () =>
-        new A2uiSandboxConnection(
-          options?.catalogJson,
-          options?.getComponentUsages,
-          options?.onThemeChange,
-          options?.getDemos,
-        ),
+      useFactory: () => new A2uiSandboxConnection(options),
     },
     ...catalogsClasses,
     provideMarkdownRenderer(options?.markdownRendererFn),

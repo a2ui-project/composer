@@ -282,13 +282,13 @@ describe('Lit Framework Adapter Spec', () => {
     document.body.appendChild(element);
     await element.updateComplete;
     const [processor, config] = attachSpy.mock.lastCall!;
-    expect(config.whenSurfaceRendered).toBeDefined();
+    expect(config.onInitialRender).toBeDefined();
     processor.processMessages([
       {version: 'v0.9', createSurface: {surfaceId: 'ready', catalogId: dummyCatalog.id}},
     ]);
     config.onSurfaceReady('ready');
     expect(element.renderRoot.querySelector('a2ui-surface')).toBeNull();
-    await config.whenSurfaceRendered!();
+    await config.onInitialRender!();
     expect(element.renderRoot.querySelector('a2ui-surface')).not.toBeNull();
     element.remove();
   });
