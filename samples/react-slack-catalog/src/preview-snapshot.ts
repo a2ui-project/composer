@@ -68,12 +68,21 @@ export enum DiagnosticCode {
   SLACK_BLOCKS_TRIMMED = 'SLACK_BLOCKS_TRIMMED',
   SLACK_BUTTON_TEXT_LIMIT_EXCEEDED = 'SLACK_BUTTON_TEXT_LIMIT_EXCEEDED',
   SLACK_BUTTON_TEXT_TRUNCATED = 'SLACK_BUTTON_TEXT_TRUNCATED',
+  /** A Chart was left out because all of its values are zero. */
+  SLACK_CHART_EMPTY = 'SLACK_CHART_EMPTY',
+  /** A Chart was left out because a value isn't a number, or a pie or donut value is negative. */
+  SLACK_CHART_INVALID_DATA = 'SLACK_CHART_INVALID_DATA',
   SLACK_CONTEXT_ELEMENTS_LIMIT_EXCEEDED = 'SLACK_CONTEXT_ELEMENTS_LIMIT_EXCEEDED',
   SLACK_CONTEXT_IMAGE_URL_LIMIT_EXCEEDED = 'SLACK_CONTEXT_IMAGE_URL_LIMIT_EXCEEDED',
   SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED = 'SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED',
   SLACK_HEADER_TEXT_LIMIT_EXCEEDED = 'SLACK_HEADER_TEXT_LIMIT_EXCEEDED',
   SLACK_HEADER_TEXT_TRUNCATED = 'SLACK_HEADER_TEXT_TRUNCATED',
   SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED = 'SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED',
+  /**
+   * A Chart is drawn as an image in the preview. In Slack, the Channels app
+   * renders it and uploads the image when it sends the message.
+   */
+  SLACK_IMAGE_RENDERED_AT_SEND = 'SLACK_IMAGE_RENDERED_AT_SEND',
   /** Slack image blocks ignore the A2UI Image `fit` and `variant` hints. */
   SLACK_IMAGE_STYLE_APPROXIMATED = 'SLACK_IMAGE_STYLE_APPROXIMATED',
   SLACK_IMAGE_TITLE_TEXT_LIMIT_EXCEEDED = 'SLACK_IMAGE_TITLE_TEXT_LIMIT_EXCEEDED',
@@ -122,6 +131,11 @@ export interface PreviewSnapshot {
   status: PreviewStatus;
   /** The Slack Block Kit blocks; empty unless `status` is `READY`. */
   blocks: KnownBlock[];
+  /**
+   * What "Generated Block Kit" exports, when it differs from `blocks`. Charts are drawn as
+   * local images in the preview; the export marks them as files the app uploads.
+   */
+  exportBlocks?: KnownBlock[];
   /** Problems found in this render. */
   diagnostics: PreviewDiagnostic[];
 }
@@ -134,4 +148,9 @@ export function createEmptySnapshot(revision: number): PreviewSnapshot {
     blocks: [],
     diagnostics: [],
   };
+}
+
+/** The blocks to export or copy: `exportBlocks` when present, otherwise the preview blocks. */
+export function blocksForExport(snapshot: PreviewSnapshot): KnownBlock[] {
+  return snapshot.exportBlocks ?? snapshot.blocks;
 }

@@ -23,12 +23,14 @@ import {
   type ComponentApi,
   type SurfaceModel,
 } from '@a2ui/web_core/v0_9';
+import {type KnownBlock} from '@slack/types';
 import {
   dispatchCurrentEventAction,
   isCurrentActionEntry,
   type ActionDispatchEntry,
 } from './action-dispatch';
 import {slackCatalog, slackCatalogJson} from './catalog';
+import {createBlobChartImageStore, type ChartImageStore} from './chart-image';
 import {SLACK_COMPONENT_USAGES} from './examples';
 import {readFormInputValue, updateFormInput, type InputDispatchEntry} from './form-input';
 import {dispatchReadOnlyLocalFunctionAction} from './local-function-dispatch';
@@ -79,14 +81,23 @@ interface SlackPreviewBridgeOptions {
   onThemeChange?: (theme: ThemePreference) => void;
 }
 
+/** Settings for `createSlackPreviewSession`. */
+interface SlackPreviewSessionOptions {
+  /** Serves drawn chart images; defaults to blob URLs. */
+  readonly chartImages?: ChartImageStore;
+}
+
 /**
  * Creates the Slack preview's session.
  *
  * @param actionHandler Receives the A2UI event actions the preview dispatches.
+ * @param options Where the session serves the images it draws for charts.
  */
 export function createSlackPreviewSession(
   actionHandler?: (action: A2uiClientAction) => void | Promise<void>,
+  options: SlackPreviewSessionOptions = {},
 ): PreviewSession {
+  const chartImages = options.chartImages ?? createBlobChartImageStore();
   let processor = new MessageProcessor([slackCatalog], actionHandler);
   let inputResetKey = 0;
   let snapshot: PreviewSnapshot = freezeSnapshot({...createEmptySnapshot(0), inputResetKey});
@@ -108,6 +119,8 @@ export function createSlackPreviewSession(
     snapshot = freezeSnapshot({...next, inputResetKey});
     actions = nextActions;
     inputs = nextInputs;
+    // Keep only the chart images this snapshot, or the one before it, shows.
+    chartImages.release(shownImageUrls(snapshot.blocks));
     for (const listener of listeners) {
       listener();
     }
@@ -170,7 +183,7 @@ export function createSlackPreviewSession(
       publish(createEmptySnapshot(revision));
       return;
     }
-    const lowered = lowerSurface(surface, revision);
+    const lowered = lowerSurface(surface, revision, chartImages);
     publish(lowered.snapshot, lowered.actions, lowered.inputs);
   };
 
@@ -327,6 +340,7 @@ export function createSlackPreviewSession(
       surfaceCreatedListeners.clear();
       actions.clear();
       inputs.clear();
+      chartImages.dispose();
       snapshot = freezeSnapshot({...createEmptySnapshot(revision), inputResetKey});
     },
   };
@@ -371,6 +385,15 @@ interface ActiveSurfaceSubscription {
 /** The surface the preview shows: the most recently created one. */
 function lastSurface(processor: MessageProcessor<ComponentApi>): SurfaceModel | undefined {
   return [...processor.model.surfacesMap.values()].at(-1);
+}
+
+/** The `image_url` of every image block in `blocks`: the images a snapshot shows. */
+function shownImageUrls(blocks: readonly KnownBlock[]): Set<string> {
+  return new Set(
+    blocks.flatMap(block =>
+      block.type === 'image' && 'image_url' in block ? [block.image_url] : [],
+    ),
+  );
 }
 
 /**
