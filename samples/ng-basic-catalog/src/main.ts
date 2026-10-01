@@ -22,7 +22,7 @@ import {provideA2uiSandbox} from 'a2ui-bridge/angular';
 import catalogJson from './assets/catalog.json';
 
 import {COMPONENT_USAGES} from './assets/usages.js';
-import {DEMOS} from './demos.js';
+import {DEMOS} from '../../shared/demos';
 
 bootstrapApplication(AppComponent, {
   providers: [

@@ -175,7 +175,7 @@ describe('AppRoot Lit Element', () => {
   });
 
   it('serves the full basic-catalog demo set', async () => {
-    const {DEMOS} = await import('./demos.js');
+    const {DEMOS} = await import('../../shared/demos');
     expect(DEMOS).toHaveLength(47);
     for (const demo of DEMOS) {
       expect(demo.id).toBeTruthy();
@@ -189,7 +189,7 @@ describe('AppRoot Lit Element', () => {
   });
 
   it('wires getDemos from the bootstrap options through to the bridge', async () => {
-    const {DEMOS} = await import('./demos.js');
+    const {DEMOS} = await import('../../shared/demos');
     // Capture the sandbox options the element actually hands the bridge on
     // connect: `bootstrapLitSandbox` in main.ts copies `getDemos` onto the
     // element class, and `connectedCallback` forwards it here. Reading the
