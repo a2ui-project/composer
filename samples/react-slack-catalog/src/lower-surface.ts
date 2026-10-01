@@ -35,6 +35,7 @@ import {renderBlockKit} from '@copilotkit/channels-slack/render';
 import {type ActionDispatchEntry} from './action-dispatch';
 import {collectActionIds, filterActionsForBlocks, registerAction} from './action-registry';
 import {collectText} from './channel-nodes';
+import {type ChartImageStore} from './chart-image';
 import {
   SOURCE_NAME_PATTERN,
   SOURCE_URL_PATTERN,
@@ -48,6 +49,7 @@ import {
   type InputDispatchEntry,
 } from './form-input';
 import {parseHttpUrl} from './http-url';
+import {drawCharts, exportChartImages, lowerChart} from './lower-chart';
 import {lowerImage} from './lower-image';
 import {lowerTable} from './lower-table';
 import {type LowerComponentContext, type LoweringState} from './lowering-context';
@@ -101,8 +103,13 @@ class WaitingForComponentError extends Error {
  * diagnostics, and no actions or inputs.
  *
  * @param revision The render number, used in the generated `action_id`s.
+ * @param chartImages Serves the images drawn for the surface's charts.
  */
-export function lowerSurface(surface: SurfaceModel, revision: number): LoweredSurface {
+export function lowerSurface(
+  surface: SurfaceModel,
+  revision: number,
+  chartImages: ChartImageStore,
+): LoweredSurface {
   const noControls = {actions: new Map(), inputs: new Map()};
   if (surface.componentsModel.entries.next().done) {
     return {snapshot: {...createEmptySnapshot(revision), surfaceId: surface.id}, ...noControls};
@@ -113,11 +120,13 @@ export function lowerSurface(surface: SurfaceModel, revision: number): LoweredSu
     diagnostics: [],
     actions: new Map(),
     inputs: new Map(),
+    charts: new Map(),
     nextActionOrdinal: 1,
   };
 
   try {
-    const ir = wrapTopLevelButtons(lowerComponent(surface, 'root', '/', new Set(), state));
+    const loweredIr = wrapTopLevelButtons(lowerComponent(surface, 'root', '/', new Set(), state));
+    const {ir, chartUrls} = drawCharts(loweredIr, state, chartImages);
     const limitEvidence = collectOutputLimitEvidence(ir);
     const blocks = renderBlockKit(ir);
     const actions = filterActionsForBlocks(state.actions, blocks, state.diagnostics);
@@ -135,6 +144,7 @@ export function lowerSurface(surface: SurfaceModel, revision: number): LoweredSu
         surfaceId: surface.id,
         status: PreviewStatus.READY,
         blocks,
+        exportBlocks: exportChartImages(blocks, chartUrls),
         diagnostics: state.diagnostics,
       },
       actions,
@@ -279,6 +289,11 @@ function lowerComponent(
           return entry;
         },
         diagnostics: state.diagnostics,
+        registerChart: chart => {
+          const key = `a2ui-chart-${state.revision}-${state.charts.size + 1}`;
+          state.charts.set(key, chart);
+          return key;
+        },
       }),
     );
   } finally {
@@ -332,6 +347,8 @@ function lowerSupportedComponent(
       return lowerFormInput(context.input(type), props);
     case 'Table':
       return lowerTable(props, context);
+    case 'Chart':
+      return lowerChart(props, context);
     case 'MarketSnapshot':
       // `lowerComponent` validated these props against MarketSnapshotSchema.
       return lowerMarketSnapshot(props as MarketSnapshotProps, context);
