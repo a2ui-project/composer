@@ -193,6 +193,20 @@ export const SLACK_COMPONENT_USAGES = {
       },
     ],
   },
+  Chart: {
+    usage: [
+      {
+        id: 'root',
+        component: 'Chart',
+        type: 'pie',
+        title: 'Illustrative possession split',
+        data: [
+          {label: 'Argentina', value: 70},
+          {label: 'Mexico', value: 30},
+        ],
+      },
+    ],
+  },
   MarketSnapshot: {
     usage: [
       {
