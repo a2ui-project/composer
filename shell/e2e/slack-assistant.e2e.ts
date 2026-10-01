@@ -217,6 +217,53 @@ test.describe('Slack assistant browser journey', () => {
     expect(unexpectedErrors).toEqual([]);
   });
 
+  test('draws a requested pie chart as an image and exports it as an uploaded file', async ({
+    page,
+  }) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackAssistant(page);
+    const chartMessages: RenderA2uiItem[] = [
+      {version: 'v0.9', createSurface: {surfaceId: 'possession', catalogId: SLACK_CATALOG_ID}},
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'possession',
+          components: [
+            {id: 'root', component: 'Column', children: ['title', 'share']},
+            {id: 'title', component: 'Text', variant: 'h1', text: 'Possession'},
+            {
+              id: 'share',
+              component: 'Chart',
+              type: 'pie',
+              title: 'Possession split',
+              data: [
+                {label: 'Team A', value: 70},
+                {label: 'Team B', value: 30},
+              ],
+            },
+          ],
+        },
+      },
+    ];
+    await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(toJsonl(chartMessages))}]);
+
+    await submitPrompt(page, 'Now generate a 70/30 pie chart.');
+
+    const altText = 'Pie chart, Possession split: Team A 70, Team B 30';
+    const chart = slackPreviewSurface(page).getByRole('img', {name: altText});
+    await expect(chart).toBeVisible();
+    await expect(chart).toHaveAttribute('src', /^blob:/);
+    await expect(slackPreviewFrame(page).getByText('SLACK_IMAGE_RENDERED_AT_SEND')).toBeVisible();
+    const request = (await getCapturedGeminiRequests(page))[0];
+    expect(JSON.stringify(request.body)).toContain('Slack has no chart block');
+    expect(await getBlockKitJson(page)).toMatchObject({
+      blocks: expect.arrayContaining([
+        {type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: altText},
+      ]),
+    });
+    expect(unexpectedErrors).toEqual([]);
+  });
+
   test('shows the Slack catalog in the system instructions', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
     await openSlackAssistant(page);
