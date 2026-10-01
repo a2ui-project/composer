@@ -150,12 +150,36 @@ separate demo API work lands.
 | `TextField`      | Slack input block with `plain_text_input`               | Writable data binding; `shortText` or `longText`.                                                                                                                                |
 | `DateTimeInput`  | Slack input block with `datepicker`                     | Writable data binding; date only, in `YYYY-MM-DD` format.                                                                                                                        |
 | `Table`          | Slack table block                                       | Aligned headers and body cells, including data bindings. Supports 1–20 columns and 1–99 body rows with matching cell counts.                                                     |
+| `Chart`          | Slack image block, drawn by the renderer                | Bar, line, pie, or donut chart from 1–20 labeled values, literal or bound. The preview draws it; the export marks it as a file your Channels app uploads (see Charts).           |
 | `MarketSnapshot` | Header, summary, table, context, and acknowledge button | Custom sample component with exactly three market rows, source links, `whyItMatters`, and `searchedAt`.                                                                          |
 
 Unsupported components, invalid props, catalog mismatches, expression failures,
 component cycles, and Slack output limit failures show diagnostics and clear the
 stale preview/export/actions until a valid update arrives. Missing child
 components put the preview in a waiting state and recover when the child arrives.
+
+## Charts
+
+Slack has no chart block, and Channels' Slack renderer skips chart nodes. The
+`Chart` component shows how a Channels app mixes native Slack blocks with a
+component it renders as an image:
+
+- The preview draws the chart as SVG in the browser and shows it as a Slack
+  image block, between the native blocks around it.
+- `Generated Block Kit` exports that block in Slack's uploaded-file form,
+  `{"type": "image", "slack_file": {"id": "RENDERED_AT_SEND"}, ...}`. Your
+  Channels app renders the chart to a PNG, uploads it, and uses the uploaded
+  file's ID when it sends the message.
+- An info diagnostic, `SLACK_IMAGE_RENDERED_AT_SEND`, says the same in the preview.
+
+Every value must be a number, pie and donut values must be zero or more, and at
+least one value must be non-zero. Otherwise the chart is skipped with a
+`SLACK_CHART_INVALID_DATA` or `SLACK_CHART_EMPTY` warning, and the rest of the
+message still renders.
+
+The Tightknit renderer's own `Copy JSON` and `Open in Block Kit Builder` buttons
+use the preview blocks, so a chart there carries a local `blob:` URL that only
+loads inside the preview. Copy from `Generated Block Kit` instead.
 
 ## Actions
 
