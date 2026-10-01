@@ -116,7 +116,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
         // Synchronously align hasRoot with surface to prevent a single-frame "[Loading root...]" flash before the [surface] effect runs.
         setHasRoot(Boolean(nextSurface?.componentsModel.get('root')));
       },
-      whenSurfaceRendered: () =>
+      onInitialRender: () =>
         new Promise<void>(resolve => {
           contentRenderWaiters.current.push(resolve);
           // Request a commit even when a streamed root arrives after createSurface

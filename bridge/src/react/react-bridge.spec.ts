@@ -252,7 +252,10 @@ describe('React Hook Adapter Spec', () => {
   });
 
   it('acknowledges content only after the React surface commit', async () => {
-    const catalog = {id: 'test', components: new Map<string, ComponentApi>()};
+    const catalog = {
+      id: 'test',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
     const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
     function TestComponent() {
       const {surface} = useA2uiSandbox([catalog]);
@@ -263,7 +266,7 @@ describe('React Hook Adapter Spec', () => {
     const root = createRoot(container);
     await act(async () => root.render(React.createElement(TestComponent)));
     const [processor, config] = attachSpy.mock.lastCall!;
-    expect(config.whenSurfaceRendered).toBeDefined();
+    expect(config.onInitialRender).toBeDefined();
     processor.processMessages([
       {version: 'v0.9', createSurface: {surfaceId: 'ready', catalogId: 'test'}},
     ]);
@@ -271,7 +274,7 @@ describe('React Hook Adapter Spec', () => {
     let pending: Promise<void> | undefined;
     await act(async () => {
       config.onSurfaceReady('ready');
-      pending = config.whenSurfaceRendered!().then(committed);
+      pending = config.onInitialRender!().then(committed);
       expect(committed).not.toHaveBeenCalled();
       expect(container.textContent).toBe('waiting');
     });
