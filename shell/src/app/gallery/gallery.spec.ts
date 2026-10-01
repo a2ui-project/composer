@@ -382,7 +382,7 @@ describe('Gallery Component', () => {
   });
 
   it('logs an error when CDK Clipboard copy returns false', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
     mockClipboard.copy.mockReturnValue(false);
 
     catalogServiceMock.selectedComponentKey.set('Text');
@@ -392,15 +392,16 @@ describe('Gallery Component', () => {
 
     await harness.clickCopyButton();
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to copy A2UI component usage to clipboard.',
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Failed to copy A2UI component usage to clipboard.'),
+        sourceTag: '[Gallery]',
+      }),
     );
-
-    consoleErrorSpy.mockRestore();
   });
 
   it('reports clipboard exceptions without losing the valid preview', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
     catalogServiceMock.selectedComponentKey.set('Text');
     catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     fixture.detectChanges();
@@ -408,11 +409,12 @@ describe('Gallery Component', () => {
       throw new Error('Clipboard unavailable');
     });
     await harness.clickCopyButton();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to parse or format A2UI usage payload: ',
-      expect.any(Error),
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Failed to parse or format A2UI usage payload: '),
+        sourceTag: '[Gallery]',
+      }),
     );
-    consoleErrorSpy.mockRestore();
   });
 
   it('returns gracefully when selectedComponentPreset is null or missing usage array', async () => {
@@ -857,19 +859,20 @@ describe('Gallery Component', () => {
   it('keeps the ready subscription alive when the preview transport fails once', () => {
     catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     fixture.detectChanges();
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
     hostCommunicationMock.sendRenderA2UI.mockClear();
     hostCommunicationMock.sendRenderA2UI.mockImplementationOnce(() => {
       throw new Error('Transport failure');
     });
     hostCommunicationMock.messageStream$.next({type: PreviewBridgeMessageType.RENDERER_READY});
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to dispatch component example:',
-      expect.any(Error),
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Failed to dispatch component example:'),
+        sourceTag: '[Gallery]',
+      }),
     );
     hostCommunicationMock.messageStream$.next({type: PreviewBridgeMessageType.RENDERER_READY});
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledTimes(2);
-    consoleErrorSpy.mockRestore();
   });
 
   it('dispatches preview payload when default component auto-selection sets selectedComponentPreset', () => {
@@ -955,7 +958,7 @@ describe('Gallery Component', () => {
   });
 
   it('reports an unencodable renderer example without enabling copy or breaking the Gallery', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
     const cyclic: Record<string, unknown> = {id: 'target', component: 'Text'};
     cyclic['self'] = cyclic;
     catalogServiceMock.selectedComponentKey.set('Text');
@@ -964,7 +967,12 @@ describe('Gallery Component', () => {
     expect(await harness.getDraftError()).toContain('Could not load');
     await harness.clickCopyButton();
     expect(mockClipboard.copy).not.toHaveBeenCalled();
-    consoleErrorSpy.mockRestore();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Failed to load component example:'),
+        sourceTag: '[Gallery]',
+      }),
+    );
   });
 
   describe('Usage Tracking Instrumentation', () => {
@@ -1015,7 +1023,7 @@ describe('Gallery Component', () => {
     it('does not track copying usage snippet to clipboard on failure', async () => {
       const trackingService = TestBed.inject(UsageTrackingService);
       const trackSpy = vi.spyOn(trackingService, 'trackGalleryCopyUsage');
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
 
       catalogServiceMock.selectedComponentPreset.set({
         usage: [{id: 'target', component: 'Text'}],
@@ -1027,11 +1035,12 @@ describe('Gallery Component', () => {
       await Promise.resolve();
 
       expect(trackSpy).not.toHaveBeenCalled();
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to copy A2UI component usage to clipboard.',
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Failed to copy A2UI component usage to clipboard.'),
+          sourceTag: '[Gallery]',
+        }),
       );
-
-      consoleErrorSpy.mockRestore();
     });
   });
   it('edits a property and retains the same valid preview and copy payload through invalid JSON and late usages', async () => {

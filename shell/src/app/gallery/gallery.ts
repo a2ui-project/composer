@@ -125,6 +125,7 @@ export class Gallery implements OnInit, OnDestroy {
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly launcher = inject(GalleryLauncher);
   private readonly errorLogger = inject(ErrorLogger);
+  private readonly logger = this.errorLogger.withTag('[Gallery]');
   protected readonly opening = signal(false);
   protected readonly actionMessage = signal('');
   protected readonly rendererUrl = this.startupResolution.resolvedUrl;
@@ -240,7 +241,7 @@ export class Gallery implements OnInit, OnDestroy {
         error: null,
       };
     } catch (error) {
-      console.error('Failed to load component example:', error);
+      this.logger.error('Failed to load component example:', error);
       return {
         text: '',
         preset: null,
@@ -445,7 +446,7 @@ export class Gallery implements OnInit, OnDestroy {
       this.hostCommunication.sendRenderA2UI(payload);
     } catch (error) {
       this.actionMessage.set('Could not update the preview. Select the component again to retry.');
-      console.error('Failed to dispatch component example:', error);
+      this.logger.error('Failed to dispatch component example:', error);
     }
   }
 
@@ -538,11 +539,11 @@ export class Gallery implements OnInit, OnDestroy {
         });
       } else {
         this.actionMessage.set('Could not copy JSON. Try again.');
-        console.error('Failed to copy A2UI component usage to clipboard.');
+        this.logger.error('Failed to copy A2UI component usage to clipboard.');
       }
     } catch (error) {
       this.actionMessage.set('Could not copy JSON. Try again.');
-      console.error('Failed to parse or format A2UI usage payload: ', error);
+      this.logger.error('Failed to parse or format A2UI usage payload: ', error);
     }
   }
 }
