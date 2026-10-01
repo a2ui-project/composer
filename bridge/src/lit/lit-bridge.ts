@@ -187,7 +187,7 @@ export class A2uiSandboxRoot extends LitElement {
         this.surface = this.processor.model.getSurface(surfaceId);
         this.requestUpdate();
       },
-      whenSurfaceRendered: async () => {
+      onInitialRender: async () => {
         await this.updateComplete;
       },
       onSurfaceCleared: () => {

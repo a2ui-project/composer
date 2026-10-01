@@ -163,10 +163,10 @@ describe('Angular Sandbox Connection Spec', () => {
     const fixture = TestBed.createComponent(TestHost);
     fixture.detectChanges();
     const config = attachSpy.mock.lastCall![1];
-    expect(config.whenSurfaceRendered).toBeDefined();
+    expect(config.onInitialRender).toBeDefined();
     config.onSurfaceReady('ready');
     const committed = vi.fn();
-    const pending = config.whenSurfaceRendered!().then(committed);
+    const pending = config.onInitialRender!().then(committed);
     expect(committed).not.toHaveBeenCalled();
     await fixture.whenStable();
     await pending;

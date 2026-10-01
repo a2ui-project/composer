@@ -91,11 +91,12 @@ export declare interface RendererConfig {
   /** Invoked with the dynamic surfaceId when a new surface layout is built. */
   onSurfaceReady: (surfaceId: string) => void;
   /**
-   * Resolves after the framework commits pending surface content to the DOM.
-   * Called once for the first root component after creation/reset. Renderers
-   * without this hook retain the legacy dimension-only resize contract.
+   * Called once after the first root component of a new or reset surface is
+   * processed; the returned promise resolves when the framework has committed
+   * that content to the DOM. The bridge then reports `contentReady: true` with
+   * the next SURFACE_RESIZE. Renderers without this hook report dimensions only.
    */
-  whenSurfaceRendered?: () => Promise<void>;
+  onInitialRender?: () => Promise<void>;
   /** Invoked when the surface needs to unmount or reset. */
   onSurfaceCleared?: () => void;
   /** A preloaded in-memory component/layout catalog payload definition. */

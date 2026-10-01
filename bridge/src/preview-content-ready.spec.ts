@@ -31,11 +31,20 @@ const rootComponent = {
   },
 };
 
-function rendererConfig(whenSurfaceRendered?: () => Promise<void>): RendererConfig {
+/** A promise with its resolver, for holding a render commit open until a test releases it. */
+function deferred(): {promise: Promise<void>; resolve: () => void} {
+  let resolve!: () => void;
+  const promise = new Promise<void>(release => {
+    resolve = release;
+  });
+  return {promise, resolve};
+}
+
+function rendererConfig(onInitialRender?: () => Promise<void>): RendererConfig {
   return {
     surfaceGroup: {onSurfaceCreated: {subscribe: () => ({unsubscribe() {}})}},
     onSurfaceReady() {},
-    whenSurfaceRendered,
+    onInitialRender,
   };
 }
 
@@ -57,10 +66,10 @@ describe('preview content readiness', () => {
   });
 
   it('waits for the framework commit and forces readiness even when dimensions stay unchanged', async () => {
-    const committed = Promise.withResolvers<void>();
-    const whenSurfaceRendered = vi.fn(() => committed.promise);
+    const committed = deferred();
+    const onInitialRender = vi.fn(() => committed.promise);
     const send = vi.spyOn(bridge, 'sendMessage');
-    bridge.attachRenderer({processMessages() {}}, rendererConfig(whenSurfaceRendered));
+    bridge.attachRenderer({processMessages() {}}, rendererConfig(onInitialRender));
     expect(send).toHaveBeenLastCalledWith({
       type: PreviewBridgeMessageType.SURFACE_RESIZE,
       payload: {height: 300, width: 400, contentReady: false},
@@ -68,7 +77,7 @@ describe('preview content readiness', () => {
 
     bridge['handleRenderA2ui']([createSurface, rootComponent]);
     await vi.runAllTimersAsync();
-    expect(whenSurfaceRendered).toHaveBeenCalledOnce();
+    expect(onInitialRender).toHaveBeenCalledOnce();
     expect(send).not.toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({contentReady: true}),
@@ -86,25 +95,25 @@ describe('preview content readiness', () => {
       {version: 'v0.9', updateDataModel: {surfaceId: 'demo', value: {}}},
     ]);
     await vi.runAllTimersAsync();
-    expect(whenSurfaceRendered).toHaveBeenCalledOnce();
+    expect(onInitialRender).toHaveBeenCalledOnce();
   });
 
   it('waits for a root component when a surface arrives progressively', async () => {
-    const whenSurfaceRendered = vi.fn(async () => {});
-    bridge.attachRenderer({processMessages() {}}, rendererConfig(whenSurfaceRendered));
+    const onInitialRender = vi.fn(async () => {});
+    bridge.attachRenderer({processMessages() {}}, rendererConfig(onInitialRender));
     bridge['handleRenderA2ui']([createSurface]);
     await vi.runAllTimersAsync();
-    expect(whenSurfaceRendered).not.toHaveBeenCalled();
+    expect(onInitialRender).not.toHaveBeenCalled();
 
     bridge['handleRenderA2ui']([rootComponent]);
     await vi.runAllTimersAsync();
-    expect(whenSurfaceRendered).toHaveBeenCalledOnce();
+    expect(onInitialRender).toHaveBeenCalledOnce();
   });
 
   it.each(['clear', 'detach', 'destroy'] as const)(
     'ignores a pending render completion after %s',
     async operation => {
-      const committed = Promise.withResolvers<void>();
+      const committed = deferred();
       const connection = bridge.attachRenderer(
         {processMessages() {}},
         rendererConfig(() => committed.promise),
@@ -127,14 +136,14 @@ describe('preview content readiness', () => {
   );
 
   it('resets readiness and ignores completion from the previous surface', async () => {
-    const first = Promise.withResolvers<void>();
-    const second = Promise.withResolvers<void>();
-    const whenSurfaceRendered = vi
+    const first = deferred();
+    const second = deferred();
+    const onInitialRender = vi
       .fn()
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     const send = vi.spyOn(bridge, 'sendMessage');
-    bridge.attachRenderer({processMessages() {}}, rendererConfig(whenSurfaceRendered));
+    bridge.attachRenderer({processMessages() {}}, rendererConfig(onInitialRender));
     bridge['handleRenderA2ui']([createSurface, rootComponent]);
     bridge['handleRenderA2ui'](null);
     bridge['handleRenderA2ui']([createSurface, rootComponent]);

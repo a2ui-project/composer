@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {SurfaceResizeObserver} from './surface-resize-observer';
+import {describe, it, expect, vi, beforeEach, afterEach, type Mock} from 'vitest';
+import {SurfaceResizeObserver, type SurfaceResizeCallback} from './surface-resize-observer';
 
 describe('SurfaceResizeObserver', () => {
   let observer: SurfaceResizeObserver;
-  let onResizeMock: ReturnType<typeof vi.fn>;
+  let onResizeMock: Mock<SurfaceResizeCallback>;
 
   beforeEach(() => {
-    onResizeMock = vi.fn();
+    onResizeMock = vi.fn<SurfaceResizeCallback>();
   });
 
   afterEach(() => {

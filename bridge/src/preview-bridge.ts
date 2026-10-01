@@ -55,7 +55,13 @@ import type {
  */
 export const ERROR_OVERLAY_DEBOUNCE_MS = 350;
 
-/** Window, in milliseconds, over which consecutive SURFACE_RESIZE reports are coalesced. */
+/**
+ * Window, in milliseconds, over which consecutive SURFACE_RESIZE reports are coalesced:
+ * one display frame at 60 Hz (1000 / 60 ≈ 16.7). Layout passes inside one frame can't
+ * be painted separately, so the host only needs the last of them. A longer window would
+ * delay size changes the user can see; a shorter one would let a mount's intermediate
+ * layout passes through.
+ */
 const SURFACE_RESIZE_COALESCE_MS = 16;
 
 /** A SURFACE_RESIZE payload: the measured dimensions, plus readiness once the renderer reports it. */
@@ -274,10 +280,11 @@ export class PreviewBridge {
   });
 
   /**
-   * Sends the first report of a burst at once and coalesces the rest into one trailing report
-   * per SURFACE_RESIZE_COALESCE_MS. A mount settles through several layout passes within a few
-   * milliseconds; reporting each one gives the host a stream of intermediate sizes it would
-   * immediately overwrite, and is the cadence a resize feedback loop is detected by.
+   * Step 2 of 3 (see {@link dispatchSurfaceResize}): sends the first report of a burst at
+   * once and coalesces the rest into one trailing report per SURFACE_RESIZE_COALESCE_MS. A
+   * mount settles through several layout passes within a few milliseconds; reporting each
+   * one gives the host a stream of intermediate sizes it would immediately overwrite, and
+   * is the cadence a resize feedback loop is detected by.
    */
   private queueSurfaceResize(payload: SurfaceResizePayload): void {
     this.pendingSurfaceResize = payload;
@@ -286,16 +293,20 @@ export class PreviewBridge {
     }
     const wait = this.lastSurfaceResizeSentAt + SURFACE_RESIZE_COALESCE_MS - Date.now();
     if (wait <= 0) {
-      this.flushSurfaceResize();
+      this.sendSurfaceResize();
       return;
     }
     this.surfaceResizeFlushId = setTimeout(() => {
       this.surfaceResizeFlushId = undefined;
-      this.flushSurfaceResize();
+      this.sendSurfaceResize();
     }, wait);
   }
 
-  private flushSurfaceResize(): void {
+  /**
+   * Step 3 of 3: posts the pending SURFACE_RESIZE to the host, unless it repeats the last
+   * report sent exactly.
+   */
+  private sendSurfaceResize(): void {
     const payload = this.pendingSurfaceResize;
     this.pendingSurfaceResize = null;
     if (!payload) {
@@ -355,6 +366,17 @@ export class PreviewBridge {
    * Measures the rendered content's maximum scroll/offset dimensions and dispatches a
    * `SURFACE_RESIZE` message to the host window if dimensions have changed.
    *
+   * Reports go through three steps:
+   * 1. Measure: this method (or {@link scheduleSurfaceResize}, which defers it a tick) asks
+   *    the SurfaceResizeObserver to measure. It skips a measurement whose dimensions
+   *    match the last one, unless `force` is set.
+   * 2. Coalesce: {@link queueSurfaceResize} collapses a burst into one report per
+   *    SURFACE_RESIZE_COALESCE_MS.
+   * 3. Send: {@link sendSurfaceResize} posts it, skipping a payload identical to the last.
+   *
+   * `force` matters when content readiness changes but the dimensions don't: the
+   * observer would otherwise drop the measurement before step 3 sees the new readiness.
+   *
    * This is triggered on:
    * 1. DOM mutations and element resize events via ResizeObserver.
    * 2. Window viewport resize events.
@@ -367,6 +389,7 @@ export class PreviewBridge {
     this.surfaceResizeObserver.measureAndDispatch(force);
   }
 
+  /** Measures on the next tick, once pending framework rendering has reached the DOM. */
   private scheduleSurfaceResize(force = false): void {
     if (this.surfaceResizeTimeoutId !== undefined) clearTimeout(this.surfaceResizeTimeoutId);
     this.forceNextSurfaceResize ||= force;
@@ -381,7 +404,7 @@ export class PreviewBridge {
   private resetContentReadiness(): void {
     this.contentRenderGeneration++;
     this.awaitingContentRender = false;
-    this.contentReady = this.activeRenderer?.config.whenSurfaceRendered ? false : undefined;
+    this.contentReady = this.activeRenderer?.config.onInitialRender ? false : undefined;
     if (this.surfaceResizeTimeoutId !== undefined) {
       clearTimeout(this.surfaceResizeTimeoutId);
       this.surfaceResizeTimeoutId = undefined;
@@ -398,14 +421,16 @@ export class PreviewBridge {
         renderer.activeSurfaceIds.has(message.updateComponents.surfaceId) &&
         message.updateComponents.components.some(component => component.id === 'root'),
     );
-    const whenSurfaceRendered = renderer.config.whenSurfaceRendered;
-    if (!hasRoot || !whenSurfaceRendered) return;
+    const onInitialRender = renderer.config.onInitialRender;
+    // Only renderers with the hook report readiness. Every RENDER_A2UI is still measured
+    // by the caller's regular scheduleSurfaceResize, so skipping here doesn't skip that.
+    if (!hasRoot || !onInitialRender) return;
 
     this.awaitingContentRender = true;
     const generation = this.contentRenderGeneration;
     void (async () => {
       try {
-        await whenSurfaceRendered();
+        await onInitialRender();
         if (generation !== this.contentRenderGeneration || renderer !== this.activeRenderer) return;
         this.awaitingContentRender = false;
         this.contentReady = true;
@@ -878,9 +903,12 @@ export class PreviewBridge {
         this.activeRenderer.config.onSurfaceReady(surfaceId);
       }
 
+      // Report readiness once the renderer's first content reaches the DOM (forced there,
+      // because readiness changes even when dimensions don't).
       this.waitForInitialContent(payload as A2uiMessage[]);
-      // Defer measurement to the next event loop tick so asynchronous framework
-      // rendering and DOM attachment complete.
+      // Measure after every render, on the next tick so asynchronous framework rendering
+      // and DOM attachment complete. Not forced: readiness doesn't change here, so a
+      // measurement with unchanged dimensions has nothing new to report.
       this.scheduleSurfaceResize();
     } else {
       console.warn('PreviewBridge: Unexpected non-array RENDER_A2UI payload received:', payload);
@@ -920,6 +948,10 @@ export class PreviewBridge {
     }
 
     // Defer measurement to allow framework component unmounting and DOM cleanup to settle.
+    // Forced because resetContentReadiness above set readiness back to false: the host
+    // must hear that even if the empty document measures the same as the last report.
+    // Skipped when dispatchRenderA2ui mounts a new surface straight after this reset;
+    // that render is measured, and reports its readiness, on its own.
     if (scheduleResize) {
       this.scheduleSurfaceResize(true);
     }
