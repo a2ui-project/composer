@@ -15,7 +15,7 @@
  */
 
 import {useEffect, useMemo, useState} from 'react';
-import {PreviewStatus, type PreviewSnapshot} from './preview-snapshot';
+import {PreviewStatus, blocksForExport, type PreviewSnapshot} from './preview-snapshot';
 
 interface BlockKitExportProps {
   readonly snapshot: PreviewSnapshot;
@@ -28,15 +28,8 @@ interface BlockKitExportProps {
 export function BlockKitExport({snapshot}: BlockKitExportProps) {
   const canCopy = snapshot.status === PreviewStatus.READY;
   const blockKitJson = useMemo(
-    () =>
-      JSON.stringify(
-        {
-          blocks: canCopy ? snapshot.blocks : [],
-        },
-        null,
-        2,
-      ),
-    [canCopy, snapshot.blocks],
+    () => JSON.stringify({blocks: canCopy ? blocksForExport(snapshot) : []}, null, 2),
+    [canCopy, snapshot],
   );
   const [copyStatus, setCopyStatus] = useState('');
 
