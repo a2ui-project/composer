@@ -40,18 +40,31 @@ import {CrossFrameValidator} from '../shell/cross-frame-validator/cross-frame-va
 import {DemoLauncher} from './services/demo-launcher';
 import {ErrorLogger} from '../debug/error-logger.service';
 
-/** Lifecycle phases of a single demo card's renderer frame handshake. */
-type DemoCardState = 'idle' | 'mounting' | 'ready' | 'error';
+/** Where a demo card is in loading its renderer iframe. */
+export enum DemoCardState {
+  /** The card hasn't been scrolled near enough to load its iframe yet. */
+  IDLE = 'idle',
+  /** The iframe is loading and the renderer hasn't sent RENDERER_READY yet. */
+  MOUNTING = 'mounting',
+  /** The renderer is ready and has been sent the demo. */
+  READY = 'ready',
+  /** Nothing rendered within {@link READY_TIMEOUT_MS}. */
+  ERROR = 'error',
+}
 
 /**
- * Phases a card's height measurement passes through for one attached frame.
- *
- * `measuring` is the window opened by the frame's first usable report, during which the
- * last report wins; `growing` follows it, during which only a larger report is
- * information; `settled` is silence outlasting {@link GROWTH_SETTLE_MS}, after which the
- * card ignores its frame entirely. See {@link DemoCard.applyReportedHeight}.
+ * How a card treats the height reports from its current iframe. A report is a
+ * SURFACE_RESIZE message the renderer sends whenever its page changes size. See {@link
+ * DemoCard.applyReportedHeight}.
  */
-type MeasurementPhase = 'measuring' | 'growing' | 'settled';
+enum MeasurementPhase {
+  /** Collecting reports. The last one before {@link MEASURE_SETTLE_MS} is committed. */
+  MEASURING = 'measuring',
+  /** A height is committed. Only a taller report changes it. */
+  GROWING = 'growing',
+  /** No growth for {@link GROWTH_SETTLE_MS}. Further reports are ignored. */
+  SETTLED = 'settled',
+}
 
 /**
  * CSS height the renderer frame is held at until a measurement commits.
@@ -85,25 +98,28 @@ const MEASURE_HEIGHT_PX = 32;
 const MAX_CARD_HEIGHT_PX = 560;
 
 /**
- * Fallback measurement window for external renderers without content-ready reports.
+ * How long a card collects height reports before committing one, for renderers that
+ * don't say when the demo has rendered.
  *
- * The window opens on that frame's first usable report and the last report to arrive
- * before it closes is the one committed. It exists because the *first* report is not the
- * demo: the renderer draws its own "waiting for a payload" screen while it boots, which
- * against the Angular sample measures 166px, so committing on sight republished the old
- * defect at a new number — every demo shorter than that idle screen would sit at the idle
- * screen's height, since once the frame is sized to a committed height the reports are
- * floored there and a shrink can no longer be seen.
+ * Reports from this repository's bridge carry `contentReady`, and the card commits the
+ * first report marked true. A renderer built on an older bridge leaves it out, so the
+ * card waits instead: the first report starts this timer, and the last report received
+ * before it fires is committed.
  *
- * 1s is sized off measured report timings against the Angular sample renderer. A frame
- * rendering on screen goes idle screen -> final demo within ~60ms (the widest observed
- * burst is Login Form with Validation at 53ms: 166, 417, 465), so 1s is more than an
- * order of magnitude of headroom, while still being short enough that the placeholder
- * covering a card's very first measurement is gone before the reader — who is scrolling
- * towards a card mounted a full viewport ahead — arrives at it.
+ * The card can't simply commit the first report, because it usually isn't the demo.
+ * While a renderer starts up it shows its own "waiting for a payload" screen, which is
+ * 166px tall in the Angular sample. Once the iframe has a committed height, reports never
+ * come back smaller than that height, so committing the waiting screen would leave every
+ * shorter demo stuck at 166px.
  *
- * The window is armed once rather than restarted per report, which bounds measuring: a
- * demo that never stops changing height still commits, instead of never resolving.
+ * 1s comes from timing the Angular sample renderer: a visible card goes from the waiting
+ * screen to the finished demo in about 60ms (the slowest, Login Form with Validation, took
+ * 53ms: 166, 417, 465). That leaves plenty of headroom and is still short enough that the
+ * placeholder is gone before the reader scrolls to the card, since cards load a full
+ * viewport ahead.
+ *
+ * Later reports don't restart the timer, so a demo whose height never stops changing
+ * still gets a height.
  */
 const MEASURE_SETTLE_MS = 1000;
 
@@ -172,11 +188,14 @@ export class DemoCard {
   /** Gate controlling frame attachment; the owning route drives it from viewport visibility. */
   readonly mount = input<boolean>(false);
 
-  private readonly stateSignal = signal<DemoCardState>('idle');
-  /** Readonly handshake state for this card's renderer frame. */
-  readonly state = this.stateSignal.asReadonly();
+  private readonly currentState = signal(DemoCardState.IDLE);
+  /** Where this card is in loading its renderer iframe. */
+  readonly state = this.currentState.asReadonly();
 
-  private readonly cardHeightSignal = signal<number | null>(null);
+  /** Whether the renderer failed to show anything in time. */
+  protected readonly hasError = computed(() => this.state() === DemoCardState.ERROR);
+
+  private readonly currentHeight = signal<number | null>(null);
   private readonly hasRenderedContent = signal(false);
   /**
    * Readonly measured height in pixels, or null before any rendered report.
@@ -185,7 +204,7 @@ export class DemoCard {
    * its own unscaled viewport — not the height the card occupies on the wall. See {@link
    * DemoCard.surfaceHeight} for the latter.
    */
-  readonly cardHeight = this.cardHeightSignal.asReadonly();
+  readonly cardHeight = this.currentHeight.asReadonly();
 
   private readonly availableWidth = signal(0);
   private readonly contentWidth = signal(0);
@@ -208,11 +227,11 @@ export class DemoCard {
   });
 
   /**
-   * How this card is currently treating its frame's height reports. Reset to `measuring`
-   * every time a frame is attached, so a card the wall unmounts and remounts measures the
-   * demo again rather than living forever with whatever its first pass caught.
+   * How this card is treating its iframe's height reports. Goes back to measuring
+   * whenever the card gets a new iframe, so a card the wall unloads and reloads measures
+   * the demo again instead of keeping the first height it caught.
    */
-  private phase: MeasurementPhase = 'measuring';
+  private phase = MeasurementPhase.MEASURING;
 
   /** Latest height reported inside the open measurement window, or null when none is. */
   private pendingHeight: number | null = null;
@@ -272,8 +291,8 @@ export class DemoCard {
         return;
       }
       untracked(() => {
-        if (this.stateSignal() === 'idle') {
-          this.stateSignal.set('mounting');
+        if (this.currentState() === DemoCardState.IDLE) {
+          this.currentState.set(DemoCardState.MOUNTING);
         }
       });
       this.startReadyTimeout();
@@ -328,11 +347,11 @@ export class DemoCard {
         // for the outgoing one is not evidence about the incoming one. Dropping back to
         // the measuring floor is what lets the new guest report its own content height
         // instead of inheriting the old card's floor.
-        this.cardHeightSignal.set(null);
+        this.currentHeight.set(null);
         this.hasRenderedContent.set(false);
         this.contentWidth.set(0);
         this.pendingHeight = null;
-        this.phase = 'measuring';
+        this.phase = MeasurementPhase.MEASURING;
         this.clearSettleTimeout();
       });
     });
@@ -360,7 +379,7 @@ export class DemoCard {
 
     switch (envelope.type) {
       case PreviewBridgeMessageType.RENDERER_READY: {
-        this.stateSignal.set('ready');
+        this.currentState.set(DemoCardState.READY);
         // React renderers under StrictMode announce readiness twice; the payload
         // must be dispatched exactly once per frame load.
         if (this.payloadSentForCurrentLoad) {
@@ -384,12 +403,14 @@ export class DemoCard {
           viewportWidth?: number;
           contentReady?: boolean;
         };
-        // New bridges distinguish a committed A2UI surface from the startup screen.
-        // Older external renderers still use the bounded measurement window.
+        // Reports from this repository's bridge say whether the demo has rendered yet.
+        // Reports without contentReady come from older bridges and use the measurement
+        // window instead.
         if (contentReady === false) {
-          // A constructor-time legacy report can precede the capability handshake.
-          // It must not reveal the startup screen while native rendering is pending.
-          if (this.phase === 'measuring') {
+          // This renderer will mark the report that shows the demo, so don't commit from
+          // the window. A report the bridge sent while starting up, before it knew it could
+          // mark readiness, may already have opened one at the waiting screen's height.
+          if (this.phase === MeasurementPhase.MEASURING) {
             this.clearSettleTimeout();
             this.pendingHeight = null;
           }
@@ -403,8 +424,12 @@ export class DemoCard {
         if (measuredViewport > 0 && width !== undefined && width > measuredViewport + 2) {
           this.contentWidth.set(Math.max(this.contentWidth(), Math.ceil(width)));
         }
-        if (this.phase !== 'settled') this.applyReportedHeight(height);
-        if (contentReady === true && this.phase === 'measuring' && this.pendingHeight !== null) {
+        if (this.phase !== MeasurementPhase.SETTLED) this.applyReportedHeight(height);
+        if (
+          contentReady === true &&
+          this.phase === MeasurementPhase.MEASURING &&
+          this.pendingHeight !== null
+        ) {
           this.clearSettleTimeout();
           this.closeMeasurementWindow();
         }
@@ -473,15 +498,14 @@ export class DemoCard {
    * follows it upwards, converging rather than oscillating, until {@link
    * GROWTH_SETTLE_MS} of silence settles it.
    *
-   * In both phases a report at or below {@link MEASURE_HEIGHT_PX} is discarded outright.
-   * It is the floor itself and carries no evidence that any content rendered: the guest
-   * posts RENDERER_READY and a SURFACE_RESIZE back to back, before content exists, so
-   * that first report measures an empty document and comes back as exactly the frame's
-   * CSS height. Committing it is the regression that pinned every card in the wall to one
-   * height and clipped its demo under `.demo-card-surface { overflow: hidden }`. {@link
-   * DemoCard.payloadSentForCurrentLoad} cannot screen it out either, since it is already
-   * true by the time the resize envelope is delivered — only the measurement distinguishes
-   * them.
+   * In both phases a report at or below {@link MEASURE_HEIGHT_PX} is discarded. The
+   * renderer sends RENDERER_READY and a SURFACE_RESIZE together, before any content
+   * exists, so that first report measures an empty page and comes back as exactly the
+   * iframe's own height. If the card committed it, every card on the wall would be 32px
+   * tall with its demo clipped, because `.demo-card-surface` hides overflow. An earlier
+   * version of this wall had that bug. {@link DemoCard.payloadSentForCurrentLoad} can't
+   * filter the report out, because it's already true when the report arrives, so the
+   * height is the only way to tell.
    *
    * @param height Raw height in pixels as reported by this card's guest frame.
    */
@@ -494,7 +518,7 @@ export class DemoCard {
       return;
     }
 
-    if (this.phase === 'measuring') {
+    if (this.phase === MeasurementPhase.MEASURING) {
       this.pendingHeight = clampedHeight;
       // Armed once, not restarted per report, so that measuring terminates even for a
       // demo whose height never stops moving.
@@ -507,21 +531,21 @@ export class DemoCard {
       return;
     }
 
-    const committedHeight = this.cardHeightSignal();
+    const committedHeight = this.currentHeight();
     if (committedHeight !== null && clampedHeight <= committedHeight) {
       return;
     }
-    this.cardHeightSignal.set(clampedHeight);
+    this.currentHeight.set(clampedHeight);
     this.restartGrowthTimeout();
   }
 
   /** Commits the last height measured inside the window and opens the growth phase. */
   private closeMeasurementWindow(): void {
-    this.phase = 'growing';
+    this.phase = MeasurementPhase.GROWING;
     if (this.pendingHeight !== null) {
-      this.cardHeightSignal.set(this.pendingHeight);
+      this.currentHeight.set(this.pendingHeight);
       this.hasRenderedContent.set(true);
-      this.stateSignal.set('ready');
+      this.currentState.set(DemoCardState.READY);
       this.clearReadyTimeout();
       this.pendingHeight = null;
     }
@@ -538,18 +562,18 @@ export class DemoCard {
    */
   private endMeasurementForTornDownFrame(): void {
     this.clearSettleTimeout();
-    if (this.phase === 'measuring' && this.pendingHeight !== null) {
-      this.cardHeightSignal.set(this.pendingHeight);
+    if (this.phase === MeasurementPhase.MEASURING && this.pendingHeight !== null) {
+      this.currentHeight.set(this.pendingHeight);
     }
     this.pendingHeight = null;
-    this.phase = 'measuring';
+    this.phase = MeasurementPhase.MEASURING;
   }
 
   private restartGrowthTimeout(): void {
     this.clearSettleTimeout();
     this.settleTimeoutId = setTimeout(() => {
       this.settleTimeoutId = null;
-      this.phase = 'settled';
+      this.phase = MeasurementPhase.SETTLED;
     }, GROWTH_SETTLE_MS);
   }
 
@@ -570,7 +594,7 @@ export class DemoCard {
   private startReadyTimeout(): void {
     this.clearReadyTimeout();
     this.readyTimeoutId = setTimeout(() => {
-      if (!this.hasRenderedContent()) this.stateSignal.set('error');
+      if (!this.hasRenderedContent()) this.currentState.set(DemoCardState.ERROR);
     }, READY_TIMEOUT_MS);
   }
 }
