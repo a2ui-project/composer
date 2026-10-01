@@ -435,6 +435,9 @@ export abstract class ChatPanelBase {
       }
     }
 
+    // Some legacy browsers may only populate clipboardData.files. In modern
+    // browsers, clipboardData.items is a superset of clipboardData.files, so
+    // don't add duplicates here.
     if (imageFiles.length === 0 && clipboardData.files && clipboardData.files.length > 0) {
       for (let i = 0; i < clipboardData.files.length; i++) {
         const file = clipboardData.files[i];
