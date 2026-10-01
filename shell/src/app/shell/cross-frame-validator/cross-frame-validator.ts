@@ -105,6 +105,7 @@ export class CrossFrameValidator {
             CrossFrameValidator.recordError(
               'Malformed payload for GET_DEMOS: must be an object, null, or undefined.',
               errors,
+              logger,
             );
             return false;
           }
@@ -363,6 +364,7 @@ export class CrossFrameValidator {
           CrossFrameValidator.recordError(
             'Malformed payload for SURFACE_RESIZE: viewportWidth must be a number if present.',
             errors,
+            logger,
           );
           return false;
         }
@@ -373,6 +375,7 @@ export class CrossFrameValidator {
           CrossFrameValidator.recordError(
             'Malformed payload for SURFACE_RESIZE: contentReady must be a boolean if present.',
             errors,
+            logger,
           );
           return false;
         }

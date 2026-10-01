@@ -721,8 +721,8 @@ export class HostCommunication implements OnDestroy {
     message: {type: PreviewBridgeMessageType; payload?: unknown},
     el: HTMLIFrameElement,
   ): void {
-    if (!CrossFrameValidator.validateOutgoingMessage(message)) {
-      console.error('Blocked dispatch of malformed message type...', message);
+    if (!CrossFrameValidator.validateOutgoingMessage(message, undefined, this.logger)) {
+      this.logger.error('Blocked dispatch of malformed message type...', message);
       return;
     }
 
