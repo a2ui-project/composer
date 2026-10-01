@@ -290,63 +290,87 @@ describe('CrossFrameValidator', () => {
   describe('GET_DEMOS', () => {
     it('accepts valid GET_DEMOS with no payload', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({
-          type: PreviewBridgeMessageType.GET_DEMOS,
-        }),
+        CrossFrameValidator.validateOutgoingMessage(
+          {
+            type: PreviewBridgeMessageType.GET_DEMOS,
+          },
+          undefined,
+          mockLogger,
+        ),
       ).toBe(true);
-      expect(errorSpy).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('accepts valid GET_DEMOS with undefined payload', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({
-          type: PreviewBridgeMessageType.GET_DEMOS,
-          payload: undefined,
-        }),
+        CrossFrameValidator.validateOutgoingMessage(
+          {
+            type: PreviewBridgeMessageType.GET_DEMOS,
+            payload: undefined,
+          },
+          undefined,
+          mockLogger,
+        ),
       ).toBe(true);
-      expect(errorSpy).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('accepts valid GET_DEMOS with null payload', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({
-          type: PreviewBridgeMessageType.GET_DEMOS,
-          payload: null,
-        }),
+        CrossFrameValidator.validateOutgoingMessage(
+          {
+            type: PreviewBridgeMessageType.GET_DEMOS,
+            payload: null,
+          },
+          undefined,
+          mockLogger,
+        ),
       ).toBe(true);
-      expect(errorSpy).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('accepts valid GET_DEMOS with object payload', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({
-          type: PreviewBridgeMessageType.GET_DEMOS,
-          payload: {},
-        }),
+        CrossFrameValidator.validateOutgoingMessage(
+          {
+            type: PreviewBridgeMessageType.GET_DEMOS,
+            payload: {},
+          },
+          undefined,
+          mockLogger,
+        ),
       ).toBe(true);
-      expect(errorSpy).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('rejects GET_DEMOS with non-object payload', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({
-          type: PreviewBridgeMessageType.GET_DEMOS,
-          payload: 'invalid',
-        }),
+        CrossFrameValidator.validateOutgoingMessage(
+          {
+            type: PreviewBridgeMessageType.GET_DEMOS,
+            payload: 'invalid',
+          },
+          undefined,
+          mockLogger,
+        ),
       ).toBe(false);
-      expect(errorSpy).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         'Malformed payload for GET_DEMOS: must be an object, null, or undefined.',
       );
     });
 
     it('rejects GET_DEMOS with array payload', () => {
       expect(
-        CrossFrameValidator.validateOutgoingMessage({
-          type: PreviewBridgeMessageType.GET_DEMOS,
-          payload: [],
-        }),
+        CrossFrameValidator.validateOutgoingMessage(
+          {
+            type: PreviewBridgeMessageType.GET_DEMOS,
+            payload: [],
+          },
+          undefined,
+          mockLogger,
+        ),
       ).toBe(false);
-      expect(errorSpy).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         'Malformed payload for GET_DEMOS: must be an object, null, or undefined.',
       );
     });
@@ -1133,20 +1157,28 @@ describe('CrossFrameValidator', () => {
 
     it('rejects a non-boolean content-ready marker', () => {
       expect(
-        CrossFrameValidator.validateIncomingMessage({
-          type: PreviewBridgeMessageType.SURFACE_RESIZE,
-          payload: {height: 200, contentReady: 'true'},
-        }),
+        CrossFrameValidator.validateIncomingMessage(
+          {
+            type: PreviewBridgeMessageType.SURFACE_RESIZE,
+            payload: {height: 200, contentReady: 'true'},
+          },
+          undefined,
+          mockLogger,
+        ),
       ).toBe(false);
     });
 
     it('accepts either content-ready state', () => {
       for (const contentReady of [false, true]) {
         expect(
-          CrossFrameValidator.validateIncomingMessage({
-            type: PreviewBridgeMessageType.SURFACE_RESIZE,
-            payload: {height: 200, contentReady},
-          }),
+          CrossFrameValidator.validateIncomingMessage(
+            {
+              type: PreviewBridgeMessageType.SURFACE_RESIZE,
+              payload: {height: 200, contentReady},
+            },
+            undefined,
+            mockLogger,
+          ),
         ).toBe(true);
       }
     });

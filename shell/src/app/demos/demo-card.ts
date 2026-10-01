@@ -375,7 +375,7 @@ export class DemoCard {
         return;
       }
       case PreviewBridgeMessageType.SURFACE_RESIZE: {
-        if (!CrossFrameValidator.validateIncomingMessage(envelope)) {
+        if (!CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
           return;
         }
         const {height, width, viewportWidth, contentReady} = envelope.payload as {
