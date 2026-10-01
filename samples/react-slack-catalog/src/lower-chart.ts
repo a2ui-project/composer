@@ -22,12 +22,12 @@ import {
 } from '@copilotkit/channels-ui';
 import {type KnownBlock} from '@slack/types';
 import {
+  ChartType,
   chartAltText,
   renderChartSvg,
   type ChartImageProps,
   type ChartImageStore,
   type ChartPoint,
-  type ChartType,
 } from './chart-image';
 import {type LowerComponentContext, type LoweringState} from './lowering-context';
 import {DiagnosticCode, DiagnosticLevel} from './preview-snapshot';
@@ -98,7 +98,7 @@ export function lowerChart(
   props: Readonly<Record<string, unknown>>,
   context: LowerComponentContext,
 ): Renderable {
-  const type = (props.type ?? 'verticalBar') as ChartType;
+  const type = (props.type as ChartType | undefined) ?? ChartType.VERTICAL_BAR;
   const data = chartData(props.data, type, context);
   if (!data) {
     return [];
@@ -153,7 +153,7 @@ function chartData(
         `Chart "${context.componentId}" has a value for "${label}" that isn't a number. Use a number such as 70.`,
       );
     }
-    if ((type === 'pie' || type === 'donut') && number < 0) {
+    if ((type === ChartType.PIE || type === ChartType.DONUT) && number < 0) {
       return warnChart(
         context,
         DiagnosticCode.SLACK_CHART_INVALID_DATA,
