@@ -13,7 +13,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-<mat-card class="demo-card" [class.is-error]="state() === 'error'">
+<mat-card class="demo-card" [class.is-error]="hasError()">
   <header class="demo-card-header">
     <div class="demo-card-heading">
       <h2 class="demo-card-title">{{ demo().name }}</h2>
@@ -39,7 +39,7 @@
       #demoSurface
       class="demo-card-surface"
       [class.is-measured]="cardHeight() !== null"
-      [attr.aria-busy]="showPlaceholder() && state() !== 'error'"
+      [attr.aria-busy]="showPlaceholder() && !hasError()"
       [style.height.px]="surfaceHeight()"
     >
       @if (mount() && safeRendererUrl()) {
@@ -62,7 +62,7 @@
         </div>
       }
 
-      @if (state() === 'error') {
+      @if (hasError()) {
         <div class="demo-card-error" role="status">This demo could not be loaded.</div>
       }
     </div>

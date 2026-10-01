@@ -244,13 +244,13 @@ export class Demos implements OnInit, OnDestroy {
     bentoColumns(this.cards().map(card => card.needsWideLayout())),
   );
 
-  private readonly mountedKeysSignal = signal<ReadonlySet<string>>(new Set<string>());
+  private readonly mounted = signal<ReadonlySet<string>>(new Set<string>());
 
   /** Track keys of the demos whose cards currently hold a live renderer frame. */
-  protected readonly mountedKeys = this.mountedKeysSignal.asReadonly();
+  protected readonly mountedKeys = this.mounted.asReadonly();
 
   /** Number of demo cards currently holding a live renderer frame. */
-  readonly mountedCount = computed(() => this.mountedKeysSignal().size);
+  readonly mountedCount = computed(() => this.mounted().size);
 
   /**
    * Card hosts the observer currently reports as in range, keyed by track key.
@@ -527,7 +527,7 @@ export class Demos implements OnInit, OnDestroy {
    * states for a slot to oscillate between.
    */
   private reconcileMountedCards(): void {
-    const previous = this.mountedKeysSignal();
+    const previous = this.mounted();
     const ranked = this.rankCandidates();
 
     const retained: RankedCard[] = [];
@@ -564,7 +564,7 @@ export class Demos implements OnInit, OnDestroy {
     if (areSetsEqual(previous, nextKeys)) {
       return;
     }
-    this.mountedKeysSignal.set(nextKeys);
+    this.mounted.set(nextKeys);
   }
 
   /**
