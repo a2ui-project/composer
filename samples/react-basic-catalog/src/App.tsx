@@ -18,7 +18,7 @@ import React from 'react';
 import {useA2uiSandbox} from 'a2ui-bridge/react';
 import {ERROR_OVERLAY_DEBOUNCE_MS} from 'a2ui-bridge';
 import {COMPONENT_USAGES} from './usages.js';
-import {DEMOS} from './demos.js';
+import {DEMOS} from '../../shared/demos';
 import {renderMarkdown} from '@a2ui/markdown-it';
 import {A2uiSurface, basicCatalog, MarkdownContext} from '@a2ui/react/v0_9';
 import {useDebouncedValue} from './hooks/use-debounced-value.js';
