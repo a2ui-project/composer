@@ -408,13 +408,7 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
         const end = valueX(point.value);
         return (
           <g key={index}>
-            <text
-              x={plot.x - 8}
-              y={round(centerY + 4)}
-              textAnchor="end"
-              fontSize={12}
-              fill={MUTED}
-            >
+            <text x={plot.x - 8} y={round(centerY + 4)} textAnchor="end" fontSize={12} fill={MUTED}>
               {truncate(point.label, 18)}
             </text>
             <rect
