@@ -1662,6 +1662,52 @@ describe('createSlackPreviewSession', () => {
     },
   );
 
+  it.each([
+    {hints: {}, warns: false},
+    {hints: {justify: 'center'}, warns: true},
+  ])(
+    'keeps a row of buttons as one actions block, warning only about alignment (%#)',
+    ({hints, warns}) => {
+      session.processMessages([
+        createSurface(),
+        updateComponents('test-surface', [
+          {id: 'root', component: 'Row', children: ['approve', 'reject'], ...hints},
+          {
+            id: 'approve',
+            component: 'Button',
+            child: 'approve-label',
+            action: {event: {name: 'approve'}},
+          },
+          {id: 'approve-label', component: 'Text', text: 'Approve'},
+          {
+            id: 'reject',
+            component: 'Button',
+            child: 'reject-label',
+            action: {event: {name: 'reject'}},
+          },
+          {id: 'reject-label', component: 'Text', text: 'Reject'},
+        ]),
+      ]);
+      expect(session.getSnapshot().status).toBe('ready');
+      expect(session.getSnapshot().blocks).toEqual([
+        expect.objectContaining({
+          type: 'actions',
+          elements: [
+            expect.objectContaining({
+              type: 'button',
+              text: expect.objectContaining({text: 'Approve'}),
+            }),
+            expect.objectContaining({
+              type: 'button',
+              text: expect.objectContaining({text: 'Reject'}),
+            }),
+          ],
+        }),
+      ]);
+      expect(diagnosticCodes(session).includes('SLACK_LAYOUT_FLATTENED')).toBe(warns);
+    },
+  );
+
   it('notifies subscribers after snapshots change and stops after unsubscribe', () => {
     const listener = vi.fn();
     const unsubscribe = session.subscribe(listener);
