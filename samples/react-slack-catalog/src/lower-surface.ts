@@ -1213,18 +1213,25 @@ function lowerLayout(
   context: LowerComponentContext,
   type: 'Row' | 'Column',
 ): Renderable {
-  if (type === 'Row' || 'align' in context.rawProps || 'justify' in context.rawProps) {
-    context.diagnostics.push({
+  // The children are lowered first to see whether they're all buttons, but this
+  // component's warning goes before theirs, so diagnostics stay in document order.
+  const diagnosticIndex = context.diagnostics.length;
+  const nodes = renderChildren(props.children, context.children);
+  const isButtonGroup = nodes.length > 0 && nodes.every(node => node.type === 'button');
+  const hasAlignment = 'align' in context.rawProps || 'justify' in context.rawProps;
+  // Buttons become one actions block, which Slack lays out in a row, so a Row of buttons
+  // keeps its layout and only alignment is lost. Any other Row is stacked vertically.
+  if ((type === 'Row' && !isButtonGroup) || hasAlignment) {
+    context.diagnostics.splice(diagnosticIndex, 0, {
       level: 'warning',
       code: 'SLACK_LAYOUT_FLATTENED',
-      message: `Slack does not preserve ${type} layout hints; children were flattened.`,
+      message: isButtonGroup
+        ? `Slack shows these buttons in one row and ignores ${type} alignment.`
+        : `Slack does not preserve ${type} layout hints; children were flattened.`,
       componentId: context.componentId,
     });
   }
-  const nodes = renderChildren(props.children, context.children);
-  return nodes.length > 0 && nodes.every(node => node.type === 'button')
-    ? Actions({children: nodes})
-    : nodes;
+  return isButtonGroup ? Actions({children: nodes}) : nodes;
 }
 
 function lowerButton(
