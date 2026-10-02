@@ -243,6 +243,7 @@
           (ngModelChange)="userPrompt.set($event)"
           [disabled]="isLocked()"
           (keydown)="onKeyDown($event)"
+          (paste)="onPaste($event)"
           placeholder="Type instruction to shape your screen (e.g. 'Add a checkbox column')..."
           rows="2"
         ></textarea>
