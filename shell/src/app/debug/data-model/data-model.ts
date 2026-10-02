@@ -15,12 +15,13 @@
  */
 
 import {Component, computed, inject, linkedSignal, signal} from '@angular/core';
-import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import {DataModelChangePayload, PreviewBridgeMessageType} from 'a2ui-bridge';
-import {debounceTime, distinctUntilChanged} from 'rxjs/operators';
+import {Subject, timer} from 'rxjs';
+import {map, switchMap, takeUntil} from 'rxjs/operators';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {formatJson} from '../../utils/json';
@@ -40,6 +41,9 @@ import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 export class DataModel {
   private readonly hostComm = inject(HostCommunication);
   private readonly usageTrackingService = inject(UsageTrackingService);
+
+  private readonly userEdit$ = new Subject<string>();
+  private readonly cancelUserEdit$ = new Subject<void>();
 
   private lastSurfaceId = 'sample-surface';
   private lastPath: string | undefined = undefined;
@@ -111,8 +115,16 @@ export class DataModel {
       }
     });
 
-    toObservable(this.dataModelJson)
-      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
+    this.userEdit$
+      .pipe(
+        switchMap(jsonStr =>
+          timer(300).pipe(
+            map(() => jsonStr),
+            takeUntil(this.cancelUserEdit$),
+          ),
+        ),
+        takeUntilDestroyed(),
+      )
       .subscribe((jsonStr: string) => {
         let isValid = false;
         try {
@@ -140,5 +152,18 @@ export class DataModel {
 
         this.usageTrackingService.trackDataModelEdit({isValidJson: isValid});
       });
+  }
+
+  protected onUserEdit(value: string): void {
+    this.dataModelJson.set(value);
+    this.userEdit$.next(value);
+  }
+
+  clearLogs(): void {
+    this.cancelUserEdit$.next();
+    this.latestModelValue.set(null);
+    this.dataModelJson.set('');
+    this.lastSurfaceId = 'sample-surface';
+    this.lastPath = undefined;
   }
 }

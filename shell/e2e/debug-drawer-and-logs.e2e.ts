@@ -182,30 +182,120 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     await expect(errorsTabLabel).not.toContainText('(1)');
   });
 
-  test('verifies New Session reset button clears localStorage session cache', async ({page}) => {
+  test('verifies New Session clears debug drawer logs and unread tab badges in-place while preserving localStorage user settings', async ({
+    page,
+  }) => {
     await page.evaluate(() => {
-      localStorage.setItem('a2ui_composer_session_state', 'test_value');
+      localStorage.setItem('a2ui_composer_custom_instructions', 'Keep custom instructions');
+      (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__ = true;
     });
 
-    await page.evaluate(() => {
-      (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__ = true;
+    await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
+    const eventsTabLabel = page.locator('.dv-tab', {hasText: /^Events/});
+    const errorsTabLabel = page.locator('.dv-tab', {hasText: /^Errors/});
+    const rawMessagesTabLabel = page.locator('.dv-tab', {hasText: /^Raw Messages/});
+    const dataModelField = page.locator('.data-model-field textarea');
+
+    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    await expect(iframeBody).toBeVisible();
+
+    await iframeBody.evaluate(
+      (_, msg) => {
+        window.parent.postMessage(msg, '*');
+      },
+      {
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        payload: {status: 'ok'},
+      },
+    );
+
+    await iframeBody.evaluate(
+      (_, msg) => {
+        window.parent.postMessage(msg, '*');
+      },
+      {
+        type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+        payload: {
+          updateDataModel: {
+            surfaceId: 's_reset',
+            value: {foo: 'bar'},
+          },
+        },
+      },
+    );
+
+    await iframeBody.evaluate(
+      (_, msg) => {
+        window.parent.postMessage(msg, '*');
+      },
+      {
+        type: PreviewBridgeMessageType.SEND_TO_SERVER,
+        payload: {
+          version: 'v0.9',
+          action: {
+            name: 'click_before_reset',
+            surfaceId: 's_reset',
+          },
+        },
+      },
+    );
+
+    await iframeBody.evaluate(
+      (_, msg) => {
+        window.parent.postMessage(msg, '*');
+      },
+      {
+        type: PreviewBridgeMessageType.CONSOLE_LOG,
+        payload: {
+          level: 'error',
+          message: 'Error before reset',
+        },
+      },
+    );
+
+    await expect(dataModelField).toHaveValue(/foo/);
+    await expect(eventsTabLabel).toContainText('(1)');
+    await expect(errorsTabLabel).toContainText('(1)');
+
+    let mainFrameNavigated = false;
+    page.on('framenavigated', frame => {
+      if (frame === page.mainFrame()) {
+        mainFrameNavigated = true;
+      }
     });
 
     await page.getByRole('button', {name: 'New Session'}).click();
 
-    // Wait for the page reload navigation to complete
-    await page.waitForFunction(
-      () => (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__ === undefined,
+    expect(mainFrameNavigated).toBe(false);
+    const beforeReloadMarker = await page.evaluate(
+      () => (window as unknown as {__BEFORE_RELOAD__?: boolean}).__BEFORE_RELOAD__,
     );
+    expect(beforeReloadMarker).toBe(true);
 
-    const testVal = await page.evaluate(() => {
-      try {
-        return localStorage.getItem('a2ui_composer_session_state');
-      } catch (e) {
-        return null;
-      }
+    // Unread badges and Data Model textarea are cleared immediately
+    await expect(eventsTabLabel).not.toContainText('(1)');
+    await expect(errorsTabLabel).not.toContainText('(1)');
+    await expect(dataModelField).toHaveValue('');
+
+    // Events, Errors, and Raw Messages logs are empty
+    await eventsTabLabel.click();
+    await expect(page.locator('.events-container table tr.element-row')).toHaveCount(0);
+
+    await errorsTabLabel.click();
+    await expect(page.locator('.errors-container table tr.element-row')).toHaveCount(0);
+
+    await rawMessagesTabLabel.click();
+    await expect(page.locator('[data-testid="llm-log-panel"]')).toHaveCount(0);
+
+    // User settings in localStorage are preserved
+    const preservedSettings = await page.evaluate(() => ({
+      customInstructions: localStorage.getItem('a2ui_composer_custom_instructions'),
+      force1p: localStorage.getItem('a2ui_composer_force_1p'),
+    }));
+    expect(preservedSettings).toEqual({
+      customInstructions: 'Keep custom instructions',
+      force1p: 'true',
     });
-    expect(testVal).toBeNull();
   });
 
   test('verifies clicking debug tabs switches active panels properly without being blocked by overlays', async ({

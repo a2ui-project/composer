@@ -36,6 +36,7 @@ import {
 } from '../../shell/host-communication/host-communication';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../../chat/chat-state/chat-state';
+import {StateSync} from '../../chat/state-sync/state-sync';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
@@ -80,6 +81,7 @@ export class RenderedFrame {
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
+  private stateSync = inject(StateSync);
   private errorLogger = inject(ErrorLogger);
   private readonly logger = this.errorLogger.withTag('[RenderedFrame]');
 
@@ -101,6 +103,7 @@ export class RenderedFrame {
   private growthRunLength = 0;
   /** Renderer URL the current breaker state belongs to; undefined until first read. */
   private trackedRendererUrl: string | null | undefined = undefined;
+  private lastHandledResetNonce = this.stateSync.sessionResetNonce();
 
   /** Computed pixel height string or 100% when rendered within dynamic/inline layout contexts. */
   readonly frameHeight = computed(() => {
@@ -230,6 +233,18 @@ export class RenderedFrame {
         }
         this.trackedRendererUrl = rendererUrl;
       });
+    });
+
+    // Reset dynamic height and growth breaker latch when starting a new session.
+    effect(() => {
+      const nonce = this.stateSync.sessionResetNonce();
+      if (nonce > this.lastHandledResetNonce) {
+        this.lastHandledResetNonce = nonce;
+        untracked(() => {
+          this.dynamicHeight.set(null);
+          this.resetGrowthBreaker();
+        });
+      }
     });
   }
 

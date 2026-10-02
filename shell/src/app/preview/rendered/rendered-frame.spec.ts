@@ -31,7 +31,12 @@ import {
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
+import {StateSync} from '../../chat/state-sync/state-sync';
 import {signal, WritableSignal} from '@angular/core';
+
+class MockStateSync {
+  readonly sessionResetNonce = signal(0);
+}
 
 class MockChatState {
   readonly isProgrammaticStreamActive = signal<boolean>(false);
@@ -66,6 +71,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
   let resolvedUrlSignal: WritableSignal<string | null>;
   let themePreferenceSignal: WritableSignal<ThemePreference>;
   let chatStateMock: MockChatState;
+  let stateSyncMock: MockStateSync;
   let messageStreamSubject: ReplaySubject<MessageEnvelope>;
   let messageStreamSignal: WritableSignal<MessageEnvelope | null>;
 
@@ -113,10 +119,15 @@ describe('RenderedFrame Live Preview Viewport', () => {
           provide: ChatState,
           useClass: MockChatState,
         },
+        {
+          provide: StateSync,
+          useClass: MockStateSync,
+        },
       ],
     }).compileComponents();
 
     chatStateMock = TestBed.inject(ChatState) as unknown as MockChatState;
+    stateSyncMock = TestBed.inject(StateSync) as unknown as MockStateSync;
     fixture = TestBed.createComponent(RenderedFrame);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RenderedFrameHarness);
@@ -685,6 +696,26 @@ describe('RenderedFrame Live Preview Viewport', () => {
       emit(surfaceResize(1024, START_TIME + 21 * LOOP_CADENCE_MS));
       fixture.detectChanges();
 
+      expect(fixture.componentInstance.dynamicHeight()).toBe(1024);
+    });
+
+    it('resets dynamicHeight to null and clears the growth breaker latch when sessionResetNonce increments', () => {
+      for (let i = 0; i < 20; i++) {
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
+        fixture.detectChanges();
+      }
+      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
+      expect(fixture.componentInstance.dynamicHeight()).not.toBeNull();
+
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.dynamicHeight()).toBeNull();
+      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
+
+      // Subsequent resize reports in the new session are not clamped by the prior latch
+      emit(surfaceResize(1024, START_TIME + 25 * LOOP_CADENCE_MS));
+      fixture.detectChanges();
       expect(fixture.componentInstance.dynamicHeight()).toBe(1024);
     });
   });

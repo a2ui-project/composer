@@ -113,6 +113,7 @@ export class MonacoEditor {
   private pendingMarkers: monaco.editor.IMarker[] | null = null;
   private pendingSignature = '';
   private lastMarkersSignature = '';
+  private isResetting = false;
 
   protected readonly isDarkTheme = computed(
     () => this.configProvider.themePreference() === ThemePreference.DARK,
@@ -543,6 +544,9 @@ export class MonacoEditor {
 
         const interactionDisposables: monaco.IDisposable[] = [
           editor.onDidChangeModelContent(() => {
+            if (this.isResetting) {
+              return;
+            }
             this.handleUserInteraction();
             const val = editor.getValue();
             if (val !== this.value()) {
@@ -722,6 +726,46 @@ export class MonacoEditor {
         schema: structuredClone(BASIC_CATALOG_SCHEMA),
       },
     ];
+  }
+
+  /**
+   * Resets the editor model content directly to `value`, flushing the undo/redo
+   * history stack and cancelling any pending diagnostic marker debounce timers.
+   */
+  resetEditor(value: string): void {
+    if (this.markerDebounceTimer) {
+      clearTimeout(this.markerDebounceTimer);
+      this.markerDebounceTimer = null;
+    }
+    this.pendingMarkers = null;
+    this.pendingSignature = '';
+    this.lastMarkersSignature = '';
+
+    if (!this.editor) {
+      return;
+    }
+
+    const isLocked = this.readOnly();
+    this.isResetting = true;
+    try {
+      if (isLocked) {
+        this.editor.updateOptions({readOnly: false});
+      }
+      const model = this.editor.getModel();
+      if (model) {
+        if (this.editor.getValue() === value) {
+          model.setValue('');
+        }
+        model.setValue(value);
+      } else {
+        this.editor.setValue(value);
+      }
+    } finally {
+      if (isLocked) {
+        this.editor.updateOptions({readOnly: true});
+      }
+      this.isResetting = false;
+    }
   }
 
   private updateEditorContent(value: string): void {

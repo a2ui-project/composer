@@ -93,8 +93,11 @@ class MockChatCoordinator {
 }
 
 class MockStateSync {
-  readonly activeDraftSignal = signal('{}');
+  readonly activeDraftSignal = signal(
+    '[{"version":"v0.9","createSurface":{"surfaceId":"sample-surface","catalogId":"basic"}}]',
+  );
   readonly activeDraft = this.activeDraftSignal.asReadonly();
+  readonly sessionResetNonce = signal(0);
   updateDraft = vi.fn((val: string) => {
     this.activeDraftSignal.set(val);
   });
@@ -164,6 +167,7 @@ describe('ComposerWorkspace Dashboard', () => {
   it('delegates clearLogs to all queried child components when clearAllLogs is called', () => {
     const manager = fixture.debugElement.injector.get(ComposerDockview);
 
+    const dataModelSpy = vi.spyOn(manager['dataModelInstance']!, 'clearLogs');
     const rawMsgSpy = vi.spyOn(manager['rawMessagesInstance']!, 'clearLogs');
     const eventsSpy = vi.spyOn(manager['eventsInstance']!, 'clearLogs');
     const errorsSpy = vi.spyOn(manager['errorsInstance']!, 'clearLogs');
@@ -171,9 +175,46 @@ describe('ComposerWorkspace Dashboard', () => {
     // Use internal state references for the dynamically instantiated components.
     fixture.componentInstance.clearAllLogs();
 
+    expect(dataModelSpy).toHaveBeenCalled();
     expect(rawMsgSpy).toHaveBeenCalled();
     expect(eventsSpy).toHaveBeenCalled();
     expect(errorsSpy).toHaveBeenCalled();
+  });
+
+  it('clears all debug drawer logs and resets unread badges when sessionResetNonce increments', async () => {
+    const stateSync = TestBed.inject(StateSync) as unknown as MockStateSync;
+    const clearAllLogsSpy = vi.spyOn(fixture.componentInstance, 'clearAllLogs');
+
+    fixture.componentInstance.unreadEventsCount.set(4);
+    fixture.componentInstance.unreadErrorsCount.set(2);
+    fixture.detectChanges();
+
+    stateSync.sessionResetNonce.update(n => n + 1);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(clearAllLogsSpy).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.unreadEventsCount()).toBe(0);
+    expect(fixture.componentInstance.unreadErrorsCount()).toBe(0);
+  });
+
+  it('does not clear logs on initial mount when sessionResetNonce is already > 0, and only clears on subsequent increments', async () => {
+    const stateSync = TestBed.inject(StateSync) as unknown as MockStateSync;
+    stateSync.sessionResetNonce.set(3);
+
+    const remountFixture = TestBed.createComponent(ComposerWorkspace);
+    const clearAllLogsSpy = vi.spyOn(remountFixture.componentInstance, 'clearAllLogs');
+    remountFixture.detectChanges();
+    await remountFixture.whenStable();
+
+    expect(clearAllLogsSpy).not.toHaveBeenCalled();
+
+    stateSync.sessionResetNonce.set(4);
+    remountFixture.detectChanges();
+    await remountFixture.whenStable();
+
+    expect(clearAllLogsSpy).toHaveBeenCalledOnce();
+    remountFixture.destroy();
   });
 
   describe('Unread Tab Badges', () => {

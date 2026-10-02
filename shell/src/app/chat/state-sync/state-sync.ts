@@ -16,8 +16,8 @@
 
 import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
-import {of} from 'rxjs';
-import {debounceTime, distinctUntilChanged, filter, skip} from 'rxjs/operators';
+import {of, Subject, timer} from 'rxjs';
+import {filter, map, skip, switchMap, takeUntil} from 'rxjs/operators';
 import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
@@ -35,6 +35,7 @@ import {ErrorLogger} from '../../debug/error-logger.service';
  * and provides state hydration to prevent layout data loss across session
  * navigation swappings.
  */
+const BASIC_CATALOG_ID = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
 const UPDATE_COMPONENTS = 'updateComponents';
 const COMPONENTS = 'components';
 const REGISTER_MOCK_RULES = 'registerMockRules';
@@ -58,11 +59,11 @@ export class StateSync {
   // payload containing the active surface setup, component hierarchy,
   // and data models currently rendered on the preview canvas.
   //
-  // We maintain separate signals for `_activeDraft` and `_draftInput`
+  // We maintain separate channels for `_activeDraft` and `userDraftInput$`
   // to prevent feedback loops when syncing with LLM chat history:
   // - `_activeDraft` is the source of truth for active editor/preview
   //   UI bindings, updating instantly.
-  // - `_draftInput` is an event trigger used to debounce and sync
+  // - `userDraftInput$` is an event stream used to debounce and sync
   //   user edits back to the history. LLM-initiated edits update
   //   `_activeDraft` directly, bypassing history sync.
   private previousCatalogId: string | null = null;
@@ -75,7 +76,13 @@ export class StateSync {
    */
   readonly activeDraft = this._activeDraft.asReadonly();
 
-  private readonly _draftInput = signal<string>('');
+  /**
+   * Monotonically increasing counter incremented on each in-memory session reset.
+   */
+  readonly sessionResetNonce = signal(0);
+
+  private readonly userDraftInput$ = new Subject<string>();
+  private readonly cancelPendingDraftSync$ = new Subject<void>();
 
   constructor() {
     toObservable(this.startupConfigState.selectedRendererId)
@@ -98,7 +105,7 @@ export class StateSync {
         if ((isInitialHandshake || isCatalogChange) && !this.isDraftModified) {
           const initial = this.getInitialDraft(catalogId);
           this._activeDraft.set(initial);
-          this._draftInput.set(initial);
+          this.userDraftInput$.next(initial);
         }
 
         this.previousCatalogId = catalogId;
@@ -117,8 +124,16 @@ export class StateSync {
         this.injectExternalDraft(payload);
       });
 
-    toObservable(this._draftInput)
-      .pipe(skip(1), debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+    this.userDraftInput$
+      .pipe(
+        switchMap(val =>
+          timer(300).pipe(
+            map(() => val),
+            takeUntil(this.cancelPendingDraftSync$),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe((val: string) => {
         this.syncLayoutToHistory(val);
       });
@@ -131,7 +146,7 @@ export class StateSync {
   updateDraft(value: string): void {
     this.isDraftModified = true;
     this._activeDraft.set(value);
-    this._draftInput.set(value);
+    this.userDraftInput$.next(value);
   }
 
   /**
@@ -140,7 +155,7 @@ export class StateSync {
   injectExternalDraft(value: string): void {
     this.isDraftModified = true;
     this._activeDraft.set(value);
-    this._draftInput.set(value);
+    this.userDraftInput$.next(value);
   }
 
   /** Synchronizes the current sanitized canvas before a prompt is submitted. */
@@ -161,6 +176,7 @@ export class StateSync {
    * bypassing standard debounces and context history synchronization.
    */
   commitLayoutFromLlm(value: string): void {
+    this.cancelPendingDraftSync$.next();
     this.isDraftModified = true;
     // Restoring a previous draft after this response must update context again.
     this.lastSynchronizedLayout = null;
@@ -172,6 +188,7 @@ export class StateSync {
    * memory to default.
    */
   flushDraft(): void {
+    this.cancelPendingDraftSync$.next();
     this.isDraftModified = false;
     this.lastSynchronizedLayout = null;
     this.previousCatalogId = null;
@@ -179,11 +196,33 @@ export class StateSync {
     let catalogId = catalog ? catalog.catalogId || catalog.$id || '' : '';
     const activeRenderer = this.startupConfigState.activeRenderer();
     if (!activeRenderer?.samplePayload && !catalogId) {
-      catalogId = 'https://a2ui.org/specification/v0_9/basic_catalog.json';
+      catalogId = BASIC_CATALOG_ID;
     }
     const initial = this.getInitialDraft(catalogId);
     this._activeDraft.set(initial);
-    this._draftInput.set(initial);
+    if (initial) {
+      this.userDraftInput$.next(initial);
+    }
+  }
+
+  /**
+   * Resets the active draft in-memory to a blank surface (createSurface only)
+   * for the active catalog, cancels any pending user-edit debounce timer,
+   * increments sessionResetNonce, and synchronously syncs the blank surface
+   * into chat history.
+   */
+  resetToBlankDraft(): void {
+    this.cancelPendingDraftSync$.next();
+    const catalog = this.catalogManagement.activeCatalog();
+    const effectiveCatalogId =
+      (catalog ? catalog.catalogId || catalog.$id || '' : '') || BASIC_CATALOG_ID;
+    this.isDraftModified = false;
+    this.lastSynchronizedLayout = null;
+    this.previousCatalogId = effectiveCatalogId;
+    const blank = this.buildBlankSurfaceDraft(effectiveCatalogId);
+    this._activeDraft.set(blank);
+    this.sessionResetNonce.update(n => n + 1);
+    this.syncLayoutToHistory(blank);
   }
 
   private getInitialDraft(catalogId: string): string {
@@ -191,12 +230,16 @@ export class StateSync {
     if (activeRenderer?.samplePayload) {
       return activeRenderer.samplePayload;
     }
-    if (catalogId === 'https://a2ui.org/specification/v0_9/basic_catalog.json') {
+    if (catalogId === BASIC_CATALOG_ID) {
       return CAR_BOOKING;
     }
     if (!catalogId) {
       return '';
     }
+    return this.buildBlankSurfaceDraft(catalogId);
+  }
+
+  private buildBlankSurfaceDraft(catalogId: string): string {
     const draftObj: RenderA2uiItem[] = [
       {
         version: 'v0.9',

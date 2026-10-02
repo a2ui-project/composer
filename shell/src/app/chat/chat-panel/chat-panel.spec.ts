@@ -42,6 +42,12 @@ import {
   CustomInstructionsState,
 } from '../chat-prompt-factory/chat-prompt-factory.service';
 import {CustomInstructionsDialogHarness} from '../custom-instructions-dialog/test/custom-instructions-dialog.harness';
+import {StateSync} from '../state-sync/state-sync';
+import {FileIngestionService} from '../file-ingestion/file-ingestion.service';
+
+class MockStateSync {
+  readonly sessionResetNonce = signal(0);
+}
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -141,6 +147,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   let hostCommunicationMock: MockHostCommunication;
   let screenshotServiceMock: ScreenshotCaptureService;
   let promptFactoryMock: MockChatPromptFactoryService;
+  let stateSyncMock: MockStateSync;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -160,6 +167,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
         {provide: CatalogManagement, useClass: MockCatalogManagement},
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
         {provide: HostCommunication, useClass: MockHostCommunication},
+        {provide: StateSync, useClass: MockStateSync},
       ],
     }).compileComponents();
 
@@ -174,6 +182,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     configProviderMock = TestBed.inject(AppConfigProvider) as unknown as MockAppConfigProvider;
     hostCommunicationMock = TestBed.inject(HostCommunication) as unknown as MockHostCommunication;
     screenshotServiceMock = TestBed.inject(ScreenshotCaptureService);
+    stateSyncMock = TestBed.inject(StateSync) as unknown as MockStateSync;
     fixture = TestBed.createComponent(ChatPanel);
     fixture.detectChanges();
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, ChatPanelHarness);
@@ -1196,6 +1205,101 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       expect(await harness.getSystemInstructionsLinkText()).toBe(
         'Instructions (includes 2 MCP Servers)',
       );
+    });
+  });
+
+  describe('Session Reset via sessionResetNonce', () => {
+    it('clears unsent userPrompt, attachedFiles, includeScreenshot, and isReadingFiles when sessionResetNonce increments', async () => {
+      await harness.setPromptText('Unsent draft prompt');
+      await harness.toggleScreenshot();
+
+      const file = new File(['dummy content'], 'draft.png', {type: 'image/png'});
+      const event = {
+        target: {files: [file], value: ''},
+      } as unknown as Event;
+      await (
+        fixture.componentInstance as unknown as {onFilesSelected: (e: Event) => Promise<void>}
+      ).onFilesSelected(event);
+      fixture.detectChanges();
+
+      expect(await harness.getPromptText()).toBe('Unsent draft prompt');
+      expect(await harness.isScreenshotChecked()).toBe(true);
+      expect(await harness.hasAttachmentPreviews()).toBe(true);
+
+      // Increment sessionResetNonce
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(await harness.getPromptText()).toBe('');
+      expect(await harness.isScreenshotChecked()).toBe(false);
+      expect(await harness.hasAttachmentPreviews()).toBe(false);
+    });
+
+    it('aborts in-flight submitPrompt if sessionResetNonce increments while awaiting captureScreenshot', async () => {
+      let resolveScreenshot!: (val: string) => void;
+      vi.spyOn(screenshotServiceMock, 'captureScreenshot').mockReturnValue(
+        new Promise<string>(resolve => {
+          resolveScreenshot = resolve;
+        }),
+      );
+
+      await harness.setPromptText('Prompt with slow screenshot');
+      await harness.toggleScreenshot();
+      fixture.detectChanges();
+
+      const clickPromise = harness.clickSubmit();
+
+      // Increment sessionResetNonce while captureScreenshot is pending
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+
+      resolveScreenshot('data:image/png;base64,lateScreenshot');
+      await clickPromise;
+      fixture.detectChanges();
+
+      expect(chatServiceMock.submitPrompt).not.toHaveBeenCalled();
+      expect(await harness.getPromptText()).toBe('');
+    });
+
+    it('discards in-flight file attachments if sessionResetNonce increments while awaiting readFileAsAttachment', async () => {
+      const fileIngestion = TestBed.inject(FileIngestionService);
+      let resolveFileRead!: (val: {
+        name: string;
+        mimeType: string;
+        data: string;
+        previewUrl: string;
+      }) => void;
+      vi.spyOn(fileIngestion, 'readFileAsAttachment').mockReturnValue(
+        new Promise(resolve => {
+          resolveFileRead = resolve;
+        }),
+      );
+
+      const file = new File(['dummy content'], 'slow-image.png', {type: 'image/png'});
+      const event = {
+        target: {files: [file], value: ''},
+      } as unknown as Event;
+
+      const selectPromise = (
+        fixture.componentInstance as unknown as {onFilesSelected: (e: Event) => Promise<void>}
+      ).onFilesSelected(event);
+
+      // Increment sessionResetNonce while file ingestion is pending
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+
+      resolveFileRead({
+        name: 'slow-image.png',
+        mimeType: 'image/png',
+        data: 'base64',
+        previewUrl: 'data:image/png;base64,base64',
+      });
+      await selectPromise;
+      fixture.detectChanges();
+
+      expect(await harness.hasAttachmentPreviews()).toBe(false);
     });
   });
 });

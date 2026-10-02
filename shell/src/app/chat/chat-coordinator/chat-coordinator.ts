@@ -97,16 +97,34 @@ export class ChatCoordinator {
       });
   }
 
+  private clearConversation(): void {
+    this.currentTurnIndex.set(0);
+    this.activePromptId = null;
+    this.activeStreamResponse = undefined;
+    this.isCancelRequested = false;
+    this.chatState.setChatHistory([]);
+    this.finalizeStream(PipelineStatus.IDLE);
+    this.chatState.clearRawLlmHistory();
+  }
+
   /**
    * Resets turns logs history, overlays milestones, and locks indicators.
    */
   wipeEnvironmentCache(): void {
-    this.currentTurnIndex.set(0);
-    this.activePromptId = null;
-    this.chatState.setChatHistory([]);
-    this.finalizeStream(PipelineStatus.IDLE);
-    this.chatState.clearRawLlmHistory();
+    this.clearConversation();
     this.stateSync.flushDraft();
+  }
+
+  /**
+   * Starts a fresh user-initiated session, cancelling any active stream and
+   * resetting the layout to a blank surface rather than the catalog sample template.
+   */
+  startNewSession(): void {
+    if (this.activePromptId || this.activeStreamResponse) {
+      this.cancelActiveStream();
+    }
+    this.clearConversation();
+    this.stateSync.resetToBlankDraft();
   }
 
   private finalizeStream(status: PipelineStatus = PipelineStatus.IDLE): void {
@@ -238,10 +256,16 @@ export class ChatCoordinator {
       },
     ]);
 
+    let responseStream: LlmStreamResponse | undefined;
     try {
       this.isCancelRequested = false;
       // Trigger streaming GenAI completions call using client facade
-      const responseStream = await this.llmClient.chatStream(fullContext);
+      responseStream = await this.llmClient.chatStream(fullContext);
+
+      if (this.activePromptId !== promptId) {
+        if (responseStream.cancel) responseStream.cancel();
+        return;
+      }
 
       // If a cancel was requested while the stream connection was establishing
       if (this.isCancelRequested) {
@@ -257,6 +281,7 @@ export class ChatCoordinator {
       let accumulatedRawText = '';
       let accumulatedThinking = '';
       for await (const chunk of responseStream.contentStream) {
+        if (this.activePromptId !== promptId) return;
         accumulatedRawText += chunk.content;
         if (chunk.thinking) {
           accumulatedThinking += chunk.thinking;
@@ -279,6 +304,7 @@ export class ChatCoordinator {
 
       // Stream exhausted, resolve final complete text and remove visual loading indicator
       const finalRawText = await responseStream.complete;
+      if (this.activePromptId !== promptId) return;
 
       // Log the raw LLM response telemetry
       this.chatState.addRawLlmLog(LlmLogType.RESPONSE, finalRawText);
@@ -298,6 +324,7 @@ export class ChatCoordinator {
       this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
       await this.processRawLlmPayload(finalRawText, promptId);
     } catch (err: unknown) {
+      if (this.activePromptId !== promptId) return;
       // If it was cancelled, don't show an error. Just leave what was generated or remove the bubble.
       // But we probably want to just reset the UI lock.
       if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
@@ -318,7 +345,9 @@ export class ChatCoordinator {
         this.handleConnectivityError(err, trimmed, attachments, promptId);
       }
     } finally {
-      this.activeStreamResponse = undefined;
+      if (this.activeStreamResponse === responseStream) {
+        this.activeStreamResponse = undefined;
+      }
     }
   }
 
@@ -326,6 +355,7 @@ export class ChatCoordinator {
    * Post-processes, extracts, syntax heals, and validates raw JSON lines.
    */
   private async processRawLlmPayload(rawText: string, promptId?: string): Promise<void> {
+    if (promptId && this.activePromptId !== promptId) return;
     // Stage 1: Parse and Syntax Healing
     let parsedBlocks: unknown[] = [];
     let componentCount = 0;

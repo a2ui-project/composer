@@ -24,6 +24,7 @@ import {CAR_BOOKING} from '../chat-service/initial-draft';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
+import {formatJson} from '../../utils/json';
 import {signal} from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
@@ -786,6 +787,228 @@ describe('StateSync Autosave Draft Integrations', () => {
       TestBed.tick();
 
       expect(service.activeDraft()).toBe(CAR_BOOKING);
+    });
+
+    it('populates blank createSurface payload on resetToBlankDraft, synchronously syncs to chatHistory at 0ms, and increments sessionResetNonce', () => {
+      const expectedBlankSurface = formatJson([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'sample-surface',
+            catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+            sendDataModel: true,
+          },
+        },
+      ]);
+
+      chatStateMock.setChatHistory.mockClear();
+      expect(service.sessionResetNonce()).toBe(0);
+
+      service.resetToBlankDraft();
+
+      expect(service.sessionResetNonce()).toBe(1);
+      expect(service.activeDraft()).toBe(expectedBlankSurface);
+      expect(service.activeDraft()).not.toBe(CAR_BOOKING);
+      // Synchronously synced at 0ms without waiting for 300ms timer
+      expect(chatStateMock.setChatHistory).toHaveBeenCalledTimes(1);
+      expect(chatStateMock.setChatHistory).toHaveBeenCalledWith([
+        {
+          role: MessageRole.USER,
+          content: expectedBlankSurface,
+        },
+      ]);
+
+      // Subsequent flushDraft restores CAR_BOOKING
+      service.flushDraft();
+      expect(service.activeDraft()).toBe(CAR_BOOKING);
+    });
+
+    it('ignores activeRenderer samplePayload and uses active catalogId or $id or BASIC_CATALOG_ID fallback on resetToBlankDraft', () => {
+      startupConfigStateMock.activeRenderer.set({
+        samplePayload: '[{"version": "v0.9", "customSample": true}]',
+      });
+      catalogManagementMock.activeCatalog.set({
+        $id: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      TestBed.tick();
+
+      service.resetToBlankDraft();
+
+      const expectedMaterialBlank = formatJson([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'sample-surface',
+            catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+            sendDataModel: true,
+          },
+        },
+      ]);
+      expect(service.activeDraft()).toBe(expectedMaterialBlank);
+
+      // When activeCatalog has empty catalogId or is null, falls back to BASIC_CATALOG_ID
+      catalogManagementMock.activeCatalog.set(null);
+      service.resetToBlankDraft();
+
+      const expectedBasicBlank = formatJson([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'sample-surface',
+            catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+            sendDataModel: true,
+          },
+        },
+      ]);
+      expect(service.activeDraft()).toBe(expectedBasicBlank);
+    });
+
+    it('cancels pending <300ms updateDraft timer on resetToBlankDraft, flushDraft, and commitLayoutFromLlm, and does not emit duplicate layout bubble at 300ms', () => {
+      const expectedBlankSurface = formatJson([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'sample-surface',
+            catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+            sendDataModel: true,
+          },
+        },
+      ]);
+
+      // 1. Pending user edit cancelled by resetToBlankDraft + prompt submitted at 100ms
+      chatStateMock.setChatHistory([]);
+      chatStateMock.setChatHistory.mockClear();
+      chatStateMock.updateChatHistory.mockClear();
+
+      service.updateDraft('[{"version": "v0.9", "dirtyBeforeReset": true}]');
+      vi.advanceTimersByTime(100);
+
+      service.resetToBlankDraft();
+      expect(chatStateMock.setChatHistory).toHaveBeenCalledTimes(1);
+      expect(chatStateMock.chatHistory()).toEqual([
+        {
+          role: MessageRole.USER,
+          content: expectedBlankSurface,
+        },
+      ]);
+
+      // Simulate user submitting a prompt 100ms after reset (appending USER text + MODEL streaming placeholder)
+      vi.advanceTimersByTime(100);
+      chatStateMock.updateChatHistory(h => [
+        ...h,
+        {role: MessageRole.USER, content: 'Create a dashboard'},
+        {role: MessageRole.MODEL, content: ' ●●●'},
+      ]);
+      chatStateMock.setChatHistory.mockClear();
+      chatStateMock.updateChatHistory.mockClear();
+
+      // Advance past 300ms mark: neither the cancelled dirty edit nor a duplicate blank sync should fire
+      vi.advanceTimersByTime(300);
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.chatHistory()).toHaveLength(3);
+      expect(chatStateMock.chatHistory()[2].role).toBe(MessageRole.MODEL);
+
+      // 2. Pending user edit cancelled by commitLayoutFromLlm
+      service.updateDraft('[{"version": "v0.9", "dirtyBeforeLlm": true}]');
+      vi.advanceTimersByTime(100);
+      service.commitLayoutFromLlm('[{"version": "v0.9", "fromLlm": true}]');
+      vi.advanceTimersByTime(300);
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+
+      // 3. Pending user edit cancelled by flushDraft, which queues initial draft (CAR_BOOKING) sync at 300ms
+      chatStateMock.setChatHistory([]);
+      chatStateMock.setChatHistory.mockClear();
+      service.updateDraft('[{"version": "v0.9", "dirtyBeforeFlush": true}]');
+      vi.advanceTimersByTime(100);
+      service.flushDraft();
+      vi.advanceTimersByTime(200);
+      // At 200ms after flushDraft (300ms after dirtyBeforeFlush), dirty edit must not have fired
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(100);
+      expect(chatStateMock.setChatHistory).toHaveBeenCalledTimes(1);
+      expect(chatStateMock.chatHistory()[0].content).toContain('Book a Car');
+      expect(chatStateMock.chatHistory()[0].content).not.toContain('dirtyBeforeFlush');
+    });
+
+    it('synchronously re-populates chatHistory across repeated consecutive resetToBlankDraft calls and after commitLayoutFromLlm', () => {
+      const expectedBlankSurface = formatJson([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'sample-surface',
+            catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+            sendDataModel: true,
+          },
+        },
+      ]);
+
+      // First reset
+      chatStateMock.setChatHistory([]);
+      service.resetToBlankDraft();
+      expect(service.sessionResetNonce()).toBe(1);
+      expect(chatStateMock.chatHistory()).toEqual([
+        {role: MessageRole.USER, content: expectedBlankSurface},
+      ]);
+
+      // Simulate ChatCoordinator clearing history and calling resetToBlankDraft a second time in a row
+      chatStateMock.setChatHistory([]);
+      service.resetToBlankDraft();
+      expect(service.sessionResetNonce()).toBe(2);
+      expect(chatStateMock.chatHistory()).toEqual([
+        {role: MessageRole.USER, content: expectedBlankSurface},
+      ]);
+
+      // Simulate LLM committing layout, then clearing history and calling resetToBlankDraft again
+      service.commitLayoutFromLlm('[{"version": "v0.9", "llmCommitted": true}]');
+      chatStateMock.setChatHistory([]);
+      service.resetToBlankDraft();
+      expect(service.sessionResetNonce()).toBe(3);
+      expect(service.activeDraft()).toBe(expectedBlankSurface);
+      expect(chatStateMock.chatHistory()).toEqual([
+        {role: MessageRole.USER, content: expectedBlankSurface},
+      ]);
+    });
+
+    it('does not overwrite blank surface on subsequent same-catalog emissions (including pre-handshake reset), while auto-populating on a different catalog', () => {
+      const expectedBasicBlank = formatJson([
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 'sample-surface',
+            catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+            sendDataModel: true,
+          },
+        },
+      ]);
+
+      // 1. Pre-handshake reset: activeCatalog is null when resetToBlankDraft() is called
+      catalogManagementMock.activeCatalog.set(null);
+      service.resetToBlankDraft();
+      expect(service.activeDraft()).toBe(expectedBasicBlank);
+
+      // Initial basic_catalog handshake arrives -> must NOT overwrite blank surface with CAR_BOOKING
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      });
+      TestBed.tick();
+      expect(service.activeDraft()).toBe(expectedBasicBlank);
+
+      // Same-catalog metadata refresh -> must NOT overwrite blank surface with CAR_BOOKING
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        title: 'Refreshed Basic Catalog',
+      });
+      TestBed.tick();
+      expect(service.activeDraft()).toBe(expectedBasicBlank);
+
+      // Switching to a different catalog -> auto-populates the new catalog's template
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      });
+      TestBed.tick();
+      expect(service.activeDraft()).toContain('material_catalog.json');
     });
   });
 });

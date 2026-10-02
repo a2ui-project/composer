@@ -75,10 +75,7 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     getModelMarkers: vi.fn(() => []),
     updateOptions: vi.fn(),
     dispose: vi.fn(),
-    getModel: vi.fn(() => ({
-      getFullModelRange: vi.fn(() => ({})),
-      dispose: vi.fn(),
-    })),
+    getModel: vi.fn(() => mockModel),
   };
 
   const create = vi.fn(
@@ -91,12 +88,16 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
       }
       container.appendChild(textarea);
 
-      mockEditor.getValue.mockImplementation(() => textarea.value);
-      mockEditor.setValue.mockImplementation((val: string) => {
+      mockModel.setValue.mockImplementation((val: string) => {
         undoStack.length = 0;
         redoStack.length = 0;
         textarea.value = val;
         textarea.dispatchEvent(new Event('input'));
+      });
+      mockEditor.getModel.mockReturnValue(mockModel);
+      mockEditor.getValue.mockImplementation(() => textarea.value);
+      mockEditor.setValue.mockImplementation((val: string) => {
+        mockModel.setValue(val);
       });
       mockEditor.executeEdits.mockImplementation(
         (source: string, edits: monaco.editor.IIdentifiedSingleEditOperation[]) => {
@@ -289,6 +290,7 @@ class MockStateSync {
       ']',
   );
   readonly activeDraft = this.activeDraftSignal.asReadonly();
+  readonly sessionResetNonce = signal(0);
   updateDraft = vi.fn((val: string) => {
     this.activeDraftSignal.set(val);
   });
@@ -1202,5 +1204,106 @@ describe('RawFrame JSON Source Editor View', () => {
     );
     expect(navigateSpy).toHaveBeenCalledWith(5, 12);
     dispatchSpy.mockRestore();
+  });
+
+  describe('sessionResetNonce handling', () => {
+    it('flushes Monaco undo/redo history via resetEditor and unconditionally dispatches sendRenderA2UI even when layoutJson equals activeDraft', async () => {
+      const {fixture, harness, component} = await setup(false);
+      const blankDraft =
+        '[{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "basic"}}]';
+
+      // 1. Simulate an LLM edit that normally pushes onto the undo stack
+      const editedDraft = '[{"version": "v0.9", "createSurface": {"surfaceId": "edited"}}]';
+      stateSyncMock.activeDraftSignal.set(editedDraft);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(await harness.getJsonText()).toBe(editedDraft);
+      expect(undoStack.length).toBeGreaterThan(0);
+
+      // 2. Trigger a session reset to blankDraft
+      const editorInstance = component.monacoEditor()!;
+      const resetEditorSpy = vi.spyOn(editorInstance, 'resetEditor');
+      sendRenderA2UIMock.mockClear();
+
+      stateSyncMock.activeDraftSignal.set(blankDraft);
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(resetEditorSpy).toHaveBeenCalledWith(blankDraft);
+      expect(await harness.getJsonText()).toBe(blankDraft);
+      expect(undoStack.length).toBe(0);
+      expect(redoStack.length).toBe(0);
+      expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+
+      // Undo must be a no-op after session reset
+      mockEditor.trigger('keyboard', 'undo', null);
+      fixture.detectChanges();
+      expect(await harness.getJsonText()).toBe(blankDraft);
+
+      // 3. Trigger a second consecutive session reset where layoutJson already equals blankDraft
+      sendRenderA2UIMock.mockClear();
+      resetEditorSpy.mockClear();
+
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(resetEditorSpy).toHaveBeenCalledWith(blankDraft);
+      expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancels pending <300ms layoutInput$ debounce, 3000ms invalidJsonTimer, and schema error state on sessionResetNonce', async () => {
+      const {fixture, harness, component} = await setup(false);
+      vi.useFakeTimers();
+
+      const blankDraft =
+        '[{"version": "v0.9", "createSurface": {"surfaceId": "sample-surface", "catalogId": "basic"}}]';
+
+      // 1. Trigger schema error state and invalid JSON timer
+      component['onMarkersChange']([
+        {
+          severity: 8,
+          message: 'Schema error before reset',
+          startLineNumber: 1,
+          startColumn: 1,
+        } as monaco.editor.IMarker,
+      ]);
+      expect(component['hasActiveSchemaErrors']).toBe(true);
+
+      await harness.setJsonText('{"version": "v0.9", invalid_json...');
+      fixture.detectChanges();
+      // Advance 300ms so invalidJsonTimer (3000ms) is armed, then type another invalid edit (<300ms pending)
+      vi.advanceTimersByTime(300);
+      await harness.setJsonText('{"version": "v0.9", still_invalid...');
+      fixture.detectChanges();
+      vi.advanceTimersByTime(100);
+
+      sendRenderA2UIMock.mockClear();
+      snackBarMock.open.mockClear();
+      snackBarMock.dismiss.mockClear();
+
+      // 2. Trigger session reset before 300ms layoutInput$ and 3000ms invalidJsonTimer fire
+      stateSyncMock.activeDraftSignal.set(blankDraft);
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      await Promise.resolve();
+
+      expect(component['isJsonInvalid']()).toBe(false);
+      expect(component['hasActiveSchemaErrors']).toBe(false);
+      expect(component['lastErrorSignature']).toBeNull();
+      expect(component['lastSyntaxError']).toBeNull();
+      expect(snackBarMock.dismiss).toHaveBeenCalled();
+      expect(sendRenderA2UIMock).toHaveBeenCalledTimes(1);
+
+      // Advance past 300ms and 3000ms: neither the stale layoutInput$ nor invalidJsonTimer should fire
+      vi.advanceTimersByTime(5000);
+      expect(snackBarMock.open).not.toHaveBeenCalled();
+      expect(component['isJsonInvalid']()).toBe(false);
+
+      // Watchdog should have been armed cleanly (since hasActiveSchemaErrors was cleared) and fire at 15000ms
+      vi.advanceTimersByTime(10000);
+      expect(errorLoggerMock.warn).toHaveBeenCalledTimes(1);
+    });
   });
 });

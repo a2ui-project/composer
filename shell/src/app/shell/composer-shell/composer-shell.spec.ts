@@ -24,16 +24,13 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter, Router, RouterLinkActive} from '@angular/router';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
-import {StateSync} from '../../chat/state-sync/state-sync';
+import {ErrorLogger} from '../../debug/error-logger.service';
+import {HostCommunication} from '../host-communication/host-communication';
 import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
-import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
-import {LocalStorageKey} from '../../storage/models/local-storage-keys';
-import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {ShareService} from '../share/share.service';
@@ -41,7 +38,6 @@ import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {ComposerShell} from './composer-shell';
 import {ComposerShellHarness} from './test/composer-shell.harness';
-import {ErrorLogger} from '../../debug/error-logger.service';
 
 @Component({standalone: true, template: ''})
 class DummyRouteComponent {}
@@ -49,9 +45,6 @@ class DummyRouteComponent {}
 describe('ComposerShell Layout', () => {
   let fixture: ComponentFixture<ComposerShell>;
   let harness: ComposerShellHarness;
-  let storageServiceMock: Partial<IndexedDbStorage>;
-  let localStorageServiceMock: Partial<LocalStorageInteractions>;
-  let sessionStorageServiceMock: Partial<SessionStorageInteractions>;
   let catalogManagementServiceMock: {
     activeCatalogTitle: WritableSignal<string>;
     activeCatalogDescription: WritableSignal<string>;
@@ -64,27 +57,24 @@ describe('ComposerShell Layout', () => {
     resolvedUrl: WritableSignal<string | null>;
     selectedRendererId: WritableSignal<string | null>;
     sharedA2uiError: WritableSignal<string | null>;
+    setSharedA2uiPayload: ReturnType<typeof vi.fn>;
+    setSharedA2uiError: ReturnType<typeof vi.fn>;
   };
-  let stateSyncMock: {
-    activeDraft: WritableSignal<string>;
+  let startupResolutionMock: {
+    cleanSharedA2uiUrl: ReturnType<typeof vi.fn>;
   };
   let chatCoordinatorMock: {
     currentTurnIndex: WritableSignal<number>;
+    startNewSession: ReturnType<typeof vi.fn>;
+  };
+  let hostCommunicationMock: {
+    clearHistoryBuffer: ReturnType<typeof vi.fn>;
+  };
+  let errorLoggerMock: {
+    clear: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
-    storageServiceMock = {
-      flushAllRecords: vi.fn().mockResolvedValue(undefined),
-    };
-
-    localStorageServiceMock = {
-      removeItem: vi.fn(),
-    };
-
-    sessionStorageServiceMock = {
-      clear: vi.fn(),
-    };
-
     catalogManagementServiceMock = {
       activeCatalogTitle: signal(''),
       activeCatalogDescription: signal(''),
@@ -101,14 +91,27 @@ describe('ComposerShell Layout', () => {
       resolvedUrl: signal<string | null>(null),
       selectedRendererId: signal<string | null>(null),
       sharedA2uiError: signal<string | null>(null),
+      setSharedA2uiPayload: vi.fn(),
+      setSharedA2uiError: vi.fn(),
     };
 
-    stateSyncMock = {
-      activeDraft: signal(''),
+    startupResolutionMock = {
+      cleanSharedA2uiUrl: vi.fn(),
     };
 
     chatCoordinatorMock = {
       currentTurnIndex: signal(3),
+      startNewSession: vi.fn(() => {
+        chatCoordinatorMock.currentTurnIndex.set(0);
+      }),
+    };
+
+    hostCommunicationMock = {
+      clearHistoryBuffer: vi.fn(),
+    };
+
+    errorLoggerMock = {
+      clear: vi.fn(),
     };
 
     await TestBed.configureTestingModule({
@@ -122,18 +125,6 @@ describe('ComposerShell Layout', () => {
         ]),
         provideNoopAnimations(),
         {
-          provide: IndexedDbStorage,
-          useValue: storageServiceMock,
-        },
-        {
-          provide: LocalStorageInteractions,
-          useValue: localStorageServiceMock,
-        },
-        {
-          provide: SessionStorageInteractions,
-          useValue: sessionStorageServiceMock,
-        },
-        {
           provide: CatalogManagement,
           useValue: catalogManagementServiceMock,
         },
@@ -145,14 +136,18 @@ describe('ComposerShell Layout', () => {
           provide: StartupConfigStateService,
           useValue: startupConfigStateMock,
         },
-        {provide: StartupResolution, useValue: {}},
-        {
-          provide: StateSync,
-          useValue: stateSyncMock,
-        },
+        {provide: StartupResolution, useValue: startupResolutionMock},
         {
           provide: ChatCoordinator,
           useValue: chatCoordinatorMock,
+        },
+        {
+          provide: HostCommunication,
+          useValue: hostCommunicationMock,
+        },
+        {
+          provide: ErrorLogger,
+          useValue: errorLoggerMock,
         },
         {
           provide: UsageTrackingService,
@@ -209,30 +204,22 @@ describe('ComposerShell Layout', () => {
     expect(await harness.getHeaderTooltipText()).toBe('Sample description');
   });
 
-  it('flushes session cache and tracks reset upon clicking New Session reset button', async () => {
+  it('resets session state in-memory and tracks reset strictly once upon clicking New Session reset button', async () => {
     const usageTracking = TestBed.inject(UsageTrackingService);
     const resetSpy = vi.spyOn(usageTracking, 'trackSessionReset');
     const sessionResetSpy = vi.spyOn(usageTracking, 'resetSession');
-    const errorLogger = TestBed.inject(ErrorLogger);
-    const infoSpy = vi.spyOn(errorLogger, 'info');
 
     await harness.clickResetButton();
 
+    expect(resetSpy).toHaveBeenCalledTimes(1);
     expect(resetSpy).toHaveBeenCalledWith({totalPromptTurns: 3});
-    expect(sessionResetSpy).toHaveBeenCalled();
-    expect(storageServiceMock.flushAllRecords).toHaveBeenCalled();
-    expect(localStorageServiceMock.removeItem).toHaveBeenCalledWith(LocalStorageKey.SESSION_STATE);
-    expect(localStorageServiceMock.removeItem).toHaveBeenCalledWith(LocalStorageKey.EDITOR_CACHE);
-    expect(localStorageServiceMock.removeItem).not.toHaveBeenCalledWith(
-      LocalStorageKey.DOCKVIEW_LAYOUT,
-    );
-    expect(localStorageServiceMock.removeItem).not.toHaveBeenCalledWith(
-      LocalStorageKey.CUSTOM_INSTRUCTIONS,
-    );
-    expect(sessionStorageServiceMock.clear).toHaveBeenCalled();
-    expect(infoSpy).toHaveBeenCalledWith(
-      expect.objectContaining({message: 'Session state cleared.', sourceTag: '[Shell]'}),
-    );
+    expect(sessionResetSpy).toHaveBeenCalledTimes(1);
+    expect(chatCoordinatorMock.startNewSession).toHaveBeenCalledTimes(1);
+    expect(startupConfigStateMock.setSharedA2uiPayload).toHaveBeenCalledWith(null);
+    expect(startupConfigStateMock.setSharedA2uiError).toHaveBeenCalledWith(null);
+    expect(startupResolutionMock.cleanSharedA2uiUrl).toHaveBeenCalledTimes(1);
+    expect(hostCommunicationMock.clearHistoryBuffer).toHaveBeenCalledTimes(1);
+    expect(errorLoggerMock.clear).toHaveBeenCalledTimes(1);
   });
 
   it('dispatches ResetLayoutEvent upon clicking Reset Layout button', async () => {
@@ -418,16 +405,18 @@ describe('ComposerShell Layout', () => {
   });
 
   describe('resetSession', () => {
-    it('resetSession strips share parameters from location href before setting href', async () => {
+    it('resetSession delegates URL cleanup to startupResolution.cleanSharedA2uiUrl without navigating location.href', () => {
       const doc = TestBed.inject(DOCUMENT);
-      const mockLocation = {href: 'http://localhost:3000/?renderer=http://test.com&a2ui=d1.123'};
+      const originalHref = 'http://localhost:3000/?renderer=http://test.com&a2ui=d1.123';
+      const mockLocation = {href: originalHref};
       vi.spyOn(doc, 'defaultView', 'get').mockReturnValue({
         location: mockLocation,
       } as unknown as Window & typeof globalThis);
 
       const component = fixture.componentInstance;
-      await component.resetSession();
-      expect(mockLocation.href).toBe('http://localhost:3000/');
+      component.resetSession();
+      expect(startupResolutionMock.cleanSharedA2uiUrl).toHaveBeenCalledTimes(1);
+      expect(mockLocation.href).toBe(originalHref);
     });
 
     it('displays a snackbar error message when sharedA2uiError signal emits an error message', () => {

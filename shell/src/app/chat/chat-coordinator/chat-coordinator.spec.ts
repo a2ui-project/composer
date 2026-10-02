@@ -104,6 +104,11 @@ class MockStateSync {
   flushDraft = vi.fn(() => {
     this.activeDraftSignal.set('Initial draft text');
   });
+  resetToBlankDraft = vi.fn(() => {
+    this.activeDraftSignal.set(
+      '[{"version":"v0.9","createSurface":{"surfaceId":"sample-surface","catalogId":"basic"}}]',
+    );
+  });
   hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
   syncActiveDraftToHistory = vi.fn();
 }
@@ -980,6 +985,249 @@ I'll output bad JSON.
           turnIndex: 1,
         }),
       );
+    });
+  });
+
+  describe('startNewSession vs wipeEnvironmentCache & In-Flight Stream Cancellation', () => {
+    it('resets currentTurnIndex, clears chat and raw LLM history, sets IDLE status, and calls stateSync.resetToBlankDraft on startNewSession', async () => {
+      await service.submitPrompt('Turn 1');
+      chatStateMock.addRawLlmLog(LlmLogType.REQUEST, {test: true});
+      expect(service.currentTurnIndex()).toBe(1);
+      expect(chatStateMock.chatHistory().length).toBeGreaterThan(0);
+      expect(chatStateMock.llmHistory().length).toBeGreaterThan(0);
+
+      stateSyncMock.flushDraft.mockClear();
+      stateSyncMock.resetToBlankDraft.mockClear();
+
+      service.startNewSession();
+
+      expect(service.currentTurnIndex()).toBe(0);
+      expect(chatStateMock.chatHistory()).toEqual([]);
+      expect(chatStateMock.llmHistory()).toEqual([]);
+      expect(chatStateMock.latestLlmLog()).toBeNull();
+      expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+      expect(service.isProgrammaticStreamActive()).toBe(false);
+      expect(stateSyncMock.resetToBlankDraft).toHaveBeenCalledTimes(1);
+      expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+    });
+
+    it('resets currentTurnIndex, clears chat and raw LLM history, sets IDLE status, and calls stateSync.flushDraft on wipeEnvironmentCache', async () => {
+      await service.submitPrompt('Turn 1');
+      chatStateMock.addRawLlmLog(LlmLogType.REQUEST, {test: true});
+      expect(service.currentTurnIndex()).toBe(1);
+
+      stateSyncMock.flushDraft.mockClear();
+      stateSyncMock.resetToBlankDraft.mockClear();
+
+      service.wipeEnvironmentCache();
+
+      expect(service.currentTurnIndex()).toBe(0);
+      expect(chatStateMock.chatHistory()).toEqual([]);
+      expect(chatStateMock.llmHistory()).toEqual([]);
+      expect(chatStateMock.latestLlmLog()).toBeNull();
+      expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+      expect(service.isProgrammaticStreamActive()).toBe(false);
+      expect(stateSyncMock.flushDraft).toHaveBeenCalledTimes(1);
+      expect(stateSyncMock.resetToBlankDraft).not.toHaveBeenCalled();
+    });
+
+    it('cancels stream if startNewSession is called before chatStream resolves and prevents stale mutations', async () => {
+      let resolveChatStream!: (resp: LlmStreamResponse) => void;
+      const mockCancel = vi.fn();
+
+      llmClientMock.chatStream = vi.fn(
+        () =>
+          new Promise<LlmStreamResponse>(resolve => {
+            resolveChatStream = resolve;
+          }),
+      );
+
+      const submitPromise = service.submitPrompt('Slow start prompt');
+      expect(service.isProgrammaticStreamActive()).toBe(true);
+
+      // Call startNewSession before chatStream resolves
+      service.startNewSession();
+      expect(service.currentTurnIndex()).toBe(0);
+      expect(service.isProgrammaticStreamActive()).toBe(false);
+      expect(chatStateMock.chatHistory()).toEqual([]);
+
+      stateSyncMock.commitLayoutFromLlm.mockClear();
+
+      // Now resolve chatStream with a stream that would yield valid A2UI
+      const rawText =
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "basic"}}\n';
+      resolveChatStream({
+        contentStream: createMockStream([rawText]),
+        complete: Promise.resolve(rawText),
+        cancel: mockCancel,
+      });
+
+      await submitPromise;
+
+      expect(mockCancel).toHaveBeenCalledTimes(1);
+      expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
+      expect(chatStateMock.chatHistory()).toEqual([]);
+      expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+    });
+
+    it('cancels active stream mid-iteration on startNewSession and ignores late chunks or non-rejecting complete promise', async () => {
+      let emitNextChunk!: () => void;
+      const mockCancel = vi.fn();
+      const rawText =
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "basic"}}\n';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        const contentStream: AsyncIterable<LlmResponse> = {
+          [Symbol.asyncIterator]() {
+            let step = 0;
+            return {
+              async next(): Promise<IteratorResult<LlmResponse>> {
+                step++;
+                if (step === 1) {
+                  return {value: {content: '{"version": "v0.9"'}, done: false};
+                }
+                if (step === 2) {
+                  await new Promise<void>(resolve => {
+                    emitNextChunk = resolve;
+                  });
+                  return {
+                    value: {
+                      content: ', "createSurface": {"surfaceId": "s1", "catalogId": "basic"}}\n',
+                    },
+                    done: false,
+                  };
+                }
+                return {value: undefined, done: true};
+              },
+            };
+          },
+        };
+        return {
+          contentStream,
+          complete: Promise.resolve(rawText),
+          cancel: mockCancel,
+        };
+      });
+
+      const submitPromise = service.submitPrompt('Mid-stream reset');
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Trigger startNewSession while stream is paused on chunk 2
+      service.startNewSession();
+      expect(mockCancel).toHaveBeenCalledTimes(1);
+      expect(chatStateMock.chatHistory()).toEqual([]);
+      expect(service.currentTurnIndex()).toBe(0);
+
+      stateSyncMock.commitLayoutFromLlm.mockClear();
+
+      // Resume stream chunk 2 without throwing CANCEL_ERROR_NAME
+      emitNextChunk();
+      await submitPromise;
+
+      expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
+      expect(chatStateMock.chatHistory()).toEqual([]);
+      expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+    });
+
+    it('ignores late responseStream.complete resolution and late errors after startNewSession', async () => {
+      let resolveComplete!: (val: string) => void;
+      const rawText =
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "basic"}}\n';
+
+      llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+        return {
+          contentStream: createMockStream([rawText]),
+          complete: new Promise<string>(resolve => {
+            resolveComplete = resolve;
+          }),
+          cancel: vi.fn(),
+        };
+      });
+
+      const submitPromise = service.submitPrompt('Pending complete');
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      service.startNewSession();
+      stateSyncMock.commitLayoutFromLlm.mockClear();
+
+      resolveComplete(rawText);
+      await submitPromise;
+
+      expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
+      expect(chatStateMock.chatHistory()).toEqual([]);
+      expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+    });
+
+    it('does not append error or cancelled message to new session when cancelled stream rejects after startNewSession, and preserves new stream reference', async () => {
+      let rejectFirstStream!: (err: unknown) => void;
+      const firstCancel = vi.fn();
+
+      llmClientMock.chatStream = vi
+        .fn()
+        .mockImplementationOnce(async (): Promise<LlmStreamResponse> => {
+          const complete = new Promise<string>((_, reject) => {
+            rejectFirstStream = reject;
+          });
+          complete.catch(() => {});
+          const contentStream: AsyncIterable<LlmResponse> = {
+            [Symbol.asyncIterator]() {
+              return {
+                async next() {
+                  await complete;
+                  return {value: undefined, done: true};
+                },
+              };
+            },
+          };
+          return {contentStream, complete, cancel: firstCancel};
+        });
+
+      const firstPromise = service.submitPrompt('First prompt');
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Reset session while first prompt is in-flight
+      service.startNewSession();
+      expect(firstCancel).toHaveBeenCalledTimes(1);
+
+      // Start a second prompt in the new session before firstPromise settles
+      let rejectSecondStream!: (err: unknown) => void;
+      const secondCancel = vi.fn(() => {
+        const err = new Error('Cancelled');
+        err.name = CANCEL_ERROR_NAME;
+        rejectSecondStream(err);
+      });
+      llmClientMock.chatStream.mockImplementationOnce(async (): Promise<LlmStreamResponse> => {
+        const complete = new Promise<string>((_, reject) => {
+          rejectSecondStream = reject;
+        });
+        complete.catch(() => {});
+        const contentStream: AsyncIterable<LlmResponse> = {
+          [Symbol.asyncIterator]() {
+            return {
+              async next() {
+                await complete;
+                return {value: undefined, done: true};
+              },
+            };
+          },
+        };
+        return {contentStream, complete, cancel: secondCancel};
+      });
+
+      const secondPromise = service.submitPrompt('Second prompt');
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Now reject the first stream with an error; its catch & finally must NOT clobber the second stream
+      rejectFirstStream(new Error('Network failure from old session'));
+      await firstPromise;
+
+      expect(chatStateMock.chatHistory().some(msg => msg.role === MessageRole.ERROR)).toBe(false);
+      expect(service.isProgrammaticStreamActive()).toBe(true);
+
+      // Second stream should still be cancellable via cancelActiveStream()
+      service.cancelActiveStream();
+      await secondPromise;
+      expect(secondCancel).toHaveBeenCalledTimes(1);
     });
   });
 });

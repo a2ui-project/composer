@@ -39,6 +39,7 @@ import {
 import {ComposerPanelId} from './composer-panel-id';
 import {ComposerDockview} from './composer-dockview.service';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {StateSync} from '../../chat/state-sync/state-sync';
 
 export {ComposerPanelId};
 
@@ -66,6 +67,8 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
   private readonly errorLogger = inject(ErrorLogger);
   private readonly composerDockview = inject(ComposerDockview);
   private readonly usageTrackingService = inject(UsageTrackingService);
+  private readonly stateSync = inject(StateSync);
+  private lastHandledResetNonce = this.stateSync.sessionResetNonce();
 
   readonly dockviewRoot = viewChild.required<ElementRef<HTMLElement>>('dockviewRoot');
 
@@ -124,6 +127,18 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
 
     effect(() => {
       this.composerDockview.updateTheme(this.isDarkTheme());
+    });
+
+    effect(() => {
+      const nonce = this.stateSync.sessionResetNonce();
+      if (nonce > this.lastHandledResetNonce) {
+        this.lastHandledResetNonce = nonce;
+        untracked(() => {
+          this.clearAllLogs();
+          this.unreadEventsCount.set(0);
+          this.unreadErrorsCount.set(0);
+        });
+      }
     });
   }
 
