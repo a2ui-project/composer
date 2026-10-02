@@ -81,8 +81,11 @@ export interface PresentedTurn extends LlmMessage {
   encapsulation: ViewEncapsulation.None,
 })
 export class CopilotKitChatPanel extends ChatPanelBase {
-  // The renderer menu in the prompt pill makes switching output formats, for
-  // example to the Slack renderer, one step instead of a trip to Settings.
+  /**
+   * Backs the renderer menu in the prompt pill, which makes switching output
+   * formats, for example to the Slack renderer, one step instead of a trip to
+   * Settings.
+   */
   protected readonly rendererSelection = inject(RendererSelection);
 
   /** The active renderer's configured display name, so no renderer is special-cased. */
@@ -105,13 +108,21 @@ export class CopilotKitChatPanel extends ChatPanelBase {
     }
   }
 
-  /** Waits for a renderer switch to finish, so the prompt uses the new renderer's catalog. */
+  /**
+   * Sends the prompt, unless a renderer switch is in progress.
+   *
+   * During a switch the Send button is disabled and the panel shows "Switching
+   * renderer…". Pressing Enter calls this method directly, so it repeats that
+   * check. The prompt stays in the input, and the user sends it once the new
+   * renderer's catalog is active, so it's never generated against the old one.
+   */
   protected override async submitPrompt(options?: {
     promptId?: string;
     promptTurnIndex?: number;
     retryOfPromptId?: string;
   }): Promise<void> {
     if (this.rendererSelection.isSwitching()) {
+      // Not sent: the text stays in the input until the switch finishes.
       return;
     }
     await super.submitPrompt(options);

@@ -32,6 +32,7 @@ import {
   HostCommunication,
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
+import {PreviewUrlParam} from '../../preview/preview-url-param';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
@@ -44,9 +45,15 @@ const CATALOG_TIMEOUT_MS = 15_000;
  * Switches the preview to another configured renderer and reports when it's
  * ready to generate against: loaded, handshaken, and with its catalog active.
  *
- * The chat panel's renderer menu uses it, and so can a model tool that
- * switches renderers mid-conversation. While a switch is in progress,
- * `isSwitching` is true; if it fails, `error` holds a message for the user.
+ * Use it wherever a preview is open and a prompt may follow right away: the
+ * chat panel's renderer menu, and a model tool that switches renderers
+ * mid-conversation. It calls `SettingsService.selectRenderer`, which saves the
+ * choice and asks the user to allow a new origin, and then waits for the
+ * preview. The Settings page calls `SettingsService.selectRenderer` directly,
+ * because it shows no preview to wait for.
+ *
+ * While a switch is in progress, `isSwitching` is true; if it fails, `error`
+ * holds a message for the user.
  */
 @Injectable({providedIn: 'root'})
 export class RendererSelection {
@@ -183,10 +190,11 @@ export class RendererSelection {
     try {
       const actual = new URL(frame.src, document.baseURI);
       const expected = new URL(renderer.rendererUrl, document.baseURI);
-      // The preview appends bridge origins and theme to the configured URL.
+      // Drop the parameters the preview adds, so only the renderer's own URL is compared.
       for (const url of [actual, expected]) {
-        url.searchParams.delete('origin');
-        url.searchParams.delete('theme');
+        for (const param of Object.values(PreviewUrlParam)) {
+          url.searchParams.delete(param);
+        }
         url.searchParams.sort();
       }
       return actual.href === expected.href;
