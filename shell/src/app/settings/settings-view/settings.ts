@@ -38,7 +38,6 @@ import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
-import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
@@ -82,7 +81,6 @@ export class Settings implements OnInit {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly dialog = inject(MatDialog);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly startupResolution = inject(StartupResolution);
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
@@ -103,7 +101,9 @@ export class Settings implements OnInit {
     return this.settingsService.getRenderers().find(r => r.id === id);
   });
 
-  readonly isThirdParty: WritableSignal<boolean> = signal(false);
+  readonly isThirdPartyAuth: Signal<boolean> = computed(
+    () => this.configProvider.authType() === AuthType.THIRD_PARTY,
+  );
   readonly isApiKeyProvidedByConfig: Signal<boolean> = computed(() =>
     this.configProvider.isApiKeyProvidedByConfig(),
   );
@@ -148,10 +148,7 @@ export class Settings implements OnInit {
 
     void this.settingsService.getEffectiveApiKey();
 
-    const is3P = this.startupResolution.isThirdPartyEnvironment();
-    this.isThirdParty.set(is3P);
-
-    this.forceThirdPartyAuth.set(this.configProvider.authType() === AuthType.THIRD_PARTY);
+    this.forceThirdPartyAuth.set(this.isThirdPartyAuth());
   }
 
   async onRendererSelected(rendererId: string): Promise<void> {
@@ -179,7 +176,6 @@ export class Settings implements OnInit {
     const newState = !this.forceThirdPartyAuth();
     this.forceThirdPartyAuth.set(newState);
     this.configProvider.setForcedAuthMode(newState ? AuthType.THIRD_PARTY : AuthType.FIRST_PARTY);
-    this.isThirdParty.set(this.startupResolution.isThirdPartyEnvironment());
   }
 
   openAddMcpServerDialog(): void {

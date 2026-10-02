@@ -259,7 +259,7 @@ describe('Settings', () => {
     mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(false);
     const {component} = await setupComponent();
 
-    expect(component.isThirdParty()).toBe(false);
+    expect(component.isThirdPartyAuth()).toBe(false);
 
     const selectSpy = vi.spyOn(component.settingsService, 'selectRenderer').mockResolvedValue(true);
     await component.onRendererSelected('dev');
@@ -389,7 +389,7 @@ describe('Settings', () => {
       fixture.detectChanges();
       const harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, SettingsHarness);
 
-      expect(component.isThirdParty()).toBe(true);
+      expect(component.isThirdPartyAuth()).toBe(true);
       expect(await harness.getFormSectionsCount()).toBe(3);
 
       const sections = await harness.getFormSectionsCount();
@@ -431,6 +431,13 @@ describe('Settings', () => {
   it('hides authentication overrides section when IS_1P_AUTH_ENABLED is false', async () => {
     const {harness} = await setupComponent(false);
     expect(await harness.isFirstPartyAuthSectionHidden()).toBe(true);
+  });
+
+  it('sets isThirdPartyAuth to true when configProvider.authType() is THIRD_PARTY even on a 1P host', async () => {
+    mockAuthOverride.set(AuthType.THIRD_PARTY);
+    const {component} = await setupComponent(false);
+
+    expect(component.isThirdPartyAuth()).toBe(true);
   });
 
   describe('Settings View Integration', () => {

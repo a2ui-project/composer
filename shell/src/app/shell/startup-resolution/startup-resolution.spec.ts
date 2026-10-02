@@ -23,14 +23,15 @@ import {MatButtonHarness} from '@angular/material/button/testing';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolution} from './startup-resolution';
+import {EnvironmentContextService} from './state/environment-context.service';
 import {StartupConfigStateService} from './state/startup-config-state.service';
 import {QueryParser} from '../query-parser/query-parser';
 import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
+import {AppConfigProvider, AuthType} from '../../settings/app-config-provider/app-config-provider';
+import {CONFIG_URL} from '../environment-tokens/environment-tokens';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
 class OriginConfirmationDialogHarness extends ComponentHarness {
@@ -67,6 +68,7 @@ class OriginConfirmationDialogHarness extends ComponentHarness {
 }
 
 class MockAppConfigProvider {
+  authType = signal<AuthType>(AuthType.THIRD_PARTY);
   geminiApiKey = signal<string>('');
   isApiKeyProvidedByConfig = signal<boolean>(false);
   purgeGeminiApiKey = vi.fn().mockResolvedValue(undefined);
@@ -99,7 +101,6 @@ describe('StartupResolution', () => {
         StartupResolution,
         LocalStorageInteractions,
         {provide: AppConfigProvider, useValue: mockConfigProvider},
-        {provide: IS_1P_AUTH_ENABLED, useValue: true},
       ],
     });
     service = TestBed.inject(StartupResolution);
@@ -450,42 +451,49 @@ describe('StartupResolution', () => {
     expect(typeof service.getWindowHostname()).toBe('string');
   });
 
-  it('returns true immediately for 3P environment when IS_1P_AUTH_ENABLED is false', () => {
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [
-        StartupResolution,
-        LocalStorageInteractions,
-        {provide: AppConfigProvider, useValue: mockConfigProvider},
-        {provide: IS_1P_AUTH_ENABLED, useValue: false},
-      ],
-    });
-    const customService = TestBed.inject(StartupResolution);
-    const hostnameSpy = vi.spyOn(customService, 'getWindowHostname');
+  it('delegates isThirdPartyEnvironment to EnvironmentContextService based on hostname regardless of auth overrides', () => {
+    const envContext = TestBed.inject(EnvironmentContextService);
+    const hostnameSpy = vi.spyOn(envContext, 'getWindowHostname');
 
-    hostnameSpy.mockReturnValue('google.com');
+    hostnameSpy.mockReturnValue('subdomain.google.com');
+    expect(service.isThirdPartyEnvironment()).toBe(false);
 
-    expect(customService.isThirdPartyEnvironment()).toBe(true);
+    localStorage.setItem(LocalStorageKey.FORCE_3P, 'true');
+    expect(service.isThirdPartyEnvironment()).toBe(false);
+
+    hostnameSpy.mockReturnValue('external-domain.com');
+    expect(service.isThirdPartyEnvironment()).toBe(true);
   });
 
-  it('consults IS_1P_AUTH_ENABLED when determining 3P environment on google.com with FORCE_3P true', () => {
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [
-        StartupResolution,
-        LocalStorageInteractions,
-        {provide: AppConfigProvider, useValue: mockConfigProvider},
-        {provide: IS_1P_AUTH_ENABLED, useValue: false},
-      ],
+  it('purges Gemini API key on startup only when authType is FIRST_PARTY and logs warning on purge failure', async () => {
+    mockFetchConfig({
+      renderers: {
+        default: {rendererUrl: 'http://base:3000'},
+      },
     });
-    const customService = TestBed.inject(StartupResolution);
-    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
-    const hostnameSpy = vi.spyOn(customService, 'getWindowHostname');
 
-    hostnameSpy.mockReturnValue('google.com');
-    getItemSpy.mockImplementation(key => (key === LocalStorageKey.FORCE_3P ? 'true' : null));
+    // When authType is THIRD_PARTY, does not purge even on a 1P hostname
+    vi.spyOn(TestBed.inject(EnvironmentContextService), 'getWindowHostname').mockReturnValue(
+      'subdomain.google.com',
+    );
+    mockConfigProvider.authType.set(AuthType.THIRD_PARTY);
+    await service.resolveStartupConfiguration();
+    expect(mockConfigProvider.purgeGeminiApiKey).not.toHaveBeenCalled();
 
-    expect(customService.isThirdPartyEnvironment()).toBe(true);
+    // When authType is FIRST_PARTY, purges Gemini API key
+    mockConfigProvider.authType.set(AuthType.FIRST_PARTY);
+    await service.resolveStartupConfiguration();
+    expect(mockConfigProvider.purgeGeminiApiKey).toHaveBeenCalledTimes(1);
+
+    // Logs warning if purgeGeminiApiKey rejects
+    const warnSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'warn');
+    mockConfigProvider.purgeGeminiApiKey.mockRejectedValueOnce(new Error('Purge failed'));
+    await service.resolveStartupConfiguration();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('Failed to purge Gemini API key in 1P environment:'),
+      }),
+    );
   });
 
   describe('server api key in config.json', () => {
@@ -1146,7 +1154,6 @@ describe('StartupResolution', () => {
           StartupResolution,
           LocalStorageInteractions,
           {provide: AppConfigProvider, useValue: mockConfigProvider},
-          {provide: IS_1P_AUTH_ENABLED, useValue: true},
           {provide: CONFIG_URL, useValue: '/custom/config.json'},
         ],
       });
