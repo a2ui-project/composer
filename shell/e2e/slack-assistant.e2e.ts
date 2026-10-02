@@ -266,7 +266,7 @@ test.describe('Slack assistant browser journey', () => {
     await expect(
       page.getByRole('menuitemradio', {name: 'Slack Block Kit Preview', exact: true}),
     ).toHaveAttribute('aria-checked', 'true');
-    await expect(page.locator('.mat-mdc-menu-panel')).not.toHaveClass(/animation/);
+    await expect(page.locator('.mat-mdc-menu-panel')).not.toHaveClass(/mat-menu-panel-animating/);
     await page.screenshot({path: testInfo.outputPath('renderer-menu-light.png')});
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toBeHidden();
@@ -277,7 +277,7 @@ test.describe('Slack assistant browser journey', () => {
     await expect(
       page.getByRole('menuitemradio', {name: 'Slack Block Kit Preview', exact: true}),
     ).toBeVisible();
-    await expect(page.locator('.mat-mdc-menu-panel')).not.toHaveClass(/animation/);
+    await expect(page.locator('.mat-mdc-menu-panel')).not.toHaveClass(/mat-menu-panel-animating/);
     await page.screenshot({path: testInfo.outputPath('renderer-menu-dark.png')});
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toBeHidden();
