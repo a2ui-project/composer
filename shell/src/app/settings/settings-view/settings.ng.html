@@ -30,7 +30,7 @@
           </a2ui-composer-renderer-selector>
         </div>
 
-        @if (isThirdParty()) {
+        @if (isThirdPartyAuth()) {
           <div class="form-section">
             <h3>Gemini API Provisioning</h3>
             <a2ui-composer-api-key-selector
@@ -57,7 +57,7 @@
         </div>
       </form>
     </mat-card-content>
-    @if (isThirdParty()) {
+    @if (isThirdPartyAuth()) {
       <mat-card-footer class="get-api-key">
         To obtain an API key:
         <ol>

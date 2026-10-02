@@ -101,7 +101,7 @@ export class Settings implements OnInit {
     return this.settingsService.getRenderers().find(r => r.id === id);
   });
 
-  readonly isThirdParty: Signal<boolean> = computed(
+  readonly isThirdPartyAuth: Signal<boolean> = computed(
     () => this.configProvider.authType() === AuthType.THIRD_PARTY,
   );
   readonly isApiKeyProvidedByConfig: Signal<boolean> = computed(() =>
@@ -148,7 +148,7 @@ export class Settings implements OnInit {
 
     void this.settingsService.getEffectiveApiKey();
 
-    this.forceThirdPartyAuth.set(this.isThirdParty());
+    this.forceThirdPartyAuth.set(this.isThirdPartyAuth());
   }
 
   async onRendererSelected(rendererId: string): Promise<void> {

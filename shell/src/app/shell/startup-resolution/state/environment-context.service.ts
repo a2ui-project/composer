@@ -35,16 +35,6 @@ export class EnvironmentContextService {
   }
 
   isThirdPartyEnvironment(): boolean {
-    const force1P = this.localStorageInteractions.getItem(LocalStorageKey.FORCE_1P) === 'true';
-    if (force1P) {
-      return false;
-    }
-
-    const force3P = this.localStorageInteractions.getItem(LocalStorageKey.FORCE_3P) === 'true';
-    if (force3P) {
-      return true;
-    }
-
     const hostname = this.getWindowHostname();
     const is1P =
       hostname.endsWith('.google.com') ||

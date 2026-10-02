@@ -57,7 +57,7 @@ describe('EnvironmentContextService', () => {
     expect(service.isLocalhost('google.com')).toBe(false);
   });
 
-  it('identifies 3P environment based on hostname or local overrides', () => {
+  it('identifies 3P environment strictly based on hostname regardless of auth overrides', () => {
     const hostnameSpy = vi.spyOn(service, 'getWindowHostname');
     mockLocalStorage.getItem.mockReturnValue(null);
 
@@ -87,19 +87,18 @@ describe('EnvironmentContextService', () => {
     hostnameSpy.mockReturnValue('external-domain.com');
     expect(service.isThirdPartyEnvironment()).toBe(true);
 
-    // Test forced 3P flag
+    // Auth override flags in localStorage do not change host environment classification
     hostnameSpy.mockReturnValue('subdomain.google.com');
     mockLocalStorage.getItem.mockImplementation(key =>
       key === LocalStorageKey.FORCE_3P ? 'true' : null,
     );
-    expect(service.isThirdPartyEnvironment()).toBe(true);
+    expect(service.isThirdPartyEnvironment()).toBe(false);
 
-    // Test forced 1P flag
     hostnameSpy.mockReturnValue('external-domain.com');
     mockLocalStorage.getItem.mockImplementation(key =>
       key === LocalStorageKey.FORCE_1P ? 'true' : null,
     );
-    expect(service.isThirdPartyEnvironment()).toBe(false);
+    expect(service.isThirdPartyEnvironment()).toBe(true);
   });
 
   it('correctly evaluates isExtensionMode based on query param and storage', () => {

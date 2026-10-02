@@ -451,7 +451,7 @@ describe('StartupResolution', () => {
     expect(typeof service.getWindowHostname()).toBe('string');
   });
 
-  it('delegates isThirdPartyEnvironment to EnvironmentContextService based on hostname and local overrides', () => {
+  it('delegates isThirdPartyEnvironment to EnvironmentContextService based on hostname regardless of auth overrides', () => {
     const envContext = TestBed.inject(EnvironmentContextService);
     const hostnameSpy = vi.spyOn(envContext, 'getWindowHostname');
 
@@ -459,6 +459,9 @@ describe('StartupResolution', () => {
     expect(service.isThirdPartyEnvironment()).toBe(false);
 
     localStorage.setItem(LocalStorageKey.FORCE_3P, 'true');
+    expect(service.isThirdPartyEnvironment()).toBe(false);
+
+    hostnameSpy.mockReturnValue('external-domain.com');
     expect(service.isThirdPartyEnvironment()).toBe(true);
   });
 
