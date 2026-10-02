@@ -14,9 +14,13 @@
  * limitations under the License.
  */
 
+import * as fs from 'node:fs';
+import * as ts from 'typescript';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {Catalog} from '../../storage/models/catalog-storage.model';
+import {BASIC_CATALOG_SCHEMA} from './basic-catalog-schema';
 import {CatalogSchemaResolver} from './catalog-schema-resolver';
+import {COMMON_TYPES_SCHEMA} from './common-types-schema';
 
 describe('CatalogSchemaResolver', () => {
   let errorLogger: import('../../debug/error-logger.service').ErrorLogger;
@@ -1248,5 +1252,129 @@ describe('CatalogSchemaResolver', () => {
       type: 'object',
       required: false,
     });
+  });
+
+  it('quotes all property keys in COMMON_TYPES_SCHEMA and BASIC_CATALOG_SCHEMA to preserve keys under Closure compilation', () => {
+    const schemaFiles = [
+      'src/app/gallery/schema/common-types-schema.ts',
+      'src/app/gallery/schema/basic-catalog-schema.ts',
+    ];
+
+    for (const filePath of schemaFiles) {
+      const sourceText = fs.readFileSync(filePath, 'utf8');
+      const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
+      let propertyCount = 0;
+      const unquotedKeys: string[] = [];
+
+      const visit = (node: ts.Node) => {
+        if (ts.isPropertyAssignment(node)) {
+          propertyCount++;
+          const keyText = node.name.getText(sourceFile);
+          if (!ts.isStringLiteral(node.name) || !keyText.startsWith("'")) {
+            unquotedKeys.push(keyText);
+          }
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(sourceFile);
+
+      expect(propertyCount).toBeGreaterThan(0);
+      expect(unquotedKeys).toEqual([]);
+    }
+
+    expect(COMMON_TYPES_SCHEMA['$schema']).toBe('https://json-schema.org/draft/2020-12/schema');
+    expect(COMMON_TYPES_SCHEMA['$id']).toBe(
+      'https://a2ui.org/specification/v0_9/common_types.json',
+    );
+    const commonDefs = COMMON_TYPES_SCHEMA['$defs'] as Record<string, Record<string, unknown>>;
+    expect(Object.keys(commonDefs)).toEqual(
+      expect.arrayContaining([
+        'ComponentId',
+        'ChildList',
+        'DataBinding',
+        'FunctionCall',
+        'DynamicString',
+        'DynamicBoolean',
+        'DynamicNumber',
+        'DynamicValue',
+        'Action',
+        'AccessibilityAttributes',
+        'ComponentCommon',
+        'DynamicStringList',
+        'CheckRule',
+        'Checkable',
+      ]),
+    );
+    const functionCallProps = commonDefs['FunctionCall']['properties'] as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(functionCallProps['returnType']).toBeDefined();
+    expect(functionCallProps['args']['additionalProperties']).toBeDefined();
+    expect(commonDefs['DataBinding']['additionalProperties']).toBe(false);
+    expect(commonDefs['CheckRule']['additionalProperties']).toBe(false);
+
+    expect(BASIC_CATALOG_SCHEMA['$schema']).toBe('https://json-schema.org/draft/2020-12/schema');
+    expect(BASIC_CATALOG_SCHEMA['$id']).toBe(
+      'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+    );
+    expect(BASIC_CATALOG_SCHEMA['catalogId']).toBe(
+      'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+    );
+    const basicDefs = BASIC_CATALOG_SCHEMA['$defs'] as Record<string, unknown>;
+    expect(basicDefs['CatalogComponentCommon']).toBeDefined();
+    expect(basicDefs['anyComponent']).toBeDefined();
+    expect(basicDefs['anyFunction']).toBeDefined();
+
+    const components = BASIC_CATALOG_SCHEMA['components'] as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(components['Text']['unevaluatedProperties']).toBe(false);
+
+    const functions = BASIC_CATALOG_SCHEMA['functions'] as Record<string, Record<string, unknown>>;
+    expect(functions['formatString']['description']).toContain('`${expression}`');
+    expect(functions['formatString']['description']).toContain('`\\${`');
+
+    const formatDateProps = (
+      functions['formatDate']['properties'] as Record<string, Record<string, unknown>>
+    )['args']['properties'] as Record<string, Record<string, unknown>>;
+    expect(formatDateProps['format']['description']).toContain('\n\nToken Reference:\n');
+  });
+
+  it('resolves BASIC_CATALOG_SCHEMA components and cross-schema common_types.json references without warnings', () => {
+    const resolver = new CatalogSchemaResolver(BASIC_CATALOG_SCHEMA as Catalog, errorLogger);
+
+    const textProps = resolver.resolveComponentProperties('Text');
+    expect(textProps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({name: 'id', type: 'string', required: true}),
+        expect.objectContaining({name: 'accessibility', type: 'object', required: false}),
+        expect.objectContaining({name: 'weight', type: 'number', required: false}),
+        expect.objectContaining({name: 'component', type: 'string', required: true}),
+        expect.objectContaining({name: 'text', type: 'string | object', required: true}),
+        expect.objectContaining({
+          name: 'variant',
+          type: 'string',
+          required: false,
+          defaultValue: 'body',
+        }),
+      ]),
+    );
+
+    const buttonProps = resolver.resolveComponentProperties('Button');
+    expect(buttonProps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({name: 'id', type: 'string', required: true}),
+        expect.objectContaining({name: 'accessibility', type: 'object', required: false}),
+        expect.objectContaining({name: 'weight', type: 'number', required: false}),
+        expect.objectContaining({name: 'checks', type: 'array', required: false}),
+        expect.objectContaining({name: 'component', type: 'string', required: true}),
+        expect.objectContaining({name: 'child', type: 'string', required: true}),
+        expect.objectContaining({name: 'action', type: 'object', required: true}),
+      ]),
+    );
+
+    expect(errorLogger.warn).not.toHaveBeenCalled();
   });
 });
