@@ -18,94 +18,94 @@
  * This is a copy synchronized from https://github.com/a2ui-project/a2ui/blob/main/specification/v0_9/json/common_types.json
  */
 export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
-  $schema: 'https://json-schema.org/draft/2020-12/schema',
-  $id: 'https://a2ui.org/specification/v0_9/common_types.json',
-  $defs: {
-    ComponentId: {
-      type: 'string',
+  '$schema': 'https://json-schema.org/draft/2020-12/schema',
+  '$id': 'https://a2ui.org/specification/v0_9/common_types.json',
+  '$defs': {
+    'ComponentId': {
+      'type': 'string',
     },
-    ChildList: {
-      oneOf: [
+    'ChildList': {
+      'oneOf': [
         {
-          type: 'array',
-          items: {
-            $ref: '#/$defs/ComponentId',
+          'type': 'array',
+          'items': {
+            '$ref': '#/$defs/ComponentId',
           },
         },
         {
-          type: 'object',
-          properties: {
-            componentId: {
-              $ref: '#/$defs/ComponentId',
+          'type': 'object',
+          'properties': {
+            'componentId': {
+              '$ref': '#/$defs/ComponentId',
             },
-            path: {
-              type: 'string',
+            'path': {
+              'type': 'string',
             },
           },
-          required: ['componentId', 'path'],
-          additionalProperties: false,
+          'required': ['componentId', 'path'],
+          'additionalProperties': false,
         },
       ],
     },
-    DataBinding: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
+    'DataBinding': {
+      'type': 'object',
+      'properties': {
+        'path': {
+          'type': 'string',
         },
       },
-      required: ['path'],
-      additionalProperties: false,
+      'required': ['path'],
+      'additionalProperties': false,
     },
-    FunctionCall: {
-      type: 'object',
-      properties: {
-        call: {
-          type: 'string',
+    'FunctionCall': {
+      'type': 'object',
+      'properties': {
+        'call': {
+          'type': 'string',
         },
-        args: {
-          type: 'object',
-          additionalProperties: {
-            anyOf: [
+        'args': {
+          'type': 'object',
+          'additionalProperties': {
+            'anyOf': [
               {
-                $ref: '#/$defs/DynamicValue',
+                '$ref': '#/$defs/DynamicValue',
               },
               {
-                type: 'object',
+                'type': 'object',
               },
             ],
           },
         },
-        returnType: {
-          type: 'string',
-          enum: ['string', 'number', 'boolean', 'array', 'object', 'any', 'void'],
-          default: 'boolean',
+        'returnType': {
+          'type': 'string',
+          'enum': ['string', 'number', 'boolean', 'array', 'object', 'any', 'void'],
+          'default': 'boolean',
         },
       },
-      required: ['call'],
-      oneOf: [
+      'required': ['call'],
+      'oneOf': [
         {
-          $ref: 'catalog.json#/$defs/anyFunction',
+          '$ref': 'catalog.json#/$defs/anyFunction',
         },
       ],
     },
-    DynamicString: {
-      oneOf: [
+    'DynamicString': {
+      'oneOf': [
         {
-          type: 'string',
+          'type': 'string',
         },
         {
-          $ref: '#/$defs/DataBinding',
+          '$ref': '#/$defs/DataBinding',
         },
         {
-          allOf: [
+          'allOf': [
             {
-              $ref: '#/$defs/FunctionCall',
+              '$ref': '#/$defs/FunctionCall',
             },
             {
-              properties: {
-                returnType: {
-                  const: 'string',
+              'properties': {
+                'returnType': {
+                  'const': 'string',
                 },
               },
             },
@@ -113,23 +113,23 @@ export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
         },
       ],
     },
-    DynamicBoolean: {
-      oneOf: [
+    'DynamicBoolean': {
+      'oneOf': [
         {
-          type: 'boolean',
+          'type': 'boolean',
         },
         {
-          $ref: '#/$defs/DataBinding',
+          '$ref': '#/$defs/DataBinding',
         },
         {
-          allOf: [
+          'allOf': [
             {
-              $ref: '#/$defs/FunctionCall',
+              '$ref': '#/$defs/FunctionCall',
             },
             {
-              properties: {
-                returnType: {
-                  const: 'boolean',
+              'properties': {
+                'returnType': {
+                  'const': 'boolean',
                 },
               },
             },
@@ -137,23 +137,23 @@ export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
         },
       ],
     },
-    DynamicNumber: {
-      oneOf: [
+    'DynamicNumber': {
+      'oneOf': [
         {
-          type: 'number',
+          'type': 'number',
         },
         {
-          $ref: '#/$defs/DataBinding',
+          '$ref': '#/$defs/DataBinding',
         },
         {
-          allOf: [
+          'allOf': [
             {
-              $ref: '#/$defs/FunctionCall',
+              '$ref': '#/$defs/FunctionCall',
             },
             {
-              properties: {
-                returnType: {
-                  const: 'number',
+              'properties': {
+                'returnType': {
+                  'const': 'number',
                 },
               },
             },
@@ -161,116 +161,116 @@ export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
         },
       ],
     },
-    DynamicValue: {
-      oneOf: [
+    'DynamicValue': {
+      'oneOf': [
         {
-          type: 'string',
+          'type': 'string',
         },
         {
-          type: 'number',
+          'type': 'number',
         },
         {
-          type: 'boolean',
+          'type': 'boolean',
         },
         {
-          type: 'array',
+          'type': 'array',
         },
         {
-          $ref: '#/$defs/DataBinding',
+          '$ref': '#/$defs/DataBinding',
         },
         {
-          $ref: '#/$defs/FunctionCall',
+          '$ref': '#/$defs/FunctionCall',
         },
       ],
     },
-    Action: {
-      oneOf: [
+    'Action': {
+      'oneOf': [
         {
-          type: 'object',
-          properties: {
-            event: {
-              type: 'object',
-              properties: {
-                name: {
-                  type: 'string',
+          'type': 'object',
+          'properties': {
+            'event': {
+              'type': 'object',
+              'properties': {
+                'name': {
+                  'type': 'string',
                 },
-                context: {
-                  type: 'object',
-                  additionalProperties: {
-                    $ref: '#/$defs/DynamicValue',
+                'context': {
+                  'type': 'object',
+                  'additionalProperties': {
+                    '$ref': '#/$defs/DynamicValue',
                   },
                 },
               },
-              required: ['name'],
-              additionalProperties: false,
+              'required': ['name'],
+              'additionalProperties': false,
             },
           },
-          required: ['event'],
-          additionalProperties: false,
+          'required': ['event'],
+          'additionalProperties': false,
         },
         {
-          type: 'object',
-          properties: {
-            functionCall: {
-              $ref: '#/$defs/FunctionCall',
+          'type': 'object',
+          'properties': {
+            'functionCall': {
+              '$ref': '#/$defs/FunctionCall',
             },
           },
-          required: ['functionCall'],
-          additionalProperties: false,
+          'required': ['functionCall'],
+          'additionalProperties': false,
         },
       ],
     },
-    AccessibilityAttributes: {
-      type: 'object',
-      description:
+    'AccessibilityAttributes': {
+      'type': 'object',
+      'description':
         'Attributes to enhance accessibility when using assistive technologies like screen readers.',
-      properties: {
-        label: {
-          $ref: '#/$defs/DynamicString',
-          description:
+      'properties': {
+        'label': {
+          '$ref': '#/$defs/DynamicString',
+          'description':
             "A short string, typically 1 to 3 words, used by assistive technologies to convey the purpose or intent of an element. For example, an input field might have an accessible label of 'User ID' or a button might be labeled 'Submit'.",
         },
-        description: {
-          $ref: '#/$defs/DynamicString',
-          description:
+        'description': {
+          '$ref': '#/$defs/DynamicString',
+          'description':
             "Additional information provided by assistive technologies about an element such as instructions, format requirements, or result of an action. For example, a mute button might have a label of 'Mute' and a description of 'Silences notifications about this conversation'.",
         },
       },
     },
-    ComponentCommon: {
-      type: 'object',
-      properties: {
-        id: {
-          $ref: '#/$defs/ComponentId',
+    'ComponentCommon': {
+      'type': 'object',
+      'properties': {
+        'id': {
+          '$ref': '#/$defs/ComponentId',
         },
-        accessibility: {
-          $ref: '#/$defs/AccessibilityAttributes',
+        'accessibility': {
+          '$ref': '#/$defs/AccessibilityAttributes',
         },
       },
-      required: ['id'],
+      'required': ['id'],
     },
-    DynamicStringList: {
-      description:
+    'DynamicStringList': {
+      'description':
         'Represents a value that can be either a literal array of strings, a path to a string array in the data model, or a function call returning a string array.',
-      oneOf: [
+      'oneOf': [
         {
-          type: 'array',
-          items: {
-            type: 'string',
+          'type': 'array',
+          'items': {
+            'type': 'string',
           },
         },
         {
-          $ref: '#/$defs/DataBinding',
+          '$ref': '#/$defs/DataBinding',
         },
         {
-          allOf: [
+          'allOf': [
             {
-              $ref: '#/$defs/FunctionCall',
+              '$ref': '#/$defs/FunctionCall',
             },
             {
-              properties: {
-                returnType: {
-                  const: 'array',
+              'properties': {
+                'returnType': {
+                  'const': 'array',
                 },
               },
             },
@@ -278,31 +278,31 @@ export const COMMON_TYPES_SCHEMA: Record<string, unknown> = {
         },
       ],
     },
-    CheckRule: {
-      type: 'object',
-      description: 'A single validation rule applied to an input component.',
-      properties: {
-        condition: {
-          $ref: '#/$defs/DynamicBoolean',
+    'CheckRule': {
+      'type': 'object',
+      'description': 'A single validation rule applied to an input component.',
+      'properties': {
+        'condition': {
+          '$ref': '#/$defs/DynamicBoolean',
         },
-        message: {
-          type: 'string',
-          description: 'The error message to display if the check fails.',
+        'message': {
+          'type': 'string',
+          'description': 'The error message to display if the check fails.',
         },
       },
-      required: ['condition', 'message'],
-      additionalProperties: false,
+      'required': ['condition', 'message'],
+      'additionalProperties': false,
     },
-    Checkable: {
-      description: 'Properties for components that support client-side checks.',
-      type: 'object',
-      properties: {
-        checks: {
-          type: 'array',
-          description:
+    'Checkable': {
+      'description': 'Properties for components that support client-side checks.',
+      'type': 'object',
+      'properties': {
+        'checks': {
+          'type': 'array',
+          'description':
             'A list of checks to perform. These are function calls that must return a boolean indicating validity.',
-          items: {
-            $ref: '#/$defs/CheckRule',
+          'items': {
+            '$ref': '#/$defs/CheckRule',
           },
         },
       },
