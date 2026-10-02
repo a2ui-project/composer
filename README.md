@@ -144,6 +144,11 @@ the current canvas, or inspect the assistant's instructions. When screenshot
 capture is enabled, the **+** button shows an indicator; open the menu to turn it
 off. You can keep drafting your prompt while opening these controls.
 
+The renderer menu beside Send switches to any configured renderer, such as the
+Slack renderer, without leaving the chat. It keeps your typed prompt and waits
+for the selected renderer's catalog before you can send. You can manage renderer
+options in Settings.
+
 Once the A2UI JSON for your interface is rendered, you can:
 
 - Use the chat panel to request changes
