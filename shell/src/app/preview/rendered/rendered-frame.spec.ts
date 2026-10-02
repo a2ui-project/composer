@@ -198,6 +198,44 @@ describe('RenderedFrame Live Preview Viewport', () => {
     );
   });
 
+  describe('with a catalog-relative renderer URL', () => {
+    let base: HTMLBaseElement;
+
+    // Composer is served from a sub-path on GitHub Pages (/composer/, and
+    // /composer/pr/<n>/ for PR previews), so bundled sample renderers are
+    // configured relative to the page, e.g. `samples/react-slack-catalog/`.
+    async function iframeSrcWithBase(href: string): Promise<string | null> {
+      fixture.destroy();
+      base = document.createElement('base');
+      base.href = href;
+      document.head.appendChild(base);
+      resolvedUrlSignal.set('samples/react-slack-catalog/');
+      const relativeFixture = TestBed.createComponent(RenderedFrame);
+      relativeFixture.detectChanges();
+      const relativeHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        relativeFixture,
+        RenderedFrameHarness,
+      );
+      return relativeHarness.getIframeSrc();
+    }
+
+    afterEach(() => {
+      base?.remove();
+    });
+
+    it('resolves it against the GitHub Pages base path', async () => {
+      expect(await iframeSrcWithBase('http://localhost:3000/composer/')).toBe(
+        'http://localhost:3000/composer/samples/react-slack-catalog/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    });
+
+    it('resolves it against a PR preview base path', async () => {
+      expect(await iframeSrcWithBase('http://localhost:3000/composer/pr/216/')).toBe(
+        'http://localhost:3000/composer/pr/216/samples/react-slack-catalog/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    });
+  });
+
   it('appends all ancestor origins and base origin to the renderer URL query params', async () => {
     fixture.destroy();
     vi.stubGlobal('location', {

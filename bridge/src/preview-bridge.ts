@@ -948,11 +948,11 @@ export class PreviewBridge {
    * Coordinates in-memory retrieval (`catalogJson`) vs. HTTP network fetching
    * (including SPA HTML fallback to `/catalog.json`).
    */
-  private async resolveCatalog(): Promise<{
+  private async resolveCatalog(renderer: ActiveRenderer | null): Promise<{
     rawData: unknown;
     isInMemory: boolean;
   } | null> {
-    const config = this.activeRenderer?.config;
+    const config = renderer?.config;
     const inMemoryCatalog = config?.catalogJson ?? config?.catalog;
     if (inMemoryCatalog !== undefined) {
       return {rawData: inMemoryCatalog, isInMemory: true};
@@ -965,6 +965,9 @@ export class PreviewBridge {
       throw new Error(`Catalog fetch failed with status: ${res.status}`);
     }
     let rawText = await res.text();
+    if (!this.isListening || this.activeRenderer !== renderer) {
+      return null;
+    }
 
     // Detect if the server fell back to serving HTML (SPA fallback)
     const trimmedLower = rawText.trim().toLowerCase();
@@ -1012,10 +1015,15 @@ export class PreviewBridge {
    * JSON payload or error status back to the host container.
    */
   private async handleGetCatalog(): Promise<void> {
+    const renderer = this.activeRenderer;
     let resolved: {rawData: unknown; isInMemory: boolean} | null = null;
     try {
-      resolved = await this.resolveCatalog();
-      if (!resolved) return;
+      resolved = await this.resolveCatalog(renderer);
+      // An early HTTP fallback can finish after a renderer attaches its inline catalog.
+      // Only the renderer that started this request may publish its result.
+      if (!this.isListening || this.activeRenderer !== renderer || !resolved) {
+        return;
+      }
 
       const catalog = this.parseCatalogData(resolved.rawData);
 
@@ -1029,6 +1037,9 @@ export class PreviewBridge {
         payload: catalog,
       });
     } catch (error: unknown) {
+      if (!this.isListening || this.activeRenderer !== renderer) {
+        return;
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (resolved?.isInMemory) {
         console.error('PreviewBridge: Error processing/parsing in-memory catalog:', error);
