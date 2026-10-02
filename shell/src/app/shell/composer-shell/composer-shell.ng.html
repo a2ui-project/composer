@@ -105,6 +105,21 @@
       </a>
       <a
         mat-list-item
+        routerLink="/demos"
+        routerLinkActive="active-nav-item"
+        aria-label="A2UI Demos"
+        matTooltip="A2UI Demos"
+        matTooltipPosition="right"
+        [matTooltipDisabled]="!isCollapsed()"
+        (click)="ensureCollapsed()"
+      >
+        <mat-icon matListItemIcon aria-hidden="true">auto_awesome_mosaic</mat-icon>
+        @if (!isCollapsed()) {
+          <span class="nav-label">A2UI Demos</span>
+        }
+      </a>
+      <a
+        mat-list-item
         routerLink="/a2a"
         routerLinkActive="active-nav-item"
         aria-label="A2A Agent Testing"

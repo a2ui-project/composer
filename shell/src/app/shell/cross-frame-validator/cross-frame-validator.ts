@@ -99,6 +99,20 @@ export class CrossFrameValidator {
         return true;
       }
 
+      case PreviewBridgeMessageType.GET_DEMOS: {
+        if (msgPayload !== undefined && msgPayload !== null) {
+          if (typeof msgPayload !== 'object' || Array.isArray(msgPayload)) {
+            CrossFrameValidator.recordError(
+              'Malformed payload for GET_DEMOS: must be an object, null, or undefined.',
+              errors,
+              logger,
+            );
+            return false;
+          }
+        }
+        return true;
+      }
+
       case PreviewBridgeMessageType.RENDER_A2UI: {
         if (!msgPayload || !Array.isArray(msgPayload)) {
           CrossFrameValidator.recordError(
@@ -321,7 +335,12 @@ export class CrossFrameValidator {
         const isValidDimension = (v: unknown): v is number =>
           typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= MAX_SURFACE_DIMENSION;
 
-        const resizePayload = msgPayload as {height?: unknown; width?: unknown};
+        const resizePayload = msgPayload as {
+          height?: unknown;
+          width?: unknown;
+          viewportWidth?: unknown;
+          contentReady?: unknown;
+        };
         if (!isValidDimension(resizePayload.height)) {
           CrossFrameValidator.recordError(
             'Malformed payload for SURFACE_RESIZE: must contain number property height.',
@@ -333,6 +352,28 @@ export class CrossFrameValidator {
         if (resizePayload.width !== undefined && !isValidDimension(resizePayload.width)) {
           CrossFrameValidator.recordError(
             'Malformed payload for SURFACE_RESIZE: width property must be a number if present.',
+            errors,
+            logger,
+          );
+          return false;
+        }
+        if (
+          resizePayload.viewportWidth !== undefined &&
+          !isValidDimension(resizePayload.viewportWidth)
+        ) {
+          CrossFrameValidator.recordError(
+            'Malformed payload for SURFACE_RESIZE: viewportWidth must be a number if present.',
+            errors,
+            logger,
+          );
+          return false;
+        }
+        if (
+          resizePayload.contentReady !== undefined &&
+          typeof resizePayload.contentReady !== 'boolean'
+        ) {
+          CrossFrameValidator.recordError(
+            'Malformed payload for SURFACE_RESIZE: contentReady must be a boolean if present.',
             errors,
             logger,
           );
