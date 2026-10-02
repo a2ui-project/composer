@@ -36,11 +36,14 @@ import {asyncable, type FunctionApiDefinition, withSettledArgs} from './common.j
 export const JmespathApi: FunctionApiDefinition = {
   name: 'jmespath',
   returnType: 'any',
+  // Quoted keys keep argument names stable under Closure Compiler property renaming, since
+  // payloads and `validateFunctionArgs` refer to them by their literal string names.
+  // prettier-ignore
   schema: z.object({
-    expression: asyncable(z.any()).describe(
+    'expression': asyncable(z.any()).describe(
       'A standard JMESPath expression evaluated against `data`.',
     ),
-    data: asyncable(z.any()).describe('The input data to evaluate the expression against.'),
+    'data': asyncable(z.any()).describe('The input data to evaluate the expression against.'),
   }) as unknown as FunctionApiDefinition['schema'],
 };
 
@@ -57,7 +60,10 @@ export const JmespathImplementation: FunctionImplementation = createFunctionImpl
   (args, context) => {
     const document = resolveDynamicValueDeep<unknown>(args['data'], context);
     const expression = resolveDynamicValueDeep<unknown>(args['expression'], context);
-    return withSettledArgs({expression, data: document}, settled => {
+    // Quoted keys keep these argument names stable under Closure Compiler property renaming.
+    // prettier-ignore
+    const unsettled = {'expression': expression, 'data': document};
+    return withSettledArgs(unsettled, settled => {
       const expr = settled['expression'];
       if (typeof expr !== 'string') {
         const kind = expr === null ? 'null' : Array.isArray(expr) ? 'an array' : `a ${typeof expr}`;

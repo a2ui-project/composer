@@ -33,9 +33,12 @@ import {
 export const RegexCaptureApi: FunctionApiDefinition = {
   name: 'regexCapture',
   returnType: 'any',
+  // Quoted keys keep argument names stable under Closure Compiler property renaming, since
+  // payloads and `validateFunctionArgs` refer to them by their literal string names.
+  // prettier-ignore
   schema: z.object({
-    value: asyncable(z.any()).describe('The string or array of strings to match against.'),
-    pattern: asyncable(z.any()).describe(
+    'value': asyncable(z.any()).describe('The string or array of strings to match against.'),
+    'pattern': asyncable(z.any()).describe(
       'An RE2 regular expression. Returns an array of capture groups from the first match, or null if there is no match. Unmatched optional groups return empty strings.',
     ),
   }) as unknown as FunctionApiDefinition['schema'],
