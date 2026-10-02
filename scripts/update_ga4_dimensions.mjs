@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Copyright 2026 Google LLC
  *
@@ -45,6 +44,7 @@ export const EXCLUDED_PARAMS = new Set([
   'cookie_prefix',
   'cookie_domain',
   'client_id',
+  'cookie_flags',
 ]);
 
 /**
@@ -52,6 +52,7 @@ export const EXCLUDED_PARAMS = new Set([
  */
 export const KNOWN_DESCRIPTIONS = {
   error_type: 'Functional error type classification',
+  reason: 'Categorized failure reason for dialog actions',
 };
 
 /**
@@ -176,8 +177,9 @@ export function parseExistingScript(scriptContent) {
  * Extracts telemetry parameter names from usage-tracking source code.
  *
  * Supports bracketed keys (`['param_name']:`), quoted keys (`'param_name':`),
- * and unquoted snake_case property keys (`param_name:`, `line:`, `column:`) inside
- * `getBaselineDimensions`, `dispatchGtagEvent`, and `customParams` object payloads.
+ * unquoted snake_case property keys (`param_name:`, `line:`, `column:`), and bracket
+ * assignments (`payload['param_name'] =`) inside `getBaselineDimensions`,
+ * `dispatchGtagEvent`, `build*Payload` helpers, and `customParams`/`payload` object declarations.
  *
  * @param {string} sourceContent
  * @returns {Set<string>}
@@ -186,7 +188,7 @@ export function extractParametersFromSource(sourceContent) {
   const params = new Set();
   const payloadRegions = [];
 
-  // 1. Identify target payload regions: getBaselineDimensions, dispatchGtagEvent, customParams
+  // 1. Identify target payload regions: getBaselineDimensions, dispatchGtagEvent, customParams/payload, build*Payload
   // Anchor getBaselineDimensions to method signature so JSDoc comments mentioning it are ignored
   const baselineRegex =
     /(?:protected|public|private)\s+getBaselineDimensions\s*\([^)]*\)[^{]*\{([\s\S]*?\n\s*\})/g;
@@ -201,11 +203,38 @@ export function extractParametersFromSource(sourceContent) {
     payloadRegions.push(match[0]);
   }
 
-  // customParams object declarations (supporting optional TypeScript type annotation)
-  const customParamsRegex =
-    /(?:const|let|var)\s+customParams(?:\s*:\s*[^=]+)?\s*=\s*\{([\s\S]*?)\};/g;
-  while ((match = customParamsRegex.exec(sourceContent)) !== null) {
-    payloadRegions.push(match[1]);
+  // Extract method bodies for track* and build*Payload methods
+  const telemetryMethodRegex =
+    /(?:^|[\n;{}])\s*(?:(?:protected|public|private)\s+)?(track\w+|build\w*Payload)\s*\([^)]*\)\s*(?::\s*(?:[^{;]+|\{[^{}]*\})+)?\s*\{/g;
+  const telemetryMethodBodies = [];
+  while ((match = telemetryMethodRegex.exec(sourceContent)) !== null) {
+    const methodName = match[1];
+    let depth = 1;
+    let idx = match.index + match[0].length;
+    while (idx < sourceContent.length && depth > 0) {
+      if (sourceContent[idx] === '{') depth++;
+      else if (sourceContent[idx] === '}') depth--;
+      idx++;
+    }
+    const methodBody = sourceContent.slice(match.index + match[0].length, idx - 1);
+    telemetryMethodBodies.push(methodBody);
+
+    // customParams or payload object declarations inside telemetry methods
+    const customParamsRegex =
+      /(?:const|let|var)\s+(?:customParams|payload)(?:\s*:\s*[^=]+)?\s*=\s*\{([\s\S]*?)\};/g;
+    let objMatch;
+    while ((objMatch = customParamsRegex.exec(methodBody)) !== null) {
+      payloadRegions.push(objMatch[1]);
+    }
+
+    // return { ... } blocks inside build*Payload helper methods
+    if (methodName.startsWith('build')) {
+      const returnObjRegex = /return\s*\{([\s\S]*?)\};/g;
+      let returnMatch;
+      while ((returnMatch = returnObjRegex.exec(methodBody)) !== null) {
+        payloadRegions.push(returnMatch[1]);
+      }
+    }
   }
 
   const IGNORED_IDENTIFIERS = new Set([
@@ -223,6 +252,18 @@ export function extractParametersFromSource(sourceContent) {
     'null',
     'undefined',
   ]);
+
+  // Bracket assignments on customParams or payload inside telemetry methods: payload['param'] = ...
+  const bracketAssignmentRegex =
+    /\b(?:customParams|payload)\s*\[\s*['"]([a-zA-Z0-9_]+)['"]\s*\]\s*=/g;
+  for (const methodBody of telemetryMethodBodies) {
+    while ((match = bracketAssignmentRegex.exec(methodBody)) !== null) {
+      const param = match[1];
+      if (!EXCLUDED_PARAMS.has(param) && !IGNORED_IDENTIFIERS.has(param)) {
+        params.add(param);
+      }
+    }
+  }
 
   // 2. Scan payload regions for bracketed, quoted, or unquoted property keys
   for (const region of payloadRegions) {
@@ -376,9 +417,10 @@ Synchronizes GA4 custom dimensions and metrics between usage-tracking source cod
 and scripts/create_ga4_dimensions.sh.
 
 Options:
-  --check       Verify if scripts/create_ga4_dimensions.sh is up to date without modifying it (exits with code 1 if changes needed)
-  --dry-run     Preview planned changes without writing to disk
-  -h, --help    Display this help message
+  --check             Verify if scripts/create_ga4_dimensions.sh is up to date without modifying it (exits with code 1 if changes needed)
+  --dry-run           Preview planned changes without writing to disk
+  --subclass <path>   Additional usage-tracking subclass source file to scan (repeatable)
+  -h, --help          Display this help message
 `;
 }
 
@@ -485,6 +527,7 @@ export function generateBashScript(
  * @typedef {Object} SyncDimensionsOptions
  * @property {string} [scriptPath]
  * @property {string} [sourcePath]
+ * @property {string[]} [subclassPaths]
  * @property {boolean} [dryRun]
  * @property {boolean} [check]
  *
@@ -500,6 +543,7 @@ export function generateBashScript(
 export function syncDimensions({
   scriptPath = DEFAULT_SCRIPT_PATH,
   sourcePath = DEFAULT_SOURCE_PATH,
+  subclassPaths = [],
   dryRun = false,
   check = false,
 } = {}) {
@@ -508,6 +552,12 @@ export function syncDimensions({
 
   const existing = parseExistingScript(scriptContent);
   const extractedParams = extractParametersFromSource(sourceContent);
+  for (const subclassPath of subclassPaths) {
+    const subclassContent = fs.readFileSync(subclassPath, 'utf-8');
+    for (const param of extractParametersFromSource(subclassContent)) {
+      extractedParams.add(param);
+    }
+  }
   const merged = mergeDefinitions(existing, extractedParams);
   const generatedContent = generateScriptContent(scriptContent, merged);
 
@@ -526,22 +576,69 @@ export function syncDimensions({
   };
 }
 
+/**
+ * Parses CLI arguments for update_ga4_dimensions.mjs.
+ *
+ * @param {string[]} args
+ * @param {string} [cwd]
+ * @returns {{help: boolean, check: boolean, dryRun: boolean, subclassPaths: string[]}}
+ */
+export function parseCliArgs(args, cwd = process.cwd()) {
+  let help = false;
+  let check = false;
+  let dryRun = false;
+  const subclassPaths = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--help' || arg === '-h') {
+      help = true;
+    } else if (arg === '--check') {
+      check = true;
+    } else if (arg === '--dry-run') {
+      dryRun = true;
+    } else if (arg === '--subclass') {
+      const nextArg = args[i + 1];
+      if (!nextArg || nextArg.startsWith('-')) {
+        throw new Error('Missing path argument for --subclass');
+      }
+      subclassPaths.push(path.resolve(cwd, nextArg));
+      i++;
+    } else if (arg.startsWith('--subclass=')) {
+      const value = arg.slice('--subclass='.length).trim();
+      if (!value) {
+        throw new Error('Missing path argument for --subclass');
+      }
+      subclassPaths.push(path.resolve(cwd, value));
+    } else {
+      throw new Error(`Unknown CLI argument: ${arg}`);
+    }
+  }
+
+  return {help, check, dryRun, subclassPaths};
+}
+
 // CLI execution
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  const isHelp = args.includes('--help') || args.includes('-h');
-  const isCheck = args.includes('--check');
-  const isDryRun = args.includes('--dry-run');
-
-  if (isHelp) {
-    console.log(formatHelpText());
-    process.exit(0);
-  }
 
   try {
+    const {
+      help: isHelp,
+      check: isCheck,
+      dryRun: isDryRun,
+      subclassPaths,
+    } = parseCliArgs(args);
+
+    if (isHelp) {
+      console.log(formatHelpText());
+      process.exit(0);
+    }
+
     const result = syncDimensions({
       check: isCheck,
       dryRun: isDryRun,
+      subclassPaths,
     });
 
     if (isCheck) {
