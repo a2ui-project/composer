@@ -68,9 +68,6 @@ for (const invalidState of ['retired panel', 'mismatched panel ID']) {
     await expect(page.locator('.workspace-container')).toBeVisible();
     await expect(page.locator('.dv-tab')).toHaveCount(7);
     await expect(page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/})).toBeVisible();
-    await page.locator('.dv-tab', {hasText: /^A2UI JSON Editor/}).click();
-    await expect(page.locator('.monaco-editor').first()).toBeVisible();
-    await page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/}).click();
 
     const preview = page.frameLocator('iframe.preview-iframe');
     await preview.getByRole('button', {name: 'Search Cars'}).click();
@@ -86,3 +83,73 @@ for (const invalidState of ['retired panel', 'mismatched panel ID']) {
     expect(pageErrors).toEqual([]);
   });
 }
+
+test('resets modified dockview layout back to default when clicking Reset Layout toolbar button', async ({
+  page,
+}) => {
+  await page.goto(`/?renderer=${rendererUrl}`);
+  await expect(page.locator('.workspace-container')).toBeVisible();
+
+  // Initially default tabs are active: Rendered A2UI Preview and Data Model
+  await expect(page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/})).toHaveClass(
+    /dv-active-tab/,
+  );
+  await expect(page.locator('.dv-tab', {hasText: /^Data Model/})).toHaveClass(/dv-active-tab/);
+
+  // Verify initial preview is fully loaded and visible inside iframe before modifying layout
+  const preview = page.frameLocator('iframe.preview-iframe');
+  await expect(preview.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+
+  // Move A2UI JSON Editor pane to dock on the right of Preview (reproducing user's drag action)
+  await page.evaluate(() => {
+    const ws = (
+      window as unknown as {
+        ng?: {
+          getComponent: (el: Element) => {
+            composerDockview?: {
+              api: {getGroupPanel: (id: string) => {api: {moveTo: (opts: unknown) => void}}};
+            };
+          };
+        };
+      }
+    ).ng?.getComponent(document.querySelector('a2ui-composer-workspace')!);
+    const rawPanel = ws?.composerDockview?.api?.getGroupPanel('raw');
+    if (rawPanel) {
+      rawPanel.api.moveTo({position: 'right'});
+      return true;
+    }
+    return false;
+  });
+
+  // Wait for debounced layout save to populate localStorage
+  await expect
+    .poll(() => page.evaluate(key => localStorage.getItem(key), LocalStorageKey.DOCKVIEW_LAYOUT))
+    .not.toBeNull();
+
+  // Click the Reset Layout button in the main toolbar
+  await page.locator('button.reset-layout-button').click();
+
+  // Verify default tabs are active again
+  await expect(page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/})).toHaveClass(
+    /dv-active-tab/,
+  );
+  await expect(page.locator('.dv-tab', {hasText: /^Data Model/})).toHaveClass(/dv-active-tab/);
+
+  // Verify all 7 tabs are present
+  await expect(page.locator('.dv-tab')).toHaveCount(7);
+
+  // Verify DOCKVIEW_LAYOUT was cleared from localStorage
+  const savedLayout = await page.evaluate(
+    key => localStorage.getItem(key),
+    LocalStorageKey.DOCKVIEW_LAYOUT,
+  );
+  expect(savedLayout).toBeNull();
+
+  // Verify the preview is visible and interactive immediately without toggling tabs
+  await expect(preview.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+  await preview.getByRole('button', {name: 'Search Cars'}).click();
+  await expect(page.locator('.dv-tab', {hasText: /^Events/})).toContainText('(1)');
+
+  // Verify the Data Model panel is visible immediately without toggling tabs
+  await expect(page.locator('textarea[aria-label="Data model JSON"]')).toBeVisible();
+});

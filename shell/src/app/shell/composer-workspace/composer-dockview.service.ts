@@ -125,6 +125,7 @@ export class ComposerDockview {
 
   private resizeObserver?: ResizeObserver;
   private animationFrameId?: number;
+  private layoutPositionFrameId?: number;
   private saveTimeout?: ReturnType<typeof setTimeout>;
   private isInitialized = false;
 
@@ -165,12 +166,6 @@ export class ComposerDockview {
       this.cdr.markForCheck();
     });
 
-    // Compute realistic initial viewport dimensions, falling back to desktop defaults if unmeasured
-    const width = rootEl.clientWidth || DEFAULT_CONTAINER_WIDTH;
-    const height = rootEl.clientHeight || DEFAULT_CONTAINER_HEIGHT;
-
-    const layoutRestored = this.buildDockviewLayout(width, height);
-
     // Debounced layout persistence to localStorage
     this.dockviewApi.onDidLayoutChange(() => {
       if (!this.isInitialized) return;
@@ -193,12 +188,7 @@ export class ComposerDockview {
     this.resizeObserver.observe(rootEl);
 
     // Initial layout pass
-    this.dockviewApi.layout(width, height);
-    if (!layoutRestored) {
-      this.enforceInitialProportions(width, height);
-    }
-    this.isInitialized = true;
-    this.checkTabOverflow();
+    this.constructAndApplyLayout();
 
     // Register capture-phase pointerdown and click event delegation for robust tab clicks
     const handleTabInteraction = (event: Event) => this.handleTabInteraction(event);
@@ -210,6 +200,9 @@ export class ComposerDockview {
       if (this.animationFrameId !== undefined) {
         cancelAnimationFrame(this.animationFrameId);
       }
+      if (this.layoutPositionFrameId !== undefined) {
+        cancelAnimationFrame(this.layoutPositionFrameId);
+      }
       if (this.saveTimeout !== undefined) {
         clearTimeout(this.saveTimeout);
       }
@@ -219,6 +212,32 @@ export class ComposerDockview {
       this.dockviewApi?.dispose();
       this.componentRefs.forEach(ref => ref.destroy());
     });
+  }
+
+  /**
+   * Constructs layout, lays out container, enforces initial proportions if default,
+   * checks tab overflow, and marks change detection.
+   */
+  private constructAndApplyLayout(): void {
+    const width = this.rootEl?.clientWidth || DEFAULT_CONTAINER_WIDTH;
+    const height = this.rootEl?.clientHeight || DEFAULT_CONTAINER_HEIGHT;
+
+    const layoutRestored = this.buildDockviewLayout(width, height);
+    this.dockviewApi.layout(width, height);
+    if (!layoutRestored) {
+      this.enforceInitialProportions(width, height);
+    }
+    this.dockviewApi.overlayRenderContainer?.updateAllPositions();
+    if (this.layoutPositionFrameId !== undefined) {
+      cancelAnimationFrame(this.layoutPositionFrameId);
+    }
+    this.layoutPositionFrameId = requestAnimationFrame(() => {
+      this.layoutPositionFrameId = undefined;
+      this.dockviewApi.overlayRenderContainer?.updateAllPositions();
+    });
+    this.isInitialized = true;
+    this.checkTabOverflow();
+    this.cdr.markForCheck();
   }
 
   /**
@@ -265,6 +284,27 @@ export class ComposerDockview {
     this.dockviewApi?.updateOptions({
       className: isDark ? 'dockview-theme-dark' : 'dockview-theme-light',
     });
+  }
+
+  /**
+   * Resets the Dockview workspace back to default panels, active tabs, and layout proportions,
+   * clearing any persisted layout from localStorage.
+   */
+  resetLayout(): void {
+    if (this.saveTimeout !== undefined) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = undefined;
+    }
+    if (this.layoutPositionFrameId !== undefined) {
+      cancelAnimationFrame(this.layoutPositionFrameId);
+      this.layoutPositionFrameId = undefined;
+    }
+
+    this.storage.removeItem(LocalStorageKey.DOCKVIEW_LAYOUT);
+    this.isInitialized = false;
+
+    this.dockviewApi.clear();
+    this.constructAndApplyLayout();
   }
 
   /**
@@ -446,7 +486,7 @@ export class ComposerDockview {
         minimumHeight: PREVIEW_PANEL_MIN_HEIGHT,
       });
 
-      // 3. Raw JSON editor tabbed within Rendered preview group (inactive initially)
+      // 3. Raw JSON editor tabbed within Rendered preview group
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Raw,
         component: ComposerPanelId.Raw,
@@ -455,7 +495,6 @@ export class ComposerDockview {
           direction: 'within',
           referencePanel: ComposerPanelId.Rendered,
         },
-        inactive: true,
       });
 
       // 4. Debug drawer split below Rendered preview
@@ -471,7 +510,7 @@ export class ComposerDockview {
         minimumHeight: DEBUG_DRAWER_MIN_HEIGHT,
       });
 
-      // 5. Secondary debug tabs placed within Data Model group (inactive initially)
+      // 5. Secondary debug tabs placed within Data Model group
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Events,
         component: ComposerPanelId.Events,
@@ -480,7 +519,6 @@ export class ComposerDockview {
           direction: 'within',
           referencePanel: ComposerPanelId.DataModel,
         },
-        inactive: true,
       });
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Errors,
@@ -490,7 +528,6 @@ export class ComposerDockview {
           direction: 'within',
           referencePanel: ComposerPanelId.DataModel,
         },
-        inactive: true,
       });
       this.dockviewApi.addPanel({
         id: ComposerPanelId.RawMessages,
@@ -500,10 +537,18 @@ export class ComposerDockview {
           direction: 'within',
           referencePanel: ComposerPanelId.DataModel,
         },
-        inactive: true,
       });
 
-      // Explicitly activate default primary tabs
+      // Explicitly activate default primary tabs for each panel group.
+      // Secondary tabs were appended to their groups above, so activating the
+      // default primary panels here cleanly executes Dockview's doSetActivePanel
+      // lifecycle, synchronizing DOM overlay visibility and tab selection.
+      const renderedPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Rendered);
+      renderedPanel?.api.setActive();
+
+      const dataModelPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.DataModel);
+      dataModelPanel?.api.setActive();
+
       const chatPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat);
       chatPanel?.api.setActive();
     }
@@ -521,10 +566,10 @@ export class ComposerDockview {
     const chatWidth = Math.floor(width * CHAT_PANEL_MAX_WIDTH_FRACTION);
     const debugHeight = Math.round(height * DEBUG_DRAWER_HEIGHT_RATIO);
 
-    const chatPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Chat);
+    const chatPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat);
     chatPanel?.api.setSize({width: chatWidth});
 
-    const dataModelPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.DataModel);
+    const dataModelPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.DataModel);
     dataModelPanel?.api.setSize({height: debugHeight});
   }
 

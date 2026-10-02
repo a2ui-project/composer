@@ -30,6 +30,7 @@ export class ComposerShellHarness extends ComponentHarness {
   private getHamburgerButton = this.locatorFor('button.hamburger-button');
   private getSidenav = this.locatorFor(MatSidenavHarness);
   private getResetButton = this.locatorFor('button.reset-session-button');
+  private getResetLayoutButton = this.locatorFor('button.reset-layout-button');
   private getHeaderTooltip = this.locatorFor(MatTooltipHarness);
   private getNavList = this.locatorFor(MatNavListHarness);
 
@@ -47,6 +48,21 @@ export class ComposerShellHarness extends ComponentHarness {
   async clickResetButton(): Promise<void> {
     const button = await this.getResetButton();
     await button.click();
+  }
+
+  async clickResetLayoutButton(): Promise<void> {
+    const button = await this.getResetLayoutButton();
+    await button.click();
+  }
+
+  async getResetLayoutIconText(): Promise<string> {
+    const icon = await this.locatorFor('button.reset-layout-button mat-icon')();
+    return icon.text();
+  }
+
+  async getResetLayoutAriaLabel(): Promise<string | null> {
+    const button = await this.getResetLayoutButton();
+    return button.getAttribute('aria-label');
   }
 
   async clickThemeToggleButton(): Promise<void> {

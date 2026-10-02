@@ -41,6 +41,7 @@ import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service'
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {ResetLayoutEvent} from '../composer-workspace/composer-panel-id';
 
 /** Standard length for showing any snack bar notification. */
 const SNACK_BAR_DURATION_MS = 5000;
@@ -161,5 +162,15 @@ export class ComposerShell {
       this.document.defaultView.location.href = url.toString();
     }
     this.logger.info('Session state cleared.');
+  }
+
+  /**
+   * Resets the Dockview workspace back to default panels and split proportions
+   * by dispatching ResetLayoutEvent to the window.
+   */
+  resetLayout(): void {
+    if (this.document.defaultView) {
+      this.document.defaultView.dispatchEvent(new ResetLayoutEvent());
+    }
   }
 }

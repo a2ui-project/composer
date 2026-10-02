@@ -70,7 +70,6 @@ export async function waitForMonacoEditor(page: Page): Promise<void> {
     // If no tab is present, proceed to editorLocator check
   }
 
-
   const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
   await expect(editorLocator).toBeVisible({timeout: TAB_VISIBILITY_TIMEOUT_MS});
 

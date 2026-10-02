@@ -215,7 +215,6 @@ test.describe('E2E Workspace User Journey', () => {
     });
   });
 
-
   test('displays informative error snackbar when navigating with truncated or corrupted shared design URL', async ({
     page,
   }) => {
@@ -260,7 +259,6 @@ test.describe('E2E Workspace User Journey', () => {
       timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
     });
   });
-
 
   for (const panel of CHAT_PANELS) {
     test(`should create, overwrite in-place, preview in system instructions, and disable custom instruction presets (${panel} panel)`, async ({

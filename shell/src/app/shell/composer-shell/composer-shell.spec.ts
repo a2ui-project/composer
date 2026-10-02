@@ -227,6 +227,18 @@ describe('ComposerShell Layout', () => {
     );
   });
 
+  it('dispatches ResetLayoutEvent upon clicking Reset Layout button', async () => {
+    const injectedDocument = TestBed.inject(DOCUMENT);
+    const dispatchSpy = vi.spyOn(injectedDocument.defaultView!, 'dispatchEvent');
+
+    expect(await harness.getResetLayoutIconText()).toBe('space_dashboard');
+    expect(await harness.getResetLayoutAriaLabel()).toBe('Reset Layout');
+
+    await harness.clickResetLayoutButton();
+
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({type: 'a2ui-reset-layout'}));
+  });
+
   it('toggles the dark theme SCSS class and tracks theme change on toggle', async () => {
     const usageTracking = TestBed.inject(UsageTrackingService);
     const themeSpy = vi.spyOn(usageTracking, 'trackThemeToggle');
@@ -283,7 +295,7 @@ describe('ComposerShell Layout', () => {
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(7);
+    expect(hiddenAttrs.length).toBe(8);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
