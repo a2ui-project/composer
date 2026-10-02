@@ -17,32 +17,37 @@
 :host {
   display: block;
   height: 100%;
+  container-type: inline-size;
+  container-name: gallery;
 }
 
 .gallery-container {
+  --gallery-sidenav-width: 208px;
   height: 100%;
   width: 100%;
 }
 
 .gallery-sidenav {
-  width: 240px;
+  width: var(--gallery-sidenav-width);
+  border-radius: 0;
+  --mat-sidenav-container-shape: 0px;
   border-right: 1px solid var(--mat-sys-outline-variant);
-  background-color: var(--mat-sys-surface-container-low);
+  background-color: var(--mat-sys-surface);
 }
 
 .catalog-title {
   margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
+  font: var(--mat-sys-title-medium);
+  letter-spacing: var(--mat-sys-title-medium-tracking);
   color: var(--mat-sys-on-surface);
 }
 
 .gallery-sidenav .catalog-list {
   .category-header {
-    font: var(--mat-sys-typescale-label-medium);
-    font-weight: 600;
+    font: var(--mat-sys-label-small);
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: var(--mat-sys-label-small-tracking);
+    color: var(--mat-sys-on-surface-variant);
   }
 
   .component-nav-item {
@@ -51,7 +56,7 @@
     text-align: left;
     border: none;
     background: transparent;
-    border-radius: 20px;
+    border-radius: 10px;
     margin: 2px 12px;
     padding-left: 12px;
     width: calc(100% - 24px);
@@ -68,12 +73,14 @@
       background-color: var(--mat-sys-surface-container-low);
     }
 
+    &.mdc-list-item--activated,
     &.mat-mdc-list-item-activated,
     &[activated='true'] {
-      background-color: var(--mat-sys-surface-container-high);
+      background-color: var(--mat-sys-secondary-container);
 
       span[matListItemTitle] {
-        font-weight: 500;
+        color: var(--mat-sys-on-secondary-container);
+        font-weight: var(--mat-sys-label-large-weight-prominent);
       }
     }
 
@@ -89,8 +96,10 @@
 .gallery-content {
   box-sizing: border-box;
   height: 100%;
-  padding: 24px;
-  background-color: var(--mat-sys-background, #fafafa);
+  // Keep this synchronized with the drawer when its container changes width.
+  margin-left: var(--gallery-sidenav-width) !important;
+  padding: 32px;
+  background-color: var(--mat-sys-background);
   overflow-y: auto;
 }
 
@@ -101,7 +110,7 @@
   justify-content: center;
   height: 80%;
   text-align: center;
-  color: var(--mat-sys-on-surface-variant, #666);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .empty-icon {
@@ -114,47 +123,77 @@
 
 .empty-title {
   margin: 0 0 8px 0;
-  font-size: 1.25rem;
-  font-weight: 500;
+  font: var(--mat-sys-title-large);
+  letter-spacing: var(--mat-sys-title-large-tracking);
 }
 
 .empty-subtitle {
   margin: 0;
   max-width: 400px;
-  font-size: 0.9rem;
+  font: var(--mat-sys-body-medium);
+  letter-spacing: var(--mat-sys-body-medium-tracking);
   opacity: 0.8;
 }
 
-.details-panel {
-  display: flex;
-  flex-direction: column;
+.gallery-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.details-panel {
+  display: contents;
+}
+
+.preview-slot {
+  min-width: 0;
+}
+
+.properties-card,
+.empty-state {
+  grid-column: 1 / -1;
 }
 
 .details-header {
-  border-bottom: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
-  padding-bottom: 16px;
+  max-width: 1440px;
+  margin: 0 auto 28px;
 }
 
 .component-title {
   margin: 0 0 8px 0;
-  font-size: 1.75rem;
-  font-weight: 400;
+  font: var(--mat-sys-headline-large);
+  letter-spacing: var(--mat-sys-headline-large-tracking);
 }
 
 .component-description {
   margin: 0;
-  font-size: 0.95rem;
-  color: var(--mat-sys-on-surface-variant, #49454f);
-  line-height: 1.4;
+  font: var(--mat-sys-body-large);
+  letter-spacing: var(--mat-sys-body-large-tracking);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .preview-card,
 .usage-card,
 .properties-card {
-  border-radius: 8px;
-  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
-  background-color: var(--mat-sys-surface, #ffffff);
+  min-width: 0;
+  align-self: start;
+  border: 1px solid var(--mat-sys-outline-variant);
+  background-color: var(--mat-sys-surface);
+
+  mat-card-header {
+    padding: 20px 24px 16px;
+  }
+
+  mat-card-title {
+    font: var(--mat-sys-title-small);
+    letter-spacing: var(--mat-sys-title-small-tracking);
+  }
+
+  mat-card-content {
+    padding: 0 24px 24px;
+  }
 }
 
 .preview-placeholder {
@@ -162,11 +201,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--mat-sys-surface-container-highest, #f0f0f0);
-  border: 2px dashed var(--mat-sys-outline-variant, #e0e0e0);
+  background-color: var(--mat-sys-surface-container-highest);
+  border: 2px dashed var(--mat-sys-outline-variant);
   border-radius: 4px;
   font-style: italic;
-  color: var(--mat-sys-on-surface-variant, #777);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .usage-header {
@@ -177,22 +216,7 @@
 }
 
 .copy-button {
-  color: var(--mat-sys-primary, #6750a4);
-}
-
-.usage-code-block {
-  margin: 0;
-  padding: 12px;
-  background-color: var(--mat-sys-surface-container-high, #f5f5f5);
-  border-radius: 4px;
-  overflow-x: auto;
-}
-
-.usage-code {
-  font-family: 'Roboto Mono', monospace;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  color: var(--mat-sys-on-surface, #333);
+  color: var(--mat-sys-primary);
 }
 
 .properties-table {
@@ -200,19 +224,21 @@
   background: transparent;
 
   th {
-    font-weight: 600;
+    font-weight: var(--mat-sys-title-small-weight);
   }
 
   .prop-name {
-    font-weight: 500;
-    color: var(--mat-sys-primary, #6750a4);
+    font-weight: var(--mat-sys-label-large-weight);
+    color: var(--mat-sys-primary);
   }
 
   .prop-type code {
-    background-color: var(--mat-sys-surface-container-high, #f0f0f0);
+    background-color: var(--mat-sys-surface-container-high);
     padding: 2px 6px;
     border-radius: 4px;
-    font-size: 0.8rem;
+    font: var(--mat-sys-body-small);
+    font-family: 'Spline Sans Mono', monospace;
+    letter-spacing: var(--mat-sys-body-small-tracking);
   }
 
   .prop-required {
@@ -224,16 +250,19 @@
   }
 
   .optional-label {
-    font-size: 0.8rem;
+    font: var(--mat-sys-body-small);
+    letter-spacing: var(--mat-sys-body-small-tracking);
     font-style: italic;
     opacity: 0.6;
   }
 
   .prop-default code {
-    background-color: var(--mat-sys-surface-container-high, #f0f0f0);
+    background-color: var(--mat-sys-surface-container-high);
     padding: 2px 6px;
     border-radius: 4px;
-    font-size: 0.8rem;
+    font: var(--mat-sys-body-small);
+    font-family: 'Spline Sans Mono', monospace;
+    letter-spacing: var(--mat-sys-body-small-tracking);
   }
 }
 
@@ -255,6 +284,240 @@
   justify-content: center;
   padding: 24px;
   gap: 16px;
-  color: var(--mat-sys-on-surface-variant, #666);
-  font-size: 0.9rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+  letter-spacing: var(--mat-sys-body-medium-tracking);
+}
+
+.preview-card {
+  overflow: hidden;
+}
+
+.json-tab {
+  padding: 16px 24px 24px;
+}
+
+.properties-content {
+  overflow-x: auto;
+}
+
+@container gallery (min-width: 1000px) {
+  .gallery-cards {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
+}
+
+@container gallery (max-width: 680px) {
+  .gallery-container {
+    --gallery-sidenav-width: 144px;
+  }
+
+  .gallery-content {
+    padding: 16px;
+  }
+
+  .gallery-cards {
+    gap: 16px;
+  }
+
+  .preview-card,
+  .usage-card,
+  .properties-card {
+    mat-card-header {
+      padding: 16px;
+    }
+
+    mat-card-content {
+      padding: 0 16px 16px;
+    }
+  }
+
+  .json-tab {
+    padding: 16px;
+  }
+}
+
+.edit-heading {
+  margin: 0 0 8px;
+  font: var(--mat-sys-title-medium);
+  letter-spacing: var(--mat-sys-title-medium-tracking);
+}
+
+.draft-help {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+  margin: 8px 0 16px;
+}
+
+// One property per row: name on the left, control on the right. Structured values and
+// read-only binding notes take the full row below their name.
+.property-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 20px;
+}
+
+.property-section-heading {
+  margin: 16px 0 4px;
+  font: var(--mat-sys-title-small);
+  letter-spacing: var(--mat-sys-title-small-tracking);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.property-row {
+  display: grid;
+  // The last column is reserved for the remove button on every row, so a control keeps
+  // its width when a value is set or cleared and the button appears or disappears.
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 40px;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 8px;
+  min-height: 48px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.property-name {
+  grid-column: 1;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-large);
+  letter-spacing: var(--mat-sys-label-large-tracking);
+}
+
+.required-marker {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: var(--mat-sys-label-small-tracking);
+}
+
+.property-control {
+  grid-column: 2;
+  display: flex;
+  min-width: 0;
+
+  input:not([type='checkbox']),
+  select,
+  textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid var(--mat-sys-outline);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--mat-sys-surface-container-low);
+    color: var(--mat-sys-on-surface);
+    font: var(--mat-sys-body-small);
+    letter-spacing: var(--mat-sys-body-small-tracking);
+  }
+
+  input[type='checkbox'] {
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    accent-color: var(--mat-sys-primary);
+  }
+
+  .property-json {
+    min-height: 88px;
+    resize: vertical;
+    font-family: 'Spline Sans Mono', monospace;
+  }
+}
+
+.remove-property {
+  grid-column: 3;
+  color: var(--mat-sys-on-surface-variant);
+  --mat-icon-button-state-layer-size: 40px;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+}
+
+// JSON fields and binding notes keep the same two columns as every other property, so
+// names stay aligned down the list; only their vertical alignment changes, pinning the
+// name and remove button to the first line of the taller control.
+.property-row-multiline {
+  align-items: start;
+
+  .property-name {
+    padding-top: 10px;
+  }
+}
+
+.property-note {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
+.property-missing {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
+.property-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
+.draft-label {
+  display: block;
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+  margin: 8px 0;
+}
+
+.draft-json {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 240px;
+  max-height: 480px;
+  resize: vertical;
+  border: 1px solid var(--mat-sys-outline);
+  border-radius: 10px;
+  padding: 12px;
+  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-surface-container-low);
+  font: var(--mat-sys-body-small);
+  font-family: 'Spline Sans Mono', monospace;
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
+.draft-json:focus-visible,
+.property-control input:focus-visible,
+.property-control select:focus-visible,
+.property-control textarea:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
+
+.draft-error {
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+  letter-spacing: var(--mat-sys-body-small-tracking);
+}
+
+.draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
 }
