@@ -463,12 +463,12 @@ describe('StartupResolution', () => {
     const customService = TestBed.inject(StartupResolution);
     const hostnameSpy = vi.spyOn(customService, 'getWindowHostname');
 
-    hostnameSpy.mockReturnValue('google.com');
+    hostnameSpy.mockReturnValue('subdomain.google.com');
 
     expect(customService.isThirdPartyEnvironment()).toBe(true);
   });
 
-  it('consults IS_1P_AUTH_ENABLED when determining 3P environment on google.com with FORCE_3P true', () => {
+  it('consults IS_1P_AUTH_ENABLED when determining 3P environment on subdomain.google.com with FORCE_3P true', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
@@ -482,7 +482,7 @@ describe('StartupResolution', () => {
     const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
     const hostnameSpy = vi.spyOn(customService, 'getWindowHostname');
 
-    hostnameSpy.mockReturnValue('google.com');
+    hostnameSpy.mockReturnValue('subdomain.google.com');
     getItemSpy.mockImplementation(key => (key === LocalStorageKey.FORCE_3P ? 'true' : null));
 
     expect(customService.isThirdPartyEnvironment()).toBe(true);

@@ -60,7 +60,7 @@ describe('EnvironmentContextService', () => {
   });
 
   it('evaluates third party environment based on 1p flag', () => {
-    vi.spyOn(service, 'getWindowHostname').mockReturnValue('google.com');
+    vi.spyOn(service, 'getWindowHostname').mockReturnValue('subdomain.google.com');
     mockLocalStorage.getItem.mockReturnValue(null);
     expect(service.isThirdPartyEnvironment()).toBe(false);
   });
@@ -80,27 +80,43 @@ describe('EnvironmentContextService', () => {
 
   it('identifies 3P environment based on hostname or local overrides when 1P auth is enabled', () => {
     const hostnameSpy = vi.spyOn(service, 'getWindowHostname');
-
-    // Test 1P hostname
-    hostnameSpy.mockReturnValue('subdomain.google.com');
     mockLocalStorage.getItem.mockReturnValue(null);
+
+    // Test 1P .google.com subdomain
+    hostnameSpy.mockReturnValue('subdomain.google.com');
     expect(service.isThirdPartyEnvironment()).toBe(false);
 
-    // Test apex 1P hostname
-    hostnameSpy.mockReturnValue('google.com');
+    // Test 1P .googleplex.com subdomain
+    hostnameSpy.mockReturnValue('subdomain.googleplex.com');
     expect(service.isThirdPartyEnvironment()).toBe(false);
+
+    // Test 1P .googlers.com subdomain
+    hostnameSpy.mockReturnValue('subdomain.googlers.com');
+    expect(service.isThirdPartyEnvironment()).toBe(false);
+
+    // Test bare apex domains (treated as 3P since 1P hosts always have a subdomain)
+    hostnameSpy.mockReturnValue('google.com');
+    expect(service.isThirdPartyEnvironment()).toBe(true);
+
+    hostnameSpy.mockReturnValue('googleplex.com');
+    expect(service.isThirdPartyEnvironment()).toBe(true);
+
+    hostnameSpy.mockReturnValue('googlers.com');
+    expect(service.isThirdPartyEnvironment()).toBe(true);
 
     // Test 3P hostname
     hostnameSpy.mockReturnValue('external-domain.com');
     expect(service.isThirdPartyEnvironment()).toBe(true);
 
     // Test forced 3P flag
+    hostnameSpy.mockReturnValue('subdomain.google.com');
     mockLocalStorage.getItem.mockImplementation(key =>
       key === LocalStorageKey.FORCE_3P ? 'true' : null,
     );
     expect(service.isThirdPartyEnvironment()).toBe(true);
 
     // Test forced 1P flag
+    hostnameSpy.mockReturnValue('external-domain.com');
     mockLocalStorage.getItem.mockImplementation(key =>
       key === LocalStorageKey.FORCE_1P ? 'true' : null,
     );

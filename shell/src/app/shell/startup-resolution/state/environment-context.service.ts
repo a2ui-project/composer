@@ -53,10 +53,9 @@ export class EnvironmentContextService {
 
     const hostname = this.getWindowHostname();
     const is1P =
-      hostname === 'google.com' ||
       hostname.endsWith('.google.com') ||
-      hostname === 'googleplex.com' ||
-      hostname.endsWith('.googleplex.com');
+      hostname.endsWith('.googleplex.com') ||
+      hostname.endsWith('.googlers.com');
 
     return !is1P;
   }
