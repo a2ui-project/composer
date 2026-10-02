@@ -28,7 +28,7 @@
     "@angular/forms": "22.0.7",
     "@angular/material": "22.0.5",
     "@angular/platform-browser": "22.0.7",
-    "@angular/router": "22.0.7",
+    "@angular/router": "22.2.0",
     "@copilotkit/angular": "0.5.2",
     "@google/genai": "2.11.0",
     "@modelcontextprotocol/sdk": "1.30.0",
