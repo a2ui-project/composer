@@ -15,6 +15,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as ts from 'typescript';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {Catalog} from '../../storage/models/catalog-storage.model';
@@ -1256,8 +1257,8 @@ describe('CatalogSchemaResolver', () => {
 
   it('quotes all property keys in COMMON_TYPES_SCHEMA and BASIC_CATALOG_SCHEMA to preserve keys under Closure compilation', () => {
     const schemaFiles = [
-      'src/app/gallery/schema/common-types-schema.ts',
-      'src/app/gallery/schema/basic-catalog-schema.ts',
+      path.resolve(__dirname, 'common-types-schema.ts'),
+      path.resolve(__dirname, 'basic-catalog-schema.ts'),
     ];
 
     for (const filePath of schemaFiles) {
