@@ -139,6 +139,11 @@ this case you'll get an error if you try to use the chat.
 After configuring the renderer app (see above) and your Gemini API key, you can
 use the chat panel on the left to describe the interface you want created.
 
+Use **+ Add to prompt** in the input pill to attach files, include a screenshot of
+the current canvas, or inspect the assistant's instructions. When screenshot
+capture is enabled, the **+** button shows an indicator; open the menu to turn it
+off. You can keep drafting your prompt while opening these controls.
+
 Once the A2UI JSON for your interface is rendered, you can:
 
 - Use the chat panel to request changes

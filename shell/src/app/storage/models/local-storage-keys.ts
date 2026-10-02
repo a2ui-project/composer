@@ -26,6 +26,11 @@ export enum LocalStorageKey {
   FORCE_1P = 'a2ui_composer_force_1p',
   /** Key mapping forced 3P authentication override settings. */
   FORCE_3P = 'a2ui_composer_force_3p',
+  /**
+   * Key forcing the dependency-free chat panel when the app provides another
+   * one, so browser tests can cover both panels.
+   */
+  FORCE_PLAIN_CHAT_PANEL = 'a2ui_composer_force_plain_chat_panel',
   /** Key tracking active runtime environment configuration modes. */
   EXTENSION_MODE = 'a2ui_composer_extension_mode',
   SESSION_STATE = 'a2ui_composer_session_state',

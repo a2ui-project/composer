@@ -133,3 +133,21 @@ export async function getMonacoContent(page: Page): Promise<string> {
 
   return contents;
 }
+
+/** The chat panels the workspace can mount, for journeys that should cover both. */
+export const CHAT_PANELS = ['copilotkit', 'plain'] as const;
+
+/** One of {@link CHAT_PANELS}. */
+export type ChatPanelKind = (typeof CHAT_PANELS)[number];
+
+/**
+ * Makes the page mount the given chat panel. The app provides the CopilotKit
+ * panel by default; the flag switches it to the dependency-free panel.
+ */
+export async function useChatPanel(page: Page, panel: ChatPanelKind): Promise<void> {
+  await page.addInitScript(usePlain => {
+    if (usePlain) {
+      localStorage.setItem('a2ui_composer_force_plain_chat_panel', 'true');
+    }
+  }, panel === 'plain');
+}
