@@ -6317,7 +6317,7 @@ __metadata:
     a2ui-bridge: "npm:0.1.0"
     angular-eslint: "npm:22.1.0"
     dockview-core: "npm:7.0.3"
-    dompurify: "npm:3.4.14"
+    dompurify: "npm:3.4.16"
     eslint: "npm:10.7.0"
     jsdom: "npm:29.1.1"
     lit-basic-catalog: "npm:0.1.0"
@@ -7632,7 +7632,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"dompurify@npm:*, dompurify@npm:3.4.14":
+"dompurify@npm:*":
   version: 3.4.14
   resolution: "dompurify@npm:3.4.14"
   dependencies:
@@ -7653,6 +7653,18 @@ __metadata:
     "@types/trusted-types":
       optional: true
   checksum: 10c0/31439481c7e8fc3805d40c376936fd66936620fb1b1a31a2ec097f6165412c37f2d868e082c9ceba62bb37661c1ea132a5db4d5213434317e30df68d4aca9cc9
+  languageName: node
+  linkType: hard
+
+"dompurify@npm:3.4.16":
+  version: 3.4.16
+  resolution: "dompurify@npm:3.4.16"
+  dependencies:
+    "@types/trusted-types": "npm:^2.0.7"
+  dependenciesMeta:
+    "@types/trusted-types":
+      optional: true
+  checksum: 10c0/65a901c6b6d489d3e898f67223d81dac66d613cda48f5785f0ed52a4ae320c4b2745490a58c14161e29f0273080fea0a0cb234a9ef892650e1a9b2a7befa07a5
   languageName: node
   linkType: hard
 
