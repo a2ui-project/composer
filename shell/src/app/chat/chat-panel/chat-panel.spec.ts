@@ -28,8 +28,7 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {MatDialogHarness} from '@angular/material/dialog/testing';
-import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider, AuthType} from '../../settings/app-config-provider/app-config-provider';
 import {MatInputHarness} from '@angular/material/input/testing';
 import {Catalog} from '../../storage/models/catalog-storage.model';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -123,14 +122,8 @@ class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>({}); // non-null by default
 }
 
-class MockStartupResolution {
-  is3PVal = false;
-  isThirdPartyEnvironment() {
-    return this.is3PVal;
-  }
-}
-
 class MockAppConfigProvider {
+  authType = signal<AuthType>(AuthType.FIRST_PARTY);
   geminiApiKey = signal<string>('AIzaSyValidKey');
 }
 
@@ -144,7 +137,6 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   let chatServiceMock: MockChatCoordinator;
   let chatStateMock: MockChatState;
   let catalogManagementServiceMock: MockCatalogManagement;
-  let startupResolutionMock: MockStartupResolution;
   let configProviderMock: MockAppConfigProvider;
   let hostCommunicationMock: MockHostCommunication;
   let screenshotServiceMock: ScreenshotCaptureService;
@@ -166,7 +158,6 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
         {provide: ChatPromptFactoryService, useClass: MockChatPromptFactoryService},
         {provide: ChatState, useClass: MockChatState},
         {provide: CatalogManagement, useClass: MockCatalogManagement},
-        {provide: StartupResolution, useClass: MockStartupResolution},
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
         {provide: HostCommunication, useClass: MockHostCommunication},
       ],
@@ -180,7 +171,6 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     catalogManagementServiceMock = TestBed.inject(
       CatalogManagement,
     ) as unknown as MockCatalogManagement;
-    startupResolutionMock = TestBed.inject(StartupResolution) as unknown as MockStartupResolution;
     configProviderMock = TestBed.inject(AppConfigProvider) as unknown as MockAppConfigProvider;
     hostCommunicationMock = TestBed.inject(HostCommunication) as unknown as MockHostCommunication;
     screenshotServiceMock = TestBed.inject(ScreenshotCaptureService);
@@ -804,8 +794,8 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     });
   });
 
-  it('disables the chat panel when in a 3P environment and the API key is empty', async () => {
-    startupResolutionMock.is3PVal = true;
+  it('disables the chat panel when in 3P auth mode and the API key is empty', async () => {
+    configProviderMock.authType.set(AuthType.THIRD_PARTY);
     configProviderMock.geminiApiKey.set('');
     fixture.detectChanges();
 
@@ -816,16 +806,16 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     expect(await harness.hasAddKeyButton()).toBe(true);
   });
 
-  it('keeps the chat panel active in 1P environment even if API key is empty', async () => {
-    startupResolutionMock.is3PVal = false;
+  it('keeps the chat panel active in 1P auth mode even if API key is empty', async () => {
+    configProviderMock.authType.set(AuthType.FIRST_PARTY);
     configProviderMock.geminiApiKey.set('');
     fixture.detectChanges();
 
     expect(await harness.isDisabled()).toBe(false);
   });
 
-  it('keeps the chat panel active in 3P environment if API key is supplied', async () => {
-    startupResolutionMock.is3PVal = true;
+  it('keeps the chat panel active in 3P auth mode if API key is supplied', async () => {
+    configProviderMock.authType.set(AuthType.THIRD_PARTY);
     configProviderMock.geminiApiKey.set('AIzaSyValidKey');
     fixture.detectChanges();
 

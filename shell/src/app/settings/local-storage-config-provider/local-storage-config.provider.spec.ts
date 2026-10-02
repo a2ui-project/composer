@@ -127,10 +127,10 @@ describe('LocalStorageAppConfigProvider', () => {
     return TestBed.inject(LocalStorageAppConfigProvider);
   }
 
-  it('ignores FORCE_1P when IS_1P_AUTH_ENABLED is false', () => {
-    mockEnvironmentContext.isThirdPartyEnvironment.mockReturnValue(true);
+  it('ignores FORCE_1P and 1P environment when IS_1P_AUTH_ENABLED is false', () => {
+    mockEnvironmentContext.isThirdPartyEnvironment.mockReturnValue(false);
     localStorage.setItem(LocalStorageKey.FORCE_1P, 'true');
-    const provider = setupProvider();
+    const provider = setupProvider(false);
     expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
   });
 
@@ -146,8 +146,8 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
   });
 
-  it('initializes forcedAuth with null when no force keys are present', () => {
-    const provider = setupProvider();
+  it('initializes forcedAuth with null when no force keys are present and IS_1P_AUTH_ENABLED is true', () => {
+    const provider = setupProvider(true);
     expect(provider.authType()).toBe(AuthType.FIRST_PARTY); // Fallback is 1P
   });
 
@@ -203,16 +203,16 @@ describe('LocalStorageAppConfigProvider', () => {
 
   it('ensures 3p even when 1p in local storage when 1p not enabled', () => {
     localStorage.setItem(LocalStorageKey.FORCE_1P, 'true');
-    const provider = setupProvider();
-    expect(provider.authType()).toBe(AuthType.FIRST_PARTY);
+    const provider = setupProvider(false);
+    expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
 
-    provider.setForcedAuthMode(AuthType.THIRD_PARTY);
+    provider.setForcedAuthMode(AuthType.FIRST_PARTY);
     expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
   });
 
   it('defines authType based on storage override keys if forcedAuth is DEFAULT', () => {
     mockEnvironmentContext.isThirdPartyEnvironment.mockReturnValue(true);
-    const provider = setupProvider();
+    const provider = setupProvider(true);
     // No local storage override yet, so uses fallback: 3P
     expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
 
@@ -222,13 +222,13 @@ describe('LocalStorageAppConfigProvider', () => {
     expect(providerWithStorage.authType()).toBe(AuthType.FIRST_PARTY);
   });
 
-  it('defines authType based on fallback environment if no overrides exist', () => {
+  it('defines authType based on fallback environment if no overrides exist and IS_1P_AUTH_ENABLED is true', () => {
     mockEnvironmentContext.isThirdPartyEnvironment.mockReturnValue(true);
-    const provider = setupProvider();
+    const provider = setupProvider(true);
     expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
 
     mockEnvironmentContext.isThirdPartyEnvironment.mockReturnValue(false);
-    const provider2 = setupProvider();
+    const provider2 = setupProvider(true);
     expect(provider2.authType()).toBe(AuthType.FIRST_PARTY);
   });
 
@@ -282,7 +282,7 @@ describe('LocalStorageAppConfigProvider', () => {
   });
 
   it('persists forced authentication mode and manages storage keys correctly', () => {
-    const provider = setupProvider();
+    const provider = setupProvider(true);
 
     // Force 1P
     provider.setForcedAuthMode(AuthType.FIRST_PARTY);
@@ -463,7 +463,7 @@ describe('LocalStorageAppConfigProvider', () => {
       const provider = setupProvider();
       expect(provider.rendererUrl()).toBe('https://default-renderer.com');
       expect(provider.geminiApiKey()).toBe('');
-      expect(provider.authType()).toBe(AuthType.FIRST_PARTY);
+      expect(provider.authType()).toBe(AuthType.THIRD_PARTY);
       expect(provider.themePreference()).toBe(ThemePreference.LIGHT);
 
       // Verify saving/mutations do not throw ReferenceError

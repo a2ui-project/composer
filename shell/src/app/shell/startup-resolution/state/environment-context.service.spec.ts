@@ -17,7 +17,6 @@
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {TestBed} from '@angular/core/testing';
 import {EnvironmentContextService} from './environment-context.service';
-import {IS_1P_AUTH_ENABLED} from '../../environment-tokens/environment-tokens';
 import {LocalStorageInteractions} from '../../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../../storage/models/local-storage-keys';
 
@@ -36,7 +35,6 @@ describe('EnvironmentContextService', () => {
     TestBed.configureTestingModule({
       providers: [
         EnvironmentContextService,
-        {provide: IS_1P_AUTH_ENABLED, useValue: true},
         {provide: LocalStorageInteractions, useValue: mockLocalStorage},
       ],
     });
@@ -59,26 +57,7 @@ describe('EnvironmentContextService', () => {
     expect(service.isLocalhost('google.com')).toBe(false);
   });
 
-  it('evaluates third party environment based on 1p flag', () => {
-    vi.spyOn(service, 'getWindowHostname').mockReturnValue('subdomain.google.com');
-    mockLocalStorage.getItem.mockReturnValue(null);
-    expect(service.isThirdPartyEnvironment()).toBe(false);
-  });
-
-  it('reports third party environment as true when 1P auth is disabled', () => {
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [
-        EnvironmentContextService,
-        {provide: IS_1P_AUTH_ENABLED, useValue: false},
-        {provide: LocalStorageInteractions, useValue: mockLocalStorage},
-      ],
-    });
-    const localService = TestBed.inject(EnvironmentContextService);
-    expect(localService.isThirdPartyEnvironment()).toBe(true);
-  });
-
-  it('identifies 3P environment based on hostname or local overrides when 1P auth is enabled', () => {
+  it('identifies 3P environment based on hostname or local overrides', () => {
     const hostnameSpy = vi.spyOn(service, 'getWindowHostname');
     mockLocalStorage.getItem.mockReturnValue(null);
 

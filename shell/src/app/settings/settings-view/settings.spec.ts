@@ -433,6 +433,13 @@ describe('Settings', () => {
     expect(await harness.isFirstPartyAuthSectionHidden()).toBe(true);
   });
 
+  it('sets isThirdParty to true when configProvider.authType() is THIRD_PARTY even on a 1P host', async () => {
+    mockAuthOverride.set(AuthType.THIRD_PARTY);
+    const {component} = await setupComponent(false);
+
+    expect(component.isThirdParty()).toBe(true);
+  });
+
   describe('Settings View Integration', () => {
     it('renders <a2ui-composer-renderer-selector> and <a2ui-composer-api-key-selector> in place of <a2ui-composer-profile-selector>', async () => {
       mockStartupResolution.isThirdPartyEnvironment.mockReturnValue(true);

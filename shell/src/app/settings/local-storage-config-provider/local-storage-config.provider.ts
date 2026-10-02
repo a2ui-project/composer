@@ -160,6 +160,9 @@ export class LocalStorageAppConfigProvider extends AppConfigProvider {
 
   /** Active authentication mode. */
   override readonly authType: Signal<AuthType> = computed(() => {
+    if (!this.is1PAuthEnabled) {
+      return AuthType.THIRD_PARTY;
+    }
     const override = this._forcedAuthOverride();
     if (override !== AuthType.DEFAULT) {
       return override;

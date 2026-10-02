@@ -24,7 +24,7 @@ import {
   ApiKeyConfig,
   RendererConfig,
 } from '../../shell/startup-resolution/state/startup-config-state.service';
-import {AppConfigProvider} from '../app-config-provider/app-config-provider';
+import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
@@ -44,6 +44,7 @@ describe('SettingsService', () => {
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
   };
   let mockConfigProvider: {
+    authType: ReturnType<typeof vi.fn>;
     setRendererUrl: ReturnType<typeof vi.fn>;
     setApiKeyFromConfig: ReturnType<typeof vi.fn>;
     setRuntimeApiKey: ReturnType<typeof vi.fn>;
@@ -91,6 +92,7 @@ describe('SettingsService', () => {
     };
 
     mockConfigProvider = {
+      authType: vi.fn().mockReturnValue(AuthType.THIRD_PARTY),
       setRendererUrl: vi.fn(),
       setApiKeyFromConfig: vi.fn(),
       setRuntimeApiKey: vi.fn(),

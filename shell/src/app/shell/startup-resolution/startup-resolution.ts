@@ -26,8 +26,8 @@ import {Injectable, Injector, DestroyRef, inject} from '@angular/core';
 import {QueryParser} from '../query-parser/query-parser';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
-import {CONFIG_URL, IS_1P_AUTH_ENABLED} from '../environment-tokens/environment-tokens';
+import {AppConfigProvider, AuthType} from '../../settings/app-config-provider/app-config-provider';
+import {CONFIG_URL} from '../environment-tokens/environment-tokens';
 import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {MatDialog} from '@angular/material/dialog';
 import {firstValueFrom} from 'rxjs';
@@ -42,7 +42,6 @@ import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-conf
 export class StartupResolution {
   private readonly logger = inject(ErrorLogger).withTag('[Shell]');
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
-  private readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
   private readonly configUrl = inject(CONFIG_URL);
   readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
@@ -548,7 +547,7 @@ export class StartupResolution {
   }
 
   private async evaluateEnvironmentPurge(): Promise<void> {
-    if (!this.isThirdPartyEnvironment()) {
+    if (this.configProvider.authType() === AuthType.FIRST_PARTY) {
       try {
         await this.configProvider.purgeGeminiApiKey();
       } catch (err) {

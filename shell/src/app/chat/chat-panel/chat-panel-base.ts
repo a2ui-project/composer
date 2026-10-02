@@ -27,10 +27,9 @@ import {
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FileIngestionService, AttachedFile} from '../file-ingestion/file-ingestion.service';
 import {MatDialog} from '@angular/material/dialog';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {AppConfigProvider, AuthType} from '../../settings/app-config-provider/app-config-provider';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
 import {ScreenshotCaptureService} from '../../shell/screenshot/screenshot-capture.service';
-import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
 import {
@@ -88,7 +87,6 @@ export abstract class ChatPanelBase {
   protected readonly chatState = inject(ChatState);
   private readonly dialog = inject(MatDialog);
   private readonly catalogManagement = inject(CatalogManagement);
-  private readonly startupResolution = inject(StartupResolution);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly fileIngestionService = inject(FileIngestionService);
@@ -120,7 +118,7 @@ export abstract class ChatPanelBase {
     () => this.catalogManagement.activeCatalog() !== null,
   );
   protected readonly isChatDisabled = computed(() => {
-    const is3P = this.startupResolution.isThirdPartyEnvironment();
+    const is3P = this.configProvider.authType() === AuthType.THIRD_PARTY;
     const hasNoKey = !this.configProvider.geminiApiKey();
     return is3P && hasNoKey;
   });
