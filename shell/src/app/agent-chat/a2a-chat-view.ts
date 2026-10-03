@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, DestroyRef, effect, inject, OnInit, signal, untracked} from '@angular/core';
+import {Component, DestroyRef, inject, OnInit, signal} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -178,28 +178,6 @@ export class A2aChatView implements OnInit {
           this.handleSendToServerAction(envelope.payload);
         }
       });
-
-    effect(() => {
-      const payload = this.activeCanvasPayload();
-      const isOpen = this.isCanvasOpen();
-      if (isOpen && payload !== null && Array.isArray(payload) && payload.length > 0) {
-        this.hostCommunication.sendRenderA2UI(payload);
-      }
-    });
-
-    effect(() => {
-      const envelope = this.hostCommunication.messageStream();
-      if (
-        envelope?.type === PreviewBridgeMessageType.RENDERER_READY ||
-        envelope?.type === PreviewBridgeMessageType.A2UI_CATALOG
-      ) {
-        const payload = untracked(() => this.activeCanvasPayload());
-        const isOpen = untracked(() => this.isCanvasOpen());
-        if (isOpen && payload !== null && Array.isArray(payload) && payload.length > 0) {
-          this.hostCommunication.sendRenderA2UI(payload);
-        }
-      }
-    });
   }
 
   ngOnInit(): void {

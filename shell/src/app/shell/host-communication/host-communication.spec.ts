@@ -1320,7 +1320,7 @@ describe('HostCommunication', () => {
       expect(defaultWindow.postMessage).not.toHaveBeenCalled();
     });
 
-    it('routes a message buffered before the handshake to its original target rather than the newest frame', () => {
+    it('holds a message for a frame until that frame completes its own handshake and never reroutes it to the newest frame', () => {
       const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
       const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
 
@@ -1328,13 +1328,20 @@ describe('HostCommunication', () => {
       const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;
 
       service.registerIframe(canvasIframe);
-      // The inline surface mounts last, making it the default dispatch target.
-      service.registerIframe(inlineIframe);
-
       // The handshake has not completed, so this is buffered rather than sent.
-      const payload = [{version: 'v0.9', createSurface: {surfaceId: 'canvas', catalogId: 'c1'}}];
-      service.sendRenderA2UI(payload, canvasIframe);
+      const canvasPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'canvas', catalogId: 'c1'}},
+      ];
+      service.sendRenderA2UI(canvasPayload, canvasIframe);
       expect(canvasWindow.postMessage).not.toHaveBeenCalled();
+
+      // The inline surface mounts last, making it the default dispatch target.
+      // Mounting it must not drop the canvas message that is still waiting.
+      service.registerIframe(inlineIframe);
+      const inlinePayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'inline', catalogId: 'c1'}},
+      ];
+      service.sendRenderA2UI(inlinePayload, inlineIframe);
 
       window.dispatchEvent(
         new MessageEvent('message', {
@@ -1344,12 +1351,145 @@ describe('HostCommunication', () => {
         }),
       );
 
-      const renderMessage = {type: PreviewBridgeMessageType.RENDER_A2UI, payload};
-      expect(canvasWindow.postMessage).toHaveBeenCalledWith(renderMessage, 'http://localhost:3000');
+      // Only the inline frame is up, so only its message goes out. The canvas
+      // renderer has not announced itself yet and would discard anything it
+      // was sent now, so its message keeps waiting instead of being flushed.
+      const canvasMessage = {type: PreviewBridgeMessageType.RENDER_A2UI, payload: canvasPayload};
+      const inlineMessage = {type: PreviewBridgeMessageType.RENDER_A2UI, payload: inlinePayload};
+      expect(inlineWindow.postMessage).toHaveBeenCalledWith(inlineMessage, 'http://localhost:3000');
       expect(inlineWindow.postMessage).not.toHaveBeenCalledWith(
-        renderMessage,
+        canvasMessage,
         'http://localhost:3000',
       );
+      expect(canvasWindow.postMessage).not.toHaveBeenCalledWith(
+        canvasMessage,
+        'http://localhost:3000',
+      );
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: canvasWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      expect(canvasWindow.postMessage).toHaveBeenCalledWith(canvasMessage, 'http://localhost:3000');
+      expect(inlineWindow.postMessage).not.toHaveBeenCalledWith(
+        canvasMessage,
+        'http://localhost:3000',
+      );
+    });
+
+    it('keeps a frame that is already up dispatching while a newly mounted frame is still handshaking', () => {
+      const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
+      const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(inlineIframe);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: inlineWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      vi.mocked(inlineWindow.postMessage).mockClear();
+
+      // Opening the side canvas mounts a second frame. That frame's handshake
+      // is its own business: the inline frame stays ready and keeps receiving
+      // messages immediately instead of having them queued and replayed later.
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(canvasIframe);
+      expect(service.isRendererReady()).toBe(true);
+
+      const inlinePayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'inline', catalogId: 'c1'}},
+      ];
+      service.sendRenderA2UI(inlinePayload, inlineIframe);
+      expect(inlineWindow.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.RENDER_A2UI, payload: inlinePayload},
+        'http://localhost:3000',
+      );
+
+      const canvasPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'canvas', catalogId: 'c1'}},
+      ];
+      service.sendRenderA2UI(canvasPayload, canvasIframe);
+      expect(canvasWindow.postMessage).not.toHaveBeenCalled();
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: canvasWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(canvasWindow.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.RENDER_A2UI, payload: canvasPayload},
+        'http://localhost:3000',
+      );
+      expect(inlineWindow.postMessage).not.toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.RENDER_A2UI, payload: canvasPayload},
+        'http://localhost:3000',
+      );
+    });
+
+    it('withdraws readiness for an iframe detached from the DOM before unregisterIframe', () => {
+      const detachedWindow = {postMessage: vi.fn()} as unknown as Window;
+      const detachedIframe: {contentWindow: Window | null} = {contentWindow: detachedWindow};
+
+      service.registerIframe(detachedIframe as unknown as HTMLIFrameElement);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: detachedWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(service.isRendererReady()).toBe(true);
+
+      // Removing the element from the DOM clears contentWindow before the
+      // component's cleanup gets to call unregisterIframe.
+      detachedIframe.contentWindow = null;
+      service.unregisterIframe(detachedIframe as unknown as HTMLIFrameElement);
+
+      expect(service.isRendererReady()).toBe(false);
+    });
+
+    it("drops only the unregistered frame's queued messages and keeps those of its siblings", () => {
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
+      const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
+      const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;
+
+      service.registerIframe(canvasIframe);
+      service.registerIframe(inlineIframe);
+      const canvasPayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'canvas', catalogId: 'c1'}},
+      ];
+      const inlinePayload = [
+        {version: 'v0.9', createSurface: {surfaceId: 'inline', catalogId: 'c1'}},
+      ];
+      service.sendRenderA2UI(canvasPayload, canvasIframe);
+      service.sendRenderA2UI(inlinePayload, inlineIframe);
+      expect(service['outboundMessageBuffer'].length).toBe(2);
+
+      service.unregisterIframe(canvasIframe);
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: inlineWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(inlineWindow.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.RENDER_A2UI, payload: inlinePayload},
+        'http://localhost:3000',
+      );
+      expect(canvasWindow.postMessage).not.toHaveBeenCalled();
+      expect(service['outboundMessageBuffer'].length).toBe(0);
     });
 
     it('omits the buffered target from the message posted to the guest frame', () => {
