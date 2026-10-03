@@ -407,7 +407,12 @@ export class HostCommunication implements OnDestroy {
    * readiness flag, which keeps the single-frame behaviour for such callers.
    */
   private isTargetReady(target?: HTMLIFrameElement | Window | null): boolean {
-    const targetWindow = this.resolveTargetWindow(target);
+    // An omitted target means the default frame. Resolve it up front so a
+    // registered default whose element is currently detached is handled like
+    // an explicit target: the message waits for the frame instead of falling
+    // through to the overall flag and being dropped for lack of a window.
+    const resolvedTarget = target ?? this.iframeElement ?? this.iframeWindow;
+    const targetWindow = this.resolveTargetWindow(resolvedTarget);
     if (targetWindow) {
       if (this.readyWindows.has(targetWindow)) {
         return true;
@@ -415,7 +420,11 @@ export class HostCommunication implements OnDestroy {
       if (this.isRegisteredWindow(targetWindow)) {
         return false;
       }
-    } else if (target && this.isIframeElement(target) && this.registeredIframes.has(target)) {
+    } else if (
+      resolvedTarget &&
+      this.isIframeElement(resolvedTarget) &&
+      this.registeredIframes.has(resolvedTarget)
+    ) {
       // A registered element without a window yet is simply not attached; its
       // frame will announce itself once it is, so the message waits for it.
       return false;
@@ -429,12 +438,15 @@ export class HostCommunication implements OnDestroy {
    * later even if the element has left the DOM by then.
    */
   private markWindowReady(sourceWindow: Window | null) {
-    if (sourceWindow) {
-      this.readyWindows.add(sourceWindow);
-      for (const iframe of this.registeredIframes) {
-        if (iframe.contentWindow === sourceWindow) {
-          this.iframeWindows.set(iframe, sourceWindow);
-        }
+    if (!sourceWindow) {
+      // Nothing can be waited for without a window to post to. A real guest
+      // frame always has one; only synthetic events lack it.
+      return;
+    }
+    this.readyWindows.add(sourceWindow);
+    for (const iframe of this.registeredIframes) {
+      if (iframe.contentWindow === sourceWindow) {
+        this.iframeWindows.set(iframe, sourceWindow);
       }
     }
     this.isRendererReadySignal.set(true);
