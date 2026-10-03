@@ -1456,6 +1456,71 @@ describe('HostCommunication', () => {
       expect(service.isRendererReady()).toBe(false);
     });
 
+    it('queues an untargeted message while the default iframe is detached rather than dropping it', () => {
+      const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
+      const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(inlineIframe);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: inlineWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const canvasIframe: {contentWindow: Window | null} = {contentWindow: canvasWindow};
+      service.registerIframe(canvasIframe as unknown as HTMLIFrameElement);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: canvasWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      vi.mocked(inlineWindow.postMessage).mockClear();
+      vi.mocked(canvasWindow.postMessage).mockClear();
+
+      // The default frame's element leaves the DOM while a sibling is still
+      // ready, so the overall readiness flag alone would say "go ahead".
+      canvasIframe.contentWindow = null;
+      const payload = [{version: 'v0.9', createSurface: {surfaceId: 'canvas', catalogId: 'c1'}}];
+      service.sendRenderA2UI(payload);
+      expect(inlineWindow.postMessage).not.toHaveBeenCalled();
+      expect(canvasWindow.postMessage).not.toHaveBeenCalled();
+      expect(service['outboundMessageBuffer'].length).toBe(1);
+
+      // Once the element has a window again and its frame announces itself,
+      // the message reaches that frame.
+      canvasIframe.contentWindow = canvasWindow;
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: canvasWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(canvasWindow.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.RENDER_A2UI, payload},
+        'http://localhost:3000',
+      );
+      expect(service['outboundMessageBuffer'].length).toBe(0);
+    });
+
+    it('does not report readiness for a RENDERER_READY that carries no source window', () => {
+      const detachedIframe = {contentWindow: null} as unknown as HTMLIFrameElement;
+      service.registerIframe(detachedIframe);
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+
+      expect(service.isRendererReady()).toBe(false);
+    });
+
     it("drops only the unregistered frame's queued messages and keeps those of its siblings", () => {
       const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
       const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
