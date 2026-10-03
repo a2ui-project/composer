@@ -890,6 +890,6 @@ describe('A2aChatView', () => {
     fixture.componentInstance['openCanvasSurface'](payload);
     fixture.detectChanges();
 
-    expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(payload);
+    expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(payload, expect.any(HTMLIFrameElement));
   });
 });
