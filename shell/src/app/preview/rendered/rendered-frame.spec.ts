@@ -69,6 +69,11 @@ describe('RenderedFrame Live Preview Viewport', () => {
   let messageStreamSubject: ReplaySubject<MessageEnvelope>;
   let messageStreamSignal: WritableSignal<MessageEnvelope | null>;
 
+  function emitBridgeMessage(envelope: MessageEnvelope): void {
+    messageStreamSubject.next(envelope);
+    messageStreamSignal.set(envelope);
+  }
+
   beforeEach(async () => {
     resolvedUrlSignal = signal('http://localhost:3000/renderer');
     themePreferenceSignal = signal<ThemePreference>(ThemePreference.LIGHT);
@@ -326,7 +331,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     );
   });
   it('applies a reported surface height to the frame container', async () => {
-    messageStreamSignal.set(surfaceResize(520));
+    emitBridgeMessage(surfaceResize(520));
     fixture.detectChanges();
 
     expect(fixture.componentInstance.dynamicHeight()).toBe(520);
@@ -346,11 +351,11 @@ describe('RenderedFrame Live Preview Viewport', () => {
   });
 
   it('lowers the applied height when a smaller SURFACE_RESIZE arrives', async () => {
-    messageStreamSignal.set(surfaceResize(3224));
+    emitBridgeMessage(surfaceResize(3224));
     fixture.detectChanges();
     expect(await harness.getFrameHeight()).toBe('3224px');
 
-    messageStreamSignal.set(surfaceResize(264));
+    emitBridgeMessage(surfaceResize(264));
     fixture.detectChanges();
 
     expect(fixture.componentInstance.dynamicHeight()).toBe(264);
@@ -361,7 +366,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     // CrossFrameValidator admits 0 as a valid dimension, so this component is
     // what stops a zero report from collapsing the frame: with no usable
     // height the container falls back to filling its panel.
-    messageStreamSignal.set(surfaceResize(0));
+    emitBridgeMessage(surfaceResize(0));
     fixture.detectChanges();
 
     expect(fixture.componentInstance.frameHeight()).toBeNull();
@@ -369,13 +374,13 @@ describe('RenderedFrame Live Preview Viewport', () => {
   });
 
   it('holds the last applied height when a report exceeds the dimension cap', async () => {
-    messageStreamSignal.set(surfaceResize(520));
+    emitBridgeMessage(surfaceResize(520));
     fixture.detectChanges();
 
     // Above MAX_SURFACE_DIMENSION in CrossFrameValidator, which is the ceiling
     // the frame was pinned to during the resize feedback loop. The report is
     // dropped before it reaches the container, leaving the last good height.
-    messageStreamSignal.set(surfaceResize(20_001));
+    emitBridgeMessage(surfaceResize(20_001));
     fixture.detectChanges();
 
     expect(await harness.getFrameHeight()).toBe('520px');
@@ -383,12 +388,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
 
   it('re-dispatches sendRenderA2UI when RENDERER_READY or A2UI_CATALOG arrives from bridge', () => {
     const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
-    const messageStreamSignal = signal<unknown>(null);
-    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
-      value: messageStreamSignal,
-      writable: true,
-    });
-
     const newFixture = TestBed.createComponent(RenderedFrame);
     newFixture.componentRef.setInput('payload', payload);
     newFixture.detectChanges();
@@ -396,7 +395,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
     sendSpy.mockClear();
 
-    messageStreamSignal.set({
+    messageStreamSubject.next({
       type: 'RENDERER_READY',
       payload: {},
       origin: 'http://localhost:3000',
@@ -407,7 +406,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(sendSpy).toHaveBeenCalledWith(payload, expect.anything());
 
     sendSpy.mockClear();
-    messageStreamSignal.set({
+    messageStreamSubject.next({
       type: 'A2UI_CATALOG',
       payload: {},
       origin: 'http://localhost:3000',
@@ -446,29 +445,21 @@ describe('RenderedFrame Live Preview Viewport', () => {
   });
 
   it('ignores SURFACE_RESIZE when height is missing or not a number', () => {
-    const messageStreamSignal = signal<unknown>({
+    const newFixture = TestBed.createComponent(RenderedFrame);
+    newFixture.detectChanges();
+
+    messageStreamSubject.next({
       type: 'SURFACE_RESIZE',
       payload: {width: 500},
       origin: 'http://localhost:3000',
       timestamp: Date.now(),
     });
-    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
-      value: messageStreamSignal,
-      writable: true,
-    });
-
-    const newFixture = TestBed.createComponent(RenderedFrame);
     newFixture.detectChanges();
 
     expect(newFixture.componentInstance.dynamicHeight()).toBeNull();
   });
-  it('does not dispatch when RENDERER_READY arrives and payload is empty', () => {
-    const messageStreamSignal = signal<unknown>(null);
-    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
-      value: messageStreamSignal,
-      writable: true,
-    });
 
+  it('does not dispatch when RENDERER_READY arrives and payload is empty', () => {
     const newFixture = TestBed.createComponent(RenderedFrame);
     newFixture.componentRef.setInput('payload', null);
     newFixture.detectChanges();
@@ -476,7 +467,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
     sendSpy.mockClear();
 
-    messageStreamSignal.set({
+    messageStreamSubject.next({
       type: 'RENDERER_READY',
       payload: {},
       origin: 'http://localhost:3000',
@@ -488,17 +479,11 @@ describe('RenderedFrame Live Preview Viewport', () => {
   });
 
   it('ignores incoming bridge messages when sourceWindow belongs to a different frame', () => {
-    const messageStreamSignal = signal<unknown>(null);
-    Object.defineProperty(hostCommunicationServiceMock, 'messageStream', {
-      value: messageStreamSignal,
-      writable: true,
-    });
-
     const newFixture = TestBed.createComponent(RenderedFrame);
     newFixture.detectChanges();
 
     const otherWindow = {postMessage: vi.fn()} as unknown as Window;
-    messageStreamSignal.set({
+    messageStreamSubject.next({
       type: 'SURFACE_RESIZE',
       payload: {height: 999},
       origin: 'http://localhost:3000',
@@ -508,6 +493,19 @@ describe('RenderedFrame Live Preview Viewport', () => {
     newFixture.detectChanges();
 
     expect(newFixture.componentInstance.dynamicHeight()).toBeNull();
+  });
+
+  it('does not drop SURFACE_RESIZE when followed immediately by other messages in the same tick', () => {
+    messageStreamSubject.next(surfaceResize(720));
+    messageStreamSubject.next({
+      type: 'RENDER_SUCCESS',
+      payload: {},
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.dynamicHeight()).toBe(720);
   });
 
   it('forwards wheel events from iframe contentWindow to parent scrollable container', () => {

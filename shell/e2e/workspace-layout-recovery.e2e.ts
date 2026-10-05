@@ -147,6 +147,41 @@ test('resets modified dockview layout back to default when clicking Reset Layout
 
   // Verify the preview is visible and interactive immediately without toggling tabs
   await expect(preview.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+
+  // Verify the preview iframe and overlay properly fill the Dockview panel container
+  // and are not clipped to the ~130px initial sandbox fallback banner.
+  await expect
+    .poll(async () => {
+      return page.evaluate(() => {
+        const renderedOverlay = Array.from(
+          document.querySelectorAll<HTMLElement>('.dv-render-overlay'),
+        ).find(el => el.querySelector('a2ui-composer-rendered-frame'));
+        const iframe = document.querySelector<HTMLIFrameElement>('iframe.preview-iframe');
+        const group = Array.from(document.querySelectorAll<HTMLElement>('.dv-groupview')).find(g =>
+          g.querySelector('.dv-tab.dv-active-tab')?.textContent?.includes('Rendered'),
+        );
+        const content = group?.querySelector<HTMLElement>('.dv-content-container');
+
+        const overlayHeight = renderedOverlay?.getBoundingClientRect().height ?? 0;
+        const contentHeight = content?.getBoundingClientRect().height ?? 0;
+        const iframeHeight = iframe?.getBoundingClientRect().height ?? 0;
+
+        return {
+          overlayHeight,
+          contentHeight,
+          iframeHeight,
+          overlayMatchesContent: contentHeight > 0 && Math.abs(overlayHeight - contentHeight) < 2,
+          iframeExpanded: iframeHeight > 300,
+        };
+      });
+    })
+    .toEqual(
+      expect.objectContaining({
+        overlayMatchesContent: true,
+        iframeExpanded: true,
+      }),
+    );
+
   await preview.getByRole('button', {name: 'Search Cars'}).click();
   await expect(page.locator('.dv-tab', {hasText: /^Events/})).toContainText('(1)');
 

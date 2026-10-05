@@ -212,41 +212,13 @@ export class RenderedFrame {
 
     // Inbound bridge listener: adjusts the iframe container height to fit the rendered
     // A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
-    effect(() => {
-      const envelope = this.hostCommunication.messageStream();
-      if (envelope) {
-        const myIframe = this.iframeRef()?.nativeElement;
-        const myWindow = myIframe?.contentWindow;
-
-        // In multi-frame environments, ignore messages dispatched by other iframes
-        if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
-          return;
-        }
-
-        if (
-          envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
-          envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
-        ) {
-          const payload = untracked(() => this.payload());
-          if (myIframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
-            this.hostCommunication.sendRenderA2UI(payload, myIframe);
-          }
-        } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-          if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
-            const resizePayload = envelope.payload as {height: number; width?: number};
-            this.dynamicHeight.set(this.capReportedHeight(resizePayload.height));
-          }
-        }
-      }
+    // Subscribed directly to messageStream$ rather than an effect so bursts of
+    // messages (e.g. SURFACE_RESIZE followed immediately by DATA_MODEL_CHANGE)
+    // do not coalesce and drop the resize report.
+    this.hostCommunication.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
+      this.trackReportedGrowth(envelope);
+      this.handleInboundEnvelope(envelope);
     });
-
-    // Runaway growth circuit breaker. The counting must happen here rather than in
-    // the effect above: signal effects coalesce, so a burst of messages arriving in
-    // one change detection tick runs that effect once, for the last value only, and
-    // a counter inside it would never see the ramp that defines a feedback loop.
-    this.hostCommunication.messageStream$
-      .pipe(takeUntilDestroyed())
-      .subscribe(envelope => this.trackReportedGrowth(envelope));
 
     // A different renderer means a different guest; give it a clean slate.
     effect(() => {
@@ -258,6 +230,39 @@ export class RenderedFrame {
         this.trackedRendererUrl = rendererUrl;
       });
     });
+  }
+
+  /**
+   * Handles incoming bridge messages (renderer ready, catalog ready, surface resize)
+   * without dropping messages during rapid bursts.
+   */
+  private handleInboundEnvelope(envelope: MessageEnvelope | null): void {
+    if (!envelope) {
+      return;
+    }
+
+    const myIframe = untracked(() => this.iframeRef()?.nativeElement);
+    const myWindow = myIframe?.contentWindow;
+
+    // In multi-frame environments, ignore messages dispatched by other iframes
+    if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
+      return;
+    }
+
+    if (
+      envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
+      envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
+    ) {
+      const payload = untracked(() => this.payload());
+      if (myIframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
+        this.hostCommunication.sendRenderA2UI(payload, myIframe);
+      }
+    } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
+      if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
+        const resizePayload = envelope.payload as {height: number; width?: number};
+        this.dynamicHeight.set(this.capReportedHeight(resizePayload.height));
+      }
+    }
   }
 
   /**
@@ -303,11 +308,14 @@ export class RenderedFrame {
 
     if (this.growthRunLength >= MAX_MONOTONIC_GROWTH_REPORTS && !this.growthBreakerLatched()) {
       this.growthBreakerLatched.set(true);
+      if (this.growthRunStartHeight !== null) {
+        this.dynamicHeight.set(this.growthRunStartHeight);
+      }
       this.errorLogger.warn({
         message:
           `Preview frame growth stopped: the renderer reported ${this.growthRunLength} ` +
           `consecutive larger heights within ${RUNAWAY_REPORT_INTERVAL_MS}ms, which is a ` +
-          `runaway resize loop. Frame held at ${untracked(() => this.dynamicHeight()) ?? this.growthRunStartHeight}px; ` +
+          `runaway resize loop. Frame held at ${this.growthRunStartHeight ?? untracked(() => this.dynamicHeight())}px; ` +
           `last reported height ${height}px.`,
         sourceTag: '[Shell]',
       });
@@ -322,7 +330,7 @@ export class RenderedFrame {
     if (!untracked(() => this.growthBreakerLatched())) {
       return height;
     }
-    const ceiling = untracked(() => this.dynamicHeight()) ?? this.growthRunStartHeight;
+    const ceiling = this.growthRunStartHeight ?? untracked(() => this.dynamicHeight());
     return ceiling === null ? height : Math.min(height, ceiling);
   }
 
