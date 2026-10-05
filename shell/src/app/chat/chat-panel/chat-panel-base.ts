@@ -22,8 +22,7 @@ import {
   ElementRef,
   inject,
   input,
-  signal,
-  untracked,
+  linkedSignal,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FileIngestionService, AttachedFile} from '../file-ingestion/file-ingestion.service';
@@ -97,30 +96,17 @@ export abstract class ChatPanelBase {
   private readonly promptFactory = inject(ChatPromptFactoryService);
   private readonly logger = inject(ErrorLogger).withTag('[ChatPanel]');
   protected readonly mcpManager = inject(McpClientManagerService);
-  private lastHandledResetNonce = this.stateSync.sessionResetNonce();
 
-  protected readonly includeScreenshot = signal<boolean>(false);
+  protected readonly includeScreenshot = linkedSignal({
+    source: this.stateSync.sessionResetNonce,
+    computation: () => false,
+  });
   protected readonly isMcpSupported = computed(() =>
     this.mcpManager.doesCatalogSupportMcp(this.catalogManagement.activeCatalog()),
   );
   protected readonly activeMcpServerCount = computed(
     () => this.mcpManager.getActiveServersWithTools().length,
   );
-
-  constructor() {
-    effect(() => {
-      const nonce = this.stateSync.sessionResetNonce();
-      if (nonce > this.lastHandledResetNonce) {
-        this.lastHandledResetNonce = nonce;
-        untracked(() => {
-          this.userPrompt.set('');
-          this.attachedFiles.set([]);
-          this.includeScreenshot.set(false);
-          this.isReadingFiles.set(false);
-        });
-      }
-    });
-  }
 
   protected onIncludeScreenshotChange(checked: boolean): void {
     this.includeScreenshot.set(checked);
@@ -154,13 +140,22 @@ export abstract class ChatPanelBase {
    */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
-  protected readonly isReadingFiles = signal<boolean>(false);
+  protected readonly isReadingFiles = linkedSignal({
+    source: this.stateSync.sessionResetNonce,
+    computation: () => false,
+  });
 
   /** Backing mutable signal capturing prompts typed by researcher. */
-  protected readonly userPrompt = signal<string>('');
+  protected readonly userPrompt = linkedSignal({
+    source: this.stateSync.sessionResetNonce,
+    computation: () => '',
+  });
 
   /** Backing mutable signal capturing uploaded files context. */
-  protected readonly attachedFiles = signal<AttachedFile[]>([]);
+  protected readonly attachedFiles = linkedSignal<number, AttachedFile[]>({
+    source: this.stateSync.sessionResetNonce,
+    computation: () => [],
+  });
 
   /**
    * Reactively computed visible logs history turns log list excluding
@@ -297,7 +292,7 @@ export abstract class ChatPanelBase {
       }
     }
 
-    if (!screenshotSuccess || this.stateSync.sessionResetNonce() !== resetNonceBefore) {
+    if (!screenshotSuccess) {
       return;
     }
 
@@ -507,9 +502,7 @@ export abstract class ChatPanelBase {
         }
       }
 
-      if (this.stateSync.sessionResetNonce() === resetNonceBefore) {
-        this.attachedFiles.update(current => [...current, ...newFiles]);
-      }
+      this.attachedFiles.update(current => [...current, ...newFiles]);
     } finally {
       if (this.stateSync.sessionResetNonce() === resetNonceBefore) {
         this.isReadingFiles.set(false);
