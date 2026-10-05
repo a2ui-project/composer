@@ -423,6 +423,7 @@ describe('PreviewBridge Core API Runtime', () => {
   describe('catalog requests across renderer lifecycles', () => {
     it('does not start an HTML fallback after the renderer attaches its catalog', async () => {
       vi.useFakeTimers();
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
       const postMessage = vi.spyOn(window.parent, 'postMessage');
       let completeText!: (text: string) => void;
       const pendingText = new Promise<string>(resolve => {
@@ -453,11 +454,17 @@ describe('PreviewBridge Core API Runtime', () => {
       await vi.runAllTimersAsync();
 
       expect(window.fetch).toHaveBeenCalledExactlyOnceWith('catalog', expect.any(Object));
+      // The host's request is still unanswered, so it gets the attached renderer's catalog.
       expect(
         postMessage.mock.calls.filter(
           ([message]) => message.type === PreviewBridgeMessageType.A2UI_CATALOG,
         ),
-      ).toEqual([]);
+      ).toEqual([
+        [
+          {type: PreviewBridgeMessageType.A2UI_CATALOG, payload: {catalogId: 'inline-catalog'}},
+          window.location.origin,
+        ],
+      ]);
     });
 
     it.each([
@@ -523,10 +530,57 @@ describe('PreviewBridge Core API Runtime', () => {
       },
     );
 
+    it("answers with the new renderer's catalog when the renderer changes mid-fetch", async () => {
+      vi.useFakeTimers();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const postMessage = vi.spyOn(window.parent, 'postMessage');
+      const surfaceGroup: SurfaceGroupLike = {
+        onSurfaceCreated: {subscribe: () => ({unsubscribe: vi.fn()})},
+      };
+      let completeFetch!: () => void;
+      const pendingFetch = new Promise<void>(resolve => {
+        completeFetch = resolve;
+      });
+      window.fetch = vi.fn<typeof window.fetch>().mockImplementation(async () => {
+        await pendingFetch;
+        return new Response(JSON.stringify({catalogId: 'stale-catalog'}));
+      });
+      bridge.attachRenderer({processMessages: vi.fn()}, {surfaceGroup, onSurfaceReady: vi.fn()});
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {type: PreviewBridgeMessageType.GET_CATALOG},
+        }),
+      );
+
+      // The host still waits for the first reply, so it doesn't request again when
+      // the replacement renderer announces itself.
+      const catalog = {catalogId: 'current-catalog', components: {}};
+      bridge.attachRenderer(
+        {processMessages: vi.fn()},
+        {surfaceGroup, onSurfaceReady: vi.fn(), catalogJson: catalog},
+      );
+      completeFetch();
+      await vi.runAllTimersAsync();
+
+      expect(
+        postMessage.mock.calls.filter(
+          ([message]) => message.type === PreviewBridgeMessageType.A2UI_CATALOG,
+        ),
+      ).toEqual([
+        [{type: PreviewBridgeMessageType.A2UI_CATALOG, payload: catalog}, window.location.origin],
+      ]);
+      expect(warn).toHaveBeenCalledWith(
+        "PreviewBridge: The renderer changed while its catalog was loading. Requesting the new renderer's catalog.",
+      );
+    });
+
     it.each(['detach', 'destroy'] as const)(
       'does not publish an in-flight catalog after %s',
       async lifecycle => {
         vi.useFakeTimers();
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const postMessage = vi.spyOn(window.parent, 'postMessage');
         const connection = bridge.attachRenderer(
           {processMessages: vi.fn()},
@@ -555,6 +609,15 @@ describe('PreviewBridge Core API Runtime', () => {
             ([message]) => message.type === PreviewBridgeMessageType.A2UI_CATALOG,
           ),
         ).toEqual([]);
+        // A detached renderer leaves the request unanswered, so it's reported. A
+        // destroyed bridge has stopped listening, so there's no one to report to.
+        const dropped =
+          'PreviewBridge: A catalog request was dropped because its renderer detached before the catalog loaded.';
+        if (lifecycle === 'detach') {
+          expect(warn).toHaveBeenCalledWith(dropped);
+        } else {
+          expect(warn).not.toHaveBeenCalledWith(dropped);
+        }
       },
     );
   });

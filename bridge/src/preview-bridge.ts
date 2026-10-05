@@ -219,6 +219,12 @@ export class PreviewBridge {
   private isListening = false;
 
   /**
+   * How many catalog requests have started. A stale result compares its own number
+   * with this to tell whether a newer request will answer the host.
+   */
+  private catalogRequestCount = 0;
+
+  /**
    * A reference to the dynamically injected blocking overlay element in the DOM, or null if no overlay is active.
    * Used to prevent user interaction and display status messages during layout processing.
    */
@@ -1004,6 +1010,33 @@ export class PreviewBridge {
   }
 
   /**
+   * Handles a catalog result that arrived after its renderer was replaced or detached.
+   *
+   * The host is still waiting for a reply, and ignores RENDERER_READY until it gets
+   * one, so dropping the result would leave it without a catalog until its watchdog
+   * gives up. If a newer request is already answering the host, there's nothing to
+   * do. Otherwise, if a renderer is attached, this requests that renderer's catalog.
+   * With no renderer attached there's no catalog to send, so it only warns.
+   *
+   * @param request The number {@link handleGetCatalog} gave the stale request.
+   */
+  private handleSupersededCatalog(request: number): void {
+    if (request !== this.catalogRequestCount) {
+      return;
+    }
+    if (this.activeRenderer) {
+      console.warn(
+        "PreviewBridge: The renderer changed while its catalog was loading. Requesting the new renderer's catalog.",
+      );
+      void this.handleGetCatalog();
+      return;
+    }
+    console.warn(
+      'PreviewBridge: A catalog request was dropped because its renderer detached before the catalog loaded.',
+    );
+  }
+
+  /**
    * Strips potential XSSI vulnerability prefixes (`)]}'\n`) and executes `JSON.parse()`.
    */
   private parseCatalogData(data: unknown): unknown {
@@ -1023,12 +1056,20 @@ export class PreviewBridge {
    */
   private async handleGetCatalog(): Promise<void> {
     const renderer = this.activeRenderer;
+    const request = ++this.catalogRequestCount;
     let resolved: {rawData: unknown; isInMemory: boolean} | null = null;
     try {
       resolved = await this.resolveCatalog(renderer);
+      if (!this.isListening) {
+        return;
+      }
       // An early HTTP fallback can finish after a renderer attaches its inline catalog.
       // Only the renderer that started this request may publish its result.
-      if (!this.isListening || this.activeRenderer !== renderer || !resolved) {
+      if (this.activeRenderer !== renderer) {
+        this.handleSupersededCatalog(request);
+        return;
+      }
+      if (!resolved) {
         return;
       }
 
@@ -1044,7 +1085,11 @@ export class PreviewBridge {
         payload: catalog,
       });
     } catch (error: unknown) {
-      if (!this.isListening || this.activeRenderer !== renderer) {
+      if (!this.isListening) {
+        return;
+      }
+      if (this.activeRenderer !== renderer) {
+        this.handleSupersededCatalog(request);
         return;
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
