@@ -19,6 +19,12 @@
       "options": {
         "singleQuote": false
       }
+    },
+    {
+      "files": "**/schema/*-schema.ts",
+      "options": {
+        "quoteProps": "preserve"
+      }
     }
   ]
 }

@@ -18,107 +18,107 @@
  * This is a copy synchronized from https://github.com/a2ui-project/a2ui/blob/main/specification/v0_9/catalogs/basic/catalog.json
  */
 export const BASIC_CATALOG_SCHEMA: Record<string, unknown> = {
-  $schema: 'https://json-schema.org/draft/2020-12/schema',
-  $id: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
-  title: 'A2UI Basic Catalog',
-  description: 'Unified catalog of basic A2UI components and functions.',
-  catalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
-  components: {
-    Text: {
-      type: 'object',
-      allOf: [
+  '$schema': 'https://json-schema.org/draft/2020-12/schema',
+  '$id': 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+  'title': 'A2UI Basic Catalog',
+  'description': 'Unified catalog of basic A2UI components and functions.',
+  'catalogId': 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+  'components': {
+    'Text': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'Text',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'Text',
             },
-            text: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description:
+            'text': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description':
                 'The text content to display. While simple Markdown formatting is supported (i.e. without HTML, images, or links), utilizing dedicated UI components is generally preferred for a richer and more structured presentation.',
             },
-            variant: {
-              type: 'string',
-              description: 'A hint for the base text style.',
-              enum: ['h1', 'h2', 'h3', 'h4', 'h5', 'caption', 'body'],
-              default: 'body',
+            'variant': {
+              'type': 'string',
+              'description': 'A hint for the base text style.',
+              'enum': ['h1', 'h2', 'h3', 'h4', 'h5', 'caption', 'body'],
+              'default': 'body',
             },
           },
-          required: ['component', 'text'],
+          'required': ['component', 'text'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    Image: {
-      type: 'object',
-      allOf: [
+    'Image': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'Image',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'Image',
             },
-            url: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'The URL of the image to display.',
+            'url': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'The URL of the image to display.',
             },
-            description: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'Accessibility text for the image.',
+            'description': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'Accessibility text for the image.',
             },
-            fit: {
-              type: 'string',
-              description:
+            'fit': {
+              'type': 'string',
+              'description':
                 "Specifies how the image should be resized to fit its container. This corresponds to the CSS 'object-fit' property.",
-              enum: ['contain', 'cover', 'fill', 'none', 'scaleDown'],
-              default: 'fill',
+              'enum': ['contain', 'cover', 'fill', 'none', 'scaleDown'],
+              'default': 'fill',
             },
-            variant: {
-              type: 'string',
-              description: 'A hint for the image size and style.',
-              enum: ['icon', 'avatar', 'smallFeature', 'mediumFeature', 'largeFeature', 'header'],
-              default: 'mediumFeature',
+            'variant': {
+              'type': 'string',
+              'description': 'A hint for the image size and style.',
+              'enum': ['icon', 'avatar', 'smallFeature', 'mediumFeature', 'largeFeature', 'header'],
+              'default': 'mediumFeature',
             },
           },
-          required: ['component', 'url'],
+          'required': ['component', 'url'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    Icon: {
-      type: 'object',
-      allOf: [
+    'Icon': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'Icon',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'Icon',
             },
-            name: {
-              description: 'The name of the icon to display.',
-              oneOf: [
+            'name': {
+              'description': 'The name of the icon to display.',
+              'oneOf': [
                 {
-                  type: 'string',
-                  enum: [
+                  'type': 'string',
+                  'enum': [
                     'accountCircle',
                     'add',
                     'arrowBack',
@@ -181,107 +181,108 @@ export const BASIC_CATALOG_SCHEMA: Record<string, unknown> = {
                   ],
                 },
                 {
-                  type: 'object',
-                  properties: {
-                    svgPath: {
-                      type: 'string',
+                  'type': 'object',
+                  'properties': {
+                    'svgPath': {
+                      'type': 'string',
                     },
                   },
-                  required: ['svgPath'],
-                  additionalProperties: false,
+                  'required': ['svgPath'],
+                  'additionalProperties': false,
                 },
                 {
-                  $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DataBinding',
+                  '$ref':
+                    'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DataBinding',
                 },
               ],
             },
           },
-          required: ['component', 'name'],
+          'required': ['component', 'name'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    Video: {
-      type: 'object',
-      allOf: [
+    'Video': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'Video',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'Video',
             },
-            url: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'The URL of the video to display.',
+            'url': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'The URL of the video to display.',
             },
           },
-          required: ['component', 'url'],
+          'required': ['component', 'url'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    AudioPlayer: {
-      type: 'object',
-      allOf: [
+    'AudioPlayer': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'AudioPlayer',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'AudioPlayer',
             },
-            url: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'The URL of the audio to be played.',
+            'url': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'The URL of the audio to be played.',
             },
-            description: {
-              description: 'A description of the audio, such as a title or summary.',
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+            'description': {
+              'description': 'A description of the audio, such as a title or summary.',
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
             },
           },
-          required: ['component', 'url'],
+          'required': ['component', 'url'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    Row: {
-      type: 'object',
-      allOf: [
+    'Row': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          description:
+          'type': 'object',
+          'description':
             'A layout component that arranges its children horizontally. To create a grid layout, nest Columns within this Row.',
-          properties: {
-            component: {
-              const: 'Row',
+          'properties': {
+            'component': {
+              'const': 'Row',
             },
-            children: {
-              description:
+            'children': {
+              'description':
                 'Defines the children. Use an array of strings for a fixed set of children, or a template object to generate children from a data list. Children cannot be defined inline, they must be referred to by ID.',
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ChildList',
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ChildList',
             },
-            justify: {
-              type: 'string',
-              description:
+            'justify': {
+              'type': 'string',
+              'description':
                 "Defines the arrangement of children along the main axis (horizontally). Use 'spaceBetween' to push items to the edges, or 'start'/'end'/'center' to pack them together.",
-              enum: [
+              'enum': [
                 'center',
                 'end',
                 'spaceAround',
@@ -290,48 +291,48 @@ export const BASIC_CATALOG_SCHEMA: Record<string, unknown> = {
                 'start',
                 'stretch',
               ],
-              default: 'start',
+              'default': 'start',
             },
-            align: {
-              type: 'string',
-              description:
+            'align': {
+              'type': 'string',
+              'description':
                 "Defines the alignment of children along the cross axis (vertically). This is similar to the CSS 'align-items' property, but uses camelCase values (e.g., 'start').",
-              enum: ['start', 'center', 'end', 'stretch'],
-              default: 'stretch',
+              'enum': ['start', 'center', 'end', 'stretch'],
+              'default': 'stretch',
             },
           },
-          required: ['component', 'children'],
+          'required': ['component', 'children'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    Column: {
-      type: 'object',
-      allOf: [
+    'Column': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          description:
+          'type': 'object',
+          'description':
             'A layout component that arranges its children vertically. To create a grid layout, nest Rows within this Column.',
-          properties: {
-            component: {
-              const: 'Column',
+          'properties': {
+            'component': {
+              'const': 'Column',
             },
-            children: {
-              description:
+            'children': {
+              'description':
                 'Defines the children. Use an array of strings for a fixed set of children, or a template object to generate children from a data list. Children cannot be defined inline, they must be referred to by ID.',
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ChildList',
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ChildList',
             },
-            justify: {
-              type: 'string',
-              description:
+            'justify': {
+              'type': 'string',
+              'description':
                 "Defines the arrangement of children along the main axis (vertically). Use 'spaceBetween' to push items to the edges (e.g. header at top, footer at bottom), or 'start'/'end'/'center' to pack them together.",
-              enum: [
+              'enum': [
                 'start',
                 'center',
                 'end',
@@ -340,1096 +341,1104 @@ export const BASIC_CATALOG_SCHEMA: Record<string, unknown> = {
                 'spaceEvenly',
                 'stretch',
               ],
-              default: 'start',
+              'default': 'start',
             },
-            align: {
-              type: 'string',
-              description:
+            'align': {
+              'type': 'string',
+              'description':
                 "Defines the alignment of children along the cross axis (horizontally). This is similar to the CSS 'align-items' property.",
-              enum: ['center', 'end', 'start', 'stretch'],
-              default: 'stretch',
+              'enum': ['center', 'end', 'start', 'stretch'],
+              'default': 'stretch',
             },
           },
-          required: ['component', 'children'],
+          'required': ['component', 'children'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    List: {
-      type: 'object',
-      allOf: [
+    'List': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'List',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'List',
             },
-            children: {
-              description:
+            'children': {
+              'description':
                 'Defines the children. Use an array of strings for a fixed set of children, or a template object to generate children from a data list.',
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ChildList',
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ChildList',
             },
-            direction: {
-              type: 'string',
-              description: 'The direction in which the list items are laid out.',
-              enum: ['vertical', 'horizontal'],
-              default: 'vertical',
+            'direction': {
+              'type': 'string',
+              'description': 'The direction in which the list items are laid out.',
+              'enum': ['vertical', 'horizontal'],
+              'default': 'vertical',
             },
-            align: {
-              type: 'string',
-              description: 'Defines the alignment of children along the cross axis.',
-              enum: ['start', 'center', 'end', 'stretch'],
-              default: 'stretch',
+            'align': {
+              'type': 'string',
+              'description': 'Defines the alignment of children along the cross axis.',
+              'enum': ['start', 'center', 'end', 'stretch'],
+              'default': 'stretch',
             },
           },
-          required: ['component', 'children'],
+          'required': ['component', 'children'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    Card: {
-      type: 'object',
-      allOf: [
+    'Card': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'Card',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'Card',
             },
-            child: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
-              description:
+            'child': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
+              'description':
                 "The ID of the single child component to be rendered inside the card. To display multiple elements, you MUST wrap them in a layout component (like Column or Row) and pass that container's ID here. Do NOT pass multiple IDs or a non-existent ID. Do NOT define the child component inline.",
             },
           },
-          required: ['component', 'child'],
+          'required': ['component', 'child'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    Tabs: {
-      type: 'object',
-      allOf: [
+    'Tabs': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'Tabs',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'Tabs',
             },
-            tabs: {
-              type: 'array',
-              description:
+            'tabs': {
+              'type': 'array',
+              'description':
                 'An array of objects, where each object defines a tab with a title and a child component.',
-              minItems: 1,
-              items: {
-                type: 'object',
-                properties: {
-                  title: {
-                    description: 'The tab title.',
-                    $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'minItems': 1,
+              'items': {
+                'type': 'object',
+                'properties': {
+                  'title': {
+                    'description': 'The tab title.',
+                    '$ref':
+                      'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
                   },
-                  child: {
-                    $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
-                    description:
+                  'child': {
+                    '$ref':
+                      'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
+                    'description':
                       'The ID of the child component. Do NOT define the component inline.',
                   },
                 },
-                required: ['title', 'child'],
-                additionalProperties: false,
+                'required': ['title', 'child'],
+                'additionalProperties': false,
               },
             },
           },
-          required: ['component', 'tabs'],
+          'required': ['component', 'tabs'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    Modal: {
-      type: 'object',
-      allOf: [
+    'Modal': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'Modal',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'Modal',
             },
-            trigger: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
-              description:
+            'trigger': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
+              'description':
                 'The ID of the component that opens the modal when interacted with (e.g., a button). Do NOT define the component inline.',
             },
-            content: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
-              description:
+            'content': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
+              'description':
                 'The ID of the component to be displayed inside the modal. Do NOT define the component inline.',
             },
           },
-          required: ['component', 'trigger', 'content'],
+          'required': ['component', 'trigger', 'content'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    Divider: {
-      type: 'object',
-      allOf: [
+    'Divider': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'Divider',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'Divider',
             },
-            axis: {
-              type: 'string',
-              description: 'The orientation of the divider.',
-              enum: ['horizontal', 'vertical'],
-              default: 'horizontal',
+            'axis': {
+              'type': 'string',
+              'description': 'The orientation of the divider.',
+              'enum': ['horizontal', 'vertical'],
+              'default': 'horizontal',
             },
           },
-          required: ['component'],
+          'required': ['component'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    Button: {
-      type: 'object',
-      allOf: [
+    'Button': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'Button',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'Button',
             },
-            child: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
-              description:
+            'child': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId',
+              'description':
                 "The ID of the child component. Use a 'Text' component for a labeled button. Only use an 'Icon' if the requirements explicitly ask for an icon-only button. Do NOT define the child component inline.",
             },
-            variant: {
-              type: 'string',
-              description:
+            'variant': {
+              'type': 'string',
+              'description':
                 "A hint for the button style. If omitted, a default button style is used. 'primary' indicates this is the main call-to-action button. 'borderless' means the button has no visual border or background, making its child content appear like a clickable link.",
-              enum: ['default', 'primary', 'borderless'],
-              default: 'default',
+              'enum': ['default', 'primary', 'borderless'],
+              'default': 'default',
             },
-            action: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action',
-            },
-          },
-          required: ['component', 'child', 'action'],
-        },
-      ],
-      unevaluatedProperties: false,
-    },
-    TextField: {
-      type: 'object',
-      allOf: [
-        {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
-        },
-        {
-          $ref: '#/$defs/CatalogComponentCommon',
-        },
-        {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
-        },
-        {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'TextField',
-            },
-            label: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'The text label for the input field.',
-            },
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'The value of the text field.',
-            },
-            variant: {
-              type: 'string',
-              description: 'The type of input field to display.',
-              enum: ['longText', 'number', 'shortText', 'obscured'],
-              default: 'shortText',
-            },
-            validationRegexp: {
-              type: 'string',
-              description: 'A regular expression used for client-side validation of the input.',
+            'action': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action',
             },
           },
-          required: ['component', 'label'],
+          'required': ['component', 'child', 'action'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    CheckBox: {
-      type: 'object',
-      allOf: [
+    'TextField': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'CheckBox',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'TextField',
             },
-            label: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'The text to display next to the checkbox.',
+            'label': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'The text label for the input field.',
             },
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
-              description:
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'The value of the text field.',
+            },
+            'variant': {
+              'type': 'string',
+              'description': 'The type of input field to display.',
+              'enum': ['longText', 'number', 'shortText', 'obscured'],
+              'default': 'shortText',
+            },
+            'validationRegexp': {
+              'type': 'string',
+              'description': 'A regular expression used for client-side validation of the input.',
+            },
+          },
+          'required': ['component', 'label'],
+        },
+      ],
+      'unevaluatedProperties': false,
+    },
+    'CheckBox': {
+      'type': 'object',
+      'allOf': [
+        {
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+        },
+        {
+          '$ref': '#/$defs/CatalogComponentCommon',
+        },
+        {
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
+        },
+        {
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'CheckBox',
+            },
+            'label': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'The text to display next to the checkbox.',
+            },
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
+              'description':
                 'The current state of the checkbox (true for checked, false for unchecked).',
             },
           },
-          required: ['component', 'label', 'value'],
+          'required': ['component', 'label', 'value'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    ChoicePicker: {
-      type: 'object',
-      allOf: [
+    'ChoicePicker': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
         },
         {
-          type: 'object',
-          description: 'A component that allows selecting one or more options from a list.',
-          properties: {
-            component: {
-              const: 'ChoicePicker',
+          'type': 'object',
+          'description': 'A component that allows selecting one or more options from a list.',
+          'properties': {
+            'component': {
+              'const': 'ChoicePicker',
             },
-            label: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'The label for the group of options.',
+            'label': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'The label for the group of options.',
             },
-            variant: {
-              type: 'string',
-              description: 'A hint for how the choice picker should be displayed and behave.',
-              enum: ['multipleSelection', 'mutuallyExclusive'],
-              default: 'mutuallyExclusive',
+            'variant': {
+              'type': 'string',
+              'description': 'A hint for how the choice picker should be displayed and behave.',
+              'enum': ['multipleSelection', 'mutuallyExclusive'],
+              'default': 'mutuallyExclusive',
             },
-            options: {
-              type: 'array',
-              description: 'The list of available options to choose from.',
-              items: {
-                type: 'object',
-                properties: {
-                  label: {
-                    description: 'The text to display for this option.',
-                    $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+            'options': {
+              'type': 'array',
+              'description': 'The list of available options to choose from.',
+              'items': {
+                'type': 'object',
+                'properties': {
+                  'label': {
+                    'description': 'The text to display for this option.',
+                    '$ref':
+                      'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
                   },
-                  value: {
-                    type: 'string',
-                    description: 'The stable value associated with this option.',
+                  'value': {
+                    'type': 'string',
+                    'description': 'The stable value associated with this option.',
                   },
                 },
-                required: ['label', 'value'],
-                additionalProperties: false,
+                'required': ['label', 'value'],
+                'additionalProperties': false,
               },
             },
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicStringList',
-              description:
+            'value': {
+              '$ref':
+                'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicStringList',
+              'description':
                 'The list of currently selected values. This should be bound to a string array in the data model.',
             },
-            displayStyle: {
-              type: 'string',
-              description: 'The display style of the component.',
-              enum: ['checkbox', 'chips'],
-              default: 'checkbox',
+            'displayStyle': {
+              'type': 'string',
+              'description': 'The display style of the component.',
+              'enum': ['checkbox', 'chips'],
+              'default': 'checkbox',
             },
-            filterable: {
-              type: 'boolean',
-              description: 'If true, displays a search input to filter the options.',
-              default: false,
-            },
-          },
-          required: ['component', 'options', 'value'],
-        },
-      ],
-      unevaluatedProperties: false,
-    },
-    Slider: {
-      type: 'object',
-      allOf: [
-        {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
-        },
-        {
-          $ref: '#/$defs/CatalogComponentCommon',
-        },
-        {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
-        },
-        {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'Slider',
-            },
-            label: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'The label for the slider.',
-            },
-            min: {
-              type: 'number',
-              description: 'The minimum value of the slider.',
-              default: 0,
-            },
-            max: {
-              type: 'number',
-              description: 'The maximum value of the slider.',
-            },
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
-              description: 'The current value of the slider.',
+            'filterable': {
+              'type': 'boolean',
+              'description': 'If true, displays a search input to filter the options.',
+              'default': false,
             },
           },
-          required: ['component', 'value', 'max'],
+          'required': ['component', 'options', 'value'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
-    DateTimeInput: {
-      type: 'object',
-      allOf: [
+    'Slider': {
+      'type': 'object',
+      'allOf': [
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
         },
         {
-          $ref: '#/$defs/CatalogComponentCommon',
+          '$ref': '#/$defs/CatalogComponentCommon',
         },
         {
-          $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
         },
         {
-          type: 'object',
-          properties: {
-            component: {
-              const: 'DateTimeInput',
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'Slider',
             },
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description:
+            'label': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'The label for the slider.',
+            },
+            'min': {
+              'type': 'number',
+              'description': 'The minimum value of the slider.',
+              'default': 0,
+            },
+            'max': {
+              'type': 'number',
+              'description': 'The maximum value of the slider.',
+            },
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
+              'description': 'The current value of the slider.',
+            },
+          },
+          'required': ['component', 'value', 'max'],
+        },
+      ],
+      'unevaluatedProperties': false,
+    },
+    'DateTimeInput': {
+      'type': 'object',
+      'allOf': [
+        {
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon',
+        },
+        {
+          '$ref': '#/$defs/CatalogComponentCommon',
+        },
+        {
+          '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/Checkable',
+        },
+        {
+          'type': 'object',
+          'properties': {
+            'component': {
+              'const': 'DateTimeInput',
+            },
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description':
                 'The selected date and/or time value in ISO 8601 format. If not yet set, initialize with an empty string.',
             },
-            enableDate: {
-              type: 'boolean',
-              description: 'If true, allows the user to select a date.',
-              default: false,
+            'enableDate': {
+              'type': 'boolean',
+              'description': 'If true, allows the user to select a date.',
+              'default': false,
             },
-            enableTime: {
-              type: 'boolean',
-              description: 'If true, allows the user to select a time.',
-              default: false,
+            'enableTime': {
+              'type': 'boolean',
+              'description': 'If true, allows the user to select a time.',
+              'default': false,
             },
-            min: {
-              allOf: [
+            'min': {
+              'allOf': [
                 {
-                  $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+                  '$ref':
+                    'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
                 },
                 {
-                  if: {
-                    type: 'string',
+                  'if': {
+                    'type': 'string',
                   },
-                  then: {
-                    oneOf: [
+                  'then': {
+                    'oneOf': [
                       {
-                        format: 'date',
+                        'format': 'date',
                       },
                       {
-                        format: 'time',
+                        'format': 'time',
                       },
                       {
-                        format: 'date-time',
+                        'format': 'date-time',
                       },
                     ],
                   },
                 },
               ],
-              description: 'The minimum allowed date/time in ISO 8601 format.',
+              'description': 'The minimum allowed date/time in ISO 8601 format.',
             },
-            max: {
-              allOf: [
+            'max': {
+              'allOf': [
                 {
-                  $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+                  '$ref':
+                    'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
                 },
                 {
-                  if: {
-                    type: 'string',
+                  'if': {
+                    'type': 'string',
                   },
-                  then: {
-                    oneOf: [
+                  'then': {
+                    'oneOf': [
                       {
-                        format: 'date',
+                        'format': 'date',
                       },
                       {
-                        format: 'time',
+                        'format': 'time',
                       },
                       {
-                        format: 'date-time',
+                        'format': 'date-time',
                       },
                     ],
                   },
                 },
               ],
-              description: 'The maximum allowed date/time in ISO 8601 format.',
+              'description': 'The maximum allowed date/time in ISO 8601 format.',
             },
-            label: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'The text label for the input field.',
+            'label': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'The text label for the input field.',
             },
           },
-          required: ['component', 'value'],
+          'required': ['component', 'value'],
         },
       ],
-      unevaluatedProperties: false,
+      'unevaluatedProperties': false,
     },
   },
-  functions: {
-    required: {
-      type: 'object',
-      description: 'Checks that the value is not null, undefined, or empty.',
-      properties: {
-        call: {
-          const: 'required',
+  'functions': {
+    'required': {
+      'type': 'object',
+      'description': 'Checks that the value is not null, undefined, or empty.',
+      'properties': {
+        'call': {
+          'const': 'required',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              description: 'The value to check.',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              'description': 'The value to check.',
             },
           },
-          required: ['value'],
-          additionalProperties: false,
+          'required': ['value'],
+          'additionalProperties': false,
         },
-        returnType: {
-          const: 'boolean',
+        'returnType': {
+          'const': 'boolean',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    regex: {
-      type: 'object',
-      description: 'Checks that the value matches a regular expression string.',
-      properties: {
-        call: {
-          const: 'regex',
+    'regex': {
+      'type': 'object',
+      'description': 'Checks that the value matches a regular expression string.',
+      'properties': {
+        'call': {
+          'const': 'regex',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
             },
-            pattern: {
-              type: 'string',
-              description: 'The regex pattern to match against.',
+            'pattern': {
+              'type': 'string',
+              'description': 'The regex pattern to match against.',
             },
           },
-          required: ['value', 'pattern'],
-          unevaluatedProperties: false,
+          'required': ['value', 'pattern'],
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'boolean',
+        'returnType': {
+          'const': 'boolean',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    length: {
-      type: 'object',
-      description: 'Checks string length constraints.',
-      properties: {
-        call: {
-          const: 'length',
+    'length': {
+      'type': 'object',
+      'description': 'Checks string length constraints.',
+      'properties': {
+        'call': {
+          'const': 'length',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
             },
-            min: {
-              type: 'integer',
-              minimum: 0,
-              description: 'The minimum allowed length.',
+            'min': {
+              'type': 'integer',
+              'minimum': 0,
+              'description': 'The minimum allowed length.',
             },
-            max: {
-              type: 'integer',
-              minimum: 0,
-              description: 'The maximum allowed length.',
+            'max': {
+              'type': 'integer',
+              'minimum': 0,
+              'description': 'The maximum allowed length.',
             },
           },
-          required: ['value'],
-          anyOf: [
+          'required': ['value'],
+          'anyOf': [
             {
-              required: ['min'],
+              'required': ['min'],
             },
             {
-              required: ['max'],
+              'required': ['max'],
             },
           ],
-          unevaluatedProperties: false,
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'boolean',
+        'returnType': {
+          'const': 'boolean',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    numeric: {
-      type: 'object',
-      description: 'Checks numeric range constraints.',
-      properties: {
-        call: {
-          const: 'numeric',
+    'numeric': {
+      'type': 'object',
+      'description': 'Checks numeric range constraints.',
+      'properties': {
+        'call': {
+          'const': 'numeric',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
             },
-            min: {
-              type: 'number',
-              description: 'The minimum allowed value.',
+            'min': {
+              'type': 'number',
+              'description': 'The minimum allowed value.',
             },
-            max: {
-              type: 'number',
-              description: 'The maximum allowed value.',
+            'max': {
+              'type': 'number',
+              'description': 'The maximum allowed value.',
             },
           },
-          required: ['value'],
-          anyOf: [
+          'required': ['value'],
+          'anyOf': [
             {
-              required: ['min'],
+              'required': ['min'],
             },
             {
-              required: ['max'],
+              'required': ['max'],
             },
           ],
-          unevaluatedProperties: false,
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'boolean',
+        'returnType': {
+          'const': 'boolean',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    email: {
-      type: 'object',
-      description: 'Checks that the value is a valid email address.',
-      properties: {
-        call: {
-          const: 'email',
+    'email': {
+      'type': 'object',
+      'description': 'Checks that the value is a valid email address.',
+      'properties': {
+        'call': {
+          'const': 'email',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
             },
           },
-          required: ['value'],
-          unevaluatedProperties: false,
+          'required': ['value'],
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'boolean',
+        'returnType': {
+          'const': 'boolean',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    formatString: {
-      type: 'object',
-      description:
+    'formatString': {
+      'type': 'object',
+      'description':
         "Performs string interpolation of data model values and other functions in the catalog functions list and returns the resulting string. The value string can contain interpolated expressions in the `${expression}` format. Supported expression types include: JSON Pointer paths to the data model (e.g., `${/absolute/path}` or `${relative/path}`), and client-side function calls (e.g., `${now()}`). Function arguments must be named (e.g., `${formatDate(value:${/currentDate}, format:'MM-dd')}`). To include a literal `${` sequence, escape it as `\\${`.",
-      properties: {
-        call: {
-          const: 'formatString',
+      'properties': {
+        'call': {
+          'const': 'formatString',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
             },
           },
-          required: ['value'],
-          unevaluatedProperties: false,
+          'required': ['value'],
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'string',
+        'returnType': {
+          'const': 'string',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    formatNumber: {
-      type: 'object',
-      description: 'Formats a number with the specified grouping and decimal precision.',
-      properties: {
-        call: {
-          const: 'formatNumber',
+    'formatNumber': {
+      'type': 'object',
+      'description': 'Formats a number with the specified grouping and decimal precision.',
+      'properties': {
+        'call': {
+          'const': 'formatNumber',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
-              description: 'The number to format.',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
+              'description': 'The number to format.',
             },
-            decimals: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
-              description:
+            'decimals': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
+              'description':
                 'Optional. The number of decimal places to show. Defaults to 0 or 2 depending on locale.',
             },
-            grouping: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
-              description:
+            'grouping': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
+              'description':
                 "Optional. If true, uses locale-specific grouping separators (e.g. '1,000'). If false, returns raw digits (e.g. '1000'). Defaults to true.",
             },
           },
-          required: ['value'],
-          unevaluatedProperties: false,
+          'required': ['value'],
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'string',
+        'returnType': {
+          'const': 'string',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    formatCurrency: {
-      type: 'object',
-      description: 'Formats a number as a currency string.',
-      properties: {
-        call: {
-          const: 'formatCurrency',
+    'formatCurrency': {
+      'type': 'object',
+      'description': 'Formats a number as a currency string.',
+      'properties': {
+        'call': {
+          'const': 'formatCurrency',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
-              description: 'The monetary amount.',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
+              'description': 'The monetary amount.',
             },
-            currency: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: "The ISO 4217 currency code (e.g., 'USD', 'EUR').",
+            'currency': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': "The ISO 4217 currency code (e.g., 'USD', 'EUR').",
             },
-            decimals: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
-              description:
+            'decimals': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
+              'description':
                 'Optional. The number of decimal places to show. Defaults to 0 or 2 depending on locale.',
             },
-            grouping: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
-              description:
+            'grouping': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
+              'description':
                 "Optional. If true, uses locale-specific grouping separators (e.g. '1,000'). If false, returns raw digits (e.g. '1000'). Defaults to true.",
             },
           },
-          required: ['currency', 'value'],
-          unevaluatedProperties: false,
+          'required': ['currency', 'value'],
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'string',
+        'returnType': {
+          'const': 'string',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    formatDate: {
-      type: 'object',
-      description: 'Formats a timestamp into a string using a pattern.',
-      properties: {
-        call: {
-          const: 'formatDate',
+    'formatDate': {
+      'type': 'object',
+      'description': 'Formats a timestamp into a string using a pattern.',
+      'properties': {
+        'call': {
+          'const': 'formatDate',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicValue',
-              description: 'The date to format.',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicValue',
+              'description': 'The date to format.',
             },
-            format: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description:
+            'format': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description':
                 "A Unicode TR35 date pattern string.\n\nToken Reference:\n- Year: 'yy' (26), 'yyyy' (2026)\n- Month: 'M' (1), 'MM' (01), 'MMM' (Jan), 'MMMM' (January)\n- Day: 'd' (1), 'dd' (01), 'E' (Tue), 'EEEE' (Tuesday)\n- Hour (12h): 'h' (1-12), 'hh' (01-12) - requires 'a' for AM/PM\n- Hour (24h): 'H' (0-23), 'HH' (00-23) - Military Time\n- Minute: 'mm' (00-59)\n- Second: 'ss' (00-59)\n- Period: 'a' (AM/PM)\n\nExamples:\n- 'MMM dd, yyyy' -> 'Jan 16, 2026'\n- 'HH:mm' -> '14:30' (Military)\n- 'h:mm a' -> '2:30 PM'\n- 'EEEE, d MMMM' -> 'Friday, 16 January'",
             },
           },
-          required: ['format', 'value'],
-          unevaluatedProperties: false,
+          'required': ['format', 'value'],
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'string',
+        'returnType': {
+          'const': 'string',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    pluralize: {
-      type: 'object',
-      description:
+    'pluralize': {
+      'type': 'object',
+      'description':
         "Returns a localized string based on the Common Locale Data Repository (CLDR) plural category of the count (zero, one, two, few, many, other). Requires an 'other' fallback. For English, just use 'one' and 'other'.",
-      properties: {
-        call: {
-          const: 'pluralize',
+      'properties': {
+        'call': {
+          'const': 'pluralize',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
-              description: 'The numeric value used to determine the plural category.',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber',
+              'description': 'The numeric value used to determine the plural category.',
             },
-            zero: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: "String for the 'zero' category (e.g., 0 items).",
+            'zero': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': "String for the 'zero' category (e.g., 0 items).",
             },
-            one: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: "String for the 'one' category (e.g., 1 item).",
+            'one': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': "String for the 'one' category (e.g., 1 item).",
             },
-            two: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: "String for the 'two' category (used in Arabic, Welsh, etc.).",
+            'two': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': "String for the 'two' category (used in Arabic, Welsh, etc.).",
             },
-            few: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description:
+            'few': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description':
                 "String for the 'few' category (e.g., small groups in Slavic languages).",
             },
-            many: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description:
+            'many': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description':
                 "String for the 'many' category (e.g., large groups in various languages).",
             },
-            other: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
-              description: 'The default/fallback string (used for general plural cases).',
+            'other': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+              'description': 'The default/fallback string (used for general plural cases).',
             },
           },
-          required: ['value', 'other'],
-          unevaluatedProperties: false,
+          'required': ['value', 'other'],
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'string',
+        'returnType': {
+          'const': 'string',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    openUrl: {
-      type: 'object',
-      description:
+    'openUrl': {
+      'type': 'object',
+      'description':
         'Opens the specified URL in a browser or handler. This function has no return value.',
-      properties: {
-        call: {
-          const: 'openUrl',
+      'properties': {
+        'call': {
+          'const': 'openUrl',
         },
-        args: {
-          type: 'object',
-          properties: {
-            url: {
-              type: 'string',
-              format: 'uri',
-              description: 'The URL to open.',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'url': {
+              'type': 'string',
+              'format': 'uri',
+              'description': 'The URL to open.',
             },
           },
-          required: ['url'],
-          additionalProperties: false,
+          'required': ['url'],
+          'additionalProperties': false,
         },
-        returnType: {
-          const: 'void',
+        'returnType': {
+          'const': 'void',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    and: {
-      type: 'object',
-      description: 'Performs a logical AND operation on a list of boolean values.',
-      properties: {
-        call: {
-          const: 'and',
+    'and': {
+      'type': 'object',
+      'description': 'Performs a logical AND operation on a list of boolean values.',
+      'properties': {
+        'call': {
+          'const': 'and',
         },
-        args: {
-          type: 'object',
-          properties: {
-            values: {
-              type: 'array',
-              description: 'The list of boolean values to evaluate.',
-              items: {
-                $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'values': {
+              'type': 'array',
+              'description': 'The list of boolean values to evaluate.',
+              'items': {
+                '$ref':
+                  'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
               },
-              minItems: 2,
+              'minItems': 2,
             },
           },
-          required: ['values'],
-          unevaluatedProperties: false,
+          'required': ['values'],
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'boolean',
+        'returnType': {
+          'const': 'boolean',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    or: {
-      type: 'object',
-      description: 'Performs a logical OR operation on a list of boolean values.',
-      properties: {
-        call: {
-          const: 'or',
+    'or': {
+      'type': 'object',
+      'description': 'Performs a logical OR operation on a list of boolean values.',
+      'properties': {
+        'call': {
+          'const': 'or',
         },
-        args: {
-          type: 'object',
-          properties: {
-            values: {
-              type: 'array',
-              description: 'The list of boolean values to evaluate.',
-              items: {
-                $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'values': {
+              'type': 'array',
+              'description': 'The list of boolean values to evaluate.',
+              'items': {
+                '$ref':
+                  'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
               },
-              minItems: 2,
+              'minItems': 2,
             },
           },
-          required: ['values'],
-          unevaluatedProperties: false,
+          'required': ['values'],
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'boolean',
+        'returnType': {
+          'const': 'boolean',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
-    not: {
-      type: 'object',
-      description: 'Performs a logical NOT operation on a boolean value.',
-      properties: {
-        call: {
-          const: 'not',
+    'not': {
+      'type': 'object',
+      'description': 'Performs a logical NOT operation on a boolean value.',
+      'properties': {
+        'call': {
+          'const': 'not',
         },
-        args: {
-          type: 'object',
-          properties: {
-            value: {
-              $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
-              description: 'The boolean value to negate.',
+        'args': {
+          'type': 'object',
+          'properties': {
+            'value': {
+              '$ref': 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean',
+              'description': 'The boolean value to negate.',
             },
           },
-          required: ['value'],
-          unevaluatedProperties: false,
+          'required': ['value'],
+          'unevaluatedProperties': false,
         },
-        returnType: {
-          const: 'boolean',
+        'returnType': {
+          'const': 'boolean',
         },
       },
-      required: ['call', 'args'],
-      unevaluatedProperties: false,
+      'required': ['call', 'args'],
+      'unevaluatedProperties': false,
     },
   },
-  $defs: {
-    CatalogComponentCommon: {
-      type: 'object',
-      properties: {
-        weight: {
-          type: 'number',
-          description:
+  '$defs': {
+    'CatalogComponentCommon': {
+      'type': 'object',
+      'properties': {
+        'weight': {
+          'type': 'number',
+          'description':
             "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column.",
         },
       },
     },
-    theme: {
-      type: 'object',
-      properties: {
-        primaryColor: {
-          type: 'string',
-          description:
+    'theme': {
+      'type': 'object',
+      'properties': {
+        'primaryColor': {
+          'type': 'string',
+          'description':
             "The primary brand color used for highlights (e.g., primary buttons, active borders). Renderers may generate variants of this color for different contexts. Format: Hexadecimal code (e.g., '#00BFFF').",
-          pattern: '^#[0-9a-fA-F]{6}$',
+          'pattern': '^#[0-9a-fA-F]{6}$',
         },
-        iconUrl: {
-          type: 'string',
-          format: 'uri',
-          description:
+        'iconUrl': {
+          'type': 'string',
+          'format': 'uri',
+          'description':
             'A URL for an image that identifies the agent or tool associated with the surface.',
         },
-        agentDisplayName: {
-          type: 'string',
-          description:
+        'agentDisplayName': {
+          'type': 'string',
+          'description':
             'Text to be displayed next to the surface to identify the agent or tool that created it.',
         },
       },
-      additionalProperties: true,
+      'additionalProperties': true,
     },
-    anyComponent: {
-      oneOf: [
+    'anyComponent': {
+      'oneOf': [
         {
-          $ref: '#/components/Text',
+          '$ref': '#/components/Text',
         },
         {
-          $ref: '#/components/Image',
+          '$ref': '#/components/Image',
         },
         {
-          $ref: '#/components/Icon',
+          '$ref': '#/components/Icon',
         },
         {
-          $ref: '#/components/Video',
+          '$ref': '#/components/Video',
         },
         {
-          $ref: '#/components/AudioPlayer',
+          '$ref': '#/components/AudioPlayer',
         },
         {
-          $ref: '#/components/Row',
+          '$ref': '#/components/Row',
         },
         {
-          $ref: '#/components/Column',
+          '$ref': '#/components/Column',
         },
         {
-          $ref: '#/components/List',
+          '$ref': '#/components/List',
         },
         {
-          $ref: '#/components/Card',
+          '$ref': '#/components/Card',
         },
         {
-          $ref: '#/components/Tabs',
+          '$ref': '#/components/Tabs',
         },
         {
-          $ref: '#/components/Modal',
+          '$ref': '#/components/Modal',
         },
         {
-          $ref: '#/components/Divider',
+          '$ref': '#/components/Divider',
         },
         {
-          $ref: '#/components/Button',
+          '$ref': '#/components/Button',
         },
         {
-          $ref: '#/components/TextField',
+          '$ref': '#/components/TextField',
         },
         {
-          $ref: '#/components/CheckBox',
+          '$ref': '#/components/CheckBox',
         },
         {
-          $ref: '#/components/ChoicePicker',
+          '$ref': '#/components/ChoicePicker',
         },
         {
-          $ref: '#/components/Slider',
+          '$ref': '#/components/Slider',
         },
         {
-          $ref: '#/components/DateTimeInput',
+          '$ref': '#/components/DateTimeInput',
         },
       ],
-      discriminator: {
-        propertyName: 'component',
+      'discriminator': {
+        'propertyName': 'component',
       },
     },
-    anyFunction: {
-      oneOf: [
+    'anyFunction': {
+      'oneOf': [
         {
-          $ref: '#/functions/required',
+          '$ref': '#/functions/required',
         },
         {
-          $ref: '#/functions/regex',
+          '$ref': '#/functions/regex',
         },
         {
-          $ref: '#/functions/length',
+          '$ref': '#/functions/length',
         },
         {
-          $ref: '#/functions/numeric',
+          '$ref': '#/functions/numeric',
         },
         {
-          $ref: '#/functions/email',
+          '$ref': '#/functions/email',
         },
         {
-          $ref: '#/functions/formatString',
+          '$ref': '#/functions/formatString',
         },
         {
-          $ref: '#/functions/formatNumber',
+          '$ref': '#/functions/formatNumber',
         },
         {
-          $ref: '#/functions/formatCurrency',
+          '$ref': '#/functions/formatCurrency',
         },
         {
-          $ref: '#/functions/formatDate',
+          '$ref': '#/functions/formatDate',
         },
         {
-          $ref: '#/functions/pluralize',
+          '$ref': '#/functions/pluralize',
         },
         {
-          $ref: '#/functions/openUrl',
+          '$ref': '#/functions/openUrl',
         },
         {
-          $ref: '#/functions/and',
+          '$ref': '#/functions/and',
         },
         {
-          $ref: '#/functions/or',
+          '$ref': '#/functions/or',
         },
         {
-          $ref: '#/functions/not',
+          '$ref': '#/functions/not',
         },
       ],
     },
