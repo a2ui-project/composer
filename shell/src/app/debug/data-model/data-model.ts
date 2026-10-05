@@ -162,6 +162,7 @@ export class DataModel {
   clearLogs(): void {
     this.cancelUserEdit$.next();
     this.latestModelValue.set(null);
+    // Explicitly clear in case latestModelValue was already null when the user edited the textarea.
     this.dataModelJson.set('');
     this.lastSurfaceId = 'sample-surface';
     this.lastPath = undefined;

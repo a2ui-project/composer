@@ -263,13 +263,13 @@ export class ChatCoordinator {
       responseStream = await this.llmClient.chatStream(fullContext);
 
       if (this.activePromptId !== promptId) {
-        if (responseStream.cancel) responseStream.cancel();
+        responseStream?.cancel?.();
         return;
       }
 
       // If a cancel was requested while the stream connection was establishing
       if (this.isCancelRequested) {
-        if (responseStream.cancel) responseStream.cancel();
+        responseStream?.cancel?.();
         const err = new Error('Cancelled');
         err.name = CANCEL_ERROR_NAME;
         throw err;
