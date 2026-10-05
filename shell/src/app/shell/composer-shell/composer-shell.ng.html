@@ -29,36 +29,38 @@
     >A2UI Composer{{ activeCatalogTitle() ? ' - ' + activeCatalogTitle() : '' }}</span
   >
   <span class="spacer"></span>
-  <button
-    mat-button
-    class="reset-session-button"
-    color="primary"
-    (click)="resetSession()"
-    a2uiComposerTrackEvent="trackSessionReset"
-    [a2uiComposerTrackParams]="{totalPromptTurns: currentTurnIndex()}"
-  >
-    New Session
-  </button>
-  <button
-    mat-icon-button
-    class="reset-layout-button"
-    color="primary"
-    (click)="resetLayout()"
-    aria-label="Reset Layout"
-    matTooltip="Reset Layout"
-  >
-    <mat-icon aria-hidden="true">space_dashboard</mat-icon>
-  </button>
-  <button
-    mat-icon-button
-    class="share-button"
-    color="primary"
-    (click)="shareDesign()"
-    aria-label="Share design"
-    matTooltip="Share Design"
-  >
-    <mat-icon aria-hidden="true">share</mat-icon>
-  </button>
+  @if (isWorkspaceRoute()) {
+    <button
+      mat-button
+      class="reset-session-button"
+      color="primary"
+      (click)="resetSession()"
+      a2uiComposerTrackEvent="trackSessionReset"
+      [a2uiComposerTrackParams]="{totalPromptTurns: currentTurnIndex()}"
+    >
+      New Session
+    </button>
+    <button
+      mat-icon-button
+      class="reset-layout-button"
+      color="primary"
+      (click)="resetLayout()"
+      aria-label="Reset Layout"
+      matTooltip="Reset Layout"
+    >
+      <mat-icon aria-hidden="true">space_dashboard</mat-icon>
+    </button>
+    <button
+      mat-icon-button
+      class="share-button"
+      color="primary"
+      (click)="shareDesign()"
+      aria-label="Share design"
+      matTooltip="Share Design"
+    >
+      <mat-icon aria-hidden="true">share</mat-icon>
+    </button>
+  }
   <button
     mat-icon-button
     class="theme-toggle-button"

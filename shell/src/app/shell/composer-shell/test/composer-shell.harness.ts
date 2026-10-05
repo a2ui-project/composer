@@ -27,10 +27,14 @@ export class ComposerShellHarness extends ComponentHarness {
 
   private getHeaderTitle = this.locatorFor('.composer-header .header-title');
   private getThemeToggleButton = this.locatorFor('button[aria-label*="theme"]');
+  private getThemeToggleButtonOptional = this.locatorForOptional('button[aria-label*="theme"]');
   private getHamburgerButton = this.locatorFor('button.hamburger-button');
   private getSidenav = this.locatorFor(MatSidenavHarness);
   private getResetButton = this.locatorFor('button.reset-session-button');
+  private getResetButtonOptional = this.locatorForOptional('button.reset-session-button');
   private getResetLayoutButton = this.locatorFor('button.reset-layout-button');
+  private getResetLayoutButtonOptional = this.locatorForOptional('button.reset-layout-button');
+  private getShareButtonOptional = this.locatorForOptional('button.share-button');
   private getHeaderTooltip = this.locatorFor(MatTooltipHarness);
   private getNavList = this.locatorFor(MatNavListHarness);
 
@@ -43,6 +47,22 @@ export class ComposerShellHarness extends ComponentHarness {
     const tooltip = await this.getHeaderTooltip();
     await tooltip.show();
     return tooltip.getTooltipText();
+  }
+
+  async hasResetButton(): Promise<boolean> {
+    return (await this.getResetButtonOptional()) !== null;
+  }
+
+  async hasResetLayoutButton(): Promise<boolean> {
+    return (await this.getResetLayoutButtonOptional()) !== null;
+  }
+
+  async hasShareButton(): Promise<boolean> {
+    return (await this.getShareButtonOptional()) !== null;
+  }
+
+  async hasThemeToggleButton(): Promise<boolean> {
+    return (await this.getThemeToggleButtonOptional()) !== null;
   }
 
   async clickResetButton(): Promise<void> {
