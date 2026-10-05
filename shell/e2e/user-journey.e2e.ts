@@ -105,8 +105,7 @@ test.describe('E2E Workspace User Journey', () => {
     await page.waitForURL(url => url.pathname === '/');
     await page.waitForLoadState('load');
 
-    // 7. Switch to A2UI JSON Editor tab, wait for Monaco to load and enter malformed JSON
-    await page.locator('.dv-tab', {hasText: /^A2UI JSON Editor/}).click();
+    // 7. Wait for Monaco to load and enter malformed JSON
     await waitForMonacoEditor(page);
 
     await setMonacoContent(page, 'invalid json {');
@@ -145,8 +144,7 @@ test.describe('E2E Workspace User Journey', () => {
     await page.goto('/');
     await page.waitForLoadState('load');
 
-    // Switch to A2UI JSON Editor tab and wait for Monaco to load
-    await page.locator('.dv-tab', {hasText: /^A2UI JSON Editor/}).click();
+    // Wait for Monaco to load
     await waitForMonacoEditor(page);
 
     // Wait for initial layout snapshot in chat history
