@@ -17,6 +17,7 @@
 import {expect, test, type Page} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {connectMockAgent} from '../src/app/agent-chat/test/mock-a2a-agent';
+import {waitForMonacoEditor} from './helpers';
 
 async function themeColor(page: Page, token: string): Promise<string> {
   const hex = await page.locator('body').evaluate((body, name) => {
@@ -178,7 +179,7 @@ test('Workspace panels, the JSON editor, and the chat panel share one surface in
     localStorage.setItem('a2ui_composer_force_1p', 'true');
   });
   await page.goto(`/?renderer=${rendererUrl}`);
-  await expect(page.locator('.monaco-editor .monaco-editor-background')).toBeVisible();
+  await waitForMonacoEditor(page);
 
   for (const theme of ['light', 'dark']) {
     if (theme === 'dark') {
