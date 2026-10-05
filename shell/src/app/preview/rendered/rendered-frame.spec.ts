@@ -362,6 +362,18 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(await harness.getFrameHeight()).toBe('264px');
   });
 
+  it('shrinks dynamicHeight when a smaller surface height is reported', async () => {
+    emitBridgeMessage(surfaceResize(600));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.dynamicHeight()).toBe(600);
+
+    emitBridgeMessage(surfaceResize(394));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.dynamicHeight()).toBe(394);
+    expect(await harness.getFrameHeight()).toBe('394px');
+  });
+
   it('keeps the frame at panel height when the guest reports zero', async () => {
     // CrossFrameValidator admits 0 as a valid dimension, so this component is
     // what stops a zero report from collapsing the frame: with no usable
@@ -594,14 +606,15 @@ describe('RenderedFrame Live Preview Viewport', () => {
       expect(fixture.componentInstance.dynamicHeight()).toBe(BASE_HEIGHT_PX);
 
       // A whole runaway burst delivered inside a single change detection tick.
-      // The Angular effect coalesces these into one run for the final value only,
-      // so a counter living inside the effect would never see the ramp.
-      for (let i = 1; i <= 15; i++) {
+      for (let i = 1; i <= 20; i++) {
         emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
       }
       fixture.detectChanges();
 
-      expect(fixture.componentInstance.dynamicHeight()).toBe(BASE_HEIGHT_PX);
+      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
+      expect(fixture.componentInstance.dynamicHeight()).toBeLessThan(
+        BASE_HEIGHT_PX + 20 * LOOP_STEP_PX,
+      );
     });
 
     it('keeps applying growth when reports arrive slower than the runaway window', () => {

@@ -54,7 +54,7 @@ import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame
  * here. Oscillation is covered by the settle assertion in
  * shell/e2e/renderer-integration-and-telemetry.e2e.ts instead.
  */
-const MAX_MONOTONIC_GROWTH_REPORTS = 8;
+const MAX_MONOTONIC_GROWTH_REPORTS = 16;
 
 /**
  * Maximum gap between two reports for them to belong to the same growth run.
@@ -185,6 +185,7 @@ export class RenderedFrame {
       const ref = this.iframeRef();
       const el = ref?.nativeElement ?? null;
       if (el) {
+        this.resetGrowthRun();
         this.hostCommunication.registerIframe(el);
         onCleanup(() => {
           this.hostCommunication.unregisterIframe(el);
@@ -284,6 +285,11 @@ export class RenderedFrame {
       return;
     }
 
+    if (envelope.type === PreviewBridgeMessageType.RENDER_SUCCESS) {
+      this.resetGrowthRun();
+      return;
+    }
+
     if (
       envelope.type !== PreviewBridgeMessageType.SURFACE_RESIZE ||
       !CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)
@@ -308,14 +314,11 @@ export class RenderedFrame {
 
     if (this.growthRunLength >= MAX_MONOTONIC_GROWTH_REPORTS && !this.growthBreakerLatched()) {
       this.growthBreakerLatched.set(true);
-      if (this.growthRunStartHeight !== null) {
-        this.dynamicHeight.set(this.growthRunStartHeight);
-      }
       this.errorLogger.warn({
         message:
           `Preview frame growth stopped: the renderer reported ${this.growthRunLength} ` +
           `consecutive larger heights within ${RUNAWAY_REPORT_INTERVAL_MS}ms, which is a ` +
-          `runaway resize loop. Frame held at ${this.growthRunStartHeight ?? untracked(() => this.dynamicHeight())}px; ` +
+          `runaway resize loop. Frame held at ${untracked(() => this.dynamicHeight()) ?? this.growthRunStartHeight}px; ` +
           `last reported height ${height}px.`,
         sourceTag: '[Shell]',
       });
@@ -330,7 +333,7 @@ export class RenderedFrame {
     if (!untracked(() => this.growthBreakerLatched())) {
       return height;
     }
-    const ceiling = this.growthRunStartHeight ?? untracked(() => this.dynamicHeight());
+    const ceiling = untracked(() => this.dynamicHeight()) ?? this.growthRunStartHeight;
     return ceiling === null ? height : Math.min(height, ceiling);
   }
 
@@ -381,6 +384,7 @@ export class RenderedFrame {
     const iframe = this.iframeRef()?.nativeElement;
     if (iframe) {
       this.setupIframeWheelForwarding(iframe);
+      this.resetGrowthRun();
       if (payload !== null && Array.isArray(payload) && payload.length > 0) {
         this.hostCommunication.sendRenderA2UI(payload, iframe);
       }

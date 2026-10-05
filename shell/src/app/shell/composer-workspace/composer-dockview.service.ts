@@ -495,6 +495,7 @@ export class ComposerDockview {
           direction: 'within',
           referencePanel: ComposerPanelId.Rendered,
         },
+        inactive: true,
       });
 
       // 4. Debug drawer split below Rendered preview
@@ -519,6 +520,7 @@ export class ComposerDockview {
           direction: 'within',
           referencePanel: ComposerPanelId.DataModel,
         },
+        inactive: true,
       });
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Errors,
@@ -528,6 +530,7 @@ export class ComposerDockview {
           direction: 'within',
           referencePanel: ComposerPanelId.DataModel,
         },
+        inactive: true,
       });
       this.dockviewApi.addPanel({
         id: ComposerPanelId.RawMessages,
@@ -537,6 +540,7 @@ export class ComposerDockview {
           direction: 'within',
           referencePanel: ComposerPanelId.DataModel,
         },
+        inactive: true,
       });
 
       // Explicitly activate default primary tabs for each panel group.

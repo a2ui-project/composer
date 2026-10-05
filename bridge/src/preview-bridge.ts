@@ -617,9 +617,10 @@ export class PreviewBridge {
       payload.some(item => item && typeof item === 'object' && 'createSurface' in item);
 
     if (hasCreateSurface) {
-      // Step 1: Synchronously dispatch null to trigger unmounting/reset
+      // Step 1: Synchronously dispatch null to trigger unmounting/reset.
+      // Omit resize measurement here since Step 2 will immediately mount and measure the new surface.
       try {
-        this.handleRenderA2ui(null, isStreaming);
+        this.handleRenderA2ui(null, isStreaming, false);
       } catch (err) {
         console.error('PreviewBridge: Error during RENDER_A2UI null reset dispatch:', err);
       }
@@ -650,11 +651,15 @@ export class PreviewBridge {
    * Renders the specified payload array, mapping surface creation handles,
    * or delegates a resetting null command.
    */
-  private handleRenderA2ui(payload: unknown, isStreaming: boolean = false): void {
+  private handleRenderA2ui(
+    payload: unknown,
+    isStreaming: boolean = false,
+    scheduleResize = true,
+  ): void {
     if (!this.activeRenderer) return;
 
     if (payload === null) {
-      this.resetActiveRendererState();
+      this.resetActiveRendererState(scheduleResize);
       return;
     }
 
@@ -745,7 +750,7 @@ export class PreviewBridge {
   /**
    * Resets active renderer properties, clearing tracking handles and posting delete signals.
    */
-  private resetActiveRendererState(): void {
+  private resetActiveRendererState(scheduleResize = true): void {
     if (!this.activeRenderer) return;
 
     const {processor, config, activeSurfaceIds} = this.activeRenderer;
@@ -770,7 +775,9 @@ export class PreviewBridge {
     }
 
     // Defer measurement to allow framework component unmounting and DOM cleanup to settle.
-    setTimeout(() => this.dispatchSurfaceResize(), 0);
+    if (scheduleResize) {
+      setTimeout(() => this.dispatchSurfaceResize(), 0);
+    }
   }
 
   /**

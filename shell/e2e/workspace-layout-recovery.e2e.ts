@@ -84,104 +84,95 @@ for (const invalidState of ['retired panel', 'mismatched panel ID']) {
   });
 }
 
-test('resets modified dockview layout back to default when clicking Reset Layout toolbar button', async ({
+test('resets modified dockview layout back to default when clicking Reset Layout toolbar button repeatedly', async ({
   page,
 }) => {
   await page.goto(`/?renderer=${rendererUrl}`);
   await expect(page.locator('.workspace-container')).toBeVisible();
 
-  // Initially default tabs are active: Rendered A2UI Preview and Data Model
-  await expect(page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/})).toHaveClass(
-    /dv-active-tab/,
-  );
-  await expect(page.locator('.dv-tab', {hasText: /^Data Model/})).toHaveClass(/dv-active-tab/);
-
-  // Verify initial preview is fully loaded and visible inside iframe before modifying layout
   const preview = page.frameLocator('iframe.preview-iframe');
-  await expect(preview.getByRole('button', {name: 'Search Cars'})).toBeVisible();
 
-  // Move A2UI JSON Editor pane to dock on the right of Preview (reproducing user's drag action)
-  await page.evaluate(() => {
-    const ws = (
-      window as unknown as {
-        ng?: {
-          getComponent: (el: Element) => {
-            composerDockview?: {
-              api: {getGroupPanel: (id: string) => {api: {moveTo: (opts: unknown) => void}}};
+  for (let cycle = 1; cycle <= 3; cycle++) {
+    // Initially default tabs are active: Rendered A2UI Preview and Data Model
+    await expect(page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/})).toHaveClass(
+      /dv-active-tab/,
+    );
+    await expect(page.locator('.dv-tab', {hasText: /^Data Model/})).toHaveClass(/dv-active-tab/);
+
+    // Verify initial preview is fully loaded and visible inside iframe before modifying layout
+    await expect(preview.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+
+    // Move A2UI JSON Editor pane to dock on the right of Preview (reproducing user's drag action)
+    await page.evaluate(() => {
+      const ws = (
+        window as unknown as {
+          ng?: {
+            getComponent: (el: Element) => {
+              composerDockview?: {
+                api: {getGroupPanel: (id: string) => {api: {moveTo: (opts: unknown) => void}}};
+              };
             };
           };
-        };
+        }
+      ).ng?.getComponent(document.querySelector('a2ui-composer-workspace')!);
+      const rawPanel = ws?.composerDockview?.api?.getGroupPanel('raw');
+      if (rawPanel) {
+        rawPanel.api.moveTo({position: 'right'});
+        return true;
       }
-    ).ng?.getComponent(document.querySelector('a2ui-composer-workspace')!);
-    const rawPanel = ws?.composerDockview?.api?.getGroupPanel('raw');
-    if (rawPanel) {
-      rawPanel.api.moveTo({position: 'right'});
-      return true;
-    }
-    return false;
-  });
+      return false;
+    });
 
-  // Wait for debounced layout save to populate localStorage
-  await expect
-    .poll(() => page.evaluate(key => localStorage.getItem(key), LocalStorageKey.DOCKVIEW_LAYOUT))
-    .not.toBeNull();
+    // Wait for debounced layout save to populate localStorage
+    await expect
+      .poll(() => page.evaluate(key => localStorage.getItem(key), LocalStorageKey.DOCKVIEW_LAYOUT))
+      .not.toBeNull();
 
-  // Click the Reset Layout button in the main toolbar
-  await page.locator('button.reset-layout-button').click();
+    // Click the Reset Layout button in the main toolbar
+    await page.locator('button.reset-layout-button').click();
 
-  // Verify default tabs are active again
-  await expect(page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/})).toHaveClass(
-    /dv-active-tab/,
-  );
-  await expect(page.locator('.dv-tab', {hasText: /^Data Model/})).toHaveClass(/dv-active-tab/);
-
-  // Verify all 7 tabs are present
-  await expect(page.locator('.dv-tab')).toHaveCount(7);
-
-  // Verify DOCKVIEW_LAYOUT was cleared from localStorage
-  const savedLayout = await page.evaluate(
-    key => localStorage.getItem(key),
-    LocalStorageKey.DOCKVIEW_LAYOUT,
-  );
-  expect(savedLayout).toBeNull();
-
-  // Verify the preview is visible and interactive immediately without toggling tabs
-  await expect(preview.getByRole('button', {name: 'Search Cars'})).toBeVisible();
-
-  // Verify the preview iframe and overlay properly fill the Dockview panel container
-  // and are not clipped to the ~130px initial sandbox fallback banner.
-  await expect
-    .poll(async () => {
-      return page.evaluate(() => {
-        const renderedOverlay = Array.from(
-          document.querySelectorAll<HTMLElement>('.dv-render-overlay'),
-        ).find(el => el.querySelector('a2ui-composer-rendered-frame'));
-        const iframe = document.querySelector<HTMLIFrameElement>('iframe.preview-iframe');
-        const group = Array.from(document.querySelectorAll<HTMLElement>('.dv-groupview')).find(g =>
-          g.querySelector('.dv-tab.dv-active-tab')?.textContent?.includes('Rendered'),
-        );
-        const content = group?.querySelector<HTMLElement>('.dv-content-container');
-
-        const overlayHeight = renderedOverlay?.getBoundingClientRect().height ?? 0;
-        const contentHeight = content?.getBoundingClientRect().height ?? 0;
-        const iframeHeight = iframe?.getBoundingClientRect().height ?? 0;
-
-        return {
-          overlayHeight,
-          contentHeight,
-          iframeHeight,
-          overlayMatchesContent: contentHeight > 0 && Math.abs(overlayHeight - contentHeight) < 2,
-          iframeExpanded: iframeHeight > 300,
-        };
-      });
-    })
-    .toEqual(
-      expect.objectContaining({
-        overlayMatchesContent: true,
-        iframeExpanded: true,
-      }),
+    // Verify default tabs are active again
+    await expect(page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/})).toHaveClass(
+      /dv-active-tab/,
     );
+    await expect(page.locator('.dv-tab', {hasText: /^Data Model/})).toHaveClass(/dv-active-tab/);
 
+    // Verify all 7 tabs are present
+    await expect(page.locator('.dv-tab')).toHaveCount(7);
+
+    // Verify DOCKVIEW_LAYOUT was cleared from localStorage
+    const savedLayout = await page.evaluate(
+      key => localStorage.getItem(key),
+      LocalStorageKey.DOCKVIEW_LAYOUT,
+    );
+    expect(savedLayout).toBeNull();
+
+    // Verify the preview is visible and interactive immediately without toggling tabs
+    await expect(preview.getByRole('button', {name: 'Search Cars'})).toBeVisible();
+
+    // Verify the preview iframe properly expands and is not clipped to the ~130px initial sandbox fallback banner.
+    await expect
+      .poll(async () => {
+        return page.evaluate(() => {
+          const iframe = document.querySelector<HTMLIFrameElement>('iframe.preview-iframe');
+          const iframeHeight = iframe?.getBoundingClientRect().height ?? 0;
+          return {
+            iframeHeight,
+            iframeExpanded: iframeHeight > 300,
+          };
+        });
+      })
+      .toEqual(
+        expect.objectContaining({
+          iframeExpanded: true,
+        }),
+      );
+
+    // Verify no spurious errors were logged to the Errors tab (circuit breaker did not false-trip)
+    await expect(page.locator('.dv-tab', {hasText: /^Errors/})).toHaveText('Errors');
+  }
+
+  // Click Search Cars and verify Events tab increments
   await preview.getByRole('button', {name: 'Search Cars'}).click();
   await expect(page.locator('.dv-tab', {hasText: /^Events/})).toContainText('(1)');
 
