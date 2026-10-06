@@ -763,7 +763,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         <pre>${this.debouncedError.message||String(this.debouncedError)}</pre>
       </div>
     `:``}render(){return this.surface?_`<main>
-      <a2ui-surface .surface=${this.surface}></a2ui-surface>
+      <a2ui-surface .surface=${this.surface}><span slot="loading"></span></a2ui-surface>
       ${this.renderErrorOverlay()}
     </main>`:_`
         <p style="color: #666; padding: 24px; font-family: sans-serif; text-align: center;">
