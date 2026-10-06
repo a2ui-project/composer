@@ -56,6 +56,8 @@ export class A2aMessageInspector {
   protected readonly copiedEventId = signal<string | null>(null);
   private readonly errorLogger = inject(ErrorLogger).withTag('[MessageInspector]');
 
+  private readonly searchStringCache = new WeakMap<MessageInspectorEvent, string>();
+
   protected readonly filteredEvents = computed(() => {
     const list = this.events();
     const dir = this.filterDirection();
@@ -66,13 +68,17 @@ export class A2aMessageInspector {
         return false;
       }
       if (query) {
-        const str = (
-          (event.messageId ?? '') +
-          ' ' +
-          event.summary +
-          ' ' +
-          JSON.stringify(event.payload)
-        ).toLowerCase();
+        let str = this.searchStringCache.get(event);
+        if (str === undefined) {
+          str = (
+            (event.messageId ?? '') +
+            ' ' +
+            event.summary +
+            ' ' +
+            JSON.stringify(event.payload)
+          ).toLowerCase();
+          this.searchStringCache.set(event, str);
+        }
         if (!str.includes(query)) {
           return false;
         }
