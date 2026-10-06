@@ -777,6 +777,13 @@ ${METRICS_END}
 
   describe('h) Subclass scanning support (--subclass / subclassPaths)', () => {
     it('parses repeatable --subclass and --subclass=<path> CLI arguments resolved relative to cwd', () => {
+      assert.deepEqual(parseCliArgs(), {
+        help: false,
+        check: false,
+        dryRun: false,
+        subclassPaths: [],
+      });
+
       const parsed = parseCliArgs(
         ['--check', '--subclass', 'sub/a.ts', '--subclass=sub/b.ts'],
         '/workspace',

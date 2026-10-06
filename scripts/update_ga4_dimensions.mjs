@@ -539,11 +539,11 @@ export function syncDimensions({
 /**
  * Parses CLI arguments for update_ga4_dimensions.mjs.
  *
- * @param {string[]} args
+ * @param {string[]} [args]
  * @param {string} [cwd]
  * @returns {{help: boolean, check: boolean, dryRun: boolean, subclassPaths: string[]}}
  */
-export function parseCliArgs(args, cwd = process.cwd()) {
+export function parseCliArgs(args = [], cwd = process.cwd()) {
   let help = false;
   let check = false;
   let dryRun = false;
