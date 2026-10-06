@@ -29,6 +29,7 @@ import {
   getBlockKitJson,
   getBlockKitTextMatches,
   openComposerWithSlackRenderer,
+  SLACK_360_EMBED_VIEWPORT,
   slackPreviewFrame,
   slackPreviewSurface,
 } from './slack-renderer.helpers';
@@ -145,18 +146,24 @@ test.describe('Slack assistant browser journey', () => {
       '🇦🇷 Argentina',
       '3–3 (4–2 pens)',
     ]);
+    // In a 360px Slack embed the table is wider than the message, so it scrolls inside
+    // its own container while the page itself still fits.
+    await page.setViewportSize(SLACK_360_EMBED_VIEWPORT);
     const tableContainer = preview.locator('.slack_blocks_to_jsx__table');
-    const narrowLayout = await tableContainer.evaluate(element => {
-      element.scrollLeft = element.scrollWidth;
-      const lastCell = element.querySelector('tr:last-child td:last-child')!;
-      return {
-        pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-        scrollable: element.scrollWidth > element.clientWidth && element.scrollLeft > 0,
-        lastCellVisible:
-          lastCell.getBoundingClientRect().right <= element.getBoundingClientRect().right + 1,
-      };
-    });
-    expect(narrowLayout).toEqual({pageFits: true, scrollable: true, lastCellVisible: true});
+    await expect
+      .poll(() =>
+        tableContainer.evaluate(element => {
+          element.scrollLeft = element.scrollWidth;
+          const lastCell = element.querySelector('tr:last-child td:last-child')!;
+          return {
+            pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+            scrollable: element.scrollWidth > element.clientWidth && element.scrollLeft > 0,
+            lastCellVisible:
+              lastCell.getBoundingClientRect().right <= element.getBoundingClientRect().right + 1,
+          };
+        }),
+      )
+      .toEqual({pageFits: true, scrollable: true, lastCellVisible: true});
     await tableContainer.evaluate(element => {
       element.scrollLeft = 0;
     });

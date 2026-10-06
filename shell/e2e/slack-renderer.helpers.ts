@@ -16,6 +16,7 @@
 
 import {readFileSync} from 'node:fs';
 import {expect, type FrameLocator, type Locator, type Page} from '@playwright/test';
+import {waitForMonacoEditor, waitForPreviewTab} from './helpers';
 
 export const SLACK_RENDERER_URL = 'http://127.0.0.1:3460';
 
@@ -129,6 +130,13 @@ interface WindowWithPreviewActivity extends Window {
 /** Longer than both debounced editor-to-preview paths, plus the guest's reply. */
 const PREVIEW_QUIET_MS = 800;
 
+/**
+ * A viewport at which the preview is roughly the width of a 360px Slack embed. The
+ * preview shares its tab group with the JSON editor and that group's width follows the
+ * viewport, so font metrics and scrollbars move it by a few pixels between machines.
+ */
+export const SLACK_360_EMBED_VIEWPORT = {width: 630, height: 900} as const;
+
 /** Starts recording when the preview iframe last sent the shell a message. */
 async function trackPreviewActivity(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -172,6 +180,9 @@ export async function waitForPreviewToSettle(page: Page): Promise<void> {
  */
 export async function replaceMonacoJson(page: Page, value: string): Promise<void> {
   await trackPreviewActivity(page);
+  // The JSON editor and the preview are tabs in one group: show the editor to edit it,
+  // then the preview again, which is what the test interacts with next.
+  await waitForMonacoEditor(page);
   await page.locator('a2ui-composer-monaco-editor .monaco-editor').first().click();
   const input = page.getByRole('textbox', {name: 'Raw layout JSON'});
   await expect(input).toBeFocused();
@@ -187,6 +198,7 @@ export async function replaceMonacoJson(page: Page, value: string): Promise<void
       new ClipboardEvent('paste', {clipboardData, bubbles: true, cancelable: true}),
     );
   }, value);
+  await waitForPreviewTab(page);
   await waitForPreviewToSettle(page);
 }
 

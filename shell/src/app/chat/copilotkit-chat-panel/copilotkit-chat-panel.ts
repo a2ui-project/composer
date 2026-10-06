@@ -147,7 +147,7 @@ export class CopilotKitChatPanel extends ChatPanelBase {
    *   instead of prose.
    * - The component count only includes components in `updateComponents`
    *   messages, not surface or data-model commands.
-   * - Snapshots that repeat what the conversation already shows are dropped
+   * - A snapshot that repeats the assistant snapshot just before it is dropped
    *   (see `dropRedundantSnapshots`).
    */
   protected readonly presentedTurns = computed<PresentedTurn[]>(() => {
@@ -210,25 +210,13 @@ export class CopilotKitChatPanel extends ChatPanelBase {
   });
 
   /**
-   * Drops canvas snapshots that would repeat what the conversation already shows:
-   * - An empty snapshot opening the conversation. A renderer that starts with an
-   *   empty canvas would otherwise open the chat with "0 components in this canvas".
-   * - A snapshot identical to the assistant snapshot just before it. After a
-   *   response is applied, Composer records the resulting canvas as the next
-   *   context turn, which would otherwise repeat the same summary.
+   * Drops a canvas snapshot identical to the assistant snapshot just before it.
+   * After a response is applied, Composer records the resulting canvas as the next
+   * context turn, which would otherwise repeat the same summary.
    */
   private dropRedundantSnapshots(turns: PresentedTurn[]): PresentedTurn[] {
     const visibleTurns: PresentedTurn[] = [];
     for (const turn of turns) {
-      const opensWithEmptySnapshot =
-        turn.isSnapshot &&
-        !turn.isStreaming &&
-        !this.isLocked() &&
-        turn.componentCount === 0 &&
-        visibleTurns.length === 0;
-      if (opensWithEmptySnapshot) {
-        continue;
-      }
       const previousTurn = visibleTurns[visibleTurns.length - 1];
       const repeatsAssistantSnapshot =
         turn.isSnapshot &&
