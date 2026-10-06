@@ -315,7 +315,6 @@ export class A2aChatMessage {
   }
 
   protected openMessageInspector(): void {
-    console.log('openMessageInspector', this.message().id);
     this.openInspector.emit(this.message().id);
   }
 
