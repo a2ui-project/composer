@@ -130,17 +130,17 @@ import {useA2uiSandbox} from 'a2ui-bridge/react';
 import {A2uiSurface, basicCatalog} from '@a2ui/react/v0_9';
 
 export function App() {
-  const {surface} = useA2uiSandbox([basicCatalog]);
+  const {surface, hasRoot} = useA2uiSandbox([basicCatalog]);
 
   return (
     <main className="sandbox-shell">
       {surface ? (
-          <A2uiSurface surface={surface} />
-  ) : (
-    <p>A2UI React Sandbox active. Waiting for RENDER_A2UI payloads...</p>
-)}
-  </main>
-);
+        hasRoot && <A2uiSurface surface={surface} />
+      ) : (
+        <p>A2UI React Sandbox active. Waiting for RENDER_A2UI payloads...</p>
+      )}
+    </main>
+  );
 }
 ```
 

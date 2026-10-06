@@ -144,4 +144,33 @@ describe('AppRoot Lit Element', () => {
     await (textEl as unknown as {updateComplete: Promise<void>})?.updateComplete;
     expect(textEl?.shadowRoot?.innerHTML).toContain('<strong>bold text</strong>');
   });
+
+  it('slots an empty loading element when surface has no root component', async () => {
+    const mockPayload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'blank-surface-123',
+          catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+        },
+      },
+    ];
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        origin: window.location.origin,
+        data: {type: PreviewBridgeMessageType.RENDER_A2UI, payload: mockPayload},
+      }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 15));
+    await element.updateComplete;
+    expect(element.shadowRoot?.innerHTML).not.toContain('Waiting for RENDER_A2UI...');
+    const surfaceEl = element.shadowRoot?.querySelector('a2ui-surface');
+    expect(surfaceEl).not.toBeNull();
+    const loadingSlot = surfaceEl?.querySelector('[slot="loading"]');
+    expect(loadingSlot).not.toBeNull();
+    expect(loadingSlot?.textContent).toBe('');
+  });
 });

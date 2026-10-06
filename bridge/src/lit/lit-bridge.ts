@@ -235,8 +235,9 @@ export class A2uiSandboxRoot extends LitElement {
         ${this.renderErrorOverlay()}
       `;
     }
+    // Slot an empty loading element to suppress @a2ui/lit's default "Loading surface..." fallback when a surface has no 'root' component.
     return html`<main>
-      <a2ui-surface .surface=${this.surface}></a2ui-surface>
+      <a2ui-surface .surface=${this.surface}><span slot="loading"></span></a2ui-surface>
       ${this.renderErrorOverlay()}
     </main>`;
   }

@@ -137,6 +137,119 @@ describe('React Hook Adapter Spec', () => {
     container.remove();
   });
 
+  it('tracks hasRoot as false for a blank createSurface and updates reactively when root component is added or removed', async () => {
+    const dummyCatalog = {
+      id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      components: new Map<string, ComponentApi>(),
+    } as unknown as Catalog<ComponentApi>;
+
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+
+    let latestHasRoot: boolean | undefined = undefined;
+
+    function TestComponent() {
+      const {hasRoot} = useA2uiSandbox([dummyCatalog]);
+      latestHasRoot = hasRoot;
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(React.createElement(TestComponent));
+    });
+
+    interface MockProcessor {
+      processMessages(messages: unknown[]): void;
+      model: {
+        getSurface(id: string): {
+          componentsModel: {removeComponent(id: string): void};
+        };
+      };
+    }
+    const processor = attachSpy.mock.lastCall![0] as unknown as MockProcessor;
+    const config = attachSpy.mock.lastCall![1];
+
+    expect(latestHasRoot).toBe(false);
+
+    // 1. Create blank surface without a root component
+    processor.processMessages([
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'surf-blank',
+          catalogId: dummyCatalog.id,
+        },
+      },
+    ]);
+
+    await act(async () => {
+      config.onSurfaceReady('surf-blank');
+    });
+
+    expect(latestHasRoot).toBe(false);
+
+    // 2. Add a non-root component first; hasRoot should remain false
+    await act(async () => {
+      processor.processMessages([
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 'surf-blank',
+            components: [{id: 'child-1', component: 'Text', text: 'Hello'}],
+          },
+        },
+      ]);
+    });
+    expect(latestHasRoot).toBe(false);
+
+    // 3. Add root component; hasRoot should become true
+    await act(async () => {
+      processor.processMessages([
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 'surf-blank',
+            components: [{id: 'root', component: 'Column', children: ['child-1']}],
+          },
+        },
+      ]);
+    });
+    expect(latestHasRoot).toBe(true);
+
+    // 4. Remove root component; hasRoot should revert to false
+    await act(async () => {
+      processor.model.getSurface('surf-blank').componentsModel.removeComponent('root');
+    });
+    expect(latestHasRoot).toBe(false);
+
+    // 5. Re-add root component and then clear surface; hasRoot should reset to false
+    await act(async () => {
+      processor.processMessages([
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 'surf-blank',
+            components: [{id: 'root', component: 'Column', children: []}],
+          },
+        },
+      ]);
+    });
+    expect(latestHasRoot).toBe(true);
+
+    await act(async () => {
+      config.onSurfaceCleared?.();
+    });
+    expect(latestHasRoot).toBe(false);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it('dispatches outbound actions triggered within MessageProcessor out to a2uiBridge.sendAction', async () => {
     const dummyCatalog = {
       id: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
