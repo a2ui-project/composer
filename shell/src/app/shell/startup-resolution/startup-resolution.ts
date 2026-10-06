@@ -75,10 +75,13 @@ export class StartupResolution {
    * allowed yet asks for confirmation first; the selection is only committed
    * once it's allowed, so a denied renderer never replaces the current one.
    *
+   * @param signal Cancels a pending confirmation, for example when the user
+   *     stops the assistant turn that asked for the switch.
    * @return Whether the renderer was selected.
    * @throws If the selection changed while the confirmation was open.
    */
-  async setSelectedRendererId(rendererId: string | null): Promise<boolean> {
+  async setSelectedRendererId(rendererId: string | null, signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted();
     const previousId = this.startupConfigState.selectedRendererId();
     const previousUrl = this.resolvedUrl();
     const active = rendererId
@@ -86,7 +89,8 @@ export class StartupResolution {
       : null;
     const rendererUrl = active?.rendererUrl;
     if (rendererUrl) {
-      const isAllowed = await this.isOriginAllowed(rendererUrl);
+      const isAllowed = await this.isOriginAllowed(rendererUrl, signal);
+      signal?.throwIfAborted();
       // The confirmation dialog can stay open for a while. If anything changed the
       // renderer in the meantime (Settings, a shared link, a config reload), this
       // request is stale and must not overwrite that newer choice.
@@ -473,7 +477,8 @@ export class StartupResolution {
     return parsed;
   }
 
-  async isOriginAllowed(url: string): Promise<boolean> {
+  async isOriginAllowed(url: string, signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted();
     let origin: string;
     let hostname: string;
     try {
@@ -519,7 +524,8 @@ export class StartupResolution {
       return true;
     }
 
-    const confirmed = await this.confirmOrigin(origin);
+    const confirmed = await this.confirmOrigin(origin, signal);
+    signal?.throwIfAborted();
     if (confirmed) {
       allowedOrigins.push(origin);
       this.localStorageInteractions.setItem(
@@ -532,13 +538,21 @@ export class StartupResolution {
     return false;
   }
 
-  async confirmOrigin(origin: string): Promise<boolean> {
+  async confirmOrigin(origin: string, signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted();
     const dialogRef = this.dialog.open(OriginConfirmationDialog, {
       data: {origin},
       width: '450px',
     });
-    const result = await firstValueFrom(dialogRef.afterClosed());
-    return !!result;
+    const onAbort = () => dialogRef.close(false);
+    signal?.addEventListener('abort', onAbort, {once: true});
+    try {
+      const result = await firstValueFrom(dialogRef.afterClosed());
+      signal?.throwIfAborted();
+      return !!result;
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+    }
   }
 
   getResolvedRendererUrl(): string | null {
