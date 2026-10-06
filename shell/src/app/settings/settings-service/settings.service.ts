@@ -88,9 +88,9 @@ export class SettingsService {
    *
    * @param rendererId The selected renderer ID string, or null to revert to Custom/Default.
    */
-  async selectRenderer(rendererId: string | null, signal?: AbortSignal): Promise<boolean> {
+  async selectRenderer(rendererId: string | null): Promise<boolean> {
     const fromRendererId = this.selectedRendererId();
-    const isAllowed = await this.startupResolution.setSelectedRendererId(rendererId, signal);
+    const isAllowed = await this.startupResolution.setSelectedRendererId(rendererId);
     if (!isAllowed) {
       return false;
     }

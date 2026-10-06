@@ -143,21 +143,16 @@ describe('SettingsService', () => {
     await service.selectRenderer('dev');
 
     expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBe('dev');
-    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev', undefined);
+    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev');
   });
 
-  it('passes cancellation through without persisting a canceled selection', async () => {
-    const controller = new AbortController();
-    const cancellation = new Error('Stopped');
-    cancellation.name = 'CancelError';
-    mockStartupResolution.setSelectedRendererId.mockRejectedValue(cancellation);
+  it('does not persist a selection that startup resolution rejects', async () => {
+    const superseded = new Error('Renderer selection was superseded before approval completed.');
+    mockStartupResolution.setSelectedRendererId.mockRejectedValue(superseded);
 
-    await expect(service.selectRenderer('dev', controller.signal)).rejects.toBe(cancellation);
+    await expect(service.selectRenderer('dev')).rejects.toBe(superseded);
 
-    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith(
-      'dev',
-      controller.signal,
-    );
+    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev');
     expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
     expect(mockConfigProvider.setRendererUrl).not.toHaveBeenCalled();
   });
@@ -168,7 +163,7 @@ describe('SettingsService', () => {
     await service.selectRenderer(null);
 
     expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
-    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith(null, undefined);
+    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith(null);
   });
 
   it('applies rendererUrl and trimmed config apiKey when selected renderer contains both', async () => {
