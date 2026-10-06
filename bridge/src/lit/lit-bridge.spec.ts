@@ -262,6 +262,7 @@ describe('Lit Framework Adapter Spec', () => {
 
     rendered = element.render() as unknown as TemplateResult;
     expect(rendered.strings.join('')).toContain('a2ui-surface');
+    expect(rendered.strings.join('')).toContain('slot="loading"');
 
     // Trigger onSurfaceCleared
     if (config.onSurfaceCleared) {

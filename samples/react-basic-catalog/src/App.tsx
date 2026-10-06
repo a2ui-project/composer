@@ -22,7 +22,7 @@ import {A2uiSurface, basicCatalog} from '@a2ui/react/v0_9';
 import {useDebouncedValue} from './hooks/use-debounced-value.js';
 
 export function App() {
-  const {surface, error} = useA2uiSandbox([basicCatalog], {
+  const {surface, hasRoot, error} = useA2uiSandbox([basicCatalog], {
     getComponentUsages: async () => COMPONENT_USAGES,
   });
 
@@ -33,7 +33,7 @@ export function App() {
   return (
     <main className="sandbox-shell">
       {surface ? (
-        <A2uiSurface surface={surface} />
+        hasRoot && <A2uiSurface surface={surface} />
       ) : (
         <p style={{padding: 24, color: '#666', fontFamily: 'sans-serif', textAlign: 'center'}}>
           A2UI React Sandbox active. Waiting for RENDER_A2UI payloads...

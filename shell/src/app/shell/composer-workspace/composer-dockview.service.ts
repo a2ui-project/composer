@@ -119,6 +119,7 @@ export class ComposerDockview {
   private dockviewApi!: DockviewComponent;
   private componentRefs: ComponentRef<unknown>[] = [];
 
+  private dataModelInstance?: DataModel;
   private rawMessagesInstance?: RawMessages;
   private eventsInstance?: Events;
   private errorsInstance?: Errors;
@@ -311,6 +312,7 @@ export class ComposerDockview {
    * Clears accumulated diagnostic logs in the debug child component instances.
    */
   clearAllLogs(): void {
+    this.dataModelInstance?.clearLogs();
     this.rawMessagesInstance?.clearLogs();
     this.eventsInstance?.clearLogs();
     this.errorsInstance?.clearLogs();
@@ -385,6 +387,7 @@ export class ComposerDockview {
     const componentRef = this.viewContainerRef.createComponent(type);
     this.componentRefs.push(componentRef);
 
+    if (type === DataModel) this.dataModelInstance = componentRef.instance as DataModel;
     if (type === RawMessages) this.rawMessagesInstance = componentRef.instance as RawMessages;
     if (type === Events) this.eventsInstance = componentRef.instance as Events;
     if (type === Errors) this.errorsInstance = componentRef.instance as Errors;
@@ -395,6 +398,9 @@ export class ComposerDockview {
         componentRef.changeDetectorRef.detectChanges();
       },
       dispose: () => {
+        if (componentRef.instance === this.dataModelInstance) {
+          this.dataModelInstance = undefined;
+        }
         if (componentRef.instance === this.rawMessagesInstance) {
           this.rawMessagesInstance = undefined;
         }

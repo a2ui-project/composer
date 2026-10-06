@@ -27,6 +27,8 @@ import {a2uiBridge, ThemePreference, CatalogDetails, ComponentUsages} from '../i
 export interface UseA2uiSandboxResult<C extends ComponentApi = ComponentApi> {
   /** The reactive dynamic surface drawing model representing the active canvas. */
   surface: SurfaceModel<C> | undefined;
+  /** Whether the active surface currently has a 'root' component defined. */
+  hasRoot: boolean;
   /** The parsing / processing error encountered validating layouts. */
   error: Error | null;
 }
@@ -54,6 +56,7 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
   options?: ReactSandboxOptions,
 ): UseA2uiSandboxResult<C> {
   const [surface, setSurface] = useState<SurfaceModel<C> | undefined>(undefined);
+  const [hasRoot, setHasRoot] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
@@ -76,10 +79,14 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
         }
       },
       onSurfaceReady: surfaceId => {
-        setSurface(processor.model.getSurface(surfaceId));
+        const nextSurface = processor.model.getSurface(surfaceId);
+        setSurface(nextSurface);
+        // Synchronously align hasRoot with surface to prevent a single-frame "[Loading root...]" flash before the [surface] effect runs.
+        setHasRoot(Boolean(nextSurface?.componentsModel.get('root')));
       },
       onSurfaceCleared: () => {
         setSurface(undefined);
+        setHasRoot(false);
       },
       onError: setError,
     });
@@ -90,5 +97,27 @@ export function useA2uiSandbox<C extends ComponentApi = ComponentApi>(
     };
   }, []);
 
-  return {surface, error};
+  useEffect(() => {
+    if (!surface) {
+      setHasRoot(false);
+      return;
+    }
+    setHasRoot(Boolean(surface.componentsModel.get('root')));
+    const createdSub = surface.componentsModel.onCreated.subscribe(comp => {
+      if (comp.id === 'root') {
+        setHasRoot(true);
+      }
+    });
+    const deletedSub = surface.componentsModel.onDeleted.subscribe(id => {
+      if (id === 'root') {
+        setHasRoot(false);
+      }
+    });
+    return () => {
+      createdSub.unsubscribe();
+      deletedSub.unsubscribe();
+    };
+  }, [surface]);
+
+  return {surface, hasRoot, error};
 }

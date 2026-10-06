@@ -29,20 +29,16 @@ import {MatTooltipModule} from '@angular/material/tooltip';
 import {NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet} from '@angular/router';
 import {filter, map} from 'rxjs';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
-import {StateSync} from '../../chat/state-sync/state-sync';
+import {ErrorLogger} from '../../debug/error-logger.service';
 import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {IndexedDbStorage} from '../../storage/indexed-db-storage/indexed-db-storage';
-import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
-import {LocalStorageKey} from '../../storage/models/local-storage-keys';
-import {SessionStorageInteractions} from '../../storage/session-storage-interactions/session-storage-interactions';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
+import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
-import {ErrorLogger} from '../../debug/error-logger.service';
 import {ResetLayoutEvent} from '../composer-workspace/composer-panel-id';
 
 /** Standard length for showing any snack bar notification. */
@@ -91,20 +87,16 @@ export class ComposerShell {
   );
 
   private readonly catalogManagement = inject(CatalogManagement);
-  private readonly indexedDbStorage = inject(IndexedDbStorage);
-  private readonly storage = inject(LocalStorageInteractions);
-  private readonly sessionStorage = inject(SessionStorageInteractions);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly startupResolution = inject(StartupResolution);
-  private readonly stateSync = inject(StateSync);
   private readonly chatCoordinator = inject(ChatCoordinator);
   private readonly startupConfigState = inject(StartupConfigStateService);
-  protected readonly currentTurnIndex = this.chatCoordinator.currentTurnIndex;
+  private readonly hostCommunication = inject(HostCommunication);
+  private readonly errorLogger = inject(ErrorLogger);
   private readonly usageTrackingService = inject(UsageTrackingService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly document = inject(DOCUMENT);
   private readonly shareService = inject(ShareService);
-  private readonly logger = inject(ErrorLogger).withTag('[Shell]');
 
   activeCatalogTitle = this.catalogManagement.activeCatalogTitle;
   activeCatalogDescription = this.catalogManagement.activeCatalogDescription;
@@ -158,27 +150,20 @@ export class ComposerShell {
   }
 
   /**
-   * Flushes all local state caches (IndexedDB, localStorage) and reloads
-   * the page to simulate a fresh hardware handshake connection.
+   * Resets the current session in-memory without reloading the page or wiping
+   * persisted renderer/catalog caches.
    */
-  async resetSession(): Promise<void> {
+  resetSession(): void {
     this.usageTrackingService.trackSessionReset({
       totalPromptTurns: this.chatCoordinator.currentTurnIndex(),
     });
     this.usageTrackingService.resetSession();
-    await this.indexedDbStorage.flushAllRecords();
-    this.storage.removeItem(LocalStorageKey.SESSION_STATE);
-    this.storage.removeItem(LocalStorageKey.EDITOR_CACHE);
-    this.sessionStorage.clear();
-    if (this.document.defaultView) {
-      const url = new URL(this.document.defaultView.location.href);
-      url.searchParams.delete('a2ui');
-      url.searchParams.delete('renderer');
-      url.searchParams.delete('rendererId');
-      url.hash = '';
-      this.document.defaultView.location.href = url.toString();
-    }
-    this.logger.info('Session state cleared.');
+    this.chatCoordinator.startNewSession();
+    this.startupConfigState.setSharedA2uiPayload(null);
+    this.startupConfigState.setSharedA2uiError(null);
+    this.startupResolution.cleanSharedA2uiUrl();
+    this.hostCommunication.clearHistoryBuffer();
+    this.errorLogger.clear();
   }
 
   /**

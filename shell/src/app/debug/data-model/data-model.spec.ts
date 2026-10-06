@@ -218,6 +218,81 @@ describe('DataModel', () => {
     expect(await harness.getModelText()).toBe('');
   });
 
+  it('clearLogs() resets model value, surfaceId, and path without firing trackDataModelEdit telemetry', async () => {
+    const trackingService = TestBed.inject(UsageTrackingService);
+    const trackSpy = vi.spyOn(trackingService, 'trackDataModelEdit');
+
+    mockHostComm.messageStream$.next({
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 'custom-surface',
+          path: '/custom/path',
+          value: {foo: 'bar'},
+        },
+      },
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+    });
+    TestBed.tick();
+    fixture.detectChanges();
+
+    expect(JSON.parse(await harness.getModelText())).toEqual({foo: 'bar'});
+    trackSpy.mockClear();
+    mockHostComm.sendMessage.mockClear();
+
+    component.clearLogs();
+    TestBed.tick();
+    fixture.detectChanges();
+
+    expect(await harness.getModelText()).toBe('');
+    await vi.advanceTimersByTimeAsync(350);
+    TestBed.tick();
+
+    expect(trackSpy).not.toHaveBeenCalled();
+    expect(mockHostComm.sendMessage).not.toHaveBeenCalled();
+
+    // Subsequent edit uses reset default surfaceId ('sample-surface') and undefined path
+    await harness.setModelText(JSON.stringify({fresh: true}));
+    TestBed.tick();
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+
+    expect(mockHostComm.sendMessage).toHaveBeenCalledWith({
+      type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
+      payload: {
+        updateDataModel: {
+          surfaceId: 'sample-surface',
+          path: undefined,
+          value: {fresh: true},
+        },
+      },
+    });
+    expect(trackSpy).toHaveBeenCalledExactlyOnceWith({isValidJson: true});
+  });
+
+  it('clearLogs() cancels a pending <300ms user edit debounce timer', async () => {
+    const trackingService = TestBed.inject(UsageTrackingService);
+    const trackSpy = vi.spyOn(trackingService, 'trackDataModelEdit');
+
+    await harness.setModelText(JSON.stringify({pending: 'edit'}));
+    TestBed.tick();
+    fixture.detectChanges();
+
+    await vi.advanceTimersByTimeAsync(150);
+    component.clearLogs();
+    TestBed.tick();
+    fixture.detectChanges();
+
+    await vi.advanceTimersByTimeAsync(300);
+    TestBed.tick();
+
+    expect(mockHostComm.sendMessage).not.toHaveBeenCalled();
+    expect(trackSpy).not.toHaveBeenCalled();
+    expect(await harness.getModelText()).toBe('');
+  });
+
   it('applies the accessible name "Data model JSON" to the data model textarea', async () => {
     const loader = TestbedHarnessEnvironment.loader(fixture);
     const input = await loader.getHarness(MatInputHarness);

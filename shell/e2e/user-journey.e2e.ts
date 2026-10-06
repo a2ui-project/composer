@@ -372,5 +372,127 @@ test.describe('E2E Workspace User Journey', () => {
       );
       await sysDialog.getByRole('button', {name: 'Close'}).click();
     });
+    test(`resets session state in-place, clears chat history and composer inputs, wipes rendered preview, and flushes Monaco undo history when New Session is clicked (${panel} panel)`, async ({
+      page,
+    }) => {
+      await useChatPanel(page, panel);
+      await page.addInitScript(() => {
+        try {
+          if (window === window.top) {
+            localStorage.setItem('a2ui_composer_selected_api_key', 'fake');
+          }
+        } catch (e: unknown) {
+          if (!(e instanceof DOMException && e.name === 'SecurityError')) {
+            throw e;
+          }
+        }
+      });
+
+      await page.goto('/');
+      await page.waitForLoadState('load');
+
+      // Verify initial sample is loaded in chat history, preview, and Monaco editor
+      await expect(page.locator('.chat-history-log .bubble-layout')).toHaveCount(1);
+
+      await waitForPreviewTab(page);
+      const previewIframe = page
+        .frameLocator('.preview-frame iframe, iframe.preview-iframe, iframe')
+        .first();
+      await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({
+        timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
+      });
+      await expect(previewIframe.locator('h1').first()).toContainText('Book a Car', {
+        timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
+      });
+
+      await waitForMonacoEditor(page);
+      await expect.poll(async () => getMonacoContent(page)).toContain('Book a Car');
+
+      const blankSnapshotText =
+        panel === 'copilotkit' ? '0 components in this canvas' : 'Received 1 A2UI JSON Components';
+
+      // Update Monaco with a second layout so Monaco has undo history
+      await setMonacoContent(page, EV_CHARGE_CONTROL_A2UI);
+      await expect(
+        page.locator('.chat-history-log .bubble-layout .bubble-text-content'),
+      ).not.toContainText(blankSnapshotText);
+
+      // Populate unsent chat composer state
+      const promptTextarea = page.getByLabel('Chat prompt');
+      await promptTextarea.fill('Unsent draft prompt');
+      const addMenuButton = page.getByRole('button', {name: 'Add to prompt', exact: true});
+      const screenshotBtn = page.locator('.screenshot-toggle-button');
+      if (panel === 'copilotkit') {
+        await addMenuButton.click();
+        await page.getByRole('menuitemcheckbox', {name: 'Include screenshot'}).click();
+        await expect(addMenuButton).toHaveAttribute(
+          'aria-description',
+          /screenshot will be included/,
+        );
+      } else {
+        await screenshotBtn.click();
+        await expect(screenshotBtn).toHaveAttribute('aria-pressed', 'true');
+      }
+
+      // Track main frame navigation to verify New Session executes in-place without reload
+      let mainFrameNavigated = false;
+      page.on('framenavigated', frame => {
+        if (frame === page.mainFrame()) {
+          mainFrameNavigated = true;
+        }
+      });
+
+      await page.locator('button.reset-session-button').click();
+
+      expect(mainFrameNavigated).toBe(false);
+
+      // Chat history should have only the single blank surface snapshot (1 createSurface item) and composer inputs should be reset
+      await expect(page.locator('.chat-history-log .bubble-layout')).toHaveCount(1);
+      await expect(
+        page.locator('.chat-history-log .bubble-layout .bubble-text-content'),
+      ).toContainText(blankSnapshotText);
+      await expect(page.locator('.chat-history-log .bubble-text')).toHaveCount(0);
+      await expect(promptTextarea).toHaveValue('');
+      if (panel === 'copilotkit') {
+        await expect(addMenuButton).not.toHaveAttribute('aria-description');
+      } else {
+        await expect(screenshotBtn).toHaveAttribute('aria-pressed', 'false');
+      }
+
+      // Monaco editor should contain only the blank createSurface draft
+      const resetContent = await getMonacoContent(page);
+      expect(resetContent).toContain('"createSurface"');
+      expect(resetContent).toContain('"sample-surface"');
+      expect(resetContent).not.toContain('Book a Car');
+      expect(resetContent).not.toContain('ev_charging');
+      expect(resetContent).not.toContain('updateComponents');
+
+      // Pressing Ctrl+Z / Cmd+Z in Monaco editor must not undo back to previous session's JSON
+      const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
+      await editorLocator.click();
+      await page.keyboard.press('Control+z');
+      await page.keyboard.press('Meta+z');
+
+      const contentAfterUndo = await getMonacoContent(page);
+      expect(contentAfterUndo).toContain('"createSurface"');
+      expect(contentAfterUndo).not.toContain('Book a Car');
+      expect(contentAfterUndo).not.toContain('ev_charging');
+
+      // Rendered preview should have 1 blank surface and 0 headings from the old sample
+      await waitForPreviewTab(page);
+      await expect(previewIframe.locator('a2ui-v09-surface')).toHaveCount(1);
+      await expect(previewIframe.locator('h1')).toHaveCount(0);
+
+      // Reloading the browser page cold-boots with the default Book a Car sample restored
+      await page.reload();
+      await page.waitForLoadState('load');
+      await waitForPreviewTab(page);
+      await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({
+        timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
+      });
+      await expect(previewIframe.locator('h1').first()).toContainText('Book a Car', {
+        timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
+      });
+    });
   }
 });

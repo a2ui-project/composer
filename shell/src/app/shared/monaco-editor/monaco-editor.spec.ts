@@ -937,4 +937,104 @@ describe('MonacoEditor component', () => {
     vi.advanceTimersByTime(1000);
     expect(markersSpy).toHaveBeenCalledWith([warningMarker]);
   });
+
+  describe('resetEditor', () => {
+    it('cancels pending 3000ms markerDebounceTimer, resets marker signatures, and sets model value directly', async () => {
+      vi.useFakeTimers();
+      const mockModelInstance = {
+        setValue: mockSetValue,
+        dispose: vi.fn(),
+        getFullModelRange: vi.fn(),
+      };
+      mockCreateModel.mockReturnValueOnce(mockModelInstance);
+
+      const mockEditorSetValue = vi.fn();
+      const mockEditorUpdateOptions = vi.fn();
+      let currentEditorValue = '{"old": true}';
+      mockSetValue.mockImplementation((v: string) => {
+        currentEditorValue = v;
+      });
+      mockEditorCreate.mockReturnValueOnce({
+        getModel: vi.fn(() => mockModelInstance),
+        getValue: vi.fn(() => currentEditorValue),
+        setValue: mockEditorSetValue.mockImplementation((v: string) => {
+          mockSetValue(v);
+        }),
+        updateOptions: mockEditorUpdateOptions,
+        setPosition: mockSetPosition,
+        revealPositionInCenterIfOutsideViewport: mockRevealPositionInCenterIfOutsideViewport,
+        revealPositionInCenter: vi.fn(),
+        focus: mockFocus,
+        onDidChangeModelContent: mockOnDidChangeModelContent,
+        onDidChangeCursorPosition: mockOnDidChangeCursorPosition,
+        onDidChangeCursorSelection: mockOnDidChangeCursorSelection,
+        onKeyDown: mockOnKeyDown,
+        onMouseDown: mockOnMouseDown,
+        dispose: vi.fn(),
+      });
+
+      fixture = TestBed.createComponent(MonacoEditor);
+      fixture.componentRef.setInput('value', '{"old": true}');
+      fixture.componentRef.setInput('readOnly', true);
+      const markersSpy = vi.fn();
+      fixture.componentInstance.markersChange.subscribe(markersSpy);
+      fixture.detectChanges();
+
+      await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+      await Promise.resolve();
+
+      const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
+        uris: readonly {toString: () => string}[],
+      ) => void;
+      const errorMarker = {
+        severity: 8,
+        message: 'Syntax error before reset',
+        startLineNumber: 1,
+        startColumn: 1,
+      };
+      mockGetModelMarkers.mockReturnValue([errorMarker]);
+      const modelUri = {toString: () => fixture.componentInstance['modelUri']};
+
+      // Queue a 3000ms error marker debounce
+      markerListener([modelUri]);
+      vi.advanceTimersByTime(1500);
+      expect(markersSpy).not.toHaveBeenCalled();
+
+      mockSetValue.mockClear();
+      mockEditorUpdateOptions.mockClear();
+
+      // Call resetEditor with new blank surface value while readOnly is true
+      const blankVal =
+        '[{"version":"v0.9","createSurface":{"surfaceId":"sample-surface","catalogId":"basic"}}]';
+      fixture.componentInstance.resetEditor(blankVal);
+
+      // Pending marker debounce timer must be cancelled
+      vi.advanceTimersByTime(3000);
+      expect(markersSpy).not.toHaveBeenCalled();
+
+      // Model setValue called and readOnly temporarily unlocked then relocked
+      expect(mockSetValue).toHaveBeenCalledWith(blankVal);
+      expect(mockEditorSetValue).not.toHaveBeenCalled();
+      expect(mockEditorUpdateOptions).toHaveBeenCalledWith({readOnly: false});
+      expect(mockEditorUpdateOptions).toHaveBeenLastCalledWith({readOnly: true});
+
+      // Resetting with the exact same value forces a two-step setValue('') -> setValue(blankVal) to flush undo history
+      mockSetValue.mockClear();
+      fixture.componentInstance.resetEditor(blankVal);
+      expect(mockSetValue).toHaveBeenNthCalledWith(1, '');
+      expect(mockSetValue).toHaveBeenNthCalledWith(2, blankVal);
+
+      // Because lastMarkersSignature was cleared, the same error marker in the new session will emit again
+      markerListener([modelUri]);
+      vi.advanceTimersByTime(3000);
+      expect(markersSpy).toHaveBeenCalledWith([errorMarker]);
+
+      // Fallback when getModel() returns null calls editor.setValue directly
+      (
+        fixture.componentInstance['editor']!.getModel as ReturnType<typeof vi.fn>
+      ).mockReturnValueOnce(null);
+      fixture.componentInstance.resetEditor('{"fallback": true}');
+      expect(mockEditorSetValue).toHaveBeenCalledWith('{"fallback": true}');
+    });
+  });
 });

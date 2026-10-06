@@ -30,14 +30,7 @@
   >
   <span class="spacer"></span>
   @if (isWorkspaceRoute()) {
-    <button
-      mat-button
-      class="reset-session-button"
-      color="primary"
-      (click)="resetSession()"
-      a2uiComposerTrackEvent="trackSessionReset"
-      [a2uiComposerTrackParams]="{totalPromptTurns: currentTurnIndex()}"
-    >
+    <button mat-button class="reset-session-button" color="primary" (click)="resetSession()">
       New Session
     </button>
     <button

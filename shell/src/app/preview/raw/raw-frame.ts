@@ -25,8 +25,8 @@ import {
   viewChild,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {Subject} from 'rxjs';
-import {debounceTime, filter, map} from 'rxjs/operators';
+import {Subject, timer} from 'rxjs';
+import {filter, map, switchMap, takeUntil} from 'rxjs/operators';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens/environment-tokens';
 import {HostCommunication} from '../../shell/host-communication/host-communication';
@@ -79,6 +79,8 @@ export class RawFrame {
   private readonly destroyRef = inject(DestroyRef);
   private readonly snackBar = inject(MatSnackBar);
   private readonly layoutInput$ = new Subject<string>();
+  private readonly cancelLayoutInput$ = new Subject<void>();
+  private lastHandledResetNonce = this.stateSync.sessionResetNonce();
   private isDestroyed = false;
 
   // A precise 15-second timeout handles normal connectivity limits and bootstrap
@@ -104,7 +106,15 @@ export class RawFrame {
     });
 
     this.markerSubject
-      .pipe(debounceTime(this.SCHEMA_ERROR_DEBOUNCE_MS), takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        switchMap(markers =>
+          timer(this.SCHEMA_ERROR_DEBOUNCE_MS).pipe(
+            map(() => markers),
+            takeUntil(this.cancelLayoutInput$),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe(markers => {
         this.notifySchemaErrors(markers);
       });
@@ -180,16 +190,32 @@ export class RawFrame {
         }
       });
 
-    // Sync back changes in StateSync activeDraft to editor layoutJson (e.g. from LLM stream completed updates)
+    // Sync back changes in StateSync activeDraft or sessionResetNonce to editor layoutJson
     effect(() => {
       const activeDraftVal = this.stateSync.activeDraft();
+      const resetNonce = this.stateSync.sessionResetNonce();
       untracked(() => {
-        if (this.layoutJson() !== activeDraftVal) {
+        const isSessionReset = resetNonce > this.lastHandledResetNonce;
+        if (isSessionReset) {
+          this.lastHandledResetNonce = resetNonce;
+          this.cancelLayoutInput$.next();
+          this.clearWatchdog();
+          this.cancelInvalidJsonTimer();
+          this.isJsonInvalid.set(false);
+          this.hasActiveSchemaErrors = false;
+          this.lastErrorSignature = null;
+          this.lastSyntaxError = null;
+          this.snackBar.dismiss();
+        }
+        if (isSessionReset || this.layoutJson() !== activeDraftVal) {
           queueMicrotask(() => {
             if (this.isDestroyed) {
               return;
             }
             this.layoutJson.set(activeDraftVal);
+            if (isSessionReset) {
+              this.monacoEditor()?.resetEditor(activeDraftVal);
+            }
 
             // Run live render updating matching activeDraft commits
             try {
@@ -218,7 +244,12 @@ export class RawFrame {
 
     this.layoutInput$
       .pipe(
-        debounceTime(300),
+        switchMap((value: string) =>
+          timer(300).pipe(
+            map(() => value),
+            takeUntil(this.cancelLayoutInput$),
+          ),
+        ),
         map((value: string): unknown[] | null => {
           try {
             const payload = this.parseLayoutString(value);

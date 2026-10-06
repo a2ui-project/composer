@@ -33,8 +33,6 @@ export enum LocalStorageKey {
   FORCE_PLAIN_CHAT_PANEL = 'a2ui_composer_force_plain_chat_panel',
   /** Key tracking active runtime environment configuration modes. */
   EXTENSION_MODE = 'a2ui_composer_extension_mode',
-  SESSION_STATE = 'a2ui_composer_session_state',
-  EDITOR_CACHE = 'a2ui_composer_editor_cache',
   /** Key for persisting dockview window split layout state. */
   DOCKVIEW_LAYOUT = 'composer_dockview_layout',
   /** Key for persisting the user's theme selection (light vs dark). */

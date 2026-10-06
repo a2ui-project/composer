@@ -22,7 +22,7 @@ import {
   ElementRef,
   inject,
   input,
-  signal,
+  linkedSignal,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FileIngestionService, AttachedFile} from '../file-ingestion/file-ingestion.service';
@@ -41,6 +41,7 @@ import {ChatCoordinator} from '../chat-coordinator/chat-coordinator';
 import {ChatState} from '../chat-state/chat-state';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
+import {StateSync} from '../state-sync/state-sync';
 import {SystemInstructionsDialog} from '../system-instructions-dialog/system-instructions-dialog';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
 import {ErrorLogger} from '../../debug/error-logger.service';
@@ -85,6 +86,7 @@ export abstract class ChatPanelBase {
   private readonly chatCoordinator = inject(ChatCoordinator);
   protected readonly chatCleaner = inject(ChatCleaner);
   protected readonly chatState = inject(ChatState);
+  private readonly stateSync = inject(StateSync);
   private readonly dialog = inject(MatDialog);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
@@ -95,7 +97,10 @@ export abstract class ChatPanelBase {
   private readonly logger = inject(ErrorLogger).withTag('[ChatPanel]');
   protected readonly mcpManager = inject(McpClientManagerService);
 
-  protected readonly includeScreenshot = signal<boolean>(false);
+  protected readonly includeScreenshot = linkedSignal({
+    source: this.stateSync.sessionResetNonce,
+    computation: () => false,
+  });
   protected readonly isMcpSupported = computed(() =>
     this.mcpManager.doesCatalogSupportMcp(this.catalogManagement.activeCatalog()),
   );
@@ -135,13 +140,22 @@ export abstract class ChatPanelBase {
    */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
-  protected readonly isReadingFiles = signal<boolean>(false);
+  protected readonly isReadingFiles = linkedSignal({
+    source: this.stateSync.sessionResetNonce,
+    computation: () => false,
+  });
 
   /** Backing mutable signal capturing prompts typed by researcher. */
-  protected readonly userPrompt = signal<string>('');
+  protected readonly userPrompt = linkedSignal({
+    source: this.stateSync.sessionResetNonce,
+    computation: () => '',
+  });
 
   /** Backing mutable signal capturing uploaded files context. */
-  protected readonly attachedFiles = signal<AttachedFile[]>([]);
+  protected readonly attachedFiles = linkedSignal<number, AttachedFile[]>({
+    source: this.stateSync.sessionResetNonce,
+    computation: () => [],
+  });
 
   /**
    * Reactively computed visible logs history turns log list excluding
@@ -244,6 +258,7 @@ export abstract class ChatPanelBase {
       return;
     }
 
+    const resetNonceBefore = this.stateSync.sessionResetNonce();
     let screenshotSuccess = true;
     if (this.includeScreenshot()) {
       this.isReadingFiles.set(true);
@@ -251,6 +266,9 @@ export abstract class ChatPanelBase {
         const screenshotDataUrl = await this.screenshotCaptureService.captureScreenshot(
           this.hostCommunication.getIframeElement(),
         );
+        if (this.stateSync.sessionResetNonce() !== resetNonceBefore) {
+          return;
+        }
         if (screenshotDataUrl) {
           const commaIndex = screenshotDataUrl.indexOf(',');
           const base64Data =
@@ -262,10 +280,15 @@ export abstract class ChatPanelBase {
           });
         }
       } catch (err) {
+        if (this.stateSync.sessionResetNonce() !== resetNonceBefore) {
+          return;
+        }
         this.logger.error('Failed to capture screenshot context:', err);
         screenshotSuccess = false;
       } finally {
-        this.isReadingFiles.set(false);
+        if (this.stateSync.sessionResetNonce() === resetNonceBefore) {
+          this.isReadingFiles.set(false);
+        }
       }
     }
 
@@ -454,6 +477,7 @@ export abstract class ChatPanelBase {
       return;
     }
 
+    const resetNonceBefore = this.stateSync.sessionResetNonce();
     this.isReadingFiles.set(true);
     try {
       const newFiles: AttachedFile[] = [];
@@ -466,15 +490,23 @@ export abstract class ChatPanelBase {
 
         try {
           const attached = await this.fileIngestionService.readFileAsAttachment(file);
+          if (this.stateSync.sessionResetNonce() !== resetNonceBefore) {
+            return;
+          }
           newFiles.push(attached);
         } catch (err) {
+          if (this.stateSync.sessionResetNonce() !== resetNonceBefore) {
+            return;
+          }
           this.logger.error(`Failed to read file ${file.name}:`, err);
         }
       }
 
       this.attachedFiles.update(current => [...current, ...newFiles]);
     } finally {
-      this.isReadingFiles.set(false);
+      if (this.stateSync.sessionResetNonce() === resetNonceBefore) {
+        this.isReadingFiles.set(false);
+      }
     }
   }
 

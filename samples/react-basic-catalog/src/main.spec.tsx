@@ -157,6 +157,74 @@ describe('A2ui React Sandbox Integration Spec Tests (100% Parity)', () => {
     expect(container?.querySelector('button')).not.toBeNull();
   });
 
+  it('renders a blank canvas when surface has no root component and renders once root is added', async () => {
+    await act(async () => {
+      if (container) {
+        root = createRoot(container);
+        root.render(<App />);
+      }
+    });
+
+    // Step 1: Send createSurface without any root component (e.g., New Session)
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [
+              {
+                version: 'v0.9',
+                createSurface: {
+                  surfaceId: 'blank-surf',
+                  catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+                },
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(container?.innerHTML).not.toContain('Waiting for RENDER_A2UI payloads...');
+    expect(container?.innerHTML).not.toContain('[Loading root...]');
+
+    // Step 2: Stream in the root component on the existing surface
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [
+              {
+                version: 'v0.9',
+                updateComponents: {
+                  surfaceId: 'blank-surf',
+                  components: [
+                    {
+                      id: 'root',
+                      component: 'Text',
+                      text: 'Root Arrived',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    expect(container?.innerHTML).toContain('Root Arrived');
+  });
+
   it('pipes user custom elements clicks telemetry actions upward to parent frame', async () => {
     const postSpy = vi.spyOn(window.parent, 'postMessage');
 

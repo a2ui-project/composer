@@ -37,7 +37,6 @@ import {
 } from './settings/app-config-provider/app-config-provider';
 import {LlmClient} from './chat/llm-client/llm-client';
 import {CatalogManagement} from './storage/catalog-management/catalog-management';
-import {IndexedDbStorage} from './storage/indexed-db-storage/indexed-db-storage';
 import {LocalStorageInteractions} from './storage/local-storage-interactions/local-storage-interactions';
 import {PipelineStatus} from './chat/pipeline-status/pipeline-status';
 import {UsageTrackingService} from './usage-tracking/usage-tracking.service';
@@ -78,6 +77,7 @@ class MockChatCoordinator {
 
 class MockStateSync {
   readonly activeDraft = signal('{}');
+  readonly sessionResetNonce = signal(0);
   updateDraft = vi.fn();
   hydrateActiveDraft = vi.fn(() => '{}');
 }
@@ -126,10 +126,6 @@ describe('App Routes Active Verification', () => {
             lastChecksumHash: signal(''),
             catalogHashDelta: signal(false),
           },
-        },
-        {
-          provide: IndexedDbStorage,
-          useValue: {flushAllRecords: vi.fn().mockResolvedValue(undefined)},
         },
         {
           provide: LocalStorageInteractions,
