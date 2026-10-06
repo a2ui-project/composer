@@ -499,7 +499,7 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
     ]);
   });
 
-  it('suppresses only the initial empty canvas snapshot from the visible transcript', async () => {
+  it('shows empty canvas snapshots, including one that opens the conversation', async () => {
     const emptySnapshot = JSON.stringify([
       {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
     ]);
@@ -514,7 +514,9 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
     ]);
     fixture.detectChanges();
 
+    // New Session opens with a blank canvas, and its snapshot is the conversation's first turn.
     expect(await harness.getBubblesText()).toEqual([
+      '0 components in this canvas',
       'Start with a blank canvas',
       '0 components in this canvas',
     ]);
