@@ -152,6 +152,8 @@ export class A2aChatView implements OnInit {
   protected readonly connectionError = signal<string | null>(null);
   /** Whether the message inspector side drawer is open. */
   protected readonly isInspectorOpen = signal<boolean>(false);
+  /** Search query applied in the message inspector side drawer. */
+  protected readonly inspectorSearchQuery = signal<string>('');
   /** Whether the agent configuration modal is open. */
   protected readonly isConfigPanelOpen = signal<boolean>(false);
   /** Whether the A2UI Canvas surface preview panel is open. */
@@ -268,6 +270,7 @@ export class A2aChatView implements OnInit {
     this.agentInfo.set(null);
     this.messages.set([]);
     this.inspectorEvents.set([]);
+    this.inspectorSearchQuery.set('');
     this.activeTaskId.set(null);
     this.activeContextId.set(undefined);
     this.activeCanvasPayload.set(null);
@@ -492,14 +495,14 @@ export class A2aChatView implements OnInit {
 
     for await (const chunk of stream) {
       if (controller.signal.aborted) break;
-      this.recordInspectorEvent(createReceivedEvent(chunk));
+      this.recordInspectorEvent(createReceivedEvent(chunk, agentMessageId));
       this.handleStreamEvent(chunk, agentMessageId);
     }
   }
 
   private handleStreamingError(err: unknown, agentMessageId: string): void {
     const errText = err instanceof Error ? err.message : 'Unknown communication error';
-    this.recordInspectorEvent(createErrorEvent(errText));
+    this.recordInspectorEvent(createErrorEvent(errText, agentMessageId));
 
     this.messages.update(msgs =>
       msgs.map(m =>
@@ -680,6 +683,7 @@ export class A2aChatView implements OnInit {
   protected resetActiveSession(): void {
     this.cancelActiveGeneration();
     this.messages.set([]);
+    this.inspectorSearchQuery.set('');
     this.activeTaskId.set(null);
     this.activeContextId.set(undefined);
     this.activeCanvasPayload.set(null);
@@ -698,6 +702,11 @@ export class A2aChatView implements OnInit {
 
   protected toggleInspectorDrawer(): void {
     this.isInspectorOpen.update(v => !v);
+  }
+
+  protected inspectMessage(messageId: string): void {
+    this.inspectorSearchQuery.set(messageId);
+    this.isInspectorOpen.set(true);
   }
 
   protected startInspectorResize(event: MouseEvent): void {

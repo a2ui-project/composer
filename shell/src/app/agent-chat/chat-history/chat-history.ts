@@ -74,8 +74,8 @@ export class A2aChatHistory implements AfterViewChecked {
   readonly openCanvas = output<RenderA2uiItem[]>();
   /** Emitted when the user closes the Canvas panel. */
   readonly closeCanvas = output<void>();
-  /** Emitted when the user clicks to open the protocol inspector drawer. */
-  readonly openInspector = output<void>();
+  /** Emitted with the message ID when the user clicks to open the protocol inspector drawer. */
+  readonly openInspector = output<string>();
 
   protected readonly scrollContainerRef = viewChild<ElementRef<HTMLDivElement>>('scrollContainer');
 

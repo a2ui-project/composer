@@ -144,8 +144,8 @@ export class A2aChatMessage {
   readonly openCanvas = output<RenderA2uiItem[]>();
   /** Emitted when the user clicks the close canvas button on the active message card. */
   readonly closeCanvas = output<void>();
-  /** Emitted when the user clicks to open the protocol message inspector. */
-  readonly openInspector = output<void>();
+  /** Emitted with the message ID when the user clicks to open the protocol message inspector. */
+  readonly openInspector = output<string>();
 
   /**
    * Records the user's last manual expand/collapse action along with the content state
@@ -314,14 +314,9 @@ export class A2aChatMessage {
     });
   }
 
-  protected copyMessageText(): void {
-    const text = this.message().text;
-    if (!text || typeof navigator === 'undefined' || !navigator.clipboard) {
-      return;
-    }
-    navigator.clipboard.writeText(text).catch((err: unknown) => {
-      this.logger.warn('Failed to copy message text to clipboard', err);
-    });
+  protected openMessageInspector(): void {
+    console.log('openMessageInspector', this.message().id);
+    this.openInspector.emit(this.message().id);
   }
 
   protected openCanvasArtifact(payload: RenderA2uiItem[]): void {

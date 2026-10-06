@@ -37,6 +37,9 @@ export class A2aChatMessageHarness extends ComponentHarness {
   private getPendingIndicator = this.locatorForOptional('.pending-response-indicator');
   private getStreamingCursor = this.locatorForOptional('.streaming-cursor');
   private getInlineSurface = this.locatorForOptional('.inline-surface-card');
+  private getInspectMessageButton = this.locatorForOptional(
+    MatButtonHarness.with({selector: 'button[aria-label="Inspect message"]'}),
+  );
 
   async hasInlineSurface(): Promise<boolean> {
     const el = await this.getInlineSurface();
@@ -127,5 +130,12 @@ export class A2aChatMessageHarness extends ComponentHarness {
   async hasStreamingCursor(): Promise<boolean> {
     const el = await this.getStreamingCursor();
     return el !== null;
+  }
+
+  async clickInspectMessage(): Promise<void> {
+    const btn = await this.getInspectMessageButton();
+    if (btn) {
+      return btn.click();
+    }
   }
 }

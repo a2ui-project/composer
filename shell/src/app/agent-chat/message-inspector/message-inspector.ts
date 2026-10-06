@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, computed, inject, input, output, signal} from '@angular/core';
+import {Component, computed, inject, input, model, output, signal} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -45,13 +45,14 @@ import {ErrorLogger} from '../../debug/error-logger.service';
 export class A2aMessageInspector {
   /** Recorded raw A2A protocol events and JSON-RPC transport traces. */
   readonly events = input<MessageInspectorEvent[]>([]);
+  /** Filter query string applied to message IDs, summaries, and JSON payloads. */
+  readonly searchQuery = model<string>('');
   /** Emitted when the user closes the message inspector side drawer. */
   readonly closeDrawer = output<void>();
   /** Emitted when the user clears all recorded inspector events. */
   readonly clearEvents = output<void>();
 
   protected readonly filterDirection = signal<'all' | 'sent' | 'received' | 'error'>('all');
-  protected readonly searchQuery = signal<string>('');
   protected readonly copiedEventId = signal<string | null>(null);
   private readonly errorLogger = inject(ErrorLogger).withTag('[MessageInspector]');
 
@@ -65,7 +66,13 @@ export class A2aMessageInspector {
         return false;
       }
       if (query) {
-        const str = (event.summary + ' ' + JSON.stringify(event.payload)).toLowerCase();
+        const str = (
+          (event.messageId ?? '') +
+          ' ' +
+          event.summary +
+          ' ' +
+          JSON.stringify(event.payload)
+        ).toLowerCase();
         if (!str.includes(query)) {
           return false;
         }

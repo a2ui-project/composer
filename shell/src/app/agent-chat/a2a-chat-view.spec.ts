@@ -892,4 +892,45 @@ describe('A2aChatView', () => {
 
     expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(payload);
   });
+
+  it('opens inspector and filters events to the inspected message', async () => {
+    fixture.componentInstance['sendUserMessage']({text: 'First prompt', images: []});
+    await fixture.whenStable();
+
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      throw new Error('Second turn failed');
+    });
+    fixture.componentInstance['sendUserMessage']({text: 'Second prompt', images: []});
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const messages = fixture.componentInstance['messages']();
+    const firstAgentMessage = messages[1];
+    const secondErrorMessage = messages[3];
+    expect(firstAgentMessage.sender).toBe('agent');
+    expect(secondErrorMessage.sender).toBe('error');
+    expect(await harness.isInspectorOpen()).toBe(false);
+
+    // Inspecting a received agent message filters by its message id.
+    fixture.componentInstance['inspectMessage'](firstAgentMessage.id);
+    fixture.detectChanges();
+
+    expect(await harness.isInspectorOpen()).toBe(true);
+    expect(fixture.componentInstance['inspectorSearchQuery']()).toBe(firstAgentMessage.id);
+
+    const inspector = await harness.getInspector();
+    expect(inspector).not.toBeNull();
+    expect(await inspector!.getPanelCount()).toBe(1);
+
+    // Inspecting an error message filters by its message id.
+    fixture.componentInstance['inspectMessage'](secondErrorMessage.id);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['inspectorSearchQuery']()).toBe(secondErrorMessage.id);
+    expect(await inspector!.getPanelCount()).toBe(1);
+
+    // Closing the inspector drawer closes the drawer.
+    fixture.componentInstance['toggleInspectorDrawer']();
+    expect(fixture.componentInstance['isInspectorOpen']()).toBe(false);
+  });
 });

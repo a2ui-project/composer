@@ -45,7 +45,7 @@
           (samplePromptClicked)="submitSamplePrompt($event)"
           (openCanvas)="openCanvasSurface($event)"
           (closeCanvas)="closeCanvasSurface()"
-          (openInspector)="toggleInspectorDrawer()"
+          (openInspector)="inspectMessage($event)"
         ></a2ui-composer-chat-history>
       </div>
 
@@ -104,6 +104,7 @@
       <div class="inspector-column" [style.width.px]="inspectorWidth()">
         <a2ui-composer-message-inspector
           [events]="inspectorEvents()"
+          [(searchQuery)]="inspectorSearchQuery"
           (closeDrawer)="toggleInspectorDrawer()"
           (clearEvents)="clearInspectorEvents()"
         ></a2ui-composer-message-inspector>

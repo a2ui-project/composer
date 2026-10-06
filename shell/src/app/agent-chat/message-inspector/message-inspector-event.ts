@@ -20,6 +20,8 @@
 export interface MessageInspectorEvent {
   /** Unique identifier for the recorded protocol trace event. */
   id: string;
+  /** Identifier of the chat UI message associated with this event, if any. */
+  messageId?: string;
   /** Timestamp when the event was transmitted or received. */
   timestamp: Date | number;
   /** Transport direction indicating whether the event was sent, received, or errored. */
