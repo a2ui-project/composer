@@ -21,15 +21,12 @@ import {
   openGeneratedBlockKit,
   openComposerWithSlackRenderer,
   replaceMonacoJson,
+  SLACK_360_EMBED_VIEWPORT,
   slackPreviewFrame,
   slackPreviewSurface,
 } from './slack-renderer.helpers';
 import {waitForMonacoEditor} from './helpers';
 
-// At this viewport, Dockview's default split gives the preview panel roughly the width
-// of a 360px Slack embed. The split is proportional, so font metrics and scrollbars move
-// it by a few pixels between machines.
-const PREVIEW_360_EMBED_VIEWPORT = {width: 1145, height: 900} as const;
 const PREVIEW_360_EMBED_WIDTH = 360;
 // Dockview split gutters and borders can add up to two CSS pixels to the panel width.
 const PREVIEW_WIDTH_TOLERANCE = 2;
@@ -46,7 +43,7 @@ test.describe('Slack renderer presentation in Composer', () => {
     page,
   }) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
-    await page.setViewportSize(PREVIEW_360_EMBED_VIEWPORT);
+    await page.setViewportSize(SLACK_360_EMBED_VIEWPORT);
     await loadDataBoundActionExample(page);
 
     await expect(slackPreviewFrame(page).locator('.slack-preview-shell')).toHaveAttribute(
