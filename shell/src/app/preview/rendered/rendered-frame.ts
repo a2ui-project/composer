@@ -54,7 +54,7 @@ import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame
  * here. Oscillation is covered by the settle assertion in
  * shell/e2e/renderer-integration-and-telemetry.e2e.ts instead.
  */
-const MAX_MONOTONIC_GROWTH_REPORTS = 8;
+const MAX_MONOTONIC_GROWTH_REPORTS = 16;
 
 /**
  * Maximum gap between two reports for them to belong to the same growth run.
@@ -185,6 +185,7 @@ export class RenderedFrame {
       const ref = this.iframeRef();
       const el = ref?.nativeElement ?? null;
       if (el) {
+        this.resetGrowthRun();
         this.hostCommunication.registerIframe(el);
         onCleanup(() => {
           this.hostCommunication.unregisterIframe(el);
@@ -212,41 +213,13 @@ export class RenderedFrame {
 
     // Inbound bridge listener: adjusts the iframe container height to fit the rendered
     // A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
-    effect(() => {
-      const envelope = this.hostCommunication.messageStream();
-      if (envelope) {
-        const myIframe = this.iframeRef()?.nativeElement;
-        const myWindow = myIframe?.contentWindow;
-
-        // In multi-frame environments, ignore messages dispatched by other iframes
-        if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
-          return;
-        }
-
-        if (
-          envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
-          envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
-        ) {
-          const payload = untracked(() => this.payload());
-          if (myIframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
-            this.hostCommunication.sendRenderA2UI(payload, myIframe);
-          }
-        } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-          if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
-            const resizePayload = envelope.payload as {height: number; width?: number};
-            this.dynamicHeight.set(this.capReportedHeight(resizePayload.height));
-          }
-        }
-      }
+    // Subscribed directly to messageStream$ rather than an effect so bursts of
+    // messages (e.g. SURFACE_RESIZE followed immediately by DATA_MODEL_CHANGE)
+    // do not coalesce and drop the resize report.
+    this.hostCommunication.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
+      this.trackReportedGrowth(envelope);
+      this.handleInboundEnvelope(envelope);
     });
-
-    // Runaway growth circuit breaker. The counting must happen here rather than in
-    // the effect above: signal effects coalesce, so a burst of messages arriving in
-    // one change detection tick runs that effect once, for the last value only, and
-    // a counter inside it would never see the ramp that defines a feedback loop.
-    this.hostCommunication.messageStream$
-      .pipe(takeUntilDestroyed())
-      .subscribe(envelope => this.trackReportedGrowth(envelope));
 
     // A different renderer means a different guest; give it a clean slate.
     effect(() => {
@@ -258,6 +231,39 @@ export class RenderedFrame {
         this.trackedRendererUrl = rendererUrl;
       });
     });
+  }
+
+  /**
+   * Handles incoming bridge messages (renderer ready, catalog ready, surface resize)
+   * without dropping messages during rapid bursts.
+   */
+  private handleInboundEnvelope(envelope: MessageEnvelope | null): void {
+    if (!envelope) {
+      return;
+    }
+
+    const myIframe = untracked(() => this.iframeRef()?.nativeElement);
+    const myWindow = myIframe?.contentWindow;
+
+    // In multi-frame environments, ignore messages dispatched by other iframes
+    if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
+      return;
+    }
+
+    if (
+      envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
+      envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
+    ) {
+      const payload = untracked(() => this.payload());
+      if (myIframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
+        this.hostCommunication.sendRenderA2UI(payload, myIframe);
+      }
+    } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
+      if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
+        const resizePayload = envelope.payload as {height: number; width?: number};
+        this.dynamicHeight.set(this.capReportedHeight(resizePayload.height));
+      }
+    }
   }
 
   /**
@@ -276,6 +282,11 @@ export class RenderedFrame {
 
     if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
       this.resetGrowthBreaker();
+      return;
+    }
+
+    if (envelope.type === PreviewBridgeMessageType.RENDER_SUCCESS) {
+      this.resetGrowthRun();
       return;
     }
 
@@ -373,6 +384,7 @@ export class RenderedFrame {
     const iframe = this.iframeRef()?.nativeElement;
     if (iframe) {
       this.setupIframeWheelForwarding(iframe);
+      this.resetGrowthRun();
       if (payload !== null && Array.isArray(payload) && payload.length > 0) {
         this.hostCommunication.sendRenderA2UI(payload, iframe);
       }

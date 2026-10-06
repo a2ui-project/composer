@@ -17,6 +17,7 @@
 import {DOCUMENT} from '@angular/common';
 import {TrackEventDirective} from '../../usage-tracking/track-event.directive';
 import {Component, computed, effect, inject, signal} from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {ShareService} from '../share/share.service';
 import {MatIconModule} from '@angular/material/icon';
@@ -25,7 +26,8 @@ import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
 import {MatToolbarModule} from '@angular/material/toolbar';
 import {MatTooltipModule} from '@angular/material/tooltip';
-import {RouterLink, RouterLinkActive, RouterOutlet} from '@angular/router';
+import {NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet} from '@angular/router';
+import {filter, map} from 'rxjs';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {
@@ -41,6 +43,7 @@ import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service'
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../startup-resolution/state/startup-config-state.service';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {ResetLayoutEvent} from '../composer-workspace/composer-panel-id';
 
 /** Standard length for showing any snack bar notification. */
 const SNACK_BAR_DURATION_MS = 5000;
@@ -72,6 +75,21 @@ const SNACK_BAR_DURATION_MS = 5000;
 export class ComposerShell {
   readonly isCollapsed = signal(true);
   isDarkTheme = computed(() => this.configProvider.themePreference() === ThemePreference.DARK);
+  private readonly router = inject(Router);
+
+  private checkIsWorkspaceRoute(url: string): boolean {
+    const path = url.split('?')[0].split('#')[0];
+    return path === '' || path === '/';
+  }
+
+  readonly isWorkspaceRoute = toSignal(
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+      map(e => this.checkIsWorkspaceRoute(e.urlAfterRedirects || e.url)),
+    ),
+    {initialValue: this.checkIsWorkspaceRoute(this.router.url)},
+  );
+
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly indexedDbStorage = inject(IndexedDbStorage);
   private readonly storage = inject(LocalStorageInteractions);
@@ -161,5 +179,15 @@ export class ComposerShell {
       this.document.defaultView.location.href = url.toString();
     }
     this.logger.info('Session state cleared.');
+  }
+
+  /**
+   * Resets the Dockview workspace back to default panels and split proportions
+   * by dispatching ResetLayoutEvent to the window.
+   */
+  resetLayout(): void {
+    if (this.document.defaultView) {
+      this.document.defaultView.dispatchEvent(new ResetLayoutEvent());
+    }
   }
 }

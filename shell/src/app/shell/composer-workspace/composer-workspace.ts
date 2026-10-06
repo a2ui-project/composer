@@ -82,6 +82,10 @@ export class ComposerWorkspace implements OnInit, AfterViewInit {
     }
   }
 
+  @HostListener('window:a2ui-reset-layout') onResetLayout() {
+    this.composerDockview.resetLayout();
+  }
+
   constructor() {
     this.errorLogger.errorStream$.pipe(takeUntilDestroyed()).subscribe(log => {
       if (log.level === 'warn' || log.level === 'error') {

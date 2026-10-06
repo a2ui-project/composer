@@ -36,3 +36,13 @@ export class OpenPanelEvent extends CustomEvent<{panelId: ComposerPanelId}> {
     super(OpenPanelEvent.TYPE, {detail: {panelId}, bubbles: true, composed: true});
   }
 }
+
+/**
+ * An event which will be fired to reset the dockview workspace layout back to default.
+ */
+export class ResetLayoutEvent extends CustomEvent<void> {
+  static readonly TYPE = 'a2ui-reset-layout';
+  constructor() {
+    super(ResetLayoutEvent.TYPE, {bubbles: true, composed: true});
+  }
+}

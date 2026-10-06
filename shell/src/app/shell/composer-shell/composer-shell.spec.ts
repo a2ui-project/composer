@@ -15,7 +15,7 @@
  */
 
 import {DOCUMENT} from '@angular/common';
-import {signal, WritableSignal} from '@angular/core';
+import {Component, signal, WritableSignal} from '@angular/core';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -42,6 +42,9 @@ import {StartupConfigStateService} from '../startup-resolution/state/startup-con
 import {ComposerShell} from './composer-shell';
 import {ComposerShellHarness} from './test/composer-shell.harness';
 import {ErrorLogger} from '../../debug/error-logger.service';
+
+@Component({standalone: true, template: ''})
+class DummyRouteComponent {}
 
 describe('ComposerShell Layout', () => {
   let fixture: ComponentFixture<ComposerShell>;
@@ -111,7 +114,12 @@ describe('ComposerShell Layout', () => {
     await TestBed.configureTestingModule({
       imports: [ComposerShell],
       providers: [
-        provideRouter([]),
+        provideRouter([
+          {path: '', component: DummyRouteComponent},
+          {path: 'gallery', component: DummyRouteComponent},
+          {path: 'a2a', component: DummyRouteComponent},
+          {path: 'settings', component: DummyRouteComponent},
+        ]),
         provideNoopAnimations(),
         {
           provide: IndexedDbStorage,
@@ -227,6 +235,18 @@ describe('ComposerShell Layout', () => {
     );
   });
 
+  it('dispatches ResetLayoutEvent upon clicking Reset Layout button', async () => {
+    const injectedDocument = TestBed.inject(DOCUMENT);
+    const dispatchSpy = vi.spyOn(injectedDocument.defaultView!, 'dispatchEvent');
+
+    expect(await harness.getResetLayoutIconText()).toBe('space_dashboard');
+    expect(await harness.getResetLayoutAriaLabel()).toBe('Reset Layout');
+
+    await harness.clickResetLayoutButton();
+
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({type: 'a2ui-reset-layout'}));
+  });
+
   it('toggles the dark theme SCSS class and tracks theme change on toggle', async () => {
     const usageTracking = TestBed.inject(UsageTrackingService);
     const themeSpy = vi.spyOn(usageTracking, 'trackThemeToggle');
@@ -283,7 +303,7 @@ describe('ComposerShell Layout', () => {
 
   it('applies aria-hidden attribute to purely decorative MatIcon elements across the composer shell', async () => {
     const hiddenAttrs = await harness.getIconsAriaHidden();
-    expect(hiddenAttrs.length).toBe(7);
+    expect(hiddenAttrs.length).toBe(8);
     hiddenAttrs.forEach(attr => {
       expect(attr).toBe('true');
     });
@@ -351,6 +371,50 @@ describe('ComposerShell Layout', () => {
     const shareButton = fixture.debugElement.query(By.css('.share-button'));
     shareButton.triggerEventHandler('click', null);
     expect(shareService.shareDesign).toHaveBeenCalled();
+  });
+
+  describe('Workspace Toolbar Route Visibility', () => {
+    it('displays New Session, Reset Layout, and Share buttons on workspace route initially', async () => {
+      expect(await harness.hasResetButton()).toBe(true);
+      expect(await harness.hasResetLayoutButton()).toBe(true);
+      expect(await harness.hasShareButton()).toBe(true);
+      expect(await harness.hasThemeToggleButton()).toBe(true);
+    });
+
+    it('hides New Session, Reset Layout, and Share buttons on non-workspace routes while keeping theme toggle visible', async () => {
+      const router = TestBed.inject(Router);
+
+      for (const route of ['/gallery', '/a2a', '/settings']) {
+        await router.navigateByUrl(route);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(await harness.hasResetButton()).toBe(false);
+        expect(await harness.hasResetLayoutButton()).toBe(false);
+        expect(await harness.hasShareButton()).toBe(false);
+        expect(await harness.hasThemeToggleButton()).toBe(true);
+      }
+    });
+
+    it('restores workspace buttons when navigating back to workspace route', async () => {
+      const router = TestBed.inject(Router);
+
+      await router.navigateByUrl('/gallery');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(await harness.hasResetButton()).toBe(false);
+      expect(await harness.hasResetLayoutButton()).toBe(false);
+      expect(await harness.hasShareButton()).toBe(false);
+
+      await router.navigateByUrl('/');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(await harness.hasResetButton()).toBe(true);
+      expect(await harness.hasResetLayoutButton()).toBe(true);
+      expect(await harness.hasShareButton()).toBe(true);
+    });
   });
 
   describe('resetSession', () => {

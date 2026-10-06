@@ -153,4 +153,58 @@ test.describe('Workspace Navigation & Layout Modes', () => {
     await page.goto('/?renderer=http://localhost:3000&extension=true');
     await expect(page.locator('.workspace-container')).toHaveClass(/extension-mode/);
   });
+
+  test('displays workspace toolbar buttons on workspace route and hides them on non-workspace routes', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.waitForURL(url => url.pathname === '/');
+    await expect(page.locator('.workspace-container')).toBeVisible();
+
+    const resetButton = page.locator('button.reset-session-button');
+    const resetLayoutButton = page.locator('button.reset-layout-button');
+    const shareButton = page.locator('button.share-button');
+    const themeToggleButton = page.locator('button.theme-toggle-button');
+
+    // On workspace route, all three workspace toolbar buttons and theme toggle are visible
+    await expect(resetButton).toBeVisible();
+    await expect(resetLayoutButton).toBeVisible();
+    await expect(shareButton).toBeVisible();
+    await expect(themeToggleButton).toBeVisible();
+
+    // Navigate to /gallery
+    await page.getByRole('link', {name: 'Components Gallery'}).click();
+    await page.waitForURL(url => url.pathname === '/gallery');
+    await expect(page.locator('.gallery-container')).toBeVisible();
+    await expect(resetButton).toBeHidden();
+    await expect(resetLayoutButton).toBeHidden();
+    await expect(shareButton).toBeHidden();
+    await expect(themeToggleButton).toBeVisible();
+
+    // Navigate to /a2a
+    await page.getByRole('link', {name: 'A2A Agent Testing'}).click();
+    await page.waitForURL(url => url.pathname === '/a2a');
+    await expect(resetButton).toBeHidden();
+    await expect(resetLayoutButton).toBeHidden();
+    await expect(shareButton).toBeHidden();
+    await expect(themeToggleButton).toBeVisible();
+
+    // Navigate to /settings
+    await page.getByRole('link', {name: 'Settings'}).click();
+    await page.waitForURL(url => url.pathname === '/settings');
+    await expect(page.locator('.settings-container')).toBeVisible();
+    await expect(resetButton).toBeHidden();
+    await expect(resetLayoutButton).toBeHidden();
+    await expect(shareButton).toBeHidden();
+    await expect(themeToggleButton).toBeVisible();
+
+    // Navigate back to workspace /
+    await page.getByRole('link', {name: 'Composer Workspace'}).click();
+    await page.waitForURL(url => url.pathname === '/');
+    await expect(page.locator('.workspace-container')).toBeVisible();
+    await expect(resetButton).toBeVisible();
+    await expect(resetLayoutButton).toBeVisible();
+    await expect(shareButton).toBeVisible();
+    await expect(themeToggleButton).toBeVisible();
+  });
 });

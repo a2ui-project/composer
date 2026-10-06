@@ -100,8 +100,8 @@ export interface DockviewManagerInitOptions {
  * Layout Architecture:
  * - **Gemini Assistant (Chat)**: Left vertical panel, constrained initially to <= 1/3 viewport width.
  * - **Rendered A2UI Preview & A2UI JSON Editor**: Central workspace area split to the right of Chat.
- *   Both panels are placed side-by-side with an equal 50/50 width split, with "Rendered A2UI Preview"
- *   on the left and "A2UI JSON Editor" on the right.
+ *   Both panels share the same tab group (`direction: 'within'`), with "Rendered A2UI Preview"
+ *   active by default and "A2UI JSON Editor" tabbed behind it (`inactive: true`).
  * - **Debug Drawer**: Bottom drawer positioned below the Preview (`direction: 'below'`), occupying ~28%
  *   of container height. Combines "Data Model" (initially active), "Events", "Errors", and "Raw Messages"
  *   in a single tabbed group (`direction: 'within'`, `inactive: true`).
@@ -125,6 +125,7 @@ export class ComposerDockview {
 
   private resizeObserver?: ResizeObserver;
   private animationFrameId?: number;
+  private layoutPositionFrameId?: number;
   private saveTimeout?: ReturnType<typeof setTimeout>;
   private isInitialized = false;
 
@@ -165,12 +166,6 @@ export class ComposerDockview {
       this.cdr.markForCheck();
     });
 
-    // Compute realistic initial viewport dimensions, falling back to desktop defaults if unmeasured
-    const width = rootEl.clientWidth || DEFAULT_CONTAINER_WIDTH;
-    const height = rootEl.clientHeight || DEFAULT_CONTAINER_HEIGHT;
-
-    const layoutRestored = this.buildDockviewLayout(width, height);
-
     // Debounced layout persistence to localStorage
     this.dockviewApi.onDidLayoutChange(() => {
       if (!this.isInitialized) return;
@@ -193,12 +188,7 @@ export class ComposerDockview {
     this.resizeObserver.observe(rootEl);
 
     // Initial layout pass
-    this.dockviewApi.layout(width, height);
-    if (!layoutRestored) {
-      this.enforceInitialProportions(width, height);
-    }
-    this.isInitialized = true;
-    this.checkTabOverflow();
+    this.constructAndApplyLayout();
 
     // Register capture-phase pointerdown and click event delegation for robust tab clicks
     const handleTabInteraction = (event: Event) => this.handleTabInteraction(event);
@@ -210,6 +200,9 @@ export class ComposerDockview {
       if (this.animationFrameId !== undefined) {
         cancelAnimationFrame(this.animationFrameId);
       }
+      if (this.layoutPositionFrameId !== undefined) {
+        cancelAnimationFrame(this.layoutPositionFrameId);
+      }
       if (this.saveTimeout !== undefined) {
         clearTimeout(this.saveTimeout);
       }
@@ -219,6 +212,32 @@ export class ComposerDockview {
       this.dockviewApi?.dispose();
       this.componentRefs.forEach(ref => ref.destroy());
     });
+  }
+
+  /**
+   * Constructs layout, lays out container, enforces initial proportions if default,
+   * checks tab overflow, and marks change detection.
+   */
+  private constructAndApplyLayout(): void {
+    const width = this.rootEl?.clientWidth || DEFAULT_CONTAINER_WIDTH;
+    const height = this.rootEl?.clientHeight || DEFAULT_CONTAINER_HEIGHT;
+
+    const layoutRestored = this.buildDockviewLayout(width, height);
+    this.dockviewApi.layout(width, height);
+    if (!layoutRestored) {
+      this.enforceInitialProportions(width, height);
+    }
+    this.dockviewApi.overlayRenderContainer?.updateAllPositions();
+    if (this.layoutPositionFrameId !== undefined) {
+      cancelAnimationFrame(this.layoutPositionFrameId);
+    }
+    this.layoutPositionFrameId = requestAnimationFrame(() => {
+      this.layoutPositionFrameId = undefined;
+      this.dockviewApi.overlayRenderContainer?.updateAllPositions();
+    });
+    this.isInitialized = true;
+    this.checkTabOverflow();
+    this.cdr.markForCheck();
   }
 
   /**
@@ -265,6 +284,27 @@ export class ComposerDockview {
     this.dockviewApi?.updateOptions({
       className: isDark ? 'dockview-theme-dark' : 'dockview-theme-light',
     });
+  }
+
+  /**
+   * Resets the Dockview workspace back to default panels, active tabs, and layout proportions,
+   * clearing any persisted layout from localStorage.
+   */
+  resetLayout(): void {
+    if (this.saveTimeout !== undefined) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = undefined;
+    }
+    if (this.layoutPositionFrameId !== undefined) {
+      cancelAnimationFrame(this.layoutPositionFrameId);
+      this.layoutPositionFrameId = undefined;
+    }
+
+    this.storage.removeItem(LocalStorageKey.DOCKVIEW_LAYOUT);
+    this.isInitialized = false;
+
+    this.dockviewApi.clear();
+    this.constructAndApplyLayout();
   }
 
   /**
@@ -375,8 +415,8 @@ export class ComposerDockview {
    *
    * Layout Design:
    * 1. **Chat Panel (Gemini Assistant)**: Anchored left. Width <= 1/3 viewport (`chatWidth`).
-   * 2. **Rendered A2UI Preview & A2UI JSON Editor**: Placed right of Chat side-by-side with an
-   *    equal 50/50 width split between Rendered Preview (left) and JSON Editor (right).
+   * 2. **Rendered A2UI Preview & A2UI JSON Editor**: Placed right of Chat. Both are tabbed together
+   *    (`direction: 'within'`), with Rendered active and JSON Editor `inactive: true`.
    * 3. **Debug Drawer Group**: Placed below Rendered Preview (`direction: 'below'`), sized to ~28%
    *    container height. Houses Data Model (active), Events, Errors, and Raw Messages (`inactive: true`).
    *
@@ -424,7 +464,6 @@ export class ComposerDockview {
       const chatWidth = Math.floor(width * CHAT_PANEL_MAX_WIDTH_FRACTION);
       const debugHeight = Math.round(height * DEBUG_DRAWER_HEIGHT_RATIO);
       const previewHeight = height - debugHeight;
-      const halfRightWidth = Math.floor((width - chatWidth) / 2);
 
       // 1. Chat panel (Gemini Assistant) on the left
       this.dockviewApi.addPanel({
@@ -441,13 +480,25 @@ export class ComposerDockview {
         component: ComposerPanelId.Rendered,
         title: 'Rendered A2UI Preview',
         position: {direction: 'right', referencePanel: ComposerPanelId.Chat},
-        initialWidth: halfRightWidth,
+        initialWidth: width - chatWidth,
         initialHeight: previewHeight,
         minimumWidth: PREVIEW_PANEL_MIN_WIDTH,
         minimumHeight: PREVIEW_PANEL_MIN_HEIGHT,
       });
 
-      // 3. Debug drawer split below Rendered preview
+      // 3. Raw JSON editor tabbed within Rendered preview group
+      this.dockviewApi.addPanel({
+        id: ComposerPanelId.Raw,
+        component: ComposerPanelId.Raw,
+        title: 'A2UI JSON Editor',
+        position: {
+          direction: 'within',
+          referencePanel: ComposerPanelId.Rendered,
+        },
+        inactive: true,
+      });
+
+      // 4. Debug drawer split below Rendered preview
       this.dockviewApi.addPanel({
         id: ComposerPanelId.DataModel,
         component: ComposerPanelId.DataModel,
@@ -460,7 +511,7 @@ export class ComposerDockview {
         minimumHeight: DEBUG_DRAWER_MIN_HEIGHT,
       });
 
-      // 4. Secondary debug tabs placed within Data Model group (inactive initially)
+      // 5. Secondary debug tabs placed within Data Model group
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Events,
         component: ComposerPanelId.Events,
@@ -492,21 +543,16 @@ export class ComposerDockview {
         inactive: true,
       });
 
-      // 5. Raw JSON editor placed to the right of Rendered preview
-      this.dockviewApi.addPanel({
-        id: ComposerPanelId.Raw,
-        component: ComposerPanelId.Raw,
-        title: 'A2UI JSON Editor',
-        position: {
-          direction: 'right',
-          referencePanel: ComposerPanelId.Rendered,
-        },
-        initialWidth: halfRightWidth,
-        minimumWidth: PREVIEW_PANEL_MIN_WIDTH,
-        minimumHeight: PREVIEW_PANEL_MIN_HEIGHT,
-      });
+      // Explicitly activate default primary tabs for each panel group.
+      // Secondary tabs were appended to their groups above, so activating the
+      // default primary panels here cleanly executes Dockview's doSetActivePanel
+      // lifecycle, synchronizing DOM overlay visibility and tab selection.
+      const renderedPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Rendered);
+      renderedPanel?.api.setActive();
 
-      // Explicitly activate default primary tabs
+      const dataModelPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.DataModel);
+      dataModelPanel?.api.setActive();
+
       const chatPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat);
       chatPanel?.api.setActive();
     }
@@ -523,20 +569,12 @@ export class ComposerDockview {
   private enforceInitialProportions(width: number, height: number): void {
     const chatWidth = Math.floor(width * CHAT_PANEL_MAX_WIDTH_FRACTION);
     const debugHeight = Math.round(height * DEBUG_DRAWER_HEIGHT_RATIO);
-    const halfRightWidth = Math.floor((width - chatWidth) / 2);
 
-    const chatPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Chat);
+    const chatPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.Chat);
     chatPanel?.api.setSize({width: chatWidth});
 
-    const dataModelPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.DataModel);
+    const dataModelPanel = this.dockviewApi.getGroupPanel(ComposerPanelId.DataModel);
     dataModelPanel?.api.setSize({height: debugHeight});
-
-    const rawPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Raw);
-    const renderedPanel = this.dockviewApi?.getGroupPanel(ComposerPanelId.Rendered);
-    if (rawPanel && renderedPanel && rawPanel.group !== renderedPanel.group) {
-      rawPanel.api.setSize({width: halfRightWidth});
-      renderedPanel.api.setSize({width: halfRightWidth});
-    }
   }
 
   /**

@@ -431,6 +431,10 @@ export class HostCommunication implements OnDestroy {
         }
       }
     }
+
+    if (this.registeredIframes.size === 0 && this.registeredWindows.size === 0) {
+      this.isRendererReadySignal.set(false);
+    }
   }
 
   /**
