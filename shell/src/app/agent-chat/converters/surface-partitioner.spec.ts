@@ -535,6 +535,37 @@ describe('SurfacePartitioner', () => {
       expect(canvasComps[0]['component']).toBe('Column');
     });
 
+    it('unwraps a flat Canvas when the resolved catalog declares no components at all', () => {
+      const catalogWithoutComponents: Catalog = {title: 'Metadata only'};
+      const flatCanvasPayload = [
+        {
+          version: 'v0.9',
+          createSurface: {surfaceId: 's1', catalogId: 'c1'},
+        },
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 's1',
+            components: [
+              {id: 'canvas-root', component: 'Canvas', children: ['card-a', 'card-b']},
+              {id: 'card-a', component: 'Card'},
+              {id: 'card-b', component: 'Card'},
+            ],
+          },
+        },
+      ];
+
+      // Only an unresolved catalog falls back to the node's own component type.
+      const partitioned = partitionA2uiSurfacePayload(flatCanvasPayload, catalogWithoutComponents);
+
+      const canvasComps =
+        (partitioned.canvasArtifacts[0].payload?.[1]?.updateComponents?.components as Array<
+          Record<string, unknown>
+        >) || [];
+      expect(canvasComps.map(c => c['id'])).toEqual(['root', 'card-a', 'card-b']);
+      expect(canvasComps[0]['component']).toBe('Column');
+    });
+
     it('applies default cardTitle (Interactive content), cardIcon (apps), and autoOpen (true) when omitted', () => {
       const minimalCanvasPayload = [
         {
