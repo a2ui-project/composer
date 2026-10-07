@@ -48,11 +48,19 @@ export const EXCLUDED_PARAMS = new Set([
 ]);
 
 /**
+ * Curated descriptions for parameters emitted by downstream usage-tracking subclasses.
+ * Preserved during standalone syncs when no `--subclass` paths are provided.
+ */
+export const SUBCLASS_DESCRIPTIONS = {
+  reason: 'Categorized failure reason for dialog actions',
+};
+
+/**
  * Curated descriptions for known parameters discovered during source scans.
  */
 export const KNOWN_DESCRIPTIONS = {
   error_type: 'Functional error type classification',
-  reason: 'Categorized failure reason for dialog actions',
+  ...SUBCLASS_DESCRIPTIONS,
 };
 
 /**
@@ -314,16 +322,17 @@ export function formatDescription(paramName, displayName) {
  *
  * @param {ParsedScriptResult} existing
  * @param {Set<string>} extractedParams
+ * @param {{preserveSubclassParams?: boolean}} [options]
  * @returns {MergedDefinitionsResult}
  */
-export function mergeDefinitions(existing, extractedParams) {
+export function mergeDefinitions(existing, extractedParams, {preserveSubclassParams = false} = {}) {
+  const shouldKeep = paramName =>
+    extractedParams.has(paramName) ||
+    (preserveSubclassParams && Object.hasOwn(SUBCLASS_DESCRIPTIONS, paramName));
+
   // Prune obsolete dimensions and metrics that are no longer present in extractedParams
-  const dimensions = Array.from(existing.dimensions.values()).filter(d =>
-    extractedParams.has(d.paramName),
-  );
-  const metrics = Array.from(existing.metrics.values()).filter(m =>
-    extractedParams.has(m.paramName),
-  );
+  const dimensions = Array.from(existing.dimensions.values()).filter(d => shouldKeep(d.paramName));
+  const metrics = Array.from(existing.metrics.values()).filter(m => shouldKeep(m.paramName));
   const addedDimensions = [];
   const addedMetrics = [];
 
@@ -518,7 +527,9 @@ export function syncDimensions({
       extractedParams.add(param);
     }
   }
-  const merged = mergeDefinitions(existing, extractedParams);
+  const merged = mergeDefinitions(existing, extractedParams, {
+    preserveSubclassParams: subclassPaths.length === 0,
+  });
   const generatedContent = generateScriptContent(scriptContent, merged);
 
   const isUpToDate = scriptContent === generatedContent;
