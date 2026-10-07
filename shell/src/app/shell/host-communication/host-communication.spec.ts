@@ -24,7 +24,7 @@ import {
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {signal, WritableSignal} from '@angular/core';
+import {effect, signal, WritableSignal} from '@angular/core';
 
 describe('HostCommunication', () => {
   let service: HostCommunication;
@@ -1488,10 +1488,9 @@ describe('HostCommunication', () => {
       service.sendRenderA2UI(payload);
       expect(inlineWindow.postMessage).not.toHaveBeenCalled();
       expect(canvasWindow.postMessage).not.toHaveBeenCalled();
-      expect(service['outboundMessageBuffer'].length).toBe(1);
 
       // Once the element has a window again and its frame announces itself,
-      // the message reaches that frame.
+      // the message reaches that frame, exactly once.
       canvasIframe.contentWindow = canvasWindow;
       window.dispatchEvent(
         new MessageEvent('message', {
@@ -1500,11 +1499,19 @@ describe('HostCommunication', () => {
           data: {type: PreviewBridgeMessageType.RENDERER_READY},
         }),
       );
-      expect(canvasWindow.postMessage).toHaveBeenCalledWith(
-        {type: PreviewBridgeMessageType.RENDER_A2UI, payload},
+      const renderMessage = {type: PreviewBridgeMessageType.RENDER_A2UI, payload};
+      expect(canvasWindow.postMessage).toHaveBeenCalledWith(renderMessage, 'http://localhost:3000');
+      expect(
+        vi
+          .mocked(canvasWindow.postMessage)
+          .mock.calls.filter(
+            call => (call[0] as {type?: string})?.type === PreviewBridgeMessageType.RENDER_A2UI,
+          ),
+      ).toHaveLength(1);
+      expect(inlineWindow.postMessage).not.toHaveBeenCalledWith(
+        renderMessage,
         'http://localhost:3000',
       );
-      expect(service['outboundMessageBuffer'].length).toBe(0);
     });
 
     it('does not report readiness for a RENDERER_READY that carries no source window', () => {
@@ -1521,7 +1528,7 @@ describe('HostCommunication', () => {
       expect(service.isRendererReady()).toBe(false);
     });
 
-    it("drops only the unregistered frame's queued messages and keeps those of its siblings", () => {
+    it("keeps a sibling's queued message when another frame is unregistered and never delivers the unregistered frame's", () => {
       const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
       const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
       const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
@@ -1537,11 +1544,10 @@ describe('HostCommunication', () => {
       ];
       service.sendRenderA2UI(canvasPayload, canvasIframe);
       service.sendRenderA2UI(inlinePayload, inlineIframe);
-      expect(service['outboundMessageBuffer'].length).toBe(2);
 
       service.unregisterIframe(canvasIframe);
-      expect(service['outboundMessageBuffer'].length).toBe(1);
 
+      // The inline frame's message is unaffected by its sibling going away.
       window.dispatchEvent(
         new MessageEvent('message', {
           source: inlineWindow,
@@ -1553,8 +1559,21 @@ describe('HostCommunication', () => {
         {type: PreviewBridgeMessageType.RENDER_A2UI, payload: inlinePayload},
         'http://localhost:3000',
       );
+      expect(inlineWindow.postMessage).not.toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.RENDER_A2UI, payload: canvasPayload},
+        'http://localhost:3000',
+      );
+
+      // A late handshake from the unregistered frame must not revive its
+      // message either.
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: canvasWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
       expect(canvasWindow.postMessage).not.toHaveBeenCalled();
-      expect(service['outboundMessageBuffer'].length).toBe(0);
     });
 
     it('omits the buffered target from the message posted to the guest frame', () => {
@@ -1587,6 +1606,178 @@ describe('HostCommunication', () => {
         payload,
       });
       expect(Object.keys(renderCall?.[0] as object)).not.toContain('target');
+    });
+
+    it('does not make an effect that sends through it depend on renderer readiness', () => {
+      // Mirrors RawFrame's untargeted payload effect, which sends before any
+      // frame is registered and therefore hits the overall-readiness fallback.
+      // The effect must run for its own inputs only, never because a frame's
+      // handshake flipped readiness; that re-run is what used to re-send
+      // every frame's payload whenever another frame came up.
+      const payload = signal([
+        {version: 'v0.9', createSurface: {surfaceId: 'draft', catalogId: 'c1'}},
+      ]);
+      let runs = 0;
+      TestBed.runInInjectionContext(() => {
+        effect(() => {
+          runs++;
+          service.sendRenderA2UI(payload());
+        });
+      });
+      TestBed.tick();
+      expect(runs).toBe(1);
+
+      const guestWindow = {postMessage: vi.fn()} as unknown as Window;
+      const guestIframe = {contentWindow: guestWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(guestIframe);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: guestWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(service.isRendererReady()).toBe(true);
+      TestBed.tick();
+      expect(runs).toBe(1);
+
+      const nextPayload = [{version: 'v0.9', createSurface: {surfaceId: 'draft', catalogId: 'c2'}}];
+      payload.set(nextPayload);
+      TestBed.tick();
+      expect(runs).toBe(2);
+      expect(guestWindow.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.RENDER_A2UI, payload: nextPayload},
+        'http://localhost:3000',
+      );
+    });
+
+    it('sends the theme on RENDERER_READY only to the frame that announced itself', () => {
+      const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
+      const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(inlineIframe);
+      service.registerIframe(canvasIframe);
+      const themeMessage = {
+        type: PreviewBridgeMessageType.SET_THEME,
+        payload: {theme: ThemePreference.LIGHT},
+      };
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: inlineWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(inlineWindow.postMessage).toHaveBeenCalledWith(themeMessage, 'http://localhost:3000');
+      // The canvas frame has not announced itself: nothing is posted to it
+      // now, and nothing is queued for it either.
+      expect(canvasWindow.postMessage).not.toHaveBeenCalled();
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: canvasWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(canvasWindow.postMessage).toHaveBeenCalledTimes(1);
+      expect(canvasWindow.postMessage).toHaveBeenCalledWith(themeMessage, 'http://localhost:3000');
+      // The inline frame already has the theme; its sibling's handshake must
+      // not send it another copy.
+      expect(inlineWindow.postMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('posts a theme change to the frames that are up and leaves a frame still handshaking to its own handshake', () => {
+      const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
+      const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const canvasIframe = {contentWindow: canvasWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(inlineIframe);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: inlineWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      service.registerIframe(canvasIframe);
+      vi.mocked(inlineWindow.postMessage).mockClear();
+
+      service.sendTheme(ThemePreference.DARK);
+      expect(inlineWindow.postMessage).toHaveBeenCalledTimes(1);
+      expect(inlineWindow.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.SET_THEME, payload: {theme: ThemePreference.DARK}},
+        'http://localhost:3000',
+      );
+      expect(canvasWindow.postMessage).not.toHaveBeenCalled();
+
+      // When the canvas frame comes up it gets the current preference once;
+      // no copy of the earlier call trails behind it.
+      themePreferenceSignal.set(ThemePreference.DARK);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: canvasWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(
+        vi
+          .mocked(canvasWindow.postMessage)
+          .mock.calls.filter(
+            call => (call[0] as {type?: string})?.type === PreviewBridgeMessageType.SET_THEME,
+          ),
+      ).toEqual([
+        [
+          {type: PreviewBridgeMessageType.SET_THEME, payload: {theme: ThemePreference.DARK}},
+          'http://localhost:3000',
+        ],
+      ]);
+    });
+
+    it('flushes the messages queued for a frame when that frame sends an MCP_REQUEST', async () => {
+      const guestWindow = {postMessage: vi.fn()} as unknown as Window;
+      const guestIframe = {contentWindow: guestWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(guestIframe);
+      const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+      service.sendRenderA2UI(payload, guestIframe);
+      expect(guestWindow.postMessage).not.toHaveBeenCalled();
+
+      const mcpManager = (
+        service as unknown as {
+          mcpManager: {callTool: ReturnType<typeof vi.fn>};
+        }
+      ).mcpManager;
+      vi.spyOn(mcpManager, 'callTool').mockResolvedValueOnce({content: []});
+
+      // A frame that calls tools is up, whether or not its RENDERER_READY was
+      // seen, so what was queued for it goes out now rather than on some
+      // other frame's handshake.
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: guestWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.MCP_REQUEST,
+            payload: {requestId: 'req-flush', toolName: 'list_directory'},
+          },
+        }),
+      );
+      expect(guestWindow.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.RENDER_A2UI, payload},
+        'http://localhost:3000',
+      );
+      await vi.waitFor(() => {
+        expect(guestWindow.postMessage).toHaveBeenCalledWith(
+          {
+            type: PreviewBridgeMessageType.MCP_RESPONSE,
+            payload: {requestId: 'req-flush', result: {content: []}},
+          },
+          'http://localhost:3000',
+        );
+      });
     });
 
     it('handles MCP_REQUEST by calling mcpManager.callTool with toolName and sending MCP_RESPONSE to a cross-origin WindowProxy', async () => {

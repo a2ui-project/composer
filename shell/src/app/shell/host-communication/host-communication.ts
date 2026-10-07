@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
+import {Injectable, inject, signal, Signal, OnDestroy, untracked} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {ReplaySubject} from 'rxjs';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
@@ -82,7 +82,11 @@ export class HostCommunication implements OnDestroy {
   /** Readonly signal tracking the most recent message envelope */
   readonly latestEnvelope: Signal<MessageEnvelope | null> = this.latestEnvelopeSignal.asReadonly();
 
-  /** Readonly signal tracking if the guest renderer is ready */
+  /**
+   * Whether at least one registered frame has completed its handshake. With
+   * several frames open this says nothing about any particular frame; it is
+   * the coarse signal for consumers such as the raw frame's watchdog message.
+   */
   readonly isRendererReady = this.isRendererReadySignal.asReadonly();
 
   private readonly messageStreamSubject = new ReplaySubject<MessageEnvelope>(1);
@@ -251,9 +255,13 @@ export class HostCommunication implements OnDestroy {
         timestamp: Date.now(),
         sourceWindow: (event.source as Window) ?? null,
       };
+      const sourceWindow = (event.source as Window) ?? null;
       if (type === PreviewBridgeMessageType.RENDERER_READY) {
-        this.markWindowReady((event.source as Window) ?? null);
-        this.sendTheme(this.configProvider.themePreference());
+        this.markWindowReady(sourceWindow);
+        // Only the frame that just announced itself needs the theme. Frames
+        // that are already up received it on their own handshake, and frames
+        // still loading will get it on theirs.
+        this.sendMessage(this.themeMessage(this.configProvider.themePreference()), sourceWindow);
         this.flushOutboundMessages();
       }
       if (type === PreviewBridgeMessageType.CONSOLE_LOG) {
@@ -263,7 +271,11 @@ export class HostCommunication implements OnDestroy {
       }
 
       if (type === PreviewBridgeMessageType.MCP_REQUEST) {
-        this.markWindowReady((event.source as Window) ?? null);
+        // A frame that calls tools is evidently up, even if its RENDERER_READY
+        // was missed; treat it exactly like a handshake so anything queued for
+        // it does not wait for some other frame's RENDERER_READY.
+        this.markWindowReady(sourceWindow);
+        this.flushOutboundMessages();
         const req = data.payload as McpRequestPayload;
         const sourceTarget =
           Array.from(this.registeredIframes).find(f => f.contentWindow === event.source) ??
@@ -376,7 +388,8 @@ export class HostCommunication implements OnDestroy {
 
   /**
    * Resolves the window a message for `target` is posted to. An omitted target
-   * means the default frame, which is the most recently registered one.
+   * means the current default frame (`iframeElement` / `iframeWindow`): the
+   * last one registered, or whichever frame `unregisterIframe` fell back to.
    */
   private resolveTargetWindow(target?: HTMLIFrameElement | Window | null): Window | null {
     if (target) {
@@ -543,9 +556,9 @@ export class HostCommunication implements OnDestroy {
     if (windowTarget) {
       this.readyWindows.delete(windowTarget);
     }
-    // Messages without an explicit target were meant for whichever frame was
-    // the default when they were queued; that is this frame now, so they are
-    // stale. Messages addressed to other frames stay queued.
+    // Untargeted messages were meant for the previous default frame. This
+    // frame is now the default, so replaying them would misroute them here;
+    // drop them. Messages addressed to other frames stay queued.
     this.dropQueuedMessages(
       queuedTarget => !queuedTarget || this.addressesTarget(queuedTarget, target, windowTarget),
     );
@@ -620,7 +633,12 @@ export class HostCommunication implements OnDestroy {
       return;
     }
 
-    if (!this.isTargetReady(target)) {
+    // Callers run inside component effects (RenderedFrame's payload and theme
+    // effects). Readiness must not become a dependency of those effects, or
+    // every frame's handshake would re-run them and re-send their payloads.
+    // Only the fallback branch of isTargetReady reads a signal today; the
+    // untracked read keeps that from changing by accident.
+    if (!untracked(() => this.isTargetReady(target))) {
       this.logger.info('Queueing outbound message; renderer is not yet ready.', message);
       this.outboundMessageBuffer.push({message, target});
       return;
@@ -649,35 +667,40 @@ export class HostCommunication implements OnDestroy {
     }
   }
 
+  private themeMessage(theme: ThemePreference) {
+    return {type: PreviewBridgeMessageType.SET_THEME, payload: {theme}};
+  }
+
   /**
-   * Helper utility dispatching a SET_THEME message to the preview renderer.
+   * Dispatches a SET_THEME message to every registered frame that is up. A
+   * frame that has not completed its handshake is skipped rather than queued
+   * for: it receives the current theme on its own RENDERER_READY, so a queued
+   * copy would only arrive as a duplicate. With nothing registered the message
+   * waits for the default frame, as any other message does.
    * @param theme Target theme option
    */
   sendTheme(theme: ThemePreference): void {
-    this.sendMessage({
-      type: PreviewBridgeMessageType.SET_THEME,
-      payload: {
-        theme: theme,
-      },
-    });
-    for (const iframe of this.registeredIframes) {
-      if (iframe.contentWindow && iframe.contentWindow !== this.iframeWindow) {
-        try {
-          const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-          if (expectedUrl) {
-            const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
-            iframe.contentWindow.postMessage(
-              {
-                type: PreviewBridgeMessageType.SET_THEME,
-                payload: {theme},
-              },
-              targetOrigin,
-            );
-          }
-        } catch {
-          // Ignore error posting theme to secondary frame
-        }
+    const message = this.themeMessage(theme);
+    const targets: Array<HTMLIFrameElement | Window> = [
+      ...this.registeredIframes,
+      ...this.registeredWindows,
+    ];
+    if (targets.length === 0) {
+      this.sendMessage(message);
+      return;
+    }
+    const postedWindows = new Set<Window>();
+    for (const target of targets) {
+      const targetWindow = this.resolveTargetWindow(target);
+      if (
+        !targetWindow ||
+        postedWindows.has(targetWindow) ||
+        !this.readyWindows.has(targetWindow)
+      ) {
+        continue;
       }
+      postedWindows.add(targetWindow);
+      this.sendMessage(message, target);
     }
   }
 
