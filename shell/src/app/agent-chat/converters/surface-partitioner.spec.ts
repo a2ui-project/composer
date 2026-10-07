@@ -18,6 +18,7 @@ import {TestBed} from '@angular/core/testing';
 import {RenderA2uiItem} from 'a2ui-bridge';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 import {
   hasA2uiCanvasComponent,
   isA2uiItem,
@@ -379,6 +380,159 @@ describe('SurfacePartitioner', () => {
           Record<string, unknown>
         >) || [];
       expect(canvasComps.map(c => c['id'])).toEqual(['root', 'card-a', 'card-b']);
+      expect(canvasComps[0]['component']).toBe('Column');
+    });
+
+    it('preserves Canvas as root when the active catalog includes Canvas', () => {
+      const catalogWithCanvas: Catalog = {
+        components: {
+          Canvas: {},
+          Card: {},
+        },
+      };
+      const canvasPayload = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'c1',
+          },
+        },
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 's1',
+            components: [
+              {
+                id: 'canvas-root',
+                component: {
+                  Canvas: {
+                    children: ['card-a', 'card-b'],
+                    cardTitle: 'Summary',
+                  },
+                },
+              },
+              {
+                id: 'card-a',
+                component: 'Card',
+              },
+              {
+                id: 'card-b',
+                component: 'Card',
+              },
+            ],
+          },
+        },
+      ];
+
+      const partitioned = partitionA2uiSurfacePayload(canvasPayload, catalogWithCanvas);
+
+      expect(partitioned.hasCanvas).toBe(true);
+      expect(partitioned.canvasArtifacts.length).toBe(1);
+      const canvasComps =
+        (partitioned.canvasArtifacts[0].payload?.[1]?.updateComponents?.components as Array<
+          Record<string, unknown>
+        >) || [];
+      expect(canvasComps.map(c => c['id'])).toEqual(['root', 'card-a', 'card-b']);
+      expect(canvasComps[0]['component']).toBe('Canvas');
+      expect(canvasComps[0]['children']).toEqual(['card-a', 'card-b']);
+    });
+
+    it('preserves flat v0.9 Canvas component as root when catalog is not yet resolved', () => {
+      const flatCanvasPayload = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'c1',
+          },
+        },
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 's1',
+            components: [
+              {
+                id: 'root',
+                component: 'Canvas',
+                children: ['card-a', 'card-b'],
+                cardTitle: 'Summary',
+              },
+              {
+                id: 'card-a',
+                component: 'Card',
+              },
+              {
+                id: 'card-b',
+                component: 'Card',
+              },
+            ],
+          },
+        },
+      ];
+
+      const partitioned = partitionA2uiSurfacePayload(flatCanvasPayload);
+
+      expect(partitioned.hasCanvas).toBe(true);
+      expect(partitioned.canvasArtifacts.length).toBe(1);
+      const canvasComps =
+        (partitioned.canvasArtifacts[0].payload?.[1]?.updateComponents?.components as Array<
+          Record<string, unknown>
+        >) || [];
+      expect(canvasComps.map(c => c['id'])).toEqual(['root', 'card-a', 'card-b']);
+      expect(canvasComps[0]['component']).toBe('Canvas');
+      expect(canvasComps[0]['children']).toEqual(['card-a', 'card-b']);
+    });
+
+    it('unwraps Canvas into Column when the active catalog does not include Canvas', () => {
+      const catalogWithoutCanvas: Catalog = {
+        components: {
+          Column: {},
+          Card: {},
+        },
+      };
+      const canvasPayload = [
+        {
+          version: 'v0.9',
+          createSurface: {
+            surfaceId: 's1',
+            catalogId: 'c1',
+          },
+        },
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 's1',
+            components: [
+              {
+                id: 'canvas-root',
+                component: 'Canvas',
+                children: ['card-a', 'card-b'],
+                cardTitle: 'Summary',
+              },
+              {
+                id: 'card-a',
+                component: 'Card',
+              },
+              {
+                id: 'card-b',
+                component: 'Card',
+              },
+            ],
+          },
+        },
+      ];
+
+      const partitioned = partitionA2uiSurfacePayload(canvasPayload, catalogWithoutCanvas);
+
+      expect(partitioned.hasCanvas).toBe(true);
+      expect(partitioned.canvasArtifacts.length).toBe(1);
+      const canvasComps =
+        (partitioned.canvasArtifacts[0].payload?.[1]?.updateComponents?.components as Array<
+          Record<string, unknown>
+        >) || [];
+      expect(canvasComps.map(c => c['id'])).toEqual(['root', 'card-a', 'card-b']);
+      expect(canvasComps[0]['component']).toBe('Column');
     });
 
     it('applies default cardTitle (Interactive content), cardIcon (apps), and autoOpen (true) when omitted', () => {

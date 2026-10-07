@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, DestroyRef, inject, OnInit, signal} from '@angular/core';
+import {Component, DestroyRef, effect, inject, OnInit, signal, untracked} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -30,6 +30,8 @@ import {
   AppConfigProvider,
 } from '../settings/app-config-provider/app-config-provider';
 import {HostCommunication} from '../shell/host-communication/host-communication';
+import {CatalogManagement} from '../storage/catalog-management/catalog-management';
+import {Catalog} from '../storage/models/catalog-storage.model';
 import {asRecord} from '../utils/json';
 import {isValidEndpointUrl, normalizeHttpUrl} from '../utils/url';
 import {generateUuid as uuid} from '../utils/uuid';
@@ -124,6 +126,7 @@ export class A2aChatView implements OnInit {
   protected readonly configProvider = inject(AppConfigProvider);
   private readonly a2aTransport = inject(A2A_TRANSPORT);
   private readonly hostCommunication = inject(HostCommunication);
+  private readonly catalogManagement = inject(CatalogManagement);
   private readonly destroyRef = inject(DestroyRef);
   private readonly streamEventParser = inject(A2aStreamEventParser);
   private readonly initTimestamp = Date.now();
@@ -178,6 +181,15 @@ export class A2aChatView implements OnInit {
           this.handleSendToServerAction(envelope.payload);
         }
       });
+
+    // The renderer iframe only mounts when the Canvas panel opens, so the active catalog
+    // can resolve after the first streaming turn has already been partitioned.
+    effect(() => {
+      const catalog = this.catalogManagement.activeCatalog();
+      if (catalog) {
+        untracked(() => this.repartitionMessagesForCatalog(catalog));
+      }
+    });
   }
 
   ngOnInit(): void {
@@ -598,7 +610,10 @@ export class A2aChatView implements OnInit {
             ? [...(m.toolCalls || []), ...parsed.toolCalls]
             : m.toolCalls;
 
-        const partitioned = partitionA2uiSurfacePayload(updatedPayload || []);
+        const partitioned = partitionA2uiSurfacePayload(
+          updatedPayload || [],
+          this.catalogManagement.activeCatalog(),
+        );
 
         // Decide once, on the first event with visible content, whether the
         // inline surface precedes the prose. Streaming appends text later,
@@ -644,6 +659,41 @@ export class A2aChatView implements OnInit {
           }
         } else if (autoOpenArtifact) {
           this.openCanvasSurface(autoOpenArtifact.payload);
+        }
+      }
+    }
+  }
+
+  /**
+   * Re-partitions existing messages against the active renderer catalog and refreshes
+   * the open Canvas payload if its surface was re-partitioned.
+   */
+  private repartitionMessagesForCatalog(catalog: Catalog) {
+    const currentMsgs = this.messages();
+    if (!currentMsgs.some(m => m.a2uiPayload && m.a2uiPayload.length > 0)) return;
+
+    this.messages.update(msgs =>
+      msgs.map(m => {
+        if (!m.a2uiPayload || m.a2uiPayload.length === 0) return m;
+        const partitioned = partitionA2uiSurfacePayload(m.a2uiPayload, catalog);
+        return {
+          ...m,
+          inlineA2uiPayload: partitioned.inlinePayload || undefined,
+          canvasArtifacts: partitioned.canvasArtifacts,
+          hasCanvas: partitioned.hasCanvas,
+        };
+      }),
+    );
+
+    if (this.isCanvasOpen()) {
+      const currentActive = this.activeCanvasPayload();
+      for (const m of this.messages()) {
+        const matching = m.canvasArtifacts?.find(a =>
+          this.matchesActiveCanvasPayload(a, currentActive),
+        );
+        if (matching) {
+          this.activeCanvasPayload.set(matching.payload);
+          break;
         }
       }
     }

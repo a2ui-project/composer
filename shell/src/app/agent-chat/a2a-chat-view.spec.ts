@@ -29,6 +29,8 @@ import {
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
 import {A2A_TRANSPORT, A2aTransport} from '../chat/a2a/a2a-transport.token';
+import {CatalogManagement} from '../storage/catalog-management/catalog-management';
+import {Catalog} from '../storage/models/catalog-storage.model';
 import {A2aChatView} from './a2a-chat-view';
 import {A2aChatViewHarness} from './test/a2a-chat-view.harness';
 
@@ -37,11 +39,13 @@ describe('A2aChatView', () => {
   let harness: A2aChatViewHarness;
   let mockA2aTransport: Partial<A2aTransport>;
   let mockAgentUrlSignal: WritableSignal<string>;
+  let mockActiveCatalogSignal: WritableSignal<Catalog | null>;
   let mockConfigProvider: Partial<AppConfigProvider>;
   let mockMessageStream$: Subject<MessageEnvelope | null>;
 
   beforeEach(async () => {
     mockAgentUrlSignal = signal('http://localhost:8000');
+    mockActiveCatalogSignal = signal<Catalog | null>(null);
     mockMessageStream$ = new Subject<MessageEnvelope | null>();
     mockA2aTransport = {
       getAgentCard: vi.fn().mockResolvedValue({
@@ -79,6 +83,10 @@ describe('A2aChatView', () => {
       providers: [
         {provide: A2A_TRANSPORT, useValue: mockA2aTransport},
         {provide: AppConfigProvider, useValue: mockConfigProvider},
+        {
+          provide: CatalogManagement,
+          useValue: {activeCatalog: mockActiveCatalogSignal},
+        },
         {
           provide: StartupResolution,
           useValue: {resolvedUrl: signal('http://localhost:3000/renderer')},
@@ -1025,5 +1033,80 @@ describe('A2aChatView', () => {
         expect(call[1]).toBe(iframe);
       }
     });
+  });
+
+  it('re-partitions canvas surfaces and updates activeCanvasPayload when activeCatalog resolves with Canvas', async () => {
+    const canvasSurfacePayload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'canvas-surface-1',
+          catalogId: 'cat-1',
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'canvas-surface-1',
+          components: [
+            {
+              id: 'canvas-root',
+              component: {
+                Canvas: {
+                  children: ['card-1', 'card-2'],
+                  cardTitle: 'Experiment Brief',
+                },
+              },
+            },
+            {id: 'card-1', component: 'Card'},
+            {id: 'card-2', component: 'Card'},
+          ],
+        },
+      },
+    ];
+
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      yield {
+        taskId: 't-canvas',
+        contextId: 'c-canvas',
+        message: {
+          role: 'agent',
+          parts: [
+            {text: 'Drafted brief:'},
+            {
+              data: {
+                mimeType: 'application/json+a2ui',
+                data: JSON.stringify(canvasSurfacePayload),
+              },
+            },
+          ],
+        },
+        final: true,
+      };
+    });
+
+    fixture.componentInstance['sendUserMessage']({text: 'Create brief', images: []});
+    await fixture.whenStable();
+
+    const initialComponents =
+      (fixture.componentInstance['activeCanvasPayload']()?.[1]?.updateComponents
+        ?.components as Array<Record<string, unknown>>) || [];
+    expect(initialComponents[0]?.['component']).toBe('Column');
+
+    mockActiveCatalogSignal.set({
+      components: {
+        Canvas: {},
+        Card: {},
+      },
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const updatedComponents =
+      (fixture.componentInstance['activeCanvasPayload']()?.[1]?.updateComponents
+        ?.components as Array<Record<string, unknown>>) || [];
+    expect(updatedComponents[0]?.['id']).toBe('root');
+    expect(updatedComponents[0]?.['component']).toBe('Canvas');
+    expect(updatedComponents[0]?.['children']).toEqual(['card-1', 'card-2']);
   });
 });
