@@ -354,6 +354,81 @@ describe('A2aChatView', () => {
     expect(agentMsg.hasCanvas).toBe(false);
   });
 
+  it('keeps an inline surface above the text when the agent sent it first', async () => {
+    const header = {
+      data: {
+        mimeType: 'application/json+a2ui',
+        data: JSON.stringify([
+          {
+            version: 'v0.9',
+            updateComponents: {
+              surfaceId: 'persona-header',
+              components: [{id: 'root', component: 'Row'}],
+            },
+          },
+        ]),
+      },
+    };
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      yield {
+        taskId: 't-order',
+        contextId: 'c-order',
+        message: {role: 'agent', parts: [header, {text: 'I manage marketing strategy.'}]},
+      };
+      // Later streamed prose must not demote a header that already rendered above it.
+      yield {
+        taskId: 't-order',
+        contextId: 'c-order',
+        message: {role: 'agent', parts: [{text: ' What should I look at today?'}]},
+        final: true,
+      };
+    });
+
+    fixture.componentInstance['sendUserMessage']({text: 'Introduce yourself', images: []});
+    await fixture.whenStable();
+
+    const agentMsg = fixture.componentInstance['messages']()[1];
+    expect(agentMsg.inlineA2uiPayload?.length).toBe(1);
+    expect(agentMsg.inlineSurfaceLeadsText).toBe(true);
+  });
+
+  it('keeps an inline surface below the text when the agent sent the text first', async () => {
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      yield {
+        taskId: 't-order-2',
+        contextId: 'c-order-2',
+        message: {
+          role: 'agent',
+          parts: [
+            {text: 'Here is the form:'},
+            {
+              data: {
+                mimeType: 'application/json+a2ui',
+                data: JSON.stringify([
+                  {
+                    version: 'v0.9',
+                    updateComponents: {
+                      surfaceId: 'form',
+                      components: [{id: 'root', component: 'Card'}],
+                    },
+                  },
+                ]),
+              },
+            },
+          ],
+        },
+        final: true,
+      };
+    });
+
+    fixture.componentInstance['sendUserMessage']({text: 'Show the form', images: []});
+    await fixture.whenStable();
+
+    const agentMsg = fixture.componentInstance['messages']()[1];
+    expect(agentMsg.inlineA2uiPayload?.length).toBe(1);
+    expect(agentMsg.inlineSurfaceLeadsText).toBe(false);
+  });
+
   it('correctly partitions and renders mixed surface with List (9 non-Canvas cards) and 1 Canvas form', async () => {
     const mixedPayload = [
       {
