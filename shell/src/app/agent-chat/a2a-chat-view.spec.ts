@@ -130,6 +130,18 @@ describe('A2aChatView', () => {
     expect(await newHarness.isConfigPanelOpen()).toBe(true);
   });
 
+  it('opens config panel when initial auto-connect fails', async () => {
+    mockA2aTransport.getAgentCard = vi.fn().mockRejectedValue(new Error('Agent unreachable'));
+    const failedFixture = TestBed.createComponent(A2aChatView);
+    failedFixture.detectChanges();
+    const failedHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      failedFixture,
+      A2aChatViewHarness,
+    );
+
+    expect(await failedHarness.isConfigPanelOpen()).toBe(true);
+  });
+
   it('handles user message streaming turn', async () => {
     const inputArea = await harness.getInputArea();
     await inputArea.setInputValue('Hello agent');
