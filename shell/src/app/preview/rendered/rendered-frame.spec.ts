@@ -789,6 +789,30 @@ describe('RenderedFrame Live Preview Viewport', () => {
       expect(logged(logger, 'warn')).toHaveLength(0);
     });
 
+    it('drops a settle timer armed for the previous content when new content is sent', () => {
+      const logger = TestBed.inject(ErrorLogger);
+      logger.clear();
+      const last = runTransition(HOLD_AT + 2);
+      const heldHeight = appliedHeight();
+      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
+
+      // New content is sent while the hold is still waiting for the previous
+      // content to settle. Firing that timer afterwards would apply the previous
+      // content's height as a probe and take the new content's first report for
+      // a reaction to it.
+      fixture.componentRef.setInput('payload', NEW_CONTENT);
+      fixture.detectChanges();
+      vi.advanceTimersByTime(SETTLE_MS);
+      expect(appliedHeight()).toBe(heldHeight);
+
+      emit(surfaceResize(last.height + 200, last.time + SETTLE_MS + LOOP_CADENCE_MS));
+      fixture.detectChanges();
+
+      expect(appliedHeight()).toBe(last.height + 200);
+      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
+      expect(logged(logger, 'warn')).toHaveLength(0);
+    });
+
     it('holds a burst delivered inside a single change detection tick', () => {
       emit(surfaceResize(BASE_HEIGHT_PX, START_TIME));
       fixture.detectChanges();

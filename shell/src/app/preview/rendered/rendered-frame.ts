@@ -543,12 +543,15 @@ export class RenderedFrame {
    * is kept so the next one is still judged against it: a hold ends only when
    * the guest stops growing, not when the host sends it new content. New
    * content is also a legitimate reason to grow right after a settled height
-   * was applied, so an outstanding probe is withdrawn.
+   * was applied, so an outstanding probe is withdrawn, and a settle timer still
+   * armed for the previous content is dropped: firing it later would apply that
+   * content's height and take the new content's first report for a reaction.
    */
   private resetGrowthRun(): void {
     this.growthRunLength = 0;
     this.growthRunStartHeight = null;
     this.settleProbePending = false;
+    this.clearSettleTimer();
   }
 
   /** Ends the growth run and any hold, restoring unrestricted sizing. */
@@ -559,7 +562,6 @@ export class RenderedFrame {
     this.heldGrowthReports = 0;
     this.ownGrowthReleases = 0;
     this.loopConfirmed = false;
-    this.clearSettleTimer();
     this.growthBreakerLatched.set(false);
   }
 
