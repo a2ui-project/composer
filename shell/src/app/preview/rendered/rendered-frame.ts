@@ -21,6 +21,7 @@ import {
   ElementRef,
   effect,
   computed,
+  DestroyRef,
   untracked,
   input,
   signal,
@@ -42,10 +43,11 @@ import {ErrorLogger} from '../../debug/error-logger.service';
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 
 /**
- * Number of consecutive growing SURFACE_RESIZE reports that trips the growth
- * circuit breaker. A healthy renderer settles within a handful of reports, so
- * this is high enough never to fire on legitimate content while still bounding
- * a feedback loop to a fraction of a second.
+ * Number of consecutive growing SURFACE_RESIZE reports that makes the growth
+ * circuit breaker hold the frame. A healthy renderer settles within a handful
+ * of reports, so this bounds a feedback loop to a fraction of a second while
+ * rarely firing on legitimate content; when it does, the hold is released
+ * again as described on {@link HELD_GROWTH_REPORTS_TO_RELEASE}.
  *
  * This covers monotonic divergence, which is the failure mode that scrolls
  * content out of view and pins the frame at its maximum. It deliberately does
@@ -61,8 +63,35 @@ const MAX_MONOTONIC_GROWTH_REPORTS = 16;
  * Maximum gap between two reports for them to belong to the same growth run.
  * Legitimate streaming also grows the frame step by step, but not at the
  * sub-frame cadence a resize feedback loop runs at.
+ *
+ * Doubles as the quiet period after which a held guest counts as settled, and
+ * as the window within which growth following an applied height counts as a
+ * reaction to it.
  */
 const RUNAWAY_REPORT_INTERVAL_MS = 500;
+
+/**
+ * Number of further growing reports a held guest sends before the hold is
+ * released as a false alarm.
+ *
+ * A resize feedback loop only grows because the host applies each reported
+ * height, so a held guest falls silent after at most the report already in
+ * flight. A guest that keeps reporting larger heights while the frame is held
+ * is growing on its own, for example through a CSS height transition (Angular
+ * Material's expansion panel animates its height over 225ms, which is a dozen
+ * per-frame reports at 60Hz and twice that on a 120Hz display) or a streaming
+ * surface, and has to be followed or its content ends up clipped.
+ */
+const HELD_GROWTH_REPORTS_TO_RELEASE = 3;
+
+/**
+ * Maximum number of times within one growth run that a hold is released
+ * because the guest kept growing. A guest that answers every applied height
+ * with a long burst of growth would otherwise alternate between holding and
+ * releasing forever; after this many releases the hold lasts until the reports
+ * settle.
+ */
+const MAX_OWN_GROWTH_RELEASES_PER_RUN = 2;
 
 /**
  * Orchestrates the secure, sandboxed iframe rendering the active preview target,
@@ -107,7 +136,10 @@ export class RenderedFrame {
 
   private readonly growthBreakerLatched = signal<boolean>(false);
 
-  /** True once the guest has been detected driving the frame into unbounded growth. */
+  /**
+   * True while the frame is held because the guest looked like it was driving
+   * the frame into unbounded growth.
+   */
   readonly isGrowthBreakerLatched = this.growthBreakerLatched.asReadonly();
 
   /** Height reported by the first message of the current growth run, in pixels. */
@@ -115,6 +147,22 @@ export class RenderedFrame {
   private lastReportedHeight: number | null = null;
   private lastReportTimestamp = 0;
   private growthRunLength = 0;
+  /** Growing reports received since the frame was last held. */
+  private heldGrowthReports = 0;
+  /** Holds released in the current run because the guest kept growing while held. */
+  private ownGrowthReleases = 0;
+  /**
+   * Set while the frame waits for a held guest to settle, in which case its last
+   * reported height is applied as a probe for the feedback loop.
+   */
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True once a settled guest's height has been applied and its reaction is awaited. */
+  private settleProbePending = false;
+  /**
+   * True once the guest grew again right after its settled height was applied,
+   * which confirms the feedback loop and ends the probing for this run.
+   */
+  private loopConfirmed = false;
   /** Renderer URL the current breaker state belongs to; undefined until first read. */
   private trackedRendererUrl: string | null | undefined = undefined;
   private lastHandledResetNonce = this.stateSync.sessionResetNonce();
@@ -244,6 +292,7 @@ export class RenderedFrame {
       this.trackReportedGrowth(envelope);
       this.handleInboundEnvelope(envelope);
     });
+    inject(DestroyRef).onDestroy(() => this.clearSettleTimer());
 
     // A different renderer means a different guest; give it a clean slate.
     effect(() => {
@@ -309,8 +358,15 @@ export class RenderedFrame {
   }
 
   /**
-   * Counts consecutive growing surface reports and latches the circuit breaker
-   * when a guest drives the frame into unbounded growth.
+   * Counts consecutive growing surface reports, holds the frame when a guest
+   * appears to drive it into unbounded growth, and releases the hold again
+   * once the guest proves otherwise.
+   *
+   * A feedback loop only grows because the host applies each reported height,
+   * so holding the frame is also the test for one: a looping guest falls
+   * silent, while a guest that is growing on its own keeps reporting. A silent
+   * guest gets its last height applied once the reports settle; growing again
+   * right after that confirms the loop.
    */
   private trackReportedGrowth(envelope: MessageEnvelope | null): void {
     // A feedback loop needs the host to apply the reports; a frame that fills
@@ -347,30 +403,131 @@ export class RenderedFrame {
       height > this.lastReportedHeight &&
       envelope.timestamp - this.lastReportTimestamp <= RUNAWAY_REPORT_INTERVAL_MS;
 
-    if (grewAtLoopCadence) {
-      this.growthRunLength++;
-    } else {
-      this.growthRunLength = 1;
+    if (!grewAtLoopCadence) {
+      // A report that does not grow, or that arrives after a pause, ends the
+      // run: whatever burst the guest was in is over, so any hold ends with it.
+      this.resetGrowthBreaker();
       this.growthRunStartHeight = height;
     }
+    this.growthRunLength++;
     this.lastReportedHeight = height;
     this.lastReportTimestamp = envelope.timestamp;
 
-    if (this.growthRunLength >= MAX_MONOTONIC_GROWTH_REPORTS && !this.growthBreakerLatched()) {
-      this.growthBreakerLatched.set(true);
-      this.errorLogger.warn({
-        message:
-          `Preview frame growth stopped: the renderer reported ${this.growthRunLength} ` +
-          `consecutive larger heights within ${RUNAWAY_REPORT_INTERVAL_MS}ms, which is a ` +
-          `runaway resize loop. Frame held at ${untracked(() => this.dynamicHeight()) ?? this.growthRunStartHeight}px; ` +
-          `last reported height ${height}px.`,
-        sourceTag: '[Shell]',
-      });
+    if (this.settleProbePending) {
+      // The guest grew again as soon as its settled height was applied, which
+      // is the host feeding the loop. Hold until the run ends.
+      this.settleProbePending = false;
+      this.holdFrame(height, /* confirmed= */ true);
+      return;
+    }
+
+    if (this.growthBreakerLatched()) {
+      this.heldGrowthReports++;
+      if (
+        this.heldGrowthReports >= HELD_GROWTH_REPORTS_TO_RELEASE &&
+        this.ownGrowthReleases < MAX_OWN_GROWTH_RELEASES_PER_RUN
+      ) {
+        // The frame did not move, yet the guest kept growing: it is not reacting
+        // to the host. Follow it, and start counting afresh so a guest that does
+        // run away eventually is still caught.
+        this.ownGrowthReleases++;
+        this.growthRunLength = 1;
+        this.releaseHold();
+      } else if (!this.loopConfirmed) {
+        this.armSettleTimer();
+      }
+      return;
+    }
+
+    if (this.growthRunLength >= MAX_MONOTONIC_GROWTH_REPORTS) {
+      this.holdFrame(height, /* confirmed= */ false);
     }
   }
 
   /**
-   * Clamps a reported height so a latched guest can shrink the frame but never
+   * Holds the frame at its current height. An unconfirmed hold is a probe that
+   * {@link trackReportedGrowth} or {@link applySettledHeight} release again; a
+   * confirmed one lasts until the growth run ends.
+   */
+  private holdFrame(reportedHeight: number, confirmed: boolean): void {
+    const heldHeight = untracked(() => this.dynamicHeight()) ?? this.growthRunStartHeight;
+    this.growthBreakerLatched.set(true);
+    this.heldGrowthReports = 0;
+
+    if (confirmed) {
+      this.loopConfirmed = true;
+      this.clearSettleTimer();
+      this.errorLogger.warn({
+        message:
+          `Preview frame growth stopped: the renderer grew again as soon as its reported ` +
+          `height was applied, which confirms a resize feedback loop. Frame held at ` +
+          `${heldHeight}px; last reported height ${reportedHeight}px. The hold ends when ` +
+          `the renderer reports a smaller height or pauses for more than ` +
+          `${RUNAWAY_REPORT_INTERVAL_MS}ms.`,
+        sourceTag: '[Shell]',
+      });
+      return;
+    }
+
+    if (this.ownGrowthReleases === 0) {
+      this.errorLogger.info({
+        message:
+          `Preview frame growth held: the renderer reported ${this.growthRunLength} ` +
+          `consecutive larger heights within ${RUNAWAY_REPORT_INTERVAL_MS}ms, which may be a ` +
+          `runaway resize loop. Frame held at ${heldHeight}px; last reported height ` +
+          `${reportedHeight}px. The hold is released if the renderer keeps growing on its ` +
+          `own or once its reports settle.`,
+        sourceTag: '[Shell]',
+      });
+    }
+    this.armSettleTimer();
+  }
+
+  /** Lets reported heights through again; the current growth run continues. */
+  private releaseHold(): void {
+    this.clearSettleTimer();
+    this.heldGrowthReports = 0;
+    this.growthBreakerLatched.set(false);
+  }
+
+  /**
+   * Applies a held guest's last reported height once it has stopped reporting.
+   *
+   * The silence means the burst is over; for a transition, the last report is
+   * where it ended and withholding it would leave the content clipped. The
+   * apply doubles as a probe: a guest that grows again within the runaway
+   * window was reacting to it, and {@link trackReportedGrowth} then confirms
+   * the loop.
+   */
+  private applySettledHeight(): void {
+    this.settleTimer = null;
+    const settledHeight = this.lastReportedHeight;
+    if (!this.growthBreakerLatched() || settledHeight === null) {
+      return;
+    }
+    // Reports are timed against the apply from here on, so a reaction to it is
+    // recognised as such rather than as the start of an unrelated run.
+    this.lastReportTimestamp += RUNAWAY_REPORT_INTERVAL_MS;
+    this.growthRunLength = 0;
+    this.settleProbePending = true;
+    this.releaseHold();
+    this.dynamicHeight.set(settledHeight);
+  }
+
+  private armSettleTimer(): void {
+    this.clearSettleTimer();
+    this.settleTimer = setTimeout(() => this.applySettledHeight(), RUNAWAY_REPORT_INTERVAL_MS);
+  }
+
+  private clearSettleTimer(): void {
+    if (this.settleTimer !== null) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = null;
+    }
+  }
+
+  /**
+   * Clamps a reported height so a held guest can shrink the frame but never
    * grow it further.
    */
   private capReportedHeight(height: number): number {
@@ -381,17 +538,28 @@ export class RenderedFrame {
     return ceiling === null ? height : Math.min(height, ceiling);
   }
 
-  /** Ends the current growth run without clearing an existing latch. */
+  /**
+   * Restarts the growth count without ending an existing hold. The last report
+   * is kept so the next one is still judged against it: a hold ends only when
+   * the guest stops growing, not when the host sends it new content. New
+   * content is also a legitimate reason to grow right after a settled height
+   * was applied, so an outstanding probe is withdrawn.
+   */
   private resetGrowthRun(): void {
     this.growthRunLength = 0;
     this.growthRunStartHeight = null;
-    this.lastReportedHeight = null;
-    this.lastReportTimestamp = 0;
+    this.settleProbePending = false;
   }
 
-  /** Clears the latch and the growth run, restoring unrestricted sizing. */
+  /** Ends the growth run and any hold, restoring unrestricted sizing. */
   private resetGrowthBreaker(): void {
     this.resetGrowthRun();
+    this.lastReportedHeight = null;
+    this.lastReportTimestamp = 0;
+    this.heldGrowthReports = 0;
+    this.ownGrowthReleases = 0;
+    this.loopConfirmed = false;
+    this.clearSettleTimer();
     this.growthBreakerLatched.set(false);
   }
 
