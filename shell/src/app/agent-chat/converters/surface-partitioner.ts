@@ -503,11 +503,12 @@ function collectDescendantIds(
  *
  * Before the active catalog is known (e.g. while the renderer iframe is still initializing),
  * flat v0.9 `{ component: 'Canvas' }` nodes are preserved as-is while nested wrapper objects
- * `{ component: { Canvas: ... } }` continue to unwrap by default.
+ * `{ component: { Canvas: ... } }` continue to unwrap by default. Once a catalog is known it
+ * alone decides: one that declares no `Canvas` component (or no components at all) unwraps.
  */
 function shouldPreserveCanvas(comp: Record<string, unknown>, catalog?: Catalog | null): boolean {
-  if (catalog?.components) {
-    return Object.keys(catalog.components).some(key => key.toLowerCase() === 'canvas');
+  if (catalog) {
+    return Object.keys(catalog.components ?? {}).some(key => key.toLowerCase() === 'canvas');
   }
   return typeof comp['component'] === 'string' && comp['component'].toLowerCase() === 'canvas';
 }
