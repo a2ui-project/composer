@@ -181,6 +181,22 @@ describe('A2aChatView', () => {
     expect(await harness.hasSideCanvas()).toBe(false);
   });
 
+  it('renders the side canvas frame at panel height rather than content height', async () => {
+    expect(await harness.getSideCanvasFrame()).toBeNull();
+
+    fixture.componentInstance['openCanvasSurface']([
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+    ]);
+    fixture.detectChanges();
+
+    // The side canvas is a fixed viewport whose content scrolls, so its frame
+    // fills the panel instead of following the guest's SURFACE_RESIZE reports.
+    const frame = await harness.getSideCanvasFrame();
+    expect(frame).not.toBeNull();
+    expect(await frame!.fillsContainer()).toBe(true);
+    expect(await frame!.getFrameHeight()).toBe('100%');
+  });
+
   it('resets session and clears messages', async () => {
     fixture.componentInstance['messages'].set([
       {id: '1', sender: 'user', text: 'hi', timestamp: Date.now()},

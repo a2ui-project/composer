@@ -67,6 +67,18 @@
     isolation: isolate;
   }
 
+  // A frame that fills its container (the side canvas) takes exactly the
+  // host's height and lets the guest document scroll inside it, so the
+  // minimums that keep an inline preview usable must not push it taller than
+  // its panel.
+  &.fill-container {
+    min-height: 100%;
+
+    .preview-iframe {
+      min-height: 0;
+    }
+  }
+
   .rendered-frame-placeholder {
     display: flex;
     align-items: center;
