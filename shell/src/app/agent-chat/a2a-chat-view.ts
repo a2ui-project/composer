@@ -224,8 +224,11 @@ export class A2aChatView implements OnInit {
     backendMode?: A2aBackendMode,
   ): Promise<void> {
     const normalizedUrl = normalizeHttpUrl(url);
-    if (!normalizedUrl || !isValidEndpointUrl(normalizedUrl) || this.isConnecting()) {
+    if (!normalizedUrl || !isValidEndpointUrl(normalizedUrl)) {
       this.isConfigPanelOpen.set(true);
+      return;
+    }
+    if (this.isConnecting()) {
       return;
     }
 
