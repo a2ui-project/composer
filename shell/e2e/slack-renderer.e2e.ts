@@ -76,7 +76,13 @@ test.describe('Slack renderer in Composer', () => {
     ).toBeVisible();
     await expect(slackPreviewFrame(page).getByRole('button', {name: 'Acknowledge'})).toBeVisible();
 
-    await page.getByRole('button', {name: 'Copy to Clipboard'}).click();
+    // At the default 720px-tall viewport the Copy button starts below the fold. On the
+    // Linux CI runner, the click after scrolling it into view landed on the preview
+    // iframe, so activate the button from the keyboard, as a keyboard user would.
+    const copyButton = page.getByRole('button', {name: 'Copy to Clipboard'});
+    await copyButton.focus();
+    await expect(copyButton).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect
       .poll(async () => {
         // The copy can land after the first read on a slower machine, so an empty

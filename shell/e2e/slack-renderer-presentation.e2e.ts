@@ -31,8 +31,10 @@ const PREVIEW_360_EMBED_WIDTH = 360;
 // Dockview split gutters and borders can add up to two CSS pixels to the panel width.
 const PREVIEW_WIDTH_TOLERANCE = 2;
 // The overflow check only means something if the panel is no wider than the embed and
-// hasn't collapsed, so anything in this range counts as a 360px embed.
-const PREVIEW_MIN_EMBED_WIDTH = 340;
+// hasn't collapsed, so anything in this range counts as a 360px embed. The floor is
+// loose because Linux's classic scrollbars make the panel about 20px narrower than
+// macOS's overlay scrollbars do at the same viewport.
+const PREVIEW_MIN_EMBED_WIDTH = 320;
 const COPY_STATUS = {
   copied: 'Block Kit copied.',
   fallback: 'Clipboard unavailable. Select and copy the JSON below.',
