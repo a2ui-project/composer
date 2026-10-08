@@ -44,7 +44,7 @@ function inlineSurfacePart(surfaceId: string, title: string, caption: string) {
       },
     },
   ];
-  return {data: {mimeType: 'application/json+a2ui', data: JSON.stringify(payload)}};
+  return {data: {mimeType: 'application/a2ui+json', data: JSON.stringify(payload)}};
 }
 
 test.describe('A2aChatMessage Visual Regression & Layout', () => {
