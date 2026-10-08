@@ -625,15 +625,21 @@ describe('RenderedFrame Live Preview Viewport', () => {
     const NEW_CONTENT = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
 
     beforeEach(() => {
-      vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+      vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'Date']});
+      vi.setSystemTime(START_TIME);
     });
 
     afterEach(() => {
       vi.useRealTimers();
     });
 
-    /** Emits through both the uncoalesced stream and the coalesced signal, as the host does. */
+    /**
+     * Emits through both the uncoalesced stream and the coalesced signal, as the
+     * host does. An envelope's timestamp is the host's receipt time, so the clock
+     * moves there first; timers armed from then on count from it.
+     */
     function emit(envelope: MessageEnvelope): void {
+      vi.setSystemTime(envelope.timestamp);
       messageStreamSubject.next(envelope);
       messageStreamSignal.set(envelope);
     }

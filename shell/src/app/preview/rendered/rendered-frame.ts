@@ -506,8 +506,9 @@ export class RenderedFrame {
       return;
     }
     // Reports are timed against the apply from here on, so a reaction to it is
-    // recognised as such rather than as the start of an unrelated run.
-    this.lastReportTimestamp += RUNAWAY_REPORT_INTERVAL_MS;
+    // recognised as such rather than as the start of an unrelated run. Envelope
+    // timestamps are the host's receipt times, so this is the same clock.
+    this.lastReportTimestamp = Date.now();
     this.growthRunLength = 0;
     this.settleProbePending = true;
     this.releaseHold();
