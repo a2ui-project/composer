@@ -15,7 +15,37 @@
  */
 
 import {test, expect} from '@playwright/test';
-import {connectMockAgent, mockAgentCard, sseFlightBody} from '../test/mock-a2a-agent';
+import {RENDERER_URLS} from '../../../../e2e/helpers';
+import {connectMockAgent, mockAgentCard, sseEvent, sseFlightBody} from '../test/mock-a2a-agent';
+
+/** Budget for a guest frame to finish its handshake and draw a surface. */
+const SURFACE_RENDER_TIMEOUT_MS = 15_000;
+
+/** An A2A data part carrying a small inline surface (no Canvas) for the basic catalog. */
+function inlineSurfacePart(surfaceId: string, title: string, caption: string) {
+  const payload = [
+    {
+      version: 'v0.9',
+      createSurface: {
+        surfaceId,
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      },
+    },
+    {
+      version: 'v0.9',
+      updateComponents: {
+        surfaceId,
+        components: [
+          {id: 'root', component: 'Card', child: 'body'},
+          {id: 'body', component: 'Column', children: ['title', 'caption']},
+          {id: 'title', component: 'Text', text: title, variant: 'h3'},
+          {id: 'caption', component: 'Text', text: caption, variant: 'caption'},
+        ],
+      },
+    },
+  ];
+  return {data: {mimeType: 'application/json+a2ui', data: JSON.stringify(payload)}};
+}
 
 test.describe('A2aChatMessage Visual Regression & Layout', () => {
   test('renders user message, agent message, and live A2UI surface card', async ({page}) => {
@@ -44,6 +74,69 @@ test.describe('A2aChatMessage Visual Regression & Layout', () => {
     await expect(chatHistory.locator('.view-canvas-btn')).toBeVisible();
 
     await expect(chatHistory).toHaveScreenshot('chat-conversation-and-surface.png');
+  });
+
+  test('renders an inline surface above or below the text to match the order the agent sent', async ({
+    page,
+  }) => {
+    // Render the inline frames with the local Angular guest so their pixels
+    // come from this checkout rather than the GitHub Pages build.
+    await page.route('**/config.json', route =>
+      route.fulfill({json: {renderers: {default: {rendererUrl: RENDERER_URLS.angular}}}}),
+    );
+
+    // Turn 1 answers surface-then-text, turn 2 text-then-surface.
+    let turn = 0;
+    await connectMockAgent(page, 'http://mock-agent.local', postData => {
+      turn += 1;
+      const parts = postData.includes('surface first')
+        ? [
+            inlineSurfacePart(`turn-${turn}`, 'Surface sent first', 'Rendered above the text'),
+            {text: 'The agent sent this text after the surface, so it reads below it.'},
+          ]
+        : [
+            {text: 'The agent sent this text before the surface, so the surface follows it.'},
+            inlineSurfacePart(`turn-${turn}`, 'Surface sent last', 'Rendered below the text'),
+          ];
+      return sseEvent({
+        taskId: `task-order-${turn}`,
+        contextId: 'ctx-surface-order',
+        message: {role: 'agent', parts},
+        final: true,
+      });
+    });
+
+    const chatHistory = page.locator('a2ui-composer-chat-history');
+    const textarea = page.locator('.prompt-textarea');
+
+    await textarea.fill('surface first');
+    await textarea.press('Enter');
+    await expect(chatHistory.locator('.agent-text-content').first()).toContainText(
+      'after the surface',
+    );
+
+    await textarea.fill('text first');
+    await textarea.press('Enter');
+    await expect(chatHistory.locator('.agent-text-content').nth(1)).toContainText(
+      'before the surface',
+    );
+
+    // Both guest frames must have drawn their surface before the pictures are taken.
+    const inlineFrames = chatHistory.locator('.inline-surface-card iframe.preview-iframe');
+    await expect(inlineFrames).toHaveCount(2);
+    await expect(inlineFrames.nth(0).contentFrame().getByText('Surface sent first')).toBeVisible({
+      timeout: SURFACE_RENDER_TIMEOUT_MS,
+    });
+    await expect(inlineFrames.nth(1).contentFrame().getByText('Surface sent last')).toBeVisible({
+      timeout: SURFACE_RENDER_TIMEOUT_MS,
+    });
+
+    // The history scrolls to the newest message, so snapshot each bubble on
+    // its own rather than the scroll container, which would crop the first one.
+    const agentBubbles = chatHistory.locator('.agent-message-container');
+    await expect(agentBubbles).toHaveCount(2);
+    await expect(agentBubbles.nth(0)).toHaveScreenshot('chat-message-inline-surface-first.png');
+    await expect(agentBubbles.nth(1)).toHaveScreenshot('chat-message-inline-surface-last.png');
   });
 
   test('renders pending loading indicator when waiting for agent response', async ({page}) => {
