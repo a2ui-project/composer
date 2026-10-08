@@ -52,7 +52,10 @@ export const EXCLUDED_PARAMS = new Set([
  * Preserved during standalone syncs when no `--subclass` paths are provided.
  */
 export const SUBCLASS_DESCRIPTIONS = {
-  reason: 'Categorized failure reason for dialog actions',
+  open_file_status: 'Status of opening A2UI file',
+  open_file_reason: 'Categorized failure reason for failure to open an A2UI file',
+  create_cl_status: 'Status of creating a CL',
+  create_cl_reason: 'Categorized failure reason for failure to create a CL',
 };
 
 /**

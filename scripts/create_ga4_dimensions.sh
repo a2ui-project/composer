@@ -213,7 +213,10 @@ create_dimension "error_category" "Error Category" "Functional error category"
 create_dimension "source_tag" "Error Source Tag" "Subsystem emitting error"
 create_dimension "invalid_property" "Error Invalid Property" "Schema property failing validation"
 create_dimension "error_type" "Error Type" "Functional error type classification"
-create_dimension "reason" "Reason" "Categorized failure reason for dialog actions"
+create_dimension "open_file_status" "Open File Status" "Status of opening A2UI file"
+create_dimension "open_file_reason" "Open File Failure Reason" "Categorized failure reason for failure to open an A2UI file"
+create_dimension "create_cl_status" "Create CL Status" "Status of creating a CL"
+create_dimension "create_cl_reason" "Create CL Failure Reason" "Categorized failure reason for failure to create a CL"
 #### END DIMENSIONS
 
 echo ""
