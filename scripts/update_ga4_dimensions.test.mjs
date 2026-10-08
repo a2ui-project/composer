@@ -18,16 +18,19 @@ import {describe, it} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
   parseExistingScript,
   extractParametersFromSource,
   classifyParameter,
+  formatDescription,
   mergeDefinitions,
   generateScriptContent,
   generateBashScript,
   syncDimensions,
+  parseCliArgs,
   escapeBashString,
   unescapeBashString,
   formatHelpText,
@@ -35,6 +38,7 @@ import {
   DIMENSIONS_END,
   METRICS_START,
   METRICS_END,
+  SUBCLASS_DESCRIPTIONS,
 } from './update_ga4_dimensions.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -134,6 +138,7 @@ describe('update_ga4_dimensions', () => {
       assert.ok(!params.has('cookie_prefix'), 'cookie_prefix should be excluded');
       assert.ok(!params.has('cookie_domain'), 'cookie_domain should be excluded');
       assert.ok(!params.has('client_id'), 'client_id should be excluded');
+      assert.ok(!params.has('cookie_flags'), 'cookie_flags should be excluded');
     });
 
     it('extracts bracketed, quoted, and unquoted snake_case keys from dispatchGtagEvent payloads without capturing TypeScript parameter annotations', () => {
@@ -247,6 +252,60 @@ describe('update_ga4_dimensions', () => {
       assert.ok(extracted.has('actual_baseline_param'));
       assert.ok(!extracted.has('commented_param'));
     });
+
+    it('extracts parameters from subclass dispatchGtagEvent calls while ignoring getConfigOptions', () => {
+      const subclassSource = `
+        export const LOCAL_STORAGE_CLIENT_ID_KEY = 'a2ui_ga4_client_id';
+
+        export class JetskiUsageTrackingService extends Ga4UsageTrackingService {
+          trackOpenFile(params: {
+            status: JetskiActionStatus;
+            reason?: JetskiActionFailureReason;
+          }): void {
+            this.dispatchGtagEvent('open_file', {
+              ['status']: params.status,
+              ...(params.status === 'failure' && params.reason ? {['reason']: params.reason} : {}),
+            });
+          }
+
+          trackCreateCl(params: {
+            status: JetskiActionStatus;
+            reason?: JetskiActionFailureReason;
+          }): void {
+            this.dispatchGtagEvent('create_cl', {
+              ['status']: params.status,
+              ...(params.status === 'failure' && params.reason ? {['reason']: params.reason} : {}),
+            });
+          }
+
+          protected override getConfigOptions(): Record<string, unknown> {
+            return {
+              ...super.getConfigOptions(),
+              'cookie_domain': 'none',
+              'client_id': this.getStableClientId(),
+              'cookie_flags': 'SameSite=None;Secure;Partitioned',
+              ['non_excluded_config_option']: 'value',
+            };
+          }
+        }
+      `;
+      const extracted = extractParametersFromSource(subclassSource);
+      assert.ok(extracted.has('status'), 'Expected status from dispatchGtagEvent payload');
+      assert.ok(extracted.has('reason'), 'Expected reason from dispatchGtagEvent payload');
+      assert.ok(
+        !extracted.has('non_excluded_config_option'),
+        'non_excluded_config_option in getConfigOptions must not be extracted',
+      );
+      assert.ok(!extracted.has('cookie_flags'), 'cookie_flags must be excluded');
+      assert.ok(!extracted.has('cookie_domain'), 'cookie_domain must be excluded');
+      assert.ok(!extracted.has('client_id'), 'client_id must be excluded');
+      assert.ok(!extracted.has('open_file'), 'Event name open_file must not be extracted');
+      assert.ok(!extracted.has('create_cl'), 'Event name create_cl must not be extracted');
+      assert.ok(
+        !extracted.has('a2ui_ga4_client_id'),
+        'Constant value a2ui_ga4_client_id must not be extracted',
+      );
+    });
   });
 
   describe('c) Parameter classification', () => {
@@ -298,6 +357,7 @@ describe('update_ga4_dimensions', () => {
         'retry_of_prompt_id',
         'pipeline_status_at_cancel',
         'status',
+        'reason',
         'theme',
         'component_key',
         'category',
@@ -325,6 +385,11 @@ describe('update_ga4_dimensions', () => {
           `Expected ${param} to be classified as EVENT DIMENSION`,
         );
       }
+
+      assert.equal(
+        formatDescription('reason', 'Reason'),
+        'Categorized failure reason for dialog actions',
+      );
     });
   });
 
@@ -385,7 +450,8 @@ describe('update_ga4_dimensions', () => {
         check: true,
       });
 
-      assert.ok(typeof result.isUpToDate === 'boolean');
+      assert.equal(result.isUpToDate, true);
+      assert.equal(result.hasChanges, false);
     });
 
     it('prunes obsolete dimensions and metrics from existing definitions when no longer in extractedParams', () => {
@@ -690,6 +756,7 @@ ${METRICS_END}
       const help = formatHelpText();
       assert.ok(help.includes('--check'));
       assert.ok(help.includes('--dry-run'));
+      assert.ok(help.includes('--subclass <path>'));
       assert.ok(help.includes('-h, --help'));
     });
 
@@ -707,6 +774,251 @@ ${METRICS_END}
       });
       assert.ok(outH.includes('Usage: node scripts/update_ga4_dimensions.mjs [options]'));
       assert.ok(outH.includes('--dry-run'));
+    });
+  });
+
+  describe('h) Subclass scanning support (--subclass / subclassPaths)', () => {
+    it('parses repeatable --subclass and --subclass=<path> CLI arguments resolved relative to cwd', () => {
+      assert.deepEqual(parseCliArgs(), {
+        help: false,
+        check: false,
+        dryRun: false,
+        subclassPaths: [],
+      });
+
+      const parsed = parseCliArgs(
+        ['--check', '--subclass', 'sub/a.ts', '--subclass=sub/b.ts'],
+        '/workspace',
+      );
+      assert.deepEqual(parsed, {
+        help: false,
+        check: true,
+        dryRun: false,
+        subclassPaths: ['/workspace/sub/a.ts', '/workspace/sub/b.ts'],
+      });
+    });
+
+    it('throws an error when --subclass is missing a path argument or an unknown flag is passed', () => {
+      assert.throws(() => parseCliArgs(['--subclass'], '/workspace'), /--subclass/);
+      assert.throws(() => parseCliArgs(['--subclass', '--check'], '/workspace'), /--subclass/);
+      assert.throws(() => parseCliArgs(['--subclass='], '/workspace'), /--subclass/);
+      assert.throws(() => parseCliArgs(['--unknown-flag'], '/workspace'), /Unknown CLI argument/);
+    });
+
+    it('merges parameters from base sourcePath and multiple subclassPaths in syncDimensions', () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga4-dims-test-'));
+      const tempScript = path.join(tempDir, 'temp_subclass_script.sh');
+      const tempSubclass1 = path.join(tempDir, 'temp_subclass_1.ts');
+      const tempSubclass2 = path.join(tempDir, 'temp_subclass_2.ts');
+
+      try {
+        const initialScriptContent = fs
+          .readFileSync(SCRIPT_PATH, 'utf-8')
+          .replace(/^create_dimension "reason".*\n/m, '');
+        fs.writeFileSync(tempScript, initialScriptContent, 'utf-8');
+        fs.writeFileSync(
+          tempSubclass1,
+          `
+          export class SubclassOne extends Ga4UsageTrackingService {
+            trackOpenFile(params: { status: string; reason?: string }): void {
+              this.dispatchGtagEvent('open_file', {
+                ['status']: params.status,
+                ...(params.status === 'failure' && params.reason ? {['reason']: params.reason} : {}),
+              });
+            }
+          }
+          `,
+          'utf-8',
+        );
+        fs.writeFileSync(
+          tempSubclass2,
+          `
+          export class SubclassTwo extends Ga4UsageTrackingService {
+            trackExtra(): void {
+              this.dispatchGtagEvent('extra_event', {
+                subclass_duration_seconds: 5,
+              });
+            }
+          }
+          `,
+          'utf-8',
+        );
+
+        const syncResult = syncDimensions({
+          scriptPath: tempScript,
+          sourcePath: SERVICE_PATH,
+          subclassPaths: [tempSubclass1, tempSubclass2],
+        });
+
+        assert.equal(syncResult.hasChanges, true);
+        assert.deepEqual(syncResult.newDefinitions.addedDimensions, ['reason']);
+        assert.deepEqual(syncResult.newDefinitions.addedMetrics, ['subclass_duration_seconds']);
+        const reasonDim = syncResult.newDefinitions.dimensions.find(d => d.paramName === 'reason');
+        assert.deepEqual(reasonDim, {
+          paramName: 'reason',
+          displayName: 'Reason',
+          description: 'Categorized failure reason for dialog actions',
+        });
+        const subclassMetric = syncResult.newDefinitions.metrics.find(
+          m => m.paramName === 'subclass_duration_seconds',
+        );
+        assert.deepEqual(subclassMetric, {
+          paramName: 'subclass_duration_seconds',
+          displayName: 'Subclass Duration Seconds',
+          measurementUnit: 'SECONDS',
+          description: 'Subclass Duration Seconds parameter',
+        });
+
+        const updatedScriptContent = fs.readFileSync(tempScript, 'utf-8');
+        assert.ok(
+          updatedScriptContent.includes(
+            'create_dimension "reason" "Reason" "Categorized failure reason for dialog actions"',
+          ),
+        );
+        assert.ok(
+          updatedScriptContent.includes(
+            'create_metric "subclass_duration_seconds" "Subclass Duration Seconds" "SECONDS" "Subclass Duration Seconds parameter"',
+          ),
+        );
+
+        const checkResult = syncDimensions({
+          scriptPath: tempScript,
+          sourcePath: SERVICE_PATH,
+          subclassPaths: [tempSubclass1, tempSubclass2],
+          check: true,
+        });
+        assert.equal(checkResult.isUpToDate, true);
+        assert.equal(checkResult.hasChanges, false);
+      } finally {
+        fs.rmSync(tempDir, {recursive: true, force: true});
+      }
+    });
+
+    it('preserves existing SUBCLASS_DESCRIPTIONS parameters during standalone sync but prunes them when subclassPaths are provided without them', () => {
+      assert.equal(SUBCLASS_DESCRIPTIONS.reason, 'Categorized failure reason for dialog actions');
+      const existing = {
+        dimensions: new Map([
+          [
+            'env_mode',
+            {
+              paramName: 'env_mode',
+              displayName: 'Environment Mode',
+              description: 'Distinguishes standalone, plugin, or extension mode',
+            },
+          ],
+          [
+            'reason',
+            {
+              paramName: 'reason',
+              displayName: 'Reason',
+              description: 'Categorized failure reason for dialog actions',
+            },
+          ],
+          [
+            'stale_dim',
+            {
+              paramName: 'stale_dim',
+              displayName: 'Stale Dim',
+              description: 'Obsolete dimension',
+            },
+          ],
+        ]),
+        metrics: new Map(),
+      };
+      const baseExtracted = new Set(['env_mode']);
+
+      const standaloneMerged = mergeDefinitions(existing, baseExtracted, {
+        preserveSubclassParams: true,
+      });
+      assert.ok(
+        standaloneMerged.dimensions.some(d => d.paramName === 'reason'),
+        'reason should be preserved when preserveSubclassParams is true',
+      );
+      assert.ok(
+        !standaloneMerged.dimensions.some(d => d.paramName === 'stale_dim'),
+        'non-subclass stale_dim should still be pruned when preserveSubclassParams is true',
+      );
+
+      const subclassMerged = mergeDefinitions(existing, baseExtracted, {
+        preserveSubclassParams: false,
+      });
+      assert.ok(
+        !subclassMerged.dimensions.some(d => d.paramName === 'reason'),
+        'reason should be pruned when preserveSubclassParams is false and not in extractedParams',
+      );
+
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga4-dims-preserve-'));
+      const tempScript = path.join(tempDir, 'temp_preserve_script.sh');
+      const tempSubclass = path.join(tempDir, 'temp_empty_subclass.ts');
+
+      try {
+        const initialScriptContent = fs.readFileSync(SCRIPT_PATH, 'utf-8');
+        fs.writeFileSync(tempScript, initialScriptContent, 'utf-8');
+        fs.writeFileSync(
+          tempSubclass,
+          'export class EmptySubclass extends Ga4UsageTrackingService {}',
+          'utf-8',
+        );
+
+        const standaloneSync = syncDimensions({
+          scriptPath: tempScript,
+          sourcePath: SERVICE_PATH,
+          dryRun: true,
+        });
+        assert.equal(standaloneSync.isUpToDate, true);
+        assert.equal(standaloneSync.hasChanges, false);
+        assert.ok(standaloneSync.newDefinitions.dimensions.some(d => d.paramName === 'reason'));
+
+        const subclassSync = syncDimensions({
+          scriptPath: tempScript,
+          sourcePath: SERVICE_PATH,
+          subclassPaths: [tempSubclass],
+          dryRun: true,
+        });
+        assert.equal(subclassSync.isUpToDate, false);
+        assert.equal(subclassSync.hasChanges, true);
+        assert.ok(!subclassSync.newDefinitions.dimensions.some(d => d.paramName === 'reason'));
+      } finally {
+        fs.rmSync(tempDir, {recursive: true, force: true});
+      }
+    });
+
+    it('accepts --subclass flags during CLI execution', () => {
+      const scriptFile = path.resolve(__dirname, 'update_ga4_dimensions.mjs');
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga4-dims-cli-'));
+      const tempSubclass = path.join(tempDir, 'temp_cli_subclass.ts');
+
+      try {
+        fs.writeFileSync(
+          tempSubclass,
+          `
+          export class CliSubclass extends Ga4UsageTrackingService {
+            trackCli(): void {
+              this.dispatchGtagEvent('cli_event', {
+                'reason': 'network_error',
+              });
+            }
+          }
+          `,
+          'utf-8',
+        );
+
+        const outSeparate = execFileSync(
+          process.execPath,
+          [scriptFile, '--dry-run', '--subclass', tempSubclass],
+          {encoding: 'utf-8'},
+        );
+        assert.ok(outSeparate.includes('Dry-run completed.'));
+
+        const outEquals = execFileSync(
+          process.execPath,
+          [scriptFile, '--dry-run', `--subclass=${tempSubclass}`],
+          {encoding: 'utf-8'},
+        );
+        assert.ok(outEquals.includes('Dry-run completed.'));
+      } finally {
+        fs.rmSync(tempDir, {recursive: true, force: true});
+      }
     });
   });
 });

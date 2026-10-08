@@ -231,6 +231,7 @@ create_dimension "error_category" "Error Category" "Functional error category"
 create_dimension "source_tag" "Error Source Tag" "Subsystem emitting error"
 create_dimension "invalid_property" "Error Invalid Property" "Schema property failing validation"
 create_dimension "error_type" "Error Type" "Functional error type classification"
+create_dimension "reason" "Reason" "Categorized failure reason for dialog actions"
 #### END DIMENSIONS
 
 echo ""

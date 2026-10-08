@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Copyright 2026 Google LLC
  *
@@ -45,13 +44,23 @@ export const EXCLUDED_PARAMS = new Set([
   'cookie_prefix',
   'cookie_domain',
   'client_id',
+  'cookie_flags',
 ]);
+
+/**
+ * Curated descriptions for parameters emitted by downstream usage-tracking subclasses.
+ * Preserved during standalone syncs when no `--subclass` paths are provided.
+ */
+export const SUBCLASS_DESCRIPTIONS = {
+  reason: 'Categorized failure reason for dialog actions',
+};
 
 /**
  * Curated descriptions for known parameters discovered during source scans.
  */
 export const KNOWN_DESCRIPTIONS = {
   error_type: 'Functional error type classification',
+  ...SUBCLASS_DESCRIPTIONS,
 };
 
 /**
@@ -313,16 +322,17 @@ export function formatDescription(paramName, displayName) {
  *
  * @param {ParsedScriptResult} existing
  * @param {Set<string>} extractedParams
+ * @param {{preserveSubclassParams?: boolean}} [options]
  * @returns {MergedDefinitionsResult}
  */
-export function mergeDefinitions(existing, extractedParams) {
+export function mergeDefinitions(existing, extractedParams, {preserveSubclassParams = false} = {}) {
+  const shouldKeep = paramName =>
+    extractedParams.has(paramName) ||
+    (preserveSubclassParams && Object.hasOwn(SUBCLASS_DESCRIPTIONS, paramName));
+
   // Prune obsolete dimensions and metrics that are no longer present in extractedParams
-  const dimensions = Array.from(existing.dimensions.values()).filter(d =>
-    extractedParams.has(d.paramName),
-  );
-  const metrics = Array.from(existing.metrics.values()).filter(m =>
-    extractedParams.has(m.paramName),
-  );
+  const dimensions = Array.from(existing.dimensions.values()).filter(d => shouldKeep(d.paramName));
+  const metrics = Array.from(existing.metrics.values()).filter(m => shouldKeep(m.paramName));
   const addedDimensions = [];
   const addedMetrics = [];
 
@@ -376,9 +386,10 @@ Synchronizes GA4 custom dimensions and metrics between usage-tracking source cod
 and scripts/create_ga4_dimensions.sh.
 
 Options:
-  --check       Verify if scripts/create_ga4_dimensions.sh is up to date without modifying it (exits with code 1 if changes needed)
-  --dry-run     Preview planned changes without writing to disk
-  -h, --help    Display this help message
+  --check             Verify if scripts/create_ga4_dimensions.sh is up to date without modifying it (exits with code 1 if changes needed)
+  --dry-run           Preview planned changes without writing to disk
+  --subclass <path>   Additional usage-tracking subclass source file to scan (repeatable)
+  -h, --help          Display this help message
 `;
 }
 
@@ -485,6 +496,7 @@ export function generateBashScript(
  * @typedef {Object} SyncDimensionsOptions
  * @property {string} [scriptPath]
  * @property {string} [sourcePath]
+ * @property {string[]} [subclassPaths]
  * @property {boolean} [dryRun]
  * @property {boolean} [check]
  *
@@ -500,6 +512,7 @@ export function generateBashScript(
 export function syncDimensions({
   scriptPath = DEFAULT_SCRIPT_PATH,
   sourcePath = DEFAULT_SOURCE_PATH,
+  subclassPaths = [],
   dryRun = false,
   check = false,
 } = {}) {
@@ -508,7 +521,15 @@ export function syncDimensions({
 
   const existing = parseExistingScript(scriptContent);
   const extractedParams = extractParametersFromSource(sourceContent);
-  const merged = mergeDefinitions(existing, extractedParams);
+  for (const subclassPath of subclassPaths) {
+    const subclassContent = fs.readFileSync(subclassPath, 'utf-8');
+    for (const param of extractParametersFromSource(subclassContent)) {
+      extractedParams.add(param);
+    }
+  }
+  const merged = mergeDefinitions(existing, extractedParams, {
+    preserveSubclassParams: subclassPaths.length === 0,
+  });
   const generatedContent = generateScriptContent(scriptContent, merged);
 
   const isUpToDate = scriptContent === generatedContent;
@@ -526,22 +547,64 @@ export function syncDimensions({
   };
 }
 
+/**
+ * Parses CLI arguments for update_ga4_dimensions.mjs.
+ *
+ * @param {string[]} [args]
+ * @param {string} [cwd]
+ * @returns {{help: boolean, check: boolean, dryRun: boolean, subclassPaths: string[]}}
+ */
+export function parseCliArgs(args = [], cwd = process.cwd()) {
+  let help = false;
+  let check = false;
+  let dryRun = false;
+  const subclassPaths = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--help' || arg === '-h') {
+      help = true;
+    } else if (arg === '--check') {
+      check = true;
+    } else if (arg === '--dry-run') {
+      dryRun = true;
+    } else if (arg === '--subclass') {
+      const nextArg = args[i + 1];
+      if (!nextArg || nextArg.startsWith('-')) {
+        throw new Error('Missing path argument for --subclass');
+      }
+      subclassPaths.push(path.resolve(cwd, nextArg));
+      i++;
+    } else if (arg.startsWith('--subclass=')) {
+      const value = arg.slice('--subclass='.length).trim();
+      if (!value) {
+        throw new Error('Missing path argument for --subclass');
+      }
+      subclassPaths.push(path.resolve(cwd, value));
+    } else {
+      throw new Error(`Unknown CLI argument: ${arg}`);
+    }
+  }
+
+  return {help, check, dryRun, subclassPaths};
+}
+
 // CLI execution
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  const isHelp = args.includes('--help') || args.includes('-h');
-  const isCheck = args.includes('--check');
-  const isDryRun = args.includes('--dry-run');
-
-  if (isHelp) {
-    console.log(formatHelpText());
-    process.exit(0);
-  }
 
   try {
+    const {help: isHelp, check: isCheck, dryRun: isDryRun, subclassPaths} = parseCliArgs(args);
+
+    if (isHelp) {
+      console.log(formatHelpText());
+      process.exit(0);
+    }
+
     const result = syncDimensions({
       check: isCheck,
       dryRun: isDryRun,
+      subclassPaths,
     });
 
     if (isCheck) {
