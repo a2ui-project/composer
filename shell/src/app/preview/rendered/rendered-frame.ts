@@ -88,6 +88,20 @@ export class RenderedFrame {
   /** Optional layout payload to render immediately into the guest iframe. */
   readonly payload = input<unknown[] | null | undefined>(null);
 
+  /**
+   * Sizes the frame to its container instead of to the guest's reported
+   * surface height.
+   *
+   * An inline preview sizes itself to its content, so the host follows the
+   * guest's SURFACE_RESIZE reports. A side panel is a fixed viewport whose
+   * content scrolls, like the canvas panels of production hosts, so there the
+   * frame fills the panel and the reports are ignored. With the frame's size
+   * no longer depending on the guest, a guest laid out against its own
+   * viewport (`100%`, `100vh`) cannot feed back into it, and the growth
+   * circuit breaker has nothing to guard.
+   */
+  readonly fillContainer = input<boolean>(false);
+
   /** Tracks dynamic surface height reported by the guest renderer frame. */
   readonly dynamicHeight = signal<number | null>(null);
 
@@ -105,8 +119,15 @@ export class RenderedFrame {
   private trackedRendererUrl: string | null | undefined = undefined;
   private lastHandledResetNonce = this.stateSync.sessionResetNonce();
 
-  /** Computed pixel height string or 100% when rendered within dynamic/inline layout contexts. */
+  /**
+   * Usable height reported by the guest, in pixels, or null when there is none
+   * or the frame fills its container, in which case the container falls back to
+   * 100% of its host.
+   */
   readonly frameHeight = computed(() => {
+    if (this.fillContainer()) {
+      return null;
+    }
     const h = this.dynamicHeight();
     return h && h > 0 ? h : null;
   });
@@ -274,7 +295,13 @@ export class RenderedFrame {
         this.hostCommunication.sendRenderA2UI(payload, myIframe);
       }
     } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-      if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
+      // A frame that fills its container has a fixed size; the guest's
+      // measurements are informational only. Read untracked so that a mode
+      // switch does not replay the last report.
+      if (
+        !untracked(() => this.fillContainer()) &&
+        CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)
+      ) {
         const resizePayload = envelope.payload as {height: number; width?: number};
         this.dynamicHeight.set(this.capReportedHeight(resizePayload.height));
       }
@@ -286,7 +313,9 @@ export class RenderedFrame {
    * when a guest drives the frame into unbounded growth.
    */
   private trackReportedGrowth(envelope: MessageEnvelope | null): void {
-    if (!envelope) {
+    // A feedback loop needs the host to apply the reports; a frame that fills
+    // its container never does, so there is nothing to count.
+    if (!envelope || untracked(() => this.fillContainer())) {
       return;
     }
 

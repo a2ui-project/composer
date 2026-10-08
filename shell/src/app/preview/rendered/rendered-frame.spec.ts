@@ -409,6 +409,42 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(await harness.getFrameHeight()).toBe('520px');
   });
 
+  it('sizes to its content by default', async () => {
+    expect(await harness.fillsContainer()).toBe(false);
+  });
+
+  it('stays at container height when it fills its container', async () => {
+    fixture.componentRef.setInput('fillContainer', true);
+    fixture.detectChanges();
+    expect(await harness.fillsContainer()).toBe(true);
+    expect(await harness.getFrameHeight()).toBe('100%');
+
+    // The side canvas is a fixed viewport; a guest measuring itself inside it
+    // must not shrink the frame to that measurement.
+    emitBridgeMessage(surfaceResize(302));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.dynamicHeight()).toBeNull();
+    expect(fixture.componentInstance.frameHeight()).toBeNull();
+    expect(await harness.getFrameHeight()).toBe('100%');
+  });
+
+  it('follows reports again once it stops filling its container', async () => {
+    fixture.componentRef.setInput('fillContainer', true);
+    fixture.detectChanges();
+    emitBridgeMessage(surfaceResize(302));
+    fixture.detectChanges();
+
+    fixture.componentRef.setInput('fillContainer', false);
+    fixture.detectChanges();
+    // Nothing was applied while filling, so the frame starts from its default.
+    expect(await harness.getFrameHeight()).toBe('100%');
+
+    emitBridgeMessage(surfaceResize(640));
+    fixture.detectChanges();
+    expect(await harness.getFrameHeight()).toBe('640px');
+  });
+
   it('re-dispatches sendRenderA2UI when RENDERER_READY or A2UI_CATALOG arrives from bridge', () => {
     const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
     const newFixture = TestBed.createComponent(RenderedFrame);
@@ -609,6 +645,23 @@ describe('RenderedFrame Live Preview Viewport', () => {
         BASE_HEIGHT_PX + 19 * LOOP_STEP_PX,
       );
       expect(warnings(logger).filter(message => message.includes('runaway'))).toHaveLength(1);
+    });
+
+    it('does not engage when the frame fills its container', () => {
+      const logger = TestBed.inject(ErrorLogger);
+      logger.clear();
+      fixture.componentRef.setInput('fillContainer', true);
+      fixture.detectChanges();
+
+      // A whole runaway burst, long enough to latch an inline frame.
+      for (let i = 0; i < 20; i++) {
+        emit(surfaceResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS));
+        fixture.detectChanges();
+      }
+
+      expect(fixture.componentInstance.dynamicHeight()).toBeNull();
+      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
+      expect(warnings(logger)).toHaveLength(0);
     });
 
     it('latches when reports arrive faster than change detection runs', () => {

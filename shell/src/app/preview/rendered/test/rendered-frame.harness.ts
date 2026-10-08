@@ -46,6 +46,12 @@ export class RenderedFrameHarness extends ComponentHarness {
     return await container.hasClass('is-locked');
   }
 
+  /** True when the frame is sized to its container rather than to the guest's reports. */
+  async fillsContainer(): Promise<boolean> {
+    const container = await this.locatorFor('.rendered-frame-container')();
+    return await container.hasClass('fill-container');
+  }
+
   /**
    * Height the template applies to the frame container, as CSS: `520px` when a
    * guest height is in effect, `100%` when none is. The host sizes the iframe
