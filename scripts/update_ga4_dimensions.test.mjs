@@ -569,15 +569,20 @@ ${METRICS_END}
     it('generates bash script with correct scopes, pageSize, failure tracking, and error routing', () => {
       const script = generateBashScript();
 
-      // Scopes hint
+      // OAuth 2.0 Playground instructions and scopes hint
       assert.ok(
-        script.includes('gcloud auth login --scopes=${REQUIRED_SCOPE}'),
-        'Must recommend gcloud auth login with explicit REQUIRED_SCOPE',
+        script.includes('https://developers.google.com/oauthplayground/'),
+        'Must reference Google OAuth 2.0 Playground',
       );
       assert.ok(
-        !script.includes('--enable-gdrive-access'),
-        'Must not contain outdated --enable-gdrive-access flag',
+        script.includes('input ${REQUIRED_SCOPE} and click Authorize APIs'),
+        'Must instruct authorizing REQUIRED_SCOPE in OAuth 2.0 Playground',
       );
+      assert.ok(
+        script.includes('ACCESS_TOKEN=\\"<your_access_token>\\" $0'),
+        'Must show ACCESS_TOKEN usage example',
+      );
+      assert.ok(!script.includes('gcloud'), 'Must not contain references to gcloud');
 
       // Page size
       assert.ok(

@@ -66,12 +66,10 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
  * or Custom Metrics in the target GA4 property to be visible in GA4 reports and explorations.
  *
  * - Use `scripts/create_ga4_dimensions.sh` to idempotently provision all dimensions and metrics
- *   via the GA4 Admin API (`v1beta`).
- *   - Authenticate with `gcloud`:
- *     `gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.edit,https://www.googleapis.com/auth/cloud-platform`
- *   - Or authenticate without `gcloud` using Google OAuth 2.0 Playground:
- *     Authorize `https://www.googleapis.com/auth/analytics.edit`, exchange for an access token,
- *     and run `ACCESS_TOKEN="<token>" ./scripts/create_ga4_dimensions.sh`.
+ *   via the GA4 Admin API (`v1beta`). Authenticate using Google OAuth 2.0 Playground
+ *   (`https://developers.google.com/oauthplayground/`): authorize
+ *   `https://www.googleapis.com/auth/analytics.edit`, exchange the authorization code for an
+ *   access token, and run `ACCESS_TOKEN="<token>" ./scripts/create_ga4_dimensions.sh`.
  *
  * - Use `scripts/update_ga4_dimensions.mjs` to automatically scan this service for new
  *   event parameters and update `scripts/create_ga4_dimensions.sh` (with `--check` and `--dry-run`
