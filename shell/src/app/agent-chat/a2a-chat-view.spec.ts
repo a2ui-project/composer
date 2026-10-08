@@ -957,14 +957,57 @@ describe('A2aChatView', () => {
     expect(fixture.componentInstance['activeCanvasPayload']()).toEqual(canvasPayload);
   });
 
-  it('dispatches sendRenderA2UI when canvas surface is opened with payload', () => {
-    const hostComm = TestBed.inject(HostCommunication);
-    const payload: RenderA2uiItem[] = [
-      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
-    ];
-    fixture.componentInstance['openCanvasSurface'](payload);
-    fixture.detectChanges();
+  describe('canvas payload dispatch', () => {
+    /** The side canvas's guest iframe, as the element the host posts to. */
+    async function canvasIframe(): Promise<HTMLIFrameElement> {
+      const frame = await harness.getSideCanvasFrame();
+      expect(frame).not.toBeNull();
+      const iframe = await frame!.getIframe();
+      expect(iframe).not.toBeNull();
+      return TestbedHarnessEnvironment.getNativeElement(iframe!) as HTMLIFrameElement;
+    }
 
-    expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(payload);
+    const renderCalls = () => {
+      const hostComm = TestBed.inject(HostCommunication);
+      return vi.mocked(hostComm.sendRenderA2UI).mock.calls;
+    };
+
+    it('dispatches the canvas payload to the side-canvas iframe, not to an inline frame', async () => {
+      const payload: RenderA2uiItem[] = [
+        {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+      ];
+      fixture.componentInstance['openCanvasSurface'](payload);
+      fixture.detectChanges();
+
+      const iframe = await canvasIframe();
+      expect(iframe).toBeInstanceOf(HTMLIFrameElement);
+      expect(renderCalls()).toContainEqual([payload, iframe]);
+    });
+
+    it('never sends a canvas payload without a target', async () => {
+      // An untargeted send goes to the default frame, which is whichever
+      // RenderedFrame registered last; with an inline surface on screen that
+      // is the inline frame, and the canvas content ends up drawn in the chat.
+      const first: RenderA2uiItem[] = [
+        {version: 'v0.9', createSurface: {surfaceId: 'canvas-1', catalogId: 'c1'}},
+      ];
+      const second: RenderA2uiItem[] = [
+        {version: 'v0.9', createSurface: {surfaceId: 'canvas-2', catalogId: 'c1'}},
+      ];
+      fixture.componentInstance['openCanvasSurface'](first);
+      fixture.detectChanges();
+      // Replacing the active payload while the canvas is open takes the same
+      // path a later turn does.
+      fixture.componentInstance['openCanvasSurface'](second);
+      fixture.detectChanges();
+
+      const iframe = await canvasIframe();
+      const calls = renderCalls();
+      expect(calls.map(call => call[0])).toEqual(expect.arrayContaining([first, second]));
+      for (const call of calls) {
+        expect(call).toHaveLength(2);
+        expect(call[1]).toBe(iframe);
+      }
+    });
   });
 });

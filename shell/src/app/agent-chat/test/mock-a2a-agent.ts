@@ -234,8 +234,24 @@ export const sseHotelResponseBody = [
     '\n\n',
 ].join('');
 
+/**
+ * Chooses the SSE body the mock agent answers a prompt with. Receives the raw
+ * JSON-RPC request body; returning `undefined` falls back to the built-in
+ * keyword routing (flights, hotels, seasons).
+ */
+export type MockA2aResponder = (postData: string) => string | undefined;
+
+/** Builds one complete SSE `message` event from an A2A streaming response. */
+export function sseEvent(event: Record<string, unknown>): string {
+  return `event: message\ndata: ${JSON.stringify(event)}\n\n`;
+}
+
 /** Sets up network route mocks for the A2A test agent */
-export async function setupMockA2aRoutes(page: Page, agentUrl = 'http://mock-agent.local') {
+export async function setupMockA2aRoutes(
+  page: Page,
+  agentUrl = 'http://mock-agent.local',
+  respond?: MockA2aResponder,
+) {
   await page.route(`${agentUrl}/**`, async route => {
     const url = route.request().url();
     if (url.includes('.well-known') || url.includes('agent.json')) {
@@ -246,16 +262,19 @@ export async function setupMockA2aRoutes(page: Page, agentUrl = 'http://mock-age
       });
     } else {
       const postData = route.request().postData() || '';
-      let body = sseFlightBody;
-      if (postData.includes('hotel') || postData.includes('stay') || postData.includes('area')) {
-        body = sseHotelResponseBody;
-      } else if (
-        postData.includes('time') ||
-        postData.includes('season') ||
-        postData.includes('visit') ||
-        postData.includes('weather')
-      ) {
-        body = sseTextResponseBody;
+      let body = respond?.(postData);
+      if (body === undefined) {
+        body = sseFlightBody;
+        if (postData.includes('hotel') || postData.includes('stay') || postData.includes('area')) {
+          body = sseHotelResponseBody;
+        } else if (
+          postData.includes('time') ||
+          postData.includes('season') ||
+          postData.includes('visit') ||
+          postData.includes('weather')
+        ) {
+          body = sseTextResponseBody;
+        }
       }
 
       await route.fulfill({
@@ -272,8 +291,12 @@ export async function setupMockA2aRoutes(page: Page, agentUrl = 'http://mock-age
 }
 
 /** Navigates to /a2a, resets state, and connects to the mock agent */
-export async function connectMockAgent(page: Page, agentUrl = 'http://mock-agent.local') {
-  await setupMockA2aRoutes(page, agentUrl);
+export async function connectMockAgent(
+  page: Page,
+  agentUrl = 'http://mock-agent.local',
+  respond?: MockA2aResponder,
+) {
+  await setupMockA2aRoutes(page, agentUrl, respond);
   await page.goto('/a2a');
   await page.evaluate(() => {
     try {
