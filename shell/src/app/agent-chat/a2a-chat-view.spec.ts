@@ -16,7 +16,6 @@
 
 import {signal, WritableSignal} from '@angular/core';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
-import {By} from '@angular/platform-browser';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {Subject} from 'rxjs';
 import {PreviewBridgeMessageType, RenderA2uiItem} from 'a2ui-bridge';
@@ -884,28 +883,33 @@ describe('A2aChatView', () => {
   });
 
   describe('canvas payload dispatch', () => {
-    const canvasIframe = () =>
-      fixture.debugElement.query(By.css('.side-canvas-viewport iframe'))?.nativeElement as
-        HTMLIFrameElement | undefined;
+    /** The side canvas's guest iframe, as the element the host posts to. */
+    async function canvasIframe(): Promise<HTMLIFrameElement> {
+      const frame = await harness.getSideCanvasFrame();
+      expect(frame).not.toBeNull();
+      const iframe = await frame!.getIframe();
+      expect(iframe).not.toBeNull();
+      return TestbedHarnessEnvironment.getNativeElement(iframe!) as HTMLIFrameElement;
+    }
 
     const renderCalls = () => {
       const hostComm = TestBed.inject(HostCommunication);
       return vi.mocked(hostComm.sendRenderA2UI).mock.calls;
     };
 
-    it('dispatches the canvas payload to the side-canvas iframe, not to an inline frame', () => {
+    it('dispatches the canvas payload to the side-canvas iframe, not to an inline frame', async () => {
       const payload: RenderA2uiItem[] = [
         {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
       ];
       fixture.componentInstance['openCanvasSurface'](payload);
       fixture.detectChanges();
 
-      const iframe = canvasIframe();
+      const iframe = await canvasIframe();
       expect(iframe).toBeInstanceOf(HTMLIFrameElement);
       expect(renderCalls()).toContainEqual([payload, iframe]);
     });
 
-    it('never sends a canvas payload without a target', () => {
+    it('never sends a canvas payload without a target', async () => {
       // An untargeted send goes to the default frame, which is whichever
       // RenderedFrame registered last; with an inline surface on screen that
       // is the inline frame, and the canvas content ends up drawn in the chat.
@@ -922,11 +926,12 @@ describe('A2aChatView', () => {
       fixture.componentInstance['openCanvasSurface'](second);
       fixture.detectChanges();
 
+      const iframe = await canvasIframe();
       const calls = renderCalls();
       expect(calls.map(call => call[0])).toEqual(expect.arrayContaining([first, second]));
       for (const call of calls) {
         expect(call).toHaveLength(2);
-        expect(call[1]).toBe(canvasIframe());
+        expect(call[1]).toBe(iframe);
       }
     });
   });
