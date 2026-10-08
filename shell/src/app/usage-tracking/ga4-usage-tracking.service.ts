@@ -169,6 +169,12 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     }
   }
 
+  private getUsageType(): UsageType {
+    return this.startupResolution.isThirdPartyEnvironment()
+      ? UsageType.THIRD_PARTY
+      : UsageType.FIRST_PARTY;
+  }
+
   /**
    * Configuration options passed to `gtag('config', measurementId, options)`.
    *
@@ -195,18 +201,21 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ['cookie_domain']: hostname || 'auto',
       // Supply stable, origin-isolated client ID from localStorage to survive cookie eviction.
       ['client_id']: this.getOrCreatePersistentClientId(),
+      // Page-load-constant dimensions, attached here so GA4 automatic events
+      // (session_start, user_engagement, ...) that bypass getBaselineDimensions() carry them too.
+      ['usage_type']: this.getUsageType(),
+      ['env_mode']: this.appConfigProvider.envMode(),
     };
   }
 
   protected getBaselineDimensions(): Record<string, unknown> {
-    const is3P = this.startupResolution.isThirdPartyEnvironment();
     const activeRendererId = this.startupConfigState.selectedRendererId() || 'default';
     const catalogObj = this.catalogManagement.activeCatalog();
     const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
     return {
       ['send_to']: this.config.measurementId,
       ['composer_session_id']: this._composerSessionId,
-      ['usage_type']: is3P ? UsageType.THIRD_PARTY : UsageType.FIRST_PARTY,
+      ['usage_type']: this.getUsageType(),
       ['env_mode']: this.appConfigProvider.envMode(),
       ['active_renderer_id']: activeRendererId,
       ['catalog_id']: catalogId,
