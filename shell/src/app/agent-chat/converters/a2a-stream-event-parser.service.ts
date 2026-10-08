@@ -566,8 +566,9 @@ export class A2aStreamEventParser {
     const a2uiNormalized = normalizeA2uiItems(items, this.errorLogger);
     if (a2uiNormalized.length > 0) {
       // Parts are visited in wire order, so text seen so far is text that
-      // preceded these items. Any item arriving after text clears the flag.
-      result.a2uiPrecedesText = result.a2uiPrecedesText !== false && !result.textChunk;
+      // preceded these items. The flag holds only while every item so far came
+      // before any text.
+      result.a2uiPrecedesText = (result.a2uiPrecedesText ?? true) && !result.textChunk;
       result.a2uiItems.push(...a2uiNormalized);
     }
 
