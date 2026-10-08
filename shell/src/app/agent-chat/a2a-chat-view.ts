@@ -14,7 +14,16 @@
  * limitations under the License.
  */
 
-import {Component, DestroyRef, effect, inject, OnInit, signal, untracked} from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  OnInit,
+  signal,
+  untracked,
+} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -51,6 +60,7 @@ import {A2aStreamEventParser} from './converters/a2a-stream-event-parser.service
 import {
   A2UI_MIME_TYPE,
   A2UI_PROTOCOL_VERSION,
+  catalogDefinesCanvas,
   mergeA2uiItems,
   partitionA2uiSurfacePayload,
 } from './converters/surface-partitioner';
@@ -127,6 +137,15 @@ export class A2aChatView implements OnInit {
   private readonly a2aTransport = inject(A2A_TRANSPORT);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
+  /**
+   * Whether the active catalog keeps `Canvas` as a surface root, or undefined while no
+   * catalog is resolved. A computed so that a catalog re-resolved with the same answer
+   * does not notify the re-partition effect.
+   */
+  private readonly catalogPreservesCanvas = computed(() => {
+    const catalog = this.catalogManagement.activeCatalog();
+    return catalog ? catalogDefinesCanvas(catalog) : undefined;
+  });
   private readonly destroyRef = inject(DestroyRef);
   private readonly streamEventParser = inject(A2aStreamEventParser);
   private readonly initTimestamp = Date.now();
@@ -183,12 +202,21 @@ export class A2aChatView implements OnInit {
       });
 
     // The renderer iframe only mounts when the Canvas panel opens, so the active catalog
-    // can resolve after the first streaming turn has already been partitioned.
+    // can resolve after the first streaming turn has already been partitioned. The
+    // effect depends on the one catalog property the partition reads, not on the
+    // catalog object: every frame's handshake re-resolves the catalog, and
+    // re-partitioning on each of those would hand every RenderedFrame a new payload
+    // and make it re-render content that has not changed.
     effect(() => {
-      const catalog = this.catalogManagement.activeCatalog();
-      if (catalog) {
-        untracked(() => this.repartitionMessagesForCatalog(catalog));
+      if (this.catalogPreservesCanvas() === undefined) {
+        return;
       }
+      untracked(() => {
+        const catalog = this.catalogManagement.activeCatalog();
+        if (catalog) {
+          this.repartitionMessagesForCatalog(catalog);
+        }
+      });
     });
   }
 

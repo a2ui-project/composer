@@ -494,6 +494,15 @@ function collectDescendantIds(
 }
 
 /**
+ * Whether `catalog` defines a `Canvas` component. This is the only property of the
+ * catalog the partitioner reads: it decides whether a `Canvas` node is kept as the
+ * surface root or unwrapped into its children.
+ */
+export function catalogDefinesCanvas(catalog: Catalog): boolean {
+  return Object.keys(catalog.components ?? {}).some(key => key.toLowerCase() === 'canvas');
+}
+
+/**
  * Returns whether the `Canvas` component should be kept as the root of the extracted
  * Canvas surface instead of unwrapping its children.
  *
@@ -508,7 +517,7 @@ function collectDescendantIds(
  */
 function shouldPreserveCanvas(comp: Record<string, unknown>, catalog?: Catalog | null): boolean {
   if (catalog) {
-    return Object.keys(catalog.components ?? {}).some(key => key.toLowerCase() === 'canvas');
+    return catalogDefinesCanvas(catalog);
   }
   return typeof comp['component'] === 'string' && comp['component'].toLowerCase() === 'canvas';
 }

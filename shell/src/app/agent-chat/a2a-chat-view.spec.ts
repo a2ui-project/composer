@@ -1109,4 +1109,70 @@ describe('A2aChatView', () => {
     expect(updatedComponents[0]?.['component']).toBe('Canvas');
     expect(updatedComponents[0]?.['children']).toEqual(['card-1', 'card-2']);
   });
+
+  it('leaves partitioned payloads untouched when the catalog is re-resolved with the same Canvas support', async () => {
+    // Every frame's handshake re-resolves the catalog as a new object. A new
+    // object with the same answer must not hand the frames new payloads, or each
+    // handshake would make every RenderedFrame re-render unchanged content.
+    const surfacePayload = [
+      {version: 'v0.9', createSurface: {surfaceId: 'canvas-surface-1', catalogId: 'cat-1'}},
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'canvas-surface-1',
+          components: [
+            {id: 'root', component: 'Column', children: ['intro', 'canvas-root']},
+            {id: 'intro', component: 'Text', text: 'Brief'},
+            {
+              id: 'canvas-root',
+              component: {Canvas: {children: ['card-1', 'card-2'], cardTitle: 'Experiment Brief'}},
+            },
+            {id: 'card-1', component: 'Card'},
+            {id: 'card-2', component: 'Card'},
+          ],
+        },
+      },
+    ];
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      yield {
+        taskId: 't-canvas',
+        contextId: 'c-canvas',
+        message: {
+          role: 'agent',
+          parts: [
+            {data: {mimeType: 'application/json+a2ui', data: JSON.stringify(surfacePayload)}},
+          ],
+        },
+        final: true,
+      };
+    });
+    fixture.componentInstance['sendUserMessage']({text: 'Create brief', images: []});
+    await fixture.whenStable();
+
+    mockActiveCatalogSignal.set({components: {Canvas: {}, Card: {}, Column: {}, Text: {}}});
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const agentMessage = () =>
+      fixture.componentInstance['messages']().find(m => m.sender === 'agent');
+    const inlinePayload = agentMessage()?.inlineA2uiPayload;
+    const canvasPayload = fixture.componentInstance['activeCanvasPayload']();
+    expect(inlinePayload).toBeDefined();
+    expect(canvasPayload).not.toBeNull();
+
+    mockActiveCatalogSignal.set({components: {Canvas: {}, Card: {}, Column: {}, Text: {}}});
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(agentMessage()?.inlineA2uiPayload).toBe(inlinePayload);
+    expect(fixture.componentInstance['activeCanvasPayload']()).toBe(canvasPayload);
+
+    // A catalog that answers differently does re-partition.
+    mockActiveCatalogSignal.set({components: {Card: {}, Column: {}, Text: {}}});
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance['activeCanvasPayload']()).not.toBe(canvasPayload);
+    const components =
+      (fixture.componentInstance['activeCanvasPayload']()?.[1]?.updateComponents
+        ?.components as Array<Record<string, unknown>>) || [];
+    expect(components[0]?.['component']).toBe('Column');
+  });
 });
