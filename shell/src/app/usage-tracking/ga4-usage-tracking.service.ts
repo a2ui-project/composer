@@ -115,7 +115,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
    * a `SecurityError` (handled by `LocalStorageInteractions`), gracefully falls back to a generated
    * UUID and caches it in `_persistentClientId` for in-memory session stability.
    */
-  private getOrCreatePersistentClientId(): string {
+  protected getOrCreatePersistentClientId(): string {
     if (this._persistentClientId) {
       return this._persistentClientId;
     }
@@ -213,7 +213,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     };
   }
 
-  private dispatchGtagEvent(name: string, params?: Record<string, unknown>): void {
+  protected dispatchGtagEvent(name: string, params?: Record<string, unknown>): void {
     if (!this.config.enabled || !this.config.measurementId) {
       return;
     }

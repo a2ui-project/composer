@@ -254,6 +254,26 @@ describe('Ga4UsageTrackingService', () => {
     expect(commands).toEqual(['js', 'config']);
   });
 
+  it('allows subclasses to override getOrCreatePersistentClientId in getConfigOptions without writing to localStorage', () => {
+    class SubclassUsageTrackingService extends Ga4UsageTrackingService {
+      protected override getOrCreatePersistentClientId(): string {
+        return '33333333-3333-4333-8333-333333333333';
+      }
+    }
+
+    const subclassService = TestBed.runInInjectionContext(() => new SubclassUsageTrackingService());
+    subclassService.initialize();
+
+    expect(localStorage.getItem(LocalStorageKey.GA4_CLIENT_ID)).toBeNull();
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'config',
+      'G-TEST1234',
+      expect.objectContaining({
+        client_id: '33333333-3333-4333-8333-333333333333',
+      }),
+    );
+  });
+
   it('resets session uuid when resetSession is called', () => {
     const initialSession = service.composerSessionId;
     service.resetSession();
