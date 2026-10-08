@@ -255,8 +255,8 @@ export class HostCommunication implements OnDestroy {
         timestamp: Date.now(),
         sourceWindow: (event.source as Window) ?? null,
       };
-      const sourceWindow = (event.source as Window) ?? null;
-      if (type === PreviewBridgeMessageType.RENDERER_READY) {
+      const sourceWindow = envelope.sourceWindow ?? null;
+      if (type === PreviewBridgeMessageType.RENDERER_READY && sourceWindow) {
         this.markWindowReady(sourceWindow);
         // Only the frame that just announced itself needs the theme. Frames
         // that are already up received it on their own handshake, and frames
@@ -450,7 +450,7 @@ export class HostCommunication implements OnDestroy {
    * remembered against its iframe element so the readiness can be withdrawn
    * later even if the element has left the DOM by then.
    */
-  private markWindowReady(sourceWindow: Window | null) {
+  private markWindowReady(sourceWindow: Window | null): void {
     if (!sourceWindow) {
       // Nothing can be waited for without a window to post to. A real guest
       // frame always has one; only synthetic events lack it.
@@ -470,7 +470,7 @@ export class HostCommunication implements OnDestroy {
    * were queued. Messages for frames that are still handshaking stay queued
    * and wait for their own RENDERER_READY.
    */
-  private flushOutboundMessages() {
+  private flushOutboundMessages(): void {
     const pending = [...this.outboundMessageBuffer];
     this.outboundMessageBuffer.length = 0;
     for (const pendingMessage of pending) {
@@ -502,7 +502,7 @@ export class HostCommunication implements OnDestroy {
 
   private dropQueuedMessages(
     shouldDrop: (queuedTarget: HTMLIFrameElement | Window | null | undefined) => boolean,
-  ) {
+  ): void {
     for (let i = this.outboundMessageBuffer.length - 1; i >= 0; i--) {
       if (shouldDrop(this.outboundMessageBuffer[i].target)) {
         this.outboundMessageBuffer.splice(i, 1);
@@ -667,7 +667,10 @@ export class HostCommunication implements OnDestroy {
     }
   }
 
-  private themeMessage(theme: ThemePreference) {
+  private themeMessage(theme: ThemePreference): {
+    type: PreviewBridgeMessageType;
+    payload: {theme: ThemePreference};
+  } {
     return {type: PreviewBridgeMessageType.SET_THEME, payload: {theme}};
   }
 

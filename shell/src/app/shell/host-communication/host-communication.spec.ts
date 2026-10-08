@@ -1514,10 +1514,26 @@ describe('HostCommunication', () => {
       );
     });
 
-    it('does not report readiness for a RENDERER_READY that carries no source window', () => {
-      const detachedIframe = {contentWindow: null} as unknown as HTMLIFrameElement;
-      service.registerIframe(detachedIframe);
+    it('ignores a RENDERER_READY that carries no source window', () => {
+      // A sibling that is up: if the sourceless handshake sent anything, this
+      // is the only frame it could reach right away.
+      const inlineWindow = {postMessage: vi.fn()} as unknown as Window;
+      const inlineIframe = {contentWindow: inlineWindow} as unknown as HTMLIFrameElement;
+      service.registerIframe(inlineIframe);
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: inlineWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      vi.mocked(inlineWindow.postMessage).mockClear();
 
+      // The default frame is detached, which is what lets a sourceless event
+      // past the source check (`null === null`).
+      const canvasWindow = {postMessage: vi.fn()} as unknown as Window;
+      const detachedIframe: {contentWindow: Window | null} = {contentWindow: null};
+      service.registerIframe(detachedIframe as unknown as HTMLIFrameElement);
       window.dispatchEvent(
         new MessageEvent('message', {
           origin: 'http://localhost:3000',
@@ -1525,7 +1541,29 @@ describe('HostCommunication', () => {
         }),
       );
 
-      expect(service.isRendererReady()).toBe(false);
+      // Nothing is posted to the frame that is up, and the detached default
+      // was not marked ready: an untargeted message still waits for it.
+      expect(service.isRendererReady()).toBe(true);
+      expect(inlineWindow.postMessage).not.toHaveBeenCalled();
+      const payload = [{version: 'v0.9', createSurface: {surfaceId: 's', catalogId: 'c'}}];
+      service.sendRenderA2UI(payload);
+      expect(inlineWindow.postMessage).not.toHaveBeenCalled();
+
+      // Nor did the sourceless event queue a theme for the default frame. When
+      // that frame comes back and announces itself it gets the theme once, from
+      // its own handshake, followed by the message that waited for it.
+      detachedIframe.contentWindow = canvasWindow;
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: canvasWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      expect(vi.mocked(canvasWindow.postMessage).mock.calls.map(call => call[0])).toEqual([
+        {type: PreviewBridgeMessageType.SET_THEME, payload: {theme: ThemePreference.LIGHT}},
+        {type: PreviewBridgeMessageType.RENDER_A2UI, payload},
+      ]);
     });
 
     it("keeps a sibling's queued message when another frame is unregistered and never delivers the unregistered frame's", () => {

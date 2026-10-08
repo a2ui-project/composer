@@ -120,7 +120,10 @@ test('inline surfaces keep their own content while the side canvas is opened and
 
   // Opening canvas #1 mounts a second frame. Its payload must reach that
   // frame only: the inline frame, which was the default dispatch target until
-  // now, keeps its own content.
+  // now, keeps its own content. This checks the steady state; the brief flash
+  // of canvas content in the inline frame that the old code showed until the
+  // canvas frame's handshake is not something a retrying assertion can pin
+  // down. The permanent variant of the same misrouting is covered below.
   await page.getByRole('button', {name: 'View Turn 1 details in Canvas'}).click();
   await expect(page.locator('.side-canvas-column')).toBeVisible();
   await expectSurface(canvasFrame(page), 'CANVAS CONTENT #1');
