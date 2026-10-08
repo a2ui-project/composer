@@ -577,6 +577,30 @@ describe('A2aChatMessage', () => {
 
     expect(await harness.hasCanvasButton()).toBe(false);
     expect(await harness.hasInlineSurface()).toBe(true);
+    expect(await harness.inlineSurfacePrecedesText()).toBe(false);
+  });
+
+  it('renders the inline surface above the text when the surface led the message', async () => {
+    fixture.componentRef.setInput('message', {
+      id: 'msg-header-first',
+      sender: 'agent',
+      text: 'I manage marketing strategy in the German market.',
+      inlineA2uiPayload: [
+        {
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: 'persona-header',
+            components: [{id: 'root', component: 'Row'}],
+          },
+        },
+      ],
+      inlineSurfaceLeadsText: true,
+      timestamp: Date.now(),
+    });
+    fixture.detectChanges();
+
+    expect(await harness.hasInlineSurface()).toBe(true);
+    expect(await harness.inlineSurfacePrecedesText()).toBe(true);
   });
 
   it('displays pending indicator when agent is streaming before first token arrives', async () => {

@@ -58,6 +58,10 @@
           </div>
         }
 
+        @if (hasInlineSurface() && message().inlineSurfaceLeadsText) {
+          <ng-container [ngTemplateOutlet]="inlineSurface" />
+        }
+
         @if (message().text) {
           <div class="agent-text-content" [class.error]="message().sender === 'error'">
             <div class="markdown-body" [innerHTML]="formattedContent()"></div>
@@ -67,13 +71,17 @@
           </div>
         }
 
-        @if (hasInlineSurface()) {
+        @if (hasInlineSurface() && !message().inlineSurfaceLeadsText) {
+          <ng-container [ngTemplateOutlet]="inlineSurface" />
+        }
+
+        <ng-template #inlineSurface>
           <div class="inline-surface-card">
             <a2ui-composer-rendered-frame
               [payload]="inlinePayload()"
             ></a2ui-composer-rendered-frame>
           </div>
-        }
+        </ng-template>
 
         @for (art of canvasArtifacts(); track art.id) {
           <div class="canvas-artifact-card">
