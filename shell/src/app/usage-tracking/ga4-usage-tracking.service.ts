@@ -142,6 +142,10 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       return;
     }
 
+    // Resolve config options (which access localStorage) before assigning windowObj.gtag
+    // so synchronous storage warnings cannot queue composer_error events before gtag('config', ...).
+    const configOptions = this.getConfigOptions();
+
     windowObj.dataLayer = windowObj.dataLayer || [];
     if (!windowObj.gtag) {
       windowObj.gtag = function () {
@@ -151,7 +155,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
     }
 
     windowObj.gtag('js', new Date());
-    windowObj.gtag('config', this.config.measurementId, this.getConfigOptions());
+    windowObj.gtag('config', this.config.measurementId, configOptions);
 
     const existingScript = this.document.querySelector(
       `script[src*="${this.config.measurementId}"]`,

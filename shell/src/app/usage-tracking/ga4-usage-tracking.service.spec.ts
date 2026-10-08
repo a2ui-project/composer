@@ -238,6 +238,22 @@ describe('Ga4UsageTrackingService', () => {
     expect(secondConfig['client_id']).toBe(configOptions['client_id']);
   });
 
+  it('does not queue composer_error before config when localStorage throws during initialize', () => {
+    delete mockWindow.gtag;
+    mockWindow.dataLayer = [];
+
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      // Simulate ErrorTelemetryReporter synchronously dispatching composer_error on storage warning
+      service.trackComposerError({sourceTag: '[Storage]', errorCategory: 'unknown_Storage'});
+      throw new Error('SecurityError: Access is denied');
+    });
+
+    service.initialize();
+
+    const commands = mockWindow.dataLayer.map(entry => Array.from(entry as ArrayLike<unknown>)[0]);
+    expect(commands).toEqual(['js', 'config']);
+  });
+
   it('resets session uuid when resetSession is called', () => {
     const initialSession = service.composerSessionId;
     service.resetSession();
