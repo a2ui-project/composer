@@ -28,7 +28,9 @@ import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
-import {Ga4UsageTrackingService, LOCAL_STORAGE_CLIENT_ID_KEY} from './ga4-usage-tracking.service';
+import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../storage/models/local-storage-keys';
+import {Ga4UsageTrackingService} from './ga4-usage-tracking.service';
 import {
   ApiKeyAction,
   PromptTurnType,
@@ -39,11 +41,11 @@ import {
 
 describe('Ga4UsageTrackingService', () => {
   let service: Ga4UsageTrackingService;
+  let localStorageInteractions: LocalStorageInteractions;
   let mockWindow: {
     dataLayer: unknown[];
     gtag?: (...args: unknown[]) => void;
     location?: Partial<Location>;
-    localStorage?: Storage;
   };
   let mockDocument: Partial<Document>;
 
@@ -75,7 +77,6 @@ describe('Ga4UsageTrackingService', () => {
       location: {
         hostname: 'a2ui-composer.corp.google.com',
       } as Location,
-      localStorage: window.localStorage,
     };
 
     mockDocument = {
@@ -90,6 +91,7 @@ describe('Ga4UsageTrackingService', () => {
     TestBed.configureTestingModule({
       providers: [
         Ga4UsageTrackingService,
+        LocalStorageInteractions,
         {
           provide: USAGE_TRACKING_CONFIG,
           useValue: {enabled: true, measurementId: 'G-TEST1234'},
@@ -103,6 +105,7 @@ describe('Ga4UsageTrackingService', () => {
     });
 
     service = TestBed.inject(Ga4UsageTrackingService);
+    localStorageInteractions = TestBed.inject(LocalStorageInteractions);
   });
 
   afterEach(() => {
@@ -146,9 +149,9 @@ describe('Ga4UsageTrackingService', () => {
   });
 
   it('generates and persists valid UUID client_id in localStorage when empty', () => {
-    expect(localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY)).toBeNull();
+    expect(localStorageInteractions.getItem(LocalStorageKey.GA4_CLIENT_ID)).toBeNull();
     service.initialize();
-    const storedId = localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY);
+    const storedId = localStorageInteractions.getItem(LocalStorageKey.GA4_CLIENT_ID);
     expect(storedId).toBeTruthy();
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     expect(storedId).toMatch(uuidRegex);
@@ -163,9 +166,9 @@ describe('Ga4UsageTrackingService', () => {
 
   it('reuses existing persistent client_id from localStorage when valid', () => {
     const existingId = '22222222-2222-4222-8222-222222222222';
-    localStorage.setItem(LOCAL_STORAGE_CLIENT_ID_KEY, existingId);
+    localStorageInteractions.setItem(LocalStorageKey.GA4_CLIENT_ID, existingId);
     service.initialize();
-    expect(localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY)).toBe(existingId);
+    expect(localStorageInteractions.getItem(LocalStorageKey.GA4_CLIENT_ID)).toBe(existingId);
     expect(mockWindow.gtag).toHaveBeenCalledWith(
       'config',
       'G-TEST1234',
@@ -176,9 +179,9 @@ describe('Ga4UsageTrackingService', () => {
   });
 
   it('regenerates and replaces client_id if existing localStorage value is malformed', () => {
-    localStorage.setItem(LOCAL_STORAGE_CLIENT_ID_KEY, 'corrupted<script>');
+    localStorageInteractions.setItem(LocalStorageKey.GA4_CLIENT_ID, 'corrupted<script>');
     service.initialize();
-    const storedId = localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY);
+    const storedId = localStorageInteractions.getItem(LocalStorageKey.GA4_CLIENT_ID);
     expect(storedId).not.toBe('corrupted<script>');
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     expect(storedId).toMatch(uuidRegex);

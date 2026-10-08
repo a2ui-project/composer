@@ -27,6 +27,8 @@ import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
+import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../storage/models/local-storage-keys';
 import {
   ApiKeyAction,
   PromptTurnType,
@@ -44,16 +46,6 @@ declare global {
     gtag?: (...args: unknown[]) => void;
   }
 }
-
-/**
- * Key used to persist the GA4 client ID in localStorage.
- *
- * Storing the client ID in origin-isolated localStorage ensures persistent user identification
- * across browser sessions. Unlike cookies on shared parent domains (such as `.corp.google.com`),
- * localStorage is strictly origin-isolated (scoped to `a2ui-composer.corp.google.com`), making it
- * immune to cross-app cookie collisions, overwrites, or Chrome's 180-cookie-per-domain eviction limit.
- */
-export const LOCAL_STORAGE_CLIENT_ID_KEY = 'a2ui_ga4_client_id';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -84,6 +76,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly appConfigProvider = inject(AppConfigProvider);
   private readonly catalogManagement = inject(CatalogManagement);
+  private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly document = inject(DOCUMENT);
 
   /**
@@ -118,8 +111,8 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
    *
    * LocalStorage is origin-isolated, preventing returning users from being treated as new visitors
    * due to cookie churn or eviction on shared domains. Validates existing values against a strict
-   * UUID v4 regex to prevent poisoned or malformed data. If localStorage throws a `SecurityError`
-   * (e.g. in restricted iframes or sandboxed environments), gracefully falls back to a generated
+   * UUID v4 regex to prevent poisoned or malformed data. If localStorage is unavailable or throws
+   * a `SecurityError` (handled by `LocalStorageInteractions`), gracefully falls back to a generated
    * UUID and caches it in `_persistentClientId` for in-memory session stability.
    */
   private getOrCreatePersistentClientId(): string {
@@ -127,26 +120,15 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       return this._persistentClientId;
     }
 
-    const windowObj = this.document.defaultView;
-    try {
-      const storage =
-        windowObj?.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null);
-      if (storage) {
-        const storedId = storage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY);
-        if (storedId && UUID_REGEX.test(storedId.trim())) {
-          this._persistentClientId = storedId.trim();
-          return this._persistentClientId;
-        }
-        const newId = generateUuid();
-        storage.setItem(LOCAL_STORAGE_CLIENT_ID_KEY, newId);
-        this._persistentClientId = newId;
-        return this._persistentClientId;
-      }
-    } catch {
-      // LocalStorage might throw SecurityError in restricted iframe or sandbox contexts.
+    const storedId = this.localStorageInteractions.getItem(LocalStorageKey.GA4_CLIENT_ID);
+    if (storedId && UUID_REGEX.test(storedId.trim())) {
+      this._persistentClientId = storedId.trim();
+      return this._persistentClientId;
     }
 
-    this._persistentClientId = generateUuid();
+    const newId = generateUuid();
+    this.localStorageInteractions.setItem(LocalStorageKey.GA4_CLIENT_ID, newId);
+    this._persistentClientId = newId;
     return this._persistentClientId;
   }
 
