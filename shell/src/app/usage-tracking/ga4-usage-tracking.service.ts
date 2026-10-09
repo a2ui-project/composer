@@ -98,6 +98,17 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
    */
   private _persistentClientId?: string;
 
+  /**
+   * True while `initialize()` is resolving config options and issuing `gtag('js')` /
+   * `gtag('config')`. `dispatchGtagEvent()` drops events during this window so re-entrant events
+   * cannot be queued ahead of `config`.
+   *
+   * Events arriving in this window are intentionally dropped rather than buffered, matching the
+   * existing behavior of dropping events while `window.gtag` is undefined. The only expected source
+   * is storage-failure telemetry, which is lossy by design.
+   */
+  private isInitializing = false;
+
   get composerSessionId(): string {
     return this._composerSessionId;
   }
@@ -113,16 +124,24 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
    * due to cookie churn or eviction on shared domains. Validates existing values against a strict
    * UUID v4 regex to prevent poisoned or malformed data. If localStorage is unavailable or throws
    * a `SecurityError` (handled by `LocalStorageInteractions`), gracefully falls back to a generated
-   * UUID and caches it in `_persistentClientId` for in-memory session stability.
+   * UUID (without attempting a follow-up write that would also fail) and caches it in
+   * `_persistentClientId` for in-memory session stability.
    */
   protected getOrCreatePersistentClientId(): string {
     if (this._persistentClientId) {
       return this._persistentClientId;
     }
 
-    const storedId = this.localStorageInteractions.getItem(LocalStorageKey.GA4_CLIENT_ID);
-    if (storedId && UUID_REGEX.test(storedId.trim())) {
-      this._persistentClientId = storedId.trim();
+    const readResult = this.localStorageInteractions.readItem(LocalStorageKey.GA4_CLIENT_ID);
+    if (!readResult.ok) {
+      // Storage is unavailable; skip the follow-up write, which would also fail.
+      this._persistentClientId = generateUuid();
+      return this._persistentClientId;
+    }
+
+    const storedId = readResult.value?.trim();
+    if (storedId && UUID_REGEX.test(storedId)) {
+      this._persistentClientId = storedId;
       return this._persistentClientId;
     }
 
@@ -142,20 +161,26 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       return;
     }
 
-    // Resolve config options (which access localStorage) before assigning windowObj.gtag
-    // so synchronous storage warnings cannot queue composer_error events before gtag('config', ...).
-    const configOptions = this.getConfigOptions();
+    // Suppress re-entrant events (e.g. composer_error emitted synchronously by ErrorTelemetryReporter
+    // for storage warnings while resolving config options) so nothing is queued before
+    // gtag('config', ...), even when window.gtag was already defined before initialize().
+    this.isInitializing = true;
+    try {
+      const configOptions = this.getConfigOptions();
 
-    windowObj.dataLayer = windowObj.dataLayer || [];
-    if (!windowObj.gtag) {
-      windowObj.gtag = function () {
-        // eslint-disable-next-line prefer-rest-params
-        windowObj.dataLayer?.push(arguments);
-      };
+      windowObj.dataLayer = windowObj.dataLayer || [];
+      if (!windowObj.gtag) {
+        windowObj.gtag = function () {
+          // eslint-disable-next-line prefer-rest-params
+          windowObj.dataLayer?.push(arguments);
+        };
+      }
+
+      windowObj.gtag('js', new Date());
+      windowObj.gtag('config', this.config.measurementId, configOptions);
+    } finally {
+      this.isInitializing = false;
     }
-
-    windowObj.gtag('js', new Date());
-    windowObj.gtag('config', this.config.measurementId, configOptions);
 
     const existingScript = this.document.querySelector(
       `script[src*="${this.config.measurementId}"]`,
@@ -223,7 +248,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   }
 
   protected dispatchGtagEvent(name: string, params?: Record<string, unknown>): void {
-    if (!this.config.enabled || !this.config.measurementId) {
+    if (this.isInitializing || !this.config.enabled || !this.config.measurementId) {
       return;
     }
 

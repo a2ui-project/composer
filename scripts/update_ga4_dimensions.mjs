@@ -48,15 +48,39 @@ export const EXCLUDED_PARAMS = new Set([
 ]);
 
 /**
- * Curated descriptions for parameters emitted by downstream usage-tracking subclasses.
- * Preserved during standalone syncs when no `--subclass` paths are provided.
+ * Curated metadata for parameters emitted by downstream usage-tracking subclasses.
+ *
+ * Preserved during standalone syncs when no `--subclass` paths are provided. Curated display names
+ * ensure subclass dimensions that are pruned and later re-discovered keep their intended names
+ * (e.g. acronym casing such as "CL") rather than the Title Case fallback.
+ *
+ * @type {Record<string, {displayName: string, description: string}>}
  */
-export const SUBCLASS_DESCRIPTIONS = {
-  open_file_status: 'Status of opening A2UI file',
-  open_file_reason: 'Categorized failure reason for failure to open an A2UI file',
-  create_cl_status: 'Status of creating a CL',
-  create_cl_reason: 'Categorized failure reason for failure to create a CL',
+export const SUBCLASS_PARAMS = {
+  open_file_status: {
+    displayName: 'Open File Status',
+    description: 'Status of opening A2UI file',
+  },
+  open_file_reason: {
+    displayName: 'Open File Failure Reason',
+    description: 'Categorized failure reason for failure to open an A2UI file',
+  },
+  create_cl_status: {
+    displayName: 'Create CL Status',
+    description: 'Status of creating a CL',
+  },
+  create_cl_reason: {
+    displayName: 'Create CL Failure Reason',
+    description: 'Categorized failure reason for failure to create a CL',
+  },
 };
+
+/**
+ * Curated descriptions for subclass parameters, derived from `SUBCLASS_PARAMS`.
+ */
+export const SUBCLASS_DESCRIPTIONS = Object.fromEntries(
+  Object.entries(SUBCLASS_PARAMS).map(([param, {description}]) => [param, description]),
+);
 
 /**
  * Curated descriptions for known parameters discovered during source scans.
@@ -293,12 +317,16 @@ export function classifyParameter(paramName) {
 }
 
 /**
- * Converts snake_case parameter name to Title Case display name.
+ * Resolves a display name for a parameter, using curated definitions or converting the
+ * snake_case parameter name to a Title Case fallback.
  *
  * @param {string} paramName
  * @returns {string}
  */
 export function formatDisplayName(paramName) {
+  if (Object.hasOwn(SUBCLASS_PARAMS, paramName)) {
+    return SUBCLASS_PARAMS[paramName].displayName;
+  }
   return paramName
     .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))

@@ -68,6 +68,7 @@ describe('Ga4UsageTrackingService', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    mockStartupResolution.isThirdPartyEnvironment.set(false);
 
     mockWindow = {
       dataLayer: [],
@@ -144,7 +145,26 @@ describe('Ga4UsageTrackingService', () => {
         send_page_view: false,
         cookie_prefix: 'a2ui_composer',
         cookie_domain: 'a2ui-composer.corp.google.com',
+        usage_type: UsageType.FIRST_PARTY,
+        env_mode: EnvMode.STANDALONE,
       }),
+    );
+  });
+
+  it('reports THIRD_PARTY usage_type in config and events in a 3P environment', () => {
+    mockStartupResolution.isThirdPartyEnvironment.set(true);
+    service.initialize();
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'config',
+      'G-TEST1234',
+      expect.objectContaining({usage_type: UsageType.THIRD_PARTY}),
+    );
+
+    service.trackPageView({pagePath: '/chat'});
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'event',
+      'page_view',
+      expect.objectContaining({usage_type: UsageType.THIRD_PARTY}),
     );
   });
 
@@ -223,6 +243,7 @@ describe('Ga4UsageTrackingService', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError: Access is denied');
     });
+    const setItemSpy = vi.spyOn(localStorageInteractions, 'setItem');
     expect(() => service.initialize()).not.toThrow();
     const calls = (mockWindow.gtag as ReturnType<typeof vi.fn>).mock.calls;
     const configCall = calls.find(call => call[0] === 'config');
@@ -230,6 +251,9 @@ describe('Ga4UsageTrackingService', () => {
     const configOptions = configCall![2] as Record<string, unknown>;
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     expect(configOptions['client_id']).toMatch(uuidRegex);
+
+    // A failed read must not trigger a follow-up write (which would also fail and log again).
+    expect(setItemSpy).not.toHaveBeenCalledWith(LocalStorageKey.GA4_CLIENT_ID, expect.anything());
 
     // Verify in-memory caching ensures idempotency on the same service instance
     const secondConfig = (
@@ -252,6 +276,39 @@ describe('Ga4UsageTrackingService', () => {
 
     const commands = mockWindow.dataLayer.map(entry => Array.from(entry as ArrayLike<unknown>)[0]);
     expect(commands).toEqual(['js', 'config']);
+  });
+
+  it('does not queue composer_error before config when window.gtag is pre-defined', () => {
+    // mockWindow.gtag is already defined by beforeEach (e.g. a host snippet defined it).
+    mockWindow.dataLayer = [];
+
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      service.trackComposerError({sourceTag: '[Storage]', errorCategory: 'unknown_Storage'});
+      throw new Error('SecurityError: Access is denied');
+    });
+
+    service.initialize();
+
+    const commands = mockWindow.dataLayer.map(entry => Array.from(entry as ArrayLike<unknown>)[0]);
+    expect(commands).toEqual(['js', 'config']);
+  });
+
+  it('dispatches events normally after initialize completes', () => {
+    service.initialize();
+    service.trackComposerError({sourceTag: '[Storage]', errorCategory: 'unknown_Storage'});
+    expect(mockWindow.gtag).toHaveBeenCalledWith('event', 'composer_error', expect.any(Object));
+  });
+
+  it('resumes dispatching events if gtag config throws during initialize', () => {
+    mockWindow.gtag = vi.fn((command: unknown) => {
+      if (command === 'config') {
+        throw new Error('boom');
+      }
+    });
+    expect(() => service.initialize()).toThrow('boom');
+
+    service.trackPageView({pagePath: '/chat'});
+    expect(mockWindow.gtag).toHaveBeenCalledWith('event', 'page_view', expect.any(Object));
   });
 
   it('allows subclasses to override getOrCreatePersistentClientId in getConfigOptions without writing to localStorage', () => {

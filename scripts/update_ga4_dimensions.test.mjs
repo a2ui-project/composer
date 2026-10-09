@@ -26,6 +26,7 @@ import {
   extractParametersFromSource,
   classifyParameter,
   formatDescription,
+  formatDisplayName,
   mergeDefinitions,
   generateScriptContent,
   generateBashScript,
@@ -39,6 +40,7 @@ import {
   METRICS_START,
   METRICS_END,
   SUBCLASS_DESCRIPTIONS,
+  SUBCLASS_PARAMS,
 } from './update_ga4_dimensions.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -393,6 +395,24 @@ describe('update_ga4_dimensions', () => {
         formatDescription('open_file_reason', 'Open File Failure Reason'),
         'Categorized failure reason for failure to open an A2UI file',
       );
+    });
+
+    it('uses curated display names for known parameters and Title Case for others', () => {
+      assert.equal(formatDisplayName('open_file_reason'), 'Open File Failure Reason');
+      assert.equal(formatDisplayName('create_cl_status'), 'Create CL Status');
+      assert.equal(formatDisplayName('create_cl_reason'), 'Create CL Failure Reason');
+      assert.equal(formatDisplayName('some_new_param'), 'Some New Param');
+    });
+
+    it('keeps curated subclass display names and descriptions in sync with create_ga4_dimensions.sh', () => {
+      const existing = parseExistingScript(fs.readFileSync(SCRIPT_PATH, 'utf-8'));
+      for (const [paramName, {displayName, description}] of Object.entries(SUBCLASS_PARAMS)) {
+        const def = existing.dimensions.get(paramName);
+        assert.ok(def, `${paramName} should be defined in create_ga4_dimensions.sh`);
+        assert.equal(def.displayName, displayName);
+        assert.equal(def.description, description);
+        assert.equal(SUBCLASS_DESCRIPTIONS[paramName], description);
+      }
     });
   });
 
@@ -864,7 +884,7 @@ ${METRICS_END}
         const reasonDim = syncResult.newDefinitions.dimensions.find(d => d.paramName === 'open_file_reason');
         assert.deepEqual(reasonDim, {
           paramName: 'open_file_reason',
-          displayName: 'Open File Reason',
+          displayName: 'Open File Failure Reason',
           description: 'Categorized failure reason for failure to open an A2UI file',
         });
         const subclassMetric = syncResult.newDefinitions.metrics.find(
@@ -880,7 +900,7 @@ ${METRICS_END}
         const updatedScriptContent = fs.readFileSync(tempScript, 'utf-8');
         assert.ok(
           updatedScriptContent.includes(
-            'create_dimension "open_file_reason" "Open File Reason" "Categorized failure reason for failure to open an A2UI file"',
+            'create_dimension "open_file_reason" "Open File Failure Reason" "Categorized failure reason for failure to open an A2UI file"',
           ),
         );
         assert.ok(
@@ -918,7 +938,7 @@ ${METRICS_END}
             'open_file_reason',
             {
               paramName: 'open_file_reason',
-              displayName: 'Open File Reason',
+              displayName: 'Open File Failure Reason',
               description: 'Categorized failure reason for failure to open an A2UI file',
             },
           ],
