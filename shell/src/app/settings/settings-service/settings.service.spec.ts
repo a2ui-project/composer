@@ -146,6 +146,17 @@ describe('SettingsService', () => {
     expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev');
   });
 
+  it('does not persist a selection that startup resolution rejects', async () => {
+    const superseded = new Error('Renderer selection was superseded before approval completed.');
+    mockStartupResolution.setSelectedRendererId.mockRejectedValue(superseded);
+
+    await expect(service.selectRenderer('dev')).rejects.toBe(superseded);
+
+    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev');
+    expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
+    expect(mockConfigProvider.setRendererUrl).not.toHaveBeenCalled();
+  });
+
   it('removes selected renderer ID from local storage when selected renderer ID is null', async () => {
     mockLocalStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'dev');
 
@@ -519,6 +530,10 @@ describe('SettingsService', () => {
           displayName: 'Development',
           rendererUrl: 'http://dev.com',
         },
+        lit: {
+          displayName: 'Lit Block Kit Preview',
+          rendererUrl: 'samples/react-lit-catalog/',
+        },
         prod: {
           displayName: 'Production',
           rendererUrl: 'http://prod.com',
@@ -537,6 +552,12 @@ describe('SettingsService', () => {
           id: 'dev',
           name: 'Development',
           rendererUrl: 'http://dev.com',
+          readOnly: true,
+        },
+        {
+          id: 'lit',
+          name: 'Lit Block Kit Preview',
+          rendererUrl: 'samples/react-lit-catalog/',
           readOnly: true,
         },
         {

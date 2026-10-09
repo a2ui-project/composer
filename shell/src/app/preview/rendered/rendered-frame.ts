@@ -40,6 +40,7 @@ import {StateSync} from '../../chat/state-sync/state-sync';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
+import {PreviewUrlParam} from '../preview-url-param';
 
 /**
  * Number of consecutive growing SURFACE_RESIZE reports that trips the growth
@@ -166,7 +167,7 @@ export class RenderedFrame {
 
       // Prevent unauthorized cross-site framing by appending parent and
       // ancestor origins.
-      url.searchParams.delete('origin');
+      url.searchParams.delete(PreviewUrlParam.ORIGIN);
 
       const origins = new Set<string>();
       if (baseOrigin) {
@@ -185,11 +186,11 @@ export class RenderedFrame {
       }
 
       for (const origin of origins) {
-        url.searchParams.append('origin', origin);
+        url.searchParams.append(PreviewUrlParam.ORIGIN, origin);
       }
 
       const initialTheme = untracked(() => this.configProvider.themePreference());
-      url.searchParams.set('theme', initialTheme);
+      url.searchParams.set(PreviewUrlParam.THEME, initialTheme);
 
       const urlString = url.toString();
       if (!isValidHttpUrl(urlString)) {

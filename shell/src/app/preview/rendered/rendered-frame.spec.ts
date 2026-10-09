@@ -16,6 +16,7 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {RenderedFrame} from './rendered-frame';
+import {PreviewUrlParam} from '../preview-url-param';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, afterEach, expect, beforeEach, vi} from 'vitest';
@@ -142,6 +143,14 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(await harness.getIframeSrc()).toBe(
       'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
     );
+  });
+
+  it('adds only the query parameters listed in PreviewUrlParam', async () => {
+    // RendererSelection removes these before comparing the iframe's URL with a
+    // renderer's, so a parameter added without being listed would break that match.
+    const src = new URL((await harness.getIframeSrc())!);
+    const listed: string[] = Object.values(PreviewUrlParam);
+    expect([...new Set(src.searchParams.keys())].filter(key => !listed.includes(key))).toEqual([]);
   });
 
   it('registers the iframe element with HostCommunication upon view initialization', () => {

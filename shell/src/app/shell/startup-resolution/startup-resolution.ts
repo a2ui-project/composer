@@ -70,19 +70,46 @@ export class StartupResolution {
     }
   }
 
+  /**
+   * Selects a configured renderer. A renderer on an origin the user hasn't
+   * allowed yet asks for confirmation first; the selection is only committed
+   * once it's allowed, so a denied renderer never replaces the current one.
+   *
+   * @return Whether the renderer was selected.
+   * @throws If the selection changed while the confirmation was open.
+   */
   async setSelectedRendererId(rendererId: string | null): Promise<boolean> {
-    this.startupConfigState.setSelectedRendererId(rendererId);
+    const previousId = this.startupConfigState.selectedRendererId();
+    const previousUrl = this.resolvedUrl();
     const active = rendererId
       ? this.getRendererById(rendererId, this.startupConfigState.renderers())
       : null;
-    if (active?.rendererUrl) {
-      const isAllowed = await this.isOriginAllowed(active.rendererUrl);
-      if (isAllowed) {
-        this.startupConfigState.setResolvedUrl(active.rendererUrl);
-        return true;
+    const rendererUrl = active?.rendererUrl;
+    if (rendererUrl) {
+      const isAllowed = await this.isOriginAllowed(rendererUrl);
+      // The confirmation dialog can stay open for a while. If anything changed the
+      // renderer in the meantime (Settings, a shared link, a config reload), this
+      // request is stale and must not overwrite that newer choice.
+      const currentRenderer = rendererId
+        ? this.getRendererById(rendererId, this.startupConfigState.renderers())
+        : null;
+      if (
+        this.startupConfigState.selectedRendererId() !== previousId ||
+        this.resolvedUrl() !== previousUrl ||
+        currentRenderer?.rendererUrl !== rendererUrl
+      ) {
+        throw new Error('Renderer selection was superseded before approval completed.');
       }
-      return false;
+      if (!isAllowed) {
+        return false;
+      }
+      // Commit both values in the same synchronous turn after approval. Selecting
+      // an unapproved renderer must not trigger draft/history reset effects.
+      this.startupConfigState.setSelectedRendererId(rendererId);
+      this.startupConfigState.setResolvedUrl(rendererUrl);
+      return true;
     }
+    this.startupConfigState.setSelectedRendererId(rendererId);
     return true;
   }
 
@@ -429,20 +456,28 @@ export class StartupResolution {
     }
 
     try {
-      const baseOrigin = this.environmentContext.getBaseOrigin();
-      const u = urlStr.startsWith('/') ? new URL(urlStr, baseOrigin) : new URL(urlStr);
+      const u = this.parseRendererUrl(urlStr);
       return u.origin + u.pathname.replace(/\/+$/, '') + u.search;
     } catch {
       return urlStr.replace(/\/+$/, '');
     }
   }
 
+  /** Parses a renderer URL, resolving root-relative paths against Composer's origin. */
+  private parseRendererUrl(url: string): URL {
+    const baseOrigin = this.environmentContext.getBaseOrigin();
+    const parsed = url.startsWith('/') ? new URL(url, baseOrigin) : new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Renderer URLs must use HTTP or HTTPS.');
+    }
+    return parsed;
+  }
+
   async isOriginAllowed(url: string): Promise<boolean> {
     let origin: string;
     let hostname: string;
     try {
-      const baseOrigin = this.environmentContext.getBaseOrigin();
-      const parsedUrl = url.startsWith('/') ? new URL(url, baseOrigin) : new URL(url);
+      const parsedUrl = this.parseRendererUrl(url);
       origin = parsedUrl.origin;
       hostname = parsedUrl.hostname;
     } catch (e) {
@@ -456,10 +491,7 @@ export class StartupResolution {
     const isStaticConfigOrigin = Object.values(this.startupConfigState.renderers()).some(r => {
       if (!r?.rendererUrl) return false;
       try {
-        const baseOrigin = this.environmentContext.getBaseOrigin();
-        const parsed = r.rendererUrl.startsWith('/')
-          ? new URL(r.rendererUrl, baseOrigin)
-          : new URL(r.rendererUrl);
+        const parsed = this.parseRendererUrl(r.rendererUrl);
         return parsed.origin === origin;
       } catch {
         return false;
