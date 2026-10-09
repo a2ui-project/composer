@@ -33,6 +33,7 @@ const {
   mockGetModel,
   mockCreateModel,
   mockSetValue,
+  mockSetEOL,
   mockEditorCreate,
   mockOnDidChangeMarkers,
   mockGetModelMarkers,
@@ -52,10 +53,12 @@ const {
   mockSetDiagnosticsOptions,
 } = vi.hoisted(() => {
   const mockSetValue = vi.fn();
+  const mockSetEOL = vi.fn();
   const mockDefineTheme = vi.fn();
   const mockGetModel = vi.fn();
   const mockCreateModel = vi.fn((val: string, lang: string, uri: unknown) => ({
     setValue: mockSetValue,
+    setEOL: mockSetEOL,
     dispose: vi.fn(),
   }));
   const mockModelContentDisposable = {dispose: vi.fn()};
@@ -98,6 +101,7 @@ const {
     mockGetModel,
     mockCreateModel,
     mockSetValue,
+    mockSetEOL,
     mockEditorCreate,
     mockSetPosition,
     mockRevealPositionInCenterIfOutsideViewport,
@@ -131,6 +135,7 @@ vi.mock('@monaco-editor/loader', () => ({
         defineTheme: mockDefineTheme,
         getModel: mockGetModel,
         createModel: mockCreateModel,
+        EndOfLineSequence: {LF: 0, CRLF: 1},
         create: mockEditorCreate,
         onDidChangeMarkers: mockOnDidChangeMarkers,
         getModelMarkers: mockGetModelMarkers,
@@ -441,9 +446,23 @@ describe('MonacoEditor component', () => {
     expect(mockSetValue).not.toHaveBeenCalled();
   });
 
+  it('keeps the model on LF line endings whatever the platform uses', async () => {
+    mockGetModel.mockReturnValue(null);
+    mockSetEOL.mockClear();
+    fixture = TestBed.createComponent(MonacoEditor);
+    fixture.componentRef.setInput('value', '{"initial": true}');
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+
+    expect(mockSetEOL).toHaveBeenCalledWith(0);
+  });
+
   it('reuses existing model and updates its value via setValue when getModel returns an existing model', async () => {
     const existingModel = {
       setValue: mockSetValue,
+      setEOL: mockSetEOL,
       dispose: vi.fn(),
     };
     mockGetModel.mockReturnValue(existingModel);
@@ -943,6 +962,7 @@ describe('MonacoEditor component', () => {
       vi.useFakeTimers();
       const mockModelInstance = {
         setValue: mockSetValue,
+        setEOL: mockSetEOL,
         dispose: vi.fn(),
         getFullModelRange: vi.fn(),
       };

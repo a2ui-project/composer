@@ -52,6 +52,7 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
       endColumn: 1,
     })),
     setValue: vi.fn(),
+    setEOL: vi.fn(),
     dispose: vi.fn(),
   };
 
@@ -166,8 +167,10 @@ vi.mock('@monaco-editor/loader', () => {
             language,
             uri,
             setValue: vi.fn(),
+            setEOL: vi.fn(),
             dispose: vi.fn(),
           })),
+          EndOfLineSequence: {LF: 0, CRLF: 1},
           onDidChangeMarkers: vi.fn(() => ({dispose: () => {}})),
           getModelMarkers: vi.fn(() => []),
         },
