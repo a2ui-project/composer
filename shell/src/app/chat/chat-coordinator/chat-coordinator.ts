@@ -87,14 +87,29 @@ export class ChatCoordinator {
   private activePromptId: string | null = null;
 
   constructor() {
-    // Effect monitoring dynamic host preview configurations mapping cache
-    // resets
+    // Reacts to renderer changes; see handleRendererChange.
     toObservable(this.configProvider.rendererUrl)
-      // skip(1) prevents wiping the cache on the initial startup signal emission
+      // skip(1) ignores the renderer chosen at startup
       .pipe(skip(1), takeUntilDestroyed())
       .subscribe(() => {
-        queueMicrotask(() => this.wipeEnvironmentCache());
+        queueMicrotask(() => this.handleRendererChange());
       });
+  }
+
+  /**
+   * Keeps the conversation and canvas when the renderer changes, so the same canvas
+   * can be viewed in another renderer. A response still streaming was written for
+   * the old renderer's catalog, so it's cancelled. A canvas nobody has changed is
+   * only the old renderer's sample, so the session starts over from the new one's.
+   */
+  private handleRendererChange(): void {
+    if (!this.stateSync.hasEditedDraft()) {
+      this.wipeEnvironmentCache();
+      return;
+    }
+    if (this.activePromptId || this.activeStreamResponse) {
+      this.cancelActiveStream();
+    }
   }
 
   private clearConversation(): void {

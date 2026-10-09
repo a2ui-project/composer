@@ -111,6 +111,7 @@ class MockStateSync {
   });
   hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
   syncActiveDraftToHistory = vi.fn();
+  hasEditedDraft = vi.fn(() => false);
 }
 
 async function* createMockStream(chunks: string[]): AsyncIterable<LlmResponse> {
@@ -614,7 +615,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(history[1].errorDetails).not.toContain('dummy_key_here');
   });
 
-  it('monitors rendererUrl mutations triggering flushing resets', async () => {
+  it('starts over when the renderer changes while the canvas is still a sample', async () => {
     // Setup initial state: history has data, status is ready, locks active
     chatStateMock.chatHistory.set([{role: MessageRole.USER, content: 'Some logs'}]);
     chatStateMock.pipelineStatus.set(PipelineStatus.READY);
@@ -642,6 +643,55 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
     expect(service.isProgrammaticStreamActive()).toBe(false);
     expect(stateSyncMock.flushDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the conversation and canvas when the renderer changes after an edit', async () => {
+    stateSyncMock.hasEditedDraft.mockReturnValue(true);
+    const history = [
+      {role: MessageRole.USER, content: 'Make a card'},
+      {role: MessageRole.MODEL, content: 'Here it is'},
+    ];
+    chatStateMock.chatHistory.set(history);
+    stateSyncMock.activeDraftSignal.set('Edited canvas');
+
+    configProviderMock.rendererUrl.set('http://localhost:9999/other-renderer');
+    TestBed.tick();
+    await new Promise<void>(resolve => queueMicrotask(() => resolve()));
+
+    expect(chatStateMock.chatHistory()).toEqual(history);
+    expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+    expect(stateSyncMock.hydrateActiveDraft()).toBe('Edited canvas');
+  });
+
+  it('cancels a response still streaming when the renderer changes after an edit', async () => {
+    stateSyncMock.hasEditedDraft.mockReturnValue(true);
+    let releaseChunk!: () => void;
+    const cancel = vi.fn(() => releaseChunk());
+    llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => ({
+      contentStream: {
+        async *[Symbol.asyncIterator]() {
+          await new Promise<void>(resolve => {
+            releaseChunk = resolve;
+          });
+        },
+      },
+      complete: Promise.resolve(''),
+      cancel,
+    }));
+    const submission = service.submitPrompt('Make a card');
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    configProviderMock.rendererUrl.set('http://localhost:9999/other-renderer');
+    TestBed.tick();
+    await new Promise<void>(resolve => queueMicrotask(() => resolve()));
+    await submission;
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+    expect(chatStateMock.chatHistory()[0]).toMatchObject({
+      role: MessageRole.USER,
+      content: 'Make a card',
+    });
   });
 
   it('unsubscribes from rendererUrl changes upon destruction', async () => {

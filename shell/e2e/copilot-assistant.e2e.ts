@@ -170,7 +170,9 @@ async function expectGeminiRequestForCurrentDraft(page: Page, expectedDraftText:
 }
 
 test.describe('Copilot assistant replacement browser journey', () => {
-  test('switches standard renderers from the pill and retains the typed prompt', async ({page}) => {
+  test('switches standard renderers from the pill and keeps the canvas and typed prompt', async ({
+    page,
+  }) => {
     await openDraftInWorkspace(page);
     const prompt = page.getByRole('textbox', {name: 'Chat prompt'});
     await prompt.fill('Create a simple card in this renderer');
@@ -189,6 +191,11 @@ test.describe('Copilot assistant replacement browser journey', () => {
     );
     await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
     await expect(prompt).toHaveValue('Create a simple card in this renderer');
+    // The canvas comes along: same draft in the editor, now drawn by the Lit renderer.
+    await expect.poll(() => readRawDraft(page)).toContain(DRAFT_TEXT);
+    await expect(
+      page.frameLocator('.workspace-container iframe').getByText(DRAFT_TEXT),
+    ).toBeVisible();
 
     await page.getByRole('button', {name: 'Add to prompt', exact: true}).click();
     await page.getByRole('menuitem', {name: /^Instructions/}).click();
@@ -208,6 +215,10 @@ test.describe('Copilot assistant replacement browser journey', () => {
     await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
     await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
     await expect(prompt).toHaveValue('Create a simple card in this renderer');
+    await expect.poll(() => readRawDraft(page)).toContain(DRAFT_TEXT);
+    await expect(
+      page.frameLocator('.workspace-container iframe').getByText(DRAFT_TEXT),
+    ).toBeVisible();
   });
 
   test('explains under the renderer menu why a renderer could not be selected', async ({page}) => {
