@@ -26,13 +26,18 @@ import {
 import {PreviewBridgeMessageType, type Demo} from 'a2ui-bridge';
 import {DemosCatalog, type TrackedDemo} from './demos-catalog';
 import {Catalog} from '../../storage/models/catalog-storage.model';
+import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {
+  AppConfigProvider,
+  ThemePreference,
+} from '../../settings/app-config-provider/app-config-provider';
 
 class MockCatalogManagement {
   readonly activeCatalog = signal<Catalog | null>(null);
 }
 
 class MockHostCommunication {
-  sendToFrame = vi.fn();
+  sendMessage = vi.fn();
   readonly messageStream$ = new ReplaySubject<MessageEnvelope>(1);
 }
 
@@ -74,19 +79,37 @@ describe('DemosCatalog', () => {
     vi.useRealTimers();
   });
 
-  it('sends no request until demosActive and activeCatalog are both set', () => {
+  /** Emits the RENDERER_READY a coordinator sends once its renderer has loaded. */
+  function announce(coordinator: HTMLIFrameElement): void {
+    hostCommunicationMock.messageStream$.next({
+      type: PreviewBridgeMessageType.RENDERER_READY,
+      origin: 'http://localhost',
+      timestamp: Date.now(),
+      sourceWindow: coordinator.contentWindow,
+    });
+    TestBed.tick();
+  }
+
+  it('sends no request until demosActive, activeCatalog and the coordinator handshake are all in place', () => {
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
 
     service.setDemosActive(true);
     TestBed.tick();
-    expect(hostCommunicationMock.sendToFrame).not.toHaveBeenCalled();
+    expect(hostCommunicationMock.sendMessage).not.toHaveBeenCalled();
 
     catalogManagementMock.activeCatalog.set({components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledWith(
+    // The request is pending, but a renderer that has not loaded yet cannot hear
+    // it, so it is sent on the coordinator's RENDERER_READY.
+    expect(service.loadingDemos()).toBe(true);
+    expect(hostCommunicationMock.sendMessage).not.toHaveBeenCalled();
+
+    announce(coordinator);
+
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith(
       {type: PreviewBridgeMessageType.GET_DEMOS},
       coordinator,
     );
@@ -395,10 +418,9 @@ describe('DemosCatalog', () => {
     catalogManagementMock.activeCatalog.set({components: {}});
     TestBed.tick();
 
-    // The initial request cannot be answered (the coordinator frame is still
-    // on about:blank), so no fallback timer is armed for it yet. A
-    // RENDERER_READY marks the coordinator ready and triggers the re-request
-    // that the fallback timer below actually covers.
+    // Nothing is sent, and no fallback timer armed, while the coordinator frame
+    // is still loading. Its RENDERER_READY marks it ready and sends the request
+    // that the fallback timer below covers.
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.RENDERER_READY,
       origin: 'http://localhost',
@@ -429,12 +451,12 @@ describe('DemosCatalog', () => {
     expect(service.demos()).toBeNull();
 
     // No RENDERER_READY ever arrives (e.g. a slow-booting dev bundle still
-    // mid-boot). The initial request was never landable, so the fallback
-    // timer must never have been armed for it: falling back to [] here
-    // would flash "No Demos Available" over a renderer that is still coming
-    // up.
+    // mid-boot). No request has been sent, so no fallback timer is armed:
+    // falling back to [] here would flash "No Demos Available" over a renderer
+    // that is still coming up.
     vi.advanceTimersByTime(2000);
 
+    expect(hostCommunicationMock.sendMessage).not.toHaveBeenCalled();
     expect(service.loadingDemos()).toBe(true);
     expect(service.demos()).toBeNull();
   });
@@ -450,7 +472,7 @@ describe('DemosCatalog', () => {
     // sends GET_CATALOG *in response to* RENDERER_READY and only sets
     // `activeCatalog` once the later A2UI_CATALOG reply lands. So the
     // coordinator reports ready while `activeCatalog` is still null, and that
-    // boot has to be recorded even though the re-request below it is gated off.
+    // boot has to be recorded even though the request below it is gated off.
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.RENDERER_READY,
       origin: 'http://localhost',
@@ -459,12 +481,12 @@ describe('DemosCatalog', () => {
     });
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).not.toHaveBeenCalled();
+    expect(hostCommunicationMock.sendMessage).not.toHaveBeenCalled();
 
     catalogManagementMock.activeCatalog.set({components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledWith(
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith(
       {type: PreviewBridgeMessageType.GET_DEMOS},
       coordinator,
     );
@@ -511,26 +533,33 @@ describe('DemosCatalog', () => {
     catalogManagementMock.activeCatalog.set({components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).not.toHaveBeenCalled();
+    expect(service.loadingDemos()).toBe(false);
 
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
     TestBed.tick();
+    expect(service.loadingDemos()).toBe(true);
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledWith(
+    announce(coordinator);
+
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith(
       {type: PreviewBridgeMessageType.GET_DEMOS},
       coordinator,
     );
   });
 
-  it('re-requests demos when a RENDERER_READY envelope arrives while the gate is open', () => {
+  it('sends the pending request once, when the coordinator reports ready', () => {
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
     service.setDemosActive(true);
     catalogManagementMock.activeCatalog.set({components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+    // HostCommunication holds a message for a frame that has not announced itself
+    // and posts it on that frame's RENDERER_READY. Sending here as well as from the
+    // handshake below would deliver the request twice.
+    expect(hostCommunicationMock.sendMessage).not.toHaveBeenCalled();
 
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.RENDERER_READY,
@@ -540,8 +569,8 @@ describe('DemosCatalog', () => {
     });
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenLastCalledWith(
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenLastCalledWith(
       {type: PreviewBridgeMessageType.GET_DEMOS},
       coordinator,
     );
@@ -554,7 +583,7 @@ describe('DemosCatalog', () => {
     catalogManagementMock.activeCatalog.set({components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+    expect(hostCommunicationMock.sendMessage).not.toHaveBeenCalled();
 
     const readyEnvelope: MessageEnvelope = {
       type: PreviewBridgeMessageType.RENDERER_READY,
@@ -565,40 +594,42 @@ describe('DemosCatalog', () => {
 
     hostCommunicationMock.messageStream$.next(readyEnvelope);
     TestBed.tick();
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
 
     // React <StrictMode> double-fires RENDERER_READY per frame mount; the
     // second envelope from the same window identity must not re-request.
     hostCommunicationMock.messageStream$.next(readyEnvelope);
     TestBed.tick();
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it('re-requests demos when activeCatalog resolves to a different catalog id', () => {
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
     service.setDemosActive(true);
+    announce(coordinator);
     catalogManagementMock.activeCatalog.set({catalogId: 'catalog-ng', components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
 
     // Switching renderers in Settings resolves a different renderer's catalog, and
     // that genuinely different catalog must re-request the wall's demos.
     catalogManagementMock.activeCatalog.set({catalogId: 'catalog-lit', components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   it('does not re-request when a re-handshake yields the same catalog id', () => {
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
     service.setDemosActive(true);
+    announce(coordinator);
     catalogManagementMock.activeCatalog.set({catalogId: 'catalog-ng', components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
 
     // `CatalogManagement` subscribes to messageStream$ with no sourceWindow filter, so
     // every demo card frame's RENDERER_READY starts a fresh catalog handshake, and each
@@ -609,7 +640,7 @@ describe('DemosCatalog', () => {
     catalogManagementMock.activeCatalog.set({catalogId: 'catalog-ng', components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
     expect(service.demos()).toBeNull();
     expect(service.loadingDemos()).toBe(true);
   });
@@ -618,10 +649,11 @@ describe('DemosCatalog', () => {
     const coordinator = createCoordinator();
     service.setCoordinator(coordinator);
     service.setDemosActive(true);
+    announce(coordinator);
     catalogManagementMock.activeCatalog.set({catalogId: 'catalog-shared', components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(1);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(1);
 
     // `CatalogManagement` clears activeCatalog to null the moment resolvedUrl() changes
     // and only re-establishes it once the new renderer answers, so the gate closes and
@@ -632,6 +664,69 @@ describe('DemosCatalog', () => {
     catalogManagementMock.activeCatalog.set({catalogId: 'catalog-shared', components: {}});
     TestBed.tick();
 
-    expect(hostCommunicationMock.sendToFrame).toHaveBeenCalledTimes(2);
+    expect(hostCommunicationMock.sendMessage).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('DemosCatalog with the real HostCommunication', () => {
+  const RENDERER_ORIGIN = 'http://localhost:3000';
+  let service: DemosCatalog;
+  let hostCommunication: HostCommunication;
+  let catalogManagementMock: MockCatalogManagement;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        DemosCatalog,
+        {provide: CatalogManagement, useClass: MockCatalogManagement},
+        {
+          provide: StartupResolution,
+          useValue: {getResolvedRendererUrl: () => `${RENDERER_ORIGIN}/renderer`},
+        },
+        {
+          provide: AppConfigProvider,
+          useValue: {themePreference: signal<ThemePreference>(ThemePreference.LIGHT)},
+        },
+      ],
+    });
+
+    service = TestBed.inject(DemosCatalog);
+    hostCommunication = TestBed.inject(HostCommunication);
+    catalogManagementMock = TestBed.inject(CatalogManagement) as unknown as MockCatalogManagement;
+  });
+
+  it('posts GET_DEMOS to the coordinator exactly once, after its renderer has loaded', () => {
+    const coordinatorWindow = {postMessage: vi.fn()} as unknown as Window;
+    const coordinator = {contentWindow: coordinatorWindow} as unknown as HTMLIFrameElement;
+    // RenderedFrame registers the coordinator before the demos page hands it over.
+    hostCommunication.registerIframe(coordinator);
+    service.setCoordinator(coordinator);
+    service.setDemosActive(true);
+    catalogManagementMock.activeCatalog.set({components: {}});
+    TestBed.tick();
+
+    const getDemosCalls = () =>
+      vi
+        .mocked(coordinatorWindow.postMessage)
+        .mock.calls.filter(
+          ([message]) => (message as {type?: string}).type === PreviewBridgeMessageType.GET_DEMOS,
+        );
+    expect(getDemosCalls()).toEqual([]);
+
+    // React renderers under <StrictMode> announce themselves twice per load.
+    for (let handshake = 0; handshake < 2; handshake++) {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: coordinatorWindow,
+          origin: RENDERER_ORIGIN,
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      TestBed.tick();
+    }
+
+    expect(getDemosCalls()).toEqual([
+      [{type: PreviewBridgeMessageType.GET_DEMOS}, RENDERER_ORIGIN],
+    ]);
   });
 });

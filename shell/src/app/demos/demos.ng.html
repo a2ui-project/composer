@@ -23,9 +23,10 @@
 <div #wallScroller class="demos-container">
   <!--
     The coordinator frame is mounted unconditionally and kept visually hidden. It is
-    the only frame on this page that registers as the bridge's primary target, and
-    its handshake is what resolves the active catalog that gates the GET_DEMOS
-    request. Mounting frames only once demos had arrived could never bootstrap.
+    the only frame on this page that becomes the bridge's default target (the frame
+    messages without a target go to), and its handshake is what resolves the active
+    catalog that gates the GET_DEMOS request. Mounting frames only once demos had
+    arrived could never bootstrap.
   -->
   <div #coordinatorHost class="coordinator-frame" aria-hidden="true">
     <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>

@@ -47,9 +47,9 @@ export interface TrackedDemo extends Demo {
  *
  * The demos page renders each demo in its own iframe (a card), plus one more,
  * hidden iframe: the coordinator. The coordinator loads the same renderer and
- * exists only to answer GET_DEMOS, so requests go to it directly
- * (`HostCommunication.sendToFrame`), and replies are accepted only from its
- * window, never from a card's.
+ * exists only to answer GET_DEMOS, so requests are addressed to its iframe
+ * (the `target` argument of `HostCommunication.sendMessage`), and replies are
+ * accepted only from its window, never from a card's.
  */
 @Injectable({
   providedIn: 'root',
@@ -86,10 +86,11 @@ export class DemosCatalog {
    *
    * A window is added as soon as it first reports ready, whatever else is
    * going on. Two things read it:
-   * - {@link requestDemos} only starts the 2s timeout for a window in this set.
-   *   A request to a renderer that hasn't loaded yet can't be answered, and
-   *   timing it out would show "No Demos Available" while it is still loading.
-   * - The RENDERER_READY handler only re-requests demos the first time a window
+   * - {@link requestDemos} only sends GET_DEMOS, and starts the 2s timeout, for
+   *   a window in this set. A renderer that hasn't loaded yet can't hear the
+   *   request, and timing it out would show "No Demos Available" while it is
+   *   still loading.
+   * - The RENDERER_READY handler only requests demos the first time a window
    *   reports ready. React's `<StrictMode>` sends RENDERER_READY twice per
    *   mount, and the second must not trigger another request.
    *
@@ -204,14 +205,15 @@ export class DemosCatalog {
       this.demosTimeoutId = undefined;
     }
 
-    this.hostCommunication.sendToFrame({type: PreviewBridgeMessageType.GET_DEMOS}, coordinator);
-
-    // The first request after the coordinator is created can't be answered: its
-    // renderer hasn't loaded yet. The RENDERER_READY handler requests again once
-    // it has. A timeout on that first request would race the retry, and a cold
-    // development build often takes longer than 2s to load, so the page would
-    // flash "No Demos Available". Only time out a renderer that has reported ready.
+    // A coordinator that was just created hasn't loaded its renderer yet, so the
+    // request is left pending (loading) and the RENDERER_READY handler makes it
+    // once the renderer has loaded. Sending it now as well would deliver it twice:
+    // HostCommunication holds a message for a frame that hasn't announced itself
+    // and posts it on that frame's RENDERER_READY. The timeout waits for the same
+    // reason: a cold development build often takes longer than 2s to load, and
+    // timing out before then would flash "No Demos Available".
     if (coordinator.contentWindow && this.readyWindows.has(coordinator.contentWindow)) {
+      this.hostCommunication.sendMessage({type: PreviewBridgeMessageType.GET_DEMOS}, coordinator);
       this.demosTimeoutId = setTimeout(() => {
         if (this._loadingDemos()) {
           this._loadingDemos.set(false);

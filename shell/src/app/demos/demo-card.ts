@@ -34,7 +34,11 @@ import {MatIconModule} from '@angular/material/icon';
 import {Demo, PreviewBridgeMessageType} from 'a2ui-bridge';
 import {buildRendererUrl} from '../preview/renderer-url';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
-import {HostCommunication, MessageEnvelope} from '../shell/host-communication/host-communication';
+import {
+  DefaultTarget,
+  HostCommunication,
+  MessageEnvelope,
+} from '../shell/host-communication/host-communication';
 import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
 import {CrossFrameValidator} from '../shell/cross-frame-validator/cross-frame-validator';
 import {DemoLauncher} from './services/demo-launcher';
@@ -299,10 +303,16 @@ export class DemoCard {
       onCleanup(() => this.clearReadyTimeout());
     });
 
-    // Frame binding: registers this card as a secondary consumer and listens only to
-    // envelopes dispatched by its own guest window. registerSecondaryIframe is required
-    // here; registerIframe would clear the shared outbound buffer and reset global
-    // renderer readiness for every other consumer each time a card mounts.
+    // Frame binding: registers this card's iframe with HostCommunication and handles
+    // only the envelopes its own guest window sends (handleEnvelope drops the rest).
+    //
+    // The card registers with DefaultTarget.KEEP. The default target is the frame that
+    // messages sent without a target go to, and on this page that has to stay the
+    // coordinator: CatalogManagement answers every frame's RENDERER_READY with an
+    // untargeted GET_CATALOG. If each card became the default as it mounted, that request
+    // would go to the newest card, wait there if the card had not loaded yet, and be
+    // dropped when the next card registered; CatalogManagement would then report its
+    // 5-second watchdog timeout as a catalog error.
     effect(onCleanup => {
       const element = this.iframeRef()?.nativeElement ?? null;
       if (!element) {
@@ -311,19 +321,17 @@ export class DemoCard {
 
       this.payloadSentForCurrentLoad = false;
       this.hasRenderedContent.set(false);
-      this.hostCommunication.registerSecondaryIframe(element);
+      this.hostCommunication.registerIframe(element, DefaultTarget.KEEP);
       const guestWindow = element.contentWindow;
       const subscription = guestWindow
-        ? this.hostCommunication
-            .messageStreamFor(guestWindow)
-            .subscribe(envelope =>
-              untracked(() => this.handleEnvelope(envelope, element, guestWindow)),
-            )
+        ? this.hostCommunication.messageStream$.subscribe(envelope =>
+            untracked(() => this.handleEnvelope(envelope, element, guestWindow)),
+          )
         : null;
 
       onCleanup(() => {
         subscription?.unsubscribe();
-        this.hostCommunication.unregisterSecondaryIframe(element);
+        this.hostCommunication.unregisterIframe(element);
         this.endMeasurementForTornDownFrame();
       });
     });
@@ -387,10 +395,9 @@ export class DemoCard {
         }
         this.payloadSentForCurrentLoad = true;
         this.startReadyTimeout();
-        this.hostCommunication.sendToFrame(
-          {type: PreviewBridgeMessageType.RENDER_A2UI, payload: this.demo().a2ui},
-          iframe,
-        );
+        // HostCommunication marks this frame ready before it hands the handshake to
+        // subscribers, so the payload is posted at once instead of queued.
+        this.hostCommunication.sendRenderA2UI(this.demo().a2ui, iframe);
         return;
       }
       case PreviewBridgeMessageType.SURFACE_RESIZE: {
