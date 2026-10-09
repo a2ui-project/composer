@@ -21,6 +21,10 @@ test.describe('A2aMessageInspector Visual Regression & Layout', () => {
   test('renders protocol inspector drawer with filter chips, search bar, and events', async ({
     page,
   }) => {
+    // Event timestamps are part of this baseline. Fix the clock so they stay
+    // identical across regenerations while timers and the stream run normally.
+    await page.clock.setFixedTime(new Date('2026-09-18T11:24:22Z'));
+
     await connectMockAgent(page);
 
     // Send prompt to generate events
