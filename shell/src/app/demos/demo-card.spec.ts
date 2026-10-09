@@ -20,7 +20,11 @@ import {afterEach, beforeEach, describe, expect, it, MockInstance, vi} from 'vit
 import {Demo, PreviewBridgeMessageType} from 'a2ui-bridge';
 import {DemoCard, DemoCardState} from './demo-card';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
-import {HostCommunication, MessageEnvelope} from '../shell/host-communication/host-communication';
+import {
+  DefaultTarget,
+  HostCommunication,
+  MessageEnvelope,
+} from '../shell/host-communication/host-communication';
 import {
   AppConfigProvider,
   ThemePreference,
@@ -74,7 +78,6 @@ const DEMO: Demo = {
 
 describe('DemoCard sandboxed live demo frame', () => {
   let hostCommunication: HostCommunication;
-  let sendToFrameSpy: MockInstance<HostCommunication['sendToFrame']>;
   let sendMessageSpy: MockInstance<HostCommunication['sendMessage']>;
   let resolvedUrlSignal: WritableSignal<string | null>;
   let openInWorkspaceSpy: MockInstance<DemoLauncher['openInWorkspace']>;
@@ -101,7 +104,6 @@ describe('DemoCard sandboxed live demo frame', () => {
       .spyOn(TestBed.inject(DemoLauncher), 'openInWorkspace')
       .mockResolvedValue(undefined);
     hostCommunication = TestBed.inject(HostCommunication);
-    sendToFrameSpy = vi.spyOn(hostCommunication, 'sendToFrame');
     sendMessageSpy = vi.spyOn(hostCommunication, 'sendMessage');
   });
 
@@ -235,31 +237,56 @@ describe('DemoCard sandboxed live demo frame', () => {
   it('sends the demo payload exactly once after its own frame reports ready', () => {
     const fixture = mountCard(true);
     const iframe = frameOf(fixture)!;
-    sendToFrameSpy.mockClear();
+    sendMessageSpy.mockClear();
 
     // React renderers under StrictMode genuinely announce readiness twice, so two
     // handshakes with no intervening frame load must still collapse to a single send.
     emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
     emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
 
-    expect(sendToFrameSpy).toHaveBeenCalledTimes(1);
-    expect(sendToFrameSpy).toHaveBeenCalledWith(
+    // The payload is addressed to this card's own frame. Sent without a target it
+    // would go to the default target instead, which is never a card.
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).toHaveBeenCalledWith(
       {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
       iframe,
     );
-    // Targeted sends to this card's own frame must go through sendToFrame; sendMessage
-    // broadcasts to every registered iframe and would leak this card's payload to others.
-    expect(sendMessageSpy).not.toHaveBeenCalled();
     expect(fixture.componentInstance.state()).toBe(DemoCardState.READY);
+  });
+
+  it('posts the demo payload to its own frame as soon as that frame announces itself', () => {
+    const fixture = mountCard(true);
+    const iframe = frameOf(fixture)!;
+    const guestWindow = iframe.contentWindow!;
+    const postMessageSpy = vi.spyOn(guestWindow, 'postMessage').mockImplementation(() => {});
+
+    // A real handshake through HostCommunication's message listener, rather than an
+    // envelope injected into its stream: the listener marks the frame ready before
+    // the card sees the envelope, so the payload is posted rather than queued.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: guestWindow,
+        origin: RENDERER_ORIGIN,
+        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+      }),
+    );
+    fixture.detectChanges();
+
+    const renderCalls = postMessageSpy.mock.calls.filter(
+      ([message]) => (message as {type?: string}).type === PreviewBridgeMessageType.RENDER_A2UI,
+    );
+    expect(renderCalls).toEqual([
+      [{type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui}, RENDERER_ORIGIN],
+    ]);
   });
 
   it('resends the demo payload after its own frame reloads', () => {
     const fixture = mountCard(true);
     const iframe = frameOf(fixture)!;
-    sendToFrameSpy.mockClear();
+    sendMessageSpy.mockClear();
 
     emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
-    expect(sendToFrameSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
 
     // Switching renderers in Settings changes resolvedUrl(), which changes the frame's
     // src and reloads it, so a freshly booted guest announces RENDERER_READY again.
@@ -270,13 +297,13 @@ describe('DemoCard sandboxed live demo frame', () => {
     fixture.detectChanges();
     emitFromCard(fixture, PreviewBridgeMessageType.RENDERER_READY, {});
 
-    expect(sendToFrameSpy).toHaveBeenCalledTimes(2);
-    expect(sendToFrameSpy).toHaveBeenNthCalledWith(
+    expect(sendMessageSpy).toHaveBeenCalledTimes(2);
+    expect(sendMessageSpy).toHaveBeenNthCalledWith(
       1,
       {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
       iframe,
     );
-    expect(sendToFrameSpy).toHaveBeenNthCalledWith(
+    expect(sendMessageSpy).toHaveBeenNthCalledWith(
       2,
       {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
       iframe,
@@ -586,24 +613,25 @@ describe('DemoCard sandboxed live demo frame', () => {
     expect(placeholderOf(fixture)).toBeNull();
   });
 
-  it('registers as a secondary consumer and never claims the primary iframe slot', () => {
-    const registerSecondarySpy = vi.spyOn(hostCommunication, 'registerSecondaryIframe');
+  it('registers its frame without taking over the default target', () => {
+    const coordinatorWindow = {postMessage: vi.fn()} as unknown as Window;
+    const coordinator = {contentWindow: coordinatorWindow} as unknown as HTMLIFrameElement;
+    hostCommunication.registerIframe(coordinator);
     const registerIframeSpy = vi.spyOn(hostCommunication, 'registerIframe');
 
     const fixture = mountCard(true);
     const iframe = frameOf(fixture);
 
-    // registerIframe clears the shared outboundMessageBuffer and resets the global
-    // isRendererReadySignal on every call, which would wipe in-flight sends for every
-    // other consumer in the app when a card lazily mounts. Cards must only ever use
-    // registerSecondaryIframe, which performs neither reset.
+    // The default target is the frame that untargeted messages go to, such as the
+    // GET_CATALOG that CatalogManagement sends on every frame's handshake. On the demos
+    // page that has to stay the coordinator, however many cards mount after it.
     expect(iframe).not.toBeNull();
-    expect(registerSecondarySpy).toHaveBeenCalledWith(iframe);
-    expect(registerIframeSpy).not.toHaveBeenCalled();
+    expect(registerIframeSpy).toHaveBeenCalledWith(iframe, DefaultTarget.KEEP);
+    expect(hostCommunication.getIframeElement()).toBe(coordinator);
   });
 
   it('unregisters its iframe when the mount gate closes', () => {
-    const unregisterSecondarySpy = vi.spyOn(hostCommunication, 'unregisterSecondaryIframe');
+    const unregisterSpy = vi.spyOn(hostCommunication, 'unregisterIframe');
     const fixture = mountCard(true);
     const iframe = frameOf(fixture);
     expect(iframe).not.toBeNull();
@@ -611,25 +639,25 @@ describe('DemoCard sandboxed live demo frame', () => {
     fixture.componentRef.setInput('mount', false);
     fixture.detectChanges();
 
-    // A leaked entry in registeredIframes would silently widen matchesSource's
-    // acceptance check and the sendTheme broadcast fan-out for every other consumer.
-    expect(unregisterSecondarySpy).toHaveBeenCalledWith(iframe);
+    // A frame left registered would keep being accepted as a message source, keep
+    // receiving theme changes, and keep its readiness after the card let it go.
+    expect(unregisterSpy).toHaveBeenCalledWith(iframe);
   });
 
   it('unregisters its iframe when the card is destroyed', () => {
-    const unregisterSecondarySpy = vi.spyOn(hostCommunication, 'unregisterSecondaryIframe');
+    const unregisterSpy = vi.spyOn(hostCommunication, 'unregisterIframe');
     const fixture = mountCard(true);
     const iframe = frameOf(fixture);
     expect(iframe).not.toBeNull();
 
     fixture.destroy();
 
-    expect(unregisterSecondarySpy).toHaveBeenCalledWith(iframe);
+    expect(unregisterSpy).toHaveBeenCalledWith(iframe);
   });
 
   it('ignores envelopes for message types it does not act on and envelopes from foreign windows', () => {
     const fixture = mountCard(true);
-    sendToFrameSpy.mockClear();
+    sendMessageSpy.mockClear();
 
     // 37 of the 43 demos set sendDataModel: true, so cards constantly receive
     // DATA_MODEL_CHANGE echoes from their own frame that this page has no use for.
@@ -650,6 +678,6 @@ describe('DemoCard sandboxed live demo frame', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.cardHeight()).toBeNull();
-    expect(sendToFrameSpy).not.toHaveBeenCalled();
+    expect(sendMessageSpy).not.toHaveBeenCalled();
   });
 });

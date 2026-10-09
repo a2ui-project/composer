@@ -142,7 +142,9 @@ const DEMO_KEY_ATTRIBUTE = 'data-demo-key';
  * masonry wall of live demo cards.
  *
  * The coordinator frame is mounted unconditionally and is the only frame on this
- * page that registers as the bridge's primary target. Its handshake is what makes
+ * page that becomes the bridge's default target (the frame `HostCommunication`
+ * posts to when a message has no target; cards register with
+ * `DefaultTarget.KEEP`). Its handshake is what makes
  * `CatalogManagement.activeCatalog()` non-null, and {@link DemosCatalog} gates its
  * `GET_DEMOS` request on that catalog, so a wall that only mounted frames once
  * demos had arrived could never bootstrap: no frame, no handshake, no catalog, no
@@ -217,10 +219,9 @@ export class Demos implements OnInit, OnDestroy {
    * different renderer than you think answered" are indistinguishable to a reader
    * otherwise — which is exactly how a preview whose shell is new but whose
    * renderers are the previously deployed build reads as a feature that does not
-   * work at all. `getResolvedRendererUrl` is the same source
-   * `HostCommunication.resolveExpectedRendererOrigin` checks frame traffic
-   * against, so it names the renderer that actually replied rather than a
-   * configured intent.
+   * work at all. `getResolvedRendererUrl` is the same source `HostCommunication`
+   * checks the origin of frame traffic against, so it names the renderer that
+   * actually replied rather than a configured intent.
    *
    * Empty and whitespace-only values collapse to null so the empty state shows
    * its message alone rather than a dangling label or the string "null".
@@ -280,9 +281,10 @@ export class Demos implements OnInit, OnDestroy {
     // `RenderedFrame.iframeRef` is protected, so the element cannot be read off the
     // component instance. Of the two available routes, querying this route's own
     // wrapper is preferred over `hostCommunication.getIframeElement()`: the latter
-    // is only correct while the coordinator remains the single frame that registers
-    // as primary, an invariant owned by other files (cards register as secondary),
-    // whereas the wrapper query is scoped to markup this component owns outright.
+    // returns the default target, which is only the coordinator while every other
+    // frame registers with `DefaultTarget.KEEP`, an invariant owned by other files
+    // (see DemoCard), whereas the wrapper query is scoped to markup this component
+    // owns outright.
     //
     // `afterRenderEffect` rather than `effect`, because the iframe only exists once
     // the child view has rendered; `resolvedUrl()` is the reactive trigger, since it

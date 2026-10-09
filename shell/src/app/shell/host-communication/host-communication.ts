@@ -16,7 +16,7 @@
 
 import {Injectable, inject, signal, Signal, OnDestroy, untracked} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
-import {Observable, ReplaySubject, filter} from 'rxjs';
+import {ReplaySubject} from 'rxjs';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
 import {
   AppConfigProvider,
@@ -42,6 +42,21 @@ export declare interface MessageEnvelope {
   timestamp: number;
   /** Window source that dispatched this message */
   sourceWindow?: Window | null;
+}
+
+/**
+ * What registering a frame does to the default target: the frame that
+ * `sendMessage` posts to when it is called without a target.
+ */
+export enum DefaultTarget {
+  /** The newly registered frame becomes the default target. */
+  REPLACE = 'replace',
+  /**
+   * The default target stays as it is, and the frame receives only messages
+   * addressed to it. `unregisterIframe` can still fall back to it if the
+   * default frame is unregistered first.
+   */
+  KEEP = 'keep',
 }
 
 /**
@@ -231,8 +246,19 @@ export class HostCommunication implements OnDestroy {
       return;
     }
 
-    const expectedOrigin = this.resolveExpectedRendererOrigin();
-    if (!expectedOrigin || event.origin !== expectedOrigin) return;
+    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
+    if (!expectedUrl) {
+      return;
+    }
+
+    try {
+      const expectedOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
+      if (event.origin !== expectedOrigin) {
+        return;
+      }
+    } catch (err) {
+      return;
+    }
 
     const data = event.data;
     if (data && typeof data === 'object' && data.type) {
@@ -506,9 +532,19 @@ export class HostCommunication implements OnDestroy {
    * Registering a frame starts a fresh handshake for that frame only: its own
    * queued messages and previous readiness are discarded, while frames that
    * are already up keep their readiness and their queued messages.
+   *
+   * Services such as CatalogManagement send without a target, so their
+   * requests go to the default target. A page that mounts many frames next to
+   * the one that should answer those requests registers the others with
+   * {@link DefaultTarget.KEEP}.
    * @param target Target iframe element, window reference, or null to unregister all
+   * @param defaultTarget Whether the frame becomes the default target. Ignored
+   *     when `target` is null.
    */
-  registerIframe(target: HTMLIFrameElement | Window | null): void {
+  registerIframe(
+    target: HTMLIFrameElement | Window | null,
+    defaultTarget = DefaultTarget.REPLACE,
+  ): void {
     if (!target) {
       this.outboundMessageBuffer.length = 0;
       this.iframeElement = null;
@@ -528,7 +564,6 @@ export class HostCommunication implements OnDestroy {
       if (previousWindow) {
         this.readyWindows.delete(previousWindow);
       }
-      this.iframeElement = target;
       this.registeredIframes.add(target);
       windowTarget = target.contentWindow;
       if (windowTarget) {
@@ -537,7 +572,6 @@ export class HostCommunication implements OnDestroy {
         this.iframeWindows.delete(target);
       }
     } else {
-      this.iframeElement = null;
       this.registeredWindows.add(target);
       windowTarget = target;
     }
@@ -545,13 +579,17 @@ export class HostCommunication implements OnDestroy {
     if (windowTarget) {
       this.readyWindows.delete(windowTarget);
     }
-    // Untargeted messages were meant for the previous default frame. This
-    // frame is now the default, so replaying them would misroute them here;
-    // drop them. Messages addressed to other frames stay queued.
-    this.dropQueuedMessages(
-      queuedTarget => !queuedTarget || this.addressesTarget(queuedTarget, target, windowTarget),
+    this.dropQueuedMessages(queuedTarget =>
+      this.addressesTarget(queuedTarget, target, windowTarget),
     );
-    this.iframeWindow = windowTarget;
+    if (defaultTarget === DefaultTarget.REPLACE) {
+      this.iframeElement = this.isIframeElement(target) ? target : null;
+      this.iframeWindow = windowTarget;
+      // Untargeted messages were meant for the previous default frame. This
+      // frame is now the default, so replaying them would misroute them here;
+      // drop them. Messages addressed to other frames stay queued.
+      this.dropQueuedMessages(queuedTarget => !queuedTarget);
+    }
     this.isRendererReadySignal.set(this.readyWindows.size > 0);
     if (windowTarget) {
       this.flushEarlyMessages();
@@ -609,60 +647,6 @@ export class HostCommunication implements OnDestroy {
   }
 
   /**
-   * Registers an additional secondary iframe target for message dispatch without
-   * disturbing the primary communication target, outbound buffer, or readiness state.
-   * Unlike {@link registerIframe}, this performs no buffer clearing or readiness reset,
-   * so it is safe to call for auxiliary consumers while a primary exchange is in flight.
-   * @param el Secondary iframe element to register
-   */
-  registerSecondaryIframe(el: HTMLIFrameElement): void {
-    this.registeredIframes.add(el);
-  }
-
-  /**
-   * Unregisters a previously registered secondary iframe target added via
-   * {@link registerSecondaryIframe}. Removes the element from the tracked set, and,
-   * if {@link unregisterIframe}'s fallback had promoted this element to the primary
-   * target in the meantime (e.g. cleanup ordering during route teardown), clears the
-   * dangling primary pointer rather than leaving it aimed at a detached iframe.
-   * It never promotes a replacement primary target itself; that remains
-   * {@link unregisterIframe}'s responsibility.
-   * @param el Secondary iframe element to unregister
-   */
-  unregisterSecondaryIframe(el: HTMLIFrameElement): void {
-    this.registeredIframes.delete(el);
-    if (this.iframeElement === el) {
-      this.iframeElement = null;
-      this.iframeWindow = null;
-    }
-  }
-
-  /**
-   * Derives a filtered message stream scoped to envelopes originating from a specific window.
-   * @param win Source window to filter incoming message envelopes by
-   * @return Observable emitting only envelopes whose sourceWindow matches the given window
-   */
-  messageStreamFor(win: Window): Observable<MessageEnvelope> {
-    return this.messageStream$.pipe(filter(e => e.sourceWindow === win));
-  }
-
-  /**
-   * Resolves the expected renderer origin from the currently configured renderer URL.
-   * @return Resolved origin string, or null if no renderer URL is configured or it fails to parse
-   */
-  private resolveExpectedRendererOrigin(): string | null {
-    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-    if (!expectedUrl) return null;
-
-    try {
-      return new URL(expectedUrl, globalThis.location?.href).origin;
-    } catch (err) {
-      // Ignore malformed URL
-      return null;
-    }
-  }
-
-  /**
    * Validates and dispatches a structured postMessage payload to the registered guest frame.
    * @param message Structured message payload
    * @param target Optional explicit target iframe element or window reference
@@ -690,10 +674,11 @@ export class HostCommunication implements OnDestroy {
     const targetWindow = this.resolveTargetWindow(target);
     if (!targetWindow) return;
 
-    const targetOrigin = this.resolveExpectedRendererOrigin();
-    if (!targetOrigin) return;
+    const expectedUrl = this.startupResolution.getResolvedRendererUrl();
+    if (!expectedUrl) return;
 
     try {
+      const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
       targetWindow.postMessage(message, targetOrigin);
       if (message.type === PreviewBridgeMessageType.MCP_RESPONSE) {
         this.recordEnvelope({
@@ -705,36 +690,7 @@ export class HostCommunication implements OnDestroy {
         });
       }
     } catch (err) {
-      // Ignore postMessage failure (e.g. detached or restricted frame)
-    }
-  }
-
-  /**
-   * Validates and dispatches a structured postMessage payload directly to a specific
-   * iframe target, bypassing the renderer-readiness gate and outbound message queue
-   * used by {@link sendMessage}. Intended for targeted sends to secondary frames where
-   * queueing would otherwise replay the message to the primary frame instead.
-   * @param message Structured message payload
-   * @param el Target iframe element to post the message to
-   */
-  sendToFrame(
-    message: {type: PreviewBridgeMessageType; payload?: unknown},
-    el: HTMLIFrameElement,
-  ): void {
-    if (!CrossFrameValidator.validateOutgoingMessage(message, undefined, this.logger)) {
-      this.logger.error('Blocked dispatch of malformed message type...', message);
-      return;
-    }
-
-    if (!el.contentWindow) return;
-
-    const targetOrigin = this.resolveExpectedRendererOrigin();
-    if (!targetOrigin) return;
-
-    try {
-      el.contentWindow.postMessage(message, targetOrigin);
-    } catch (err) {
-      // Ignore postMessage failure (e.g. detached or restricted frame)
+      // Ignore malformed URL
     }
   }
 

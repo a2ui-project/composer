@@ -19,7 +19,7 @@ import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal} from '@angular/core';
 import {describe, it, expect, afterEach, beforeEach, vi} from 'vitest';
-import {EMPTY, ReplaySubject} from 'rxjs';
+import {ReplaySubject} from 'rxjs';
 import {Demos, MAX_MOUNTED_CARDS} from './demos';
 import {DemosHarness} from './test/demos.harness';
 import {DemosCatalog, type TrackedDemo} from './services/demos-catalog';
@@ -42,13 +42,9 @@ class MockDemosCatalog {
 
 class MockHostCommunication {
   sendRenderA2UI = vi.fn();
-  sendToFrame = vi.fn();
   registerIframe = vi.fn();
   unregisterIframe = vi.fn();
-  registerSecondaryIframe = vi.fn();
-  unregisterSecondaryIframe = vi.fn();
   sendTheme = vi.fn();
-  messageStreamFor = vi.fn(() => EMPTY);
   readonly messageStream$ = new ReplaySubject<unknown>(1);
   readonly messageStream = signal(null);
 }
