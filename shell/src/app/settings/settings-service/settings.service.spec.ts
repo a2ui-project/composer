@@ -143,7 +143,23 @@ describe('SettingsService', () => {
     await service.selectRenderer('dev');
 
     expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBe('dev');
-    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev');
+    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev', undefined);
+  });
+
+  it('passes cancellation through without persisting a canceled selection', async () => {
+    const controller = new AbortController();
+    const cancellation = new Error('Stopped');
+    cancellation.name = 'CancelError';
+    mockStartupResolution.setSelectedRendererId.mockRejectedValue(cancellation);
+
+    await expect(service.selectRenderer('dev', controller.signal)).rejects.toBe(cancellation);
+
+    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith(
+      'dev',
+      controller.signal,
+    );
+    expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
+    expect(mockConfigProvider.setRendererUrl).not.toHaveBeenCalled();
   });
 
   it('removes selected renderer ID from local storage when selected renderer ID is null', async () => {
@@ -152,7 +168,7 @@ describe('SettingsService', () => {
     await service.selectRenderer(null);
 
     expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
-    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith(null);
+    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith(null, undefined);
   });
 
   it('applies rendererUrl and trimmed config apiKey when selected renderer contains both', async () => {
@@ -519,6 +535,10 @@ describe('SettingsService', () => {
           displayName: 'Development',
           rendererUrl: 'http://dev.com',
         },
+        slack: {
+          displayName: 'Slack Block Kit Preview',
+          rendererUrl: 'samples/react-slack-catalog/',
+        },
         prod: {
           displayName: 'Production',
           rendererUrl: 'http://prod.com',
@@ -537,6 +557,12 @@ describe('SettingsService', () => {
           id: 'dev',
           name: 'Development',
           rendererUrl: 'http://dev.com',
+          readOnly: true,
+        },
+        {
+          id: 'slack',
+          name: 'Slack Block Kit Preview',
+          rendererUrl: 'samples/react-slack-catalog/',
           readOnly: true,
         },
         {

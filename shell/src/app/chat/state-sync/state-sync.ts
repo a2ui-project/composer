@@ -85,10 +85,14 @@ export class StateSync {
   private readonly cancelPendingDraftSync$ = new Subject<void>();
 
   constructor() {
+    // A renderer change replaces only an untouched sample. A canvas the user or the
+    // assistant changed stays, so it can be viewed in the new renderer.
     toObservable(this.startupConfigState.selectedRendererId)
       .pipe(skip(1), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
-        this.flushDraft();
+        if (!this.isDraftModified) {
+          this.flushDraft();
+        }
       });
 
     toObservable(this.catalogManagement.activeCatalog)
@@ -161,6 +165,14 @@ export class StateSync {
   /** Synchronizes the current sanitized canvas before a prompt is submitted. */
   syncActiveDraftToHistory(): void {
     this.syncLayoutToHistory(this._activeDraft());
+  }
+
+  /**
+   * Whether the canvas holds a change the user or the assistant made, rather than
+   * the renderer's sample or a blank New Session canvas.
+   */
+  hasEditedDraft(): boolean {
+    return this.isDraftModified;
   }
 
   /**

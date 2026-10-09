@@ -210,6 +210,39 @@ describe('StateSync Autosave Draft Integrations', () => {
     ]);
   });
 
+  it('synchronizes active draft immediately and skips the later duplicate debounce', () => {
+    service.updateDraft('[{"version": "v0.9", "live": true}]');
+    TestBed.tick();
+
+    service.syncActiveDraftToHistory();
+
+    expect(chatStateMock.setChatHistory).toHaveBeenCalledWith([
+      {
+        role: MessageRole.USER,
+        content: '[\n  {\n    "version": "v0.9",\n    "live": true\n  }\n]',
+      },
+    ]);
+
+    chatStateMock.setChatHistory.mockClear();
+    chatStateMock.updateChatHistory.mockClear();
+    vi.advanceTimersByTime(300);
+
+    expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+    expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+  });
+
+  it('ignores stale delayed draft syncs after an LLM commit replaces the active draft', () => {
+    service.updateDraft('[{"version": "v0.9", "stale": true}]');
+    TestBed.tick();
+
+    service.commitLayoutFromLlm('[{"version": "v0.9", "fromLlm": true}]');
+    vi.advanceTimersByTime(300);
+
+    expect(service.activeDraft()).toBe('[{"version": "v0.9", "fromLlm": true}]');
+    expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+    expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+  });
+
   it('updates target layout node in-place if last message is also user layout snapshot', () => {
     // Prime the mock history with user snapshot
     chatStateMock.setChatHistory([
@@ -688,30 +721,43 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(service.activeDraft()).toBe(editedPayload);
     });
 
-    it('autonomously refreshes draft template from activeRenderer samplePayload on selectedRendererId$ changes without catalog emission', () => {
-      // Start with basic catalog
+    it("replaces an untouched sample with the new renderer's sample when the renderer changes", () => {
       catalogManagementMock.activeCatalog.set({
         catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
       });
       TestBed.tick();
       expect(service.activeDraft()).toBe(CAR_BOOKING);
+      expect(service.hasEditedDraft()).toBe(false);
 
-      // Edit draft
-      service.updateDraft('{"version": "dirty-basic"}');
-      TestBed.tick();
-
-      // Simulate renderer change updating the activeRenderer's samplePayload
       const newSamplePayload = '[{"version": "v0.9", "materialSample": true}]';
-      startupConfigStateMock.activeRenderer.set({
-        samplePayload: newSamplePayload,
-      });
-
-      // Explicit renderer change in settings
+      startupConfigStateMock.activeRenderer.set({samplePayload: newSamplePayload});
       startupConfigStateMock.selectedRendererId.set('renderer-material');
       TestBed.tick();
 
-      // Verify that the new template loaded autonomously from samplePayload without catalog emission
+      // Loaded from the renderer's samplePayload, before its catalog arrives.
       expect(service.activeDraft()).toBe(newSamplePayload);
+    });
+
+    it('keeps an edited canvas when the renderer changes, including after its catalog arrives', () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      });
+      TestBed.tick();
+      const edited = '[{"version": "v0.9", "edited": true}]';
+      service.updateDraft(edited);
+      TestBed.tick();
+      expect(service.hasEditedDraft()).toBe(true);
+
+      startupConfigStateMock.activeRenderer.set({
+        samplePayload: '[{"version": "v0.9", "materialSample": true}]',
+      });
+      startupConfigStateMock.selectedRendererId.set('renderer-material');
+      TestBed.tick();
+      catalogManagementMock.activeCatalog.set({catalogId: 'https://example.com/material'});
+      TestBed.tick();
+
+      expect(service.activeDraft()).toBe(edited);
+      expect(service.hasEditedDraft()).toBe(true);
     });
 
     it('resets draft to clean default template upon flushDraft() even when started from a shared payload', () => {
