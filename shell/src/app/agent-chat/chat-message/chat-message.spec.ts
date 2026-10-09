@@ -630,4 +630,12 @@ describe('A2aChatMessage', () => {
     expect(await harness.hasStreamingCursor()).toBe(true);
     expect(await harness.hasPendingIndicator()).toBe(false);
   });
+
+  it('emits openInspector with message id when inspect message button is clicked', async () => {
+    const inspectSpy = vi.spyOn(fixture.componentInstance.openInspector, 'emit');
+
+    await harness.clickInspectMessage();
+
+    expect(inspectSpy).toHaveBeenCalledWith('msg-1');
+  });
 });

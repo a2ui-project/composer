@@ -28,6 +28,7 @@ describe('A2aMessageInspector', () => {
   const mockEvents = [
     {
       id: '1',
+      messageId: 'msg-1',
       timestamp: Date.now(),
       direction: 'sent' as const,
       summary: 'Sent [user]: Hello',
@@ -35,6 +36,7 @@ describe('A2aMessageInspector', () => {
     },
     {
       id: '2',
+      messageId: 'msg-2',
       timestamp: Date.now() + 1000,
       direction: 'received' as const,
       summary: 'Received text response',
@@ -42,6 +44,7 @@ describe('A2aMessageInspector', () => {
     },
     {
       id: '3',
+      messageId: 'msg-3',
       timestamp: Date.now() + 2000,
       direction: 'error' as const,
       summary: 'Transport Error: Timeout',
@@ -105,6 +108,13 @@ describe('A2aMessageInspector', () => {
 
     fixture.componentInstance['handleSearchInput']({target: {value: ''}} as unknown as Event);
     expect(fixture.componentInstance['filteredEvents']().length).toBe(3);
+  });
+
+  it('filters events by messageId when searchQuery is set', () => {
+    fixture.componentRef.setInput('searchQuery', 'msg-2');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['filteredEvents']().map(e => e.id)).toEqual(['2']);
   });
 
   it('formats JSON into lines with line numbers correctly', () => {

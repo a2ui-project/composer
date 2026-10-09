@@ -133,29 +133,11 @@
               mat-icon-button
               type="button"
               class="action-btn"
-              matTooltip="Good response"
-              aria-label="Good response"
+              matTooltip="Inspect message"
+              aria-label="Inspect message"
+              (click)="openMessageInspector()"
             >
-              <mat-icon class="action-icon">thumb_up</mat-icon>
-            </button>
-            <button
-              mat-icon-button
-              type="button"
-              class="action-btn"
-              matTooltip="Bad response"
-              aria-label="Bad response"
-            >
-              <mat-icon class="action-icon">thumb_down</mat-icon>
-            </button>
-            <button
-              mat-icon-button
-              type="button"
-              class="action-btn"
-              matTooltip="Copy text"
-              aria-label="Copy text"
-              (click)="copyMessageText()"
-            >
-              <mat-icon class="action-icon">content_copy</mat-icon>
+              <mat-icon class="action-icon">manage_search</mat-icon>
             </button>
           </div>
         }
