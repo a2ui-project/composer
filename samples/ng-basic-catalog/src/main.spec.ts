@@ -15,7 +15,7 @@
  */
 
 // @vitest-environment jsdom
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach, onTestFinished} from 'vitest';
 import {AppComponent} from './app/app.component';
 import {BasicWithMcpCatalog} from './app/basic-with-mcp.catalog';
 import {A2uiSandboxConnection, provideA2uiSandbox} from 'a2ui-bridge/angular';
@@ -26,6 +26,7 @@ import {
   provideZonelessChangeDetection,
   createEnvironmentInjector,
   EnvironmentInjector,
+  type ApplicationConfig,
 } from '@angular/core';
 import {a2uiBridge} from 'a2ui-bridge';
 
@@ -145,5 +146,69 @@ describe('A2uiSandbox', () => {
     expect(environmentInjector.get(A2uiSandboxConnection)).toBeDefined();
     expect(environmentInjector.get(BasicCatalog)).toBeDefined();
     expect(environmentInjector.get(A2UI_RENDERER_CONFIG)).toBeDefined();
+  });
+
+  it('serves the full basic-catalog demo set', async () => {
+    const {DEMOS} = await import('../../shared/demos');
+    expect(DEMOS).toHaveLength(47);
+    for (const demo of DEMOS) {
+      expect(demo.id).toBeTruthy();
+      expect(demo.name).toBeTruthy();
+      expect(demo.description).toBeTruthy();
+      expect(Array.isArray(demo.a2ui)).toBe(true);
+      expect(demo.a2ui.length).toBeGreaterThan(0);
+      expect(demo.a2ui[0].version).toBe('v0.9');
+    }
+    expect(new Set(DEMOS.map(d => d.id)).size).toBe(DEMOS.length);
+  });
+
+  it('wires getDemos from the bootstrap providers through to the bridge', async () => {
+    // Intercept the real bootstrap so the sandbox options main.ts actually
+    // passes can be inspected without standing up a second application.
+    // Reading getDemos back out of those providers (rather than out of a
+    // locally built options object) is what makes deleting getDemos from
+    // main.ts fail this test.
+    const bootstrapConfigs: ApplicationConfig[] = [];
+    vi.doMock('@angular/platform-browser', async () => {
+      const actual = await vi.importActual<typeof import('@angular/platform-browser')>(
+        '@angular/platform-browser',
+      );
+      return {
+        ...actual,
+        bootstrapApplication: (component: unknown, config: ApplicationConfig) => {
+          bootstrapConfigs.push(config);
+          return Promise.resolve();
+        },
+      };
+    });
+
+    onTestFinished(() => {
+      vi.doUnmock('@angular/platform-browser');
+    });
+
+    await import('./main.js');
+    expect(bootstrapConfigs).toHaveLength(1);
+
+    const attachRenderer = vi.mocked(a2uiBridge.attachRenderer);
+    const callsBefore = attachRenderer.mock.calls.length;
+    const environmentInjector = createEnvironmentInjector(
+      bootstrapConfigs[0].providers,
+      TestBed.inject(EnvironmentInjector),
+    );
+    onTestFinished(() => {
+      environmentInjector.destroy();
+    });
+
+    // Resolving the connection is what forwards the bootstrap options to the bridge.
+    expect(environmentInjector.get(A2uiSandboxConnection)).toBeTruthy();
+    expect(attachRenderer.mock.calls).toHaveLength(callsBefore + 1);
+
+    const rendererConfig = attachRenderer.mock.calls[callsBefore][1];
+    expect(rendererConfig.getDemos).toBeTypeOf('function');
+
+    const {DEMOS} = await import('../../shared/demos');
+    const served = await rendererConfig.getDemos!();
+    expect(served).toHaveLength(47);
+    expect(served).toBe(DEMOS);
   });
 });
