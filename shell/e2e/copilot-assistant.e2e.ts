@@ -27,6 +27,7 @@ import {
   setGeminiScenarios,
   splitTextIntoGeminiChunks,
 } from './helpers/gemini-fixture';
+import {RENDERER_URLS} from './helpers';
 
 const DRAFT_TEXT = 'Ready to use from my selected catalog';
 const MODEL_TEXT = 'Updated by deterministic Gemini fixture';
@@ -113,6 +114,73 @@ async function openDraftInWorkspace(page: Page): Promise<void> {
  */
 function sharedDesignPayload(json: string): string {
   return `d1.${deflateRawSync(Buffer.from(json)).toString('base64url')}`;
+}
+
+/**
+ * Text that only the Lit renderer's sample shows, so a switch to Lit shows whether the
+ * canvas was replaced.
+ */
+const LIT_SAMPLE_TEXT = 'Sample canvas from the Lit renderer';
+
+/**
+ * Serves a config.json with the Angular and Lit renderers, so Settings can switch between
+ * them. Angular has no sample of its own, so it starts on Composer's default sample.
+ */
+async function serveTwoRenderers(page: Page): Promise<void> {
+  const litSample = [
+    {
+      version: 'v0.9',
+      createSurface: {
+        surfaceId: 'lit-sample',
+        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      },
+    },
+    {
+      version: 'v0.9',
+      updateComponents: {
+        surfaceId: 'lit-sample',
+        components: [{id: 'root', component: 'Text', text: LIT_SAMPLE_TEXT}],
+      },
+    },
+  ];
+  await page.route('**/config.json', async route => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        renderers: {
+          default: {rendererUrl: RENDERER_URLS.angular, displayName: 'Angular Basic'},
+          lit: {
+            rendererUrl: RENDERER_URLS.lit,
+            displayName: 'Lit Basic',
+            samplePayload: JSON.stringify(litSample),
+          },
+        },
+        apiKeys: {
+          default: {displayName: 'E2E fake Gemini key', apiKey: FAKE_GEMINI_API_KEY},
+        },
+      }),
+    });
+  });
+}
+
+/** Opens the workspace on the Angular renderer's unedited sample. */
+async function openSampleInWorkspace(page: Page): Promise<void> {
+  await page.goto(`/?renderer=${RENDERER_URLS.angular}`);
+  await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+  await expect(
+    page.frameLocator('.workspace-container iframe').getByText('Book a Car'),
+  ).toBeVisible();
+}
+
+/** Selects the Lit renderer in Settings, then returns to the workspace. */
+async function switchToLitInSettings(page: Page): Promise<void> {
+  await page.getByRole('link', {name: 'Settings', exact: true}).click();
+  await page.locator('a2ui-composer-renderer-selector mat-select').click();
+  await page.locator('mat-option', {hasText: 'Lit Basic'}).click();
+  await page.getByRole('link', {name: 'Composer Workspace'}).click();
+  await expect
+    .poll(() => page.locator('.workspace-container iframe').getAttribute('src'))
+    .toContain(RENDERER_URLS.lit);
 }
 
 async function readRawDraft(page: Page): Promise<string> {
@@ -239,6 +307,48 @@ test.describe('Copilot assistant replacement browser journey', () => {
     await page.getByRole('button', {name: 'Switch to dark theme'}).click();
     await expect(page.locator('body')).toHaveClass(/dark-theme/);
     await expectAccessibleChatPanel(page);
+  });
+
+  test('keeps a canvas the assistant edited, and the conversation, when the renderer changes', async ({
+    page,
+  }) => {
+    await serveTwoRenderers(page);
+    await openSampleInWorkspace(page);
+    const prompt = 'Change the title to the deterministic fixture text.';
+    const editedDraft = replaceDraftText(await readRawDraft(page), 'Book a Car', MODEL_TEXT);
+    await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(editedDraft)}]);
+    await submitPrompt(page, prompt);
+    const preview = page.frameLocator('.workspace-container iframe');
+    await expect(preview.getByText(MODEL_TEXT)).toBeVisible();
+    await expect(chatHistory(page)).toContainText('7 components in this canvas');
+
+    await switchToLitInSettings(page);
+
+    await expect(preview.getByText(MODEL_TEXT)).toBeVisible();
+    await expect(preview.getByText(LIT_SAMPLE_TEXT)).toBeHidden();
+    await expect.poll(() => readRawDraft(page)).toContain(MODEL_TEXT);
+    await expect(chatHistory(page)).toContainText(prompt);
+    await expect(chatHistory(page)).toContainText('7 components in this canvas');
+  });
+
+  test("shows the new renderer's sample, and clears the conversation, when the renderer changes on an unedited sample", async ({
+    page,
+  }) => {
+    await serveTwoRenderers(page);
+    await openSampleInWorkspace(page);
+    const reply = 'This sample is a car booking form.';
+    await setGeminiScenarios(page, [{chunks: [geminiTextChunk(reply)]}]);
+    await submitPrompt(page, 'What does this sample show?');
+    await expect(chatHistory(page)).toContainText(reply);
+
+    await switchToLitInSettings(page);
+
+    await expect(page.locator('.header-title')).toContainText('Basic Catalog');
+    await expect(
+      page.frameLocator('.workspace-container iframe').getByText(LIT_SAMPLE_TEXT),
+    ).toBeVisible();
+    await expect.poll(() => readRawDraft(page)).toContain(LIT_SAMPLE_TEXT);
+    await expect(page.locator('a2ui-composer-chat-panel').getByText(reply)).toBeHidden();
   });
 
   test('keeps the last valid draft after an invalid reply and recovers on the next prompt', async ({

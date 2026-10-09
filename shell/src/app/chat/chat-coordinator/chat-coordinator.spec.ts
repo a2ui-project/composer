@@ -111,12 +111,47 @@ class MockStateSync {
   });
   hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
   syncActiveDraftToHistory = vi.fn();
+  hasEditedDraft = vi.fn(() => false);
 }
 
 async function* createMockStream(chunks: string[]): AsyncIterable<LlmResponse> {
   for (const content of chunks) {
     yield {content};
   }
+}
+
+/**
+ * A response that streams nothing until it's cancelled, then fails the way the real client
+ * does: its content stream and `complete` both reject with an error named
+ * CANCEL_ERROR_NAME.
+ */
+function createStreamAwaitingCancel() {
+  let markStarted!: () => void;
+  const started = new Promise<void>(resolve => {
+    markStarted = resolve;
+  });
+  let rejectCancelled!: (err: Error) => void;
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectCancelled = reject;
+  });
+  // As in the real client: once the content stream fails, nobody awaits `complete`.
+  cancelled.catch(() => {});
+  const cancel = vi.fn(() => {
+    const err = new Error('Cancelled');
+    err.name = CANCEL_ERROR_NAME;
+    rejectCancelled(err);
+  });
+  const response: LlmStreamResponse = {
+    contentStream: {
+      async *[Symbol.asyncIterator]() {
+        markStarted();
+        await cancelled;
+      },
+    },
+    complete: cancelled,
+    cancel,
+  };
+  return {response, started, cancel};
 }
 
 class MockLlmClient {
@@ -614,30 +649,81 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(history[1].errorDetails).not.toContain('dummy_key_here');
   });
 
-  it('monitors rendererUrl mutations triggering flushing resets', async () => {
-    // Setup initial state: history has data, status is ready, locks active
-    chatStateMock.chatHistory.set([{role: MessageRole.USER, content: 'Some logs'}]);
-    chatStateMock.pipelineStatus.set(PipelineStatus.READY);
-    chatStateMock.isProgrammaticStreamActive.set(true);
-    stateSyncMock.activeDraftSignal.set('Custom unsaved draft configs');
-
-    // Verify setup
-    expect(chatStateMock.chatHistory().length).toBe(1);
-    expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
-    expect(service.isProgrammaticStreamActive()).toBe(true);
-    expect(stateSyncMock.hydrateActiveDraft()).toBe('Custom unsaved draft configs');
-
-    // Trigger dynamic rendererUrl setting override
-    configProviderMock.rendererUrl.set('http://localhost:9999/preview-env-fresh');
-
-    // Trigger Angular effects change detections
+  /** Changes the renderer and waits for ChatCoordinator to handle the change. */
+  async function changeRenderer(): Promise<void> {
+    configProviderMock.rendererUrl.set('http://localhost:9999/other-renderer');
     TestBed.tick();
-    await Promise.resolve();
-
-    // Wait for the scheduled microtask to execute
     await new Promise<void>(resolve => queueMicrotask(() => resolve()));
+  }
 
-    // Verify dynamic flushes wipes resets instantly execute!
+  it('starts a new session when the renderer changes while the canvas is unedited', async () => {
+    chatStateMock.chatHistory.set([
+      {role: MessageRole.USER, content: 'What can you build?'},
+      {role: MessageRole.MODEL, content: 'Forms, lists and cards.'},
+    ]);
+    chatStateMock.pipelineStatus.set(PipelineStatus.READY);
+
+    await changeRenderer();
+
+    expect(chatStateMock.chatHistory()).toEqual([]);
+    expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+    expect(service.isProgrammaticStreamActive()).toBe(false);
+    expect(stateSyncMock.flushDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the conversation and canvas when the renderer changes after an edit', async () => {
+    stateSyncMock.hasEditedDraft.mockReturnValue(true);
+    const history = [
+      {role: MessageRole.USER, content: 'Make a card'},
+      {role: MessageRole.MODEL, content: 'Here it is'},
+    ];
+    chatStateMock.chatHistory.set(history);
+    stateSyncMock.activeDraftSignal.set('Edited canvas');
+
+    await changeRenderer();
+
+    expect(chatStateMock.chatHistory()).toEqual(history);
+    expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+    expect(stateSyncMock.hydrateActiveDraft()).toBe('Edited canvas');
+  });
+
+  it('cancels a streaming response, without tracking a user cancel, when the renderer changes after an edit', async () => {
+    stateSyncMock.hasEditedDraft.mockReturnValue(true);
+    const trackChatCancel = vi.spyOn(TestBed.inject(UsageTrackingService), 'trackChatCancel');
+    const stream = createStreamAwaitingCancel();
+    llmClientMock.chatStream = vi.fn(async () => stream.response);
+    const submission = service.submitPrompt('Make a card', [], {promptId: 'prompt-1'});
+    await stream.started;
+
+    await changeRenderer();
+    await submission;
+
+    expect(stream.cancel).toHaveBeenCalledTimes(1);
+    expect(trackChatCancel).not.toHaveBeenCalled();
+    expect(chatStateMock.chatHistory()).toEqual([
+      {role: MessageRole.USER, content: 'Make a card', promptId: 'prompt-1'},
+      {
+        role: MessageRole.MODEL,
+        content: '*This response was stopped because the renderer changed.*',
+      },
+    ]);
+    expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+    expect(service.isProgrammaticStreamActive()).toBe(false);
+    expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+  });
+
+  it('cancels a streaming response, without tracking a user cancel, when the renderer changes while the canvas is unedited', async () => {
+    const trackChatCancel = vi.spyOn(TestBed.inject(UsageTrackingService), 'trackChatCancel');
+    const stream = createStreamAwaitingCancel();
+    llmClientMock.chatStream = vi.fn(async () => stream.response);
+    const submission = service.submitPrompt('Make a card', [], {promptId: 'prompt-1'});
+    await stream.started;
+
+    await changeRenderer();
+    await submission;
+
+    expect(stream.cancel).toHaveBeenCalledTimes(1);
+    expect(trackChatCancel).not.toHaveBeenCalled();
     expect(chatStateMock.chatHistory()).toEqual([]);
     expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
     expect(service.isProgrammaticStreamActive()).toBe(false);
