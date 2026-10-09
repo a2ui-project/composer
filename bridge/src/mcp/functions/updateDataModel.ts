@@ -32,8 +32,11 @@ import {asyncable, type FunctionApiDefinition, withSettledArgs} from './common.j
 export const UpdateDataModelApi: FunctionApiDefinition = {
   name: 'updateDataModel',
   returnType: 'any',
+  // Quoted keys keep argument names stable under Closure Compiler property renaming, since
+  // payloads and `validateFunctionArgs` refer to them by their literal string names.
+  // prettier-ignore
   schema: z.object({
-    updates: asyncable(z.any()).describe(
+    'updates': asyncable(z.any()).describe(
       'An object mapping data model paths to the values to write (e.g., {"/entries": [...], "/title": "Home"}). Paths starting with "/" are absolute; relative paths resolve against the current data context.',
     ),
   }) as unknown as FunctionApiDefinition['schema'],
@@ -50,7 +53,10 @@ export const UpdateDataModelImplementation: FunctionImplementation = createFunct
   UpdateDataModelApi as Parameters<typeof createFunctionImplementation>[0],
   (args, context) => {
     const requested = resolveDynamicValueDeep<unknown>(args['updates'], context);
-    return withSettledArgs({updates: requested}, settled => {
+    // Quoted keys keep these argument names stable under Closure Compiler property renaming.
+    // prettier-ignore
+    const unsettled = {'updates': requested};
+    return withSettledArgs(unsettled, settled => {
       const updates = settled['updates'];
       if (updates === null || updates === undefined) {
         return;
