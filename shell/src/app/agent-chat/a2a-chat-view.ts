@@ -202,7 +202,13 @@ export class A2aChatView implements OnInit {
     backendMode?: A2aBackendMode,
   ): Promise<void> {
     const normalizedUrl = normalizeHttpUrl(url);
-    if (!normalizedUrl || !isValidEndpointUrl(normalizedUrl) || this.isConnecting()) return;
+    if (!normalizedUrl || !isValidEndpointUrl(normalizedUrl)) {
+      this.isConfigPanelOpen.set(true);
+      return;
+    }
+    if (this.isConnecting()) {
+      return;
+    }
 
     this.isConnecting.set(true);
     this.connectionError.set(null);
@@ -229,6 +235,7 @@ export class A2aChatView implements OnInit {
       const errorMsg = err instanceof Error ? err.message : 'Failed to connect to agent endpoint.';
       this.connectionError.set(errorMsg);
       this.recordInspectorEvent(createErrorEvent(err));
+      this.isConfigPanelOpen.set(true);
     } finally {
       this.isConnecting.set(false);
     }
