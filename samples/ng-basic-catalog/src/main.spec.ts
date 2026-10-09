@@ -15,7 +15,7 @@
  */
 
 // @vitest-environment jsdom
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach, onTestFinished} from 'vitest';
 import {AppComponent} from './app/app.component';
 import {BasicWithMcpCatalog} from './app/basic-with-mcp.catalog';
 import {A2uiSandboxConnection, provideA2uiSandbox} from 'a2ui-bridge/angular';
@@ -182,32 +182,33 @@ describe('A2uiSandbox', () => {
       };
     });
 
-    let environmentInjector: EnvironmentInjector | undefined;
-    try {
-      await import('./main.js');
-      expect(bootstrapConfigs).toHaveLength(1);
-
-      const attachRenderer = vi.mocked(a2uiBridge.attachRenderer);
-      const callsBefore = attachRenderer.mock.calls.length;
-      environmentInjector = createEnvironmentInjector(
-        bootstrapConfigs[0].providers,
-        TestBed.inject(EnvironmentInjector),
-      );
-
-      // Resolving the connection is what forwards the bootstrap options to the bridge.
-      expect(environmentInjector.get(A2uiSandboxConnection)).toBeTruthy();
-      expect(attachRenderer.mock.calls).toHaveLength(callsBefore + 1);
-
-      const rendererConfig = attachRenderer.mock.calls[callsBefore][1];
-      expect(rendererConfig.getDemos).toBeTypeOf('function');
-
-      const {DEMOS} = await import('../../shared/demos');
-      const served = await rendererConfig.getDemos!();
-      expect(served).toHaveLength(47);
-      expect(served).toBe(DEMOS);
-    } finally {
-      environmentInjector?.destroy();
+    onTestFinished(() => {
       vi.doUnmock('@angular/platform-browser');
-    }
+    });
+
+    await import('./main.js');
+    expect(bootstrapConfigs).toHaveLength(1);
+
+    const attachRenderer = vi.mocked(a2uiBridge.attachRenderer);
+    const callsBefore = attachRenderer.mock.calls.length;
+    const environmentInjector = createEnvironmentInjector(
+      bootstrapConfigs[0].providers,
+      TestBed.inject(EnvironmentInjector),
+    );
+    onTestFinished(() => {
+      environmentInjector.destroy();
+    });
+
+    // Resolving the connection is what forwards the bootstrap options to the bridge.
+    expect(environmentInjector.get(A2uiSandboxConnection)).toBeTruthy();
+    expect(attachRenderer.mock.calls).toHaveLength(callsBefore + 1);
+
+    const rendererConfig = attachRenderer.mock.calls[callsBefore][1];
+    expect(rendererConfig.getDemos).toBeTypeOf('function');
+
+    const {DEMOS} = await import('../../shared/demos');
+    const served = await rendererConfig.getDemos!();
+    expect(served).toHaveLength(47);
+    expect(served).toBe(DEMOS);
   });
 });
