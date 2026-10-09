@@ -98,13 +98,32 @@ class TestIntersectionObserver {
 
   readonly targets = new Set<Element>();
 
+  /** Targets observed since the last delivery; a real observer reports them later. */
+  private readonly pending: Element[] = [];
+
   constructor(private readonly callback: IntersectionObserverCallback) {
     TestIntersectionObserver.instances.push(this);
   }
 
+  /**
+   * Reports every target still observed since the last delivery as in range, the
+   * way a real observer's next callback would.
+   */
+  static deliverPending(): void {
+    for (const observer of TestIntersectionObserver.instances) {
+      const entries = observer.pending
+        .splice(0)
+        .filter(target => observer.targets.has(target))
+        .map(target => ({target, isIntersecting: true}));
+      if (entries.length > 0) {
+        observer.report(entries);
+      }
+    }
+  }
+
   observe(target: Element): void {
     this.targets.add(target);
-    setTimeout(() => this.report([{target, isIntersecting: true}]), 0);
+    this.pending.push(target);
   }
 
   unobserve(target: Element): void {
@@ -293,11 +312,11 @@ describe('Demos Component', () => {
   let originalResizeObserver: typeof ResizeObserver;
 
   /**
-   * Lets {@link TestIntersectionObserver} deliver the entries it queues when a
-   * card is first observed, then flushes the resulting render.
+   * Delivers the entries {@link TestIntersectionObserver} queued when cards were
+   * first observed, then flushes the resulting render.
    */
   async function flushIntersections(): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, 0));
+    TestIntersectionObserver.deliverPending();
     fixture.detectChanges();
     await fixture.whenStable();
   }

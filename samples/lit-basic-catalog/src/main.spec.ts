@@ -15,7 +15,7 @@
  */
 
 // @vitest-environment jsdom
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi, onTestFinished} from 'vitest';
 import {AppRoot} from './main';
 import {a2uiBridge, PreviewBridgeMessageType} from 'a2ui-bridge';
 
@@ -197,21 +197,20 @@ describe('AppRoot Lit Element', () => {
     // is what makes deleting `getDemos` from main.ts fail this test.
     const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
     const bootstrapped = new AppRoot();
-
-    try {
-      document.body.appendChild(bootstrapped);
-      await bootstrapped.updateComplete;
-
-      expect(attachSpy).toHaveBeenCalledTimes(1);
-      const rendererConfig = attachSpy.mock.calls[0][1];
-      expect(rendererConfig.getDemos).toBeTypeOf('function');
-
-      const served = await rendererConfig.getDemos!();
-      expect(served).toHaveLength(47);
-      expect(served).toBe(DEMOS);
-    } finally {
+    onTestFinished(() => {
       bootstrapped.remove();
       attachSpy.mockRestore();
-    }
+    });
+
+    document.body.appendChild(bootstrapped);
+    await bootstrapped.updateComplete;
+
+    expect(attachSpy).toHaveBeenCalledTimes(1);
+    const rendererConfig = attachSpy.mock.calls[0][1];
+    expect(rendererConfig.getDemos).toBeTypeOf('function');
+
+    const served = await rendererConfig.getDemos!();
+    expect(served).toHaveLength(47);
+    expect(served).toBe(DEMOS);
   });
 });

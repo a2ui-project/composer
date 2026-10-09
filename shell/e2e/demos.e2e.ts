@@ -32,9 +32,11 @@ for (const renderer of [
     test.beforeEach(async ({page}) => {
       await page.emulateMedia({colorScheme: 'light'});
       await page.addInitScript(() => {
-        try {
-          localStorage.setItem('a2ui_composer_force_1p', 'true');
-        } catch (e) {}
+        // Only the Composer page; the renderer iframes keep their own storage.
+        if (window.top !== window) {
+          return;
+        }
+        localStorage.setItem('a2ui_composer_force_1p', 'true');
       });
     });
 

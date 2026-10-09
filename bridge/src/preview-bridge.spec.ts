@@ -546,14 +546,14 @@ describe('PreviewBridge Core API Runtime', () => {
       }),
     );
 
-    await new Promise(resolve => setTimeout(resolve, 10));
-
-    expect(spy).toHaveBeenCalledWith(
-      {
-        type: PreviewBridgeMessageType.DEMOS,
-        payload: mockDemos,
-      },
-      window.location.origin,
+    await vi.waitFor(() =>
+      expect(spy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.DEMOS,
+          payload: mockDemos,
+        },
+        window.location.origin,
+      ),
     );
   });
 
@@ -575,14 +575,14 @@ describe('PreviewBridge Core API Runtime', () => {
       }),
     );
 
-    await new Promise(resolve => setTimeout(resolve, 10));
-
-    expect(spy).toHaveBeenCalledWith(
-      {
-        type: PreviewBridgeMessageType.DEMOS,
-        payload: [],
-      },
-      window.location.origin,
+    await vi.waitFor(() =>
+      expect(spy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.DEMOS,
+          payload: [],
+        },
+        window.location.origin,
+      ),
     );
   });
 
@@ -608,14 +608,14 @@ describe('PreviewBridge Core API Runtime', () => {
       }),
     );
 
-    await new Promise(resolve => setTimeout(resolve, 10));
-
-    expect(spy).toHaveBeenCalledWith(
-      {
-        type: PreviewBridgeMessageType.DEMOS,
-        payload: {error: 'DEMOS_PROVIDER_FAILED'},
-      },
-      window.location.origin,
+    await vi.waitFor(() =>
+      expect(spy).toHaveBeenCalledWith(
+        {
+          type: PreviewBridgeMessageType.DEMOS,
+          payload: {error: 'DEMOS_PROVIDER_FAILED'},
+        },
+        window.location.origin,
+      ),
     );
     expect(errorSpy).toHaveBeenCalledWith(
       'PreviewBridge: Error invoking getDemos:',
