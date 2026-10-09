@@ -15,7 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
-import {RENDERER_URLS} from './helpers';
+import {RENDERER_URLS, waitForPreviewTab} from './helpers';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -326,6 +326,8 @@ test.describe('Components Gallery User Journey', () => {
     const renderer = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('renderer');
     expect(new URL(renderer!).origin).toBe('http://localhost:3456');
     await expect(page.locator('.workspace-container')).toBeVisible();
+    // The preview shares a tab group with the JSON editor; make sure it is the one shown.
+    await waitForPreviewTab(page);
     await expect(
       page.frameLocator('.workspace-container iframe').getByText(edited, {exact: true}),
     ).toBeVisible();
