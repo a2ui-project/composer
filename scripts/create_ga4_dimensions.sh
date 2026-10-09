@@ -31,16 +31,6 @@ echo "Target Property: properties/${PROPERTY_ID}"
 # ------------------------------------------------------------------------------
 TOKEN="${ACCESS_TOKEN:-}"
 
-if [[ -z "${TOKEN}" ]]; then
-  if command -v gcloud >/dev/null 2>&1; then
-    echo "Querying gcloud for access token..."
-    TOKEN=$(gcloud auth print-access-token 2>/dev/null || true)
-    if [[ -z "${TOKEN}" ]]; then
-      TOKEN=$(gcloud auth application-default print-access-token 2>/dev/null || true)
-    fi
-  fi
-fi
-
 test_token() {
   local tok="$1"
   local code
@@ -58,20 +48,12 @@ else
   echo ""
   echo "No valid OAuth access token found with access to properties/${PROPERTY_ID}."
   echo ""
-  if ! command -v gcloud >/dev/null 2>&1; then
-    echo "Note: 'gcloud' is not currently installed on this system."
-    echo "To install google-cloud-cli on gLinux/Debian:"
-    echo "  sudo apt-get update && sudo apt-get install -y google-cloud-cli"
-    echo ""
-  fi
-  echo "To authenticate, run either:"
-  echo "  gcloud auth application-default login --scopes=${REQUIRED_SCOPE}"
-  echo "  or"
-  echo "  gcloud auth login --scopes=${REQUIRED_SCOPE}"
-  echo ""
-  echo "Then re-run this script, or export ACCESS_TOKEN:"
-  echo "  export ACCESS_TOKEN=\"\$(gcloud auth print-access-token)\""
-  echo "  $0"
+  echo "To authenticate via Google OAuth 2.0 Playground:"
+  echo "  1. Open Google OAuth 2.0 Playground (https://developers.google.com/oauthplayground/)."
+  echo "  2. In Step 1 (Select & authorize APIs), input ${REQUIRED_SCOPE} and click Authorize APIs."
+  echo "  3. In Step 2 (Exchange authorization code for tokens), click Exchange authorization code for tokens and copy the Access token."
+  echo "  4. Run the provisioning script with the access token:"
+  echo "     ACCESS_TOKEN=\"<your_access_token>\" $0"
   echo ""
   if [[ -t 0 ]]; then
     read -r -p "Enter OAuth Access Token (or Ctrl+C to abort): " MANUAL_TOKEN
@@ -231,7 +213,10 @@ create_dimension "error_category" "Error Category" "Functional error category"
 create_dimension "source_tag" "Error Source Tag" "Subsystem emitting error"
 create_dimension "invalid_property" "Error Invalid Property" "Schema property failing validation"
 create_dimension "error_type" "Error Type" "Functional error type classification"
-create_dimension "reason" "Reason" "Categorized failure reason for dialog actions"
+create_dimension "open_file_status" "Open File Status" "Status of opening A2UI file"
+create_dimension "open_file_reason" "Open File Failure Reason" "Categorized failure reason for failure to open an A2UI file"
+create_dimension "create_cl_status" "Create CL Status" "Status of creating a CL"
+create_dimension "create_cl_reason" "Create CL Failure Reason" "Categorized failure reason for failure to create a CL"
 #### END DIMENSIONS
 
 echo ""

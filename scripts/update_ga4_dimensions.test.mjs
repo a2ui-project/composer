@@ -26,6 +26,7 @@ import {
   extractParametersFromSource,
   classifyParameter,
   formatDescription,
+  formatDisplayName,
   mergeDefinitions,
   generateScriptContent,
   generateBashScript,
@@ -39,6 +40,7 @@ import {
   METRICS_START,
   METRICS_END,
   SUBCLASS_DESCRIPTIONS,
+  SUBCLASS_PARAMS,
 } from './update_ga4_dimensions.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -357,7 +359,6 @@ describe('update_ga4_dimensions', () => {
         'retry_of_prompt_id',
         'pipeline_status_at_cancel',
         'status',
-        'reason',
         'theme',
         'component_key',
         'category',
@@ -372,6 +373,10 @@ describe('update_ga4_dimensions', () => {
         'error_type',
         'source_tag',
         'invalid_property',
+        'open_file_status',
+        'open_file_reason',
+        'create_cl_status',
+        'create_cl_reason',
       ];
 
       for (const param of dimensionParams) {
@@ -387,9 +392,27 @@ describe('update_ga4_dimensions', () => {
       }
 
       assert.equal(
-        formatDescription('reason', 'Reason'),
-        'Categorized failure reason for dialog actions',
+        formatDescription('open_file_reason', 'Open File Failure Reason'),
+        'Categorized failure reason for failure to open an A2UI file',
       );
+    });
+
+    it('uses curated display names for known parameters and Title Case for others', () => {
+      assert.equal(formatDisplayName('open_file_reason'), 'Open File Failure Reason');
+      assert.equal(formatDisplayName('create_cl_status'), 'Create CL Status');
+      assert.equal(formatDisplayName('create_cl_reason'), 'Create CL Failure Reason');
+      assert.equal(formatDisplayName('some_new_param'), 'Some New Param');
+    });
+
+    it('keeps curated subclass display names and descriptions in sync with create_ga4_dimensions.sh', () => {
+      const existing = parseExistingScript(fs.readFileSync(SCRIPT_PATH, 'utf-8'));
+      for (const [paramName, {displayName, description}] of Object.entries(SUBCLASS_PARAMS)) {
+        const def = existing.dimensions.get(paramName);
+        assert.ok(def, `${paramName} should be defined in create_ga4_dimensions.sh`);
+        assert.equal(def.displayName, displayName);
+        assert.equal(def.description, description);
+        assert.equal(SUBCLASS_DESCRIPTIONS[paramName], description);
+      }
     });
   });
 
@@ -569,15 +592,20 @@ ${METRICS_END}
     it('generates bash script with correct scopes, pageSize, failure tracking, and error routing', () => {
       const script = generateBashScript();
 
-      // Scopes hint
+      // OAuth 2.0 Playground instructions and scopes hint
       assert.ok(
-        script.includes('gcloud auth login --scopes=${REQUIRED_SCOPE}'),
-        'Must recommend gcloud auth login with explicit REQUIRED_SCOPE',
+        script.includes('https://developers.google.com/oauthplayground/'),
+        'Must reference Google OAuth 2.0 Playground',
       );
       assert.ok(
-        !script.includes('--enable-gdrive-access'),
-        'Must not contain outdated --enable-gdrive-access flag',
+        script.includes('input ${REQUIRED_SCOPE} and click Authorize APIs'),
+        'Must instruct authorizing REQUIRED_SCOPE in OAuth 2.0 Playground',
       );
+      assert.ok(
+        script.includes('ACCESS_TOKEN=\\"<your_access_token>\\" $0'),
+        'Must show ACCESS_TOKEN usage example',
+      );
+      assert.ok(!script.includes('gcloud'), 'Must not contain references to gcloud');
 
       // Page size
       assert.ok(
@@ -814,7 +842,7 @@ ${METRICS_END}
       try {
         const initialScriptContent = fs
           .readFileSync(SCRIPT_PATH, 'utf-8')
-          .replace(/^create_dimension "reason".*\n/m, '');
+          .replace(/^create_dimension "open_file_reason".*\n/m, '');
         fs.writeFileSync(tempScript, initialScriptContent, 'utf-8');
         fs.writeFileSync(
           tempSubclass1,
@@ -822,8 +850,8 @@ ${METRICS_END}
           export class SubclassOne extends Ga4UsageTrackingService {
             trackOpenFile(params: { status: string; reason?: string }): void {
               this.dispatchGtagEvent('open_file', {
-                ['status']: params.status,
-                ...(params.status === 'failure' && params.reason ? {['reason']: params.reason} : {}),
+                ['open_file_status']: params.status,
+                ...(params.status === 'failure' && params.reason ? {['open_file_reason']: params.reason} : {}),
               });
             }
           }
@@ -851,13 +879,13 @@ ${METRICS_END}
         });
 
         assert.equal(syncResult.hasChanges, true);
-        assert.deepEqual(syncResult.newDefinitions.addedDimensions, ['reason']);
+        assert.deepEqual(syncResult.newDefinitions.addedDimensions, ['open_file_reason']);
         assert.deepEqual(syncResult.newDefinitions.addedMetrics, ['subclass_duration_seconds']);
-        const reasonDim = syncResult.newDefinitions.dimensions.find(d => d.paramName === 'reason');
+        const reasonDim = syncResult.newDefinitions.dimensions.find(d => d.paramName === 'open_file_reason');
         assert.deepEqual(reasonDim, {
-          paramName: 'reason',
-          displayName: 'Reason',
-          description: 'Categorized failure reason for dialog actions',
+          paramName: 'open_file_reason',
+          displayName: 'Open File Failure Reason',
+          description: 'Categorized failure reason for failure to open an A2UI file',
         });
         const subclassMetric = syncResult.newDefinitions.metrics.find(
           m => m.paramName === 'subclass_duration_seconds',
@@ -872,7 +900,7 @@ ${METRICS_END}
         const updatedScriptContent = fs.readFileSync(tempScript, 'utf-8');
         assert.ok(
           updatedScriptContent.includes(
-            'create_dimension "reason" "Reason" "Categorized failure reason for dialog actions"',
+            'create_dimension "open_file_reason" "Open File Failure Reason" "Categorized failure reason for failure to open an A2UI file"',
           ),
         );
         assert.ok(
@@ -895,7 +923,7 @@ ${METRICS_END}
     });
 
     it('preserves existing SUBCLASS_DESCRIPTIONS parameters during standalone sync but prunes them when subclassPaths are provided without them', () => {
-      assert.equal(SUBCLASS_DESCRIPTIONS.reason, 'Categorized failure reason for dialog actions');
+      assert.equal(SUBCLASS_DESCRIPTIONS.open_file_reason, 'Categorized failure reason for failure to open an A2UI file');
       const existing = {
         dimensions: new Map([
           [
@@ -907,11 +935,11 @@ ${METRICS_END}
             },
           ],
           [
-            'reason',
+            'open_file_reason',
             {
-              paramName: 'reason',
-              displayName: 'Reason',
-              description: 'Categorized failure reason for dialog actions',
+              paramName: 'open_file_reason',
+              displayName: 'Open File Failure Reason',
+              description: 'Categorized failure reason for failure to open an A2UI file',
             },
           ],
           [
@@ -931,8 +959,8 @@ ${METRICS_END}
         preserveSubclassParams: true,
       });
       assert.ok(
-        standaloneMerged.dimensions.some(d => d.paramName === 'reason'),
-        'reason should be preserved when preserveSubclassParams is true',
+        standaloneMerged.dimensions.some(d => d.paramName === 'open_file_reason'),
+        'open_file_reason should be preserved when preserveSubclassParams is true',
       );
       assert.ok(
         !standaloneMerged.dimensions.some(d => d.paramName === 'stale_dim'),
@@ -943,8 +971,8 @@ ${METRICS_END}
         preserveSubclassParams: false,
       });
       assert.ok(
-        !subclassMerged.dimensions.some(d => d.paramName === 'reason'),
-        'reason should be pruned when preserveSubclassParams is false and not in extractedParams',
+        !subclassMerged.dimensions.some(d => d.paramName === 'open_file_reason'),
+        'open_file_reason should be pruned when preserveSubclassParams is false and not in extractedParams',
       );
 
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga4-dims-preserve-'));
@@ -967,7 +995,7 @@ ${METRICS_END}
         });
         assert.equal(standaloneSync.isUpToDate, true);
         assert.equal(standaloneSync.hasChanges, false);
-        assert.ok(standaloneSync.newDefinitions.dimensions.some(d => d.paramName === 'reason'));
+        assert.ok(standaloneSync.newDefinitions.dimensions.some(d => d.paramName === 'open_file_reason'));
 
         const subclassSync = syncDimensions({
           scriptPath: tempScript,
@@ -977,7 +1005,7 @@ ${METRICS_END}
         });
         assert.equal(subclassSync.isUpToDate, false);
         assert.equal(subclassSync.hasChanges, true);
-        assert.ok(!subclassSync.newDefinitions.dimensions.some(d => d.paramName === 'reason'));
+        assert.ok(!subclassSync.newDefinitions.dimensions.some(d => d.paramName === 'open_file_reason'));
       } finally {
         fs.rmSync(tempDir, {recursive: true, force: true});
       }
