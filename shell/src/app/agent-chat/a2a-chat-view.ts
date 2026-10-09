@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, DestroyRef, effect, inject, OnInit, signal, untracked} from '@angular/core';
+import {Component, DestroyRef, inject, OnInit, signal} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -180,28 +180,6 @@ export class A2aChatView implements OnInit {
           this.handleSendToServerAction(envelope.payload);
         }
       });
-
-    effect(() => {
-      const payload = this.activeCanvasPayload();
-      const isOpen = this.isCanvasOpen();
-      if (isOpen && payload !== null && Array.isArray(payload) && payload.length > 0) {
-        this.hostCommunication.sendRenderA2UI(payload);
-      }
-    });
-
-    effect(() => {
-      const envelope = this.hostCommunication.messageStream();
-      if (
-        envelope?.type === PreviewBridgeMessageType.RENDERER_READY ||
-        envelope?.type === PreviewBridgeMessageType.A2UI_CATALOG
-      ) {
-        const payload = untracked(() => this.activeCanvasPayload());
-        const isOpen = untracked(() => this.isCanvasOpen());
-        if (isOpen && payload !== null && Array.isArray(payload) && payload.length > 0) {
-          this.hostCommunication.sendRenderA2UI(payload);
-        }
-      }
-    });
   }
 
   ngOnInit(): void {
@@ -625,6 +603,18 @@ export class A2aChatView implements OnInit {
 
         const partitioned = partitionA2uiSurfacePayload(updatedPayload || []);
 
+        // Decide once, on the first event with visible content, whether the
+        // inline surface precedes the prose. Streaming appends text later,
+        // which must not flip a header that already rendered above it.
+        let inlineSurfaceLeadsText = m.inlineSurfaceLeadsText;
+        if (inlineSurfaceLeadsText === undefined) {
+          if (parsed.a2uiItems.length > 0 && !m.text) {
+            inlineSurfaceLeadsText = parsed.a2uiPrecedesText === true;
+          } else if (parsed.textChunk) {
+            inlineSurfaceLeadsText = false;
+          }
+        }
+
         return {
           ...m,
           text: updatedText,
@@ -632,6 +622,7 @@ export class A2aChatView implements OnInit {
           a2uiPayload: updatedPayload,
           toolCalls: updatedToolCalls,
           inlineA2uiPayload: partitioned.inlinePayload || undefined,
+          inlineSurfaceLeadsText,
           canvasArtifacts: partitioned.canvasArtifacts,
           hasCanvas: partitioned.hasCanvas,
           isStreaming: !parsed.isCompleted,

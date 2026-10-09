@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ComponentHarness} from '@angular/cdk/testing';
+import {ComponentHarness, TestElement} from '@angular/cdk/testing';
 
 export class RenderedFrameHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-rendered-frame';
@@ -32,9 +32,24 @@ export class RenderedFrameHarness extends ComponentHarness {
     return iframe.getAttribute('src');
   }
 
+  /**
+   * The guest iframe, or null before it is created. For checks that need the
+   * element itself (for example which frame a message was posted to), resolve
+   * it with `TestbedHarnessEnvironment.getNativeElement`.
+   */
+  async getIframe(): Promise<TestElement | null> {
+    return await this.getIframeElement();
+  }
+
   async isLocked(): Promise<boolean> {
     const container = await this.locatorFor('.rendered-frame-container')();
     return await container.hasClass('is-locked');
+  }
+
+  /** True when the frame is sized to its container rather than to the guest's reports. */
+  async fillsContainer(): Promise<boolean> {
+    const container = await this.locatorFor('.rendered-frame-container')();
+    return await container.hasClass('fill-container');
   }
 
   /**

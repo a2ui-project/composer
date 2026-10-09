@@ -36,6 +36,7 @@ import {
   ThemePreference,
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
+import {StateSync} from '../chat/state-sync/state-sync';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../usage-tracking/noop-usage-tracking.service';
 import {ErrorLogger} from '../debug/error-logger.service';
@@ -88,6 +89,14 @@ class MockChatState {
   readonly isProgrammaticStreamActive = signal<boolean>(false);
 }
 
+/**
+ * Gallery embeds RenderedFrame, which injects StateSync. Mocking it prevents the real StateSync's
+ * debounced history sync from calling into MockChatState after a test has finished.
+ */
+class MockStateSync {
+  readonly sessionResetNonce = signal(0);
+}
+
 describe('Gallery Component', () => {
   let fixture: ComponentFixture<Gallery>;
   let harness: GalleryHarness;
@@ -109,6 +118,7 @@ describe('Gallery Component', () => {
         {provide: StartupResolution, useClass: MockStartupResolution},
         {provide: AppConfigProvider, useValue: {themePreference: signal(ThemePreference.LIGHT)}},
         {provide: ChatState, useClass: MockChatState},
+        {provide: StateSync, useClass: MockStateSync},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
         {provide: Clipboard, useValue: mockClipboard},
       ],

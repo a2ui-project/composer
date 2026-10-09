@@ -28,7 +28,9 @@ import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
-import {Ga4UsageTrackingService, LOCAL_STORAGE_CLIENT_ID_KEY} from './ga4-usage-tracking.service';
+import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../storage/models/local-storage-keys';
+import {Ga4UsageTrackingService} from './ga4-usage-tracking.service';
 import {
   ApiKeyAction,
   PromptTurnType,
@@ -39,11 +41,11 @@ import {
 
 describe('Ga4UsageTrackingService', () => {
   let service: Ga4UsageTrackingService;
+  let localStorageInteractions: LocalStorageInteractions;
   let mockWindow: {
     dataLayer: unknown[];
     gtag?: (...args: unknown[]) => void;
     location?: Partial<Location>;
-    localStorage?: Storage;
   };
   let mockDocument: Partial<Document>;
 
@@ -66,6 +68,7 @@ describe('Ga4UsageTrackingService', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    mockStartupResolution.isThirdPartyEnvironment.set(false);
 
     mockWindow = {
       dataLayer: [],
@@ -75,7 +78,6 @@ describe('Ga4UsageTrackingService', () => {
       location: {
         hostname: 'a2ui-composer.corp.google.com',
       } as Location,
-      localStorage: window.localStorage,
     };
 
     mockDocument = {
@@ -90,6 +92,7 @@ describe('Ga4UsageTrackingService', () => {
     TestBed.configureTestingModule({
       providers: [
         Ga4UsageTrackingService,
+        LocalStorageInteractions,
         {
           provide: USAGE_TRACKING_CONFIG,
           useValue: {enabled: true, measurementId: 'G-TEST1234'},
@@ -103,6 +106,7 @@ describe('Ga4UsageTrackingService', () => {
     });
 
     service = TestBed.inject(Ga4UsageTrackingService);
+    localStorageInteractions = TestBed.inject(LocalStorageInteractions);
   });
 
   afterEach(() => {
@@ -141,14 +145,33 @@ describe('Ga4UsageTrackingService', () => {
         send_page_view: false,
         cookie_prefix: 'a2ui_composer',
         cookie_domain: 'a2ui-composer.corp.google.com',
+        usage_type: UsageType.FIRST_PARTY,
+        env_mode: EnvMode.STANDALONE,
       }),
     );
   });
 
-  it('generates and persists valid UUID client_id in localStorage when empty', () => {
-    expect(localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY)).toBeNull();
+  it('reports THIRD_PARTY usage_type in config and events in a 3P environment', () => {
+    mockStartupResolution.isThirdPartyEnvironment.set(true);
     service.initialize();
-    const storedId = localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY);
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'config',
+      'G-TEST1234',
+      expect.objectContaining({usage_type: UsageType.THIRD_PARTY}),
+    );
+
+    service.trackPageView({pagePath: '/chat'});
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'event',
+      'page_view',
+      expect.objectContaining({usage_type: UsageType.THIRD_PARTY}),
+    );
+  });
+
+  it('generates and persists valid UUID client_id in localStorage when empty', () => {
+    expect(localStorageInteractions.getItem(LocalStorageKey.GA4_CLIENT_ID)).toBeNull();
+    service.initialize();
+    const storedId = localStorageInteractions.getItem(LocalStorageKey.GA4_CLIENT_ID);
     expect(storedId).toBeTruthy();
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     expect(storedId).toMatch(uuidRegex);
@@ -163,9 +186,9 @@ describe('Ga4UsageTrackingService', () => {
 
   it('reuses existing persistent client_id from localStorage when valid', () => {
     const existingId = '22222222-2222-4222-8222-222222222222';
-    localStorage.setItem(LOCAL_STORAGE_CLIENT_ID_KEY, existingId);
+    localStorageInteractions.setItem(LocalStorageKey.GA4_CLIENT_ID, existingId);
     service.initialize();
-    expect(localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY)).toBe(existingId);
+    expect(localStorageInteractions.getItem(LocalStorageKey.GA4_CLIENT_ID)).toBe(existingId);
     expect(mockWindow.gtag).toHaveBeenCalledWith(
       'config',
       'G-TEST1234',
@@ -176,9 +199,9 @@ describe('Ga4UsageTrackingService', () => {
   });
 
   it('regenerates and replaces client_id if existing localStorage value is malformed', () => {
-    localStorage.setItem(LOCAL_STORAGE_CLIENT_ID_KEY, 'corrupted<script>');
+    localStorageInteractions.setItem(LocalStorageKey.GA4_CLIENT_ID, 'corrupted<script>');
     service.initialize();
-    const storedId = localStorage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY);
+    const storedId = localStorageInteractions.getItem(LocalStorageKey.GA4_CLIENT_ID);
     expect(storedId).not.toBe('corrupted<script>');
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     expect(storedId).toMatch(uuidRegex);
@@ -220,6 +243,7 @@ describe('Ga4UsageTrackingService', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError: Access is denied');
     });
+    const setItemSpy = vi.spyOn(localStorageInteractions, 'setItem');
     expect(() => service.initialize()).not.toThrow();
     const calls = (mockWindow.gtag as ReturnType<typeof vi.fn>).mock.calls;
     const configCall = calls.find(call => call[0] === 'config');
@@ -228,11 +252,83 @@ describe('Ga4UsageTrackingService', () => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     expect(configOptions['client_id']).toMatch(uuidRegex);
 
+    // A failed read must not trigger a follow-up write (which would also fail and log again).
+    expect(setItemSpy).not.toHaveBeenCalledWith(LocalStorageKey.GA4_CLIENT_ID, expect.anything());
+
     // Verify in-memory caching ensures idempotency on the same service instance
     const secondConfig = (
       service as unknown as {getConfigOptions: () => Record<string, unknown>}
     ).getConfigOptions();
     expect(secondConfig['client_id']).toBe(configOptions['client_id']);
+  });
+
+  it('does not queue composer_error before config when localStorage throws during initialize', () => {
+    delete mockWindow.gtag;
+    mockWindow.dataLayer = [];
+
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      // Simulate ErrorTelemetryReporter synchronously dispatching composer_error on storage warning
+      service.trackComposerError({sourceTag: '[Storage]', errorCategory: 'unknown_Storage'});
+      throw new Error('SecurityError: Access is denied');
+    });
+
+    service.initialize();
+
+    const commands = mockWindow.dataLayer.map(entry => Array.from(entry as ArrayLike<unknown>)[0]);
+    expect(commands).toEqual(['js', 'config']);
+  });
+
+  it('does not queue composer_error before config when window.gtag is pre-defined', () => {
+    // mockWindow.gtag is already defined by beforeEach (e.g. a host snippet defined it).
+    mockWindow.dataLayer = [];
+
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      service.trackComposerError({sourceTag: '[Storage]', errorCategory: 'unknown_Storage'});
+      throw new Error('SecurityError: Access is denied');
+    });
+
+    service.initialize();
+
+    const commands = mockWindow.dataLayer.map(entry => Array.from(entry as ArrayLike<unknown>)[0]);
+    expect(commands).toEqual(['js', 'config']);
+  });
+
+  it('dispatches events normally after initialize completes', () => {
+    service.initialize();
+    service.trackComposerError({sourceTag: '[Storage]', errorCategory: 'unknown_Storage'});
+    expect(mockWindow.gtag).toHaveBeenCalledWith('event', 'composer_error', expect.any(Object));
+  });
+
+  it('resumes dispatching events if gtag config throws during initialize', () => {
+    mockWindow.gtag = vi.fn((command: unknown) => {
+      if (command === 'config') {
+        throw new Error('boom');
+      }
+    });
+    expect(() => service.initialize()).toThrow('boom');
+
+    service.trackPageView({pagePath: '/chat'});
+    expect(mockWindow.gtag).toHaveBeenCalledWith('event', 'page_view', expect.any(Object));
+  });
+
+  it('allows subclasses to override getOrCreatePersistentClientId in getConfigOptions without writing to localStorage', () => {
+    class SubclassUsageTrackingService extends Ga4UsageTrackingService {
+      protected override getOrCreatePersistentClientId(): string {
+        return '33333333-3333-4333-8333-333333333333';
+      }
+    }
+
+    const subclassService = TestBed.runInInjectionContext(() => new SubclassUsageTrackingService());
+    subclassService.initialize();
+
+    expect(localStorage.getItem(LocalStorageKey.GA4_CLIENT_ID)).toBeNull();
+    expect(mockWindow.gtag).toHaveBeenCalledWith(
+      'config',
+      'G-TEST1234',
+      expect.objectContaining({
+        client_id: '33333333-3333-4333-8333-333333333333',
+      }),
+    );
   });
 
   it('resets session uuid when resetSession is called', () => {

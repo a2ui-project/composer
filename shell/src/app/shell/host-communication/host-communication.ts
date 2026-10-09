@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, Signal, OnDestroy} from '@angular/core';
+import {Injectable, inject, signal, Signal, OnDestroy, untracked} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {ReplaySubject} from 'rxjs';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
@@ -61,13 +61,32 @@ export class HostCommunication implements OnDestroy {
   private iframeElement: HTMLIFrameElement | null = null;
   private readonly registeredIframes = new Set<HTMLIFrameElement>();
   private readonly registeredWindows = new Set<Window>();
+  /**
+   * Content window of each registered iframe element, captured while the
+   * element is still attached. `contentWindow` turns null once the element
+   * leaves the DOM, which can happen before `unregisterIframe` runs, and the
+   * window is needed then to withdraw its readiness.
+   */
+  private readonly iframeWindows = new Map<HTMLIFrameElement, Window>();
+  /**
+   * Guest windows that have completed the RENDERER_READY handshake. Readiness
+   * is tracked per window because several renderer frames can be open at the
+   * same time (inline chat surfaces plus the side canvas) and each one
+   * announces itself independently; one frame still loading must not stall
+   * or reset the others.
+   */
+  private readonly readyWindows = new Set<Window>();
   private readonly latestEnvelopeSignal = signal<MessageEnvelope | null>(null);
   private readonly isRendererReadySignal = signal<boolean>(false);
 
   /** Readonly signal tracking the most recent message envelope */
   readonly latestEnvelope: Signal<MessageEnvelope | null> = this.latestEnvelopeSignal.asReadonly();
 
-  /** Readonly signal tracking if the guest renderer is ready */
+  /**
+   * Whether at least one registered frame has completed its handshake. With
+   * several frames open this says nothing about any particular frame; it is
+   * the coarse signal for consumers such as the raw frame's watchdog message.
+   */
   readonly isRendererReady = this.isRendererReadySignal.asReadonly();
 
   private readonly messageStreamSubject = new ReplaySubject<MessageEnvelope>(1);
@@ -236,14 +255,14 @@ export class HostCommunication implements OnDestroy {
         timestamp: Date.now(),
         sourceWindow: (event.source as Window) ?? null,
       };
-      if (type === PreviewBridgeMessageType.RENDERER_READY) {
-        this.isRendererReadySignal.set(true);
-        this.sendTheme(this.configProvider.themePreference());
-        const pending = [...this.outboundMessageBuffer];
-        this.outboundMessageBuffer.length = 0;
-        for (const pendingMessage of pending) {
-          this.sendMessage(pendingMessage.message, pendingMessage.target);
-        }
+      const sourceWindow = envelope.sourceWindow ?? null;
+      if (type === PreviewBridgeMessageType.RENDERER_READY && sourceWindow) {
+        this.markWindowReady(sourceWindow);
+        // Only the frame that just announced itself needs the theme. Frames
+        // that are already up received it on their own handshake, and frames
+        // still loading will get it on theirs.
+        this.sendMessage(this.themeMessage(this.configProvider.themePreference()), sourceWindow);
+        this.flushOutboundMessages();
       }
       if (type === PreviewBridgeMessageType.CONSOLE_LOG) {
         this.handleConsoleLog(data.payload);
@@ -252,7 +271,11 @@ export class HostCommunication implements OnDestroy {
       }
 
       if (type === PreviewBridgeMessageType.MCP_REQUEST) {
-        this.isRendererReadySignal.set(true);
+        // A frame that calls tools is evidently up, even if its RENDERER_READY
+        // was missed; treat it exactly like a handshake so anything queued for
+        // it does not wait for some other frame's RENDERER_READY.
+        this.markWindowReady(sourceWindow);
+        this.flushOutboundMessages();
         const req = data.payload as McpRequestPayload;
         const sourceTarget =
           Array.from(this.registeredIframes).find(f => f.contentWindow === event.source) ??
@@ -364,17 +387,147 @@ export class HostCommunication implements OnDestroy {
   }
 
   /**
+   * Resolves the window a message for `target` is posted to. An omitted target
+   * means the current default frame (`iframeElement` / `iframeWindow`): the
+   * last one registered, or whichever frame `unregisterIframe` fell back to.
+   */
+  private resolveTargetWindow(target?: HTMLIFrameElement | Window | null): Window | null {
+    if (target) {
+      return this.isIframeElement(target) ? target.contentWindow : target;
+    }
+    return this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
+  }
+
+  private isRegisteredWindow(targetWindow: Window): boolean {
+    if (this.registeredWindows.has(targetWindow)) {
+      return true;
+    }
+    for (const iframe of this.registeredIframes) {
+      if (
+        iframe.contentWindow === targetWindow ||
+        this.iframeWindows.get(iframe) === targetWindow
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Whether a message for `target` can be posted right away. A registered frame
+   * has to have completed its own handshake. A target the service does not
+   * know about cannot announce itself, so it falls back to the overall
+   * readiness flag, which keeps the single-frame behaviour for such callers.
+   */
+  private isTargetReady(target?: HTMLIFrameElement | Window | null): boolean {
+    // An omitted target means the default frame. Resolve it up front so a
+    // registered default whose element is currently detached is handled like
+    // an explicit target: the message waits for the frame instead of falling
+    // through to the overall flag and being dropped for lack of a window.
+    const resolvedTarget = target ?? this.iframeElement ?? this.iframeWindow;
+    const targetWindow = this.resolveTargetWindow(resolvedTarget);
+    if (targetWindow) {
+      if (this.readyWindows.has(targetWindow)) {
+        return true;
+      }
+      if (this.isRegisteredWindow(targetWindow)) {
+        return false;
+      }
+    } else if (
+      resolvedTarget &&
+      this.isIframeElement(resolvedTarget) &&
+      this.registeredIframes.has(resolvedTarget)
+    ) {
+      // A registered element without a window yet is simply not attached; its
+      // frame will announce itself once it is, so the message waits for it.
+      return false;
+    }
+    return this.isRendererReady();
+  }
+
+  /**
+   * Records that `sourceWindow` completed its handshake. The window is also
+   * remembered against its iframe element so the readiness can be withdrawn
+   * later even if the element has left the DOM by then.
+   */
+  private markWindowReady(sourceWindow: Window | null): void {
+    if (!sourceWindow) {
+      // Nothing can be waited for without a window to post to. A real guest
+      // frame always has one; only synthetic events lack it.
+      return;
+    }
+    this.readyWindows.add(sourceWindow);
+    for (const iframe of this.registeredIframes) {
+      if (iframe.contentWindow === sourceWindow) {
+        this.iframeWindows.set(iframe, sourceWindow);
+      }
+    }
+    this.isRendererReadySignal.set(true);
+  }
+
+  /**
+   * Posts every queued message whose target is ready now, in the order they
+   * were queued. Messages for frames that are still handshaking stay queued
+   * and wait for their own RENDERER_READY.
+   */
+  private flushOutboundMessages(): void {
+    const pending = [...this.outboundMessageBuffer];
+    this.outboundMessageBuffer.length = 0;
+    for (const pendingMessage of pending) {
+      if (this.isTargetReady(pendingMessage.target)) {
+        this.sendMessage(pendingMessage.message, pendingMessage.target);
+      } else {
+        this.outboundMessageBuffer.push(pendingMessage);
+      }
+    }
+  }
+
+  /**
+   * Whether a queued message's target refers to `target`, either by the same
+   * element or window reference, or by resolving to the same window.
+   */
+  private addressesTarget(
+    queuedTarget: HTMLIFrameElement | Window | null | undefined,
+    target: HTMLIFrameElement | Window,
+    targetWindow: Window | null,
+  ): boolean {
+    if (!queuedTarget) {
+      return false;
+    }
+    if (queuedTarget === target) {
+      return true;
+    }
+    return targetWindow !== null && this.resolveTargetWindow(queuedTarget) === targetWindow;
+  }
+
+  private dropQueuedMessages(
+    shouldDrop: (queuedTarget: HTMLIFrameElement | Window | null | undefined) => boolean,
+  ): void {
+    for (let i = this.outboundMessageBuffer.length - 1; i >= 0; i--) {
+      if (shouldDrop(this.outboundMessageBuffer[i].target)) {
+        this.outboundMessageBuffer.splice(i, 1);
+      }
+    }
+  }
+
+  /**
    * Registers an active iframe DOM element or content window target and flushes
    * any buffered early messages. Supports multiple concurrent iframes.
+   *
+   * Registering a frame starts a fresh handshake for that frame only: its own
+   * queued messages and previous readiness are discarded, while frames that
+   * are already up keep their readiness and their queued messages.
    * @param target Target iframe element, window reference, or null to unregister all
    */
   registerIframe(target: HTMLIFrameElement | Window | null): void {
-    this.outboundMessageBuffer.length = 0;
     if (!target) {
+      this.outboundMessageBuffer.length = 0;
       this.iframeElement = null;
       this.iframeWindow = null;
       this.registeredIframes.clear();
       this.registeredWindows.clear();
+      this.iframeWindows.clear();
+      this.readyWindows.clear();
       this.earlyMessageBuffer.length = 0;
       this.isRendererReadySignal.set(false);
       return;
@@ -382,17 +535,35 @@ export class HostCommunication implements OnDestroy {
 
     let windowTarget: Window | null = null;
     if (this.isIframeElement(target)) {
+      const previousWindow = this.iframeWindows.get(target);
+      if (previousWindow) {
+        this.readyWindows.delete(previousWindow);
+      }
       this.iframeElement = target;
       this.registeredIframes.add(target);
       windowTarget = target.contentWindow;
+      if (windowTarget) {
+        this.iframeWindows.set(target, windowTarget);
+      } else {
+        this.iframeWindows.delete(target);
+      }
     } else {
       this.iframeElement = null;
       this.registeredWindows.add(target);
       windowTarget = target;
     }
 
+    if (windowTarget) {
+      this.readyWindows.delete(windowTarget);
+    }
+    // Untargeted messages were meant for the previous default frame. This
+    // frame is now the default, so replaying them would misroute them here;
+    // drop them. Messages addressed to other frames stay queued.
+    this.dropQueuedMessages(
+      queuedTarget => !queuedTarget || this.addressesTarget(queuedTarget, target, windowTarget),
+    );
     this.iframeWindow = windowTarget;
-    this.isRendererReadySignal.set(false);
+    this.isRendererReadySignal.set(this.readyWindows.size > 0);
     if (windowTarget) {
       this.flushEarlyMessages();
     }
@@ -408,7 +579,10 @@ export class HostCommunication implements OnDestroy {
    */
   unregisterIframe(target: HTMLIFrameElement | Window): void {
     if (!target) return;
+    let targetWindow: Window | null = null;
     if (this.isIframeElement(target)) {
+      targetWindow = this.iframeWindows.get(target) ?? target.contentWindow;
+      this.iframeWindows.delete(target);
       this.registeredIframes.delete(target);
       if (this.iframeElement === target) {
         this.iframeElement = this.registeredIframes.values().next().value ?? null;
@@ -418,6 +592,7 @@ export class HostCommunication implements OnDestroy {
       }
     } else {
       // Target is a direct Window reference (e.g. external popout or window-only test target).
+      targetWindow = target;
       this.registeredWindows.delete(target);
       if (this.iframeWindow === target) {
         const nextWindow = this.registeredWindows.values().next().value ?? null;
@@ -431,10 +606,17 @@ export class HostCommunication implements OnDestroy {
         }
       }
     }
-
-    if (this.registeredIframes.size === 0 && this.registeredWindows.size === 0) {
-      this.isRendererReadySignal.set(false);
+    if (targetWindow) {
+      this.readyWindows.delete(targetWindow);
     }
+    this.dropQueuedMessages(queuedTarget =>
+      this.addressesTarget(queuedTarget, target, targetWindow),
+    );
+    if (this.registeredIframes.size === 0 && this.registeredWindows.size === 0) {
+      // Nothing is registered any more, so no readiness can be current.
+      this.readyWindows.clear();
+    }
+    this.isRendererReadySignal.set(this.readyWindows.size > 0);
   }
 
   /**
@@ -451,18 +633,18 @@ export class HostCommunication implements OnDestroy {
       return;
     }
 
-    if (!this.isRendererReady()) {
+    // Callers run inside component effects (RenderedFrame's payload and theme
+    // effects). Readiness must not become a dependency of those effects, or
+    // every frame's handshake would re-run them and re-send their payloads.
+    // Only the fallback branch of isTargetReady reads a signal today; the
+    // untracked read keeps that from changing by accident.
+    if (!untracked(() => this.isTargetReady(target))) {
       this.logger.info('Queueing outbound message; renderer is not yet ready.', message);
       this.outboundMessageBuffer.push({message, target});
       return;
     }
 
-    let targetWindow: Window | null = null;
-    if (target) {
-      targetWindow = this.isIframeElement(target) ? target.contentWindow : target;
-    } else {
-      targetWindow = this.iframeElement ? this.iframeElement.contentWindow : this.iframeWindow;
-    }
+    const targetWindow = this.resolveTargetWindow(target);
     if (!targetWindow) return;
 
     const expectedUrl = this.startupResolution.getResolvedRendererUrl();
@@ -485,35 +667,43 @@ export class HostCommunication implements OnDestroy {
     }
   }
 
+  private themeMessage(theme: ThemePreference): {
+    type: PreviewBridgeMessageType;
+    payload: {theme: ThemePreference};
+  } {
+    return {type: PreviewBridgeMessageType.SET_THEME, payload: {theme}};
+  }
+
   /**
-   * Helper utility dispatching a SET_THEME message to the preview renderer.
+   * Dispatches a SET_THEME message to every registered frame that is up. A
+   * frame that has not completed its handshake is skipped rather than queued
+   * for: it receives the current theme on its own RENDERER_READY, so a queued
+   * copy would only arrive as a duplicate. With nothing registered the message
+   * waits for the default frame, as any other message does.
    * @param theme Target theme option
    */
   sendTheme(theme: ThemePreference): void {
-    this.sendMessage({
-      type: PreviewBridgeMessageType.SET_THEME,
-      payload: {
-        theme: theme,
-      },
-    });
-    for (const iframe of this.registeredIframes) {
-      if (iframe.contentWindow && iframe.contentWindow !== this.iframeWindow) {
-        try {
-          const expectedUrl = this.startupResolution.getResolvedRendererUrl();
-          if (expectedUrl) {
-            const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
-            iframe.contentWindow.postMessage(
-              {
-                type: PreviewBridgeMessageType.SET_THEME,
-                payload: {theme},
-              },
-              targetOrigin,
-            );
-          }
-        } catch {
-          // Ignore error posting theme to secondary frame
-        }
+    const message = this.themeMessage(theme);
+    const targets: Array<HTMLIFrameElement | Window> = [
+      ...this.registeredIframes,
+      ...this.registeredWindows,
+    ];
+    if (targets.length === 0) {
+      this.sendMessage(message);
+      return;
+    }
+    const postedWindows = new Set<Window>();
+    for (const target of targets) {
+      const targetWindow = this.resolveTargetWindow(target);
+      if (
+        !targetWindow ||
+        postedWindows.has(targetWindow) ||
+        !this.readyWindows.has(targetWindow)
+      ) {
+        continue;
       }
+      postedWindows.add(targetWindow);
+      this.sendMessage(message, target);
     }
   }
 
@@ -546,6 +736,8 @@ export class HostCommunication implements OnDestroy {
     this.earlyMessageBuffer.length = 0;
     this.registeredIframes.clear();
     this.registeredWindows.clear();
+    this.iframeWindows.clear();
+    this.readyWindows.clear();
     this.iframeElement = null;
     this.iframeWindow = null;
     this.messageStreamSubject.complete();

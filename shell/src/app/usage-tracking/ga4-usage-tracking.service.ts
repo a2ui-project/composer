@@ -27,6 +27,8 @@ import {ComposerPanelId} from '../shell/composer-workspace/composer-panel-id';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
+import {LocalStorageInteractions} from '../storage/local-storage-interactions/local-storage-interactions';
+import {LocalStorageKey} from '../storage/models/local-storage-keys';
 import {
   ApiKeyAction,
   PromptTurnType,
@@ -45,16 +47,6 @@ declare global {
   }
 }
 
-/**
- * Key used to persist the GA4 client ID in localStorage.
- *
- * Storing the client ID in origin-isolated localStorage ensures persistent user identification
- * across browser sessions. Unlike cookies on shared parent domains (such as `.corp.google.com`),
- * localStorage is strictly origin-isolated (scoped to `a2ui-composer.corp.google.com`), making it
- * immune to cross-app cookie collisions, overwrites, or Chrome's 180-cookie-per-domain eviction limit.
- */
-export const LOCAL_STORAGE_CLIENT_ID_KEY = 'a2ui_ga4_client_id';
-
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
@@ -66,12 +58,10 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
  * or Custom Metrics in the target GA4 property to be visible in GA4 reports and explorations.
  *
  * - Use `scripts/create_ga4_dimensions.sh` to idempotently provision all dimensions and metrics
- *   via the GA4 Admin API (`v1beta`).
- *   - Authenticate with `gcloud`:
- *     `gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.edit,https://www.googleapis.com/auth/cloud-platform`
- *   - Or authenticate without `gcloud` using Google OAuth 2.0 Playground:
- *     Authorize `https://www.googleapis.com/auth/analytics.edit`, exchange for an access token,
- *     and run `ACCESS_TOKEN="<token>" ./scripts/create_ga4_dimensions.sh`.
+ *   via the GA4 Admin API (`v1beta`). Authenticate using Google OAuth 2.0 Playground
+ *   (`https://developers.google.com/oauthplayground/`): authorize
+ *   `https://www.googleapis.com/auth/analytics.edit`, exchange the authorization code for an
+ *   access token, and run `ACCESS_TOKEN="<token>" ./scripts/create_ga4_dimensions.sh`.
  *
  * - Use `scripts/update_ga4_dimensions.mjs` to automatically scan this service for new
  *   event parameters and update `scripts/create_ga4_dimensions.sh` (with `--check` and `--dry-run`
@@ -86,6 +76,7 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly appConfigProvider = inject(AppConfigProvider);
   private readonly catalogManagement = inject(CatalogManagement);
+  private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly document = inject(DOCUMENT);
 
   /**
@@ -107,6 +98,17 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
    */
   private _persistentClientId?: string;
 
+  /**
+   * True while `initialize()` is resolving config options and issuing `gtag('js')` /
+   * `gtag('config')`. `dispatchGtagEvent()` drops events during this window so re-entrant events
+   * cannot be queued ahead of `config`.
+   *
+   * Events arriving in this window are intentionally dropped rather than buffered, matching the
+   * existing behavior of dropping events while `window.gtag` is undefined. The only expected source
+   * is storage-failure telemetry, which is lossy by design.
+   */
+  private isInitializing = false;
+
   get composerSessionId(): string {
     return this._composerSessionId;
   }
@@ -120,35 +122,32 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
    *
    * LocalStorage is origin-isolated, preventing returning users from being treated as new visitors
    * due to cookie churn or eviction on shared domains. Validates existing values against a strict
-   * UUID v4 regex to prevent poisoned or malformed data. If localStorage throws a `SecurityError`
-   * (e.g. in restricted iframes or sandboxed environments), gracefully falls back to a generated
-   * UUID and caches it in `_persistentClientId` for in-memory session stability.
+   * UUID v4 regex to prevent poisoned or malformed data. If localStorage is unavailable or throws
+   * a `SecurityError` (handled by `LocalStorageInteractions`), gracefully falls back to a generated
+   * UUID (without attempting a follow-up write that would also fail) and caches it in
+   * `_persistentClientId` for in-memory session stability.
    */
-  private getOrCreatePersistentClientId(): string {
+  protected getOrCreatePersistentClientId(): string {
     if (this._persistentClientId) {
       return this._persistentClientId;
     }
 
-    const windowObj = this.document.defaultView;
-    try {
-      const storage =
-        windowObj?.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null);
-      if (storage) {
-        const storedId = storage.getItem(LOCAL_STORAGE_CLIENT_ID_KEY);
-        if (storedId && UUID_REGEX.test(storedId.trim())) {
-          this._persistentClientId = storedId.trim();
-          return this._persistentClientId;
-        }
-        const newId = generateUuid();
-        storage.setItem(LOCAL_STORAGE_CLIENT_ID_KEY, newId);
-        this._persistentClientId = newId;
-        return this._persistentClientId;
-      }
-    } catch {
-      // LocalStorage might throw SecurityError in restricted iframe or sandbox contexts.
+    const readResult = this.localStorageInteractions.readItem(LocalStorageKey.GA4_CLIENT_ID);
+    if (!readResult.ok) {
+      // Storage is unavailable; skip the follow-up write, which would also fail.
+      this._persistentClientId = generateUuid();
+      return this._persistentClientId;
     }
 
-    this._persistentClientId = generateUuid();
+    const storedId = readResult.value?.trim();
+    if (storedId && UUID_REGEX.test(storedId)) {
+      this._persistentClientId = storedId;
+      return this._persistentClientId;
+    }
+
+    const newId = generateUuid();
+    this.localStorageInteractions.setItem(LocalStorageKey.GA4_CLIENT_ID, newId);
+    this._persistentClientId = newId;
     return this._persistentClientId;
   }
 
@@ -162,16 +161,26 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       return;
     }
 
-    windowObj.dataLayer = windowObj.dataLayer || [];
-    if (!windowObj.gtag) {
-      windowObj.gtag = function () {
-        // eslint-disable-next-line prefer-rest-params
-        windowObj.dataLayer?.push(arguments);
-      };
-    }
+    // Suppress re-entrant events (e.g. composer_error emitted synchronously by ErrorTelemetryReporter
+    // for storage warnings while resolving config options) so nothing is queued before
+    // gtag('config', ...), even when window.gtag was already defined before initialize().
+    this.isInitializing = true;
+    try {
+      const configOptions = this.getConfigOptions();
 
-    windowObj.gtag('js', new Date());
-    windowObj.gtag('config', this.config.measurementId, this.getConfigOptions());
+      windowObj.dataLayer = windowObj.dataLayer || [];
+      if (!windowObj.gtag) {
+        windowObj.gtag = function () {
+          // eslint-disable-next-line prefer-rest-params
+          windowObj.dataLayer?.push(arguments);
+        };
+      }
+
+      windowObj.gtag('js', new Date());
+      windowObj.gtag('config', this.config.measurementId, configOptions);
+    } finally {
+      this.isInitializing = false;
+    }
 
     const existingScript = this.document.querySelector(
       `script[src*="${this.config.measurementId}"]`,
@@ -183,6 +192,12 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       setScriptSrc(script, safeUrl);
       this.document.head.appendChild(script);
     }
+  }
+
+  private getUsageType(): UsageType {
+    return this.startupResolution.isThirdPartyEnvironment()
+      ? UsageType.THIRD_PARTY
+      : UsageType.FIRST_PARTY;
   }
 
   /**
@@ -211,26 +226,29 @@ export class Ga4UsageTrackingService extends UsageTrackingService {
       ['cookie_domain']: hostname || 'auto',
       // Supply stable, origin-isolated client ID from localStorage to survive cookie eviction.
       ['client_id']: this.getOrCreatePersistentClientId(),
+      // Page-load-constant dimensions, attached here so GA4 automatic events
+      // (session_start, user_engagement, ...) that bypass getBaselineDimensions() carry them too.
+      ['usage_type']: this.getUsageType(),
+      ['env_mode']: this.appConfigProvider.envMode(),
     };
   }
 
   protected getBaselineDimensions(): Record<string, unknown> {
-    const is3P = this.startupResolution.isThirdPartyEnvironment();
     const activeRendererId = this.startupConfigState.selectedRendererId() || 'default';
     const catalogObj = this.catalogManagement.activeCatalog();
     const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
     return {
       ['send_to']: this.config.measurementId,
       ['composer_session_id']: this._composerSessionId,
-      ['usage_type']: is3P ? UsageType.THIRD_PARTY : UsageType.FIRST_PARTY,
+      ['usage_type']: this.getUsageType(),
       ['env_mode']: this.appConfigProvider.envMode(),
       ['active_renderer_id']: activeRendererId,
       ['catalog_id']: catalogId,
     };
   }
 
-  private dispatchGtagEvent(name: string, params?: Record<string, unknown>): void {
-    if (!this.config.enabled || !this.config.measurementId) {
+  protected dispatchGtagEvent(name: string, params?: Record<string, unknown>): void {
+    if (this.isInitializing || !this.config.enabled || !this.config.measurementId) {
       return;
     }
 

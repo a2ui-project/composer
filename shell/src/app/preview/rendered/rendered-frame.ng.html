@@ -16,6 +16,7 @@
 <div
   class="rendered-frame-container"
   [class.is-locked]="isLocked()"
+  [class.fill-container]="fillContainer()"
   [style.height]="frameHeightPx() ?? '100%'"
   [style.min-height]="frameHeightPx()"
 >

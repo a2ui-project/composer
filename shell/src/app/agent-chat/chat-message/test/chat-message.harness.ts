@@ -37,6 +37,7 @@ export class A2aChatMessageHarness extends ComponentHarness {
   private getPendingIndicator = this.locatorForOptional('.pending-response-indicator');
   private getStreamingCursor = this.locatorForOptional('.streaming-cursor');
   private getInlineSurface = this.locatorForOptional('.inline-surface-card');
+  private getBodyBlocks = this.locatorForAll('.agent-text-content, .inline-surface-card');
   private getInspectMessageButton = this.locatorForOptional(
     MatButtonHarness.with({selector: 'button[aria-label="Inspect message"]'}),
   );
@@ -44,6 +45,13 @@ export class A2aChatMessageHarness extends ComponentHarness {
   async hasInlineSurface(): Promise<boolean> {
     const el = await this.getInlineSurface();
     return el !== null;
+  }
+
+  /** Whether the inline surface is rendered above the message text. */
+  async inlineSurfacePrecedesText(): Promise<boolean> {
+    const blocks = await this.getBodyBlocks();
+    if (blocks.length < 2) return false;
+    return blocks[0].hasClass('inline-surface-card');
   }
 
   async hasCanvasButton(): Promise<boolean> {

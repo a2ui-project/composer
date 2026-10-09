@@ -236,19 +236,7 @@ Custom dimensions and metrics must be registered in the target GA4 property befo
 
 The script `scripts/create_ga4_dimensions.sh` idempotently registers all custom dimensions and custom metrics in GA4 Property `549078235` (or any configured property ID) via the Google Analytics Admin API (`v1beta`).
 
-#### Option A: Authenticate via `gcloud`
-
-```bash
-# Log in with the required Google Analytics Edit scope:
-gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.edit,https://www.googleapis.com/auth/cloud-platform
-
-# Run the provisioning script:
-./scripts/create_ga4_dimensions.sh
-```
-
-#### Option B: Authenticate via Google OAuth 2.0 Playground (No `gcloud` Required)
-
-If `gcloud` is not installed or you prefer browser-based authentication:
+To authenticate via Google OAuth 2.0 Playground:
 
 1. Open [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground/).
 2. In **Step 1 (Select & authorize APIs)**, input `https://www.googleapis.com/auth/analytics.edit` and click **Authorize APIs**.
