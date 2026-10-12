@@ -256,7 +256,7 @@ export class A2aChatView implements OnInit {
   ): Promise<void> {
     const normalizedUrl = normalizeHttpUrl(url);
     if (!normalizedUrl || !isValidEndpointUrl(normalizedUrl)) {
-      if (!this.agentCard()) {
+      if (!this.agentCard() && !this.configDialogRef) {
         this.showsInlineConfig.set(true);
       }
       return;
