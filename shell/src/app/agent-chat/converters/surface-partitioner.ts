@@ -16,6 +16,7 @@
 
 import {A2UI_UPDATE_KEYS, RenderA2uiItem} from 'a2ui-bridge';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 import {CanvasArtifact} from '../chat-message/types';
 
 interface ExtractedCanvasInfo {
@@ -492,6 +493,83 @@ function collectDescendantIds(
   return descendantIds;
 }
 
+/**
+ * Whether `catalog` defines a `Canvas` component. This is the only property of the
+ * catalog the partitioner reads: it decides whether a `Canvas` node is kept as the
+ * surface root or unwrapped into its children.
+ */
+export function catalogDefinesCanvas(catalog: Catalog): boolean {
+  return Object.keys(catalog.components ?? {}).some(key => key.toLowerCase() === 'canvas');
+}
+
+/**
+ * Returns whether the `Canvas` component should be kept as the root of the extracted
+ * Canvas surface instead of unwrapping its children.
+ *
+ * Some renderer catalogs define `Canvas` as a first-class container component that lays out
+ * its own children (and may not define a generic `'Column'` component), whereas basic catalogs
+ * omit `Canvas` and expect the shell to unwrap its children into a root component.
+ *
+ * Before the active catalog is known (e.g. while the renderer iframe is still initializing),
+ * flat v0.9 `{ component: 'Canvas' }` nodes are preserved as-is while nested wrapper objects
+ * `{ component: { Canvas: ... } }` continue to unwrap by default. Once a catalog is known it
+ * alone decides: one that declares no `Canvas` component (or no components at all) unwraps.
+ */
+function shouldPreserveCanvas(comp: Record<string, unknown>, catalog?: Catalog | null): boolean {
+  if (catalog) {
+    return catalogDefinesCanvas(catalog);
+  }
+  return typeof comp['component'] === 'string' && comp['component'].toLowerCase() === 'canvas';
+}
+
+/**
+ * Normalizes a preserved `Canvas` node into a surface root component (`id: 'root'`)
+ * with a flat `component: 'Canvas'` type and `children` ID array, regardless of whether
+ * the source payload used flat or nested component syntax.
+ */
+function normalizeCanvasRootComponent(
+  comp: Record<string, unknown>,
+  childRootIds: Set<string>,
+): Record<string, unknown> {
+  const compVal = comp['component'];
+  if (typeof compVal === 'object' && compVal !== null) {
+    const compRecord = compVal as Record<string, unknown>;
+    const canvasKey = Object.keys(compRecord).find(key => key.toLowerCase() === 'canvas');
+    const canvasProps =
+      canvasKey && typeof compRecord[canvasKey] === 'object' && compRecord[canvasKey] !== null
+        ? (compRecord[canvasKey] as Record<string, unknown>)
+        : {};
+    const {child: _child, content: _content, items: _items, ...restCanvasProps} = canvasProps;
+    const {
+      child: _compChild,
+      content: _compContent,
+      items: _compItems,
+      component: _component,
+      ...restComp
+    } = comp;
+    return {
+      ...restComp,
+      ...restCanvasProps,
+      ['id']: 'root',
+      ['component']: canvasKey || 'Canvas',
+      ['children']: Array.from(childRootIds),
+    };
+  }
+
+  const {child: _child, content: _content, items: _items, ...restComp} = comp;
+  return {
+    ...restComp,
+    ['id']: 'root',
+    ['component']: typeof compVal === 'string' ? compVal : 'Canvas',
+    ['children']: Array.from(childRootIds),
+  };
+}
+
+/**
+ * Unwraps a `Canvas` node's children for catalogs that do not define a `Canvas` component,
+ * promoting a single child to `id: 'root'` or synthesizing a `'Column'` root wrapper when
+ * multiple top-level children are present.
+ */
 function formatCanvasComponents(
   components: Array<Record<string, unknown>>,
   childRootIds: Set<string>,
@@ -537,6 +615,7 @@ function extractCanvasArtifacts(
   createSurfaceItems: RenderA2uiItem[],
   updateDataModelItems: RenderA2uiItem[],
   otherItems: RenderA2uiItem[],
+  catalog?: Catalog | null,
 ): ExtractedArtifactsResult {
   const canvasArtifacts: CanvasArtifact[] = [];
   const canvasCompIds = new Set<string>();
@@ -557,11 +636,13 @@ function extractCanvasArtifacts(
 
     let canvasComponents = allComponents.filter(c => {
       const id = String(c['id'] || '');
-      return canvasDescendantIds.has(id);
+      return id !== compId && canvasDescendantIds.has(id);
     });
 
     if (canvasComponents.length > 0) {
-      canvasComponents = formatCanvasComponents(canvasComponents, childRootIds);
+      canvasComponents = shouldPreserveCanvas(comp, catalog)
+        ? [normalizeCanvasRootComponent(comp, childRootIds), ...canvasComponents]
+        : formatCanvasComponents(canvasComponents, childRootIds);
 
       const surfaceId = createSurfaceItems[0]?.createSurface?.surfaceId || 'default';
       const individualPayload: RenderA2uiItem[] = [
@@ -641,8 +722,15 @@ function buildInlineSurfacePayload(
  * - `inlinePayload` contains the List with the 9 non-Canvas cards.
  * - `canvasArtifacts` contains individual isolated subtrees for each Canvas component with its metadata.
  * - `hasCanvas` is set to true.
+ *
+ * @param items The A2UI surface update items to partition.
+ * @param catalog Optional active renderer catalog used to determine whether `Canvas` nodes
+ *     should be preserved as the surface root or unwrapped into their children.
  */
-export function partitionA2uiSurfacePayload(items: RenderA2uiItem[]): PartitionedA2uiSurface {
+export function partitionA2uiSurfacePayload(
+  items: RenderA2uiItem[],
+  catalog?: Catalog | null,
+): PartitionedA2uiSurface {
   const normalized = normalizeA2uiItems(items);
   if (normalized.length === 0) {
     return {inlinePayload: null, canvasArtifacts: [], hasCanvas: false};
@@ -666,6 +754,7 @@ export function partitionA2uiSurfacePayload(items: RenderA2uiItem[]): Partitione
     createSurfaceItems,
     updateDataModelItems,
     otherItems,
+    catalog,
   );
 
   const inlinePayload = buildInlineSurfacePayload(
@@ -699,7 +788,10 @@ export function partitionA2uiSurfacePayload(items: RenderA2uiItem[]): Partitione
 /**
  * Unwraps or prepares layout items for the live canvas renderer iframe.
  */
-export function unwrapCanvasForRenderer(items: RenderA2uiItem[]): RenderA2uiItem[] {
-  const partitioned = partitionA2uiSurfacePayload(items);
+export function unwrapCanvasForRenderer(
+  items: RenderA2uiItem[],
+  catalog?: Catalog | null,
+): RenderA2uiItem[] {
+  const partitioned = partitionA2uiSurfacePayload(items, catalog);
   return partitioned.canvasArtifacts[0]?.payload || normalizeA2uiItems(items);
 }
