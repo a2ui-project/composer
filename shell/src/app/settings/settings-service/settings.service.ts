@@ -71,6 +71,8 @@ export class SettingsService {
   private readonly localStorageInteractions = inject(LocalStorageInteractions);
   private readonly usageTrackingService = inject(UsageTrackingService);
 
+  private readonly _customRenderersVersion = signal(0);
+
   readonly renderers: Signal<Record<string, RendererConfig>> = computed(() =>
     this.startupConfigState.renderers(),
   );
@@ -79,9 +81,20 @@ export class SettingsService {
     this.startupConfigState.selectedRendererId(),
   );
 
-  readonly activeRenderer: Signal<RendererConfig | null> = computed(() =>
-    this.startupConfigState.activeRenderer(),
-  );
+  readonly activeRenderer: Signal<RendererConfig | null> = computed(() => {
+    this._customRenderersVersion();
+    const staticActive = this.startupConfigState.activeRenderer();
+    if (staticActive) {
+      return staticActive;
+    }
+    const selectedId = this.selectedRendererId();
+    if (!selectedId) {
+      return null;
+    }
+    return (
+      this.getCustomRenderers().find(r => r.id === selectedId || r.name === selectedId) || null
+    );
+  });
 
   /**
    * Switches the active configuration renderer selection.
@@ -374,11 +387,7 @@ export class SettingsService {
       this.usageTrackingService.trackRendererAdd({rendererId: id});
     }
     this.localStorageInteractions.setItem(LocalStorageKey.CUSTOM_RENDERERS, JSON.stringify(list));
-
-    // Keep StartupConfigStateService in sync so activeRenderer can resolve it
-    const updatedRenderers = {...this.startupConfigState.renderers()};
-    updatedRenderers[id] = {id, name, rendererUrl};
-    this.startupConfigState.setRenderers(updatedRenderers);
+    this._customRenderersVersion.update(v => v + 1);
   }
 
   /**
@@ -389,10 +398,7 @@ export class SettingsService {
     this.usageTrackingService.trackRendererDelete({rendererId: id});
     const list = this.getCustomRenderers().filter(item => item.id !== id);
     this.localStorageInteractions.setItem(LocalStorageKey.CUSTOM_RENDERERS, JSON.stringify(list));
-
-    const updatedRenderers = {...this.startupConfigState.renderers()};
-    delete updatedRenderers[id];
-    this.startupConfigState.setRenderers(updatedRenderers);
+    this._customRenderersVersion.update(v => v + 1);
 
     if (this.selectedRendererId() === id) {
       this.localStorageInteractions.removeItem(LocalStorageKey.SELECTED_RENDERER);
