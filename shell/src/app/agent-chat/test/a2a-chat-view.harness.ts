@@ -15,6 +15,7 @@
  */
 
 import {ComponentHarness, HarnessPredicate} from '@angular/cdk/testing';
+import {MatDialogHarness} from '@angular/material/dialog/testing';
 import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
 import {AgentConfigPanelHarness} from '../agent-config-panel/test/agent-config-panel.harness';
 import {A2aAgentHeaderHarness} from '../agent-header/test/agent-header.harness';
@@ -29,12 +30,18 @@ export class A2aChatViewHarness extends ComponentHarness {
   readonly getHistory = this.locatorFor(A2aChatHistoryHarness);
   readonly getInputArea = this.locatorFor(A2aInputAreaHarness);
   readonly getInspector = this.locatorForOptional(A2aMessageInspectorHarness);
-  readonly getConfigPanel = this.locatorForOptional(AgentConfigPanelHarness);
+  readonly getConfigDialog = this.documentRootLocatorFactory().locatorForOptional(MatDialogHarness);
+  readonly getConfigPanel = this.documentRootLocatorFactory().locatorForOptional(AgentConfigPanelHarness);
   readonly getSideCanvas = this.locatorForOptional('.side-canvas-column');
 
   async isInspectorOpen(): Promise<boolean> {
     const inspector = await this.getInspector();
     return inspector !== null;
+  }
+
+  async isConfigDialogOpen(): Promise<boolean> {
+    const dialog = await this.getConfigDialog();
+    return dialog !== null;
   }
 
   async isConfigPanelOpen(): Promise<boolean> {

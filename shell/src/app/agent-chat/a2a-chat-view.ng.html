@@ -15,106 +15,111 @@
 -->
 
 <div class="a2a-chat-view-root">
-  <a2ui-composer-agent-header
-    [agentInfo]="agentInfo()"
-    [agentCard]="agentCard()"
-    [activeTaskId]="activeTaskId()"
-    [sessionId]="activeContextId()"
-    [isInspectorOpen]="isInspectorOpen()"
-    (toggleInspector)="toggleInspectorDrawer()"
-    (resetSession)="resetActiveSession()"
-    (openSettings)="openConfigPanel()"
-  ></a2ui-composer-agent-header>
+  @if (!showsInlineConfig()) {
+    <a2ui-composer-agent-header
+      [agentInfo]="agentInfo()"
+      [agentCard]="agentCard()"
+      [activeTaskId]="activeTaskId()"
+      [sessionId]="activeContextId()"
+      [isInspectorOpen]="isInspectorOpen()"
+      (toggleInspector)="toggleInspectorDrawer()"
+      (resetSession)="resetActiveSession()"
+      (openSettings)="openConfigPanel()"
+    ></a2ui-composer-agent-header>
 
-  <div
-    class="chat-main-layout"
-    [class.with-inspector]="isInspectorOpen()"
-    [class.with-canvas]="isCanvasOpen()"
-  >
-    <!-- Left Conversation Stream Area -->
-    <div class="chat-viewport-column">
-      <div class="history-wrapper">
-        <a2ui-composer-chat-history
-          [messages]="messages()"
-          [agentInfo]="agentInfo()"
-          [isStreaming]="isStreaming()"
-          [isConnecting]="isConnecting()"
-          [endpoint]="configProvider.a2aAgentUrl() || ''"
-          [isCanvasOpen]="isCanvasOpen()"
-          [activeCanvasPayload]="activeCanvasPayload()"
-          (samplePromptClicked)="submitSamplePrompt($event)"
-          (openCanvas)="openCanvasSurface($event)"
-          (closeCanvas)="closeCanvasSurface()"
-          (openInspector)="inspectMessage($event)"
-        ></a2ui-composer-chat-history>
+    <div
+      class="chat-main-layout"
+      [class.with-inspector]="isInspectorOpen()"
+      [class.with-canvas]="isCanvasOpen()"
+    >
+      <!-- Left Conversation Stream Area -->
+      <div class="chat-viewport-column">
+        <div class="history-wrapper">
+          <a2ui-composer-chat-history
+            [messages]="messages()"
+            [agentInfo]="agentInfo()"
+            [isStreaming]="isStreaming()"
+            [isConnecting]="isConnecting()"
+            [endpoint]="configProvider.a2aAgentUrl() || ''"
+            [isCanvasOpen]="isCanvasOpen()"
+            [activeCanvasPayload]="activeCanvasPayload()"
+            (samplePromptClicked)="submitSamplePrompt($event)"
+            (openCanvas)="openCanvasSurface($event)"
+            (closeCanvas)="closeCanvasSurface()"
+            (openInspector)="inspectMessage($event)"
+          ></a2ui-composer-chat-history>
+        </div>
+
+        <div class="input-wrapper">
+          <a2ui-composer-input-area
+            [isStreaming]="isStreaming()"
+            [disabled]="isConnecting()"
+            (sendMessage)="sendUserMessage($event)"
+            (stopGeneration)="cancelActiveGeneration()"
+          ></a2ui-composer-input-area>
+        </div>
       </div>
 
-      <div class="input-wrapper">
-        <a2ui-composer-input-area
-          [isStreaming]="isStreaming()"
-          [disabled]="isConnecting()"
-          (sendMessage)="sendUserMessage($event)"
-          (stopGeneration)="cancelActiveGeneration()"
-        ></a2ui-composer-input-area>
-      </div>
-    </div>
-
-    <!-- Center Canvas Viewport (Opened only when View in Canvas is clicked) -->
-    @if (isCanvasOpen()) {
-      <div class="side-canvas-column">
-        <div class="side-canvas-header">
-          <div class="canvas-title">
-            <mat-icon class="canvas-icon">dashboard_customize</mat-icon>
-            <h3>A2UI Surface Canvas</h3>
+      <!-- Center Canvas Viewport (Opened only when View in Canvas is clicked) -->
+      @if (isCanvasOpen()) {
+        <div class="side-canvas-column">
+          <div class="side-canvas-header">
+            <div class="canvas-title">
+              <mat-icon class="canvas-icon">dashboard_customize</mat-icon>
+              <h3>A2UI Surface Canvas</h3>
+            </div>
+            <button
+              mat-icon-button
+              type="button"
+              (click)="closeCanvasSurface()"
+              matTooltip="Close Canvas Preview"
+              aria-label="Close Canvas Preview"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
           </div>
-          <button
-            mat-icon-button
-            type="button"
-            (click)="closeCanvasSurface()"
-            matTooltip="Close Canvas Preview"
-            aria-label="Close Canvas Preview"
-          >
-            <mat-icon>close</mat-icon>
-          </button>
+          <div class="side-canvas-viewport">
+            <a2ui-composer-rendered-frame
+              [payload]="activeCanvasPayload()"
+              [fillContainer]="true"
+            ></a2ui-composer-rendered-frame>
+          </div>
         </div>
-        <div class="side-canvas-viewport">
-          <a2ui-composer-rendered-frame
-            [payload]="activeCanvasPayload()"
-            [fillContainer]="true"
-          ></a2ui-composer-rendered-frame>
+      }
+
+      <!-- Right Inspector Side Drawer with Resizable Splitter Handle -->
+      @if (isInspectorOpen()) {
+        <div
+          class="inspector-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize A2A message inspection panel"
+          [attr.aria-valuenow]="inspectorWidth()"
+          [attr.aria-valuemin]="280"
+          tabindex="0"
+          (mousedown)="startInspectorResize($event)"
+          (keydown)="handleInspectorResizeKey($event)"
+        >
+          <div class="resize-grip"></div>
         </div>
-      </div>
-    }
 
-    <!-- Right Inspector Side Drawer with Resizable Splitter Handle -->
-    @if (isInspectorOpen()) {
-      <div
-        class="inspector-resize-handle"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize A2A message inspection panel"
-        [attr.aria-valuenow]="inspectorWidth()"
-        [attr.aria-valuemin]="280"
-        tabindex="0"
-        (mousedown)="startInspectorResize($event)"
-        (keydown)="handleInspectorResizeKey($event)"
-      >
-        <div class="resize-grip"></div>
-      </div>
+        <div class="inspector-column" [style.width.px]="inspectorWidth()">
+          <a2ui-composer-message-inspector
+            [events]="inspectorEvents()"
+            [(searchQuery)]="inspectorSearchQuery"
+            (closeDrawer)="toggleInspectorDrawer()"
+            (clearEvents)="clearInspectorEvents()"
+          ></a2ui-composer-message-inspector>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="inline-config-panel">
+      <ng-container [ngTemplateOutlet]="configPanel" />
+    </div>
+  }
 
-      <div class="inspector-column" [style.width.px]="inspectorWidth()">
-        <a2ui-composer-message-inspector
-          [events]="inspectorEvents()"
-          [(searchQuery)]="inspectorSearchQuery"
-          (closeDrawer)="toggleInspectorDrawer()"
-          (clearEvents)="clearInspectorEvents()"
-        ></a2ui-composer-message-inspector>
-      </div>
-    }
-  </div>
-
-  <!-- Agent Configuration Modal Dialog -->
-  @if (isConfigPanelOpen()) {
+  <ng-template #configPanel>
     <a2ui-composer-agent-config-panel
       [initialEndpoint]="configProvider.a2aAgentUrl()"
       [initialTenantId]="configProvider.a2aTenantId()"
@@ -124,7 +129,7 @@
       [canCancel]="!!agentCard()"
       (saveAndConnect)="saveAgentConfiguration($event)"
       (clearConfig)="clearAgentConfiguration()"
-      (dismissPanel)="isConfigPanelOpen.set(false)"
-    ></a2ui-composer-agent-config-panel>
-  }
+      (dismissPanel)="closeConfigDialog()"
+    />
+  </ng-template>
 </div>

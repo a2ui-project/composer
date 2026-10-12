@@ -118,7 +118,7 @@ describe('A2aChatView', () => {
     expect(await header.getTitleText()).toBe('Mock Test Agent');
   });
 
-  it('opens config panel when no stored URL is configured', async () => {
+  it('opens config panel as non-dialog when no stored URL is configured', async () => {
     mockAgentUrlSignal.set('');
     const newFixture = TestBed.createComponent(A2aChatView);
     newFixture.detectChanges();
@@ -128,9 +128,25 @@ describe('A2aChatView', () => {
     );
 
     expect(await newHarness.isConfigPanelOpen()).toBe(true);
+    expect(await harness.isConfigDialogOpen()).toBe(false);
+    newFixture.destroy();
   });
 
-  it('opens config panel when initial auto-connect fails', async () => {
+  it('opens config panel as a MatDialog when stored URL is configured and prevents dismissal after clearing address', async () => {
+    const header = await harness.getHeader();
+    await header.clickSettings();
+
+    const dialog = await harness.getConfigDialog();
+    expect(dialog).not.toBeNull();
+
+    const panel = await harness.getConfigPanel();
+    await panel?.clickClear();
+    await dialog?.close();
+
+    expect(await harness.isConfigDialogOpen()).toBe(true);
+  });
+
+  it('opens config dialog when initial auto-connect fails', async () => {
     mockA2aTransport.getAgentCard = vi.fn().mockRejectedValue(new Error('Agent unreachable'));
     const failedFixture = TestBed.createComponent(A2aChatView);
     failedFixture.detectChanges();
@@ -139,7 +155,10 @@ describe('A2aChatView', () => {
       A2aChatViewHarness,
     );
 
-    expect(await failedHarness.isConfigPanelOpen()).toBe(true);
+    expect(await failedHarness.isConfigDialogOpen()).toBe(true);
+    const panel = await failedHarness.getConfigPanel();
+    expect(await panel?.getErrorMessage()).toContain('Agent unreachable');
+    failedFixture.destroy();
   });
 
   it('handles user message streaming turn', async () => {
@@ -248,12 +267,12 @@ describe('A2aChatView', () => {
     expect(fixture.componentInstance['agentCard']()).toBeNull();
   });
 
-  it('clears inspector events and opens settings', () => {
+  it('clears inspector events and opens settings', async () => {
     fixture.componentInstance['clearInspectorEvents']();
     expect(fixture.componentInstance['inspectorEvents']()).toEqual([]);
 
     fixture.componentInstance['openConfigPanel']();
-    expect(fixture.componentInstance['isConfigPanelOpen']()).toBe(true);
+    expect(await harness.isConfigDialogOpen()).toBe(true);
 
     fixture.componentInstance['cancelActiveGeneration']();
     expect(fixture.componentInstance['isStreaming']()).toBe(false);
@@ -611,7 +630,7 @@ describe('A2aChatView', () => {
     await fixture.componentInstance['connectToAgent']('http://localhost:9999');
 
     expect(fixture.componentInstance['connectionError']()).toBe('Connection refused');
-    expect(fixture.componentInstance['isConfigPanelOpen']()).toBe(true);
+    expect(await harness.isConfigDialogOpen()).toBe(true);
   });
 
   it('handles non-Error rejection in agent connection', async () => {
