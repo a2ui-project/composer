@@ -136,7 +136,7 @@ describe('A2aChatView', () => {
     );
 
     expect(await newHarness.isConfigPanelOpen()).toBe(true);
-    expect(await harness.isConfigDialogOpen()).toBe(false);
+    expect(await newHarness.isConfigDialogOpen()).toBe(false);
     newFixture.destroy();
   });
 
