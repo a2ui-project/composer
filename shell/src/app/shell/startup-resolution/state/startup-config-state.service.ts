@@ -69,9 +69,10 @@ export class StartupConfigStateService {
     const renderers = this._renderers();
     const selectedId = this._selectedRendererId();
     if (!selectedId) return null;
-    return (
-      renderers[selectedId] || Object.values(renderers).find(r => r.name === selectedId) || null
-    );
+    const staticMatch = Object.prototype.hasOwnProperty.call(renderers, selectedId)
+      ? renderers[selectedId]
+      : undefined;
+    return staticMatch || Object.values(renderers).find(r => r.name === selectedId) || null;
   });
 
   setResolvedUrl(url: string | null): void {
