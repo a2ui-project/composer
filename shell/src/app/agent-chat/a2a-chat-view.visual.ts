@@ -21,6 +21,11 @@ test.describe('A2aChatView Full Orchestration Visual Regression & Layout', () =>
   test('renders orchestrated full page layout with header, conversation, input, and inspector drawer', async ({
     page,
   }) => {
+    // The open inspector drawer puts event timestamps in this baseline. Fix the
+    // clock so they stay identical across regenerations while timers and the
+    // stream run normally.
+    await page.clock.setFixedTime(new Date('2026-09-18T11:24:22Z'));
+
     await connectMockAgent(page);
 
     // Verify root layout container and child components

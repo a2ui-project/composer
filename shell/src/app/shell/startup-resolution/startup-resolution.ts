@@ -282,14 +282,7 @@ export class StartupResolution {
       staticRenderers = this.startupConfigState.renderers();
     }
 
-    const mergedRenderers = {...staticRenderers};
-    const customRenderers = this.getCustomRenderers();
-    for (const cr of customRenderers) {
-      if (cr.id) {
-        mergedRenderers[cr.id] = cr;
-      }
-    }
-    this.startupConfigState.setRenderers(mergedRenderers);
+    this.startupConfigState.setRenderers(staticRenderers);
 
     // Tier 1 & 2: renderer param from hash or query (subject to origin allowlist check)
     const queryRendererUrl =

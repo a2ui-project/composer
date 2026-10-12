@@ -1317,7 +1317,8 @@ describe('StartupResolution', () => {
 
       const url = await service.resolveRenderer();
       expect(url).toBe('http://localhost:9999/preview');
-      expect(stateService.selectedRendererId()).toMatch(/^custom-\d+$/);
+      const selectedId = stateService.selectedRendererId();
+      expect(selectedId).toMatch(/^custom-\d+$/);
 
       const customList = JSON.parse(localStorage.getItem(LocalStorageKey.CUSTOM_RENDERERS) || '[]');
       expect(customList).toEqual(
@@ -1328,6 +1329,10 @@ describe('StartupResolution', () => {
           }),
         ]),
       );
+
+      expect(service.renderers()).toEqual({
+        default: {rendererUrl: 'https://default.example.com'},
+      });
     });
 
     it('1f. registers new custom renderer when ?renderer= is provided with an unrecognized ?rendererId=', async () => {
@@ -1345,6 +1350,60 @@ describe('StartupResolution', () => {
       const url = await service.resolveRenderer();
       expect(url).toBe('http://localhost:8888/preview');
       expect(stateService.selectedRendererId()).toMatch(/^custom-\d+$/);
+    });
+
+    it('keeps renderers() strictly static while resolving custom renderers via getRendererById and setSelectedRendererId', async () => {
+      mockFetchConfig({
+        renderers: {
+          default: {rendererUrl: 'https://default.example.com', displayName: 'Default'},
+        },
+      });
+      localStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'custom-1', name: 'My Custom', rendererUrl: 'http://localhost:5000/renderer'},
+        ]),
+      );
+
+      await service.resolveStartupConfiguration();
+
+      expect(service.renderers()).toEqual({
+        default: {rendererUrl: 'https://default.example.com', displayName: 'Default'},
+      });
+      expect(stateService.activeRenderer()).toEqual({
+        rendererUrl: 'https://default.example.com',
+        displayName: 'Default',
+      });
+
+      await service.setSelectedRendererId('custom-1');
+      expect(service.resolvedUrl()).toBe('http://localhost:5000/renderer');
+    });
+
+    it('does not allow custom renderers in localStorage to bypass isOriginAllowed as static config origins', async () => {
+      const confirmSpy = vi.spyOn(service, 'confirmOrigin').mockResolvedValue(false);
+      mockFetchConfig({
+        renderers: {
+          default: {rendererUrl: 'https://default.example.com'},
+        },
+      });
+      localStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {
+            id: 'custom-ext',
+            name: 'External Custom',
+            rendererUrl: 'https://untrusted-custom.example.com/app',
+          },
+        ]),
+      );
+
+      await service.resolveStartupConfiguration();
+
+      const isAllowed = await service.isOriginAllowed(
+        'https://untrusted-custom.example.com/other-path',
+      );
+      expect(isAllowed).toBe(false);
+      expect(confirmSpy).toHaveBeenCalledWith('https://untrusted-custom.example.com');
     });
 
     it('2a. auto-allows localhost, 127.0.0.1, and [::1] origins in ?renderer= without prompting confirmation', async () => {

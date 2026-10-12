@@ -40,6 +40,7 @@ describe('SettingsService', () => {
     selectedRendererId: WritableSignal<string | null>;
     activeRenderer: WritableSignal<RendererConfig | null>;
     apiKeys: WritableSignal<Record<string, ApiKeyConfig>>;
+    setRenderers: ReturnType<typeof vi.fn>;
     setSelectedRendererId: ReturnType<typeof vi.fn>;
     isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
   };
@@ -81,7 +82,9 @@ describe('SettingsService', () => {
       renderers: signal(sampleRenderers),
       selectedRendererId: signal(null),
       activeRenderer: signal(null),
-      setRenderers: vi.fn(),
+      setRenderers: vi.fn((r: Record<string, RendererConfig>) =>
+        mockStartupResolution.renderers.set(r),
+      ),
       apiKeys: signal({}),
       isThirdPartyEnvironment: vi.fn().mockReturnValue(true),
       setSelectedRendererId: vi.fn((id: string | null) => {
@@ -761,6 +764,96 @@ describe('SettingsService', () => {
           rendererUrl: 'example.com',
         }),
       ).toThrow('Custom renderer URL must start with http:// or https://');
+    });
+
+    it('keeps custom renderers editable (readOnly: false) in getRenderers() after saveCustomRenderer(), resolves activeRenderer() for custom renderers, and allows editing and deleting them', () => {
+      mockStartupResolution.renderers.set({
+        default: {
+          displayName: 'Default Static',
+          rendererUrl: 'http://default.com',
+        },
+      });
+
+      service.saveCustomRenderer({
+        id: 'custom-1',
+        name: 'Custom One',
+        rendererUrl: 'http://c1.com',
+      });
+
+      expect(mockStartupResolution.renderers()).toEqual({
+        default: {
+          displayName: 'Default Static',
+          rendererUrl: 'http://default.com',
+        },
+      });
+      expect(service.getRenderers()).toEqual([
+        {
+          id: 'default',
+          name: 'Default Static',
+          rendererUrl: 'http://default.com',
+          readOnly: true,
+        },
+        {
+          id: 'custom-1',
+          name: 'Custom One',
+          rendererUrl: 'http://c1.com',
+          readOnly: false,
+        },
+      ]);
+
+      mockStartupResolution.selectedRendererId.set('custom-1');
+      mockStartupResolution.activeRenderer.set(null);
+      expect(service.activeRenderer()).toEqual({
+        id: 'custom-1',
+        name: 'Custom One',
+        rendererUrl: 'http://c1.com',
+      });
+
+      mockStartupResolution.selectedRendererId.set('Custom One');
+      expect(service.activeRenderer()).toEqual({
+        id: 'custom-1',
+        name: 'Custom One',
+        rendererUrl: 'http://c1.com',
+      });
+
+      mockStartupResolution.selectedRendererId.set('custom-1');
+      service.saveCustomRenderer({
+        id: 'custom-1',
+        name: 'Custom One Edited',
+        rendererUrl: 'http://c1-edited.com',
+      });
+
+      expect(service.activeRenderer()).toEqual({
+        id: 'custom-1',
+        name: 'Custom One Edited',
+        rendererUrl: 'http://c1-edited.com',
+      });
+      expect(service.getRenderers()).toEqual([
+        {
+          id: 'default',
+          name: 'Default Static',
+          rendererUrl: 'http://default.com',
+          readOnly: true,
+        },
+        {
+          id: 'custom-1',
+          name: 'Custom One Edited',
+          rendererUrl: 'http://c1-edited.com',
+          readOnly: false,
+        },
+      ]);
+
+      service.deleteCustomRenderer('custom-1');
+
+      expect(service.activeRenderer()).toBeNull();
+      expect(service.getRenderers()).toEqual([
+        {
+          id: 'default',
+          name: 'Default Static',
+          rendererUrl: 'http://default.com',
+          readOnly: true,
+        },
+      ]);
     });
   });
 
