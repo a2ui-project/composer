@@ -37,15 +37,12 @@ export const COMPONENT_USAGES: ComponentUsages = {
         action: {
           event: {
             name: 'submit',
-            context: [
-              {
-                key: 'formId',
-                value: 'contact-form',
-              },
-            ],
+            context: {
+              formId: 'contact-form',
+            },
           },
         },
-        primary: true,
+        variant: 'primary',
       },
       {
         id: 'demo-button-child',
@@ -70,7 +67,7 @@ export const COMPONENT_USAGES: ComponentUsages = {
         id: 'demo-card-title',
         component: 'Text',
         text: 'Card Title',
-        usageHint: 'h3',
+        variant: 'h3',
       },
       {
         id: 'demo-card-content',
@@ -94,14 +91,13 @@ export const COMPONENT_USAGES: ComponentUsages = {
       {
         id: 'root',
         component: 'ChoicePicker',
-        selections: ['US'],
+        value: ['US'],
         options: [
           {label: 'United States', value: 'US'},
           {label: 'Canada', value: 'CA'},
           {label: 'Mexico', value: 'MX'},
         ],
         variant: 'multipleSelection',
-        maxAllowedSelections: 1,
       },
     ],
   },
@@ -118,19 +114,19 @@ export const COMPONENT_USAGES: ComponentUsages = {
         id: 'demo-column-header',
         component: 'Text',
         text: 'Header',
-        usageHint: 'h2',
+        variant: 'h2',
       },
       {
         id: 'demo-column-content',
         component: 'Text',
         text: 'Content goes here',
-        usageHint: 'body',
+        variant: 'body',
       },
       {
         id: 'demo-column-footer',
         component: 'Text',
         text: 'Footer',
-        usageHint: 'caption',
+        variant: 'caption',
       },
     ],
   },
@@ -159,7 +155,7 @@ export const COMPONENT_USAGES: ComponentUsages = {
       {
         id: 'root',
         component: 'Icon',
-        name: 'check_circle',
+        name: 'check',
       },
     ],
   },
@@ -170,7 +166,7 @@ export const COMPONENT_USAGES: ComponentUsages = {
         component: 'Image',
         url: 'https://www.gstatic.com/marketing-cms/assets/images/c5/3a/200414104c669203c62270f7884f/google-wordmarks-2x.webp=n-w100-h32-fcrop64=1,00000000ffffffff-rw',
         fit: 'scaleDown',
-        usageHint: 'mediumFeature',
+        variant: 'mediumFeature',
       },
     ],
   },
@@ -268,8 +264,8 @@ export const COMPONENT_USAGES: ComponentUsages = {
         id: 'root',
         component: 'Slider',
         value: 50,
-        minValue: 0,
-        maxValue: 100,
+        min: 0,
+        max: 100,
       },
     ],
   },
@@ -288,7 +284,7 @@ export const COMPONENT_USAGES: ComponentUsages = {
         id: 'root',
         component: 'TextField',
         label: 'Your name',
-        textFieldType: 'shortText',
+        variant: 'shortText',
         validationRegexp: '^[a-zA-Z]+$',
         value: {
           path: '/user/name',

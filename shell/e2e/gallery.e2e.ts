@@ -15,7 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
-import {RENDERER_URLS} from './helpers';
+import {RENDERER_URLS, getMonacoContent, setMonacoContent} from './helpers';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -72,7 +72,37 @@ test.describe('Components Gallery User Journey', () => {
 
     // Assert card headers are visible
     const cardHeaders = page.locator('mat-card-header mat-card-title');
-    await expect(cardHeaders).toHaveText(['Preview', 'Usage', 'Properties']);
+    await expect(cardHeaders).toHaveText(['Preview', 'Edit JSON', 'Usage', 'Properties']);
+
+    // 6. Verify the Interactive Playground toggle is expanded by default and can be collapsed and re-expanded
+    const playgroundToggle = page.getByRole('button', {name: 'Interactive Playground'});
+    await expect(playgroundToggle).toHaveAttribute('aria-expanded', 'true');
+    await playgroundToggle.click();
+    await expect(playgroundToggle).toHaveAttribute('aria-expanded', 'false');
+    await playgroundToggle.click();
+    await expect(playgroundToggle).toHaveAttribute('aria-expanded', 'true');
+
+    // Verify Preview is stacked on top of Edit JSON, both cards have the same height, and both playground columns have the same height
+    await expect
+      .poll(async () => {
+        const previewCard = await page.locator('.preview-card').boundingBox();
+        const jsonCard = await page.locator('.json-card').boundingBox();
+        const previewSlot = await page.locator('.preview-slot').boundingBox();
+        const usageCard = await page.locator('.usage-card').boundingBox();
+        if (!previewCard || !jsonCard || !previewSlot || !usageCard) {
+          return null;
+        }
+        return {
+          previewAboveJson: previewCard.y + previewCard.height <= jsonCard.y,
+          equalCardHeight: Math.abs(previewCard.height - jsonCard.height) <= 1,
+          equalColumnHeight: Math.abs(previewSlot.height - usageCard.height) <= 1,
+        };
+      })
+      .toEqual({
+        previewAboveJson: true,
+        equalCardHeight: true,
+        equalColumnHeight: true,
+      });
 
     // 7. Assert properties table is populated
     const propertiesTable = page.getByRole('table');
@@ -80,16 +110,17 @@ test.describe('Components Gallery User Journey', () => {
     const rows = propertiesTable.locator('tbody tr');
     await expect(rows.first()).toBeVisible();
 
-    // 8. Assert usage card renders the usage JSON block representing a raw components array
-    const usageCode = page.locator('pre code');
-    await expect(usageCode).toBeVisible();
-    await expect(usageCode).toContainText(`"component": "${firstComponentName!}"`);
-    const usageCodeText = (await usageCode.textContent()) || '';
-    expect(usageCodeText.trim().startsWith('[')).toBe(true);
-    expect(usageCodeText.trim().endsWith(']')).toBe(true);
-    expect(usageCodeText).not.toContain('"usage": [');
-    expect(usageCodeText).not.toContain('createSurface');
-    expect(usageCodeText).not.toContain('updateComponents');
+    // 8. Assert the Edit JSON card holds the editable example as a raw components array in Monaco Editor
+    const draftJson = page.locator('a2ui-composer-monaco-editor.draft-json');
+    await expect(draftJson).toBeVisible();
+    await expect
+      .poll(() => getMonacoContent(page))
+      .toMatch(new RegExp(`"component": "${firstComponentName!}"`));
+    const draftText = await getMonacoContent(page);
+    expect(Array.isArray(JSON.parse(draftText).components)).toBe(true);
+    expect(draftText).not.toContain('"usage": [');
+    expect(draftText).not.toContain('createSurface');
+    expect(draftText).not.toContain('updateComponents');
 
     // Explicitly select AudioPlayer to verify its custom usages rendering
     const audioPlayerItem = page
@@ -97,9 +128,8 @@ test.describe('Components Gallery User Journey', () => {
       .getByRole('button', {name: 'AudioPlayer', exact: true});
     await expect(audioPlayerItem).toBeVisible();
     await audioPlayerItem.click();
-    await expect(page.locator('pre code')).toContainText('"description": "Deep dive into A2UI"');
-    const audioUsageCodeText = (await page.locator('pre code').textContent()) || '';
-    expect(audioUsageCodeText).not.toContain('Audio Clip');
+    await expect.poll(() => getMonacoContent(page)).toMatch(/"description": "Deep dive into A2UI"/);
+    expect(await getMonacoContent(page)).not.toContain('Audio Clip');
 
     // Click back to first component to continue the rest of the test flow
     await navItems.first().click();
@@ -109,6 +139,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(renderedFrame).toBeVisible();
     const iframe = renderedFrame.locator('iframe');
     await expect(iframe).toBeVisible();
+    await iframe.evaluate(el => el.setAttribute('data-test-marker', 'persistent-preview'));
 
     // 10. Click copy to clipboard and assert clipboard content represents a JSON array envelope
     const copyButton = page.getByRole('button', {name: /copy/i});
@@ -177,16 +208,19 @@ test.describe('Components Gallery User Journey', () => {
       page.getByRole('heading', {name: secondComponentName!, exact: true}),
     ).toBeVisible();
 
-    await expect(page.locator('pre code')).toContainText(`"component": "${secondComponentName!}"`);
-    const secondUsageCodeText = (await page.locator('pre code').textContent()) || '';
-    expect(secondUsageCodeText.trim().startsWith('[')).toBe(true);
-    expect(secondUsageCodeText.trim().endsWith(']')).toBe(true);
-    expect(secondUsageCodeText).not.toContain('"usage": [');
-    expect(secondUsageCodeText).not.toContain('createSurface');
-    expect(secondUsageCodeText).not.toContain('updateComponents');
+    // The Edit JSON card holds the selected component's editable example.
+    await expect
+      .poll(() => getMonacoContent(page))
+      .toMatch(new RegExp(`"component": "${secondComponentName!}"`));
+    const secondDraftText = await getMonacoContent(page);
+    const secondDraft = JSON.parse(secondDraftText) as Record<string, unknown>;
+    expect(Array.isArray(secondDraft['components'])).toBe(true);
+    expect(secondDraftText).not.toContain('createSurface');
+    expect(secondDraftText).not.toContain('updateComponents');
 
     // Assert that the marker is still present, proving the DOM element was reused in-place
     await expect(detailsPanel).toHaveAttribute('data-test-marker', 'in-place-verify');
+    await expect(iframe).toHaveAttribute('data-test-marker', 'persistent-preview');
 
     // Take screenshot for verification
     const screenshotBuffer = await page.screenshot();
@@ -194,5 +228,129 @@ test.describe('Components Gallery User Journey', () => {
       body: screenshotBuffer,
       contentType: 'image/png',
     });
+  });
+
+  test('keeps tall renderer controls inside the preview card and reachable', async ({page}) => {
+    await page.goto('/?renderer=http://localhost:3456');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await page.getByRole('link', {name: 'Components Gallery'}).click();
+
+    const preview = page.frameLocator('.preview-card iframe');
+    await expect(preview.locator('body')).toBeVisible();
+    await preview.locator('body').evaluate(body => {
+      const content = document.createElement('div');
+      content.style.cssText = 'min-height:700px;display:flex;align-items:flex-end';
+      const button = document.createElement('button');
+      button.textContent = 'Tall preview action';
+      button.addEventListener('click', () => (button.textContent = 'Action completed'));
+      content.append(button);
+      body.append(content);
+    });
+
+    const frame = page.locator('.preview-card iframe');
+    await expect
+      .poll(async () => (await frame.boundingBox())?.height ?? 0)
+      .toBeGreaterThanOrEqual(700);
+    await expect
+      .poll(async () => {
+        const cardBounds = await page.locator('.preview-card').boundingBox();
+        const frameBounds = await frame.boundingBox();
+        if (!cardBounds || !frameBounds) {
+          return -1;
+        }
+        return cardBounds.y + cardBounds.height - frameBounds.y - frameBounds.height;
+      })
+      .toBeGreaterThanOrEqual(0);
+
+    await page.locator('.gallery-content').evaluate(el => {
+      const card = el.querySelector('.preview-card')!;
+      el.scrollTop += card.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom;
+    });
+    const action = preview.getByRole('button', {name: 'Tall preview action'});
+    await expect(action).toBeInViewport();
+    await action.click();
+    await expect(preview.getByRole('button', {name: 'Action completed'})).toBeVisible();
+  });
+
+  test('keeps the gallery beside its drawer when shell navigation changes width', async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 820, height: 800});
+    await page.goto('/?renderer=http://localhost:3456');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await page.getByRole('link', {name: 'Components Gallery'}).click();
+    const toggle = page.getByRole('button', {name: 'Toggle sidenav'});
+    await toggle.click();
+    await expect(page.locator('.gallery-sidenav')).toHaveCSS('width', '144px');
+    await page.setViewportSize({width: 830, height: 800});
+    await expect
+      .poll(() => page.locator('.gallery-content').evaluate(el => el.style.marginLeft))
+      .toBe('144px');
+    await toggle.click();
+    await expect(page.locator('.gallery-sidenav')).toHaveCSS('width', '208px');
+    await expect(page.locator('.gallery-content')).toHaveCSS('margin-left', '208px');
+  });
+  test('lays out every property with its name beside its control, JSON fields included', async ({
+    page,
+  }) => {
+    await page.goto('/?renderer=http://localhost:3456');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await page.getByRole('link', {name: 'Components Gallery'}).click();
+    await page.locator('.catalog-list').getByRole('button', {name: 'Modal', exact: true}).click();
+    await expect(page.locator('[data-property-row="accessibility"]')).toBeVisible();
+
+    const rows = await page.locator('[data-property-row]').evaluateAll(elements =>
+      elements.map(row => {
+        const name = row.querySelector('.property-name')!.getBoundingClientRect();
+        const control = row.querySelector('.property-control')!.getBoundingClientRect();
+        return {
+          property: row.getAttribute('data-property-row'),
+          nameRight: name.right,
+          controlLeft: control.left,
+          topOffset: Math.abs(name.top - control.top),
+        };
+      }),
+    );
+    expect(rows.map(row => row.property)).toContain('accessibility');
+    for (const row of rows) {
+      // A JSON field sits in the same column as every other control, not below its name.
+      expect(row.nameRight, row.property ?? '').toBeLessThanOrEqual(row.controlLeft);
+      expect(row.topOffset, row.property ?? '').toBeLessThan(16);
+    }
+  });
+
+  test('edits selected-catalog Text and opens the same valid example with its renderer', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.goto('/?renderer=http://localhost:3456');
+    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
+    await page.getByRole('link', {name: 'Components Gallery'}).click();
+    await page.locator('.catalog-list').getByRole('button', {name: 'Text', exact: true}).click();
+    const text = page.getByRole('textbox', {name: 'text', exact: true});
+    await expect(text).toBeVisible();
+    const edited = 'Ready to use from my selected catalog';
+    await text.fill(edited);
+    const preview = page.frameLocator('.preview-card iframe');
+    await expect(preview.getByText(edited, {exact: true})).toBeVisible();
+
+    await expect.poll(() => getMonacoContent(page)).toMatch(new RegExp(edited));
+    await setMonacoContent(page, '{invalid');
+    await expect(page.getByRole('alert').filter({hasText: 'last valid example'})).toBeVisible();
+    await expect(preview.getByText(edited, {exact: true})).toBeVisible();
+    await page.getByRole('button', {name: 'Copy JSON', exact: true}).click();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toContain(edited);
+    expect(JSON.parse(copied)[0].createSurface.catalogId).toBeTruthy();
+
+    await page.getByRole('button', {name: 'Open in Composer', exact: true}).click();
+    await page.waitForURL(url => !url.pathname.endsWith('/gallery') && url.hash.includes('a2ui='));
+    const renderer = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('renderer');
+    expect(new URL(renderer!).origin).toBe('http://localhost:3456');
+    await expect(page.locator('.workspace-container')).toBeVisible();
+    await expect(
+      page.frameLocator('.workspace-container iframe').getByText(edited, {exact: true}),
+    ).toBeVisible();
   });
 });
