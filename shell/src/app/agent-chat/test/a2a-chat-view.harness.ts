@@ -31,7 +31,8 @@ export class A2aChatViewHarness extends ComponentHarness {
   readonly getInputArea = this.locatorFor(A2aInputAreaHarness);
   readonly getInspector = this.locatorForOptional(A2aMessageInspectorHarness);
   readonly getConfigDialog = this.documentRootLocatorFactory().locatorForOptional(MatDialogHarness);
-  readonly getConfigPanel = this.documentRootLocatorFactory().locatorForOptional(AgentConfigPanelHarness);
+  readonly getConfigPanel =
+    this.documentRootLocatorFactory().locatorForOptional(AgentConfigPanelHarness);
   readonly getSideCanvas = this.locatorForOptional('.side-canvas-column');
 
   async isInspectorOpen(): Promise<boolean> {

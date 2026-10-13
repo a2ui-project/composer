@@ -156,8 +156,7 @@ export class A2aChatView implements OnInit {
   private readonly streamEventParser = inject(A2aStreamEventParser);
   private readonly initTimestamp = Date.now();
 
-  private readonly configPanelTemplate =
-      viewChild.required<TemplateRef<void>>('configPanel');
+  private readonly configPanelTemplate = viewChild.required<TemplateRef<void>>('configPanel');
 
   /** Discovered A2A AgentCard metadata for the connected agent. */
   protected readonly agentCard = signal<AgentCard | null>(null);
