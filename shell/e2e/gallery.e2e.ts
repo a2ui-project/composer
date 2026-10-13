@@ -236,7 +236,7 @@ test.describe('Components Gallery User Journey', () => {
     await page.getByRole('link', {name: 'Components Gallery'}).click();
 
     const preview = page.frameLocator('.preview-card iframe');
-    await expect(preview.locator('body')).toBeVisible();
+    await expect(preview.locator('main')).toBeVisible();
     await preview.locator('body').evaluate(body => {
       const content = document.createElement('div');
       content.style.cssText = 'min-height:700px;display:flex;align-items:flex-end';
