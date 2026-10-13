@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { DOCUMENT, Location } from '@angular/common';
-import { TestBed } from '@angular/core/testing';
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { GalleryLauncher } from './gallery-launcher';
-import { QueryParser } from '../shell/query-parser/query-parser';
+import {DOCUMENT, Location} from '@angular/common';
+import {TestBed} from '@angular/core/testing';
+import {describe, it, expect, vi, afterEach} from 'vitest';
+import {GalleryLauncher} from './gallery-launcher';
+import {QueryParser} from '../shell/query-parser/query-parser';
 
 describe('GalleryLauncher', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -31,23 +31,23 @@ describe('GalleryLauncher', () => {
           provide: DOCUMENT,
           useValue: {
             defaultView: {
-              location: { href: 'https://example.com/composer/pr/129/gallery?renderer=old', assign },
+              location: {href: 'https://example.com/composer/pr/129/gallery?renderer=old', assign},
             },
           },
         },
-        { provide: Location, useValue: { prepareExternalUrl: () => '/composer/pr/129/' } },
+        {provide: Location, useValue: {prepareExternalUrl: () => '/composer/pr/129/'}},
       ],
     });
     const payload = JSON.stringify([
       {
         version: 'v0.9',
-        createSurface: { surfaceId: 'gallery-preview', catalogId: 'custom://notice' },
+        createSurface: {surfaceId: 'gallery-preview', catalogId: 'custom://notice'},
       },
       {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [{ id: 'root', component: 'Notice', text: 'Edited' }],
+          components: [{id: 'root', component: 'Notice', text: 'Edited'}],
         },
       },
     ]);
@@ -57,7 +57,7 @@ describe('GalleryLauncher', () => {
       'custom',
     );
     const url = new URL(assign.mock.lastCall?.[0]);
-    const logger = { warn: vi.fn() };
+    const logger = {warn: vi.fn()};
     expect(url.pathname).toBe('/composer/pr/129/');
     expect(url.search).toBe('');
     expect(QueryParser.parseRendererUrl(url.hash, logger)).toBe(
@@ -75,9 +75,9 @@ describe('GalleryLauncher', () => {
       providers: [
         {
           provide: DOCUMENT,
-          useValue: { defaultView: { location: { href: 'https://example.com/gallery', assign } } },
+          useValue: {defaultView: {location: {href: 'https://example.com/gallery', assign}}},
         },
-        { provide: Location, useValue: { prepareExternalUrl: () => '/' } },
+        {provide: Location, useValue: {prepareExternalUrl: () => '/'}},
       ],
     });
     vi.spyOn(QueryParser, 'encodeSharedPayload').mockRejectedValue(new Error('Encoding failed'));
@@ -93,22 +93,22 @@ describe('GalleryLauncher', () => {
       providers: [
         {
           provide: DOCUMENT,
-          useValue: { defaultView: { location: { href: 'https://example.com/gallery', assign } } },
+          useValue: {defaultView: {location: {href: 'https://example.com/gallery', assign}}},
         },
-        { provide: Location, useValue: { prepareExternalUrl: () => '/' } },
+        {provide: Location, useValue: {prepareExternalUrl: () => '/'}},
       ],
     });
     await TestBed.inject(GalleryLauncher).open('[]', 'https://renderer.test', null);
     const url = new URL(assign.mock.lastCall?.[0]);
-    const logger = { warn: vi.fn() };
+    const logger = {warn: vi.fn()};
     expect(url.hash).not.toContain('renderId');
   });
 
   it('throws when document.defaultView is unavailable', async () => {
     TestBed.configureTestingModule({
       providers: [
-        { provide: DOCUMENT, useValue: { defaultView: undefined } },
-        { provide: Location, useValue: { prepareExternalUrl: () => '/' } },
+        {provide: DOCUMENT, useValue: {defaultView: undefined}},
+        {provide: Location, useValue: {prepareExternalUrl: () => '/'}},
       ],
     });
     await expect(

@@ -22,14 +22,14 @@ import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {ReplaySubject} from 'rxjs';
 import {Clipboard} from '@angular/cdk/clipboard';
 import {Gallery} from './gallery';
-import { GalleryLauncher } from './gallery-launcher';
-import { StartupConfigStateService } from '../shell/startup-resolution/state/startup-config-state.service';
+import {GalleryLauncher} from './gallery-launcher';
+import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {GalleryHarness} from './test/gallery.harness';
 import {GalleryCatalog, CategorizedComponents} from './services/gallery-catalog';
 import {PreviewBridgeMessageType, type ComponentUsage} from 'a2ui-bridge';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
-import { CatalogSchemaResolver, ParsedProperty } from './schema/catalog-schema-resolver';
-import { ErrorLogger } from '../debug/error-logger.service';
+import {CatalogSchemaResolver, ParsedProperty} from './schema/catalog-schema-resolver';
+import {ErrorLogger} from '../debug/error-logger.service';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
@@ -38,17 +38,17 @@ import {
   ThemePreference,
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
-import { StateSync } from '../chat/state-sync/state-sync';
+import {StateSync} from '../chat/state-sync/state-sync';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../usage-tracking/noop-usage-tracking.service';
 import type * as monaco from 'monaco-editor';
 
-const { createMockMonaco } = vi.hoisted(() => {
+const {createMockMonaco} = vi.hoisted(() => {
   const create = vi.fn(
     (container: HTMLElement, options: monaco.editor.IStandaloneEditorConstructionOptions) => {
       const textarea = document.createElement('textarea');
       textarea.className = 'mock-monaco-textarea';
-      textarea.value = (options.model as { value?: string } | undefined)?.value || '';
+      textarea.value = (options.model as {value?: string} | undefined)?.value || '';
       if (options.readOnly) {
         textarea.readOnly = true;
       }
@@ -88,12 +88,12 @@ const { createMockMonaco } = vi.hoisted(() => {
         focus: vi.fn(),
         onDidChangeModelContent: vi.fn((cb: () => void) => {
           textarea.addEventListener('input', cb);
-          return { dispose: () => textarea.removeEventListener('input', cb) };
+          return {dispose: () => textarea.removeEventListener('input', cb)};
         }),
-        onDidChangeCursorPosition: vi.fn(() => ({ dispose: () => { } })),
-        onDidChangeCursorSelection: vi.fn(() => ({ dispose: () => { } })),
-        onKeyDown: vi.fn(() => ({ dispose: () => { } })),
-        onMouseDown: vi.fn(() => ({ dispose: () => { } })),
+        onDidChangeCursorPosition: vi.fn(() => ({dispose: () => {}})),
+        onDidChangeCursorSelection: vi.fn(() => ({dispose: () => {}})),
+        onKeyDown: vi.fn(() => ({dispose: () => {}})),
+        onMouseDown: vi.fn(() => ({dispose: () => {}})),
         updateOptions: vi.fn((newOpts: monaco.editor.IEditorOptions) => {
           if (newOpts.readOnly !== undefined) {
             textarea.readOnly = newOpts.readOnly;
@@ -103,7 +103,7 @@ const { createMockMonaco } = vi.hoisted(() => {
       } as unknown as monaco.editor.IStandaloneCodeEditor;
     },
   );
-  return { createMockMonaco: create };
+  return {createMockMonaco: create};
 });
 
 vi.mock('@monaco-editor/loader', () => ({
@@ -111,7 +111,7 @@ vi.mock('@monaco-editor/loader', () => ({
     config: vi.fn(),
     init: vi.fn().mockResolvedValue({
       Uri: {
-        parse: vi.fn((uri: string) => ({ toString: () => uri })),
+        parse: vi.fn((uri: string) => ({toString: () => uri})),
       },
       editor: {
         defineTheme: vi.fn(),
@@ -124,7 +124,7 @@ vi.mock('@monaco-editor/loader', () => ({
           setValue: vi.fn(),
           dispose: vi.fn(),
         })),
-        onDidChangeMarkers: vi.fn(() => ({ dispose: () => { } })),
+        onDidChangeMarkers: vi.fn(() => ({dispose: () => {}})),
         getModelMarkers: vi.fn(() => []),
       },
       languages: {
@@ -196,18 +196,18 @@ class MockStateSync {
 
 // The basic catalog's ChoicePicker and DateTimeInput, with the common types they reference.
 const dynamic = (literal: Record<string, unknown>) => ({
-  oneOf: [literal, { $ref: '#/$defs/DataBinding' }, { $ref: '#/$defs/FunctionCall' }],
+  oneOf: [literal, {$ref: '#/$defs/DataBinding'}, {$ref: '#/$defs/FunctionCall'}],
 });
 const basicCatalog: Catalog = {
   catalogId: 'https://a2ui.org/basic_catalog.json',
   $defs: {
-    DataBinding: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
-    FunctionCall: { type: 'object', properties: { call: { type: 'string' } }, required: ['call'] },
-    DynamicString: dynamic({ type: 'string' }),
-    DynamicStringList: dynamic({ type: 'array', items: { type: 'string' } }),
+    DataBinding: {type: 'object', properties: {path: {type: 'string'}}, required: ['path']},
+    FunctionCall: {type: 'object', properties: {call: {type: 'string'}}, required: ['call']},
+    DynamicString: dynamic({type: 'string'}),
+    DynamicStringList: dynamic({type: 'array', items: {type: 'string'}}),
     ComponentCommon: {
       type: 'object',
-      properties: { id: { type: 'string' }, weight: { type: 'number' } },
+      properties: {id: {type: 'string'}, weight: {type: 'number'}},
       required: ['id'],
     },
   },
@@ -215,24 +215,24 @@ const basicCatalog: Catalog = {
     ChoicePicker: {
       type: 'object',
       allOf: [
-        { $ref: '#/$defs/ComponentCommon' },
+        {$ref: '#/$defs/ComponentCommon'},
         {
           type: 'object',
           properties: {
-            component: { const: 'ChoicePicker' },
-            label: { $ref: '#/$defs/DynamicString' },
-            variant: { type: 'string', enum: ['multipleSelection', 'mutuallyExclusive'] },
+            component: {const: 'ChoicePicker'},
+            label: {$ref: '#/$defs/DynamicString'},
+            variant: {type: 'string', enum: ['multipleSelection', 'mutuallyExclusive']},
             options: {
               type: 'array',
               items: {
                 type: 'object',
-                properties: { label: { $ref: '#/$defs/DynamicString' }, value: { type: 'string' } },
+                properties: {label: {$ref: '#/$defs/DynamicString'}, value: {type: 'string'}},
                 required: ['label', 'value'],
               },
             },
-            value: { $ref: '#/$defs/DynamicStringList' },
-            displayStyle: { type: 'string', enum: ['checkbox', 'chips'] },
-            filterable: { type: 'boolean' },
+            value: {$ref: '#/$defs/DynamicStringList'},
+            displayStyle: {type: 'string', enum: ['checkbox', 'chips']},
+            filterable: {type: 'boolean'},
           },
           required: ['component', 'options', 'value'],
         },
@@ -241,16 +241,16 @@ const basicCatalog: Catalog = {
     DateTimeInput: {
       type: 'object',
       allOf: [
-        { $ref: '#/$defs/ComponentCommon' },
+        {$ref: '#/$defs/ComponentCommon'},
         {
           type: 'object',
           properties: {
-            component: { const: 'DateTimeInput' },
-            value: { $ref: '#/$defs/DynamicString' },
-            enableDate: { type: 'boolean' },
-            enableTime: { type: 'boolean' },
-            min: { $ref: '#/$defs/DynamicString' },
-            label: { $ref: '#/$defs/DynamicString' },
+            component: {const: 'DateTimeInput'},
+            value: {$ref: '#/$defs/DynamicString'},
+            enableDate: {type: 'boolean'},
+            enableTime: {type: 'boolean'},
+            min: {$ref: '#/$defs/DynamicString'},
+            label: {$ref: '#/$defs/DynamicString'},
           },
           required: ['component', 'value'],
         },
@@ -263,10 +263,10 @@ const choicePicker = {
   component: 'ChoicePicker',
   label: 'Size',
   options: [
-    { label: 'Small', value: 's' },
-    { label: 'Large', value: 'l' },
+    {label: 'Small', value: 's'},
+    {label: 'Large', value: 'l'},
   ],
-  value: { path: '/size' },
+  value: {path: '/size'},
 };
 
 describe('Gallery Component', () => {
@@ -275,7 +275,7 @@ describe('Gallery Component', () => {
   let catalogServiceMock: MockGalleryCatalogService;
   let catalogManagementMock: MockCatalogManagement;
   let hostCommunicationMock: MockHostCommunication;
-  const launcher = { open: vi.fn<GalleryLauncher['open']>().mockResolvedValue() };
+  const launcher = {open: vi.fn<GalleryLauncher['open']>().mockResolvedValue()};
   let mockClipboard: {copy: ReturnType<typeof vi.fn>};
 
   beforeEach(async () => {
@@ -292,10 +292,10 @@ describe('Gallery Component', () => {
         {provide: StartupResolution, useClass: MockStartupResolution},
         {provide: AppConfigProvider, useValue: {themePreference: signal(ThemePreference.LIGHT)}},
         {provide: ChatState, useClass: MockChatState},
-        { provide: StateSync, useClass: MockStateSync },
+        {provide: StateSync, useClass: MockStateSync},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
         {provide: Clipboard, useValue: mockClipboard},
-        { provide: GalleryLauncher, useValue: launcher },
+        {provide: GalleryLauncher, useValue: launcher},
       ],
     }).compileComponents();
 
@@ -411,7 +411,7 @@ describe('Gallery Component', () => {
     catalogServiceMock.selectedComponentUsage.set(mockUsage);
     fixture.detectChanges();
 
-    expect(JSON.parse(await harness.getDraftText())).toEqual({ components: mockComponents });
+    expect(JSON.parse(await harness.getDraftText())).toEqual({components: mockComponents});
 
     await harness.clickCopyButton();
 
@@ -498,7 +498,7 @@ describe('Gallery Component', () => {
   it('reports clipboard exceptions without losing the valid preview', async () => {
     const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
     catalogServiceMock.selectedComponentKey.set('Text');
-    catalogServiceMock.selectedComponentPreset.set({ usage: [{ id: 'target', component: 'Text' }] });
+    catalogServiceMock.selectedComponentPreset.set({usage: [{id: 'target', component: 'Text'}]});
     fixture.detectChanges();
     mockClipboard.copy.mockImplementation(() => {
       throw new Error('Clipboard unavailable');
@@ -611,7 +611,7 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [{ id: 'root', component: 'Text' }],
+          components: [{id: 'root', component: 'Text'}],
         },
       },
     ]);
@@ -675,7 +675,7 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [{ id: 'root', component: 'TextField' }],
+          components: [{id: 'root', component: 'TextField'}],
         },
       },
       {
@@ -713,7 +713,7 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [{ id: 'root', component: 'Text' }],
+          components: [{id: 'root', component: 'Text'}],
         },
       },
     ]);
@@ -851,7 +851,7 @@ describe('Gallery Component', () => {
       version: 'v0.9',
       updateComponents: {
         surfaceId: 'gallery-preview',
-        components: [{ ...usageText[0], id: 'root' }],
+        components: [{...usageText[0], id: 'root'}],
       },
     };
     const expectedTextPayload = [expectedTextLine1, expectedTextLine2];
@@ -869,7 +869,7 @@ describe('Gallery Component', () => {
       version: 'v0.9',
       updateComponents: {
         surfaceId: 'gallery-preview',
-        components: [{ ...usageButton[0], id: 'root' }],
+        components: [{...usageButton[0], id: 'root'}],
       },
     };
     const expectedButtonPayload = [expectedTextLine1, expectedButtonLine2];
@@ -908,7 +908,7 @@ describe('Gallery Component', () => {
         updateComponents: {
           surfaceId: 'gallery-preview',
           components: [
-            { id: 'root', component: 'Card', children: ['header'] },
+            {id: 'root', component: 'Card', children: ['header']},
             {id: 'header', component: 'Text', text: 'Hello'},
           ],
         },
@@ -937,7 +937,7 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [{ id: 'root', component: 'Text', text: 'Hello' }],
+          components: [{id: 'root', component: 'Text', text: 'Hello'}],
         },
       },
       {
@@ -974,14 +974,14 @@ describe('Gallery Component', () => {
     hostCommunicationMock.sendRenderA2UI.mockImplementationOnce(() => {
       throw new Error('Transport failure');
     });
-    hostCommunicationMock.messageStream$.next({ type: PreviewBridgeMessageType.RENDERER_READY });
+    hostCommunicationMock.messageStream$.next({type: PreviewBridgeMessageType.RENDERER_READY});
     expect(errorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining('Failed to dispatch component example:'),
         sourceTag: '[Gallery]',
       }),
     );
-    hostCommunicationMock.messageStream$.next({ type: PreviewBridgeMessageType.RENDERER_READY });
+    hostCommunicationMock.messageStream$.next({type: PreviewBridgeMessageType.RENDERER_READY});
     expect(hostCommunicationMock.sendRenderA2UI).toHaveBeenCalledTimes(2);
   });
 
@@ -1006,7 +1006,7 @@ describe('Gallery Component', () => {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 'gallery-preview',
-          components: [{ id: 'root', component: 'Button' }],
+          components: [{id: 'root', component: 'Button'}],
         },
       },
     ]);
@@ -1069,10 +1069,10 @@ describe('Gallery Component', () => {
 
   it('reports an unencodable renderer example without enabling copy or breaking the Gallery', async () => {
     const errorSpy = vi.spyOn(TestBed.inject(ErrorLogger), 'error');
-    const cyclic: Record<string, unknown> = { id: 'target', component: 'Text' };
+    const cyclic: Record<string, unknown> = {id: 'target', component: 'Text'};
     cyclic['self'] = cyclic;
     catalogServiceMock.selectedComponentKey.set('Text');
-    catalogServiceMock.selectedComponentPreset.set({ usage: [cyclic] });
+    catalogServiceMock.selectedComponentPreset.set({usage: [cyclic]});
     fixture.detectChanges();
     expect(await harness.getDraftError()).toContain('Could not load');
     await harness.clickCopyButton();
@@ -1153,15 +1153,15 @@ describe('Gallery Component', () => {
   it('edits a property and retains the same valid preview and copy payload through invalid JSON and late usages', async () => {
     catalogManagementMock.activeCatalog.set({
       catalogId: 'custom://notice',
-      components: { Notice: { type: 'object', properties: { text: { type: 'string' } } } },
+      components: {Notice: {type: 'object', properties: {text: {type: 'string'}}}},
     });
     catalogServiceMock.selectedComponentKey.set('Notice');
     catalogServiceMock.selectedComponentProperties.set([
-      { name: 'text', type: 'string', required: true, description: 'Notice text' },
+      {name: 'text', type: 'string', required: true, description: 'Notice text'},
     ]);
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Notice', text: 'Original' }],
-      data: { count: 1 },
+      usage: [{id: 'target', component: 'Notice', text: 'Original'}],
+      data: {count: 1},
     });
     fixture.detectChanges();
     await harness.editProperty('text', 'Edited notice');
@@ -1175,9 +1175,9 @@ describe('Gallery Component', () => {
     expect(await harness.getDraftError()).toContain('JSON');
     expect(await harness.getDraftText()).toBe('{broken');
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Notice', text: 'Late reply' }],
+      usage: [{id: 'target', component: 'Notice', text: 'Late reply'}],
     });
-    hostCommunicationMock.messageStream$.next({ type: PreviewBridgeMessageType.RENDERER_READY });
+    hostCommunicationMock.messageStream$.next({type: PreviewBridgeMessageType.RENDERER_READY});
     fixture.detectChanges();
     expect(await harness.getDraftText()).toBe('{broken');
     await harness.clickCopyButton();
@@ -1188,19 +1188,19 @@ describe('Gallery Component', () => {
   it('updates bound data from JSON and rejects components outside the active catalog', async () => {
     catalogServiceMock.selectedComponentKey.set('Text');
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Text', text: { path: '/name' } }],
-      data: { name: 'Original' },
+      usage: [{id: 'target', component: 'Text', text: {path: '/name'}}],
+      data: {name: 'Original'},
     });
     fixture.detectChanges();
     const edited = {
-      components: [{ id: 'target', component: 'Text', text: { path: '/name' } }],
-      data: { name: 'New name' },
+      components: [{id: 'target', component: 'Text', text: {path: '/name'}}],
+      data: {name: 'New name'},
     };
     await harness.editDraft(JSON.stringify(edited));
     const preview = hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0];
-    expect(preview[2].updateDataModel.value).toEqual({ name: 'New name' });
+    expect(preview[2].updateDataModel.value).toEqual({name: 'New name'});
     await harness.editDraft(
-      JSON.stringify({ ...edited, components: [{ id: 'target', component: 'OtherCatalog' }] }),
+      JSON.stringify({...edited, components: [{id: 'target', component: 'OtherCatalog'}]}),
     );
     expect(await harness.getDraftError()).toContain('OtherCatalog');
     await harness.clickCopyButton();
@@ -1210,29 +1210,29 @@ describe('Gallery Component', () => {
   it('resets the draft for a new component or catalog but not an equivalent catalog announcement', async () => {
     const catalog: Catalog = {
       catalogId: 'custom://notice',
-      components: { Notice: { type: 'object' }, Other: { type: 'object' } },
+      components: {Notice: {type: 'object'}, Other: {type: 'object'}},
     };
     catalogManagementMock.activeCatalog.set(catalog);
     catalogServiceMock.selectedComponentKey.set('Notice');
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Notice', text: 'First' }],
+      usage: [{id: 'target', component: 'Notice', text: 'First'}],
     });
     fixture.detectChanges();
     await harness.editDraft(
-      JSON.stringify({ components: [{ id: 'target', component: 'Notice', text: 'Edited' }] }),
+      JSON.stringify({components: [{id: 'target', component: 'Notice', text: 'Edited'}]}),
     );
     catalogManagementMock.activeCatalog.set(structuredClone(catalog));
     fixture.detectChanges();
     expect(await harness.getDraftText()).toContain('Edited');
     catalogServiceMock.selectedComponentKey.set('Other');
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Other', text: 'Second' }],
+      usage: [{id: 'target', component: 'Other', text: 'Second'}],
     });
     fixture.detectChanges();
     expect(await harness.getDraftText()).toContain('Second');
-    catalogManagementMock.activeCatalog.set({ ...catalog, catalogId: 'custom://new' });
+    catalogManagementMock.activeCatalog.set({...catalog, catalogId: 'custom://new'});
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Other', text: 'New catalog' }],
+      usage: [{id: 'target', component: 'Other', text: 'New catalog'}],
     });
     fixture.detectChanges();
     expect(await harness.getDraftText()).toContain('New catalog');
@@ -1249,39 +1249,39 @@ describe('Gallery Component', () => {
       catalog: {
         catalogId: 'custom://tree',
         components: {
-          Column: { type: 'object' },
-          Row: { type: 'object' },
-          Text: { type: 'object' },
+          Column: {type: 'object'},
+          Row: {type: 'object'},
+          Text: {type: 'object'},
         },
       },
       selected: 'Column',
       authored: [
-        { id: 'root', component: 'Column', children: ['target', 'detail'] },
-        { id: 'target', component: 'Row', children: ['label'] },
-        { id: 'label', component: 'Text', text: 'Name' },
-        { id: 'detail', component: 'Text', text: 'target' },
+        {id: 'root', component: 'Column', children: ['target', 'detail']},
+        {id: 'target', component: 'Row', children: ['label']},
+        {id: 'label', component: 'Text', text: 'Name'},
+        {id: 'detail', component: 'Text', text: 'target'},
       ],
       expected: [
-        { id: 'root', component: 'Column', children: ['target', 'detail'] },
-        { id: 'target', component: 'Row', children: ['label'] },
-        { id: 'label', component: 'Text', text: 'Name' },
-        { id: 'detail', component: 'Text', text: 'target' },
+        {id: 'root', component: 'Column', children: ['target', 'detail']},
+        {id: 'target', component: 'Row', children: ['label']},
+        {id: 'label', component: 'Text', text: 'Name'},
+        {id: 'detail', component: 'Text', text: 'target'},
       ],
     },
     {
       name: 'a legacy target-only container and its child references',
       catalog: {
         catalogId: 'custom://tree',
-        components: { Column: { type: 'object' }, Text: { type: 'object' } },
+        components: {Column: {type: 'object'}, Text: {type: 'object'}},
       },
       selected: 'Column',
       authored: [
-        { id: 'target', component: 'Column', children: ['label'] },
-        { id: 'label', component: 'Text', text: 'target' },
+        {id: 'target', component: 'Column', children: ['label']},
+        {id: 'label', component: 'Text', text: 'target'},
       ],
       expected: [
-        { id: 'root', component: 'Column', children: ['label'] },
-        { id: 'label', component: 'Text', text: 'target' },
+        {id: 'root', component: 'Column', children: ['label']},
+        {id: 'label', component: 'Text', text: 'target'},
       ],
     },
     {
@@ -1292,39 +1292,39 @@ describe('Gallery Component', () => {
           AcmeColumn: {
             type: 'object',
             properties: {
-              id: { type: 'string' },
-              component: { const: 'AcmeColumn' },
-              slots: { type: 'array' },
-              mode: { type: 'string', enum: ['stacked'] },
+              id: {type: 'string'},
+              component: {const: 'AcmeColumn'},
+              slots: {type: 'array'},
+              mode: {type: 'string', enum: ['stacked']},
             },
             required: ['slots', 'mode'],
             additionalProperties: false,
           },
-          Text: { type: 'object' },
+          Text: {type: 'object'},
         },
       },
       selected: 'AcmeColumn',
       authored: [
-        { id: 'target', component: 'AcmeColumn', slots: ['label'], mode: 'stacked' },
-        { id: 'label', component: 'Text', text: 'Custom child' },
+        {id: 'target', component: 'AcmeColumn', slots: ['label'], mode: 'stacked'},
+        {id: 'label', component: 'Text', text: 'Custom child'},
       ],
       expected: [
-        { id: 'root', component: 'AcmeColumn', slots: ['label'], mode: 'stacked' },
-        { id: 'label', component: 'Text', text: 'Custom child' },
+        {id: 'root', component: 'AcmeColumn', slots: ['label'], mode: 'stacked'},
+        {id: 'label', component: 'Text', text: 'Custom child'},
       ],
     },
   ])('preserves $name across preview, copy, and Open', async scenario => {
     catalogManagementMock.activeCatalog.set(scenario.catalog);
     catalogServiceMock.selectedComponentKey.set(scenario.selected);
-    catalogServiceMock.selectedComponentPreset.set({ usage: scenario.authored });
+    catalogServiceMock.selectedComponentPreset.set({usage: scenario.authored});
     fixture.detectChanges();
     await harness.editDraft(
-      JSON.stringify({ components: scenario.authored, data: { name: 'Edited' } }),
+      JSON.stringify({components: scenario.authored, data: {name: 'Edited'}}),
     );
     expect(await harness.getDraftError()).toBeNull();
     const preview = hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0];
     expect(preview[1].updateComponents.components).toEqual(scenario.expected);
-    expect(preview[2].updateDataModel.value).toEqual({ name: 'Edited' });
+    expect(preview[2].updateDataModel.value).toEqual({name: 'Edited'});
     expect(JSON.parse(await harness.getDraftText()).components).toEqual(scenario.authored);
     await harness.clickCopyButton();
     await harness.openInComposer();
@@ -1336,12 +1336,12 @@ describe('Gallery Component', () => {
   it('copies and opens byte-equivalent last valid JSON with the selected renderer after an invalid edit', async () => {
     catalogServiceMock.selectedComponentKey.set('Text');
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Text', text: 'Initial' }],
+      usage: [{id: 'target', component: 'Text', text: 'Initial'}],
     });
     TestBed.inject(StartupConfigStateService).setSelectedRendererId('selected');
     fixture.detectChanges();
     await harness.editDraft(
-      JSON.stringify({ components: [{ id: 'target', component: 'Text', text: 'Final' }] }),
+      JSON.stringify({components: [{id: 'target', component: 'Text', text: 'Final'}]}),
     );
     await harness.editDraft('{bad');
     await harness.clickCopyButton();
@@ -1359,13 +1359,13 @@ describe('Gallery Component', () => {
   it('reports an error and re-enables Open in Composer when launching fails, and ignores missing renderer or concurrent opens', async () => {
     catalogServiceMock.selectedComponentKey.set('Text');
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Text', text: 'Initial' }],
+      usage: [{id: 'target', component: 'Text', text: 'Initial'}],
     });
     fixture.detectChanges();
 
     const startup = TestBed.inject(StartupResolution) as unknown as MockStartupResolution;
     const openInComposer = () =>
-      (fixture.componentInstance as unknown as { openInComposer(): Promise<void> }).openInComposer();
+      (fixture.componentInstance as unknown as {openInComposer(): Promise<void>}).openInComposer();
 
     // Guard when rendererUrl() is null:
     startup.resolvedUrl.set(null);
@@ -1406,11 +1406,11 @@ describe('Gallery Component', () => {
   it('resets an edited draft when the selected renderer URL changes', async () => {
     catalogServiceMock.selectedComponentKey.set('Text');
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Text', text: 'Initial' }],
+      usage: [{id: 'target', component: 'Text', text: 'Initial'}],
     });
     fixture.detectChanges();
     await harness.editDraft(
-      JSON.stringify({ components: [{ id: 'target', component: 'Text', text: 'Edited' }] }),
+      JSON.stringify({components: [{id: 'target', component: 'Text', text: 'Edited'}]}),
     );
     const startup = TestBed.inject(StartupResolution) as unknown as MockStartupResolution;
     startup.resolvedUrl.set('http://localhost/new-renderer');
@@ -1422,16 +1422,16 @@ describe('Gallery Component', () => {
   it('keeps the current draft when renderer validation and theme messages arrive', async () => {
     catalogServiceMock.selectedComponentKey.set('Text');
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Text', text: 'Initial' }],
+      usage: [{id: 'target', component: 'Text', text: 'Initial'}],
     });
     fixture.detectChanges();
     await harness.editDraft(
-      JSON.stringify({ components: [{ id: 'target', component: 'Text', text: 'Edited' }] }),
+      JSON.stringify({components: [{id: 'target', component: 'Text', text: 'Edited'}]}),
     );
     hostCommunicationMock.sendRenderA2UI.mockClear();
     hostCommunicationMock.messageStream$.next({
       type: PreviewBridgeMessageType.DATA_MODEL_CHANGE,
-      payload: { validationErrors: [] },
+      payload: {validationErrors: []},
     });
     fixture.detectChanges();
     expect(await harness.getDraftText()).toContain('Edited');
@@ -1444,14 +1444,14 @@ describe('Gallery Component', () => {
     // failing to render.
     catalogManagementMock.activeCatalog.set({
       catalogId: 'custom://unresolved',
-      components: { Notice: { type: 'object' } },
+      components: {Notice: {type: 'object'}},
     });
     catalogServiceMock.selectedComponentKey.set('Notice');
     catalogServiceMock.selectedComponentProperties.set([
-      { name: 'text', type: 'string', description: '', required: false },
+      {name: 'text', type: 'string', description: '', required: false},
     ]);
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Notice', text: 'Initial' }],
+      usage: [{id: 'target', component: 'Notice', text: 'Initial'}],
     });
     expect(() => fixture.detectChanges()).not.toThrow();
 
@@ -1469,21 +1469,21 @@ describe('Gallery Component', () => {
         Notice: {
           type: 'object',
           properties: {
-            count: { type: 'number' },
-            enabled: { type: 'boolean' },
-            emphasis: { type: 'string', enum: ['normal', 'strong'] },
+            count: {type: 'number'},
+            enabled: {type: 'boolean'},
+            emphasis: {type: 'string', enum: ['normal', 'strong']},
           },
         },
       },
     });
     catalogServiceMock.selectedComponentKey.set('Notice');
     catalogServiceMock.selectedComponentProperties.set([
-      { name: 'count', type: 'number', description: '', required: false },
-      { name: 'enabled', type: 'boolean', description: '', required: false },
-      { name: 'emphasis', type: 'string', description: '', required: false },
+      {name: 'count', type: 'number', description: '', required: false},
+      {name: 'enabled', type: 'boolean', description: '', required: false},
+      {name: 'emphasis', type: 'string', description: '', required: false},
     ]);
     catalogServiceMock.selectedComponentPreset.set({
-      usage: [{ id: 'target', component: 'Notice', count: 2, enabled: true, emphasis: 'normal' }],
+      usage: [{id: 'target', component: 'Notice', count: 2, enabled: true, emphasis: 'normal'}],
     });
     fixture.detectChanges();
     await harness.editProperty('count', '');
@@ -1505,13 +1505,13 @@ describe('Gallery Component', () => {
       catalogServiceMock.selectedComponentProperties.set(
         new CatalogSchemaResolver(basicCatalog, new ErrorLogger()).resolveComponentProperties(name),
       );
-      catalogServiceMock.selectedComponentPreset.set({ usage, data: { size: ['s'] } });
+      catalogServiceMock.selectedComponentPreset.set({usage, data: {size: ['s']}});
       fixture.detectChanges();
     };
     const target = async () => JSON.parse(await harness.getDraftText()).components[0];
 
     it('flags a required property the example does not set, and only that one', async () => {
-      const { value: _value, ...withoutValue } = choicePicker;
+      const {value: _value, ...withoutValue} = choicePicker;
       select('ChoicePicker', [withoutValue]);
       expect(await harness.isPropertyMissing('value')).toBe(true);
       expect(await harness.isPropertyMissing('options')).toBe(false);
@@ -1550,7 +1550,7 @@ describe('Gallery Component', () => {
       await harness.selectPropertyOption('displayStyle', 2);
       expect((await target()).displayStyle).toBe('chips');
       expect(hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0][1]).toMatchObject({
-        updateComponents: { components: [{ displayStyle: 'chips' }] },
+        updateComponents: {components: [{displayStyle: 'chips'}]},
       });
       await harness.selectPropertyOption('displayStyle', 0);
       expect(await target()).not.toHaveProperty('displayStyle');
@@ -1562,12 +1562,12 @@ describe('Gallery Component', () => {
       expect(await harness.getObjectPropertyNames('options.0')).toEqual(['label', 'value']);
 
       await harness.editProperty('options.0.label', 'Extra Small');
-      expect((await target()).options[0]).toEqual({ label: 'Extra Small', value: 's' });
+      expect((await target()).options[0]).toEqual({label: 'Extra Small', value: 's'});
 
       // Adding an entry duplicates the latest item in the array.
       await harness.addArrayItem('options');
       expect(await harness.getArrayItemCount('options')).toBe(3);
-      expect((await target()).options[2]).toEqual({ label: 'Large', value: 'l' });
+      expect((await target()).options[2]).toEqual({label: 'Large', value: 'l'});
 
       // Deleting all items and clicking Add Entry creates a fresh item from itemControl.
       await harness.deleteArrayItem('options', 2);
@@ -1577,7 +1577,7 @@ describe('Gallery Component', () => {
 
       await harness.addArrayItem('options');
       expect(await harness.getArrayItemCount('options')).toBe(1);
-      expect((await target()).options).toEqual([{ label: '', value: '' }]);
+      expect((await target()).options).toEqual([{label: '', value: ''}]);
     });
 
     it('renders objects with properties as nested cards and objects without properties as JSON textareas', async () => {
@@ -1588,16 +1588,16 @@ describe('Gallery Component', () => {
           CardWithObjects: {
             type: 'object',
             allOf: [
-              { $ref: '#/$defs/ComponentCommon' },
+              {$ref: '#/$defs/ComponentCommon'},
               {
                 type: 'object',
                 properties: {
-                  component: { const: 'CardWithObjects' },
+                  component: {const: 'CardWithObjects'},
                   accessibility: {
                     type: 'object',
                     properties: {
-                      label: { $ref: '#/$defs/DynamicString' },
-                      live: { type: 'string', enum: ['off', 'polite', 'assertive'] },
+                      label: {$ref: '#/$defs/DynamicString'},
+                      live: {type: 'string', enum: ['off', 'polite', 'assertive']},
                     },
                   },
                   style: {
@@ -1619,7 +1619,7 @@ describe('Gallery Component', () => {
         ),
       );
       catalogServiceMock.selectedComponentPreset.set({
-        usage: [{ id: 'target', component: 'CardWithObjects', style: { padding: 8 } }],
+        usage: [{id: 'target', component: 'CardWithObjects', style: {padding: 8}}],
       });
       fixture.detectChanges();
 
@@ -1629,9 +1629,9 @@ describe('Gallery Component', () => {
 
       await harness.editProperty('accessibility.label', 'Close dialog');
       await harness.selectPropertyOption('accessibility.live', 2);
-      expect((await target()).accessibility).toEqual({ label: 'Close dialog', live: 'polite' });
+      expect((await target()).accessibility).toEqual({label: 'Close dialog', live: 'polite'});
 
-      const updatedStyle = { padding: 16 };
+      const updatedStyle = {padding: 16};
       await harness.editJsonProperty('style', JSON.stringify(updatedStyle));
       expect((await target()).style).toEqual(updatedStyle);
       expect(await harness.getPropertyError('style')).toBeNull();
@@ -1648,14 +1648,14 @@ describe('Gallery Component', () => {
     });
 
     it('never offers to remove or unset a required property', async () => {
-      select('ChoicePicker', [{ ...choicePicker, variant: 'mutuallyExclusive' }]);
+      select('ChoicePicker', [{...choicePicker, variant: 'mutuallyExclusive'}]);
       expect(await harness.canRemoveProperty('options')).toBe(false);
       expect(await harness.canRemoveProperty('value')).toBe(false);
       expect(await harness.getPropertyOptions('variant')).toContain('(not set)');
     });
 
     it('removes a set optional property through its remove action', async () => {
-      select('ChoicePicker', [{ ...choicePicker, filterable: true }]);
+      select('ChoicePicker', [{...choicePicker, filterable: true}]);
       expect(await harness.canRemoveProperty('filterable')).toBe(true);
       await harness.removeProperty('filterable');
       expect(await target()).not.toHaveProperty('filterable');
@@ -1666,10 +1666,10 @@ describe('Gallery Component', () => {
       select('ChoicePicker', [
         {
           ...choicePicker,
-          label: { path: '/sizeLabel' },
+          label: {path: '/sizeLabel'},
           options: [
-            { label: { path: '/optionLabel' }, value: 's' },
-            { label: 'Large', value: 'l' },
+            {label: {path: '/optionLabel'}, value: 's'},
+            {label: 'Large', value: 'l'},
           ],
         },
       ]);
@@ -1682,12 +1682,12 @@ describe('Gallery Component', () => {
         'gallery-property-options.0.value',
       );
       await harness.selectPropertyOption('displayStyle', 1);
-      expect((await target()).label).toEqual({ path: '/sizeLabel' });
+      expect((await target()).label).toEqual({path: '/sizeLabel'});
     });
 
     it('keeps each DateTimeInput boolean on its own single-line row', async () => {
       select('DateTimeInput', [
-        { id: 'target', component: 'DateTimeInput', value: '', enableDate: true },
+        {id: 'target', component: 'DateTimeInput', value: '', enableDate: true},
       ]);
       for (const name of ['enableDate', 'enableTime']) {
         expect(await harness.getPropertyControlKind(name)).toBe('checkbox');
@@ -1695,17 +1695,17 @@ describe('Gallery Component', () => {
       }
       expect(await harness.isPropertyRequired('value')).toBe(true);
       await harness.toggleProperty('enableTime');
-      expect(await target()).toMatchObject({ value: '', enableDate: true, enableTime: true });
+      expect(await target()).toMatchObject({value: '', enableDate: true, enableTime: true});
     });
 
     it('edits the draft from the Edit JSON card and resets it while keeping the preview frame mounted', async () => {
       select('ChoicePicker', [choicePicker]);
       await harness.editDraft(
-        JSON.stringify({ components: [{ ...choicePicker, displayStyle: 'chips' }] }),
+        JSON.stringify({components: [{...choicePicker, displayStyle: 'chips'}]}),
       );
       expect(await harness.hasRenderedFrame()).toBe(true);
       expect(hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0][1]).toMatchObject({
-        updateComponents: { components: [{ displayStyle: 'chips' }] },
+        updateComponents: {components: [{displayStyle: 'chips'}]},
       });
       expect(await harness.getPropertyOptions('displayStyle')).toContain('chips');
       expect(await harness.hasRenderedFrame()).toBe(true);
@@ -1721,8 +1721,8 @@ describe('Gallery Component', () => {
 
     it('prioritizes the target or root component when another component of the same type appears earlier', async () => {
       select('ChoicePicker', [
-        { ...choicePicker, id: 'helper-picker', label: 'Helper' },
-        { ...choicePicker, id: 'target', label: 'Primary' },
+        {...choicePicker, id: 'helper-picker', label: 'Helper'},
+        {...choicePicker, id: 'target', label: 'Primary'},
       ]);
 
       await harness.editProperty('label', 'Updated Primary');
@@ -1739,22 +1739,22 @@ describe('Gallery Component', () => {
           NestedOptionalCard: {
             type: 'object',
             allOf: [
-              { $ref: '#/$defs/ComponentCommon' },
+              {$ref: '#/$defs/ComponentCommon'},
               {
                 type: 'object',
                 required: ['component'],
                 properties: {
-                  component: { const: 'NestedOptionalCard' },
+                  component: {const: 'NestedOptionalCard'},
                   outer: {
                     type: 'object',
                     properties: {
                       inner: {
                         type: 'object',
                         properties: {
-                          note: { type: 'string' },
+                          note: {type: 'string'},
                         },
                       },
-                      keep: { type: 'string' },
+                      keep: {type: 'string'},
                     },
                   },
                 },
@@ -1775,7 +1775,7 @@ describe('Gallery Component', () => {
           {
             id: 'target',
             component: 'NestedOptionalCard',
-            outer: { inner: { note: 'hello' }, keep: 'stay' },
+            outer: {inner: {note: 'hello'}, keep: 'stay'},
           },
         ],
       });
@@ -1785,7 +1785,7 @@ describe('Gallery Component', () => {
       expect(await target()).toEqual({
         id: 'target',
         component: 'NestedOptionalCard',
-        outer: { keep: 'stay' },
+        outer: {keep: 'stay'},
       });
 
       await harness.editProperty('outer.keep', '');
@@ -1803,13 +1803,13 @@ describe('Gallery Component', () => {
           SliderInput: {
             type: 'object',
             allOf: [
-              { $ref: '#/$defs/ComponentCommon' },
+              {$ref: '#/$defs/ComponentCommon'},
               {
                 type: 'object',
                 required: ['component', 'value'],
                 properties: {
-                  component: { const: 'SliderInput' },
-                  value: { type: 'number' },
+                  component: {const: 'SliderInput'},
+                  value: {type: 'number'},
                 },
               },
             ],
@@ -1824,7 +1824,7 @@ describe('Gallery Component', () => {
         ),
       );
       catalogServiceMock.selectedComponentPreset.set({
-        usage: [{ id: 'target', component: 'SliderInput', value: 42 }],
+        usage: [{id: 'target', component: 'SliderInput', value: 42}],
       });
       fixture.detectChanges();
 
@@ -1835,7 +1835,7 @@ describe('Gallery Component', () => {
       );
       expect((await target()).value).toBe(42);
       expect(hostCommunicationMock.sendRenderA2UI.mock.lastCall?.[0][1]).toMatchObject({
-        updateComponents: { components: [{ id: 'root', component: 'SliderInput', value: 42 }] },
+        updateComponents: {components: [{id: 'root', component: 'SliderInput', value: 42}]},
       });
     });
 
@@ -1847,12 +1847,12 @@ describe('Gallery Component', () => {
           StyledBox: {
             type: 'object',
             allOf: [
-              { $ref: '#/$defs/ComponentCommon' },
+              {$ref: '#/$defs/ComponentCommon'},
               {
                 type: 'object',
                 required: ['component'],
                 properties: {
-                  component: { const: 'StyledBox' },
+                  component: {const: 'StyledBox'},
                   style: {
                     type: 'object',
                     additionalProperties: true,
@@ -1871,7 +1871,7 @@ describe('Gallery Component', () => {
         ),
       );
       catalogServiceMock.selectedComponentPreset.set({
-        usage: [{ id: 'target', component: 'StyledBox', style: { padding: 8 } }],
+        usage: [{id: 'target', component: 'StyledBox', style: {padding: 8}}],
       });
       fixture.detectChanges();
 
@@ -1894,10 +1894,10 @@ describe('Gallery Component', () => {
         {
           ...choicePicker,
           options: [
-            { label: { path: '/itemLabel' }, value: 's' },
-            { label: 'Large', value: 'l' },
+            {label: {path: '/itemLabel'}, value: 's'},
+            {label: 'Large', value: 'l'},
           ],
-          value: [{ path: '/selectedValue' }],
+          value: [{path: '/selectedValue'}],
         },
       ]);
 
@@ -1918,4 +1918,3 @@ describe('Gallery Component', () => {
     });
   });
 });
-

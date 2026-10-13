@@ -28,16 +28,16 @@ import {
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Clipboard} from '@angular/cdk/clipboard';
 import {filter} from 'rxjs/operators';
-import { FormsModule } from '@angular/forms';
-import { MatInputModule } from '@angular/material/input';
-import { JsonPipe, NgTemplateOutlet } from '@angular/common';
+import {FormsModule} from '@angular/forms';
+import {MatInputModule} from '@angular/material/input';
+import {JsonPipe, NgTemplateOutlet} from '@angular/common';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatListModule} from '@angular/material/list';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
-import { MatExpansionModule } from '@angular/material/expansion';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import {MatExpansionModule} from '@angular/material/expansion';
+import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {GalleryCatalog} from './services/gallery-catalog';
@@ -46,11 +46,11 @@ import {RenderedFrame} from '../preview/rendered/rendered-frame';
 import {HostCommunication} from '../shell/host-communication/host-communication';
 import {formatJson} from '../utils/json';
 import {PreviewBridgeMessageType, ComponentUsage, RenderA2uiItem} from 'a2ui-bridge';
-import { StartupResolution } from '../shell/startup-resolution/startup-resolution';
-import { StartupConfigStateService } from '../shell/startup-resolution/state/startup-config-state.service';
-import { stableStringify } from '../storage/stable-stringify/stable-stringify';
-import { Catalog } from '../storage/models/catalog-storage.model';
-import { CatalogSchemaResolver } from './schema/catalog-schema-resolver';
+import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
+import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
+import {stableStringify} from '../storage/stable-stringify/stable-stringify';
+import {Catalog} from '../storage/models/catalog-storage.model';
+import {CatalogSchemaResolver} from './schema/catalog-schema-resolver';
 import {
   createDefaultGalleryValue,
   describeUneditableValue,
@@ -59,9 +59,9 @@ import {
   parseGalleryExample,
 } from './gallery-example';
 import {ErrorLogger} from '../debug/error-logger.service';
-import { GalleryLauncher } from './gallery-launcher';
-import { UsageTrackingService } from '../usage-tracking/usage-tracking.service';
-import { MonacoEditor } from '../shared/monaco-editor/monaco-editor';
+import {GalleryLauncher} from './gallery-launcher';
+import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
+import {MonacoEditor} from '../shared/monaco-editor/monaco-editor';
 
 type PropertyPath = ReadonlyArray<string | number>;
 
@@ -214,7 +214,7 @@ export class Gallery implements OnInit, OnDestroy {
       return [];
     }
     const schemas = this.selectedComponentSchemas();
-    const { common } = resolved;
+    const {common} = resolved;
     const properties = this.catalogService.selectedComponentProperties().flatMap(prop => {
       const schema = schemas[prop.name];
       if (prop.name === 'id' || prop.name === 'component' || schema?.['const'] !== undefined) {
@@ -240,12 +240,12 @@ export class Gallery implements OnInit, OnDestroy {
     // Required properties first, then the component's own, then the shared ones.
     const rank = (prop: EditableProperty) => (prop.required ? 0 : prop.common ? 2 : 1);
     const sorted = properties
-      .map((prop, index) => ({ prop, index }))
+      .map((prop, index) => ({prop, index}))
       .sort((a, b) => rank(a.prop) - rank(b.prop) || a.index - b.index)
-      .map(({ prop }) => prop);
+      .map(({prop}) => prop);
     const firstCommon = sorted.findIndex(prop => prop.common);
     return sorted.map((prop, index) =>
-      index === firstCommon ? { ...prop, firstCommon: true } : prop,
+      index === firstCommon ? {...prop, firstCommon: true} : prop,
     );
   });
 
@@ -284,14 +284,14 @@ export class Gallery implements OnInit, OnDestroy {
   private createDraft(preset: ComponentUsage | null, catalog: Catalog | null): ExampleDraft {
     const id = catalog?.catalogId || catalog?.$id;
     if (!preset || !Array.isArray(preset.usage) || !catalog || !id) {
-      return { text: '', preset: null, payload: null, error: null };
+      return {text: '', preset: null, payload: null, error: null};
     }
     try {
       const copy = structuredClone(preset);
       return {
         text: formatJson({
           ['components']: copy.usage,
-          ...(copy.data !== undefined ? { ['data']: copy.data } : {}),
+          ...(copy.data !== undefined ? {['data']: copy.data} : {}),
         }),
         preset: copy,
         payload: this.buildA2UIPayload(copy, id),
@@ -369,15 +369,15 @@ export class Gallery implements OnInit, OnDestroy {
         return component;
       }
       if (value !== undefined) {
-        return { ...component, [name]: value };
+        return {...component, [name]: value};
       }
-      const { [name]: _removed, ...rest } = component;
+      const {[name]: _removed, ...rest} = component;
       return rest;
     });
     return this.editDraft(
       formatJson({
         ['components']: components,
-        ...(preset.data !== undefined ? { ['data']: preset.data } : {}),
+        ...(preset.data !== undefined ? {['data']: preset.data} : {}),
       }),
       true,
     );
@@ -459,7 +459,7 @@ export class Gallery implements OnInit, OnDestroy {
     text: string,
   ): void {
     const setError = (message: string) => {
-      this.jsonFieldErrors.update(errors => ({ ...errors, [pathKey]: { text, message } }));
+      this.jsonFieldErrors.update(errors => ({...errors, [pathKey]: {text, message}}));
     };
     let value: unknown;
     if (!text.trim()) {
@@ -482,7 +482,7 @@ export class Gallery implements OnInit, OnDestroy {
       setError(`${error} The example keeps its previous value.`);
       return;
     }
-    this.jsonFieldErrors.update(({ [pathKey]: _cleared, ...errors }) => errors);
+    this.jsonFieldErrors.update(({[pathKey]: _cleared, ...errors}) => errors);
   }
 
   /**
@@ -556,7 +556,7 @@ export class Gallery implements OnInit, OnDestroy {
     }
     const nextObject: Record<string, unknown> =
       current !== null && typeof current === 'object' && !Array.isArray(current)
-        ? { ...(current as Record<string, unknown>) }
+        ? {...(current as Record<string, unknown>)}
         : {};
     const subProp = control?.properties?.find(prop => prop.name === head);
     const nextValue = this.setDeepValue(
@@ -745,7 +745,7 @@ export class Gallery implements OnInit, OnDestroy {
     // properties intact; A2UI v0.9 only requires its root component to be named "root".
     // This allows 'target' as the id to work.
     return components.map(component =>
-      component['id'] === 'target' ? { ...component, id: 'root' } : component,
+      component['id'] === 'target' ? {...component, id: 'root'} : component,
     );
   }
 
