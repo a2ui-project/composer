@@ -15,6 +15,7 @@
  */
 
 import {signal, WritableSignal} from '@angular/core';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {Subject} from 'rxjs';
@@ -81,6 +82,7 @@ describe('A2aChatView', () => {
     await TestBed.configureTestingModule({
       imports: [A2aChatView],
       providers: [
+        provideNoopAnimations(),
         {provide: A2A_TRANSPORT, useValue: mockA2aTransport},
         {provide: AppConfigProvider, useValue: mockConfigProvider},
         {
@@ -167,6 +169,52 @@ describe('A2aChatView', () => {
     const panel = await failedHarness.getConfigPanel();
     expect(await panel?.getErrorMessage()).toContain('Agent unreachable');
     failedFixture.destroy();
+  });
+
+  it('dismisses config dialog on close when agent is connected', async () => {
+    const header = await harness.getHeader();
+    await header.clickSettings();
+    expect(await harness.isConfigDialogOpen()).toBe(true);
+
+    const dialog = await harness.getConfigDialog();
+    await dialog?.close();
+
+    expect(await harness.isConfigDialogOpen()).toBe(false);
+  });
+
+  it('does not dismiss config dialog on close when agent is not connected', async () => {
+    const header = await harness.getHeader();
+    await header.clickSettings();
+
+    const panel = await harness.getConfigPanel();
+    await panel?.clickClear();
+    const dialog = await harness.getConfigDialog();
+    await dialog?.close();
+
+    expect(await harness.isConfigDialogOpen()).toBe(true);
+  });
+
+  it('does not dismiss config dialog on close when isConnecting is true', async () => {
+    let resolveConnect!: (value: unknown) => void;
+    mockA2aTransport.getAgentCard = vi.fn().mockReturnValue(
+      new Promise(resolve => {
+        resolveConnect = resolve;
+      }),
+    );
+
+    const header = await harness.getHeader();
+    await header.clickSettings();
+    const panel = await harness.getConfigPanel();
+    await panel?.clickSave();
+    expect(fixture.componentInstance['isConnecting']()).toBe(true);
+
+    const dialog = await harness.getConfigDialog();
+    await dialog?.close();
+
+    expect(await harness.isConfigDialogOpen()).toBe(true);
+
+    resolveConnect({name: 'Mock Test Agent'});
+    await fixture.whenStable();
   });
 
   it('handles user message streaming turn', async () => {
