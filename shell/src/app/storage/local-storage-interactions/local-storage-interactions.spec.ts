@@ -69,6 +69,23 @@ describe('LocalStorageInteractions Safety Boundaries', () => {
       expect(Storage.prototype.removeItem).toHaveBeenCalledWith(LocalStorageKey.FORCE_1P);
       expect(localStorage.getItem(LocalStorageKey.FORCE_1P)).toBeNull();
     });
+
+    it('returns ok with the stored value from readItem', () => {
+      localStorage.setItem(LocalStorageKey.THEME_PREFERENCE, 'dark');
+      expect(service.readItem(LocalStorageKey.THEME_PREFERENCE)).toEqual({ok: true, value: 'dark'});
+    });
+
+    it('returns ok with null from readItem for a missing key', () => {
+      expect(service.readItem(LocalStorageKey.THEME_PREFERENCE)).toEqual({ok: true, value: null});
+    });
+
+    it('returns not ok from readItem when the native read throws, while getItem still returns null', () => {
+      vi.mocked(Storage.prototype.getItem).mockImplementation(() => {
+        throw new Error('SecurityError: Access is denied');
+      });
+      expect(service.readItem(LocalStorageKey.THEME_PREFERENCE)).toEqual({ok: false});
+      expect(service.getItem(LocalStorageKey.THEME_PREFERENCE)).toBeNull();
+    });
   });
 
   describe('SSR Server Bootstrap Environment (Storage Unavailable)', () => {
@@ -109,6 +126,10 @@ describe('LocalStorageInteractions Safety Boundaries', () => {
       expect(() => {
         service.removeItem(LocalStorageKey.THEME_PREFERENCE);
       }).not.toThrow();
+    });
+
+    it('reports a failed read from readItem under storage unavailable contexts', () => {
+      expect(service.readItem(LocalStorageKey.THEME_PREFERENCE)).toEqual({ok: false});
     });
   });
 });

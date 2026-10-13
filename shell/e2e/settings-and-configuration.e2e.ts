@@ -106,6 +106,48 @@ test.describe('Settings and Client Configuration', () => {
       const iframe = page.frameLocator('iframe.preview-iframe');
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
     });
+
+    test('allows editing and deleting a custom renderer after adding it', async ({page}) => {
+      await page.getByRole('button', {name: 'Add custom renderer'}).click();
+      const addDialog = page.getByRole('dialog', {name: 'Add Custom Renderer'});
+      await expect(addDialog).toBeVisible();
+      await addDialog.getByLabel('Name', {exact: true}).fill('Editable Custom Renderer');
+      await addDialog.getByLabel('Renderer URL', {exact: true}).fill('http://localhost:9091');
+      await page.keyboard.press('Tab');
+      await addDialog.getByRole('button', {name: 'Add', exact: true}).click();
+      await expect(addDialog).toBeHidden();
+
+      const rendererSelect = page.locator('#renderer-select');
+      await expect(rendererSelect).toContainText('Editable Custom Renderer');
+      await rendererSelect.click();
+
+      const editBtn = page.getByRole('button', {name: 'Edit Editable Custom Renderer'});
+      const deleteBtn = page.getByRole('button', {name: 'Delete Editable Custom Renderer'});
+      await expect(editBtn).toBeEnabled();
+      await expect(deleteBtn).toBeEnabled();
+
+      await editBtn.click();
+      const editDialog = page.getByRole('dialog', {name: 'Edit Custom Renderer'});
+      await expect(editDialog).toBeVisible();
+      await editDialog.getByLabel('Name', {exact: true}).fill('Updated Custom Renderer');
+      await editDialog.getByLabel('Renderer URL', {exact: true}).fill('http://localhost:9092');
+      await page.keyboard.press('Tab');
+      await editDialog.getByRole('button', {name: 'Save', exact: true}).click();
+      await expect(editDialog).toBeHidden();
+
+      await expect(rendererSelect).toContainText('Updated Custom Renderer');
+      await expect(rendererSelect).toContainText('http://localhost:9092');
+
+      const updatedDeleteBtn = page.getByRole('button', {name: 'Delete Updated Custom Renderer'});
+      await expect(updatedDeleteBtn).toBeVisible();
+      await expect(updatedDeleteBtn).toBeEnabled();
+      await updatedDeleteBtn.click();
+
+      const customRenderersCount = await page.evaluate(
+        () => JSON.parse(localStorage.getItem('a2ui_composer_custom_renderers') || '[]').length,
+      );
+      expect(customRenderersCount).toBe(0);
+    });
   });
 
   test.describe('Enterprise & Environment Constraints', () => {

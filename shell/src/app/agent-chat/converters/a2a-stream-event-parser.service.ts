@@ -150,6 +150,14 @@ export interface ParsedA2aStreamEvent {
   textChunk?: string;
   thoughtChunk?: string;
   a2uiItems: RenderA2uiItem[];
+  /**
+   * Whether the event's A2UI items all appeared before any of its text parts.
+   *
+   * Agents that lead a message with a UI header (for example an avatar row) followed by prose
+   * rely on part order, which is otherwise lost when text and A2UI are accumulated separately.
+   * Only meaningful when `a2uiItems` is non-empty.
+   */
+  a2uiPrecedesText?: boolean;
   toolCalls?: UiToolCall[];
   isCompleted: boolean;
   statusState?: string;
@@ -557,6 +565,10 @@ export class A2aStreamEventParser {
     // Extract declarative A2UI items
     const a2uiNormalized = normalizeA2uiItems(items, this.errorLogger);
     if (a2uiNormalized.length > 0) {
+      // Parts are visited in wire order, so text seen so far is text that
+      // preceded these items. The flag holds only while every item so far came
+      // before any text.
+      result.a2uiPrecedesText = (result.a2uiPrecedesText ?? true) && !result.textChunk;
       result.a2uiItems.push(...a2uiNormalized);
     }
 

@@ -86,6 +86,58 @@ describe('A2aStreamEventParser', () => {
     expect(parsed.a2uiItems[0].createSurface?.surfaceId).toBe('surf-1');
   });
 
+  it('reports A2UI items that precede the text parts', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-order-1',
+      message: {
+        role: 'agent',
+        parts: [
+          {data: {createSurface: {surfaceId: 'header', catalogId: 'cat-1'}}},
+          {text: 'I manage marketing strategy.'},
+        ],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.a2uiItems.length).toBe(1);
+    expect(parsed.textChunk).toBe('I manage marketing strategy.');
+    expect(parsed.a2uiPrecedesText).toBe(true);
+  });
+
+  it('reports A2UI items that follow the text parts', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-order-2',
+      message: {
+        role: 'agent',
+        parts: [
+          {text: 'Here is the form.'},
+          {data: {createSurface: {surfaceId: 'form', catalogId: 'cat-1'}}},
+        ],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.a2uiPrecedesText).toBe(false);
+  });
+
+  it('does not report precedence when A2UI items surround the text', () => {
+    const event: TaskStatusUpdateEvent = {
+      taskId: 'task-order-3',
+      message: {
+        role: 'agent',
+        parts: [
+          {data: {createSurface: {surfaceId: 'header', catalogId: 'cat-1'}}},
+          {text: 'Body'},
+          {data: {createSurface: {surfaceId: 'footer', catalogId: 'cat-1'}}},
+        ],
+      },
+    };
+
+    const parsed = parser.parse(event);
+    expect(parsed.a2uiItems.length).toBe(2);
+    expect(parsed.a2uiPrecedesText).toBe(false);
+  });
+
   it('filters out non-A2UI data such as tool calls from a2uiItems and records them in toolCalls', () => {
     const event: TaskStatusUpdateEvent = {
       taskId: 'task-tool',

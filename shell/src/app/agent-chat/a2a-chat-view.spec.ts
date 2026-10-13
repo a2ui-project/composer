@@ -29,6 +29,8 @@ import {
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
 import {A2A_TRANSPORT, A2aTransport} from '../chat/a2a/a2a-transport.token';
+import {CatalogManagement} from '../storage/catalog-management/catalog-management';
+import {Catalog} from '../storage/models/catalog-storage.model';
 import {A2aChatView} from './a2a-chat-view';
 import {A2aChatViewHarness} from './test/a2a-chat-view.harness';
 
@@ -37,11 +39,13 @@ describe('A2aChatView', () => {
   let harness: A2aChatViewHarness;
   let mockA2aTransport: Partial<A2aTransport>;
   let mockAgentUrlSignal: WritableSignal<string>;
+  let mockActiveCatalogSignal: WritableSignal<Catalog | null>;
   let mockConfigProvider: Partial<AppConfigProvider>;
   let mockMessageStream$: Subject<MessageEnvelope | null>;
 
   beforeEach(async () => {
     mockAgentUrlSignal = signal('http://localhost:8000');
+    mockActiveCatalogSignal = signal<Catalog | null>(null);
     mockMessageStream$ = new Subject<MessageEnvelope | null>();
     mockA2aTransport = {
       getAgentCard: vi.fn().mockResolvedValue({
@@ -79,6 +83,10 @@ describe('A2aChatView', () => {
       providers: [
         {provide: A2A_TRANSPORT, useValue: mockA2aTransport},
         {provide: AppConfigProvider, useValue: mockConfigProvider},
+        {
+          provide: CatalogManagement,
+          useValue: {activeCatalog: mockActiveCatalogSignal},
+        },
         {
           provide: StartupResolution,
           useValue: {resolvedUrl: signal('http://localhost:3000/renderer')},
@@ -130,6 +138,18 @@ describe('A2aChatView', () => {
     expect(await newHarness.isConfigPanelOpen()).toBe(true);
   });
 
+  it('opens config panel when initial auto-connect fails', async () => {
+    mockA2aTransport.getAgentCard = vi.fn().mockRejectedValue(new Error('Agent unreachable'));
+    const failedFixture = TestBed.createComponent(A2aChatView);
+    failedFixture.detectChanges();
+    const failedHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      failedFixture,
+      A2aChatViewHarness,
+    );
+
+    expect(await failedHarness.isConfigPanelOpen()).toBe(true);
+  });
+
   it('handles user message streaming turn', async () => {
     const inputArea = await harness.getInputArea();
     await inputArea.setInputValue('Hello agent');
@@ -179,6 +199,22 @@ describe('A2aChatView', () => {
     fixture.detectChanges();
 
     expect(await harness.hasSideCanvas()).toBe(false);
+  });
+
+  it('renders the side canvas frame at panel height rather than content height', async () => {
+    expect(await harness.getSideCanvasFrame()).toBeNull();
+
+    fixture.componentInstance['openCanvasSurface']([
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+    ]);
+    fixture.detectChanges();
+
+    // The side canvas is a fixed viewport whose content scrolls, so its frame
+    // fills the panel instead of following the guest's SURFACE_RESIZE reports.
+    const frame = await harness.getSideCanvasFrame();
+    expect(frame).not.toBeNull();
+    expect(await frame!.fillsContainer()).toBe(true);
+    expect(await frame!.getFrameHeight()).toBe('100%');
   });
 
   it('resets session and clears messages', async () => {
@@ -352,6 +388,81 @@ describe('A2aChatView', () => {
     const agentMsg = messages[1];
     expect(agentMsg.a2uiPayload?.length).toBe(1);
     expect(agentMsg.hasCanvas).toBe(false);
+  });
+
+  it('keeps an inline surface above the text when the agent sent it first', async () => {
+    const header = {
+      data: {
+        mimeType: 'application/json+a2ui',
+        data: JSON.stringify([
+          {
+            version: 'v0.9',
+            updateComponents: {
+              surfaceId: 'persona-header',
+              components: [{id: 'root', component: 'Row'}],
+            },
+          },
+        ]),
+      },
+    };
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      yield {
+        taskId: 't-order',
+        contextId: 'c-order',
+        message: {role: 'agent', parts: [header, {text: 'I manage marketing strategy.'}]},
+      };
+      // Later streamed prose must not demote a header that already rendered above it.
+      yield {
+        taskId: 't-order',
+        contextId: 'c-order',
+        message: {role: 'agent', parts: [{text: ' What should I look at today?'}]},
+        final: true,
+      };
+    });
+
+    fixture.componentInstance['sendUserMessage']({text: 'Introduce yourself', images: []});
+    await fixture.whenStable();
+
+    const agentMsg = fixture.componentInstance['messages']()[1];
+    expect(agentMsg.inlineA2uiPayload?.length).toBe(1);
+    expect(agentMsg.inlineSurfaceLeadsText).toBe(true);
+  });
+
+  it('keeps an inline surface below the text when the agent sent the text first', async () => {
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      yield {
+        taskId: 't-order-2',
+        contextId: 'c-order-2',
+        message: {
+          role: 'agent',
+          parts: [
+            {text: 'Here is the form:'},
+            {
+              data: {
+                mimeType: 'application/json+a2ui',
+                data: JSON.stringify([
+                  {
+                    version: 'v0.9',
+                    updateComponents: {
+                      surfaceId: 'form',
+                      components: [{id: 'root', component: 'Card'}],
+                    },
+                  },
+                ]),
+              },
+            },
+          ],
+        },
+        final: true,
+      };
+    });
+
+    fixture.componentInstance['sendUserMessage']({text: 'Show the form', images: []});
+    await fixture.whenStable();
+
+    const agentMsg = fixture.componentInstance['messages']()[1];
+    expect(agentMsg.inlineA2uiPayload?.length).toBe(1);
+    expect(agentMsg.inlineSurfaceLeadsText).toBe(false);
   });
 
   it('correctly partitions and renders mixed surface with List (9 non-Canvas cards) and 1 Canvas form', async () => {
@@ -882,14 +993,239 @@ describe('A2aChatView', () => {
     expect(fixture.componentInstance['activeCanvasPayload']()).toEqual(canvasPayload);
   });
 
-  it('dispatches sendRenderA2UI when canvas surface is opened with payload', () => {
-    const hostComm = TestBed.inject(HostCommunication);
-    const payload: RenderA2uiItem[] = [
-      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
-    ];
-    fixture.componentInstance['openCanvasSurface'](payload);
+  describe('canvas payload dispatch', () => {
+    /** The side canvas's guest iframe, as the element the host posts to. */
+    async function canvasIframe(): Promise<HTMLIFrameElement> {
+      const frame = await harness.getSideCanvasFrame();
+      expect(frame).not.toBeNull();
+      const iframe = await frame!.getIframe();
+      expect(iframe).not.toBeNull();
+      return TestbedHarnessEnvironment.getNativeElement(iframe!) as HTMLIFrameElement;
+    }
+
+    const renderCalls = () => {
+      const hostComm = TestBed.inject(HostCommunication);
+      return vi.mocked(hostComm.sendRenderA2UI).mock.calls;
+    };
+
+    it('dispatches the canvas payload to the side-canvas iframe, not to an inline frame', async () => {
+      const payload: RenderA2uiItem[] = [
+        {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
+      ];
+      fixture.componentInstance['openCanvasSurface'](payload);
+      fixture.detectChanges();
+
+      const iframe = await canvasIframe();
+      expect(iframe).toBeInstanceOf(HTMLIFrameElement);
+      expect(renderCalls()).toContainEqual([payload, iframe]);
+    });
+
+    it('never sends a canvas payload without a target', async () => {
+      // An untargeted send goes to the default frame, which is whichever
+      // RenderedFrame registered last; with an inline surface on screen that
+      // is the inline frame, and the canvas content ends up drawn in the chat.
+      const first: RenderA2uiItem[] = [
+        {version: 'v0.9', createSurface: {surfaceId: 'canvas-1', catalogId: 'c1'}},
+      ];
+      const second: RenderA2uiItem[] = [
+        {version: 'v0.9', createSurface: {surfaceId: 'canvas-2', catalogId: 'c1'}},
+      ];
+      fixture.componentInstance['openCanvasSurface'](first);
+      fixture.detectChanges();
+      // Replacing the active payload while the canvas is open takes the same
+      // path a later turn does.
+      fixture.componentInstance['openCanvasSurface'](second);
+      fixture.detectChanges();
+
+      const iframe = await canvasIframe();
+      const calls = renderCalls();
+      expect(calls.map(call => call[0])).toEqual(expect.arrayContaining([first, second]));
+      for (const call of calls) {
+        expect(call).toHaveLength(2);
+        expect(call[1]).toBe(iframe);
+      }
+    });
+  });
+
+  it('opens inspector and filters events to the inspected message', async () => {
+    fixture.componentInstance['sendUserMessage']({text: 'First prompt', images: []});
+    await fixture.whenStable();
+
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      throw new Error('Second turn failed');
+    });
+    fixture.componentInstance['sendUserMessage']({text: 'Second prompt', images: []});
+    await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(hostComm.sendRenderA2UI).toHaveBeenCalledWith(payload);
+    const messages = fixture.componentInstance['messages']();
+    const firstAgentMessage = messages[1];
+    const secondErrorMessage = messages[3];
+    expect(firstAgentMessage.sender).toBe('agent');
+    expect(secondErrorMessage.sender).toBe('error');
+    expect(await harness.isInspectorOpen()).toBe(false);
+
+    // Inspecting a received agent message filters by its message id.
+    fixture.componentInstance['inspectMessage'](firstAgentMessage.id);
+    fixture.detectChanges();
+
+    expect(await harness.isInspectorOpen()).toBe(true);
+    expect(fixture.componentInstance['inspectorSearchQuery']()).toBe(firstAgentMessage.id);
+
+    const inspector = await harness.getInspector();
+    expect(inspector).not.toBeNull();
+    expect(await inspector!.getPanelCount()).toBe(1);
+
+    // Inspecting an error message filters by its message id.
+    fixture.componentInstance['inspectMessage'](secondErrorMessage.id);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['inspectorSearchQuery']()).toBe(secondErrorMessage.id);
+    expect(await inspector!.getPanelCount()).toBe(1);
+
+    // Closing the inspector drawer closes the drawer.
+    fixture.componentInstance['toggleInspectorDrawer']();
+    expect(fixture.componentInstance['isInspectorOpen']()).toBe(false);
+  });
+
+  it('re-partitions canvas surfaces and updates activeCanvasPayload when activeCatalog resolves with Canvas', async () => {
+    const canvasSurfacePayload = [
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: 'canvas-surface-1',
+          catalogId: 'cat-1',
+        },
+      },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'canvas-surface-1',
+          components: [
+            {
+              id: 'canvas-root',
+              component: {
+                Canvas: {
+                  children: ['card-1', 'card-2'],
+                  cardTitle: 'Experiment Brief',
+                },
+              },
+            },
+            {id: 'card-1', component: 'Card'},
+            {id: 'card-2', component: 'Card'},
+          ],
+        },
+      },
+    ];
+
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      yield {
+        taskId: 't-canvas',
+        contextId: 'c-canvas',
+        message: {
+          role: 'agent',
+          parts: [
+            {text: 'Drafted brief:'},
+            {
+              data: {
+                mimeType: 'application/json+a2ui',
+                data: JSON.stringify(canvasSurfacePayload),
+              },
+            },
+          ],
+        },
+        final: true,
+      };
+    });
+
+    fixture.componentInstance['sendUserMessage']({text: 'Create brief', images: []});
+    await fixture.whenStable();
+
+    const initialComponents =
+      (fixture.componentInstance['activeCanvasPayload']()?.[1]?.updateComponents
+        ?.components as Array<Record<string, unknown>>) || [];
+    expect(initialComponents[0]?.['component']).toBe('Column');
+
+    mockActiveCatalogSignal.set({
+      components: {
+        Canvas: {},
+        Card: {},
+      },
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const updatedComponents =
+      (fixture.componentInstance['activeCanvasPayload']()?.[1]?.updateComponents
+        ?.components as Array<Record<string, unknown>>) || [];
+    expect(updatedComponents[0]?.['id']).toBe('root');
+    expect(updatedComponents[0]?.['component']).toBe('Canvas');
+    expect(updatedComponents[0]?.['children']).toEqual(['card-1', 'card-2']);
+  });
+
+  it('leaves partitioned payloads untouched when the catalog is re-resolved with the same Canvas support', async () => {
+    // Every frame's handshake re-resolves the catalog as a new object. A new
+    // object with the same answer must not hand the frames new payloads, or each
+    // handshake would make every RenderedFrame re-render unchanged content.
+    const surfacePayload = [
+      {version: 'v0.9', createSurface: {surfaceId: 'canvas-surface-1', catalogId: 'cat-1'}},
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'canvas-surface-1',
+          components: [
+            {id: 'root', component: 'Column', children: ['intro', 'canvas-root']},
+            {id: 'intro', component: 'Text', text: 'Brief'},
+            {
+              id: 'canvas-root',
+              component: {Canvas: {children: ['card-1', 'card-2'], cardTitle: 'Experiment Brief'}},
+            },
+            {id: 'card-1', component: 'Card'},
+            {id: 'card-2', component: 'Card'},
+          ],
+        },
+      },
+    ];
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      yield {
+        taskId: 't-canvas',
+        contextId: 'c-canvas',
+        message: {
+          role: 'agent',
+          parts: [
+            {data: {mimeType: 'application/json+a2ui', data: JSON.stringify(surfacePayload)}},
+          ],
+        },
+        final: true,
+      };
+    });
+    fixture.componentInstance['sendUserMessage']({text: 'Create brief', images: []});
+    await fixture.whenStable();
+
+    mockActiveCatalogSignal.set({components: {Canvas: {}, Card: {}, Column: {}, Text: {}}});
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const agentMessage = () =>
+      fixture.componentInstance['messages']().find(m => m.sender === 'agent');
+    const inlinePayload = agentMessage()?.inlineA2uiPayload;
+    const canvasPayload = fixture.componentInstance['activeCanvasPayload']();
+    expect(inlinePayload).toBeDefined();
+    expect(canvasPayload).not.toBeNull();
+
+    mockActiveCatalogSignal.set({components: {Canvas: {}, Card: {}, Column: {}, Text: {}}});
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(agentMessage()?.inlineA2uiPayload).toBe(inlinePayload);
+    expect(fixture.componentInstance['activeCanvasPayload']()).toBe(canvasPayload);
+
+    // A catalog that answers differently does re-partition.
+    mockActiveCatalogSignal.set({components: {Card: {}, Column: {}, Text: {}}});
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance['activeCanvasPayload']()).not.toBe(canvasPayload);
+    const components =
+      (fixture.componentInstance['activeCanvasPayload']()?.[1]?.updateComponents
+        ?.components as Array<Record<string, unknown>>) || [];
+    expect(components[0]?.['component']).toBe('Column');
   });
 });

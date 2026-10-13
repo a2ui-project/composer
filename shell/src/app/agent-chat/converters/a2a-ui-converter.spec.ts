@@ -135,9 +135,10 @@ describe('A2aUiConverter', () => {
       expect(event.summary).toContain('Connection refused');
       expect((event.payload as {message: string}).message).toBe('Connection refused');
 
-      const strEvent = createErrorEvent('String error');
+      const strEvent = createErrorEvent('String error', 'msg-err-1');
       expect(strEvent.summary).toContain('String error');
       expect(strEvent.payload).toBe('String error');
+      expect(strEvent.messageId).toBe('msg-err-1');
     });
   });
 

@@ -18,6 +18,9 @@ import {Injectable, inject} from '@angular/core';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {LocalStorageKey} from '../models/local-storage-keys';
 
+/** Result of `LocalStorageInteractions.readItem()`. */
+export type StorageReadResult = {ok: true; value: string | null} | {ok: false};
+
 /**
  * Governs browser local storage interactions.
  * Safely abstracts the low-level API under SSR contexts without crashing.
@@ -51,17 +54,33 @@ export class LocalStorageInteractions {
    * Retrieves an item from browser local storage securely.
    *
    * @param key The strongly-typed local storage key enum.
-   * @return The associated string value, or null if storage is unavailable.
+   * @return The associated string value, or null if the key is absent, storage is unavailable, or
+   *     the read failed. Use `readItem()` to distinguish a failed read from a missing key.
    */
   getItem(key: LocalStorageKey): string | null {
+    const result = this.readItem(key);
+    return result.ok ? result.value : null;
+  }
+
+  /**
+   * Reads an item from browser local storage, distinguishing a failed read from a missing key.
+   *
+   * Use this instead of `getItem()` when the caller must avoid follow-up storage operations
+   * (e.g. a `setItem()` that would also fail and log a second warning) after a read failure.
+   *
+   * @param key The strongly-typed local storage key enum.
+   * @return `{ok: true, value}` (value is null if the key is absent), or `{ok: false}` if storage
+   *     is unavailable or the read threw.
+   */
+  readItem(key: LocalStorageKey): StorageReadResult {
     if (!this._isStorageAvailable) {
-      return null;
+      return {ok: false};
     }
     try {
-      return window.localStorage.getItem(key);
+      return {ok: true, value: window.localStorage.getItem(key)};
     } catch (e) {
       this.logger.warn(`Failed to read key "${key}" from local storage safely:`, e);
-      return null;
+      return {ok: false};
     }
   }
 

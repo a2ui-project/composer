@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {ComponentHarness} from '@angular/cdk/testing';
+import {ComponentHarness, HarnessPredicate} from '@angular/cdk/testing';
+import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
 import {AgentConfigPanelHarness} from '../agent-config-panel/test/agent-config-panel.harness';
 import {A2aAgentHeaderHarness} from '../agent-header/test/agent-header.harness';
 import {A2aChatHistoryHarness} from '../chat-history/test/chat-history.harness';
@@ -45,4 +46,9 @@ export class A2aChatViewHarness extends ComponentHarness {
     const canvas = await this.getSideCanvas();
     return canvas !== null;
   }
+
+  /** The rendered frame inside the side canvas viewport, or null while the canvas is closed. */
+  readonly getSideCanvasFrame = this.locatorForOptional(
+    new HarnessPredicate(RenderedFrameHarness, {ancestor: '.side-canvas-viewport'}),
+  );
 }

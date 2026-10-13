@@ -90,6 +90,11 @@ export interface UiMessage {
   a2uiPayload?: RenderA2uiItem[];
   /** Sanitized A2UI payload containing non-canvas items for inline chat rendering. */
   inlineA2uiPayload?: RenderA2uiItem[];
+  /**
+   * Whether the inline surface arrived before any of the message's text and should therefore
+   * render above it, preserving the agent's part order (e.g. an avatar header followed by prose).
+   */
+  inlineSurfaceLeadsText?: boolean;
   /** Array of Canvas artifacts extracted from this message's surface payload. */
   canvasArtifacts?: CanvasArtifact[];
   /** Whether the message contains interactive Canvas surface cards. */

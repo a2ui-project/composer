@@ -14,7 +14,16 @@
  * limitations under the License.
  */
 
-import {Component, DestroyRef, effect, inject, OnInit, signal, untracked} from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  OnInit,
+  signal,
+  untracked,
+} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -30,6 +39,8 @@ import {
   AppConfigProvider,
 } from '../settings/app-config-provider/app-config-provider';
 import {HostCommunication} from '../shell/host-communication/host-communication';
+import {CatalogManagement} from '../storage/catalog-management/catalog-management';
+import {Catalog} from '../storage/models/catalog-storage.model';
 import {asRecord} from '../utils/json';
 import {isValidEndpointUrl, normalizeHttpUrl} from '../utils/url';
 import {generateUuid as uuid} from '../utils/uuid';
@@ -49,6 +60,7 @@ import {A2aStreamEventParser} from './converters/a2a-stream-event-parser.service
 import {
   A2UI_MIME_TYPE,
   A2UI_PROTOCOL_VERSION,
+  catalogDefinesCanvas,
   mergeA2uiItems,
   partitionA2uiSurfacePayload,
 } from './converters/surface-partitioner';
@@ -124,6 +136,16 @@ export class A2aChatView implements OnInit {
   protected readonly configProvider = inject(AppConfigProvider);
   private readonly a2aTransport = inject(A2A_TRANSPORT);
   private readonly hostCommunication = inject(HostCommunication);
+  private readonly catalogManagement = inject(CatalogManagement);
+  /**
+   * Whether the active catalog keeps `Canvas` as a surface root, or undefined while no
+   * catalog is resolved. A computed so that a catalog re-resolved with the same answer
+   * does not notify the re-partition effect.
+   */
+  private readonly catalogPreservesCanvas = computed(() => {
+    const catalog = this.catalogManagement.activeCatalog();
+    return catalog ? catalogDefinesCanvas(catalog) : undefined;
+  });
   private readonly destroyRef = inject(DestroyRef);
   private readonly streamEventParser = inject(A2aStreamEventParser);
   private readonly initTimestamp = Date.now();
@@ -152,6 +174,8 @@ export class A2aChatView implements OnInit {
   protected readonly connectionError = signal<string | null>(null);
   /** Whether the message inspector side drawer is open. */
   protected readonly isInspectorOpen = signal<boolean>(false);
+  /** Search query applied in the message inspector side drawer. */
+  protected readonly inspectorSearchQuery = signal<string>('');
   /** Whether the agent configuration modal is open. */
   protected readonly isConfigPanelOpen = signal<boolean>(false);
   /** Whether the A2UI Canvas surface preview panel is open. */
@@ -179,26 +203,22 @@ export class A2aChatView implements OnInit {
         }
       });
 
+    // The renderer iframe only mounts when the Canvas panel opens, so the active catalog
+    // can resolve after the first streaming turn has already been partitioned. The
+    // effect depends on the one catalog property the partition reads, not on the
+    // catalog object: every frame's handshake re-resolves the catalog, and
+    // re-partitioning on each of those would hand every RenderedFrame a new payload
+    // and make it re-render content that has not changed.
     effect(() => {
-      const payload = this.activeCanvasPayload();
-      const isOpen = this.isCanvasOpen();
-      if (isOpen && payload !== null && Array.isArray(payload) && payload.length > 0) {
-        this.hostCommunication.sendRenderA2UI(payload);
+      if (this.catalogPreservesCanvas() === undefined) {
+        return;
       }
-    });
-
-    effect(() => {
-      const envelope = this.hostCommunication.messageStream();
-      if (
-        envelope?.type === PreviewBridgeMessageType.RENDERER_READY ||
-        envelope?.type === PreviewBridgeMessageType.A2UI_CATALOG
-      ) {
-        const payload = untracked(() => this.activeCanvasPayload());
-        const isOpen = untracked(() => this.isCanvasOpen());
-        if (isOpen && payload !== null && Array.isArray(payload) && payload.length > 0) {
-          this.hostCommunication.sendRenderA2UI(payload);
+      untracked(() => {
+        const catalog = this.catalogManagement.activeCatalog();
+        if (catalog) {
+          this.repartitionMessagesForCatalog(catalog);
         }
-      }
+      });
     });
   }
 
@@ -224,7 +244,13 @@ export class A2aChatView implements OnInit {
     backendMode?: A2aBackendMode,
   ): Promise<void> {
     const normalizedUrl = normalizeHttpUrl(url);
-    if (!normalizedUrl || !isValidEndpointUrl(normalizedUrl) || this.isConnecting()) return;
+    if (!normalizedUrl || !isValidEndpointUrl(normalizedUrl)) {
+      this.isConfigPanelOpen.set(true);
+      return;
+    }
+    if (this.isConnecting()) {
+      return;
+    }
 
     this.isConnecting.set(true);
     this.connectionError.set(null);
@@ -251,6 +277,7 @@ export class A2aChatView implements OnInit {
       const errorMsg = err instanceof Error ? err.message : 'Failed to connect to agent endpoint.';
       this.connectionError.set(errorMsg);
       this.recordInspectorEvent(createErrorEvent(err));
+      this.isConfigPanelOpen.set(true);
     } finally {
       this.isConnecting.set(false);
     }
@@ -268,6 +295,7 @@ export class A2aChatView implements OnInit {
     this.agentInfo.set(null);
     this.messages.set([]);
     this.inspectorEvents.set([]);
+    this.inspectorSearchQuery.set('');
     this.activeTaskId.set(null);
     this.activeContextId.set(undefined);
     this.activeCanvasPayload.set(null);
@@ -492,14 +520,14 @@ export class A2aChatView implements OnInit {
 
     for await (const chunk of stream) {
       if (controller.signal.aborted) break;
-      this.recordInspectorEvent(createReceivedEvent(chunk));
+      this.recordInspectorEvent(createReceivedEvent(chunk, agentMessageId));
       this.handleStreamEvent(chunk, agentMessageId);
     }
   }
 
   private handleStreamingError(err: unknown, agentMessageId: string): void {
     const errText = err instanceof Error ? err.message : 'Unknown communication error';
-    this.recordInspectorEvent(createErrorEvent(errText));
+    this.recordInspectorEvent(createErrorEvent(errText, agentMessageId));
 
     this.messages.update(msgs =>
       msgs.map(m =>
@@ -620,7 +648,22 @@ export class A2aChatView implements OnInit {
             ? [...(m.toolCalls || []), ...parsed.toolCalls]
             : m.toolCalls;
 
-        const partitioned = partitionA2uiSurfacePayload(updatedPayload || []);
+        const partitioned = partitionA2uiSurfacePayload(
+          updatedPayload || [],
+          this.catalogManagement.activeCatalog(),
+        );
+
+        // Decide once, on the first event with visible content, whether the
+        // inline surface precedes the prose. Streaming appends text later,
+        // which must not flip a header that already rendered above it.
+        let inlineSurfaceLeadsText = m.inlineSurfaceLeadsText;
+        if (inlineSurfaceLeadsText === undefined) {
+          if (parsed.a2uiItems.length > 0 && !m.text) {
+            inlineSurfaceLeadsText = parsed.a2uiPrecedesText === true;
+          } else if (parsed.textChunk) {
+            inlineSurfaceLeadsText = false;
+          }
+        }
 
         return {
           ...m,
@@ -629,6 +672,7 @@ export class A2aChatView implements OnInit {
           a2uiPayload: updatedPayload,
           toolCalls: updatedToolCalls,
           inlineA2uiPayload: partitioned.inlinePayload || undefined,
+          inlineSurfaceLeadsText,
           canvasArtifacts: partitioned.canvasArtifacts,
           hasCanvas: partitioned.hasCanvas,
           isStreaming: !parsed.isCompleted,
@@ -658,6 +702,41 @@ export class A2aChatView implements OnInit {
     }
   }
 
+  /**
+   * Re-partitions existing messages against the active renderer catalog and refreshes
+   * the open Canvas payload if its surface was re-partitioned.
+   */
+  private repartitionMessagesForCatalog(catalog: Catalog) {
+    const currentMsgs = this.messages();
+    if (!currentMsgs.some(m => m.a2uiPayload && m.a2uiPayload.length > 0)) return;
+
+    this.messages.update(msgs =>
+      msgs.map(m => {
+        if (!m.a2uiPayload || m.a2uiPayload.length === 0) return m;
+        const partitioned = partitionA2uiSurfacePayload(m.a2uiPayload, catalog);
+        return {
+          ...m,
+          inlineA2uiPayload: partitioned.inlinePayload || undefined,
+          canvasArtifacts: partitioned.canvasArtifacts,
+          hasCanvas: partitioned.hasCanvas,
+        };
+      }),
+    );
+
+    if (this.isCanvasOpen()) {
+      const currentActive = this.activeCanvasPayload();
+      for (const m of this.messages()) {
+        const matching = m.canvasArtifacts?.find(a =>
+          this.matchesActiveCanvasPayload(a, currentActive),
+        );
+        if (matching) {
+          this.activeCanvasPayload.set(matching.payload);
+          break;
+        }
+      }
+    }
+  }
+
   private matchesActiveCanvasPayload(
     artifact: CanvasArtifact,
     currentActive: RenderA2uiItem[] | null,
@@ -680,6 +759,7 @@ export class A2aChatView implements OnInit {
   protected resetActiveSession(): void {
     this.cancelActiveGeneration();
     this.messages.set([]);
+    this.inspectorSearchQuery.set('');
     this.activeTaskId.set(null);
     this.activeContextId.set(undefined);
     this.activeCanvasPayload.set(null);
@@ -698,6 +778,11 @@ export class A2aChatView implements OnInit {
 
   protected toggleInspectorDrawer(): void {
     this.isInspectorOpen.update(v => !v);
+  }
+
+  protected inspectMessage(messageId: string): void {
+    this.inspectorSearchQuery.set(messageId);
+    this.isInspectorOpen.set(true);
   }
 
   protected startInspectorResize(event: MouseEvent): void {

@@ -100,5 +100,15 @@ describe('StartupConfigStateService', () => {
       service.setSelectedRendererId('Beta');
       expect(service.activeRenderer()).toBeNull();
     });
+
+    it('returns null when selectedRendererId is an Object.prototype property name', () => {
+      service.setRenderers({key1: {id: 'key1', name: 'Alpha'}});
+
+      service.setSelectedRendererId('toString');
+      expect(service.activeRenderer()).toBeNull();
+
+      service.setSelectedRendererId('constructor');
+      expect(service.activeRenderer()).toBeNull();
+    });
   });
 });

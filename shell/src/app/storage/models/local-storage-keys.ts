@@ -55,6 +55,8 @@ export enum LocalStorageKey {
   MCP_SERVERS = 'a2ui_composer_mcp_servers',
   /** Key for storing user custom instruction presets and active preset selection. */
   CUSTOM_INSTRUCTIONS = 'a2ui_composer_custom_instructions',
+  /** Key for persisting the origin-isolated GA4 client ID. */
+  GA4_CLIENT_ID = 'a2ui_ga4_client_id',
 
   /** @deprecated Key for retrieving the active workspace prompt in-progress draft content. */
   ACTIVE_DRAFT = 'a2ui_composer_active_draft',

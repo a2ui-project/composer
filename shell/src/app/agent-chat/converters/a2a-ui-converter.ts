@@ -107,7 +107,10 @@ export function createSentActionEvent(taskId: string, action: unknown): MessageI
 /**
  * Creates an InspectorEvent recording an incoming streaming event chunk with validation.
  */
-export function createReceivedEvent(event: TaskStatusUpdateEvent): MessageInspectorEvent {
+export function createReceivedEvent(
+  event: TaskStatusUpdateEvent,
+  messageId?: string,
+): MessageInspectorEvent {
   const eventRecord = event as Record<string, unknown>;
   const taskId =
     event.taskId || event.task_id || event.contextId || event.context_id || event.id || 'event';
@@ -133,6 +136,7 @@ export function createReceivedEvent(event: TaskStatusUpdateEvent): MessageInspec
 
   return {
     id: uuid(),
+    messageId,
     timestamp: Date.now(),
     direction: 'received',
     kind,
@@ -145,10 +149,11 @@ export function createReceivedEvent(event: TaskStatusUpdateEvent): MessageInspec
 /**
  * Creates an InspectorEvent recording an error event.
  */
-export function createErrorEvent(err: unknown): MessageInspectorEvent {
+export function createErrorEvent(err: unknown, messageId?: string): MessageInspectorEvent {
   const msg = err instanceof Error ? err.message : String(err);
   return {
     id: uuid(),
+    messageId,
     timestamp: Date.now(),
     direction: 'error',
     kind: 'error',
