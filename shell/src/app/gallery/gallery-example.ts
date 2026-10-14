@@ -392,6 +392,9 @@ function isLiteralSchema(schema: CatalogComponentSchema): boolean {
 
 /** Returns true if value matches schema, false otherwise. */
 function matchesSimpleSchema(value: unknown, schema: CatalogComponentSchema): boolean {
+  if (typeof schema === 'boolean') {
+    return schema;
+  }
   const alternatives = schema['anyOf'] ?? schema['oneOf'];
   if (Array.isArray(alternatives)) {
     return alternatives.some(option => isRecord(option) && matchesSimpleSchema(value, option));
