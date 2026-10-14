@@ -100,7 +100,6 @@ describe('GalleryLauncher', () => {
     });
     await TestBed.inject(GalleryLauncher).open('[]', 'https://renderer.test', null);
     const url = new URL(assign.mock.lastCall?.[0]);
-    const logger = {warn: vi.fn()};
     expect(url.hash).not.toContain('renderId');
   });
 
