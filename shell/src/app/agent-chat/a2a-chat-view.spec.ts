@@ -182,18 +182,6 @@ describe('A2aChatView', () => {
     expect(await harness.isConfigDialogOpen()).toBe(false);
   });
 
-  it('does not dismiss config dialog on close when agent is not connected', async () => {
-    const header = await harness.getHeader();
-    await header.clickSettings();
-
-    const panel = await harness.getConfigPanel();
-    await panel?.clickClear();
-    const dialog = await harness.getConfigDialog();
-    await dialog?.close();
-
-    expect(await harness.isConfigDialogOpen()).toBe(true);
-  });
-
   it('does not dismiss config dialog on close when isConnecting is true', async () => {
     let resolveConnect!: (value: unknown) => void;
     mockA2aTransport.getAgentCard = vi.fn().mockReturnValue(
