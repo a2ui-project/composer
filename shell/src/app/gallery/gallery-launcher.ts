@@ -18,13 +18,17 @@ import {DOCUMENT, Location} from '@angular/common';
 import {Injectable, inject} from '@angular/core';
 import {QueryParser} from '../shell/query-parser/query-parser';
 
-/** Opens an isolated Gallery draft with its renderer using the existing shared-design URL. */
+/**
+ * Opens an isolated Gallery draft with its renderer using the existing shared-design URL.
+ */
 @Injectable({providedIn: 'root'})
 export class GalleryLauncher {
   private readonly document = inject(DOCUMENT);
   private readonly location = inject(Location);
 
-  /** Snapshots the selected example and renderer before compressing the workspace handoff. */
+  /**
+   * Snapshots the selected example ands renderer before compressing the workspace handoff.
+   */
   async open(payload: string, rendererUrl: string, rendererId: string | null): Promise<void> {
     const view = this.document.defaultView;
     if (!view) {

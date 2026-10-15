@@ -17,6 +17,8 @@
 import {TrackEventDirective} from '../usage-tracking/track-event.directive';
 import {
   Component,
+  Signal,
+  WritableSignal,
   computed,
   effect,
   inject,
@@ -40,7 +42,7 @@ import {MatExpansionModule} from '@angular/material/expansion';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {GalleryCatalog} from './services/gallery-catalog';
+import {CategorizedComponents, GalleryCatalog} from './services/gallery-catalog';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
 import {HostCommunication} from '../shell/host-communication/host-communication';
@@ -49,8 +51,8 @@ import {PreviewBridgeMessageType, ComponentUsage, RenderA2uiItem} from 'a2ui-bri
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {StartupConfigStateService} from '../shell/startup-resolution/state/startup-config-state.service';
 import {stableStringify} from '../storage/stable-stringify/stable-stringify';
-import {Catalog} from '../storage/models/catalog-storage.model';
-import {CatalogSchemaResolver} from './schema/catalog-schema-resolver';
+import {Catalog, CatalogComponentSchema} from '../storage/models/catalog-storage.model';
+import {CatalogSchemaResolver, ParsedProperty} from './schema/catalog-schema-resolver';
 import {
   createDefaultGalleryValue,
   describeUneditableValue,
@@ -58,7 +60,7 @@ import {
   GalleryPropertyControl,
   parseGalleryExample,
 } from './gallery-example';
-import {ErrorLogger} from '../debug/error-logger.service';
+import {ErrorLogger, TaggedLogger} from '../debug/error-logger.service';
 import {GalleryLauncher} from './gallery-launcher';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 import {MonacoEditor} from '../shared/monaco-editor/monaco-editor';
@@ -78,17 +80,19 @@ interface EditableProperty {
   control: GalleryPropertyControl;
   kind: GalleryPropertyControl['kind'];
   options: GalleryPropertyControl['options'];
-  /** The current value, or undefined when the example omits the property. */
+  // The current value, or undefined when the example omits the property.
   value: unknown;
-  /** Set when the value is a binding or call that only the JSON tab can edit. */
+  // Set when the value is a binding or call that only the JSON tab can edit.
   note: string | null;
-  /** True for properties every component in the catalog shares, such as accessibility. */
+  // True for properties every component in the catalog shares, such as accessibility.
   common: boolean;
-  /** True on the first common property, where the list starts its common section. */
+  // True on the first common property, where the list starts its common section.
   firstCommon: boolean;
 }
 
-/** An unparsed JSON property edit, kept so the field shows what was typed. */
+/**
+ * An unparsed JSON property edit, kept so the field shows what was typed.
+ */
 interface JsonFieldError {
   text: string;
   message: string;
@@ -132,20 +136,27 @@ export class Gallery implements OnInit, OnDestroy {
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly launcher = inject(GalleryLauncher);
   private readonly errorLogger = inject(ErrorLogger);
-  private readonly logger = this.errorLogger.withTag('[Gallery]');
+  private readonly logger: TaggedLogger = this.errorLogger.withTag('[Gallery]');
   protected readonly opening = signal(false);
   protected readonly actionMessage = signal('');
   protected readonly playgroundExpanded = signal(true);
-  protected readonly rendererUrl = this.startupResolution.resolvedUrl;
+  protected readonly rendererUrl: Signal<string | null> = this.startupResolution.resolvedUrl;
 
-  /** Memoized stringified catalog identity so switching components doesn't re-serialize the catalog. */
-  private readonly catalogSignature = computed(() => {
+  /**
+   * Memoized stringified catalog identity so switching components doesn't re-serialize the catalog.
+   */
+  private readonly catalogSignature: Signal<string | null> = computed(() => {
     const catalog = this.catalogManagement.activeCatalog();
     return catalog ? stableStringify(catalog) : null;
   });
 
-  /** Memoized schema resolver and shared property names, computed once per active catalog. */
-  private readonly activeCatalogResolver = computed(() => {
+  /**
+   * Memoized schema resolver and shared property names, computed once per active catalog.
+   */
+  private readonly activeCatalogResolver: Signal<{
+    resolver: CatalogSchemaResolver;
+    common: Set<string>;
+  } | null> = computed(() => {
     const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) {
       return null;
@@ -157,22 +168,25 @@ export class Gallery implements OnInit, OnDestroy {
     };
   });
 
-  /** Memoized property schemas for the active component so keystrokes don't re-resolve schemas. */
-  private readonly selectedComponentSchemas = computed(() => {
-    const key = this.catalogService.selectedComponentKey();
-    const resolved = this.activeCatalogResolver();
-    return key && resolved ? resolved.resolver.resolveComponentPropertiesSchema(key) : {};
-  });
+  /**
+   * Memoized property schemas for the active component so keystrokes don't re-resolve schemas.
+   */
+  private readonly selectedComponentSchemas: Signal<Record<string, CatalogComponentSchema>> =
+    computed(() => {
+      const key = this.catalogService.selectedComponentKey();
+      const resolved = this.activeCatalogResolver();
+      return key && resolved ? resolved.resolver.resolveComponentPropertiesSchema(key) : {};
+    });
 
   /**
-   * linkedSignal owns the local draft without propagating component state through effects.
-   * Once initialized, repeat usages/ready messages cannot overwrite an edit.
-   *
-   * draftSource: identifies all information of current component
-   * (rendererURL, rendererId, catalog, componentKey)
-   * and preset/example JSON for that component
+   * Identifies the current component context (rendererUrl, rendererId, catalog, componentKey)
+   * and its initial preset/example JSON for `draft`.
    */
-  private readonly draftSource = computed(() => {
+  private readonly draftSource: Signal<{
+    identity: string;
+    catalog: Catalog | null;
+    preset: ComponentUsage | null;
+  }> = computed(() => {
     const catalog = this.catalogManagement.activeCatalog();
     return {
       identity: JSON.stringify([
@@ -186,8 +200,11 @@ export class Gallery implements OnInit, OnDestroy {
     };
   });
 
-  /** draft: local draft without propagating component state through effects. */
-  protected readonly draft = linkedSignal({
+  /**
+   * `draft` owns the local example draft without propagating component state through effects.
+   * Once initialized, repeat usages/ready messages cannot overwrite an edit.
+   */
+  protected readonly draft: WritableSignal<ExampleDraft> = linkedSignal({
     source: this.draftSource,
     computation: (source, previous): ExampleDraft => {
       if (previous?.source.identity === source.identity && previous.value.preset) {
@@ -196,18 +213,28 @@ export class Gallery implements OnInit, OnDestroy {
       return this.createDraft(source.preset, source.catalog);
     },
   });
-  /** Invalid per-property JSON edits by property name; cleared when the draft is replaced. */
-  protected readonly jsonFieldErrors = linkedSignal({
-    source: computed(() => this.draftSource().identity),
-    computation: (): Partial<Record<string, JsonFieldError>> => ({}),
-  });
-  private readonly validPayload = computed(() => this.draft().payload);
-  protected readonly validPayloadJson = computed(() => {
+
+  /**
+   * `jsonFieldErrors` tracks invalid per-property JSON edits keyed by property path,
+   * automatically resetting to `{}` whenever the `draftSource` identity changes.
+   */
+  protected readonly jsonFieldErrors: WritableSignal<Partial<Record<string, JsonFieldError>>> =
+    linkedSignal({
+      source: computed(() => this.draftSource().identity),
+      computation: (): Partial<Record<string, JsonFieldError>> => ({}),
+    });
+  private readonly validPayload: Signal<RenderA2uiItem[] | null> = computed(
+    () => this.draft().payload,
+  );
+  protected readonly validPayloadJson: Signal<string> = computed(() => {
     const payload = this.validPayload();
     return payload ? formatJson(payload) : '';
   });
-  /** Every catalog property of the selected component except its identity and constants. */
-  protected readonly editableProperties = computed<EditableProperty[]>(() => {
+
+  /**
+   * Every catalog property of the selected component except its identity and constants.
+   */
+  protected readonly editableProperties: Signal<EditableProperty[]> = computed(() => {
     const target = this.editableComponent();
     const resolved = this.activeCatalogResolver();
     if (!target || !resolved) {
@@ -249,7 +276,9 @@ export class Gallery implements OnInit, OnDestroy {
     );
   });
 
-  /** Property names every component in the catalog declares. */
+  /**
+   * Property names every component in the catalog declares.
+   */
   private commonPropertyNames(resolver: CatalogSchemaResolver, catalog: Catalog): Set<string> {
     const names = Object.keys(catalog.components ?? {});
     if (names.length < 2) {
@@ -261,9 +290,11 @@ export class Gallery implements OnInit, OnDestroy {
     return new Set([...first].filter(prop => rest.every(set => set.has(prop))));
   }
 
-  /** Property Editor form reads and writes to. Prioritize 'target'
+  /**
+   * Property Editor form reads and writes to. Prioritize 'target'
    * or 'root' nodes when it matches the selected component type so
-   * child nodes of the same type don't shadow it */
+   * child nodes of the same type don't shadow it
+   */
   private editableComponent(): Record<string, unknown> | undefined {
     const key = this.catalogService.selectedComponentKey();
     const usage = this.draft().preset?.usage;
@@ -308,7 +339,9 @@ export class Gallery implements OnInit, OnDestroy {
     }
   }
 
-  /** Retains every edit; preview and actions keep the last valid example when parsing fails. */
+  /**
+   * Retains every edit; preview and actions keep the last valid example when parsing fails.
+   */
   protected editDraft(text: string, propertyEdit = false): string | null {
     const catalog = this.catalogManagement.activeCatalog();
     const id = this.catalogId();
@@ -350,7 +383,9 @@ export class Gallery implements OnInit, OnDestroy {
     }
   }
 
-  /** Sets one property on the selected component, or removes it when value is undefined. */
+  /**
+   * Sets one property on the selected component, or removes it when value is undefined.
+   */
   protected editProperty(name: string, value: unknown): string | null {
     const preset = this.draft().preset;
     const target = this.editableComponent();
@@ -383,11 +418,19 @@ export class Gallery implements OnInit, OnDestroy {
     );
   }
 
-  protected describeUneditable(value: unknown, control: GalleryPropertyControl): string | null {
-    return describeUneditableValue(value, control);
-  }
+  protected readonly formatJson = formatJson;
 
-  protected asArray(value: unknown): unknown[] {
+  /**
+   * Exposes `describeUneditableValue` to `gallery.ng.html` for checking whether
+   * nested property values in `#controlTemplate` are uneditable bindings or calls.
+   */
+  protected readonly describeUneditableValue = describeUneditableValue;
+
+  /**
+   * Returns the array's elements for `@for`, or an empty list when an optional
+   * array property is unset (`undefined`).
+   */
+  protected ensureArray(value: unknown): unknown[] {
     return Array.isArray(value) ? value : [];
   }
 
@@ -401,11 +444,9 @@ export class Gallery implements OnInit, OnDestroy {
     return [...path, segment];
   }
 
-  protected formatJsonValue(value: unknown): string {
-    return value === undefined ? '' : formatJson(value);
-  }
-
-  /** Updates a top-level or nested property at `path`. */
+  /**
+   * Updates a top-level or nested property at `path`.
+   */
   protected editAtPath(path: PropertyPath, value: unknown): string | null {
     if (path.length === 0) {
       return null;
@@ -429,12 +470,16 @@ export class Gallery implements OnInit, OnDestroy {
     return this.editProperty(rootName, updatedRoot);
   }
 
-  /** Empty optional text removes the property; required text may be empty. */
+  /**
+   * Empty optional text removes the property; required text may be empty.
+   */
   protected editTextAtPath(path: PropertyPath, value: string, required: boolean): void {
     this.editAtPath(path, value === '' && !required ? undefined : value);
   }
 
-  /** Empty optional numbers remove the property; a required number keeps its value. */
+  /**
+   * Empty optional numbers remove the property; a required number keeps its value.
+   */
   protected editNumberAtPath(
     path: PropertyPath,
     value: number | null,
@@ -450,7 +495,9 @@ export class Gallery implements OnInit, OnDestroy {
     }
   }
 
-  /** Parses a structured JSON property; invalid JSON stays in its field and leaves the draft alone. */
+  /**
+   * Parses a structured JSON property; invalid JSON stays in its field and leaves the draft alone.
+   */
   protected editJsonAtPath(
     path: PropertyPath,
     pathKey: string,
@@ -502,7 +549,9 @@ export class Gallery implements OnInit, OnDestroy {
     this.editAtPath(path, [...items, nextItem]);
   }
 
-  /** Deletes the item at `index` from the array at `path`. */
+  /**
+   * Deletes the item at `index` from the array at `path`.
+   */
   protected removeArrayItem(path: PropertyPath, index: number): void {
     const current = this.getValueAtPath(path);
     if (!Array.isArray(current)) {
@@ -518,7 +567,9 @@ export class Gallery implements OnInit, OnDestroy {
     );
   }
 
-  /** Deep-gets a value from the editable component by the property path. */
+  /**
+   * Deep-gets a value from the editable component by the property path.
+   */
   private getValueAtPath(path: PropertyPath): unknown {
     let current: unknown = this.editableComponent();
     for (const segment of path) {
@@ -537,7 +588,10 @@ export class Gallery implements OnInit, OnDestroy {
     return current;
   }
 
-  /** Deep-sets a value into the editable component at `path`, pruning optional branches that become empty. */
+  /**
+   * Deep-sets a value into the editable component at `path`,
+   * pruning optional branches that become empty.
+   */
   private setDeepValue(
     current: unknown,
     path: PropertyPath,
@@ -684,22 +738,36 @@ export class Gallery implements OnInit, OnDestroy {
     this.catalogService.setGalleryActive(false);
   }
 
-  /** Whether usage samples are currently loading from the bridge. */
-  protected readonly loadingUsages = this.catalogService.loadingUsages;
+  /**
+   * Whether usage samples are currently loading from the bridge.
+   */
+  protected readonly loadingUsages: Signal<boolean> = this.catalogService.loadingUsages;
 
-  /** The alphabetized component list categorized by Layout, Content, Input, Feedback, Other. */
-  protected readonly componentsList = this.catalogService.componentsList;
+  /**
+   * The alphabetized component list categorized by Layout, Content, Input, Feedback, Other.
+   */
+  protected readonly componentsList: Signal<CategorizedComponents[]> =
+    this.catalogService.componentsList;
 
-  /** The key of the currently selected component. */
-  protected readonly selectedComponentKey = this.catalogService.selectedComponentKey;
+  /**
+   * The key of the currently selected component.
+   */
+  protected readonly selectedComponentKey: Signal<string | null> =
+    this.catalogService.selectedComponentKey;
 
-  /** The parsed property specifications for the selected component. */
-  protected readonly selectedComponentProperties = this.catalogService.selectedComponentProperties;
+  /**
+   * The parsed property specifications for the selected component.
+   */
+  protected readonly selectedComponentProperties: Signal<ParsedProperty[]> =
+    this.catalogService.selectedComponentProperties;
 
-  /** The formatted JSON usage snippet containing the component array. */
-  protected readonly selectedComponentUsage = this.catalogService.selectedComponentUsage;
+  /**
+   * The formatted JSON usage snippet containing the component array.
+   */
+  protected readonly selectedComponentUsage: Signal<string> =
+    this.catalogService.selectedComponentUsage;
 
-  protected readonly catalogId = computed<string | null>(() => {
+  protected readonly catalogId: Signal<string | null> = computed(() => {
     const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) {
       return null;
@@ -707,7 +775,9 @@ export class Gallery implements OnInit, OnDestroy {
     return catalog.catalogId || catalog.$id || null;
   });
 
-  /** The table column names mapped by MatTable. */
+  /**
+   * The table column names mapped by MatTable.
+   */
   protected readonly displayedColumns: string[] = [
     'name',
     'description',
@@ -716,8 +786,10 @@ export class Gallery implements OnInit, OnDestroy {
     'defaultValue',
   ];
 
-  /** The resolved schema description for the selected component. */
-  protected readonly selectedComponentDescription = computed<string>(() => {
+  /**
+   * The resolved schema description for the selected component.
+   */
+  protected readonly selectedComponentDescription: Signal<string> = computed(() => {
     const key = this.selectedComponentKey();
     const catalog = this.catalogManagement.activeCatalog();
     const comp =

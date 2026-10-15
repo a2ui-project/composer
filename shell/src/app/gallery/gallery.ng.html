@@ -225,7 +225,7 @@
                       let-label="label"
                       let-required="required"
                     >
-                      @if (describeUneditable(value, control); as nestedNote) {
+                      @if (describeUneditableValue(value, control); as nestedNote) {
                         <p class="property-note" [attr.data-property-note]="pathKey">
                           {{ nestedNote }}
                         </p>
@@ -280,7 +280,7 @@
                         />
                       } @else if (control.kind === 'array') {
                         <div class="array-control" [attr.data-property-array]="pathKey">
-                          @for (itemValue of asArray(value); track $index) {
+                          @for (itemValue of ensureArray(value); track $index) {
                             <div
                               class="array-item-row"
                               [attr.data-array-item]="pathKey + '.' + $index"
@@ -335,7 +335,7 @@
                               <label
                                 class="object-property-label"
                                 [attr.for]="
-                                  describeUneditable(
+                                  describeUneditableValue(
                                     getObjectField(value, subProp.name),
                                     subProp.control
                                   ) ||
@@ -376,7 +376,7 @@
                             [attr.aria-label]="label + ' (JSON)'"
                             [attr.data-property]="pathKey"
                             [placeholder]="required ? '' : 'Not set'"
-                            [value]="jsonFieldErrors()[pathKey]?.text ?? formatJsonValue(value)"
+                            [value]="jsonFieldErrors()[pathKey]?.text ?? formatJson(value)"
                             (change)="
                               editJsonAtPath(path, pathKey, required, label, jsonField.value)
                             "

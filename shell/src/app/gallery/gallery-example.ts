@@ -226,26 +226,30 @@ export function describeUneditableValue(
   value: unknown,
   control: GalleryPropertyControl,
 ): string | null {
+  // Unset values and raw JSON textareas are always editable.
   if (value === undefined || control.kind === 'json') {
     return null;
   }
+  // Enum select controls can edit the value if it matches one of the allowed options.
   if (control.kind === 'enum' && control.options.some(option => option === value)) {
     return null;
   }
+  // Array controls can edit the value if it is an actual array (not a binding or call).
   if (control.kind === 'array' && Array.isArray(value)) {
     return null;
   }
+  // Object field controls can edit plain objects, excluding data bindings and function calls.
   if (control.kind === 'object' && isRecord(value) && !isBindingOrCallValue(value)) {
     return null;
   }
+  // Primitive controls ('string', 'number', 'boolean') can edit values of the matching JS typeof.
   if (
-    control.kind !== 'enum' &&
-    control.kind !== 'array' &&
-    control.kind !== 'object' &&
+    (control.kind === 'string' || control.kind === 'number' || control.kind === 'boolean') &&
     typeof value === control.kind
   ) {
     return null;
   }
+  // Otherwise, the control cannot edit this value—explain why in a read-only note.
   if (isRecord(value) && isDataBindingValue(value)) {
     return `Bound to ${value['path']} — edit in the JSON editor.`;
   }
@@ -291,7 +295,8 @@ function inferControlFromValue(
     : {kind: 'json', options: []};
 }
 
-/** Extracts editable child property controls from an object schema, skips fixed `const` fields.
+/**
+ * Extracts editable child property controls from an object schema, skips fixed `const` fields.
  * This is used for object types in order to render form inputs for each nested field in object types
  * instead of using single raw JSON textarea.
  */
@@ -328,7 +333,9 @@ function resolveObjectProperties(
   return properties;
 }
 
-/** Returns true if schema has editable object properties, false otherwise. */
+/**
+ * Returns true if schema has editable object properties, false otherwise.
+ */
 function hasEditableObjectProperties(
   schema: CatalogComponentSchema,
   visited: Set<CatalogComponentSchema>,
@@ -338,7 +345,9 @@ function hasEditableObjectProperties(
 
 const FUNCTION_CALL_KEYS = new Set(['call', 'args', 'returnType']);
 
-/** Returns true if schema represents a data binding or function call schema, false otherwise. */
+/**
+ * Returns true if schema represents a data binding or function call schema, false otherwise.
+ */
 function isBindingOrCallSchema(schema: CatalogComponentSchema): boolean {
   const props = isRecord(schema['properties']) ? schema['properties'] : null;
   if (!props) {
@@ -351,13 +360,17 @@ function isBindingOrCallSchema(schema: CatalogComponentSchema): boolean {
   return 'call' in props && keys.every(key => FUNCTION_CALL_KEYS.has(key));
 }
 
-/** Returns true if value represents a data binding value, false otherwise. */
+/**
+ * Returns true if value represents a data binding value, false otherwise.
+ */
 function isDataBindingValue(value: Record<string, unknown>): boolean {
   const keys = Object.keys(value);
   return keys.length === 1 && keys[0] === 'path' && typeof value['path'] === 'string';
 }
 
-/** Returns true if value represents a function call value, false otherwise. */
+/**
+ * Returns true if value represents a function call value, false otherwise.
+ */
 function isFunctionCallValue(value: Record<string, unknown>): boolean {
   const keys = Object.keys(value);
   return (
@@ -368,17 +381,23 @@ function isFunctionCallValue(value: Record<string, unknown>): boolean {
   );
 }
 
-/** Returns true if value represents a data binding or function call value, false otherwise. */
+/**
+ * Returns true if value represents a data binding or function call value, false otherwise.
+ */
 function isBindingOrCallValue(value: Record<string, unknown>): boolean {
   return isDataBindingValue(value) || isFunctionCallValue(value);
 }
 
-/** Returns true if value is a literal, false otherwise. */
+/**
+ * Returns true if value is a literal, false otherwise.
+ */
 function isLiteral(value: unknown): value is Literal {
   return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 }
 
-/** Returns true if schema represents a literal schema, false otherwise. */
+/**
+ * Returns true if schema represents a literal schema, false otherwise.
+ */
 function isLiteralSchema(schema: CatalogComponentSchema): boolean {
   const type = schema['type'];
   return (
@@ -390,7 +409,9 @@ function isLiteralSchema(schema: CatalogComponentSchema): boolean {
   );
 }
 
-/** Returns true if value matches schema, false otherwise. */
+/**
+ * Returns true if value matches schema, false otherwise.
+ */
 function matchesSimpleSchema(value: unknown, schema: CatalogComponentSchema): boolean {
   if (typeof schema === 'boolean') {
     return schema;
