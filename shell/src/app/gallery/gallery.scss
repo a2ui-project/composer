@@ -140,26 +140,75 @@
   margin: 0 auto 24px;
 }
 
-.playground-panel {
+.playground-card {
+  box-sizing: border-box;
+  min-width: 0;
   border: 1px solid var(--mat-sys-outline-variant);
   background-color: var(--mat-sys-surface-container-lowest, var(--mat-sys-surface));
   box-shadow: none !important;
+  > mat-card-content {
+    padding: 24px;
+  }
 }
 
-.playground-title {
-  font: var(--mat-sys-title-medium);
-  letter-spacing: var(--mat-sys-title-medium-tracking);
+.playground-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.playground-tabs {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 999px;
+  background-color: var(--mat-sys-surface-container);
+  gap: 2px;
+}
+
+.playground-tab {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 16px;
+  background: transparent;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-large);
+  letter-spacing: var(--mat-sys-label-large-tracking);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+
+  &.active {
+    background-color: var(--mat-sys-surface);
+    color: var(--mat-sys-on-surface);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.playground-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .gallery-cards {
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
   gap: 24px;
   max-width: 1440px;
   margin: 0 auto;
-  padding-top: 8px;
+  padding: 20px;
+  border-radius: 16px;
+  background-color: var(--mat-sys-surface-container);
 }
+
 .details-panel {
   max-width: 1440px;
   margin: 0 auto;
@@ -167,15 +216,15 @@
 
 .preview-slot {
   min-width: 0;
-  display: grid;
-  grid-template-rows: 1fr 1fr;
-  gap: 24px;
+  display: flex;
+  flex-direction: column;
 }
 
 .properties-card,
 .empty-state {
   grid-column: 1 / -1;
 }
+
 .details-header {
   max-width: 1440px;
   margin: 0 auto 28px;
@@ -196,7 +245,6 @@
 
 .preview-card,
 .json-card,
-.usage-card,
 .properties-card {
   box-sizing: border-box;
   min-width: 0;
@@ -231,7 +279,15 @@
   }
 }
 
+.preview-card,
+.json-card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: none !important;
+}
+
 .preview-card {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-height: min-content;
@@ -239,14 +295,29 @@
 }
 
 .json-card {
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
 
 .usage-card {
+  box-sizing: border-box;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.usage-title {
+  margin: 0 0 12px;
+  font: var(--mat-sys-title-small);
+  letter-spacing: var(--mat-sys-title-small-tracking);
+}
+
+.usage-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .preview-placeholder {
@@ -265,7 +336,6 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-right: 8px;
 }
 
 .copy-button {
@@ -353,9 +423,9 @@
   overflow-x: auto;
 }
 
-@container gallery (min-width: 1000px) {
+@container gallery (min-width: 760px) {
   .gallery-cards {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-columns: minmax(220px, 1fr) minmax(0, 1.85fr);
   }
 }
 
@@ -372,14 +442,21 @@
     margin-bottom: 16px;
   }
 
+  .gallery-cards {
+    padding: 16px;
+  }
+
   .gallery-cards,
   .preview-slot {
     gap: 16px;
   }
 
+  .playground-card > mat-card-content {
+    padding: 16px;
+  }
+
   .preview-card,
   .json-card,
-  .usage-card,
   .properties-card {
     mat-card-header {
       padding: 16px;
@@ -408,8 +485,7 @@
   margin: 8px 0 16px;
 }
 
-// One property per row: name on the left, control on the right. Structured values and
-// read-only binding notes take the full row below their name.
+// One property per row: property name stacked on top of its UI control.
 .property-list {
   display: flex;
   flex-direction: column;
@@ -425,14 +501,11 @@
 
 .property-row {
   display: grid;
-  // The last column is reserved for the remove button on every row, so a control keeps
-  // its width when a value is set or cleared and the button appears or disappears.
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 40px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 16px;
-  row-gap: 8px;
-  min-height: 48px;
-  padding: 4px 0;
+  column-gap: 8px;
+  row-gap: 6px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--mat-sys-outline-variant);
 
   &:last-child {
@@ -441,7 +514,7 @@
 }
 
 .property-name {
-  grid-column: 1;
+  grid-column: 1 / -1;
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
@@ -460,7 +533,7 @@
 }
 
 .property-control {
-  grid-column: 2;
+  grid-column: 1;
   display: flex;
   min-width: 0;
 
@@ -470,10 +543,10 @@
     box-sizing: border-box;
     width: 100%;
     min-height: 40px;
-    border: 1px solid var(--mat-sys-outline);
+    border: 1px solid var(--mat-sys-outline-variant);
     border-radius: 8px;
     padding: 8px 10px;
-    background: var(--mat-sys-surface-container-low);
+    background: var(--mat-sys-surface);
     color: var(--mat-sys-on-surface);
     font: var(--mat-sys-body-small);
     letter-spacing: var(--mat-sys-body-small-tracking);
@@ -562,7 +635,7 @@
 }
 
 .remove-property {
-  grid-column: 3;
+  grid-column: 2;
   color: var(--mat-sys-on-surface-variant);
   --mat-icon-button-state-layer-size: 40px;
   width: 40px;
@@ -570,15 +643,8 @@
   padding: 8px;
 }
 
-// JSON fields and binding notes keep the same two columns as every other property, so
-// names stay aligned down the list; only their vertical alignment changes, pinning the
-// name and remove button to the first line of the taller control.
 .property-row-multiline {
   align-items: start;
-
-  .property-name {
-    padding-top: 10px;
-  }
 }
 
 .property-note {
@@ -589,7 +655,7 @@
 }
 
 .property-missing {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
   margin: 0;
   color: var(--mat-sys-error);
   font: var(--mat-sys-body-small);

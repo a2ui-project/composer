@@ -38,7 +38,6 @@ import {MatListModule} from '@angular/material/list';
 import {MatCardModule} from '@angular/material/card';
 import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
-import {MatExpansionModule} from '@angular/material/expansion';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
@@ -117,7 +116,6 @@ interface JsonFieldError {
     MatTableModule,
     MatSlideToggleModule,
     MatButtonModule,
-    MatExpansionModule,
     MatIconModule,
     MatProgressSpinnerModule,
     MonacoEditor,
@@ -139,8 +137,12 @@ export class Gallery implements OnInit, OnDestroy {
   private readonly logger: TaggedLogger = this.errorLogger.withTag('[Gallery]');
   protected readonly opening = signal(false);
   protected readonly actionMessage = signal('');
-  protected readonly playgroundExpanded = signal(true);
+  protected readonly activePlaygroundTab = signal<'preview' | 'json'>('preview');
   protected readonly rendererUrl: Signal<string | null> = this.startupResolution.resolvedUrl;
+
+  protected selectPlaygroundTab(tab: 'preview' | 'json'): void {
+    this.activePlaygroundTab.set(tab);
+  }
 
   /**
    * Memoized stringified catalog identity so switching components doesn't re-serialize the catalog.

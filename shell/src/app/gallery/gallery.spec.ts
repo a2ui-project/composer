@@ -566,23 +566,40 @@ describe('Gallery Component', () => {
     fixture.detectChanges();
 
     const titles = await harness.getCardTitlesText();
-    expect(titles).toEqual(['Preview', 'Edit JSON', 'Usage', 'Properties']);
+    expect(titles).toEqual(['Preview', 'Edit JSON', 'Properties']);
   });
 
-  it('toggles the interactive playground expansion panel while keeping the preview frame mounted', async () => {
+  it('switches between the Preview and Edit JSON tabs while keeping the preview frame mounted', async () => {
     catalogServiceMock.selectedComponentKey.set('Text');
     fixture.detectChanges();
 
-    expect(await harness.getPlaygroundTitle()).toBe('Interactive Playground');
-    expect(await harness.isPlaygroundExpanded()).toBe(true);
+    expect(await harness.getPlaygroundTabsText()).toEqual(['Preview', 'Edit JSON']);
+    expect(await harness.getActivePlaygroundTabText()).toBe('Preview');
+    expect(await harness.isPreviewCardHidden()).toBe(false);
+    expect(await harness.isJsonCardHidden()).toBe(true);
     expect(await harness.hasRenderedFrame()).toBe(true);
 
-    await harness.togglePlayground();
-    expect(await harness.isPlaygroundExpanded()).toBe(false);
+    await harness.selectPlaygroundTab('Edit JSON');
+    expect(await harness.getActivePlaygroundTabText()).toBe('Edit JSON');
+    expect(await harness.isPreviewCardHidden()).toBe(true);
+    expect(await harness.isJsonCardHidden()).toBe(false);
     expect(await harness.hasRenderedFrame()).toBe(true);
 
-    await harness.togglePlayground();
-    expect(await harness.isPlaygroundExpanded()).toBe(true);
+    await harness.selectPlaygroundTab('Preview');
+    expect(await harness.getActivePlaygroundTabText()).toBe('Preview');
+    expect(await harness.isPreviewCardHidden()).toBe(false);
+    expect(await harness.isJsonCardHidden()).toBe(true);
+
+    await expect(harness.selectPlaygroundTab('NonExistent')).rejects.toThrow(
+      'Could not find playground tab with text: "NonExistent"',
+    );
+  });
+
+  it('returns null for active playground tab in empty state', async () => {
+    catalogServiceMock.selectedComponentKey.set(null);
+    fixture.detectChanges();
+
+    expect(await harness.getActivePlaygroundTabText()).toBeNull();
   });
 
   it('displays catalog configuration error state when catalogError is set', async () => {

@@ -70,37 +70,41 @@ test.describe('Components Gallery User Journey', () => {
     // 5. Assert first component is automatically selected upon gallery navigation and details pane is updated
     await expect(page.getByRole('heading', {name: firstComponentName!, exact: true})).toBeVisible();
 
-    // Assert card headers are visible
+    // Assert card headers are visible (only Preview, Edit JSON, and Properties are mat-cards)
     const cardHeaders = page.locator('mat-card-header mat-card-title');
-    await expect(cardHeaders).toHaveText(['Preview', 'Edit JSON', 'Usage', 'Properties']);
+    await expect(cardHeaders).toHaveText(['Preview', 'Edit JSON', 'Properties']);
 
-    // 6. Verify the Interactive Playground toggle is expanded by default and can be collapsed and re-expanded
-    const playgroundToggle = page.getByRole('button', {name: 'Interactive Playground'});
-    await expect(playgroundToggle).toHaveAttribute('aria-expanded', 'true');
-    await playgroundToggle.click();
-    await expect(playgroundToggle).toHaveAttribute('aria-expanded', 'false');
-    await playgroundToggle.click();
-    await expect(playgroundToggle).toHaveAttribute('aria-expanded', 'true');
+    // 6. Verify the Playground toolbar has Preview/Edit JSON tabs on the top left, Copy JSON/Open in Composer on the top right,
+    // Usage section on the left (narrower than Preview/Edit JSON) with Reset example at its bottom, and Preview card on the right by default
+    const previewTab = page.getByRole('tab', {name: 'Preview', exact: true});
+    const editJsonTab = page.getByRole('tab', {name: 'Edit JSON', exact: true});
+    await expect(previewTab).toHaveAttribute('aria-selected', 'true');
+    await expect(editJsonTab).toHaveAttribute('aria-selected', 'false');
+    await expect(
+      page.locator('.usage-card').getByRole('button', {name: 'Reset example', exact: true}),
+    ).toBeVisible();
 
-    // Verify Preview is stacked on top of Edit JSON, both cards have the same height, and both playground columns have the same height
     await expect
       .poll(async () => {
-        const previewCard = await page.locator('.preview-card').boundingBox();
-        const jsonCard = await page.locator('.json-card').boundingBox();
-        const previewSlot = await page.locator('.preview-slot').boundingBox();
+        const tabsBox = await page.locator('.playground-tabs').boundingBox();
+        const actionsBox = await page.locator('.playground-actions').boundingBox();
         const usageCard = await page.locator('.usage-card').boundingBox();
-        if (!previewCard || !jsonCard || !previewSlot || !usageCard) {
+        const previewCard = await page.locator('.preview-card').boundingBox();
+        const previewSlot = await page.locator('.preview-slot').boundingBox();
+        if (!tabsBox || !actionsBox || !usageCard || !previewCard || !previewSlot) {
           return null;
         }
         return {
-          previewAboveJson: previewCard.y + previewCard.height <= jsonCard.y,
-          equalCardHeight: Math.abs(previewCard.height - jsonCard.height) <= 1,
+          tabsLeftOfActions: tabsBox.x + tabsBox.width <= actionsBox.x,
+          usageLeftOfPreview: usageCard.x + usageCard.width <= previewCard.x,
+          usageNarrowerThanPreview: usageCard.width < previewCard.width,
           equalColumnHeight: Math.abs(previewSlot.height - usageCard.height) <= 1,
         };
       })
       .toEqual({
-        previewAboveJson: true,
-        equalCardHeight: true,
+        tabsLeftOfActions: true,
+        usageLeftOfPreview: true,
+        usageNarrowerThanPreview: true,
         equalColumnHeight: true,
       });
 
@@ -110,7 +114,28 @@ test.describe('Components Gallery User Journey', () => {
     const rows = propertiesTable.locator('tbody tr');
     await expect(rows.first()).toBeVisible();
 
-    // 8. Assert the Edit JSON card holds the editable example as a raw components array in Monaco Editor
+    // 8. Assert sandboxed preview frame is mounted and has an iframe on the Preview tab
+    const renderedFrame = page.locator('a2ui-composer-rendered-frame');
+    await expect(renderedFrame).toBeVisible();
+    const iframe = renderedFrame.locator('iframe');
+    await expect(iframe).toBeVisible();
+    await iframe.evaluate(el => el.setAttribute('data-test-marker', 'persistent-preview'));
+
+    // 9. Switch to the Edit JSON tab and assert the Edit JSON card is on the right side and holds the editable example in Monaco Editor
+    await editJsonTab.click();
+    await expect(editJsonTab).toHaveAttribute('aria-selected', 'true');
+    await expect(previewTab).toHaveAttribute('aria-selected', 'false');
+    await expect
+      .poll(async () => {
+        const usageCard = await page.locator('.usage-card').boundingBox();
+        const jsonCard = await page.locator('.json-card').boundingBox();
+        if (!usageCard || !jsonCard) {
+          return null;
+        }
+        return usageCard.x + usageCard.width <= jsonCard.x;
+      })
+      .toBe(true);
+
     const draftJson = page.locator('a2ui-composer-monaco-editor.draft-json');
     await expect(draftJson).toBeVisible();
     await expect
@@ -131,15 +156,12 @@ test.describe('Components Gallery User Journey', () => {
     await expect.poll(() => getMonacoContent(page)).toMatch(/"description": "Deep dive into A2UI"/);
     expect(await getMonacoContent(page)).not.toContain('Audio Clip');
 
-    // Click back to first component to continue the rest of the test flow
+    // Click back to first component and switch back to Preview tab
     await navItems.first().click();
-
-    // 9. Assert sandboxed preview frame is mounted and has an iframe
-    const renderedFrame = page.locator('a2ui-composer-rendered-frame');
-    await expect(renderedFrame).toBeVisible();
-    const iframe = renderedFrame.locator('iframe');
+    await previewTab.click();
+    await expect(previewTab).toHaveAttribute('aria-selected', 'true');
     await expect(iframe).toBeVisible();
-    await iframe.evaluate(el => el.setAttribute('data-test-marker', 'persistent-preview'));
+    await expect(iframe).toHaveAttribute('data-test-marker', 'persistent-preview');
 
     // 10. Click copy to clipboard and assert clipboard content represents a JSON array envelope
     const copyButton = page.getByRole('button', {name: /copy/i});
@@ -208,7 +230,8 @@ test.describe('Components Gallery User Journey', () => {
       page.getByRole('heading', {name: secondComponentName!, exact: true}),
     ).toBeVisible();
 
-    // The Edit JSON card holds the selected component's editable example.
+    // Switch to Edit JSON tab to verify it holds the selected component's editable example
+    await editJsonTab.click();
     await expect
       .poll(() => getMonacoContent(page))
       .toMatch(new RegExp(`"component": "${secondComponentName!}"`));
@@ -218,7 +241,8 @@ test.describe('Components Gallery User Journey', () => {
     expect(secondDraftText).not.toContain('createSurface');
     expect(secondDraftText).not.toContain('updateComponents');
 
-    // Assert that the marker is still present, proving the DOM element was reused in-place
+    // Switch back to Preview tab and assert that the markers are still present, proving DOM elements were reused in-place
+    await previewTab.click();
     await expect(detailsPanel).toHaveAttribute('data-test-marker', 'in-place-verify');
     await expect(iframe).toHaveAttribute('data-test-marker', 'persistent-preview');
 
@@ -290,7 +314,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(page.locator('.gallery-sidenav')).toHaveCSS('width', '208px');
     await expect(page.locator('.gallery-content')).toHaveCSS('margin-left', '208px');
   });
-  test('lays out every property with its name beside its control, JSON fields included', async ({
+  test('lays out every property with its name on top of its control, JSON fields included', async ({
     page,
   }) => {
     await page.goto('/?renderer=http://localhost:3456');
@@ -305,17 +329,14 @@ test.describe('Components Gallery User Journey', () => {
         const control = row.querySelector('.property-control')!.getBoundingClientRect();
         return {
           property: row.getAttribute('data-property-row'),
-          nameRight: name.right,
-          controlLeft: control.left,
-          topOffset: Math.abs(name.top - control.top),
+          nameBottom: name.bottom,
+          controlTop: control.top,
         };
       }),
     );
     expect(rows.map(row => row.property)).toContain('accessibility');
     for (const row of rows) {
-      // A JSON field sits in the same column as every other control, not below its name.
-      expect(row.nameRight, row.property ?? '').toBeLessThanOrEqual(row.controlLeft);
-      expect(row.topOffset, row.property ?? '').toBeLessThan(16);
+      expect(row.nameBottom, row.property ?? '').toBeLessThanOrEqual(row.controlTop + 1);
     }
   });
 
@@ -335,9 +356,11 @@ test.describe('Components Gallery User Journey', () => {
     const preview = page.frameLocator('.preview-card iframe');
     await expect(preview.getByText(edited, {exact: true})).toBeVisible();
 
+    await page.getByRole('tab', {name: 'Edit JSON', exact: true}).click();
     await expect.poll(() => getMonacoContent(page)).toMatch(new RegExp(edited));
     await setMonacoContent(page, '{invalid');
     await expect(page.getByRole('alert').filter({hasText: 'last valid example'})).toBeVisible();
+    await page.getByRole('tab', {name: 'Preview', exact: true}).click();
     await expect(preview.getByText(edited, {exact: true})).toBeVisible();
     await page.getByRole('button', {name: 'Copy JSON', exact: true}).click();
     const copied = await page.evaluate(() => navigator.clipboard.readText());
