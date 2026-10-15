@@ -92,11 +92,11 @@ flowchart TD
 The ecosystem is architected as a modular, highly cohesive monorepo utilizing
 **Yarn v4 Workspaces**:
 
-| Workspace      | Package Name                                                                                | Description & Core Responsibilities                                                                                                                                                               |
-| :------------- | :------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`shell/`**   | `a2ui-composer-shell`                                                                       | Standalone web application hosting chat panel, live JSON editors, real-time iframe preview wrapper, debugging suite, interactive mock rules manager, and IndexedDB storage engines.               |
-| **`bridge/`**  | `a2ui-bridge`                                                                               | ESBuild-bundled lightweight cross-frame JavaScript library embedded inside child rendering iframes.                                                                                               |
-| **`samples/`** | `ng-basic-catalog`<br>`lit-basic-catalog`<br>`react-basic-catalog`<br>`react-slack-catalog` | Plug-and-play developer renderer sandbox applications demonstrating zero-boilerplate integration across Lit, Angular, and React rendering stacks, plus a credential-free Slack Block Kit preview. |
+| Workspace      | Package Name                                                                                | Description & Core Responsibilities                                                                                                                                                                             |
+| :------------- | :------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`shell/`**   | `a2ui-composer-shell`                                                                       | Standalone web application hosting chat panel, live JSON editors, real-time iframe preview wrapper, debugging suite, interactive mock rules manager, and IndexedDB storage engines.                             |
+| **`bridge/`**  | `a2ui-bridge`                                                                               | ESBuild-bundled lightweight cross-frame JavaScript library embedded inside child rendering iframes.                                                                                                             |
+| **`samples/`** | `ng-basic-catalog`<br>`lit-basic-catalog`<br>`react-basic-catalog`<br>`react-slack-catalog` | Plug-and-play developer renderer sandbox applications demonstrating zero-boilerplate integration across Lit, Angular, and React rendering stacks, plus a Slack Block Kit preview that needs no Slack workspace. |
 
 ## Getting Started
 
