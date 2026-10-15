@@ -79,13 +79,13 @@ interface EditableProperty {
   control: GalleryPropertyControl;
   kind: GalleryPropertyControl['kind'];
   options: GalleryPropertyControl['options'];
-  // The current value, or undefined when the example omits the property.
+  /** The current value, or undefined when the example omits the property. */
   value: unknown;
-  // Set when the value is a binding or call that only the JSON tab can edit.
+  /** Set when the value is a binding or call that only the JSON tab can edit. */
   note: string | null;
-  // True for properties every component in the catalog shares, such as accessibility.
+  /** True for properties every component in the catalog shares, such as accessibility. */
   common: boolean;
-  // True on the first common property, where the list starts its common section.
+  /** True on the first common property, where the list starts its common section. */
   firstCommon: boolean;
 }
 
@@ -429,8 +429,8 @@ export class Gallery implements OnInit, OnDestroy {
   protected readonly describeUneditableValue = describeUneditableValue;
 
   /**
-   * Returns the array's elements for `@for`, or an empty list when an optional
-   * array property is unset (`undefined`).
+   * Returns the array's elements for `@for` if it is set in the sample, or an empty
+   * list when an optional array property is unset (`undefined`).
    */
   protected ensureArray(value: unknown): unknown[] {
     return Array.isArray(value) ? value : [];

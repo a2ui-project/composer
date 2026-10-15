@@ -27,7 +27,7 @@ export class GalleryLauncher {
   private readonly location = inject(Location);
 
   /**
-   * Snapshots the selected example ands renderer before compressing the workspace handoff.
+   * Snapshots the selected example and renderer before compressing the workspace handoff.
    */
   async open(payload: string, rendererUrl: string, rendererId: string | null): Promise<void> {
     const view = this.document.defaultView;
