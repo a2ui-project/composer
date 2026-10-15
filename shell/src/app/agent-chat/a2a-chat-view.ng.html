@@ -96,7 +96,7 @@
         [attr.aria-valuenow]="inspectorWidth()"
         [attr.aria-valuemin]="280"
         tabindex="0"
-        (mousedown)="startInspectorResize($event)"
+        (pointerdown)="startInspectorResize($event)"
         (keydown)="handleInspectorResizeKey($event)"
       >
         <div class="resize-grip"></div>
