@@ -20,16 +20,50 @@ import {type InputBlock} from '@slack/types';
 
 type InputKind = 'shortText' | 'longText' | 'date';
 
+/**
+ * Slack's limit on an input block's label.
+ * https://docs.slack.dev/reference/block-kit/blocks/input-block
+ */
+const SLACK_LABEL_MAX_LENGTH = 2_000;
+
+/**
+ * Slack's limit on what a user can type into a plain-text input, which this
+ * sample also applies to the value it pre-fills from the data model.
+ * https://docs.slack.dev/reference/block-kit/block-elements/plain-text-input-element
+ */
+const SLACK_TEXT_INPUT_MAX_LENGTH = 3_000;
+
+/**
+ * An A2UI TextField or DateTimeInput lowered onto a Slack input, kept so text
+ * typed in Slack can be written back to the A2UI data model.
+ *
+ * Create it with `createInputDispatchEntry`, which checks the component has a
+ * writable value binding. The other functions here take an entry, so they rely
+ * on that check instead of repeating it.
+ */
 export interface InputDispatchEntry {
+  /** The Slack `action_id` given to the input element. */
   readonly actionId: string;
+  /** The preview render this entry was created in; a later render replaces it. */
   readonly revision: number;
+  /** The surface that drew the component. */
   readonly surface: SurfaceModel;
+  /** The A2UI component's ID. */
   readonly componentId: string;
+  /** The data model path the component was drawn under, such as a list item's. */
   readonly basePath: string;
+  /** The data model path the input's value is bound to. Never empty. */
   readonly path: string;
+  /** Which Slack element the input became. */
   readonly kind: InputKind;
 }
 
+/**
+ * Wraps a TextField or DateTimeInput for use as a Slack input.
+ *
+ * @throws If the component's `value` isn't bound to a data model path, since
+ *     Slack input would have nowhere to go.
+ */
 export function createInputDispatchEntry(
   actionId: string,
   revision: number,
@@ -61,13 +95,18 @@ export function createInputDispatchEntry(
   };
 }
 
+/**
+ * Builds the Slack input block for an entry, pre-filled from the data model.
+ *
+ * @throws If the label or the current value breaks one of Slack's limits.
+ */
 export function lowerFormInput(
   entry: InputDispatchEntry,
   props: Readonly<Record<string, unknown>>,
 ): ChannelNode {
   const label = props.label ?? (entry.kind === 'date' ? 'Date' : undefined);
-  if (typeof label !== 'string' || !label.trim() || label.length > 2_000) {
-    throw new Error('Slack input labels must contain 1–2000 characters.');
+  if (typeof label !== 'string' || !label.trim() || label.length > SLACK_LABEL_MAX_LENGTH) {
+    throw new Error(`Slack input labels must contain 1–${SLACK_LABEL_MAX_LENGTH} characters.`);
   }
   const value = readFormInputValue(entry);
   validateInputValue(entry, value);
@@ -87,7 +126,7 @@ export function lowerFormInput(
             type: 'plain_text_input',
             action_id: entry.actionId,
             multiline: entry.kind === 'longText',
-            max_length: 3_000,
+            max_length: SLACK_TEXT_INPUT_MAX_LENGTH,
             ...(value ? {initial_value: value} : {}),
             dispatch_action_config: {trigger_actions_on: ['on_character_entered']},
           },
@@ -95,12 +134,18 @@ export function lowerFormInput(
   return createNativeNode('slack', 'raw', 'raw', {value: block});
 }
 
+/**
+ * Writes a value typed in Slack to the input's data model path.
+ *
+ * @throws If the value isn't one Slack's input could have produced.
+ */
 export function updateFormInput(entry: InputDispatchEntry, value: unknown): void {
   validateInputValue(entry, value);
   const context = new ComponentContext(entry.surface, entry.componentId, entry.basePath);
   context.dataContext.set(entry.path, value);
 }
 
+/** Reads the input's current value from the data model, as `''` when unset. */
 export function readFormInputValue(entry: InputDispatchEntry): unknown {
   const context = new ComponentContext(entry.surface, entry.componentId, entry.basePath);
   const value = context.dataContext.resolveDynamicValue({path: entry.path});
@@ -126,8 +171,8 @@ function validateInputValue(entry: InputDispatchEntry, value: unknown): asserts 
     }
     return;
   }
-  if (value.length > 3_000) {
-    throw new Error('Slack text inputs accept at most 3000 characters.');
+  if (value.length > SLACK_TEXT_INPUT_MAX_LENGTH) {
+    throw new Error(`Slack text inputs accept at most ${SLACK_TEXT_INPUT_MAX_LENGTH} characters.`);
   }
   if (entry.kind === 'shortText' && /[\r\n]/.test(value)) {
     throw new Error(

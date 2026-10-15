@@ -9,7 +9,7 @@
 
 import {type A2uiMessage} from '@a2ui/web_core/v0_9';
 import {type ComponentUsages} from 'a2ui-bridge';
-import {SLACK_CATALOG_ID, SLACK_COMPONENT_USAGES as CATALOG_COMPONENT_USAGES} from './catalog';
+import {SLACK_CATALOG_ID} from './catalog';
 
 export const EXAMPLE_INITIAL_DATA = {
   greeting: 'Ready for review',
@@ -18,6 +18,10 @@ export const EXAMPLE_INITIAL_DATA = {
   },
 } as const;
 
+/**
+ * One example per Slack catalog component. The renderer sends these to
+ * Composer's Gallery, and the catalog tests check each against its schema.
+ */
 export const SLACK_COMPONENT_USAGES = {
   Text: {
     usage: [
@@ -147,9 +151,43 @@ export const SLACK_COMPONENT_USAGES = {
     ],
     data: EXAMPLE_INITIAL_DATA,
   },
-  TextField: CATALOG_COMPONENT_USAGES.TextField,
-  DateTimeInput: CATALOG_COMPONENT_USAGES.DateTimeInput,
-  Table: CATALOG_COMPONENT_USAGES.Table,
+  TextField: {
+    usage: [
+      {
+        id: 'root',
+        component: 'TextField',
+        label: 'Pickup location',
+        value: {path: '/pickupLocation'},
+        variant: 'shortText',
+      },
+    ],
+  },
+  DateTimeInput: {
+    usage: [
+      {
+        id: 'root',
+        component: 'DateTimeInput',
+        label: 'Pickup date',
+        value: {path: '/pickupDate'},
+        enableDate: true,
+        enableTime: false,
+      },
+    ],
+  },
+  Table: {
+    usage: [
+      {
+        id: 'root',
+        component: 'Table',
+        accessibility: {label: 'Illustrative 2022 World Cup final scores'},
+        columns: [{header: 'Team'}, {header: 'Goals', align: 'right'}, {header: 'Result'}],
+        rows: [
+          ['Argentina', '3', 'Won on penalties'],
+          ['France', '3', 'Runner-up'],
+        ],
+      },
+    ],
+  },
   MarketSnapshot: {
     usage: [
       {

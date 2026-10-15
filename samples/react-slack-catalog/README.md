@@ -1,7 +1,8 @@
 # React Slack Catalog Renderer
 
-Credential-free React sample renderer that previews A2UI surfaces as Slack
-message Block Kit. It registers the catalog ID
+React sample renderer that previews A2UI surfaces as Slack message Block Kit.
+It draws the preview in the browser and never contacts Slack, so you don't
+need a Slack workspace, app or token to use it. It registers the catalog ID
 `https://a2ui-project.github.io/composer/catalogs/slack/v1`, exposes Gallery
 usages for the supported Slack-oriented components, and renders the active
 Composer surface through the standard `a2uiBridge.attachRenderer` API.
@@ -30,8 +31,7 @@ the query parameter:
 http://localhost:4200/?renderer=http://localhost:3460
 ```
 
-Localhost renderer origins are allowed by the shell startup flow. The Slack
-renderer does not use Slack credentials, a Slack app, or a live agent endpoint.
+Localhost renderer origins are allowed by the shell startup flow.
 
 For assistant-driven generation and refinement, configure a valid Gemini API key
 through the normal Composer Settings flow. The Playwright happy-path tests use a
@@ -204,8 +204,8 @@ corepack yarn workspace react-slack-catalog preview --host 127.0.0.1 --port 4459
 ```
 
 Then register `http://127.0.0.1:4459` in Composer. If a host rewrites `/render`
-to this same static app, that `/render` entry is credential-free; it only serves
-the renderer bundle and participates in the Composer iframe bridge.
+to this same static app, that `/render` entry only serves the renderer bundle
+and participates in the Composer iframe bridge.
 
 The Vite config uses a relative asset base, so the built bundle can be hosted
 under a path prefix as long as the host serves `index.html` and static assets
