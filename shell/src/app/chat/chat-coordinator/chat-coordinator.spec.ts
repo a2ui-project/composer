@@ -18,6 +18,8 @@
 import {TestBed} from '@angular/core/testing';
 import {createEnvironmentInjector, EnvironmentInjector, signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {RendererSelection} from '../renderer-selection/renderer-selection';
+import {RendererTool} from '../renderer-selection/renderer-tool';
 import {ChatCoordinator} from './chat-coordinator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
@@ -33,6 +35,7 @@ import {
   LlmClient,
   LlmMessage,
   LlmResponse,
+  LlmRequestOptions,
   LlmStreamResponse,
   MessageRole,
   CANCEL_ERROR_NAME,
@@ -98,6 +101,7 @@ class MockChatState {
 class MockStateSync {
   readonly activeDraftSignal = signal<string>('Initial draft text');
   readonly activeDraft = this.activeDraftSignal.asReadonly();
+  syncActiveDraftToHistory = vi.fn();
   commitLayoutFromLlm = vi.fn((val: string) => {
     this.activeDraftSignal.set(val);
   });
@@ -110,7 +114,7 @@ class MockStateSync {
     );
   });
   hydrateActiveDraft = vi.fn(() => this.activeDraftSignal());
-  syncActiveDraftToHistory = vi.fn();
+  hasEditedDraft = vi.fn(() => false);
 }
 
 async function* createMockStream(chunks: string[]): AsyncIterable<LlmResponse> {
@@ -119,17 +123,126 @@ async function* createMockStream(chunks: string[]): AsyncIterable<LlmResponse> {
   }
 }
 
+/**
+ * A response that streams nothing until it's cancelled, then fails the way the real client
+ * does: its content stream and `complete` both reject with an error named
+ * CANCEL_ERROR_NAME.
+ */
+function createStreamAwaitingCancel() {
+  let markStarted!: () => void;
+  const started = new Promise<void>(resolve => {
+    markStarted = resolve;
+  });
+  let rejectCancelled!: (err: Error) => void;
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectCancelled = reject;
+  });
+  // As in the real client: once the content stream fails, nobody awaits `complete`.
+  cancelled.catch(() => {});
+  const cancel = vi.fn(() => {
+    const err = new Error('Cancelled');
+    err.name = CANCEL_ERROR_NAME;
+    rejectCancelled(err);
+  });
+  const response: LlmStreamResponse = {
+    contentStream: {
+      async *[Symbol.asyncIterator]() {
+        markStarted();
+        await cancelled;
+      },
+    },
+    complete: cancelled,
+    cancel,
+  };
+  return {response, started, cancel};
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve(value: T | PromiseLike<T>): void;
+  reject(reason?: unknown): void;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return {promise, resolve, reject};
+}
+
+function createControlledStream() {
+  const queued: LlmResponse[] = [];
+  let waiting:
+    | {
+        resolve(result: IteratorResult<LlmResponse>): void;
+        reject(reason?: unknown): void;
+      }
+    | undefined;
+  let finished = false;
+
+  const contentStream: AsyncIterable<LlmResponse> = {
+    [Symbol.asyncIterator]() {
+      return {
+        next(): Promise<IteratorResult<LlmResponse>> {
+          if (queued.length > 0) {
+            return Promise.resolve({value: queued.shift()!, done: false});
+          }
+          if (finished) {
+            return Promise.resolve({value: undefined, done: true});
+          }
+          return new Promise<IteratorResult<LlmResponse>>((resolve, reject) => {
+            waiting = {resolve, reject};
+          });
+        },
+      };
+    },
+  };
+
+  return {
+    contentStream,
+    push(content: string) {
+      if (waiting) {
+        const waiter = waiting;
+        waiting = undefined;
+        waiter.resolve({value: {content}, done: false});
+      } else {
+        queued.push({content});
+      }
+    },
+    fail(reason: unknown) {
+      if (waiting) {
+        const waiter = waiting;
+        waiting = undefined;
+        waiter.reject(reason);
+      }
+    },
+    finish() {
+      finished = true;
+      if (waiting) {
+        const waiter = waiting;
+        waiting = undefined;
+        waiter.resolve({value: undefined, done: true});
+      }
+    },
+  };
+}
+
 class MockLlmClient {
   chat = vi.fn();
-  chatStream = vi.fn(async (messages: LlmMessage[]): Promise<LlmStreamResponse> => {
-    const contentStream = createMockStream([
-      '{"version": "v0.9", "createSurface": {"surfaceId": "s1", ' + '"catalogId": "basic"}}\n',
-    ]);
-    const complete = Promise.resolve(
-      '{"version": "v0.9", "createSurface": {"surfaceId": "s1", ' + '"catalogId": "basic"}}\n',
-    );
-    return {contentStream, complete};
-  });
+  chatStream = vi.fn(
+    async (messages: LlmMessage[], options?: LlmRequestOptions): Promise<LlmStreamResponse> => {
+      const contentStream = createMockStream([
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", ' + '"catalogId": "basic"}}\n',
+      ]);
+      const complete = Promise.resolve(
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", ' + '"catalogId": "basic"}}\n',
+      );
+      return {contentStream, complete};
+    },
+  );
 }
 
 describe('ChatCoordinator Pipeline & State Integration', () => {
@@ -139,12 +252,32 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
   let configProviderMock: MockAppConfigProvider;
   let stateSyncMock: MockStateSync;
   let llmClientMock: MockLlmClient;
+  const rendererTool = {
+    definition: vi.fn(() => ({
+      name: 'switchRenderer',
+      description: 'Switch renderer',
+      parametersJsonSchema: {type: 'object'},
+    })),
+    rendererFor: vi.fn(),
+  };
+  const rendererSelection = {
+    selectRenderer: vi.fn<(id: string, signal: AbortSignal) => Promise<void>>(),
+  };
 
   beforeEach(() => {
     TestBed.resetTestingModule();
+    rendererSelection.selectRenderer.mockReset();
+    rendererTool.rendererFor.mockReset().mockReturnValue({
+      id: 'slack',
+      name: 'Slack',
+      rendererUrl: 'samples/react-slack-catalog/',
+      readOnly: true,
+    });
     TestBed.configureTestingModule({
       providers: [
         ChatCoordinator,
+        {provide: RendererTool, useValue: rendererTool},
+        {provide: RendererSelection, useValue: rendererSelection},
         {provide: ChatState, useClass: MockChatState},
         {
           provide: CatalogManagement,
@@ -166,6 +299,105 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
     // Eagerly execute initial constructor tracking effects skips
     TestBed.tick();
+  });
+
+  function toolStream(): LlmStreamResponse {
+    return {
+      contentStream: (async function* () {
+        yield {content: '', toolCalls: [{name: 'switchRenderer', args: {rendererId: 'slack'}}]};
+      })(),
+      complete: Promise.resolve(''),
+    };
+  }
+
+  it('switches renderers for a tool call and regenerates the same request with the new catalog', async () => {
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'basic',
+      components: {Text: {type: 'object'}},
+    });
+    const changed = createDeferred<void>();
+    const ready = createDeferred<void>();
+    rendererSelection.selectRenderer.mockImplementation(async () => {
+      configProviderMock.rendererUrl.set('samples/react-slack-catalog/');
+      TestBed.tick();
+      changed.resolve();
+      await ready.promise;
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'slack-catalog',
+        components: {Text: {type: 'object'}},
+      });
+    });
+    llmClientMock.chatStream.mockResolvedValueOnce(toolStream());
+    const submission = service.submitPrompt('Create a Slack approval message', [
+      {name: 'notes.txt', mimeType: 'text/plain', data: 'bm90ZXM='},
+    ]);
+    await changed.promise;
+    expect(chatStateMock.isProgrammaticStreamActive()).toBe(true);
+    expect(llmClientMock.chatStream).toHaveBeenCalledTimes(1);
+    ready.resolve();
+    await submission;
+    expect(rendererSelection.selectRenderer).toHaveBeenCalledOnce();
+    expect(llmClientMock.chatStream).toHaveBeenCalledTimes(2);
+    const [messages, options] = llmClientMock.chatStream.mock.calls[1];
+    expect(messages[0].content).toContain('slack-catalog');
+    expect(
+      messages.some(
+        m =>
+          m.content === 'Create a Slack approval message' &&
+          m.attachments?.[0].name === 'notes.txt',
+      ),
+    ).toBe(true);
+    expect(options).toBeUndefined();
+    expect(stateSyncMock.flushDraft).toHaveBeenCalledOnce();
+    expect(stateSyncMock.commitLayoutFromLlm).toHaveBeenCalledOnce();
+    expect(chatStateMock.isProgrammaticStreamActive()).toBe(false);
+  });
+
+  it('does not generate after cancellation during a renderer handshake', async () => {
+    const started = createDeferred<void>();
+    rendererSelection.selectRenderer.mockImplementation(async (_id, signal) => {
+      started.resolve();
+      await new Promise<void>((_resolve, reject) =>
+        signal.addEventListener('abort', () => reject(signal.reason), {once: true}),
+      );
+    });
+    llmClientMock.chatStream.mockResolvedValueOnce(toolStream());
+    const submission = service.submitPrompt('Create a Slack message');
+    await started.promise;
+    service.cancelActiveStream();
+    await submission;
+    expect(llmClientMock.chatStream).toHaveBeenCalledTimes(1);
+    expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
+    expect(chatStateMock.isProgrammaticStreamActive()).toBe(false);
+  });
+
+  it('reports a failed renderer switch without generating against the previous catalog', async () => {
+    rendererSelection.selectRenderer.mockRejectedValue(new Error('Slack renderer did not load'));
+    llmClientMock.chatStream.mockResolvedValueOnce(toolStream());
+    await service.submitPrompt('Create a Slack message');
+    expect(llmClientMock.chatStream).toHaveBeenCalledTimes(1);
+    expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
+    expect(chatStateMock.chatHistory().some(m => m.role === MessageRole.ERROR)).toBe(true);
+    expect(chatStateMock.isProgrammaticStreamActive()).toBe(false);
+  });
+
+  it('an unrelated renderer change still cancels a pending tool turn', async () => {
+    const started = createDeferred<void>();
+    rendererSelection.selectRenderer.mockImplementation(async (_id, signal) => {
+      started.resolve();
+      await new Promise<void>((_resolve, reject) =>
+        signal.addEventListener('abort', () => reject(signal.reason), {once: true}),
+      );
+    });
+    llmClientMock.chatStream.mockResolvedValueOnce(toolStream());
+    const submission = service.submitPrompt('Create a Slack message');
+    await started.promise;
+    configProviderMock.rendererUrl.set('https://other-renderer.example/');
+    TestBed.tick();
+    await submission;
+    expect(llmClientMock.chatStream).toHaveBeenCalledTimes(1);
+    expect(chatStateMock.chatHistory()).toEqual([]);
+    expect(chatStateMock.isProgrammaticStreamActive()).toBe(false);
   });
 
   /* Pre-existing baseline specs mapped to dynamic settings mocks */
@@ -365,6 +597,215 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
         2,
       ),
     );
+  });
+
+  it('syncs the live draft into the LLM request context immediately before the prompt', async () => {
+    const liveDraft =
+      '[{"version": "v0.9", "createSurface": {"surfaceId": "live", "catalogId": "test"}}]';
+    stateSyncMock.activeDraftSignal.set(liveDraft);
+    stateSyncMock.syncActiveDraftToHistory.mockImplementation(() => {
+      chatStateMock.updateChatHistory(history => [
+        ...history,
+        {
+          role: MessageRole.USER,
+          content: liveDraft,
+        },
+      ]);
+    });
+
+    await service.submitPrompt('Edit the live draft');
+
+    expect(stateSyncMock.syncActiveDraftToHistory.mock.invocationCallOrder[0]).toBeLessThan(
+      llmClientMock.chatStream.mock.invocationCallOrder[0],
+    );
+    const request = llmClientMock.chatStream.mock.calls[0][0];
+    expect(request.at(-2)).toEqual({
+      role: MessageRole.USER,
+      content: liveDraft,
+    });
+    expect(request.at(-1)).toEqual(
+      expect.objectContaining({
+        role: MessageRole.USER,
+        content: 'Edit the live draft',
+      }),
+    );
+  });
+
+  it('applies assistant deltas to the live active draft without dropping unrelated content', async () => {
+    const activeDraft = JSON.stringify([
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's1',
+          components: [
+            {id: 'root', component: 'Column', children: ['kept']},
+            {id: 'kept', component: 'Text', text: 'Keep me'},
+          ],
+        },
+      },
+    ]);
+    stateSyncMock.activeDraftSignal.set(activeDraft);
+    catalogManagementMock.activeCatalog.set({
+      catalogId: 'test',
+      components: {
+        Column: {},
+        Text: {},
+      },
+    });
+    const delta =
+      '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id": "new", "component": "Text", "text": "Added"}]}}';
+    llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+      const contentStream = createMockStream([delta]);
+      return {contentStream, complete: Promise.resolve(delta)};
+    });
+
+    await service.submitPrompt('Add one component');
+
+    const committedOutput = stateSyncMock.commitLayoutFromLlm.mock.calls[0][0];
+    const parsed = JSON.parse(committedOutput);
+    expect(parsed).toHaveLength(3);
+    expect(JSON.stringify(parsed)).toContain('Keep me');
+    expect(JSON.stringify(parsed)).toContain('Added');
+  });
+
+  it('rejects unknown-surface deltas and preserves the active draft', async () => {
+    const activeDraft = JSON.stringify([
+      {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'test'}},
+    ]);
+    stateSyncMock.activeDraftSignal.set(activeDraft);
+    catalogManagementMock.activeCatalog.set({catalogId: 'test', components: {Text: {}}});
+    const delta =
+      '{"version": "v0.9", "updateComponents": {"surfaceId": "missing", "components": [{"id": "root", "component": "Text", "text": "Bad"}]}}';
+    llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+      const contentStream = createMockStream([delta]);
+      return {contentStream, complete: Promise.resolve(delta)};
+    });
+
+    await service.submitPrompt('Patch missing surface');
+
+    expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
+    expect(stateSyncMock.activeDraft()).toBe(activeDraft);
+    expect(service.pipelineStatus()).toBe(PipelineStatus.FAILED);
+    const history = chatStateMock.chatHistory();
+    expect(history.at(-1)?.role).toBe(MessageRole.ERROR);
+    expect(history.at(-1)?.errorDetails).toContain('surface "missing" does not exist');
+  });
+
+  it('does not commit stale output after renderer changes while a stream is in flight', async () => {
+    const response =
+      '{"version": "v0.9", "createSurface": {"surfaceId": "old", "catalogId": "test"}}';
+    llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => {
+      const contentStream = createMockStream([response]);
+      return {
+        contentStream,
+        complete: Promise.resolve().then(() => {
+          configProviderMock.rendererUrl.set('http://localhost:4200/slack-new');
+          return response;
+        }),
+      };
+    });
+
+    await service.submitPrompt('Generate stale output');
+    TestBed.tick();
+    await Promise.resolve();
+    await new Promise<void>(resolve => queueMicrotask(() => resolve()));
+
+    expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
+    expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+    expect(chatStateMock.chatHistory()).toEqual([]);
+  });
+
+  it('stops a response that completes before the renderer change is handled, keeping an edited canvas', async () => {
+    stateSyncMock.hasEditedDraft.mockReturnValue(true);
+    const response =
+      '{"version": "v0.9", "createSurface": {"surfaceId": "old", "catalogId": "test"}}';
+    llmClientMock.chatStream = vi.fn(async (): Promise<LlmStreamResponse> => ({
+      contentStream: createMockStream([response]),
+      complete: Promise.resolve().then(() => {
+        configProviderMock.rendererUrl.set('http://localhost:4200/slack-new');
+        return response;
+      }),
+    }));
+
+    await service.submitPrompt('Generate stale output', [], {promptId: 'prompt-1'});
+    TestBed.tick();
+    await new Promise<void>(resolve => queueMicrotask(() => resolve()));
+
+    expect(stateSyncMock.commitLayoutFromLlm).not.toHaveBeenCalled();
+    expect(chatStateMock.chatHistory().at(-1)?.content).toBe(
+      '*This response was stopped because the renderer changed.*',
+    );
+    expect(service.isProgrammaticStreamActive()).toBe(false);
+    expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+  });
+
+  it('ignores stale chunks and cleanup after renderer changes and a new prompt starts', async () => {
+    const oldStream = createControlledStream();
+    const newStream = createControlledStream();
+    const oldComplete = createDeferred<string>();
+    const newComplete = createDeferred<string>();
+    oldComplete.promise.catch(() => {});
+    newComplete.promise.catch(() => {});
+
+    const oldCancel = vi.fn();
+    const newCancel = vi.fn(() => {
+      const err = new Error('Cancelled');
+      err.name = CANCEL_ERROR_NAME;
+      newStream.fail(err);
+      newComplete.reject(err);
+    });
+
+    llmClientMock.chatStream = vi
+      .fn()
+      .mockResolvedValueOnce({
+        contentStream: oldStream.contentStream,
+        complete: oldComplete.promise,
+        cancel: oldCancel,
+      })
+      .mockResolvedValueOnce({
+        contentStream: newStream.contentStream,
+        complete: newComplete.promise,
+        cancel: newCancel,
+      });
+
+    const oldPromptPromise = service.submitPrompt('Generate old renderer output');
+    await Promise.resolve();
+
+    configProviderMock.rendererUrl.set('http://localhost:4200/slack-new');
+    TestBed.tick();
+    await Promise.resolve();
+    await new Promise<void>(resolve => queueMicrotask(() => resolve()));
+
+    const newPromptPromise = service.submitPrompt('Generate new renderer output');
+    await Promise.resolve();
+    newStream.push('new renderer chunk');
+    await Promise.resolve();
+
+    oldStream.push('stale renderer chunk');
+    await Promise.resolve();
+
+    oldStream.fail(new Error('stale stream failed'));
+    await oldPromptPromise;
+
+    expect(service.isProgrammaticStreamActive()).toBe(true);
+    expect(service.pipelineStatus()).toBe(PipelineStatus.RECEIVING_STREAM);
+    expect(chatStateMock.chatHistory().at(-1)).toEqual(
+      expect.objectContaining({
+        role: MessageRole.MODEL,
+        content: expect.stringContaining('new renderer chunk'),
+      }),
+    );
+    expect(chatStateMock.chatHistory().at(-1)?.content).not.toContain('stale renderer chunk');
+    expect(chatStateMock.chatHistory().some(message => message.role === MessageRole.ERROR)).toBe(
+      false,
+    );
+
+    service.cancelActiveStream();
+    await newPromptPromise;
+
+    expect(newCancel).toHaveBeenCalledTimes(1);
+    expect(service.isProgrammaticStreamActive()).toBe(false);
   });
 
   it('extracts layouts markdown and heals unmatched curly braces', async () => {
@@ -614,30 +1055,81 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(history[1].errorDetails).not.toContain('dummy_key_here');
   });
 
-  it('monitors rendererUrl mutations triggering flushing resets', async () => {
-    // Setup initial state: history has data, status is ready, locks active
-    chatStateMock.chatHistory.set([{role: MessageRole.USER, content: 'Some logs'}]);
-    chatStateMock.pipelineStatus.set(PipelineStatus.READY);
-    chatStateMock.isProgrammaticStreamActive.set(true);
-    stateSyncMock.activeDraftSignal.set('Custom unsaved draft configs');
-
-    // Verify setup
-    expect(chatStateMock.chatHistory().length).toBe(1);
-    expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
-    expect(service.isProgrammaticStreamActive()).toBe(true);
-    expect(stateSyncMock.hydrateActiveDraft()).toBe('Custom unsaved draft configs');
-
-    // Trigger dynamic rendererUrl setting override
-    configProviderMock.rendererUrl.set('http://localhost:9999/preview-env-fresh');
-
-    // Trigger Angular effects change detections
+  /** Changes the renderer and waits for ChatCoordinator to handle the change. */
+  async function changeRenderer(): Promise<void> {
+    configProviderMock.rendererUrl.set('http://localhost:9999/other-renderer');
     TestBed.tick();
-    await Promise.resolve();
-
-    // Wait for the scheduled microtask to execute
     await new Promise<void>(resolve => queueMicrotask(() => resolve()));
+  }
 
-    // Verify dynamic flushes wipes resets instantly execute!
+  it('starts a new session when the renderer changes while the canvas is unedited', async () => {
+    chatStateMock.chatHistory.set([
+      {role: MessageRole.USER, content: 'What can you build?'},
+      {role: MessageRole.MODEL, content: 'Forms, lists and cards.'},
+    ]);
+    chatStateMock.pipelineStatus.set(PipelineStatus.READY);
+
+    await changeRenderer();
+
+    expect(chatStateMock.chatHistory()).toEqual([]);
+    expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+    expect(service.isProgrammaticStreamActive()).toBe(false);
+    expect(stateSyncMock.flushDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the conversation and canvas when the renderer changes after an edit', async () => {
+    stateSyncMock.hasEditedDraft.mockReturnValue(true);
+    const history = [
+      {role: MessageRole.USER, content: 'Make a card'},
+      {role: MessageRole.MODEL, content: 'Here it is'},
+    ];
+    chatStateMock.chatHistory.set(history);
+    stateSyncMock.activeDraftSignal.set('Edited canvas');
+
+    await changeRenderer();
+
+    expect(chatStateMock.chatHistory()).toEqual(history);
+    expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+    expect(stateSyncMock.hydrateActiveDraft()).toBe('Edited canvas');
+  });
+
+  it('cancels a streaming response, without tracking a user cancel, when the renderer changes after an edit', async () => {
+    stateSyncMock.hasEditedDraft.mockReturnValue(true);
+    const trackChatCancel = vi.spyOn(TestBed.inject(UsageTrackingService), 'trackChatCancel');
+    const stream = createStreamAwaitingCancel();
+    llmClientMock.chatStream = vi.fn(async () => stream.response);
+    const submission = service.submitPrompt('Make a card', [], {promptId: 'prompt-1'});
+    await stream.started;
+
+    await changeRenderer();
+    await submission;
+
+    expect(stream.cancel).toHaveBeenCalledTimes(1);
+    expect(trackChatCancel).not.toHaveBeenCalled();
+    expect(chatStateMock.chatHistory()).toEqual([
+      {role: MessageRole.USER, content: 'Make a card', promptId: 'prompt-1'},
+      {
+        role: MessageRole.MODEL,
+        content: '*This response was stopped because the renderer changed.*',
+      },
+    ]);
+    expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
+    expect(service.isProgrammaticStreamActive()).toBe(false);
+    expect(stateSyncMock.flushDraft).not.toHaveBeenCalled();
+  });
+
+  it('cancels a streaming response, without tracking a user cancel, when the renderer changes while the canvas is unedited', async () => {
+    const trackChatCancel = vi.spyOn(TestBed.inject(UsageTrackingService), 'trackChatCancel');
+    const stream = createStreamAwaitingCancel();
+    llmClientMock.chatStream = vi.fn(async () => stream.response);
+    const submission = service.submitPrompt('Make a card', [], {promptId: 'prompt-1'});
+    await stream.started;
+
+    await changeRenderer();
+    await submission;
+
+    expect(stream.cancel).toHaveBeenCalledTimes(1);
+    expect(trackChatCancel).not.toHaveBeenCalled();
     expect(chatStateMock.chatHistory()).toEqual([]);
     expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
     expect(service.isProgrammaticStreamActive()).toBe(false);

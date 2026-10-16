@@ -40,6 +40,8 @@ import {StateSync} from '../../chat/state-sync/state-sync';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
+import {PreviewUrlParam} from '../preview-url-param';
+import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 
 /**
  * Number of consecutive growing SURFACE_RESIZE reports that trips the growth
@@ -78,6 +80,7 @@ const RUNAWAY_REPORT_INTERVAL_MS = 500;
 export class RenderedFrame {
   private sanitizer = inject(DomSanitizer);
   private startupResolution = inject(StartupResolution);
+  private environmentContext = inject(EnvironmentContextService);
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
@@ -159,14 +162,15 @@ export class RenderedFrame {
       // (e.g., in Server-Side Rendering).
       const baseOrigin = globalThis.location?.origin || undefined;
 
-      // Construct a URL object. Passing baseOrigin as the second argument ensures that
-      // relative URLs (e.g., "/renderer") are parsed correctly relative to the current
-      // domain. Absolute URLs will ignore this base parameter.
-      const url = new URL(currentUrl, baseOrigin);
+      // Without a page location only absolute URLs are loaded; parsing a relative
+      // one throws.
+      const url = baseOrigin
+        ? this.environmentContext.resolveRendererUrl(currentUrl)
+        : new URL(currentUrl);
 
       // Prevent unauthorized cross-site framing by appending parent and
       // ancestor origins.
-      url.searchParams.delete('origin');
+      url.searchParams.delete(PreviewUrlParam.ORIGIN);
 
       const origins = new Set<string>();
       if (baseOrigin) {
@@ -185,11 +189,11 @@ export class RenderedFrame {
       }
 
       for (const origin of origins) {
-        url.searchParams.append('origin', origin);
+        url.searchParams.append(PreviewUrlParam.ORIGIN, origin);
       }
 
       const initialTheme = untracked(() => this.configProvider.themePreference());
-      url.searchParams.set('theme', initialTheme);
+      url.searchParams.set(PreviewUrlParam.THEME, initialTheme);
 
       const urlString = url.toString();
       if (!isValidHttpUrl(urlString)) {

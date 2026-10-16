@@ -16,6 +16,7 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {RenderedFrame} from './rendered-frame';
+import {PreviewUrlParam} from '../preview-url-param';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RenderedFrameHarness} from './test/rendered-frame.harness';
 import {describe, it, afterEach, expect, beforeEach, vi} from 'vitest';
@@ -144,6 +145,14 @@ describe('RenderedFrame Live Preview Viewport', () => {
     );
   });
 
+  it('adds only the query parameters listed in PreviewUrlParam', async () => {
+    // RendererSelection removes these before comparing the iframe's URL with a
+    // renderer's, so a parameter added without being listed would break that match.
+    const src = new URL((await harness.getIframeSrc())!);
+    const listed: string[] = Object.values(PreviewUrlParam);
+    expect([...new Set(src.searchParams.keys())].filter(key => !listed.includes(key))).toEqual([]);
+  });
+
   it('registers the iframe element with HostCommunication upon view initialization', () => {
     expect(hostCommunicationServiceMock.registerIframe).toHaveBeenCalled();
   });
@@ -212,6 +221,43 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(await relativeHarness.getIframeSrc()).toBe(
       'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
     );
+  });
+
+  describe('with a catalog-relative renderer URL', () => {
+    let base: HTMLBaseElement;
+
+    // A renderer deployed with Composer can be configured relative to the page;
+    // see `RendererConfig.rendererUrl`.
+    async function iframeSrcWithBase(href: string): Promise<string | null> {
+      fixture.destroy();
+      base = document.createElement('base');
+      base.href = href;
+      document.head.appendChild(base);
+      resolvedUrlSignal.set('samples/bundled-renderer/');
+      const relativeFixture = TestBed.createComponent(RenderedFrame);
+      relativeFixture.detectChanges();
+      const relativeHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        relativeFixture,
+        RenderedFrameHarness,
+      );
+      return relativeHarness.getIframeSrc();
+    }
+
+    afterEach(() => {
+      base?.remove();
+    });
+
+    it('resolves it against the GitHub Pages base path', async () => {
+      expect(await iframeSrcWithBase('http://localhost:3000/composer/')).toBe(
+        'http://localhost:3000/composer/samples/bundled-renderer/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    });
+
+    it('resolves it against a PR preview base path', async () => {
+      expect(await iframeSrcWithBase('http://localhost:3000/composer/pr/216/')).toBe(
+        'http://localhost:3000/composer/pr/216/samples/bundled-renderer/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    });
   });
 
   it('appends all ancestor origins and base origin to the renderer URL query params', async () => {

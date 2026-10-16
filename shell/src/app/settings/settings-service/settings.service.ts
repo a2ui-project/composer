@@ -77,6 +77,16 @@ export class SettingsService {
     this.startupConfigState.renderers(),
   );
 
+  /**
+   * Every renderer the user can choose: those in the app config and those
+   * saved in Settings. Unlike `getRenderers()`, it updates when a renderer is
+   * saved or deleted, so menus that list renderers stay current.
+   */
+  readonly rendererOptions: Signal<RendererOption[]> = computed(() => {
+    this._customRenderersVersion();
+    return this.getRenderers();
+  });
+
   readonly selectedRendererId: Signal<string | null> = computed(() =>
     this.startupConfigState.selectedRendererId(),
   );
@@ -101,9 +111,9 @@ export class SettingsService {
    *
    * @param rendererId The selected renderer ID string, or null to revert to Custom/Default.
    */
-  async selectRenderer(rendererId: string | null): Promise<boolean> {
+  async selectRenderer(rendererId: string | null, signal?: AbortSignal): Promise<boolean> {
     const fromRendererId = this.selectedRendererId();
-    const isAllowed = await this.startupResolution.setSelectedRendererId(rendererId);
+    const isAllowed = await this.startupResolution.setSelectedRendererId(rendererId, signal);
     if (!isAllowed) {
       return false;
     }
