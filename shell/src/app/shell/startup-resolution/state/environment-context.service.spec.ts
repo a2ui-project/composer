@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {TestBed} from '@angular/core/testing';
 import {EnvironmentContextService} from './environment-context.service';
 import {LocalStorageInteractions} from '../../../storage/local-storage-interactions/local-storage-interactions';
@@ -45,10 +45,42 @@ describe('EnvironmentContextService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('returns localhost fallback from getBaseOrigin when location origin is undefined', () => {
-    vi.stubGlobal('location', {origin: undefined});
-    expect(service.getBaseOrigin()).toBe('http://localhost');
-    vi.unstubAllGlobals();
+  describe('resolveRendererUrl', () => {
+    let base: HTMLBaseElement | undefined;
+
+    afterEach(() => {
+      base?.remove();
+      base = undefined;
+    });
+
+    function serveComposerFrom(href: string): void {
+      base = document.createElement('base');
+      base.href = href;
+      document.head.appendChild(base);
+    }
+
+    it('keeps an absolute URL', () => {
+      serveComposerFrom('https://example.com/composer/');
+      expect(service.resolveRendererUrl('https://renderer.example/app/').href).toBe(
+        'https://renderer.example/app/',
+      );
+    });
+
+    it('resolves a root-relative URL against the origin', () => {
+      serveComposerFrom('https://example.com/composer/pr/7/');
+      expect(service.resolveRendererUrl('/renderer/').href).toBe('https://example.com/renderer/');
+    });
+
+    it('resolves a page-relative URL under the path Composer is served from', () => {
+      serveComposerFrom('https://example.com/composer/pr/7/');
+      expect(service.resolveRendererUrl('samples/bundled-renderer/').href).toBe(
+        'https://example.com/composer/pr/7/samples/bundled-renderer/',
+      );
+    });
+
+    it('throws for a URL that cannot be parsed', () => {
+      expect(() => service.resolveRendererUrl('http://')).toThrow(TypeError);
+    });
   });
 
   it('determines if environment is localhost', () => {

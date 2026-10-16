@@ -42,6 +42,7 @@ import {ErrorLogger} from '../../debug/error-logger.service';
 
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {PreviewUrlParam} from '../preview-url-param';
+import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 
 /**
  * Number of consecutive growing SURFACE_RESIZE reports that makes the growth
@@ -108,6 +109,7 @@ const MAX_OWN_GROWTH_RELEASES_PER_RUN = 2;
 export class RenderedFrame {
   private sanitizer = inject(DomSanitizer);
   private startupResolution = inject(StartupResolution);
+  private environmentContext = inject(EnvironmentContextService);
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
@@ -208,17 +210,11 @@ export class RenderedFrame {
       // (e.g., in Server-Side Rendering).
       const baseOrigin = globalThis.location?.origin || undefined;
 
-      // Resolve relative renderer URLs against the page's base URL rather than just
-      // its origin. Root-relative URLs ("/renderer") resolve the same either way, but
-      // Composer is also served from a sub-path (GitHub Pages at /composer/, PR
-      // previews at /composer/pr/<n>/), where a bundled renderer configured as
-      // "samples/react-slack-catalog/" must stay under that path. Absolute URLs
-      // ignore the base. `document.baseURI` honors a <base> element and falls back
-      // to the page URL.
-      const baseUrl = globalThis.location
-        ? globalThis.document?.baseURI || globalThis.location.href
-        : baseOrigin;
-      const url = new URL(currentUrl, baseUrl);
+      // Without a page location only absolute URLs are loaded; parsing a relative
+      // one throws.
+      const url = baseOrigin
+        ? this.environmentContext.resolveRendererUrl(currentUrl)
+        : new URL(currentUrl);
 
       // Prevent unauthorized cross-site framing by appending parent and
       // ancestor origins.
