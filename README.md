@@ -148,8 +148,9 @@ renderer pill in the input toolbar opens the configured renderer choices. Choose
 or Lit renderer for standard A2UI.
 
 You can also ask the assistant to change formats, for example: “Create a Slack
-approval message with an Approve button.” Its `switchRenderer` frontend tool
-selects the renderer and waits for its catalog before generating. Both controls
+approval message with an Approve button.” The assistant can call a
+`switchRenderer` function that Composer runs: it selects the renderer and waits
+for its catalog before generating. Both controls
 use the same selection. Switching renderer keeps a canvas you or the assistant
 have changed, along with the conversation, and draws it with the new renderer; an
 unchanged sample canvas is replaced by the new renderer's sample. Subsequent edits

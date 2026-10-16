@@ -43,6 +43,7 @@ import {
 import {ChatPromptFactoryService} from '../chat-prompt-factory/chat-prompt-factory.service';
 import {ChatErrorFormatterService} from '../chat-error-formatter/chat-error-formatter.service';
 import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
+import {RendererSelection} from '../renderer-selection/renderer-selection';
 import {RendererTool} from '../renderer-selection/renderer-tool';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
@@ -79,6 +80,7 @@ export class ChatCoordinator {
   private readonly chatState = inject(ChatState);
   private readonly llmClient = inject(LlmClient);
   private readonly rendererTool = inject(RendererTool);
+  private readonly rendererSelection = inject(RendererSelection);
   private readonly errorLogger = inject(ErrorLogger);
   private readonly logger = inject(ErrorLogger).withTag('[ChatCoordinator]');
   private readonly chatCleaner = inject(ChatCleaner);
@@ -400,11 +402,11 @@ export class ChatCoordinator {
           if (this.cancelReason !== null) {
             throw this.cancelError();
           }
-          const targetUrl = this.rendererTool.targetUrl(toolCalls[0]);
-          const changedRenderer = targetUrl !== rendererUrlAtSubmit;
-          this.expectedToolRendererUrl = changedRenderer ? targetUrl : undefined;
+          const renderer = this.rendererTool.rendererFor(toolCalls[0]);
+          const changedRenderer = renderer.rendererUrl !== rendererUrlAtSubmit;
+          this.expectedToolRendererUrl = changedRenderer ? renderer.rendererUrl : undefined;
           try {
-            await this.rendererTool.execute(toolCalls[0], toolAbortController.signal);
+            await this.rendererSelection.selectRenderer(renderer.id, toolAbortController.signal);
           } finally {
             if (requestId === this.activeRequestId) {
               this.expectedToolRendererUrl = undefined;

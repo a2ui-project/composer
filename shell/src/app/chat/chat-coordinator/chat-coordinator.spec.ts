@@ -18,6 +18,7 @@
 import {TestBed} from '@angular/core/testing';
 import {createEnvironmentInjector, EnvironmentInjector, signal} from '@angular/core';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {RendererSelection} from '../renderer-selection/renderer-selection';
 import {RendererTool} from '../renderer-selection/renderer-tool';
 import {ChatCoordinator} from './chat-coordinator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
@@ -257,18 +258,26 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
       description: 'Switch renderer',
       parametersJsonSchema: {type: 'object'},
     })),
-    targetUrl: vi.fn(() => 'samples/react-slack-catalog/'),
-    execute: vi.fn<(call: unknown, signal: AbortSignal) => Promise<void>>(),
+    rendererFor: vi.fn(),
+  };
+  const rendererSelection = {
+    selectRenderer: vi.fn<(id: string, signal: AbortSignal) => Promise<void>>(),
   };
 
   beforeEach(() => {
     TestBed.resetTestingModule();
-    rendererTool.execute.mockReset();
-    rendererTool.targetUrl.mockReset().mockReturnValue('samples/react-slack-catalog/');
+    rendererSelection.selectRenderer.mockReset();
+    rendererTool.rendererFor.mockReset().mockReturnValue({
+      id: 'slack',
+      name: 'Slack',
+      rendererUrl: 'samples/react-slack-catalog/',
+      readOnly: true,
+    });
     TestBed.configureTestingModule({
       providers: [
         ChatCoordinator,
         {provide: RendererTool, useValue: rendererTool},
+        {provide: RendererSelection, useValue: rendererSelection},
         {provide: ChatState, useClass: MockChatState},
         {
           provide: CatalogManagement,
@@ -301,14 +310,14 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     };
   }
 
-  it('executes the frontend tool and regenerates the same request with the new catalog', async () => {
+  it('switches renderers for a tool call and regenerates the same request with the new catalog', async () => {
     catalogManagementMock.activeCatalog.set({
       catalogId: 'basic',
       components: {Text: {type: 'object'}},
     });
     const changed = createDeferred<void>();
     const ready = createDeferred<void>();
-    rendererTool.execute.mockImplementation(async () => {
+    rendererSelection.selectRenderer.mockImplementation(async () => {
       configProviderMock.rendererUrl.set('samples/react-slack-catalog/');
       TestBed.tick();
       changed.resolve();
@@ -327,7 +336,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(llmClientMock.chatStream).toHaveBeenCalledTimes(1);
     ready.resolve();
     await submission;
-    expect(rendererTool.execute).toHaveBeenCalledOnce();
+    expect(rendererSelection.selectRenderer).toHaveBeenCalledOnce();
     expect(llmClientMock.chatStream).toHaveBeenCalledTimes(2);
     const [messages, options] = llmClientMock.chatStream.mock.calls[1];
     expect(messages[0].content).toContain('slack-catalog');
@@ -346,7 +355,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
   it('does not generate after cancellation during a renderer handshake', async () => {
     const started = createDeferred<void>();
-    rendererTool.execute.mockImplementation(async (_call, signal) => {
+    rendererSelection.selectRenderer.mockImplementation(async (_id, signal) => {
       started.resolve();
       await new Promise<void>((_resolve, reject) =>
         signal.addEventListener('abort', () => reject(signal.reason), {once: true}),
@@ -363,7 +372,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
   });
 
   it('reports a failed renderer switch without generating against the previous catalog', async () => {
-    rendererTool.execute.mockRejectedValue(new Error('Slack renderer did not load'));
+    rendererSelection.selectRenderer.mockRejectedValue(new Error('Slack renderer did not load'));
     llmClientMock.chatStream.mockResolvedValueOnce(toolStream());
     await service.submitPrompt('Create a Slack message');
     expect(llmClientMock.chatStream).toHaveBeenCalledTimes(1);
@@ -374,7 +383,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
 
   it('an unrelated renderer change still cancels a pending tool turn', async () => {
     const started = createDeferred<void>();
-    rendererTool.execute.mockImplementation(async (_call, signal) => {
+    rendererSelection.selectRenderer.mockImplementation(async (_id, signal) => {
       started.resolve();
       await new Promise<void>((_resolve, reject) =>
         signal.addEventListener('abort', () => reject(signal.reason), {once: true}),
