@@ -350,7 +350,7 @@ export class StartupResolution {
               targetId = customMatch.id ?? null;
             } else {
               try {
-                const urlObj = new URL(queryRendererUrl, this.environmentContext.getBaseOrigin());
+                const urlObj = this.environmentContext.resolveRendererUrl(queryRendererUrl);
                 const hostname = urlObj.hostname || 'custom';
                 const port = urlObj.port ? `:${urlObj.port}` : '';
                 const newId = `custom-${Date.now()}`;
@@ -462,15 +462,9 @@ export class StartupResolution {
     }
   }
 
-  /**
-   * Parses a renderer URL. Relative URLs resolve against the page's base URL, so a
-   * bundled renderer configured as "samples/react-slack-catalog/" stays under the
-   * sub-path Composer is served from (/composer/ on GitHub Pages, /composer/pr/<n>/
-   * for PR previews). Root-relative URLs resolve against Composer's origin either way.
-   */
+  /** Parses a renderer URL, rejecting any that isn't HTTP(S). */
   private parseRendererUrl(url: string): URL {
-    const baseUrl = globalThis.document?.baseURI || this.environmentContext.getBaseOrigin();
-    const parsed = new URL(url, baseUrl);
+    const parsed = this.environmentContext.resolveRendererUrl(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new Error('Renderer URLs must use HTTP or HTTPS.');
     }

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {DOCUMENT} from '@angular/common';
 import {
   DestroyRef,
   EffectRef,
@@ -35,6 +34,7 @@ import {
 } from '../../shell/host-communication/host-communication';
 import {PreviewUrlParam} from '../../preview/preview-url-param';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {
   CatalogManagement,
   sanitizeCatalog,
@@ -68,7 +68,7 @@ export class RendererSelection {
   private readonly catalog = inject(CatalogManagement);
   private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly document = inject(DOCUMENT);
+  private readonly environmentContext = inject(EnvironmentContextService);
   private readonly switching = signal(false);
 
   /** Every renderer the user can switch to, from the app config and Settings. */
@@ -178,7 +178,7 @@ export class RendererSelection {
   private notAllowedMessage(renderer: RendererOption): string {
     let href = '';
     try {
-      href = new URL(renderer.rendererUrl, this.document.baseURI).href;
+      href = this.environmentContext.resolveRendererUrl(renderer.rendererUrl).href;
     } catch {
       // Reported below as an unusable URL.
     }
@@ -211,8 +211,8 @@ export class RendererSelection {
       return false;
     }
     try {
-      const actual = new URL(frame.src, this.document.baseURI);
-      const expected = new URL(renderer.rendererUrl, this.document.baseURI);
+      const actual = this.environmentContext.resolveRendererUrl(frame.src);
+      const expected = this.environmentContext.resolveRendererUrl(renderer.rendererUrl);
       // Drop the parameters the preview adds, so only the renderer's own URL is compared.
       for (const url of [actual, expected]) {
         for (const param of Object.values(PreviewUrlParam)) {
@@ -241,8 +241,10 @@ export class RendererSelection {
       return false;
     }
     try {
-      const baseUri = this.document.baseURI;
-      return new URL(configuredUrl, baseUri).href === new URL(resolvedUrl, baseUri).href;
+      return (
+        this.environmentContext.resolveRendererUrl(configuredUrl).href ===
+        this.environmentContext.resolveRendererUrl(resolvedUrl).href
+      );
     } catch {
       return configuredUrl === resolvedUrl;
     }
