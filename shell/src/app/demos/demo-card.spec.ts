@@ -440,7 +440,7 @@ describe('DemoCard sandboxed live demo frame', () => {
     expect(host.style.getPropertyValue('--demo-preview-scale')).toBe(String(PREVIEW_SCALE));
   });
 
-  it('fits overflowing content and requests a wide tile without reloading the frame', () => {
+  it('fits overflowing content and asks for a wider card without reloading the frame', () => {
     vi.useFakeTimers();
     const fixture = mountCard(true);
     const frame = frameOf(fixture)!;
@@ -452,7 +452,7 @@ describe('DemoCard sandboxed live demo frame', () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.style.getPropertyValue('--demo-preview-scale')).toBe('0.5');
-    expect(fixture.componentInstance.needsWideLayout()).toBe(true);
+    expect(fixture.componentInstance.minimumCardWidth()).toBe(800);
     expect(surfaceOf(fixture).style.height).toBe('250px');
     expect(frameOf(fixture)).toBe(frame);
 
@@ -465,7 +465,7 @@ describe('DemoCard sandboxed live demo frame', () => {
 
     resolvedUrlSignal.set('http://localhost:3000/other-renderer');
     fixture.detectChanges();
-    expect(fixture.componentInstance.needsWideLayout()).toBe(false);
+    expect(fixture.componentInstance.minimumCardWidth()).toBe(0);
   });
 
   it('compares content width with the viewport at measurement time', () => {
@@ -479,7 +479,7 @@ describe('DemoCard sandboxed live demo frame', () => {
       viewportWidth: 1230,
       contentReady: true,
     });
-    expect(fixture.componentInstance.needsWideLayout()).toBe(false);
+    expect(fixture.componentInstance.minimumCardWidth()).toBe(0);
     expect(
       (fixture.nativeElement as HTMLElement).style.getPropertyValue('--demo-preview-scale'),
     ).toBe('1');

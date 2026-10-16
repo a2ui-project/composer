@@ -34,7 +34,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {DemosCatalog} from './services/demos-catalog';
 import {DemoCard} from './demo-card';
-import {bentoColumns} from './bento-layout';
+import {BentoGrid, bentoLayout} from './bento-layout';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 
@@ -240,9 +240,27 @@ export class Demos implements OnInit, OnDestroy {
 
   private readonly cards = viewChildren(DemoCard);
 
-  /** Wide demos and their neighbours fill rows without dense packing or reordering. */
-  protected readonly cardColumns = computed(() =>
-    bentoColumns(this.cards().map(card => card.needsWideLayout())),
+  private readonly wallRef = viewChild<ElementRef<HTMLElement>>('wall');
+
+  /**
+   * The wall's width and column gap, which decide whether a demo fits half a row. Read
+   * by {@link Demos.measureWall} whenever a card changes size.
+   */
+  private readonly wallGrid = signal<BentoGrid>({width: 0, gap: 0});
+
+  /**
+   * Each card's place on the wall, in reading order; see {@link bentoLayout}. A card's
+   * measured height is its height on the wall wherever its demo fits unscaled, which is
+   * the only case in which the layout stacks or pairs it.
+   */
+  protected readonly cardPlacements = computed(() =>
+    bentoLayout(
+      this.cards().map(card => ({
+        minimumWidth: card.minimumCardWidth(),
+        height: card.cardHeight(),
+      })),
+      this.wallGrid(),
+    ),
   );
 
   private readonly mounted = signal<ReadonlySet<string>>(new Set<string>());
@@ -383,6 +401,26 @@ export class Demos implements OnInit, OnDestroy {
   }
 
   /**
+   * Reads the wall's width and column gap into {@link Demos.wallGrid}.
+   *
+   * The wall resizes only with its cards, so the card resize observer is enough to keep
+   * it current: every observed card reports once when it's first observed, and again
+   * whenever the wall reflows it.
+   */
+  private measureWall(): void {
+    const wall = this.wallRef()?.nativeElement;
+    if (!wall) {
+      return;
+    }
+    const width = wall.clientWidth;
+    const gap = Number.parseFloat(getComputedStyle(wall).columnGap) || 0;
+    const current = this.wallGrid();
+    if (width !== current.width || gap !== current.gap) {
+      this.wallGrid.set({width, gap});
+    }
+  }
+
+  /**
    * Builds the observer that re-runs mount scheduling when the wall reflows.
    *
    * Intersection entries are not enough to keep the mount set true, because the
@@ -414,9 +452,13 @@ export class Demos implements OnInit, OnDestroy {
     if (typeof ResizeObserver === 'undefined') {
       return null;
     }
-    // Entries are ignored: any card changing size invalidates the ranking for all
-    // of them, and the observer already coalesces a batch into one callback.
-    this.resizeObserver = new ResizeObserver(() => this.reconcileMountedCards());
+    // Entries are ignored: any card changing size can mean the wall reflowed, which
+    // invalidates its measurements and the ranking for every card, and the observer
+    // already coalesces a batch into one callback.
+    this.resizeObserver = new ResizeObserver(() => {
+      this.measureWall();
+      this.reconcileMountedCards();
+    });
     return this.resizeObserver;
   }
 

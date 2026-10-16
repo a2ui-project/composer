@@ -91,7 +91,10 @@
   font-size: 0.8125rem;
 }
 
-// Row order matches the renderer response and the keyboard reading order.
+// Row order matches the renderer response and the keyboard reading order. A tall card
+// spans the rows of the cards stacked beside it (see `bentoLayout`), and sparse
+// auto-placement puts each stacked card in the next row beside it, so the grid must
+// not use `grid-auto-flow: dense`, which would move cards out of reading order.
 .demos-wall {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -102,6 +105,7 @@
     display: block;
     min-width: 0;
     grid-column: span var(--demo-columns, 6);
+    grid-row: span var(--demo-rows, 1);
   }
 }
 
@@ -166,6 +170,7 @@
 
     a2ui-composer-demo-card {
       grid-column: 1 / -1;
+      grid-row: auto;
     }
   }
 

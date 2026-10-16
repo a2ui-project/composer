@@ -153,6 +153,24 @@ for (const renderer of [
       await expect(checkout.getByRole('button', {name: 'Place order · $199.99'})).toBeVisible();
     });
 
+    test('stacks short demos beside a tall one instead of stretching them to its height', async ({
+      page,
+    }) => {
+      await page.setViewportSize({width: 1440, height: 1120});
+      await page.goto(`/demos?renderer=http://localhost:${renderer.port}`);
+      const incremental = page.locator('a2ui-composer-demo-card', {
+        has: page.locator('.demo-card-title', {hasText: /^Incremental$/}),
+      });
+      await incremental.scrollIntoViewIfNeeded();
+
+      // Incremental's list is one of the tallest demos, and three short demos follow it.
+      // Pairing the first of them with the list stretched its card to the list's height,
+      // three times the height of its own content.
+      await expect
+        .poll(() => largestStretch(page, INCREMENTAL_AND_FOLLOWING_DEMOS), {timeout: 20_000})
+        .toBeLessThan(2);
+    });
+
     test('fits the invitation builder and renders its heading without Markdown syntax', async ({
       page,
     }) => {
@@ -262,6 +280,38 @@ for (const renderer of [
       await expect(page.frameLocator('iframe').first().locator('body')).toContainText('Sign In');
     });
   });
+}
+
+/** Incremental's tall list and the three short demos that follow it on the wall. */
+const INCREMENTAL_AND_FOLLOWING_DEMOS = [
+  'Incremental',
+  'Interactive Button',
+  'Row Layout',
+  'Simple Login Form',
+];
+
+/**
+ * Returns how many times taller than its own content the most stretched of the named
+ * demo cards is. A card's content is its header plus its measured demo. Returns
+ * Infinity until all of those cards have measured their demos.
+ */
+async function largestStretch(page: Page, titles: readonly string[]): Promise<number> {
+  return page.locator('a2ui-composer-demo-card').evaluateAll((cards, titles) => {
+    let largest = 0;
+    for (const title of titles) {
+      const card = cards.find(
+        candidate => candidate.querySelector('.demo-card-title')?.textContent?.trim() === title,
+      );
+      const surface = card?.querySelector('.demo-card-surface');
+      if (!card || !surface?.classList.contains('is-measured')) {
+        return Infinity;
+      }
+      const cardBox = card.getBoundingClientRect();
+      const contentHeight = surface.getBoundingClientRect().bottom - cardBox.top;
+      largest = Math.max(largest, cardBox.height / contentHeight);
+    }
+    return largest;
+  }, titles);
 }
 
 interface WindowWithPreviewActivity extends Window {

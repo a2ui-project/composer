@@ -66,7 +66,7 @@
       }
     </div>
   } @else {
-    <div class="demos-wall">
+    <div class="demos-wall" #wall>
       @for (demo of demos() ?? []; track demo.trackKey) {
         <!--
           `--demo-card-enter-index` is the card's place in the entrance cascade; the
@@ -78,7 +78,8 @@
           #cardHost
           [attr.data-demo-key]="demo.trackKey"
           [style.--demo-card-enter-index]="entranceStep($index)"
-          [style.--demo-columns]="cardColumns()[$index]"
+          [style.--demo-columns]="cardPlacements()[$index]?.columns"
+          [style.--demo-rows]="cardPlacements()[$index]?.rows"
           [demo]="demo"
           [mount]="mountedKeys().has(demo.trackKey)"
         ></a2ui-composer-demo-card>

@@ -185,6 +185,7 @@ export class DemoCard {
   private readonly configProvider = inject(AppConfigProvider);
   private readonly demoLauncher = inject(DemoLauncher);
   private readonly logger = inject(ErrorLogger).withTag('[DemoCard]');
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   /** The demo whose A2UI payload this card renders. */
   readonly demo = input.required<Demo>();
@@ -212,8 +213,19 @@ export class DemoCard {
 
   private readonly availableWidth = signal(0);
   private readonly contentWidth = signal(0);
-  /** Overflow is renderer-owned evidence that this demo needs a full-width tile. */
-  readonly needsWideLayout = computed(() => this.contentWidth() > 0);
+  /** Width of the card around its surface: its borders and the surface's margin. */
+  private readonly surfaceInset = signal(0);
+  /**
+   * Narrowest card, in pixels, that shows this demo without scaling it down, or 0 while
+   * the demo has fit every card it has been shown in.
+   *
+   * It is learned from overflow, which only the renderer can see: the card records the
+   * widest content the demo has reported beyond its frame. The wall gives a card that
+   * needs more than its half of a row a wider slot or a full row.
+   */
+  readonly minimumCardWidth = computed(() =>
+    this.contentWidth() > 0 ? this.contentWidth() + this.surfaceInset() : 0,
+  );
 
   /** Fit wide, interactive content without reloading the frame or losing form state. */
   protected readonly previewScale = computed(() => {
@@ -448,7 +460,10 @@ export class DemoCard {
   }
 
   private measureAvailableWidth(surface: HTMLElement): void {
-    if (surface.clientWidth > 0) this.availableWidth.set(surface.clientWidth);
+    if (surface.clientWidth > 0) {
+      this.availableWidth.set(surface.clientWidth);
+      this.surfaceInset.set(Math.max(0, this.host.nativeElement.offsetWidth - surface.clientWidth));
+    }
   }
 
   /**
