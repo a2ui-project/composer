@@ -785,16 +785,23 @@ export class A2aChatView implements OnInit {
     this.isInspectorOpen.set(true);
   }
 
-  protected startInspectorResize(event: MouseEvent): void {
+  protected startInspectorResize(event: PointerEvent): void {
+    if (!event.isPrimary || event.button !== 0) return;
     event.preventDefault();
     this.isResizingInspector.set(true);
+
+    // Capture the pointer on the handle so fast drags over adjacent columns
+    // (such as preview iframes) continue routing pointer events here instead of
+    // being swallowed by the iframe's browsing context.
+    const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    target?.setPointerCapture?.(event.pointerId);
 
     const startX = event.clientX;
     const startWidth = this.inspectorWidth();
     const resizeController = new AbortController();
     const {signal} = resizeController;
 
-    const onMouseMove = (moveEvent: MouseEvent) => {
+    const onPointerMove = (moveEvent: PointerEvent) => {
       const delta = startX - moveEvent.clientX;
       const minWidth = 280;
       const maxWidth = Math.max(300, Math.floor(window.innerWidth * 0.7));
@@ -803,8 +810,11 @@ export class A2aChatView implements OnInit {
     };
 
     const cleanup = () => {
-      this.isResizingInspector.set(false);
       resizeController.abort();
+      if (target?.hasPointerCapture?.(event.pointerId)) {
+        target.releasePointerCapture(event.pointerId);
+      }
+      this.isResizingInspector.set(false);
       removeDestroyHook();
     };
 
@@ -812,8 +822,10 @@ export class A2aChatView implements OnInit {
       resizeController.abort();
     });
 
-    window.addEventListener('mousemove', onMouseMove, {signal});
-    window.addEventListener('mouseup', cleanup, {signal});
+    target?.addEventListener('lostpointercapture', cleanup, {signal});
+    window.addEventListener('pointermove', onPointerMove, {signal});
+    window.addEventListener('pointerup', cleanup, {signal});
+    window.addEventListener('pointercancel', cleanup, {signal});
   }
 
   protected handleInspectorResizeKey(event: KeyboardEvent): void {

@@ -128,6 +128,7 @@
       align-items: center;
       justify-content: center;
       user-select: none;
+      touch-action: none;
       transition: background 0.15s ease;
 
       .resize-grip {
