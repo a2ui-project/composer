@@ -621,6 +621,85 @@ describe('StartupResolution', () => {
     expect(stateService.selectedRendererId()).toBeNull();
   });
 
+  describe('interactive renderer approval', () => {
+    beforeEach(() => {
+      stateService.setRenderers({
+        standard: {rendererUrl: '/standard/'},
+        lit: {rendererUrl: '/lit/'},
+        other: {rendererUrl: '/other/'},
+      });
+      stateService.setSelectedRendererId('standard');
+      stateService.setResolvedUrl('/standard/');
+    });
+
+    it('keeps the current selection intact until approval succeeds', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed').mockReturnValue(
+        new Promise(resolve => {
+          approve = resolve;
+        }),
+      );
+      const selection = service.setSelectedRendererId('lit');
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+      approve(true);
+      expect(await selection).toBe(true);
+      expect(stateService.selectedRendererId()).toBe('lit');
+      expect(service.resolvedUrl()).toBe('/lit/');
+    });
+
+    it('does not reset the current renderer when approval is denied', async () => {
+      vi.spyOn(service, 'isOriginAllowed').mockResolvedValue(false);
+      expect(await service.setSelectedRendererId('lit')).toBe(false);
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
+    it('does not overwrite a newer selection when an older approval completes', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed')
+        .mockReturnValueOnce(
+          new Promise(resolve => {
+            approve = resolve;
+          }),
+        )
+        .mockResolvedValue(true);
+      const selection = service.setSelectedRendererId('lit');
+      const rejection = expect(selection).rejects.toThrow('waiting for approval');
+      await service.setSelectedRendererId('other');
+      approve(true);
+      await rejection;
+      expect(stateService.selectedRendererId()).toBe('other');
+      expect(service.resolvedUrl()).toBe('/other/');
+    });
+
+    it('rejects pending approval when the target URL is edited', async () => {
+      let approve!: (allowed: boolean) => void;
+      vi.spyOn(service, 'isOriginAllowed').mockReturnValue(
+        new Promise(resolve => {
+          approve = resolve;
+        }),
+      );
+      const selection = service.setSelectedRendererId('lit');
+      const rejection = expect(selection).rejects.toThrow('waiting for approval');
+      stateService.setRenderers({lit: {rendererUrl: 'https://other.example/renderer'}});
+      approve(true);
+      await rejection;
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
+    it.each(['javascript:alert(1)', 'data:text/html,preview', 'ftp://localhost/renderer'])(
+      'rejects non-HTTP renderer URL %s',
+      async rendererUrl => {
+        stateService.setRenderers({lit: {rendererUrl}});
+        expect(await service.setSelectedRendererId('lit')).toBe(false);
+        expect(stateService.selectedRendererId()).toBe('standard');
+        expect(service.resolvedUrl()).toBe('/standard/');
+      },
+    );
+  });
+
   describe('renderer resolution', () => {
     it('loads default profile when no profile query parameter is provided', async () => {
       mockFetchConfig({

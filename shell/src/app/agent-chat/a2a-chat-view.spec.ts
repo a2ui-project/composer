@@ -640,23 +640,53 @@ describe('A2aChatView', () => {
     expect(fixture.componentInstance['inspectorWidth']()).toBe(380);
   });
 
-  it('resizes inspector drawer on mouse drag', () => {
+  it('resizes inspector drawer on pointer drag and captures pointer', () => {
     fixture.componentInstance['inspectorWidth'].set(380);
+    fixture.componentInstance['isInspectorOpen'].set(true);
+    fixture.detectChanges();
 
-    const mouseDownEvent = new MouseEvent('mousedown', {clientX: 800});
-    fixture.componentInstance['startInspectorResize'](mouseDownEvent);
+    const handle: HTMLElement = fixture.nativeElement.querySelector('.inspector-resize-handle');
+    const setPointerCaptureSpy = vi.fn();
+    const hasPointerCaptureSpy = vi.fn().mockReturnValue(true);
+    const releasePointerCaptureSpy = vi.fn();
+    Object.assign(handle, {
+      setPointerCapture: setPointerCaptureSpy,
+      hasPointerCapture: hasPointerCaptureSpy,
+      releasePointerCapture: releasePointerCaptureSpy,
+    });
+
+    // Non-primary or right-click pointerdown should be ignored
+    handle.dispatchEvent(
+      new PointerEvent('pointerdown', {clientX: 800, pointerId: 1, button: 2, isPrimary: true}),
+    );
+    expect(fixture.componentInstance['isResizingInspector']()).toBe(false);
+
+    const pointerDownEvent = new PointerEvent('pointerdown', {
+      clientX: 800,
+      pointerId: 1,
+      button: 0,
+      isPrimary: true,
+    });
+    handle.dispatchEvent(pointerDownEvent);
 
     expect(fixture.componentInstance['isResizingInspector']()).toBe(true);
+    expect(setPointerCaptureSpy).toHaveBeenCalledWith(1);
 
-    const mouseMoveEvent = new MouseEvent('mousemove', {clientX: 750});
-    window.dispatchEvent(mouseMoveEvent);
+    const pointerMoveEvent = new PointerEvent('pointermove', {
+      clientX: 750,
+      pointerId: 1,
+      isPrimary: true,
+    });
+    window.dispatchEvent(pointerMoveEvent);
 
     expect(fixture.componentInstance['inspectorWidth']()).toBe(430);
 
-    const mouseUpEvent = new MouseEvent('mouseup');
-    window.dispatchEvent(mouseUpEvent);
+    const pointerUpEvent = new PointerEvent('pointerup', {pointerId: 1, isPrimary: true});
+    window.dispatchEvent(pointerUpEvent);
 
     expect(fixture.componentInstance['isResizingInspector']()).toBe(false);
+    expect(hasPointerCaptureSpy).toHaveBeenCalledWith(1);
+    expect(releasePointerCaptureSpy).toHaveBeenCalledWith(1);
   });
 
   it('aborts active generation when cancelActiveGeneration is called', () => {
@@ -956,28 +986,38 @@ describe('A2aChatView', () => {
     );
   });
 
-  it('cleans up resize event listeners on window mouseup or component destroy', () => {
+  it('cleans up resize event listeners on window pointerup or component destroy', () => {
     const abortSpy = vi.spyOn(AbortController.prototype, 'abort');
     const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
 
-    const mousedownEvent = new MouseEvent('mousedown', {clientX: 400});
-    fixture.componentInstance['startInspectorResize'](mousedownEvent);
+    const pointerdownEvent = new PointerEvent('pointerdown', {
+      clientX: 400,
+      pointerId: 1,
+      button: 0,
+      isPrimary: true,
+    });
+    fixture.componentInstance['startInspectorResize'](pointerdownEvent);
 
     expect(fixture.componentInstance['isResizingInspector']()).toBe(true);
     expect(addEventListenerSpy).toHaveBeenCalledWith(
-      'mousemove',
+      'pointermove',
       expect.any(Function),
       expect.any(Object),
     );
     expect(addEventListenerSpy).toHaveBeenCalledWith(
-      'mouseup',
+      'pointerup',
+      expect.any(Function),
+      expect.any(Object),
+    );
+    expect(addEventListenerSpy).toHaveBeenCalledWith(
+      'pointercancel',
       expect.any(Function),
       expect.any(Object),
     );
 
-    // Trigger mouseup on window
-    const mouseupEvent = new MouseEvent('mouseup');
-    window.dispatchEvent(mouseupEvent);
+    // Trigger pointerup on window
+    const pointerupEvent = new PointerEvent('pointerup', {pointerId: 1, isPrimary: true});
+    window.dispatchEvent(pointerupEvent);
 
     expect(fixture.componentInstance['isResizingInspector']()).toBe(false);
     expect(abortSpy).toHaveBeenCalled();

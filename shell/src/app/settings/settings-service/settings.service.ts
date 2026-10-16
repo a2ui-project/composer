@@ -77,6 +77,16 @@ export class SettingsService {
     this.startupConfigState.renderers(),
   );
 
+  /**
+   * Every renderer the user can choose: those in the app config and those
+   * saved in Settings. Unlike `getRenderers()`, it updates when a renderer is
+   * saved or deleted, so menus that list renderers stay current.
+   */
+  readonly rendererOptions: Signal<RendererOption[]> = computed(() => {
+    this._customRenderersVersion();
+    return this.getRenderers();
+  });
+
   readonly selectedRendererId: Signal<string | null> = computed(() =>
     this.startupConfigState.selectedRendererId(),
   );
