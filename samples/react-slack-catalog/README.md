@@ -150,7 +150,8 @@ separate demo API work lands.
 | `TextField`      | Slack input block with `plain_text_input`               | Writable data binding; `shortText` or `longText`.                                                                                                                                |
 | `DateTimeInput`  | Slack input block with `datepicker`                     | Writable data binding; date only, in `YYYY-MM-DD` format.                                                                                                                        |
 | `Table`          | Slack table block                                       | Aligned headers and body cells, including data bindings. Supports 1–20 columns and 1–99 body rows with matching cell counts.                                                     |
-| `Chart`          | Slack image block, drawn by the renderer                | Bar, line, pie, or donut chart from 1–20 labeled values, literal or bound. The preview draws it; the export marks it as a file your Channels app uploads (see Charts).           |
+| `Chart`          | Slack image block, drawn by the renderer                | Bar, line, pie, or donut chart from 1–20 labeled values, literal or bound. Drawn as an image; see React components drawn as images.                                              |
+| `Scorecard`      | Slack image block, drawn by the renderer                | One match result: two teams with names and scores, plus an optional status and competition, literal or bound. Drawn as an image, like `Chart`.                                   |
 | `MarketSnapshot` | Header, summary, table, context, and acknowledge button | Custom sample component with exactly three market rows, source links, `whyItMatters`, and `searchedAt`.                                                                          |
 
 Unsupported components, invalid props, catalog mismatches, expression failures,
@@ -158,33 +159,64 @@ component cycles, and Slack output limit failures show diagnostics and clear the
 stale preview/export/actions until a valid update arrives. Missing child
 components put the preview in a waiting state and recover when the child arrives.
 
-## Charts
+## React components drawn as images
+
+Most of the catalog becomes native Slack blocks. `Chart` and `Scorecard` don't:
+the renderer draws each with a React component and sends it as an image, so one
+Slack message carries both kinds. This section uses these terms:
+
+- **Channels**: CopilotKit's channel SDK. Its Slack renderer turns Channels UI
+  components into Block Kit.
+- **Channels UI** (`@copilotkit/channels-ui`): the components a Channels message
+  is built from, such as `Header`, `Table`, `Image`, and `Chart`. The sample
+  lowers A2UI components to them.
+- **`renderBlockKit`** (`@copilotkit/channels-slack`): the Slack renderer's
+  function that turns Channels UI components into Slack blocks.
+- **Your Channels app**: the app you build with Channels to send these messages
+  to Slack. The preview stands in for it in the browser.
+
+For each drawn component:
+
+- The preview draws it as SVG in the browser and shows it as a Slack image
+  block, between the native blocks around it.
+- `Generated Block Kit` exports that block in Slack's uploaded-file form,
+  `{"type": "image", "slack_file": {"id": "RENDERED_AT_SEND"}, ...}`. Your
+  Channels app renders the component to a PNG, uploads it, and uses the
+  uploaded file's ID when it sends the message.
+- An info diagnostic, `SLACK_IMAGE_RENDERED_AT_SEND`, names the component and
+  says the same in the preview.
+
+The Tightknit renderer's own `Copy JSON` and `Open in Block Kit Builder` buttons
+use the preview blocks, so a drawn image there carries a local `blob:` URL that
+only loads inside the preview. Copy from `Generated Block Kit` instead.
+
+### Chart
 
 Slack's native chart block, `data_visualization` (`Slack.Block.DataVisualization`
 in `@copilotkit/channels-slack`), draws only pie, bar, area, and line charts. It
 limits titles to 50 characters, labels to 20, and a message to 2 charts, and its
-pie values must be above 0. Channels' Slack renderer also skips chart nodes, the
-elements that Channels UI's `Chart` produces. So this sample draws every `Chart`
-as an image on purpose. That covers the donut and horizontal bar charts the
-native block lacks, and it shows how a Channels app mixes native Slack blocks
-with a component it renders as an image:
-
-- The preview draws the chart as SVG in the browser and shows it as a Slack
-  image block, between the native blocks around it.
-- `Generated Block Kit` exports that block in Slack's uploaded-file form,
-  `{"type": "image", "slack_file": {"id": "RENDERED_AT_SEND"}, ...}`. Your
-  Channels app renders the chart to a PNG, uploads it, and uses the uploaded
-  file's ID when it sends the message.
-- An info diagnostic, `SLACK_IMAGE_RENDERED_AT_SEND`, says the same in the preview.
+pie values must be above 0. `renderBlockKit` also skips the chart nodes that
+Channels UI's `Chart` produces. So this sample draws every `Chart` as an image
+on purpose, which also covers the donut and horizontal bar charts the native
+block lacks. The chart stays a Channels UI `Chart` until just before
+`renderBlockKit` runs, and is then replaced by the drawing.
 
 Every value must be a number, pie and donut values must be zero or more, and at
 least one value must be non-zero. Otherwise the chart is skipped with a
 `SLACK_CHART_INVALID_DATA` or `SLACK_CHART_EMPTY` warning, and the rest of the
 message still renders.
 
-The Tightknit renderer's own `Copy JSON` and `Open in Block Kit Builder` buttons
-use the preview blocks, so a chart there carries a local `blob:` URL that only
-loads inside the preview. Copy from `Generated Block Kit` instead.
+### Scorecard
+
+`Scorecard` shows one match result: a `home` and an `away` team, each with a
+`name` and a `score`, plus an optional `status`, such as `Full time`, and an
+optional `competition`. A score can be a number or text such as `3 (4)`, and
+every field accepts data bindings. Slack has no block for a scorecard, and it
+isn't a Channels UI component either, so the sample draws it while lowering. It
+shows that any React component can be sent this way, not only Channels UI's.
+
+If a team's name or score is empty or missing, the scorecard is skipped with a
+`SLACK_SCORECARD_INVALID` warning, and the rest of the message still renders.
 
 ## Actions
 
