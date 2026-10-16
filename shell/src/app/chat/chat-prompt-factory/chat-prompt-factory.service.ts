@@ -16,7 +16,7 @@
 
 import {Injectable, computed, inject, signal} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {Catalog} from '../../storage/models/catalog-storage.model';
+import {Catalog, getCatalogId} from '../../storage/models/catalog-storage.model';
 import {formatJson} from '../../utils/json';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {
@@ -224,7 +224,7 @@ export class ChatPromptFactoryService {
     const componentTreeMappingGuidance = this.componentTreeMappingGuidance(hasIcon, hasCustomSvg);
     const examples = this.examplesForCatalog(
       componentNames,
-      catalog.catalogId || catalog.$id || 'active-catalog',
+      getCatalogId(catalog) || 'active-catalog',
     );
     return `
   # A2UI Generation Expert
@@ -447,26 +447,23 @@ export class ChatPromptFactoryService {
     when the Icon schema explicitly defines them.`;
   }
 
+  /**
+   * Guidance for a catalog whose Image `url` property says, in its description,
+   * that it takes HTTP(S) URLs. Only that property's description is read: a
+   * component's schema also holds `$ref` URLs, which say nothing about its values.
+   */
   private imageUrlGuidance(catalog: Catalog): string {
-    const imageSchema = catalog.components?.['Image'];
-    if (!imageSchema) {
-      return '';
-    }
-    const imageSchemaText = JSON.stringify(imageSchema).toLowerCase();
-    if (imageSchemaText.includes('http(s)') || imageSchemaText.includes('http')) {
+    const description = findPropertySchema(catalog.components?.['Image'], 'url')?.['description'];
+    if (typeof description === 'string' && /\bhttps?\b/i.test(description)) {
       return `* For Image.url, use only HTTP(S) URLs. If no suitable HTTP(S) URL is
     provided or visible, omit the Image component instead of inventing a URL.`;
     }
     return '';
   }
 
+  /** Whether the catalog's Icon component accepts custom SVG path data (`svgPath`). */
   private catalogSupportsCustomSvg(catalog: Catalog): boolean {
-    const iconSchema = catalog.components?.['Icon'];
-    if (!iconSchema) {
-      return false;
-    }
-    const iconSchemaText = JSON.stringify(iconSchema).toLowerCase();
-    return iconSchemaText.includes('svg') || iconSchemaText.includes('path data');
+    return Boolean(findPropertySchema(catalog.components?.['Icon'], SVG_PATH_PROPERTY));
   }
 
   private visualAffordanceGuidance(hasIcon: boolean): string {
@@ -554,4 +551,28 @@ export class ChatPromptFactoryService {
   not contain the common Column/Text layout primitives. Use only the exact
   component names and properties in the active catalog schema above.`;
   }
+}
+
+/** The Icon property the basic catalog uses for custom SVG path data. */
+const SVG_PATH_PROPERTY = 'svgPath';
+
+/**
+ * Finds a property's schema anywhere in a component's schema, including inside
+ * `allOf` or `oneOf` branches, where catalogs usually declare them.
+ */
+function findPropertySchema(schema: unknown, name: string): Record<string, unknown> | undefined {
+  if (!schema || typeof schema !== 'object') {
+    return undefined;
+  }
+  const properties = (schema as {properties?: unknown}).properties;
+  if (properties && typeof properties === 'object' && name in properties) {
+    return (properties as Record<string, Record<string, unknown>>)[name];
+  }
+  for (const value of Object.values(schema)) {
+    const found = findPropertySchema(value, name);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
 }
