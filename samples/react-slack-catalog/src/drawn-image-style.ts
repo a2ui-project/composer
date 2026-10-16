@@ -31,6 +31,8 @@ export enum DrawnImageColor {
   MUTED = '#57606a',
   /** Gridlines and borders. */
   RULE = '#d0d7de',
+  /** The fill behind a label, such as a scorecard's status. */
+  SURFACE = '#f6f8fa',
   /** The image's background. */
   BACKGROUND = '#ffffff',
 }
