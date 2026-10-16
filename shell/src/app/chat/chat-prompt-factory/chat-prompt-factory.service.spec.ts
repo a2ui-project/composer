@@ -330,4 +330,86 @@ describe('ChatPromptFactoryService', () => {
       expect(unreferencedDefsCatalog.$defs.catalog_Text).toEqual({type: 'object'});
     });
   });
+
+  describe('Condensed Few-Shot Examples', () => {
+    beforeEach(() => {
+      catalogSpy.activeCatalog.mockReturnValue({components: {}});
+    });
+
+    it('replaces the verbose vacation_booking example with compact valid JSONL examples covering core A2UI features', () => {
+      const prompt = service.systemPrompt();
+      expect(prompt).not.toContain('vacation_booking');
+      expect(prompt).not.toContain('Book Your Dream Vacation');
+
+      const examplesMatch = prompt.match(/## Examples([\s\S]*?)## Data Binding/);
+      expect(examplesMatch).not.toBeNull();
+      const examplesSection = examplesMatch![1];
+      expect(examplesSection.length).toBeLessThanOrEqual(1500);
+
+      const jsonlBlocks = Array.from(examplesSection.matchAll(/```jsonl\n([\s\S]*?)```/g)).map(m =>
+        m[1].trim(),
+      );
+      expect(jsonlBlocks.length).toBeGreaterThanOrEqual(2);
+
+      for (const block of jsonlBlocks) {
+        const rawLines = block.split('\n').map(line => line.trim());
+        for (const rawLine of rawLines) {
+          expect(rawLine).toBe(JSON.stringify(JSON.parse(rawLine)));
+        }
+
+        const blockMessages = rawLines.map(line => JSON.parse(line));
+        const createMsg = blockMessages.find(m => m.createSurface);
+        const updateCompMsg = blockMessages.find(m => m.updateComponents);
+        const updateDataMsg = blockMessages.find(m => m.updateDataModel);
+        expect(createMsg).toBeDefined();
+        expect(updateCompMsg).toBeDefined();
+        expect(updateDataMsg).toBeDefined();
+
+        const surfaceId = createMsg.createSurface.surfaceId;
+        expect(updateCompMsg.updateComponents.surfaceId).toBe(surfaceId);
+        expect(updateDataMsg.updateDataModel.surfaceId).toBe(surfaceId);
+
+        const components: Array<{
+          id: string;
+          child?: string;
+          children?: string[] | {componentId?: string};
+        }> = updateCompMsg.updateComponents.components;
+        const componentIds = new Set(components.map(c => c.id));
+        expect(componentIds.has('root')).toBe(true);
+
+        for (const comp of components) {
+          if (typeof comp.child === 'string') {
+            expect(componentIds.has(comp.child)).toBe(true);
+          }
+          if (Array.isArray(comp.children)) {
+            for (const childId of comp.children) {
+              expect(componentIds.has(childId)).toBe(true);
+            }
+          } else if (comp.children && typeof comp.children.componentId === 'string') {
+            expect(componentIds.has(comp.children.componentId)).toBe(true);
+          }
+        }
+      }
+
+      const parsedLines = jsonlBlocks
+        .flatMap(block => block.split('\n'))
+        .map(line => JSON.parse(line.trim()));
+
+      expect(parsedLines.some(msg => msg.version === 'v0.9' && msg.createSurface)).toBe(true);
+      expect(parsedLines.some(msg => msg.version === 'v0.9' && msg.updateComponents)).toBe(true);
+      expect(parsedLines.some(msg => msg.version === 'v0.9' && msg.updateDataModel)).toBe(true);
+
+      const serializedExamples = JSON.stringify(parsedLines);
+      // JSON Pointer data binding
+      expect(serializedExamples).toContain('"path":"/');
+      // Button event action with context binding
+      expect(serializedExamples).toContain(
+        '"action":{"event":{"name":"submitForm","context":{"name":{"path":"/name"}}}}',
+      );
+      // Dynamic list template
+      expect(serializedExamples).toContain(
+        '"children":{"componentId":"item_template","path":"/items"}',
+      );
+    });
+  });
 });
