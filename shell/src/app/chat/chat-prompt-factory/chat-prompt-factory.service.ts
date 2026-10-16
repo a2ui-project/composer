@@ -64,7 +64,21 @@ export class ChatPromptFactoryService {
   readonly customInstructions = computed(() => this.activePreset()?.content ?? '');
   readonly hasCustomInstructions = computed(() => this.customInstructions().trim().length > 0);
 
-  readonly systemPrompt = computed<string>(() => {
+  private readonly textOnlySystemPrompt = computed<string>(() => this.composeSystemPrompt(false));
+  private readonly multimodalSystemPrompt = computed<string>(() => this.composeSystemPrompt(true));
+
+  readonly systemPrompt = this.textOnlySystemPrompt;
+
+  /**
+   * Builds the system prompt with optional multimodal image-to-UI guidelines.
+   */
+  buildSystemPrompt(options?: {includeMultimodalGuidelines?: boolean}): string {
+    return options?.includeMultimodalGuidelines
+      ? this.multimodalSystemPrompt()
+      : this.textOnlySystemPrompt();
+  }
+
+  private composeSystemPrompt(includeMultimodalGuidelines: boolean): string {
     const catalog = this.catalogManagement.activeCatalog();
     const mcpSupported = this.mcpManager.doesCatalogSupportMcp(catalog);
     const activeServers = mcpSupported ? this.mcpManager.getActiveServersWithTools() : [];
@@ -89,10 +103,12 @@ export class ChatPromptFactoryService {
     }
 
     return (
-      (this.generateSystemPrompt(formatJson(catalog)) + mcpInstructions).trimEnd() +
-      customPromptSuffix
+      (
+        this.generateSystemPrompt(formatJson(catalog), includeMultimodalGuidelines) +
+        mcpInstructions
+      ).trimEnd() + customPromptSuffix
     );
-  });
+  }
 
   /**
    * Updates the custom instruction state and persists it to local storage.
@@ -215,78 +231,16 @@ export class ChatPromptFactoryService {
 `;
   }
 
-  private generateSystemPrompt(catalog: string): string {
-    return `
-  # A2UI Generation Expert
-
-  ## Role
-  You are an expert A2UI generation assistant. Your role is to translate user
-  requests—whether provided as text instructions, UI wireframes, screenshots,
-  or mockup images—into valid A2UI v0.9 interactive user interfaces.
-
-  ## Catalog Allowlist & Component Rules
-
-  You MUST strictly enforce the following rules regarding component selection
-  and schema compliance:
-  1. **Strict Component Allowlist**: You MUST use ONLY the component types
-     defined as keys in the "components" map of the active catalog schema
-     provided below.
-  2. **No Hallucinated Component Names**: Never invent, guess, or mix
-     component names from other libraries or catalogs. For example, if only
-     "Column", "Row", "Text", and "Button" are present in the active catalog
-     schema below, emitting "MaterialColumn", "MaterialText", or "Div" is
-     strictly INVALID.
-  3. **No Hallucinated Properties**: Include ONLY properties explicitly
-     defined in the JSON Schema for that specific component type in the
-     active catalog. Do NOT emit unauthorized keys (e.g., "rules", "mock*",
-     or unsupported CSS/styling parameters).
-
-  ### Active Catalog Schema (Mandatory Allowlist)
-  \`\`\`json
-  ${catalog}
-  \`\`\`
-
-  ### Common Schema Types
-  Common structural types referenced by $ref in the catalog schema (e.g.,
-  DataBinding, Action, Event, DynamicString, etc.) are defined here:
-  \`\`\`json
-  ${formatJson(COMMON_TYPES_SCHEMA)}
-  \`\`\`
-
-  ## Editing the Current UI
-
-  When a current editor A2UI snapshot is provided, it is the authoritative UI
-  being edited. Use its actual surface IDs, component IDs, and data bindings;
-  never borrow IDs or paths from the illustrative examples below. For literal
-  Text values, emit updateComponents with the edited component and its existing
-  properties. Use updateDataModel only for values bound to that surface's model.
-  Preserve unrelated components and update all labels affected by the request
-  (for example, a destination's airport code, city label, and route heading).
-  For edits, emit updates to existing surfaces. For a replacement UI, emit a
-  complete document beginning with createSurface before its updates.
-
-  ## Output Format: Strict A2UI JSON Lines (JSONL)
-
-  Your output MUST be valid **A2UI JSON Lines (JSONL)**:
-  1. **One JSON Object Per Line**: Each A2UI message MUST be formatted as a
-     single, valid JSON object on its own line, terminated by a newline
-     character (\\n). Do NOT pretty-print or split a single JSON object across
-     multiple lines.
-  2. **Required Version & Command**: Every message object MUST include
-     "version": "v0.9" at the top level and specify exactly one A2UI
-     command: "createSurface", "updateComponents", "updateDataModel", or
-     "deleteSurface".
-  3. **No Markdown or Preamble**: Output ONLY raw JSON Lines. Do NOT wrap
-     your response in markdown code fences (such as \`\`\`jsonl or \`\`\`). Do
-     NOT include any conversational text, greetings, explanations,
-     scratchpad analysis, or summary before or after the JSON Lines.
-  4. **Direct Parseability**: Every line in your response MUST be
-     independently parseable by JSON.parse().
+  private generateSystemPrompt(catalog: string, includeMultimodalGuidelines = false): string {
+    const multimodalGuidelinesSection = includeMultimodalGuidelines
+      ? `
 
   ## Multimodal & Image-to-UI Guidelines
 
   When an image, wireframe, mockup, or UI screenshot is provided by the
-  user, adhere strictly to these visual translation principles:
+  user, adhere strictly to these visual translation principles (on follow-up
+  turns, explicit user text instructions to add, modify, or remove elements
+  take precedence over earlier screenshots and follow ## Editing the Current UI):
 
   ### 1. Visual Layout, Scope & Sizing Fidelity
   * **Root Container Bounding**: The root component ("id": "root") MUST match
@@ -415,7 +369,75 @@ export class ChatPromptFactoryService {
      catalog component types with exact icon names/SVGs, full-width
      properties, and JSON Pointer paths.
   4. **Emit JSONL Messages**: Output the single-line JSONL messages in
-     strict sequence (createSurface -> updateComponents -> updateDataModel).
+     strict sequence (createSurface -> updateComponents -> updateDataModel).`
+      : '';
+
+    return `
+  # A2UI Generation Expert
+
+  ## Role
+  You are an expert A2UI generation assistant. Your role is to translate user
+  requests—whether provided as text instructions, UI wireframes, screenshots,
+  or mockup images—into valid A2UI v0.9 interactive user interfaces.
+
+  ## Catalog Allowlist & Component Rules
+
+  You MUST strictly enforce the following rules regarding component selection
+  and schema compliance:
+  1. **Strict Component Allowlist**: You MUST use ONLY the component types
+     defined as keys in the "components" map of the active catalog schema
+     provided below.
+  2. **No Hallucinated Component Names**: Never invent, guess, or mix
+     component names from other libraries or catalogs. For example, if only
+     "Column", "Row", "Text", and "Button" are present in the active catalog
+     schema below, emitting "MaterialColumn", "MaterialText", or "Div" is
+     strictly INVALID.
+  3. **No Hallucinated Properties**: Include ONLY properties explicitly
+     defined in the JSON Schema for that specific component type in the
+     active catalog. Do NOT emit unauthorized keys (e.g., "rules", "mock*",
+     or unsupported CSS/styling parameters).
+
+  ### Active Catalog Schema (Mandatory Allowlist)
+  \`\`\`json
+  ${catalog}
+  \`\`\`
+
+  ### Common Schema Types
+  Common structural types referenced by $ref in the catalog schema (e.g.,
+  DataBinding, Action, Event, DynamicString, etc.) are defined here:
+  \`\`\`json
+  ${formatJson(COMMON_TYPES_SCHEMA)}
+  \`\`\`
+
+  ## Editing the Current UI
+
+  When a current editor A2UI snapshot is provided, it is the authoritative UI
+  being edited. Use its actual surface IDs, component IDs, and data bindings;
+  never borrow IDs or paths from the illustrative examples below. For literal
+  Text values, emit updateComponents with the edited component and its existing
+  properties. Use updateDataModel only for values bound to that surface's model.
+  Preserve unrelated components and update all labels affected by the request
+  (for example, a destination's airport code, city label, and route heading).
+  For edits, emit updates to existing surfaces. For a replacement UI, emit a
+  complete document beginning with createSurface before its updates.
+
+  ## Output Format: Strict A2UI JSON Lines (JSONL)
+
+  Your output MUST be valid **A2UI JSON Lines (JSONL)**:
+  1. **One JSON Object Per Line**: Each A2UI message MUST be formatted as a
+     single, valid JSON object on its own line, terminated by a newline
+     character (\\n). Do NOT pretty-print or split a single JSON object across
+     multiple lines.
+  2. **Required Version & Command**: Every message object MUST include
+     "version": "v0.9" at the top level and specify exactly one A2UI
+     command: "createSurface", "updateComponents", "updateDataModel", or
+     "deleteSurface".
+  3. **No Markdown or Preamble**: Output ONLY raw JSON Lines. Do NOT wrap
+     your response in markdown code fences (such as \`\`\`jsonl or \`\`\`). Do
+     NOT include any conversational text, greetings, explanations,
+     scratchpad analysis, or summary before or after the JSON Lines.
+  4. **Direct Parseability**: Every line in your response MUST be
+     independently parseable by JSON.parse().${multimodalGuidelinesSection}
 
   ## Validation & Lifecycle Ordering
 

@@ -110,6 +110,9 @@ class MockChatCoordinator {
 
 class MockChatPromptFactoryService {
   readonly systemPrompt = signal<string>('Initial system prompt instructions block');
+  buildSystemPrompt = vi.fn((opts?: {includeMultimodalGuidelines?: boolean}) =>
+    opts?.includeMultimodalGuidelines ? 'multimodal prompt' : this.systemPrompt(),
+  );
   readonly customInstructionsState = signal<CustomInstructionsState>({
     presets: [],
     activePresetId: null,
@@ -697,6 +700,39 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
     const dialog = dialogs[0];
     expect(await dialog.getTitleText()).toBe('System Instructions');
+  });
+
+  it('builds multimodal system instructions when includeScreenshot is enabled or an image attachment is staged', async () => {
+    const component = fixture.componentInstance;
+    expect(component.systemPrompt()).toBe('Initial system prompt instructions block');
+
+    // Enabling includeScreenshot switches systemPrompt() to multimodal
+    await harness.toggleScreenshot();
+    fixture.detectChanges();
+    expect(component.systemPrompt()).toBe('multimodal prompt');
+    expect(promptFactoryMock.buildSystemPrompt).toHaveBeenCalledWith({
+      includeMultimodalGuidelines: true,
+    });
+
+    // Disabling includeScreenshot and staging an image attachment also switches systemPrompt() to multimodal
+    await harness.toggleScreenshot();
+    promptFactoryMock.buildSystemPrompt.mockClear();
+    component.attachedFiles.set([
+      {
+        name: 'mockup.webp',
+        mimeType: 'image/webp',
+        data: 'base64data',
+        previewUrl: 'data:image/webp;base64,base64data',
+      },
+    ]);
+    fixture.detectChanges();
+
+    await harness.clickSystemInstructionsLink();
+    fixture.detectChanges();
+
+    expect(promptFactoryMock.buildSystemPrompt).toHaveBeenCalledWith({
+      includeMultimodalGuidelines: true,
+    });
   });
 
   it('renders custom instructions link and updates text based on active custom preset', async () => {

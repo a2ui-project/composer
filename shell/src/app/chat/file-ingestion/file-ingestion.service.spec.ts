@@ -45,4 +45,14 @@ describe('FileIngestionService', () => {
     expect(result.data).toBe(btoa('blobdata'));
     expect(result.previewUrl).toContain('data:image/png;base64,');
   });
+
+  it('infers image MIME type and previewUrl from filename extension when File.type is empty', async () => {
+    const file = new File(['webpdata'], 'wireframe.webp', {type: ''});
+    const result = await service.readFileAsAttachment(file);
+
+    expect(result.name).toBe('wireframe.webp');
+    expect(result.mimeType).toBe('image/webp');
+    expect(result.data).toBe(btoa('webpdata'));
+    expect(result.previewUrl).toBeDefined();
+  });
 });
