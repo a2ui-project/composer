@@ -451,10 +451,13 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
     expect(service.isProgrammaticStreamActive()).toBe(false);
 
-    // Verify raw content streamed directly inside model's turn logs
+    // Verify compact JSON content stored in model's turn log
     const updatedHistory = chatStateMock.chatHistory();
     expect(updatedHistory[1].role).toBe(MessageRole.MODEL);
-    expect(updatedHistory[1].content).toContain('"createSurface": {');
+    expect(updatedHistory[1].content).toBe(
+      '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+    );
+    expect(updatedHistory[1].content).not.toContain('\n');
     expect(updatedHistory[1].content).not.toContain('●●●');
 
     // Verify layout committed back in a single commit transaction
@@ -969,9 +972,9 @@ I should generate a text field.
       const history = chatStateMock.chatHistory();
       const lastMessage = history[history.length - 1];
 
-      // Extract the updated content - it should be cleanly parsed JSON text structure
+      // Extract the updated content - it should be cleanly parsed compact JSON text structure
       // that is successfully parsed from the payload.
-      expect(lastMessage.content).toContain('"version": "v0.9"');
+      expect(lastMessage.content).toContain('"version":"v0.9"');
       expect(lastMessage.content).toContain('"createSurface"');
       expect(lastMessage.content).toContain('"TextField"');
 

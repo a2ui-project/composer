@@ -17,6 +17,7 @@
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach} from 'vitest';
 import {ChatCleaner} from './chat-cleaner';
+import {MessageRole} from '../llm-client/llm-client';
 
 describe('ChatCleaner', () => {
   let service: ChatCleaner;
@@ -194,6 +195,73 @@ describe('ChatCleaner', () => {
       expect(service.isLayoutSnapshot('')).toBe(false);
       expect(service.isLayoutSnapshot(undefined)).toBe(false);
       expect(service.isLayoutSnapshot(null as unknown as string)).toBe(false);
+    });
+  });
+
+  describe('isUserLayoutSnapshot', () => {
+    it('returns true for unprompted USER messages with isSnapshot: true or JSON layout content', () => {
+      expect(
+        service.isUserLayoutSnapshot({
+          role: MessageRole.USER,
+          content: '[{"version":"v0.9"}]',
+          isSnapshot: true,
+        }),
+      ).toBe(true);
+      expect(
+        service.isUserLayoutSnapshot({
+          role: MessageRole.USER,
+          content: '[{"version":"v0.9"}]',
+        }),
+      ).toBe(true);
+    });
+
+    it('returns false for undefined, non-USER, prompted, attachment-bearing, or prose-prefixed messages', () => {
+      expect(service.isUserLayoutSnapshot(undefined)).toBe(false);
+      expect(
+        service.isUserLayoutSnapshot({
+          role: MessageRole.MODEL,
+          content: '[{"version":"v0.9"}]',
+        }),
+      ).toBe(false);
+      expect(
+        service.isUserLayoutSnapshot({
+          role: MessageRole.USER,
+          content: '[{"version":"v0.9"}]',
+          promptId: 'p1',
+        }),
+      ).toBe(false);
+      expect(
+        service.isUserLayoutSnapshot({
+          role: MessageRole.USER,
+          content: '[{"version":"v0.9"}]',
+          attachments: [{name: 'img.png', mimeType: 'image/png', data: 'abc'}],
+        }),
+      ).toBe(false);
+      expect(
+        service.isUserLayoutSnapshot({
+          role: MessageRole.USER,
+          content: '[{"version":"v0.9"}]',
+          isSnapshot: false,
+        }),
+      ).toBe(false);
+      expect(
+        service.isUserLayoutSnapshot({
+          role: MessageRole.USER,
+          content: 'Fix this: [{"version":"v0.9"}]',
+        }),
+      ).toBe(false);
+      expect(
+        service.isUserLayoutSnapshot({
+          role: MessageRole.USER,
+          content: undefined as unknown as string,
+        }),
+      ).toBe(false);
+      expect(
+        service.isUserLayoutSnapshot({
+          role: MessageRole.USER,
+          content: null as unknown as string,
+        }),
+      ).toBe(false);
     });
   });
 
