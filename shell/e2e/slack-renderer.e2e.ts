@@ -40,6 +40,7 @@ const EXPECTED_COMPONENTS = [
   'Image',
   'MarketSnapshot',
   'Row',
+  'Scorecard',
   'Table',
   'Text',
   'TextField',
