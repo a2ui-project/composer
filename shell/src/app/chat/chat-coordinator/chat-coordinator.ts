@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {inject, Injectable, signal} from '@angular/core';
+import {computed, inject, Injectable, signal} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {skip} from 'rxjs/operators';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
@@ -23,6 +23,7 @@ import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {PromptTurnType, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {formatJson, tryParseJsonArray} from '../../utils/json';
+import {isImageAttachment as isA2aImageAttachment} from '../a2a/a2a-attachments';
 import {ChatState, LlmLogType} from '../chat-state/chat-state';
 import {
   Attachment,
@@ -99,7 +100,16 @@ export class ChatCoordinator {
    * A dynamic, reactive, computed signal property constructing conformed JSON
    * catalog schema specifications system instructions.
    */
-  readonly systemPrompt = this.promptFactory.systemPrompt;
+  readonly systemPrompt = computed<string>(() => {
+    const hasImageAttachment = this.chatState
+      .chatHistory()
+      .some(
+        m => m.role !== MessageRole.ERROR && m.attachments?.some(a => this.isImageAttachment(a)),
+      );
+    return this.promptFactory.buildSystemPrompt({
+      includeMultimodalGuidelines: hasImageAttachment,
+    });
+  });
 
   private activePromptId: string | null = null;
 
@@ -167,16 +177,27 @@ export class ChatCoordinator {
     this.chatState.setProgrammaticStreamActive(false);
   }
 
+  private isImageAttachment(attachment: Attachment): boolean {
+    return isA2aImageAttachment(attachment.mimeType, attachment.name);
+  }
+
   /**
    * Constructs System instructions prepended message logs context.
    */
   getFullMessageContext(): LlmMessage[] {
+    const nonErrorMessages = this.chatState.chatHistory().filter(m => m.role !== MessageRole.ERROR);
+    const hasImageAttachment = nonErrorMessages.some(m =>
+      m.attachments?.some(a => this.isImageAttachment(a)),
+    );
+
     return [
       {
         role: MessageRole.SYSTEM,
-        content: this.promptFactory.systemPrompt(),
+        content: this.promptFactory.buildSystemPrompt({
+          includeMultimodalGuidelines: hasImageAttachment,
+        }),
       },
-      ...this.chatState.chatHistory().filter(m => m.role !== MessageRole.ERROR),
+      ...nonErrorMessages,
     ];
   }
 
@@ -225,12 +246,8 @@ export class ChatCoordinator {
     const catalogObj = this.catalogManagement.activeCatalog();
     const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
 
-    const hasScreenshot = attachments.some(
-      a => a.name === 'screenshot.png' || a.mimeType?.startsWith('image/'),
-    );
-    const nonScreenshotAttachments = attachments.filter(
-      a => a.name !== 'screenshot.png' && !a.mimeType?.startsWith('image/'),
-    );
+    const hasScreenshot = attachments.some(a => this.isImageAttachment(a));
+    const nonScreenshotAttachments = attachments.filter(a => !this.isImageAttachment(a));
 
     if (isRetry) {
       return this.usageTrackingService.trackChatRetry({

@@ -113,6 +113,9 @@ class MockChatCoordinator {
 
 class MockChatPromptFactoryService {
   readonly systemPrompt = signal<string>('Initial system prompt instructions block');
+  buildSystemPrompt = vi.fn((opts?: {includeMultimodalGuidelines?: boolean}) =>
+    opts?.includeMultimodalGuidelines ? 'multimodal prompt' : this.systemPrompt(),
+  );
   readonly customInstructionsState = signal<CustomInstructionsState>({
     presets: [],
     activePresetId: null,

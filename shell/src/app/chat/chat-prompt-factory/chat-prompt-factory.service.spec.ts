@@ -219,4 +219,40 @@ describe('ChatPromptFactoryService', () => {
       );
     });
   });
+
+  describe('Multimodal Guidelines', () => {
+    beforeEach(() => {
+      catalogSpy.activeCatalog.mockReturnValue({components: {}});
+    });
+
+    it('omits ## Multimodal & Image-to-UI Guidelines by default in systemPrompt() and buildSystemPrompt() with clean section boundary formatting', () => {
+      const prompt = service.systemPrompt();
+      expect(prompt).not.toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.buildSystemPrompt()).not.toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.buildSystemPrompt({includeMultimodalGuidelines: false})).not.toContain(
+        '## Multimodal & Image-to-UI Guidelines',
+      );
+      expect(prompt).toContain(
+        'independently parseable by JSON.parse().\n\n  ## Validation & Lifecycle Ordering',
+      );
+      expect(prompt).not.toContain('\n\n\n');
+    });
+
+    it('includes ## Multimodal & Image-to-UI Guidelines when includeMultimodalGuidelines is true with follow-up precedence note and clean boundaries', () => {
+      const prompt = service.buildSystemPrompt({includeMultimodalGuidelines: true});
+      expect(prompt).toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(prompt).toContain(
+        'explicit user text instructions to add, modify, or remove elements\n  take precedence over earlier screenshots and follow ## Editing the Current UI',
+      );
+      expect(prompt).toContain('### 1. Visual Layout, Scope & Sizing Fidelity');
+      expect(prompt).toContain('### 6. Image-to-UI Processing Sequence');
+      expect(prompt).toContain(
+        'independently parseable by JSON.parse().\n\n  ## Multimodal & Image-to-UI Guidelines',
+      );
+      expect(prompt).toContain(
+        '(createSurface -> updateComponents -> updateDataModel).\n\n  ## Validation & Lifecycle Ordering',
+      );
+      expect(prompt).not.toContain('\n\n\n');
+    });
+  });
 });

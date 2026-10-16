@@ -25,6 +25,7 @@ import {
   linkedSignal,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
+import {isImageAttachment} from '../a2a/a2a-attachments';
 import {FileIngestionService, AttachedFile} from '../file-ingestion/file-ingestion.service';
 import {MatDialog} from '@angular/material/dialog';
 import {AppConfigProvider, AuthType} from '../../settings/app-config-provider/app-config-provider';
@@ -116,7 +117,15 @@ export abstract class ChatPanelBase {
    * Reactively computed dynamic system prompt instructions spec viewport
    * text.
    */
-  protected readonly systemPrompt = this.chatCoordinator.systemPrompt;
+  protected readonly systemPrompt = computed(() => {
+    const hasStagedImage =
+      this.includeScreenshot() ||
+      this.attachedFiles().some(f => isImageAttachment(f.mimeType, f.name));
+    if (hasStagedImage) {
+      return this.promptFactory.buildSystemPrompt({includeMultimodalGuidelines: true});
+    }
+    return this.chatCoordinator.systemPrompt();
+  });
   protected readonly hasCustomInstructions = this.promptFactory.hasCustomInstructions;
   protected readonly activeCustomPreset = this.promptFactory.activePreset;
   protected readonly isHandshakeComplete = computed(
@@ -356,7 +365,7 @@ export abstract class ChatPanelBase {
    */
   protected showSystemInstructions(): void {
     this.dialog.open(SystemInstructionsDialog, {
-      data: this.chatCoordinator.systemPrompt(),
+      data: this.systemPrompt(),
       maxWidth: '90vw',
     });
   }

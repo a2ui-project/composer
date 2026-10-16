@@ -258,6 +258,80 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(prompt).toContain('"components": {}');
   });
 
+  describe('Multimodal Guidelines Conditional Injection', () => {
+    beforeEach(() => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'basic',
+        components: {Text: {}},
+      });
+    });
+
+    it('omits Multimodal & Image-to-UI Guidelines on text-only turns', async () => {
+      await service.submitPrompt('Build a login card');
+      const messages = llmClientMock.chatStream.mock.calls[0][0];
+      expect(messages[0].role).toBe(MessageRole.SYSTEM);
+      expect(messages[0].content).not.toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.systemPrompt()).not.toContain('## Multimodal & Image-to-UI Guidelines');
+    });
+
+    it('omits Multimodal & Image-to-UI Guidelines when only non-image attachments (e.g., application/json) are present', async () => {
+      await service.submitPrompt('Import this data', [
+        {name: 'data.json', mimeType: 'application/json', data: 'e30='},
+      ]);
+      const messages = llmClientMock.chatStream.mock.calls[0][0];
+      expect(messages[0].role).toBe(MessageRole.SYSTEM);
+      expect(messages[0].content).not.toContain('## Multimodal & Image-to-UI Guidelines');
+    });
+
+    it('omits Multimodal & Image-to-UI Guidelines when image attachments exist only on MessageRole.ERROR messages', () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.ERROR,
+          content: 'Failed turn',
+          attachments: [{name: 'screenshot.png', mimeType: 'image/png', data: 'base64'}],
+        },
+      ]);
+      const context = service.getFullMessageContext();
+      expect(context[0].content).not.toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.systemPrompt()).not.toContain('## Multimodal & Image-to-UI Guidelines');
+    });
+
+    it('includes Multimodal & Image-to-UI Guidelines when an image attachment is present and updates systemPrompt() reactively', async () => {
+      await service.submitPrompt('Match this mockup', [
+        {name: 'mockup.png', mimeType: 'image/png', data: 'base64'},
+      ]);
+      const messages = llmClientMock.chatStream.mock.calls[0][0];
+      expect(messages[0].role).toBe(MessageRole.SYSTEM);
+      expect(messages[0].content).toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.systemPrompt()).toContain('## Multimodal & Image-to-UI Guidelines');
+    });
+
+    it('includes Multimodal & Image-to-UI Guidelines for screenshot.png, uppercase MIME types, and extension-inferred image files', async () => {
+      await service.submitPrompt('Fix spacing', [
+        {name: 'screenshot.png', mimeType: '', data: 'base64'},
+      ]);
+      expect(llmClientMock.chatStream.mock.calls[0][0][0].content).toContain(
+        '## Multimodal & Image-to-UI Guidelines',
+      );
+
+      service.startNewSession();
+      await service.submitPrompt('Check uppercase MIME', [
+        {name: 'upload', mimeType: 'IMAGE/PNG', data: 'base64'},
+      ]);
+      expect(llmClientMock.chatStream.mock.calls[1][0][0].content).toContain(
+        '## Multimodal & Image-to-UI Guidelines',
+      );
+
+      service.startNewSession();
+      await service.submitPrompt('Check extension fallback', [
+        {name: 'wireframe.webp', mimeType: 'application/octet-stream', data: 'base64'},
+      ]);
+      expect(llmClientMock.chatStream.mock.calls[2][0][0].content).toContain(
+        '## Multimodal & Image-to-UI Guidelines',
+      );
+    });
+  });
+
   describe('editing an imported demo', () => {
     const flight = [
       {version: 'v0.9', createSurface: {surfaceId: 'showcase-01-flight', catalogId: 'basic'}},
