@@ -77,11 +77,14 @@ export type McpClientResolver = (
 export const CallMcpToolApi: FunctionApiDefinition = {
   name: 'callMcpTool',
   returnType: 'any',
+  // Quoted keys keep argument names stable under Closure Compiler property renaming, since
+  // payloads and `validateFunctionArgs` refer to them by their literal string names.
+  // prettier-ignore
   schema: z.object({
-    name: (DynamicStringSchema as unknown as z.ZodTypeAny).describe(
+    'name': (DynamicStringSchema as unknown as z.ZodTypeAny).describe(
       'The name of the MCP tool to execute.',
     ),
-    arguments: z
+    'arguments': z
       .record(DynamicValueSchema as unknown as z.ZodTypeAny)
       .optional()
       .default({})
