@@ -93,25 +93,40 @@ export declare interface LlmMessage {
 }
 
 /**
+ * A function the model asked the app to run, such as switching renderers,
+ * instead of answering with canvas JSON.
+ */
+export declare interface LlmToolCall {
+  /** The `name` of the `LlmToolDefinition` the model chose. */
+  readonly name: string;
+  /** The arguments the model supplied, as parsed JSON. */
+  readonly args: Record<string, unknown>;
+}
+
+/**
+ * Describes a function the model may call, sent to the model with a request.
+ * The field names are the ones Gemini's function declarations use.
+ */
+export declare interface LlmToolDefinition {
+  /** The name the model uses to call the function. */
+  readonly name: string;
+  /** Tells the model what the function does and when to call it. */
+  readonly description: string;
+  /** JSON Schema for the function's arguments. */
+  readonly parametersJsonSchema: Record<string, unknown>;
+}
+
+/** Per-request settings passed to `LlmClient.chatStream`. */
+export declare interface LlmRequestOptions {
+  /** Functions the model may call while answering this request. */
+  readonly tools?: LlmToolDefinition[];
+}
+
+/**
  * Captures static, fully generated conversational completions returned by
  * generative model operations. Used primarily in synchronous or
  * non-incremental user flow layouts.
  */
-export interface LlmToolCall {
-  readonly name: string;
-  readonly args: Record<string, unknown>;
-}
-
-export interface LlmToolDefinition {
-  readonly name: string;
-  readonly description: string;
-  readonly parametersJsonSchema: Record<string, unknown>;
-}
-
-export interface LlmRequestOptions {
-  readonly tools?: LlmToolDefinition[];
-}
-
 export interface LlmResponse {
   /** Native function calls requested by the model, separate from canvas JSON. */
   readonly toolCalls?: LlmToolCall[];
