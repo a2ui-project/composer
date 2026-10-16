@@ -18,6 +18,7 @@ import {TestBed} from '@angular/core/testing';
 import {ChatPromptFactoryService} from './chat-prompt-factory.service';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
+import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
@@ -253,6 +254,80 @@ describe('ChatPromptFactoryService', () => {
         '(createSurface -> updateComponents -> updateDataModel).\n\n  ## Validation & Lifecycle Ordering',
       );
       expect(prompt).not.toContain('\n\n\n');
+    });
+  });
+
+  describe('Schema Minification', () => {
+    it('serializes catalog and COMMON_TYPES_SCHEMA as compact single-line JSON while preserving COMMON_TYPES_SCHEMA descriptions', () => {
+      const catalog = {
+        catalogId: 'compact-cat',
+        components: {
+          Text: {
+            type: 'object',
+            properties: {text: {type: 'string'}},
+          },
+        },
+      };
+      catalogSpy.activeCatalog.mockReturnValue(catalog);
+
+      const prompt = service.systemPrompt();
+      expect(prompt).toContain(
+        '{"catalogId":"compact-cat","components":{"Text":{"type":"object","properties":{"text":{"type":"string"}}}}}',
+      );
+      expect(prompt).toContain(JSON.stringify(COMMON_TYPES_SCHEMA));
+      expect(prompt).toContain(
+        'Attributes to enhance accessibility when using assistive technologies',
+      );
+    });
+
+    it('preserves transitively referenced $defs (including common_types_* and custom $defs) while pruning unreferenced $defs without mutating input catalog', () => {
+      const catalog = {
+        catalogId: 'defs-cat',
+        components: {
+          Button: {
+            type: 'object',
+            properties: {
+              label: {$ref: '#/$defs/common_types_DynamicString'},
+              variant: {$ref: '#/$defs/CustomVariant'},
+            },
+          },
+        },
+        $defs: {
+          common_types_DynamicString: {
+            anyOf: [{type: 'string'}, {$ref: '#/$defs/common_types_DataBinding'}],
+          },
+          common_types_DataBinding: {type: 'object'},
+          CustomVariant: {type: 'string', enum: ['primary', 'secondary']},
+          catalog_Button: {type: 'object', description: 'Unreferenced duplicate component copy'},
+          UnusedDef: {type: 'number'},
+        },
+      };
+      catalogSpy.activeCatalog.mockReturnValue(catalog);
+
+      const prompt = service.systemPrompt();
+      expect(prompt).toContain('"common_types_DynamicString"');
+      expect(prompt).toContain('"common_types_DataBinding"');
+      expect(prompt).toContain('"CustomVariant":{"type":"string","enum":["primary","secondary"]}');
+      expect(prompt).not.toContain('catalog_Button');
+      expect(prompt).not.toContain('UnusedDef');
+      // Input catalog object must not be mutated
+      expect(catalog.$defs.catalog_Button).toBeDefined();
+      expect(catalog.$defs.UnusedDef).toEqual({type: 'number'});
+    });
+
+    it('omits $defs when catalog.$defs contains only unreferenced entries', () => {
+      const unreferencedDefsCatalog = {
+        catalogId: 'only-unreferenced-defs',
+        components: {Text: {type: 'object'}},
+        $defs: {
+          catalog_Text: {type: 'object'},
+        },
+      };
+      catalogSpy.activeCatalog.mockReturnValue(unreferencedDefsCatalog);
+      expect(service.systemPrompt()).toContain(
+        '{"catalogId":"only-unreferenced-defs","components":{"Text":{"type":"object"}}}',
+      );
+      expect(unreferencedDefsCatalog.$defs.catalog_Text).toEqual({type: 'object'});
     });
   });
 });

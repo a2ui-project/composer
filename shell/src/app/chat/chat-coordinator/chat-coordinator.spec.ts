@@ -255,7 +255,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     const prompt = service.systemPrompt();
 
     expect(prompt).toContain('"Empty Catalog"');
-    expect(prompt).toContain('"components": {}');
+    expect(prompt).toContain('"components":{}');
   });
 
   describe('Multimodal Guidelines Conditional Injection', () => {
