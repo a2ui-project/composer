@@ -58,6 +58,13 @@ enum CancelReason {
   RENDERER_CHANGED = 'rendererChanged',
 }
 
+/**
+ * The most model requests one prompt makes. The first may switch renderers with the
+ * renderer tool; the second answers with the new catalog and can't switch again, so a
+ * model can't keep cycling between renderers.
+ */
+const MAX_MODEL_REQUESTS_PER_PROMPT = 2;
+
 /** Shown in place of a response the user cancelled. */
 const USER_CANCELLED_NOTE = '*You stopped this response.*';
 
@@ -332,13 +339,12 @@ export class ChatCoordinator {
       this.cancelReason = null;
       const toolAbortController = new AbortController();
       this.toolAbortController = toolAbortController;
-      // A tool call starts a fresh generation request with the new catalog. One
-      // transition per prompt prevents a model from cycling between renderers.
-      for (let pass = 0; pass < 2; pass++) {
+      for (let request = 1; request <= MAX_MODEL_REQUESTS_PER_PROMPT; request++) {
+        const isLastRequest = request === MAX_MODEL_REQUESTS_PER_PROMPT;
         // Trigger streaming GenAI completions call using client facade
         responseStream = await this.llmClient.chatStream(
           fullContext,
-          pass === 0 ? {tools: [this.rendererTool.definition()]} : undefined,
+          isLastRequest ? undefined : {tools: [this.rendererTool.definition()]},
         );
 
         // The conversation was cleared while the stream connection was establishing.
@@ -396,45 +402,22 @@ export class ChatCoordinator {
         this.throwIfRendererChanged(rendererUrlAtSubmit, catalogIdAtSubmit);
 
         if (toolCalls.length) {
-          if (pass > 0 || toolCalls.length !== 1) {
+          if (isLastRequest || toolCalls.length !== 1) {
             throw new Error('The assistant must request one renderer change at a time.');
           }
-          if (this.cancelReason !== null) {
-            throw this.cancelError();
-          }
-          const renderer = this.rendererTool.rendererFor(toolCalls[0]);
-          const changedRenderer = renderer.rendererUrl !== rendererUrlAtSubmit;
-          this.expectedToolRendererUrl = changedRenderer ? renderer.rendererUrl : undefined;
-          try {
-            await this.rendererSelection.selectRenderer(renderer.id, toolAbortController.signal);
-          } finally {
-            if (requestId === this.activeRequestId) {
-              this.expectedToolRendererUrl = undefined;
-            }
-          }
-          if (requestId !== this.activeRequestId) {
+          const nextContext = await this.switchRendererForToolCall(
+            toolCalls[0],
+            fullContext,
+            requestId,
+            rendererUrlAtSubmit,
+            toolAbortController.signal,
+          );
+          if (!nextContext) {
             return;
           }
-          if (this.cancelReason !== null) {
-            throw this.cancelError();
-          }
+          fullContext = nextContext;
           rendererUrlAtSubmit = this.configProvider.rendererUrl();
           catalogIdAtSubmit = this.getActiveCatalogId();
-          if (changedRenderer) {
-            this.stateSync.flushDraft();
-          }
-          // Retain the user's intent and attachments. Earlier layouts remain
-          // reference material, while only the newly selected catalog is allowed.
-          fullContext = [
-            {
-              role: MessageRole.SYSTEM,
-              content:
-                this.promptFactory.systemPrompt() +
-                '\nThe renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a complete createSurface/updateComponents/updateDataModel sequence.',
-            },
-            ...fullContext.filter(message => message.role !== MessageRole.SYSTEM),
-          ];
-          this.chatState.addRawLlmLog(LlmLogType.REQUEST, fullContext);
           continue;
         }
 
@@ -491,6 +474,61 @@ export class ChatCoordinator {
         this.activeStreamResponse = undefined;
       }
     }
+  }
+
+  /**
+   * Switches to the renderer the model asked for with the renderer tool, instead of
+   * answering, and returns the request to send next: the same conversation, told to
+   * use the newly selected catalog. The switch is the request's own, so it isn't
+   * handled as a renderer change (see the constructor); the canvas is rebuilt for the
+   * new catalog by the next response.
+   *
+   * @return The next request's messages, or null if the conversation was cleared
+   *     during the switch.
+   * @throws If the call is invalid, the switch fails, or the response is cancelled.
+   */
+  private async switchRendererForToolCall(
+    call: LlmToolCall,
+    context: LlmMessage[],
+    requestId: number,
+    rendererUrlAtSubmit: string,
+    signal: AbortSignal,
+  ): Promise<LlmMessage[] | null> {
+    if (this.cancelReason !== null) {
+      throw this.cancelError();
+    }
+    const renderer = this.rendererTool.rendererFor(call);
+    const changedRenderer = renderer.rendererUrl !== rendererUrlAtSubmit;
+    this.expectedToolRendererUrl = changedRenderer ? renderer.rendererUrl : undefined;
+    try {
+      await this.rendererSelection.selectRenderer(renderer.id, signal);
+    } finally {
+      if (requestId === this.activeRequestId) {
+        this.expectedToolRendererUrl = undefined;
+      }
+    }
+    if (requestId !== this.activeRequestId) {
+      return null;
+    }
+    if (this.cancelReason !== null) {
+      throw this.cancelError();
+    }
+    if (changedRenderer) {
+      this.stateSync.flushDraft();
+    }
+    // Retain the user's intent and attachments. Earlier layouts remain
+    // reference material, while only the newly selected catalog is allowed.
+    const nextContext: LlmMessage[] = [
+      {
+        role: MessageRole.SYSTEM,
+        content:
+          this.promptFactory.systemPrompt() +
+          '\nThe renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a complete createSurface/updateComponents/updateDataModel sequence.',
+      },
+      ...context.filter(message => message.role !== MessageRole.SYSTEM),
+    ];
+    this.chatState.addRawLlmLog(LlmLogType.REQUEST, nextContext);
+    return nextContext;
   }
 
   private cancelError(): Error {
