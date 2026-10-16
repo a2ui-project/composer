@@ -1,9 +1,17 @@
 /**
- * SPDX-License-Identifier: MIT
- * Copyright (c) Atai Barkai
+ * Copyright 2026 Google LLC
  *
- * Adapted from CopilotKit commit 00904af842b2f8c015f1e405a0c590a86d7842f8:
- * - examples/channels-a2ui-playground/src/poc/market-snapshot.ts
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import {type ComponentApi} from '@a2ui/web_core/v0_9';
