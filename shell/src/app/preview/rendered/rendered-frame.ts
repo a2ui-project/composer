@@ -29,7 +29,7 @@ import {
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {DomSanitizer} from '@angular/platform-browser';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {isValidHttpUrl} from '../../utils/url';
+import {buildRendererUrl} from '../renderer-url';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {
   HostCommunication,
@@ -41,7 +41,6 @@ import {StateSync} from '../../chat/state-sync/state-sync';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
-import {PreviewUrlParam} from '../preview-url-param';
 
 /**
  * Number of consecutive growing SURFACE_RESIZE reports that makes the growth
@@ -200,57 +199,12 @@ export class RenderedFrame {
   protected iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('previewIframe');
 
   protected safeRendererUrl = computed(() => {
-    const currentUrl = this.startupResolution.resolvedUrl();
-    if (!currentUrl) return null;
-
-    try {
-      // Fallback to undefined if globalThis.location is undefined
-      // (e.g., in Server-Side Rendering).
-      const baseOrigin = globalThis.location?.origin || undefined;
-
-      // Construct a URL object. Passing baseOrigin as the second argument ensures that
-      // relative URLs (e.g., "/renderer") are parsed correctly relative to the current
-      // domain. Absolute URLs will ignore this base parameter.
-      const url = new URL(currentUrl, baseOrigin);
-
-      // Prevent unauthorized cross-site framing by appending parent and
-      // ancestor origins.
-      url.searchParams.delete(PreviewUrlParam.ORIGIN);
-
-      const origins = new Set<string>();
-      if (baseOrigin) {
-        origins.add(baseOrigin);
-      }
-
-      const ancestorOrigins = (
-        globalThis.location as Location & {['ancestorOrigins']?: DOMStringList}
-      )?.['ancestorOrigins'];
-      if (ancestorOrigins) {
-        for (let i = 0; i < ancestorOrigins.length; i++) {
-          if (ancestorOrigins[i]) {
-            origins.add(ancestorOrigins[i]);
-          }
-        }
-      }
-
-      for (const origin of origins) {
-        url.searchParams.append(PreviewUrlParam.ORIGIN, origin);
-      }
-
-      const initialTheme = untracked(() => this.configProvider.themePreference());
-      url.searchParams.set(PreviewUrlParam.THEME, initialTheme);
-
-      const urlString = url.toString();
-      if (!isValidHttpUrl(urlString)) {
-        this.logger.error('Renderer URL failed safe validation:', urlString);
-        return null;
-      }
-
-      return this.sanitizer.bypassSecurityTrustResourceUrl(urlString);
-    } catch (e) {
-      this.logger.error('Failed to parse renderer URL:', e);
-      return null;
-    }
+    const built = buildRendererUrl(
+      this.startupResolution.resolvedUrl(),
+      untracked(() => this.configProvider.themePreference()),
+      this.logger,
+    );
+    return built ? this.sanitizer.bypassSecurityTrustResourceUrl(built) : null;
   });
 
   constructor() {
