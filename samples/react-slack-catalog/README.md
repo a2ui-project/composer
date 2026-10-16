@@ -31,12 +31,12 @@ the query parameter:
 http://localhost:4200/?renderer=http://localhost:3460
 ```
 
-Localhost renderer origins are allowed by the shell startup flow.
+Localhost renderer origins are allowed by the shell startup flow. The shell's
+`slack-dev` profile, `Slack Block Kit Preview (local static)`, loads the sample
+from `http://localhost:4200/samples/react-slack-catalog/` instead.
 
 For assistant-driven generation and refinement, configure a valid Gemini API key
-through the normal Composer Settings flow. The Playwright happy-path tests use a
-deterministic Gemini fixture so local and CI runs are repeatable; that fixture is
-not live Gemini.
+through the normal Composer Settings flow.
 
 ## Review in Composer
 
@@ -57,7 +57,9 @@ A2UI editor, and the assistant when the Slack renderer is selected.
 
 ### Book a Car form
 
-The built-in Slack profiles load `/examples/car-booking.json` as their starter.
+The built-in Slack profiles start with the Book a Car form: their `samplePayload`
+in `shell/src/config.json` holds the same messages as `/examples/car-booking.json`,
+and a test keeps the two in step.
 Enter a pick-up location and two dates, then select **Search Cars**. Composer
 receives the same `searchCars` A2UI event as the basic renderer, with the current
 field values. The sample demonstrates form authoring and events; it does not
