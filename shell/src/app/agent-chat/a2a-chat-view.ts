@@ -790,6 +790,9 @@ export class A2aChatView implements OnInit {
     event.preventDefault();
     this.isResizingInspector.set(true);
 
+    // Capture the pointer on the handle so fast drags over adjacent columns
+    // (such as preview iframes) continue routing pointer events here instead of
+    // being swallowed by the iframe's browsing context.
     const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
     target?.setPointerCapture?.(event.pointerId);
 
