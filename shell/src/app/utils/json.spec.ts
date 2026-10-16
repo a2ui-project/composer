@@ -107,10 +107,11 @@ describe('JSON Array Parser Utilities', () => {
 });
 
 describe('JSON Formatter Utilities', () => {
-  it('formats objects, arrays, and primitives correctly with 2 spaces', () => {
+  it('formats objects, arrays, primitives correctly with 2 spaces, and undefined as empty string', () => {
     expect(formatJson({hello: 'world'})).toBe('{\n  "hello": "world"\n}');
     expect(formatJson([1, 2])).toBe('[\n  1,\n  2\n]');
     expect(formatJson('test')).toBe('"test"');
+    expect(formatJson(undefined)).toBe('');
   });
 });
 

@@ -191,10 +191,10 @@ export function tryParseJsonArray(content?: string | null): JsonParseResult<unkn
  * Formats the given value as a JSON string with 2-space indentation.
  *
  * @param value The value to format.
- * @return The formatted JSON string.
+ * @return The formatted JSON string. Returns empty string when value is undefined.
  */
 export function formatJson(value: unknown): string {
-  return JSON.stringify(value, null, 2);
+  return value === undefined ? '' : JSON.stringify(value, null, 2);
 }
 
 /**

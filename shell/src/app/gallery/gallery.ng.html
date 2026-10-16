@@ -36,54 +36,435 @@
   </mat-sidenav>
 
   <mat-sidenav-content class="gallery-content">
-    <div [class.hidden-frame]="!selectedComponentKey()">
-      <mat-card class="preview-card">
-        <mat-card-header>
-          <mat-card-title>Preview</mat-card-title>
-        </mat-card-header>
+    @if (selectedComponentKey() && catalogManagement.activeCatalog()) {
+      <div class="details-header">
+        <h2 class="component-title">{{ selectedComponentKey() }}</h2>
+        @if (selectedComponentDescription()) {
+          <p class="component-description">{{ selectedComponentDescription() }}</p>
+        }
+      </div>
+    }
+
+    <div
+      class="playground-wrapper"
+      [class.hidden-frame]="!selectedComponentKey() || !catalogManagement.activeCatalog()"
+    >
+      <mat-card class="playground-card">
         <mat-card-content>
-          <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
+          @if (selectedComponentKey() && catalogManagement.activeCatalog()) {
+            <div class="playground-toolbar">
+              <div class="playground-tabs" role="tablist" aria-label="Playground view">
+                <button
+                  type="button"
+                  role="tab"
+                  class="playground-tab"
+                  [class.active]="activePlaygroundTab() === 'preview'"
+                  [attr.aria-selected]="activePlaygroundTab() === 'preview'"
+                  (click)="selectPlaygroundTab('preview')"
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  class="playground-tab"
+                  [class.active]="activePlaygroundTab() === 'json'"
+                  [attr.aria-selected]="activePlaygroundTab() === 'json'"
+                  (click)="selectPlaygroundTab('json')"
+                >
+                  Edit JSON
+                </button>
+              </div>
+              <div class="playground-actions">
+                @if (!loadingUsages()) {
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    (click)="copyToClipboard()"
+                    aria-label="Copy JSON"
+                    [disabled]="!validPayloadJson()"
+                    class="copy-button"
+                  >
+                    <mat-icon aria-hidden="true">content_copy</mat-icon>
+                    Copy JSON
+                  </button>
+                }
+                <button
+                  mat-flat-button
+                  color="primary"
+                  type="button"
+                  (click)="openInComposer()"
+                  [disabled]="!validPayloadJson() || !rendererUrl() || opening()"
+                >
+                  <mat-icon aria-hidden="true">edit</mat-icon>
+                  Open in Composer
+                </button>
+              </div>
+            </div>
+          }
+          <div class="gallery-cards">
+            @if (selectedComponentKey() && catalogManagement.activeCatalog()) {
+              <div class="usage-card">
+                <div class="usage-header">
+                  <h3 class="usage-title">Usage</h3>
+                </div>
+                <div class="usage-content">
+                  @if (loadingUsages()) {
+                    <div class="usage-loading-spinner">
+                      <mat-spinner diameter="32"></mat-spinner>
+                      <span>Loading usage samples...</span>
+                    </div>
+                  } @else {
+                    @if (draft().preset) {
+                      <p id="gallery-draft-help" class="draft-help">
+                        Change properties below, or edit the example in the Edit JSON tab.
+                      </p>
+                      @if (draft().error) {
+                        <p class="draft-help" role="status">
+                          Fix the JSON in the Edit JSON tab to enable property editing again.
+                        </p>
+                      }
+                      @if (editableProperties().length) {
+                        <div class="property-list">
+                          @for (prop of editableProperties(); track prop.name) {
+                            @if (prop.firstCommon) {
+                              <h4 class="property-section-heading">Common properties</h4>
+                            }
+                            <div
+                              class="property-row"
+                              [attr.data-property-row]="prop.name"
+                              [class.property-row-multiline]="
+                                prop.kind === 'json' ||
+                                prop.kind === 'array' ||
+                                prop.kind === 'object' ||
+                                prop.note
+                              "
+                            >
+                              <label
+                                class="property-name"
+                                [attr.for]="
+                                  prop.note || prop.kind === 'array' || prop.kind === 'object'
+                                    ? null
+                                    : 'gallery-property-' + prop.name
+                                "
+                              >
+                                <span>{{ prop.name }}</span>
+                                @if (prop.required) {
+                                  <span class="required-marker">required</span>
+                                }
+                              </label>
+                              <div class="property-control">
+                                <ng-container
+                                  *ngTemplateOutlet="
+                                    controlTemplate;
+                                    context: {
+                                      control: prop.control,
+                                      value: prop.value,
+                                      path: [prop.name],
+                                      pathKey: prop.name,
+                                      label: prop.name,
+                                      required: prop.required,
+                                    }
+                                  "
+                                ></ng-container>
+                              </div>
+                              @if (
+                                !prop.required && prop.value !== undefined && prop.kind !== 'enum'
+                              ) {
+                                <button
+                                  mat-icon-button
+                                  type="button"
+                                  class="remove-property"
+                                  [attr.aria-label]="'Remove ' + prop.name"
+                                  [attr.data-remove-property]="prop.name"
+                                  (click)="editProperty(prop.name, undefined)"
+                                  [disabled]="!!draft().error"
+                                >
+                                  <mat-icon>close</mat-icon>
+                                </button>
+                              }
+                              @if (jsonFieldErrors()[prop.name]; as fieldError) {
+                                <p
+                                  class="property-error"
+                                  [id]="'gallery-property-error-' + prop.name"
+                                  role="alert"
+                                >
+                                  {{ fieldError.message }}
+                                </p>
+                              } @else if (prop.required && prop.value === undefined) {
+                                <p
+                                  class="property-missing"
+                                  [attr.data-property-missing]="prop.name"
+                                >
+                                  Required, but this example doesn't set it.
+                                </p>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                      <ng-template
+                        #controlTemplate
+                        let-control="control"
+                        let-value="value"
+                        let-path="path"
+                        let-pathKey="pathKey"
+                        let-label="label"
+                        let-required="required"
+                      >
+                        @if (describeUneditableValue(value, control); as nestedNote) {
+                          <p class="property-note" [attr.data-property-note]="pathKey">
+                            {{ nestedNote }}
+                          </p>
+                        } @else if (control.kind === 'enum') {
+                          <select
+                            [id]="'gallery-property-' + pathKey"
+                            [attr.aria-label]="label"
+                            [attr.data-property]="pathKey"
+                            [ngModel]="value ?? null"
+                            (ngModelChange)="editAtPath(path, $event ?? undefined)"
+                            [disabled]="!!draft().error"
+                          >
+                            @if (!required) {
+                              <option [ngValue]="null">(not set)</option>
+                            }
+                            @for (option of control.options; track option) {
+                              <option [ngValue]="option">{{ option }}</option>
+                            }
+                          </select>
+                        } @else if (control.kind === 'boolean') {
+                          <mat-slide-toggle
+                            [id]="'gallery-property-' + pathKey"
+                            [attr.aria-label]="label"
+                            [attr.data-property]="pathKey"
+                            [ngModel]="value === true"
+                            (ngModelChange)="editAtPath(path, $event)"
+                            [disabled]="!!draft().error"
+                          ></mat-slide-toggle>
+                        } @else if (control.kind === 'number') {
+                          <input
+                            matInput
+                            type="number"
+                            [id]="'gallery-property-' + pathKey"
+                            [attr.aria-label]="label"
+                            [attr.data-property]="pathKey"
+                            [placeholder]="required ? '' : 'Not set'"
+                            [ngModel]="value ?? null"
+                            (ngModelChange)="editNumberAtPath(path, $event, required, label)"
+                            [disabled]="!!draft().error"
+                          />
+                        } @else if (control.kind === 'string') {
+                          <input
+                            matInput
+                            type="text"
+                            [id]="'gallery-property-' + pathKey"
+                            [attr.aria-label]="label"
+                            [attr.data-property]="pathKey"
+                            [placeholder]="required ? '' : 'Not set'"
+                            [ngModel]="value ?? ''"
+                            (ngModelChange)="editTextAtPath(path, $event, required)"
+                            [disabled]="!!draft().error"
+                          />
+                        } @else if (control.kind === 'array') {
+                          <div class="array-control" [attr.data-property-array]="pathKey">
+                            @for (itemValue of ensureArray(value); track $index) {
+                              <div
+                                class="array-item-row"
+                                [attr.data-array-item]="pathKey + '.' + $index"
+                              >
+                                <div class="array-item-control">
+                                  <ng-container
+                                    *ngTemplateOutlet="
+                                      controlTemplate;
+                                      context: {
+                                        control: control.itemControl,
+                                        value: itemValue,
+                                        path: appendPath(path, $index),
+                                        pathKey: pathKey + '.' + $index,
+                                        label: label + ' item ' + ($index + 1),
+                                        required: true,
+                                      }
+                                    "
+                                  ></ng-container>
+                                </div>
+                                <button
+                                  mat-icon-button
+                                  type="button"
+                                  class="delete-array-item"
+                                  [attr.aria-label]="'Delete ' + label + ' item ' + ($index + 1)"
+                                  [attr.data-delete-array-item]="pathKey + '.' + $index"
+                                  (click)="removeArrayItem(path, $index)"
+                                  [disabled]="!!draft().error"
+                                >
+                                  <mat-icon>delete</mat-icon>
+                                </button>
+                              </div>
+                            }
+                            <button
+                              mat-stroked-button
+                              type="button"
+                              class="add-array-item"
+                              [attr.data-add-array-item]="pathKey"
+                              (click)="addArrayItem(path, control.itemControl)"
+                              [disabled]="!!draft().error"
+                            >
+                              <mat-icon>add</mat-icon>
+                              Add Entry
+                            </button>
+                          </div>
+                        } @else if (control.kind === 'object') {
+                          <div class="object-control" [attr.data-property-object]="pathKey">
+                            @for (subProp of control.properties; track subProp.name) {
+                              <div
+                                class="object-property-field"
+                                [attr.data-object-property]="pathKey + '.' + subProp.name"
+                              >
+                                <label
+                                  class="object-property-label"
+                                  [attr.for]="
+                                    describeUneditableValue(
+                                      getObjectField(value, subProp.name),
+                                      subProp.control
+                                    ) ||
+                                    subProp.control.kind === 'array' ||
+                                    subProp.control.kind === 'object'
+                                      ? null
+                                      : 'gallery-property-' + pathKey + '.' + subProp.name
+                                  "
+                                >
+                                  <span>{{ subProp.name }}</span>
+                                  @if (subProp.required) {
+                                    <span class="required-marker">required</span>
+                                  }
+                                </label>
+                                <ng-container
+                                  *ngTemplateOutlet="
+                                    controlTemplate;
+                                    context: {
+                                      control: subProp.control,
+                                      value: getObjectField(value, subProp.name),
+                                      path: appendPath(path, subProp.name),
+                                      pathKey: pathKey + '.' + subProp.name,
+                                      label: label + ' ' + subProp.name,
+                                      required: subProp.required,
+                                    }
+                                  "
+                                ></ng-container>
+                              </div>
+                            }
+                          </div>
+                        } @else {
+                          <div class="json-control-wrapper">
+                            <textarea
+                              #jsonField
+                              class="property-json"
+                              spellcheck="false"
+                              [id]="'gallery-property-' + pathKey"
+                              [attr.aria-label]="label + ' (JSON)'"
+                              [attr.data-property]="pathKey"
+                              [placeholder]="required ? '' : 'Not set'"
+                              [value]="jsonFieldErrors()[pathKey]?.text ?? formatJson(value)"
+                              (change)="
+                                editJsonAtPath(path, pathKey, required, label, jsonField.value)
+                              "
+                              [attr.aria-invalid]="!!jsonFieldErrors()[pathKey]"
+                              [attr.aria-describedby]="
+                                jsonFieldErrors()[pathKey]
+                                  ? 'gallery-property-error-' + pathKey
+                                  : null
+                              "
+                              [disabled]="!!draft().error"
+                            ></textarea>
+                            @if (
+                              path.length > 1 && jsonFieldErrors()[pathKey];
+                              as nestedFieldError
+                            ) {
+                              <p
+                                class="property-error"
+                                [id]="'gallery-property-error-' + pathKey"
+                                role="alert"
+                              >
+                                {{ nestedFieldError.message }}
+                              </p>
+                            }
+                          </div>
+                        }
+                      </ng-template>
+                      <div class="draft-actions">
+                        <button
+                          mat-flat-button
+                          color="primary"
+                          type="button"
+                          (click)="resetDraft()"
+                        >
+                          Reset example
+                        </button>
+                      </div>
+                      @if (actionMessage()) {
+                        <p class="draft-help" role="status">{{ actionMessage() }}</p>
+                      }
+                    } @else {
+                      <p class="draft-help" [class.draft-error]="draft().error" role="status">
+                        {{ draft().error || 'No example is available for this component.' }}
+                      </p>
+                    }
+                  }
+                </div>
+              </div>
+            }
+            <div class="preview-slot">
+              <mat-card
+                class="preview-card"
+                [class.hidden-frame]="activePlaygroundTab() !== 'preview'"
+              >
+                <mat-card-header>
+                  <mat-card-title>Preview</mat-card-title>
+                </mat-card-header>
+                <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
+              </mat-card>
+
+              <mat-card class="json-card" [class.hidden-frame]="activePlaygroundTab() !== 'json'">
+                <mat-card-header>
+                  <mat-card-title>Edit JSON</mat-card-title>
+                </mat-card-header>
+                <mat-card-content class="json-tab">
+                  @if (draft().preset) {
+                    <p id="gallery-draft-json-help" class="draft-help">
+                      Changes here update the preview and the properties. Reset example restores the
+                      original.
+                    </p>
+                    <a2ui-composer-monaco-editor
+                      id="gallery-draft"
+                      class="draft-json"
+                      schemaMode="gallery-example"
+                      ariaLabel="Edit components and optional data"
+                      [value]="draft().text"
+                      (valueChange)="editDraft($event)"
+                      [attr.aria-invalid]="!!draft().error"
+                      aria-describedby="gallery-draft-json-help gallery-draft-error"
+                    />
+                    @if (draft().error; as error) {
+                      <p id="gallery-draft-error" class="draft-error" role="alert">{{ error }}</p>
+                    }
+                  } @else {
+                    <p class="draft-help" role="status">
+                      {{
+                        loadingUsages()
+                          ? 'Loading usage samples...'
+                          : 'No example is available for this component.'
+                      }}
+                    </p>
+                  }
+                </mat-card-content>
+              </mat-card>
+            </div>
+          </div>
         </mat-card-content>
       </mat-card>
     </div>
 
     @if (selectedComponentKey() && catalogManagement.activeCatalog()) {
       <div class="details-panel">
-        <div class="details-header">
-          <h2 class="component-title">{{ selectedComponentKey() }}</h2>
-          @if (selectedComponentDescription()) {
-            <p class="component-description">{{ selectedComponentDescription() }}</p>
-          }
-        </div>
-
-        <mat-card class="usage-card">
-          <mat-card-header class="usage-header">
-            <mat-card-title>Usage</mat-card-title>
-            @if (!loadingUsages()) {
-              <button
-                mat-icon-button
-                (click)="copyToClipboard()"
-                aria-label="Copy to Clipboard"
-                class="copy-button"
-              >
-                <mat-icon>content_copy</mat-icon>
-              </button>
-            }
-          </mat-card-header>
-          <mat-card-content>
-            @if (loadingUsages()) {
-              <div class="usage-loading-spinner">
-                <mat-spinner diameter="32"></mat-spinner>
-                <span>Loading usage samples...</span>
-              </div>
-            } @else {
-              <pre
-                class="usage-code-block"
-              ><code class="usage-code">{{ selectedComponentUsage() }}</code></pre>
-            }
-          </mat-card-content>
-        </mat-card>
-
         <mat-card class="properties-card">
           <mat-card-header>
             <mat-card-title>Properties</mat-card-title>
