@@ -468,6 +468,67 @@ describe('DemoCard sandboxed live demo frame', () => {
     expect(fixture.componentInstance.minimumCardWidth()).toBe(0);
   });
 
+  it('stops widening a demo that is always wider than its frame by the same amount', () => {
+    vi.useFakeTimers();
+    const fixture = mountCard(true);
+    const frame = frameOf(fixture)!;
+    vi.spyOn(frame, 'clientWidth', 'get').mockReturnValue(400);
+    vi.spyOn(surfaceOf(fixture), 'clientWidth', 'get').mockReturnValue(400);
+    // The demo is always 100px wider than the frame it is shown in.
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 300, width: 500});
+    advance(fixture, MEASURE_SETTLE_MS);
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.style.getPropertyValue('--demo-preview-scale')).toBe('0.8');
+
+    // Scaled to fit, the frame is widened to 500px, where the demo reports 600px.
+    vi.spyOn(frame, 'clientWidth', 'get').mockReturnValue(500);
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 300, width: 600});
+    expect(host.style.getPropertyValue('--demo-preview-scale')).toBe('0.8');
+    expect(fixture.componentInstance.minimumCardWidth()).toBe(500);
+  });
+
+  it('keeps widening a scaled demo while its overflow shrinks, until it fits', () => {
+    vi.useFakeTimers();
+    const fixture = mountCard(true);
+    const frame = frameOf(fixture)!;
+    vi.spyOn(frame, 'clientWidth', 'get').mockReturnValue(400);
+    vi.spyOn(surfaceOf(fixture), 'clientWidth', 'get').mockReturnValue(400);
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 300, width: 500});
+    advance(fixture, MEASURE_SETTLE_MS);
+
+    // In the frame widened to 500px the demo lays out 16px wider, then fits at 516px.
+    vi.spyOn(frame, 'clientWidth', 'get').mockReturnValue(500);
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 300, width: 516});
+    expect(fixture.componentInstance.minimumCardWidth()).toBe(516);
+    vi.spyOn(frame, 'clientWidth', 'get').mockReturnValue(516);
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 300, width: 516});
+    expect(fixture.componentInstance.minimumCardWidth()).toBe(516);
+    expect(
+      (fixture.nativeElement as HTMLElement).style.getPropertyValue('--demo-preview-scale'),
+    ).toBe(String(400 / 516));
+  });
+
+  it('allows the same few pixels of overflow twice while a scaled demo converges', () => {
+    vi.useFakeTimers();
+    const fixture = mountCard(true);
+    const frame = frameOf(fixture)!;
+    vi.spyOn(frame, 'clientWidth', 'get').mockReturnValue(400);
+    vi.spyOn(surfaceOf(fixture), 'clientWidth', 'get').mockReturnValue(400);
+    emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 300, width: 500});
+    advance(fixture, MEASURE_SETTLE_MS);
+
+    // Rounded up to whole pixels, a shrinking overflow can repeat: 3px, 3px, then a fit.
+    for (const [frameWidth, width] of [
+      [500, 503],
+      [503, 506],
+      [506, 508],
+    ]) {
+      vi.spyOn(frame, 'clientWidth', 'get').mockReturnValue(frameWidth);
+      emitFromCard(fixture, PreviewBridgeMessageType.SURFACE_RESIZE, {height: 300, width});
+    }
+    expect(fixture.componentInstance.minimumCardWidth()).toBe(506);
+  });
+
   it('compares content width with the viewport at measurement time', () => {
     const fixture = mountCard(true);
     const frame = frameOf(fixture)!;

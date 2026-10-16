@@ -102,6 +102,26 @@ const MEASURE_HEIGHT_PX = 32;
 const MAX_CARD_HEIGHT_PX = 560;
 
 /**
+ * Overflow in pixels a frame's width report may show without counting as overflow:
+ * fractional widths round in either direction on both sides of the frame.
+ */
+const ROUNDING_TOLERANCE_PX = 2;
+
+/**
+ * Largest overflow, in pixels, that may repeat while a scaled demo still counts as
+ * converging. React's invitation builder overflows by 3px twice before it fits. See
+ * {@link DemoCard.recordsOverflow}.
+ */
+const MAX_REPEATED_OVERFLOW_PX = 3;
+
+/**
+ * Most times in a row a card widens a scaled frame for a demo that still overflows it.
+ * React's invitation builder converges in 12 at its narrowest card. See
+ * {@link DemoCard.recordsOverflow}.
+ */
+const MAX_SCALED_WIDENINGS = 20;
+
+/**
  * How long a card collects height reports before committing one, for renderers that
  * don't say when the demo has rendered.
  *
@@ -213,6 +233,13 @@ export class DemoCard {
 
   private readonly availableWidth = signal(0);
   private readonly contentWidth = signal(0);
+  /**
+   * How far the demo overflowed its frame, in pixels, in the report that last widened
+   * {@link DemoCard.contentWidth}. See {@link DemoCard.recordsOverflow}.
+   */
+  private recordedOverflow = Number.POSITIVE_INFINITY;
+  /** Widenings recorded in a row from a scaled frame. See {@link DemoCard.recordsOverflow}. */
+  private scaledWidenings = 0;
   /** Width of the card around its surface: its borders and the surface's margin. */
   private readonly surfaceInset = signal(0);
   /**
@@ -370,6 +397,8 @@ export class DemoCard {
         this.currentHeight.set(null);
         this.hasRenderedContent.set(false);
         this.contentWidth.set(0);
+        this.recordedOverflow = Number.POSITIVE_INFINITY;
+        this.scaledWidenings = 0;
         this.pendingHeight = null;
         this.phase = MeasurementPhase.MEASURING;
         this.clearSettleTimeout();
@@ -440,8 +469,11 @@ export class DemoCard {
         // Ignore the viewport's own width and fractional rounding. Only actual
         // horizontal overflow earns a larger canvas, retained across lazy remounts.
         const measuredViewport = viewportWidth ?? iframe.clientWidth;
-        if (measuredViewport > 0 && width !== undefined && width > measuredViewport + 2) {
-          this.contentWidth.set(Math.max(this.contentWidth(), Math.ceil(width)));
+        if (measuredViewport > 0 && width !== undefined) {
+          const overflow = width - measuredViewport;
+          if (overflow > ROUNDING_TOLERANCE_PX && this.recordsOverflow(overflow)) {
+            this.contentWidth.set(Math.max(this.contentWidth(), Math.ceil(width)));
+          }
         }
         if (this.phase !== MeasurementPhase.SETTLED) this.applyReportedHeight(height);
         if (
@@ -457,6 +489,37 @@ export class DemoCard {
       default:
         return;
     }
+  }
+
+  /**
+   * Decides whether a report that overflows the frame by `overflow` pixels widens
+   * {@link DemoCard.contentWidth}, and remembers it if so.
+   *
+   * Overflow in an unscaled frame always counts. A scaled frame is widened to the
+   * content width already recorded, and some demos lay out wider in a wider frame, so
+   * the demo can overflow again. It's recorded again while that converges: while the
+   * overflow shrinks, or is within rounding of shrinking, up to
+   * {@link MAX_SCALED_WIDENINGS} times in a row. React's invitation builder settles
+   * that way, overflowing by 45, 34, 26 and so on down to 3px. A demo that is always
+   * wider than its frame by the same amount (the sample Task Card is, by about 65px at
+   * any width) stops after one, instead of shrinking its preview without end.
+   */
+  private recordsOverflow(overflow: number): boolean {
+    if (this.previewScale() === 1) {
+      this.scaledWidenings = 0;
+    } else {
+      const shrinking = overflow < this.recordedOverflow;
+      // Widths are reported in whole pixels, rounded up, so an overflow that is still
+      // shrinking can show the same few pixels twice.
+      const shrinkingWithinRounding =
+        overflow === this.recordedOverflow && overflow <= MAX_REPEATED_OVERFLOW_PX;
+      if (this.scaledWidenings >= MAX_SCALED_WIDENINGS || !(shrinking || shrinkingWithinRounding)) {
+        return false;
+      }
+      this.scaledWidenings++;
+    }
+    this.recordedOverflow = overflow;
+    return true;
   }
 
   private measureAvailableWidth(surface: HTMLElement): void {
