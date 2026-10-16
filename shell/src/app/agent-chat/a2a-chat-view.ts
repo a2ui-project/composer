@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {NgTemplateOutlet} from '@angular/common';
 import {
   Component,
   DestroyRef,
@@ -22,10 +23,13 @@ import {
   inject,
   OnInit,
   signal,
+  TemplateRef,
   untracked,
+  viewChild,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
+import {MatDialog, MatDialogRef} from '@angular/material/dialog';
 import {MatIconModule} from '@angular/material/icon';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatTooltipModule} from '@angular/material/tooltip';
@@ -122,6 +126,7 @@ function resolveUserActionText(action: unknown): string {
     MatIconModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
+    NgTemplateOutlet,
     A2aAgentHeader,
     A2aChatHistory,
     A2aInputArea,
@@ -147,8 +152,11 @@ export class A2aChatView implements OnInit {
     return catalog ? catalogDefinesCanvas(catalog) : undefined;
   });
   private readonly destroyRef = inject(DestroyRef);
+  private readonly dialog = inject(MatDialog);
   private readonly streamEventParser = inject(A2aStreamEventParser);
   private readonly initTimestamp = Date.now();
+
+  private readonly configPanelTemplate = viewChild.required<TemplateRef<void>>('configPanel');
 
   /** Discovered A2A AgentCard metadata for the connected agent. */
   protected readonly agentCard = signal<AgentCard | null>(null);
@@ -176,8 +184,8 @@ export class A2aChatView implements OnInit {
   protected readonly isInspectorOpen = signal<boolean>(false);
   /** Search query applied in the message inspector side drawer. */
   protected readonly inspectorSearchQuery = signal<string>('');
-  /** Whether the agent configuration modal is open. */
-  protected readonly isConfigPanelOpen = signal<boolean>(false);
+  /** Whether the agent configuration panel is rendered inline instead of the chat view. */
+  protected readonly showsInlineConfig = signal<boolean>(false);
   /** Whether the A2UI Canvas surface preview panel is open. */
   protected readonly isCanvasOpen = signal<boolean>(false);
   /** Active A2UI component items to render inside Canvas. */
@@ -191,6 +199,7 @@ export class A2aChatView implements OnInit {
   protected readonly isResizingInspector = signal<boolean>(false);
 
   private activeAbortController?: AbortController;
+  private configDialogRef?: MatDialogRef<void, void>;
 
   constructor() {
     this.hostCommunication.messageStream$
@@ -225,6 +234,7 @@ export class A2aChatView implements OnInit {
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => {
       this.cancelActiveGeneration();
+      this.closeConfigDialog();
     });
 
     const storedUrl = this.configProvider.a2aAgentUrl();
@@ -234,7 +244,7 @@ export class A2aChatView implements OnInit {
     if (storedUrl) {
       this.connectToAgent(storedUrl, storedTenant, backendMode);
     } else {
-      this.isConfigPanelOpen.set(true);
+      this.showsInlineConfig.set(true);
     }
   }
 
@@ -245,7 +255,9 @@ export class A2aChatView implements OnInit {
   ): Promise<void> {
     const normalizedUrl = normalizeHttpUrl(url);
     if (!normalizedUrl || !isValidEndpointUrl(normalizedUrl)) {
-      this.isConfigPanelOpen.set(true);
+      if (!this.agentCard() && !this.configDialogRef) {
+        this.showsInlineConfig.set(true);
+      }
       return;
     }
     if (this.isConnecting()) {
@@ -253,6 +265,9 @@ export class A2aChatView implements OnInit {
     }
 
     this.isConnecting.set(true);
+    if (this.configDialogRef) {
+      this.configDialogRef.disableClose = true;
+    }
     this.connectionError.set(null);
 
     try {
@@ -272,14 +287,18 @@ export class A2aChatView implements OnInit {
       this.agentCard.set(card);
       const info = a2aCardToUiAgentInfo(card, normalizedUrl);
       this.agentInfo.set(info);
-      this.isConfigPanelOpen.set(false);
+      this.showsInlineConfig.set(false);
+      this.closeConfigDialog();
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to connect to agent endpoint.';
       this.connectionError.set(errorMsg);
       this.recordInspectorEvent(createErrorEvent(err));
-      this.isConfigPanelOpen.set(true);
+      this.openConfigPanel();
     } finally {
       this.isConnecting.set(false);
+      if (this.configDialogRef) {
+        this.configDialogRef.disableClose = !this.agentCard();
+      }
     }
   }
 
@@ -292,6 +311,9 @@ export class A2aChatView implements OnInit {
     this.configProvider.setA2aAgentUrl('');
     this.configProvider.setA2aTenantId('');
     this.agentCard.set(null);
+    if (this.configDialogRef) {
+      this.configDialogRef.disableClose = true;
+    }
     this.agentInfo.set(null);
     this.messages.set([]);
     this.inspectorEvents.set([]);
@@ -840,7 +862,29 @@ export class A2aChatView implements OnInit {
   }
 
   protected openConfigPanel(): void {
-    this.isConfigPanelOpen.set(true);
+    if (this.configDialogRef || this.showsInlineConfig()) return;
+
+    const ref = this.dialog.open(this.configPanelTemplate(), {
+      ariaLabel: 'A2A Agent Configuration',
+      maxWidth: '480px',
+      width: '100%',
+      disableClose: !this.agentCard() || this.isConnecting(),
+    });
+    this.configDialogRef = ref;
+    ref
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.connectionError.set(null);
+        if (this.configDialogRef === ref) {
+          this.configDialogRef = undefined;
+        }
+      });
+  }
+
+  protected closeConfigDialog(): void {
+    this.configDialogRef?.close();
+    this.configDialogRef = undefined;
   }
 
   protected clearInspectorEvents(): void {

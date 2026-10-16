@@ -167,7 +167,7 @@ test.describe('A2aChatMessage Visual Regression & Layout', () => {
     await page.evaluate(() => localStorage.clear());
     await page.goto('/a2a');
 
-    const configPanel = page.locator('.agent-config-panel-card');
+    const configPanel = page.locator('.agent-config-panel');
     await configPanel.getByLabel('Agent Endpoint URL').fill('http://mock-agent.local');
     await configPanel.getByRole('button', {name: 'Connect Agent'}).click();
 

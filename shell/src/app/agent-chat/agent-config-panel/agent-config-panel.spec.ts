@@ -157,21 +157,6 @@ describe('AgentConfigPanel', () => {
     expect(await harness.isSaveDisabled()).toBe(false);
   });
 
-  it('dismisses panel on Escape key when canCancel is true', () => {
-    const dismissSpy = vi.spyOn(fixture.componentInstance.dismissPanel, 'emit');
-    fixture.nativeElement.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
-    expect(dismissSpy).toHaveBeenCalled();
-  });
-
-  it('does not dismiss panel on Escape key when canCancel is false or isConnecting is true', () => {
-    const dismissSpy = vi.spyOn(fixture.componentInstance.dismissPanel, 'emit');
-    fixture.componentRef.setInput('canCancel', false);
-    fixture.detectChanges();
-
-    fixture.nativeElement.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
-    expect(dismissSpy).not.toHaveBeenCalled();
-  });
-
   it('renders backend select dropdown when multiple backend options are provided via DI', async () => {
     const mockOptions = [
       {id: A2aBackendMode.HTTP_JSONRPC, label: 'JSON-RPC (Port 8088)'},
