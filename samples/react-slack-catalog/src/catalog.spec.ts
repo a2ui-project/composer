@@ -35,6 +35,7 @@ const EXPECTED_COMPONENTS = [
   'DateTimeInput',
   'Table',
   'Chart',
+  'Scorecard',
   'MarketSnapshot',
 ].sort();
 const TableSchema = slackCatalog.components.get('Table')!.schema;
@@ -235,7 +236,7 @@ describe('Slack catalog schema payload', () => {
     ).toBe('common_types.json#/$defs/ComponentId');
   });
 
-  it('contains the supported Slack basic components plus Table, Chart, and MarketSnapshot', () => {
+  it('contains the supported Slack basic components plus Table, Chart, Scorecard, and MarketSnapshot', () => {
     expect(Object.keys(slackCatalogJson.components).sort()).toEqual(EXPECTED_COMPONENTS);
     expect([...slackCatalog.components.keys()].sort()).toEqual(EXPECTED_COMPONENTS);
   });

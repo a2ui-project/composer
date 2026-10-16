@@ -41,7 +41,7 @@ export const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalog
 const SLACK_CATALOG_SCHEMA = 'https://json-schema.org/draft/2019-09/schema';
 const SLACK_CATALOG_TITLE = 'Slack Preview Renderer Catalog';
 const SLACK_CATALOG_DESCRIPTION =
-  'A2UI catalog for Slack Block Kit preview messages. TextField and date-only DateTimeInput provide editable forms with writable data bindings. Use Table for aligned tabular data such as scores or comparisons. Use Chart for bar, line, pie, or donut charts; the native Slack chart block cannot express every chart this catalog allows, so the renderer draws the chart and sends it as an image. Row and Column flatten their children into sequential Slack blocks; they do not preserve horizontal alignment. MarketSnapshot provides a specialized market summary.';
+  'A2UI catalog for Slack Block Kit preview messages. TextField and date-only DateTimeInput provide editable forms with writable data bindings. Use Table for aligned tabular data such as scores or comparisons. Use Chart for bar, line, pie, or donut charts; the native Slack chart block cannot express every chart this catalog allows, so the renderer draws the chart and sends it as an image. Use Scorecard to show one match result; Slack has no block for it, so the renderer draws it and sends it as an uploaded image. Row and Column flatten their children into sequential Slack blocks; they do not preserve horizontal alignment. MarketSnapshot provides a specialized market summary.';
 
 /**
  * Pairs a component name with its props schema. web_core types `ComponentApi`
@@ -275,6 +275,37 @@ const ChartSchema = z
 
 const ChartApi = slackComponentApi('Chart', ChartSchema);
 
+/** A score: a number, or anything a DynamicString accepts, such as "3 (4)" or a binding. */
+const DynamicScoreSchema = z.union([z.number(), ...DynamicStringSchema.options]);
+
+const ScorecardTeamSchema = z
+  .object({
+    name: DynamicStringSchema.describe('Team or player name.'),
+    score: DynamicScoreSchema.describe(
+      'Score as a number, as text such as "3 (4)" for a penalty shootout, or a binding.',
+    ),
+  })
+  .strict();
+
+const ScorecardSchema = z
+  .object({
+    ...CommonProps,
+    home: ScorecardTeamSchema.describe('The home team and its score, drawn on the left.'),
+    away: ScorecardTeamSchema.describe('The away team and its score, drawn on the right.'),
+    status: DynamicStringSchema.optional().describe(
+      'Where the match stands, such as "Full time" or "72\'".',
+    ),
+    competition: DynamicStringSchema.optional().describe(
+      'Competition or stage, such as "World Cup, Group C".',
+    ),
+  })
+  .strict()
+  .describe(
+    "A match result card: two teams with their scores, plus an optional status and competition. Use it to show one game's score at a glance, and Table to list several results. Slack has no block for a scorecard, so the Slack renderer draws it and sends it as an uploaded image. Give the teams and scores, not an image URL.",
+  );
+
+const ScorecardApi = slackComponentApi('Scorecard', ScorecardSchema);
+
 const slackBasicComponents: ComponentApi[] = [
   TextApi,
   SlackImageApi,
@@ -295,6 +326,7 @@ const slackComponents = [
   ...slackBasicComponents,
   TableApi,
   ChartApi,
+  ScorecardApi,
   slackComponentApi('MarketSnapshot', MarketSnapshotSchema),
 ];
 
