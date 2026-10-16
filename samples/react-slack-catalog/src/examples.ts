@@ -207,6 +207,18 @@ export const SLACK_COMPONENT_USAGES = {
       },
     ],
   },
+  Scorecard: {
+    usage: [
+      {
+        id: 'root',
+        component: 'Scorecard',
+        home: {name: 'Argentina', score: 2},
+        away: {name: 'Mexico', score: 0},
+        status: 'Full time',
+        competition: 'World Cup, Group C',
+      },
+    ],
+  },
   MarketSnapshot: {
     usage: [
       {
