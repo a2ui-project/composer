@@ -16,7 +16,7 @@
 
 import {Injectable, computed, inject, signal} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {formatJson} from '../../utils/json';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {
   McpClientManagerService,
@@ -42,6 +42,8 @@ export declare interface CustomInstructionsState {
   presets: CustomInstructionPreset[];
   activePresetId: string | null;
 }
+
+const MINIFIED_COMMON_TYPES_SCHEMA = JSON.stringify(COMMON_TYPES_SCHEMA);
 
 /**
  * Constructs dynamic system prompts based on the provided LLM intent and active catalog states.
@@ -104,8 +106,10 @@ export class ChatPromptFactoryService {
 
     return (
       (
-        this.generateSystemPrompt(formatJson(catalog), includeMultimodalGuidelines) +
-        mcpInstructions
+        this.generateSystemPrompt(
+          this.serializeCatalogForPrompt(catalog),
+          includeMultimodalGuidelines,
+        ) + mcpInstructions
       ).trimEnd() + customPromptSuffix
     );
   }
@@ -229,6 +233,57 @@ export class ChatPromptFactoryService {
   ### Available MCP Tools
   ${toolsMarkdown}
 `;
+  }
+
+  /**
+   * Serializes the catalog as compact JSON, pruning `$defs` entries that are not
+   * transitively referenced by `components` or `functions` (such as bundled
+   * duplicate `catalog_*` definitions).
+   */
+  private serializeCatalogForPrompt(catalog: Catalog): string {
+    if (!catalog.$defs || typeof catalog.$defs !== 'object' || Array.isArray(catalog.$defs)) {
+      return JSON.stringify(catalog);
+    }
+    const defs = catalog.$defs;
+    const referenced = new Set<string>();
+    this.collectLocalDefRefs(
+      {components: catalog.components, functions: catalog.functions},
+      referenced,
+    );
+    for (const currentKey of referenced) {
+      const defNode = defs[currentKey];
+      if (defNode !== undefined) {
+        this.collectLocalDefRefs(defNode, referenced);
+      }
+    }
+    const filteredDefs = Object.fromEntries(
+      Object.entries(defs).filter(([key]) => referenced.has(key)),
+    );
+    const prunedCatalog: Catalog = {...catalog};
+    if (Object.keys(filteredDefs).length > 0) {
+      prunedCatalog.$defs = filteredDefs;
+    } else {
+      delete prunedCatalog.$defs;
+    }
+    return JSON.stringify(prunedCatalog);
+  }
+
+  private collectLocalDefRefs(node: unknown, out: Set<string>): void {
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        this.collectLocalDefRefs(item, out);
+      }
+      return;
+    }
+    if (node !== null && typeof node === 'object') {
+      for (const [key, val] of Object.entries(node)) {
+        if (key === '$ref' && typeof val === 'string' && val.startsWith('#/$defs/')) {
+          out.add(val.slice('#/$defs/'.length));
+        } else {
+          this.collectLocalDefRefs(val, out);
+        }
+      }
+    }
   }
 
   private generateSystemPrompt(catalog: string, includeMultimodalGuidelines = false): string {
@@ -406,7 +461,7 @@ export class ChatPromptFactoryService {
   Common structural types referenced by $ref in the catalog schema (e.g.,
   DataBinding, Action, Event, DynamicString, etc.) are defined here:
   \`\`\`json
-  ${formatJson(COMMON_TYPES_SCHEMA)}
+  ${MINIFIED_COMMON_TYPES_SCHEMA}
   \`\`\`
 
   ## Editing the Current UI
