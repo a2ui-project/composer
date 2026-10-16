@@ -25,6 +25,10 @@ test.beforeEach(async ({page}) => {
 test.describe('Settings and Client Configuration', () => {
   test.describe('Custom Config Modification & Persistence', () => {
     test.beforeEach(async ({page}) => {
+      // The shipped config's default renderer is the copy deployed to GitHub Pages,
+      // which is built from main and needs the network. The test server also serves
+      // the sample at /samples/ng-basic-catalog/, built from this branch, so the
+      // journeys below run against this branch's renderer and bridge.
       await page.route('**/config.json', async route => {
         const response = await route.fetch();
         const config = await response.json();
