@@ -94,14 +94,8 @@ export class CatalogManagement {
         if (!catalogObj) {
           return null;
         }
-        if (typeof catalogObj.title === 'string') {
-          catalogObj.title = sanitizeHtml(catalogObj.title).toString();
-        }
-        if (typeof catalogObj.description === 'string') {
-          catalogObj.description = sanitizeHtml(catalogObj.description).toString();
-        }
         return {
-          catalog: catalogObj,
+          catalog: sanitizeCatalog(catalogObj),
           catalogString: record.catalogString,
           checksumHash: record.checksumHash,
         };
@@ -365,13 +359,7 @@ export class CatalogManagement {
             let catalogObj: Catalog;
             let catalogString: string;
             try {
-              catalogObj = structuredClone(payload as Catalog);
-              if (typeof catalogObj.title === 'string') {
-                catalogObj.title = sanitizeHtml(catalogObj.title).toString();
-              }
-              if (typeof catalogObj.description === 'string') {
-                catalogObj.description = sanitizeHtml(catalogObj.description).toString();
-              }
+              catalogObj = sanitizeCatalog(payload as Catalog);
               catalogString = stableStringify(catalogObj);
             } catch (err: unknown) {
               const errorMsg = 'Failed to clone or serialize catalog payload.';
@@ -453,6 +441,21 @@ export class CatalogManagement {
       )
       .subscribe();
   }
+}
+
+/**
+ * Returns a copy of a catalog with its title and description sanitized, the
+ * form in which Composer stores and displays a catalog a renderer sent.
+ */
+export function sanitizeCatalog(catalog: Catalog): Catalog {
+  const sanitized = structuredClone(catalog);
+  if (typeof sanitized.title === 'string') {
+    sanitized.title = sanitizeHtml(sanitized.title).toString();
+  }
+  if (typeof sanitized.description === 'string') {
+    sanitized.description = sanitizeHtml(sanitized.description).toString();
+  }
+  return sanitized;
 }
 
 function simpleHash(str: string): string {

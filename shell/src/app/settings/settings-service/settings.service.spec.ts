@@ -17,7 +17,7 @@
 import {TestBed} from '@angular/core/testing';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {signal, WritableSignal} from '@angular/core';
-import {SettingsService} from './settings.service';
+import {RendererOption, SettingsService} from './settings.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {
   StartupConfigStateService,
@@ -147,6 +147,19 @@ describe('SettingsService', () => {
 
     expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBe('dev');
     expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev');
+  });
+
+  it('does not persist a selection that startup resolution rejects', async () => {
+    const superseded = new Error(
+      "The renderer selection changed while this one was waiting for approval, so it wasn't applied.",
+    );
+    mockStartupResolution.setSelectedRendererId.mockRejectedValue(superseded);
+
+    await expect(service.selectRenderer('dev')).rejects.toBe(superseded);
+
+    expect(mockStartupResolution.setSelectedRendererId).toHaveBeenCalledWith('dev');
+    expect(mockLocalStorage.getItem(LocalStorageKey.SELECTED_RENDERER)).toBeNull();
+    expect(mockConfigProvider.setRendererUrl).not.toHaveBeenCalled();
   });
 
   it('removes selected renderer ID from local storage when selected renderer ID is null', async () => {
@@ -764,6 +777,34 @@ describe('SettingsService', () => {
           rendererUrl: 'example.com',
         }),
       ).toThrow('Custom renderer URL must start with http:// or https://');
+    });
+
+    it('updates rendererOptions() when a custom renderer is saved or deleted after it was read', () => {
+      mockStartupResolution.renderers.set({
+        default: {displayName: 'Default Static', rendererUrl: 'http://default.com'},
+      });
+      const staticOption: RendererOption = {
+        id: 'default',
+        name: 'Default Static',
+        rendererUrl: 'http://default.com',
+        readOnly: true,
+      };
+      expect(service.rendererOptions()).toEqual([staticOption]);
+
+      service.saveCustomRenderer({
+        id: 'custom-1',
+        name: 'Custom One',
+        rendererUrl: 'http://c1.com',
+      });
+
+      expect(service.rendererOptions()).toEqual([
+        staticOption,
+        {id: 'custom-1', name: 'Custom One', rendererUrl: 'http://c1.com', readOnly: false},
+      ]);
+
+      service.deleteCustomRenderer('custom-1');
+
+      expect(service.rendererOptions()).toEqual([staticOption]);
     });
 
     it('keeps custom renderers editable (readOnly: false) in getRenderers() after saveCustomRenderer(), resolves activeRenderer() for custom renderers, and allows editing and deleting them', () => {

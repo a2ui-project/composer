@@ -91,6 +91,8 @@ export class Settings implements OnInit {
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
 
   readonly selectedRendererId: WritableSignal<string | null> = signal<string | null>(null);
+  /** Why the last renderer selection failed, shown under the renderer selector. */
+  readonly rendererError: WritableSignal<string | null> = signal<string | null>(null);
   readonly selectedApiKeyId: Signal<string | null> = computed(() =>
     this.settingsService.selectedApiKeyId(),
   );
@@ -154,10 +156,18 @@ export class Settings implements OnInit {
   async onRendererSelected(rendererId: string): Promise<void> {
     const previousId = this.selectedRendererId();
     this.selectedRendererId.set(rendererId);
-    const success = await this.settingsService.selectRenderer(rendererId);
-
-    if (!success) {
-      this.selectedRendererId.set(previousId);
+    this.rendererError.set(null);
+    try {
+      if (!(await this.settingsService.selectRenderer(rendererId))) {
+        this.selectedRendererId.set(previousId);
+      }
+    } catch (error) {
+      // Show the renderer that is actually selected: another selection may have
+      // replaced this one while it waited for approval.
+      this.selectedRendererId.set(this.settingsService.selectedRendererId() || 'default');
+      this.rendererError.set(
+        error instanceof Error ? error.message : 'Could not change the renderer.',
+      );
     }
   }
 
