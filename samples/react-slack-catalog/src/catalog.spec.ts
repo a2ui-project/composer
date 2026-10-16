@@ -17,23 +17,26 @@
 import {MessageProcessor} from '@a2ui/web_core/v0_9';
 import Ajv2019, {type SchemaObject, type ValidateFunction} from 'ajv/dist/2019';
 import {describe, expect, it} from 'vitest';
-import {
-  SLACK_BASIC_COMPONENT_NAMES,
-  SLACK_CATALOG_ID,
-  slackCatalog,
-  slackCatalogJson,
-  TableSchema,
-} from './catalog';
+import {SLACK_CATALOG_ID, slackCatalog, slackCatalogJson} from './catalog';
 import dataBoundActionJson from '../public/examples/data-bound-action.json';
 import marketSnapshotJson from '../public/examples/market-snapshot.json';
-import {
-  DATA_BOUND_ACTION_MESSAGES,
-  MARKET_SNAPSHOT_MESSAGES,
-  SLACK_COMPONENT_USAGES,
-} from './examples';
-import {MarketSnapshotApi} from './market-snapshot';
+import {SLACK_COMPONENT_USAGES} from './examples';
+import {MarketSnapshotSchema} from './market-snapshot';
 
-const EXPECTED_COMPONENTS = [...SLACK_BASIC_COMPONENT_NAMES, 'Table', 'MarketSnapshot'].sort();
+const EXPECTED_COMPONENTS = [
+  'Text',
+  'Image',
+  'Divider',
+  'Row',
+  'Column',
+  'Card',
+  'Button',
+  'TextField',
+  'DateTimeInput',
+  'Table',
+  'MarketSnapshot',
+].sort();
+const TableSchema = slackCatalog.components.get('Table')!.schema;
 const COMMON_TYPES_SCHEMA: SchemaObject = {
   $id: 'common_types.json',
   type: 'object',
@@ -440,13 +443,12 @@ describe('Slack catalog schema payload', () => {
       searchedAt: '2026-09-16T12:00:00Z',
     };
 
-    expect(MarketSnapshotApi.schema.safeParse(snapshot).success).toBe(true);
+    expect(MarketSnapshotSchema.safeParse(snapshot).success).toBe(true);
     expect(
-      MarketSnapshotApi.schema.safeParse({...snapshot, markets: snapshot.markets.slice(0, 2)})
-        .success,
+      MarketSnapshotSchema.safeParse({...snapshot, markets: snapshot.markets.slice(0, 2)}).success,
     ).toBe(false);
     expect(
-      MarketSnapshotApi.schema.safeParse({
+      MarketSnapshotSchema.safeParse({
         ...snapshot,
         markets: [{...snapshot.markets[0], unexpected: true}, ...snapshot.markets.slice(1)],
       }).success,
@@ -472,8 +474,7 @@ describe('Slack catalog schema payload', () => {
   });
 
   it('exports data-bound Text and Button examples with public JSON parity', () => {
-    expect(dataBoundActionJson).toEqual(DATA_BOUND_ACTION_MESSAGES);
-    expect(DATA_BOUND_ACTION_MESSAGES).toEqual([
+    expect(dataBoundActionJson).toEqual([
       {
         version: 'v0.9',
         createSurface: {
@@ -502,7 +503,7 @@ describe('Slack catalog schema payload', () => {
         },
       },
     ]);
-    expect(DATA_BOUND_ACTION_MESSAGES[2]).toMatchObject({
+    expect(dataBoundActionJson[2]).toMatchObject({
       updateComponents: {
         components: expect.arrayContaining([
           expect.objectContaining({
@@ -524,8 +525,7 @@ describe('Slack catalog schema payload', () => {
   });
 
   it('exports a Mark-derived MarketSnapshot sequence with public JSON parity', () => {
-    expect(marketSnapshotJson).toEqual(MARKET_SNAPSHOT_MESSAGES);
-    expect(MARKET_SNAPSHOT_MESSAGES).toEqual([
+    expect(marketSnapshotJson).toEqual([
       {
         version: 'v0.9',
         createSurface: {

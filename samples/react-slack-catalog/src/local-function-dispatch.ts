@@ -15,15 +15,11 @@
  */
 
 import {type Action, type ComponentContext} from '@a2ui/web_core/v0_9';
+import {DiagnosticCode, DiagnosticLevel, type PreviewDiagnostic} from './preview-snapshot';
 
-export interface PreviewDiagnostic {
-  level: 'info' | 'warning' | 'error';
-  code: string;
-  message: string;
-  componentId?: string;
-}
-
-export interface LocalFunctionDispatchResult {
+/** What running a local function action reported. */
+interface LocalFunctionDispatchResult {
+  /** The function's errors, if it failed. */
   readonly diagnostics?: PreviewDiagnostic[];
 }
 
@@ -33,6 +29,13 @@ interface SurfaceError {
   expression?: string;
 }
 
+/**
+ * Runs an A2UI function-call action, such as `formatString`, in the preview
+ * instead of sending it to Composer. The sample's functions only read the data
+ * model, so running one has no effect beyond any errors it reports.
+ *
+ * @param componentId The component the action came from, for the diagnostics.
+ */
 export function dispatchReadOnlyLocalFunctionAction(
   context: ComponentContext,
   action: Action,
@@ -51,7 +54,7 @@ export function dispatchReadOnlyLocalFunctionAction(
     context.dataContext.resolveAction(action);
   } catch (error) {
     errors.push({
-      code: 'A2UI_LOCAL_FUNCTION_ERROR',
+      code: DiagnosticCode.A2UI_LOCAL_FUNCTION_ERROR,
       message: error instanceof Error ? error.message : String(error),
       expression: action.functionCall.call,
     });
@@ -65,8 +68,8 @@ export function dispatchReadOnlyLocalFunctionAction(
 
 function localFunctionDiagnostic(error: SurfaceError, componentId?: string): PreviewDiagnostic {
   return {
-    level: 'error',
-    code: error.code ?? 'A2UI_LOCAL_FUNCTION_ERROR',
+    level: DiagnosticLevel.ERROR,
+    code: error.code ?? DiagnosticCode.A2UI_LOCAL_FUNCTION_ERROR,
     message: localFunctionDiagnosticMessage(error),
     componentId,
   };

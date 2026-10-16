@@ -15,14 +15,18 @@
  */
 
 import {useEffect, useMemo, useState} from 'react';
-import {type PreviewSnapshot} from './preview-session';
+import {PreviewStatus, type PreviewSnapshot} from './preview-snapshot';
 
 interface BlockKitExportProps {
   readonly snapshot: PreviewSnapshot;
 }
 
+/**
+ * Shows the Slack Block Kit JSON for the current preview, ready to paste into
+ * Slack's Block Kit Builder or an app, with a button to copy it.
+ */
 export function BlockKitExport({snapshot}: BlockKitExportProps) {
-  const canCopy = snapshot.status === 'ready';
+  const canCopy = snapshot.status === PreviewStatus.READY;
   const blockKitJson = useMemo(
     () =>
       JSON.stringify(

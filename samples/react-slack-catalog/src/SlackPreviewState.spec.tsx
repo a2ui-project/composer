@@ -18,7 +18,12 @@ import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {SlackPreviewState} from './SlackPreviewState';
-import {type PreviewSnapshot} from './preview-session';
+import {
+  DiagnosticCode,
+  DiagnosticLevel,
+  PreviewStatus,
+  type PreviewSnapshot,
+} from './preview-snapshot';
 
 describe('SlackPreviewState', () => {
   let container: HTMLDivElement;
@@ -38,11 +43,11 @@ describe('SlackPreviewState', () => {
   });
 
   it.each<PreviewSnapshot>([
-    {revision: 0, status: 'empty', blocks: [], diagnostics: []},
+    {revision: 0, status: PreviewStatus.EMPTY, blocks: [], diagnostics: []},
     {
       revision: 1,
       surfaceId: 'surface-1',
-      status: 'empty',
+      status: PreviewStatus.EMPTY,
       blocks: [],
       diagnostics: [],
     },
@@ -54,7 +59,7 @@ describe('SlackPreviewState', () => {
     );
     expect(container.textContent).toContain('Describe a message in the assistant');
     expect(container.querySelector('[aria-label="Preview diagnostics"]')).toBeNull();
-    expect(container.textContent).not.toContain('A2UI_WAITING_FOR_COMPONENT');
+    expect(container.textContent).not.toContain(DiagnosticCode.A2UI_WAITING_FOR_COMPONENT);
     expect(buttonNamed('Export Block Kit')).toBeNull();
 
     renderPreview(readySnapshot(2, 'Created message'));
@@ -65,12 +70,12 @@ describe('SlackPreviewState', () => {
   it('keeps actionable diagnostics visible even when the root is missing', () => {
     renderPreview({
       revision: 1,
-      status: 'waiting',
+      status: PreviewStatus.WAITING,
       blocks: [],
       diagnostics: [
         {
-          level: 'warning',
-          code: 'A2UI_WAITING_FOR_COMPONENT',
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.A2UI_WAITING_FOR_COMPONENT,
           componentId: 'root',
           message: 'Check the root component',
         },
@@ -93,12 +98,12 @@ describe('SlackPreviewState', () => {
     renderPreview({
       revision: 2,
       surfaceId: 'surface-1',
-      status: 'waiting',
+      status: PreviewStatus.WAITING,
       blocks: [],
       diagnostics: [
         {
-          level: 'info',
-          code: 'A2UI_WAITING_FOR_COMPONENT',
+          level: DiagnosticLevel.INFO,
+          code: DiagnosticCode.A2UI_WAITING_FOR_COMPONENT,
           message: 'A2UI surface is waiting for component "summary"',
           componentId: 'summary',
         },
@@ -122,12 +127,12 @@ describe('SlackPreviewState', () => {
     renderPreview({
       revision: 2,
       surfaceId: 'surface-1',
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         {
-          level: 'error',
-          code: 'SLACK_UNSUPPORTED_COMPONENT',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.A2UI_UNSUPPORTED_COMPONENT,
           message: 'Unsupported component "Chart"',
         },
       ],
@@ -140,7 +145,7 @@ describe('SlackPreviewState', () => {
       'Slack preview could not render',
     );
     expect(container.querySelector('[aria-label="Preview diagnostics"]')?.textContent).toContain(
-      'error SLACK_UNSUPPORTED_COMPONENT Unsupported component "Chart"',
+      'error A2UI_UNSUPPORTED_COMPONENT Unsupported component "Chart"',
     );
   });
 
@@ -188,7 +193,7 @@ function readySnapshot(revision: number, text: string): PreviewSnapshot {
   return {
     revision,
     surfaceId: 'surface-1',
-    status: 'ready',
+    status: PreviewStatus.READY,
     blocks: [
       {
         type: 'section',

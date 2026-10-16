@@ -14,20 +14,13 @@
  * limitations under the License.
  */
 
-import {type A2uiMessage} from '@a2ui/web_core/v0_9';
 import {type ComponentUsages} from 'a2ui-bridge';
-import {SLACK_CATALOG_ID} from './catalog';
-
-export const EXAMPLE_INITIAL_DATA = {
-  greeting: 'Ready for review',
-  record: {
-    id: 'example-42',
-  },
-} as const;
 
 /**
  * One example per Slack catalog component. The renderer sends these to
  * Composer's Gallery, and the catalog tests check each against its schema.
+ * The Button and MarketSnapshot examples are also served, as complete message
+ * arrays, from `public/examples/`; the catalog tests keep the two in step.
  */
 export const SLACK_COMPONENT_USAGES = {
   Text: {
@@ -156,7 +149,12 @@ export const SLACK_COMPONENT_USAGES = {
         text: 'Acknowledge',
       },
     ],
-    data: EXAMPLE_INITIAL_DATA,
+    data: {
+      greeting: 'Ready for review',
+      record: {
+        id: 'example-42',
+      },
+    },
   },
   TextField: {
     usage: [
@@ -232,44 +230,3 @@ export const SLACK_COMPONENT_USAGES = {
     ],
   },
 } satisfies ComponentUsages;
-
-function createExampleMessages(surfaceId: string, usage: ComponentUsages[string]): A2uiMessage[] {
-  return [
-    {
-      version: 'v0.9',
-      createSurface: {
-        surfaceId,
-        catalogId: SLACK_CATALOG_ID,
-      },
-    },
-    ...(usage.data === undefined
-      ? []
-      : [
-          {
-            version: 'v0.9' as const,
-            updateDataModel: {
-              surfaceId,
-              path: '/',
-              value: usage.data,
-            },
-          },
-        ]),
-    {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId,
-        components: usage.usage,
-      },
-    },
-  ];
-}
-
-export const DATA_BOUND_ACTION_MESSAGES = createExampleMessages(
-  'data-bound-action',
-  SLACK_COMPONENT_USAGES.Button,
-);
-
-export const MARKET_SNAPSHOT_MESSAGES = createExampleMessages(
-  'market-snapshot',
-  SLACK_COMPONENT_USAGES.MarketSnapshot,
-);

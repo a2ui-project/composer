@@ -33,6 +33,7 @@ import {
   createSlackPreviewSession,
   type PreviewSession,
 } from './preview-session';
+import {DiagnosticCode, DiagnosticLevel, PreviewStatus} from './preview-snapshot';
 
 vi.mock('@tightknitai/storybook-addon-slack-block-kit', () => ({
   Renderer: ({blocks}: {blocks: unknown[]}) =>
@@ -165,7 +166,7 @@ describe('createSlackPreviewSession', () => {
     expect(session.getSnapshot()).toMatchObject({
       revision: 1,
       surfaceId: 'test-surface',
-      status: 'waiting',
+      status: PreviewStatus.WAITING,
       blocks: [],
     });
 
@@ -177,7 +178,7 @@ describe('createSlackPreviewSession', () => {
 
     expect(session.getSnapshot()).toMatchObject({
       revision: 2,
-      status: 'waiting',
+      status: PreviewStatus.WAITING,
     });
 
     session.processMessages([
@@ -192,7 +193,7 @@ describe('createSlackPreviewSession', () => {
 
     expect(session.getSnapshot()).toMatchObject({
       revision: 3,
-      status: 'ready',
+      status: PreviewStatus.READY,
     });
     expect(sectionText(session)).toBe('First value');
 
@@ -204,7 +205,7 @@ describe('createSlackPreviewSession', () => {
 
     expect(session.getSnapshot()).toMatchObject({
       revision: 4,
-      status: 'ready',
+      status: PreviewStatus.READY,
     });
     expect(sectionText(session)).toBe('Updated value');
     expect(Object.isFrozen(session.getSnapshot())).toBe(true);
@@ -240,7 +241,7 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     const staleActionId = actionIds(session)[0];
-    expect(session.getSnapshot().status).toBe('ready');
+    expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
 
     session.processMessages([
       createSurface('test-surface', 'https://example.com/catalogs/not-slack/v1'),
@@ -248,12 +249,12 @@ describe('createSlackPreviewSession', () => {
 
     expect(session.getSnapshot()).toMatchObject({
       revision: 2,
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'A2UI_PROCESS_MESSAGE_ERROR',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.A2UI_PROCESS_MESSAGE_ERROR,
         }),
       ],
     });
@@ -274,7 +275,7 @@ describe('createSlackPreviewSession', () => {
 
     expect(session.getSnapshot()).toMatchObject({
       revision: 3,
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(sectionText(session)).toBe('Recovered');
@@ -296,12 +297,12 @@ describe('createSlackPreviewSession', () => {
     expect(session.getSnapshot()).toMatchObject({
       revision: 1,
       surfaceId: 'test-surface',
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'A2UI_UNSUPPORTED_COMPONENT',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.A2UI_UNSUPPORTED_COMPONENT,
           componentId: 'root',
         }),
       ],
@@ -321,7 +322,7 @@ describe('createSlackPreviewSession', () => {
     expect(session.getSnapshot()).toMatchObject({
       revision: 2,
       surfaceId: 'test-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(sectionText(session)).toBe('Recovered from recreate');
@@ -337,14 +338,14 @@ describe('createSlackPreviewSession', () => {
 
     expect(session.getSnapshot()).toMatchObject({
       surfaceId: 'second-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
     });
 
     session.processMessages(readyTextSurfaceMessages('first-surface', 'First recreated'));
 
     expect(session.getSnapshot()).toMatchObject({
       surfaceId: 'first-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(sectionText(session)).toBe('First recreated');
@@ -360,7 +361,7 @@ describe('createSlackPreviewSession', () => {
 
     expect(session.getSnapshot()).toMatchObject({
       surfaceId: 'same-batch-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(sectionText(session)).toBe('Recreated same-batch text');
@@ -381,10 +382,10 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       diagnostics: [
         expect.objectContaining({
-          code: 'A2UI_PROCESS_MESSAGE_ERROR',
+          code: DiagnosticCode.A2UI_PROCESS_MESSAGE_ERROR,
         }),
       ],
     });
@@ -393,7 +394,7 @@ describe('createSlackPreviewSession', () => {
 
     expect(session.getSnapshot()).toMatchObject({
       surfaceId: 'partial-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(sectionText(session)).toBe('Recovered partial');
@@ -524,7 +525,7 @@ describe('createSlackPreviewSession', () => {
 
     expect(actions).toEqual([]);
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
   });
@@ -567,10 +568,10 @@ describe('createSlackPreviewSession', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(session.getSnapshot()).toMatchObject({
       revision: 1,
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
+          level: DiagnosticLevel.ERROR,
           code: 'EXPRESSION_ERROR',
           componentId: 'root',
         }),
@@ -722,7 +723,7 @@ describe('createSlackPreviewSession', () => {
     expect(processorSurfaces.surfaces).toHaveLength(1);
     expect(initialSnapshot).toMatchObject({
       surfaceId: 'live-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
     });
     expect(sectionText(session)).toBe('First value');
 
@@ -733,7 +734,7 @@ describe('createSlackPreviewSession', () => {
     const currentActionId = actionIds(session)[0];
     expect(refreshedSnapshot).toMatchObject({
       surfaceId: 'live-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
     });
     expect(sectionText(session)).toBe('Updated through live model');
     expect(refreshedSnapshot.revision).toBeGreaterThan(initialSnapshot.revision);
@@ -842,7 +843,7 @@ describe('createSlackPreviewSession', () => {
     session.processMessages([{version: 'v0.9', deleteSurface: {surfaceId: 'second-surface'}}]);
     expect(session.getSnapshot()).toMatchObject({
       surfaceId: 'first-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
     });
     expect(sectionText(session)).toBe('First surface');
 
@@ -883,7 +884,7 @@ describe('createSlackPreviewBridgeConfig', () => {
 
     expect(session.getSnapshot()).toMatchObject({
       revision: 2,
-      status: 'empty',
+      status: PreviewStatus.EMPTY,
       blocks: [],
       diagnostics: [],
     });
@@ -894,7 +895,7 @@ describe('createSlackPreviewBridgeConfig', () => {
       {version: 'v0.9', deleteSurface: {surfaceId: 'test-surface'}},
     ]);
 
-    expect(session.getSnapshot().status).toBe('empty');
+    expect(session.getSnapshot().status).toBe(PreviewStatus.EMPTY);
     expect(listener).toHaveBeenCalledTimes(3);
 
     config.onSurfaceCleared?.();

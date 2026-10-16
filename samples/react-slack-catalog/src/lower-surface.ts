@@ -18,11 +18,6 @@ import {
   ActionSchema,
   ComponentContext,
   GenericBinder,
-  MessageProcessor,
-  type A2uiClientAction,
-  type A2uiMessage,
-  type Action,
-  type ComponentApi,
   type SurfaceModel,
 } from '@a2ui/web_core/v0_9';
 import {
@@ -45,60 +40,44 @@ import {
 } from '@copilotkit/channels-ui';
 import {SLACK_LIMITS, markdownToMrkdwn, renderBlockKit} from '@copilotkit/channels-slack/render';
 import {type KnownBlock} from '@slack/types';
-import {
-  createEventActionDispatchEntry,
-  dispatchCurrentEventAction,
-  type EventActionDispatchEntry,
-} from './action-dispatch';
-import {slackCatalog} from './catalog';
-import {dispatchReadOnlyLocalFunctionAction} from './local-function-dispatch';
+import {type ActionDispatchEntry} from './action-dispatch';
 import {type MarketSnapshotProps} from './market-snapshot';
 import {
+  InputComponentType,
   createInputDispatchEntry,
   lowerFormInput,
-  readFormInputValue,
-  updateFormInput,
   type InputDispatchEntry,
 } from './form-input';
+import {
+  DiagnosticCode,
+  DiagnosticLevel,
+  PreviewStatus,
+  createEmptySnapshot,
+  type PreviewDiagnostic,
+  type PreviewSnapshot,
+} from './preview-snapshot';
+import {
+  SLACK_IMAGE_ALT_TEXT_MAX_LENGTH,
+  SLACK_IMAGE_TITLE_MAX_LENGTH,
+  SLACK_IMAGE_URL_MAX_LENGTH,
+  SLACK_TABLE_TEXT_MAX_LENGTH,
+  SLACK_TEXT_OBJECT_MAX_LENGTH,
+} from './slack-limits';
 
-const SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT = 10_000;
-const SLACK_TEXT_OBJECT_TEXT_LIMIT = SLACK_LIMITS.sectionText;
-const SLACK_IMAGE_URL_LIMIT = 3_000;
-const SLACK_IMAGE_ALT_TEXT_LIMIT = 2_000;
-const SLACK_IMAGE_TITLE_TEXT_LIMIT = SLACK_IMAGE_ALT_TEXT_LIMIT;
 const RFC3986_PATH = /^(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/]|%[0-9A-Fa-f]{2})*$/;
 const RFC3986_QUERY_OR_FRAGMENT = /^(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*$/;
 
-export interface PreviewDiagnostic {
-  level: 'info' | 'warning' | 'error';
-  code: string;
-  message: string;
-  componentId?: string;
-}
-
-export interface PreviewSnapshot {
-  revision: number;
-  /** Resets controls for external updates or rejected edits; valid local edits preserve focus. */
-  inputResetKey?: number;
-  surfaceId?: string;
-  status: 'empty' | 'waiting' | 'ready' | 'error';
-  blocks: KnownBlock[];
-  diagnostics: PreviewDiagnostic[];
-}
-
-export interface PreviewSession {
-  processMessages(messages: A2uiMessage[]): void;
-  getSnapshot(): PreviewSnapshot;
-  subscribe(listener: () => void): () => void;
-  subscribeSurfaceCreated(listener: (surface: SurfaceModel) => void): () => void;
-  dispatch(actionId: string): Promise<void>;
-  updateInput(actionId: string, value: string): void;
-  clear(): void;
-  dispose(): void;
-}
-
-export interface SlackLoweringPreviewSession extends PreviewSession {
-  getActiveSurfaceIds(): readonly string[];
+/**
+ * The result of lowering one A2UI surface to Slack: the snapshot to show and,
+ * when it rendered, the Slack actions and inputs it drew, by `action_id`.
+ */
+interface LoweredSurface {
+  /** The render, without the session's `inputResetKey`. */
+  readonly snapshot: PreviewSnapshot;
+  /** The buttons in `snapshot.blocks` and the A2UI actions they run. */
+  readonly actions: Map<string, ActionDispatchEntry>;
+  /** The inputs in `snapshot.blocks` and the data they write. */
+  readonly inputs: Map<string, InputDispatchEntry>;
 }
 
 interface ChildRef {
@@ -131,18 +110,6 @@ class LoweringError extends Error {
   }
 }
 
-type ActionDispatchEntry = EventActionDispatchEntry | LocalFunctionActionDispatchEntry;
-
-interface LocalFunctionActionDispatchEntry {
-  readonly actionId: string;
-  readonly revision: number;
-  readonly surface: SurfaceModel;
-  readonly surfaceId: string;
-  readonly sourceComponentId: string;
-  readonly basePath: string;
-  readonly action: Action;
-}
-
 interface LoweringState {
   readonly revision: number;
   readonly diagnostics: PreviewDiagnostic[];
@@ -154,353 +121,99 @@ interface LoweringState {
 interface OutputLimitEvidence {
   readonly blocksTrimmed: boolean;
   readonly actionsElementsTrimmed: boolean;
-  readonly truncatedCodes: ReadonlySet<string>;
+  readonly truncatedCodes: ReadonlySet<DiagnosticCode>;
 }
 
-type SubscriptionLike = {unsubscribe(): void};
+/**
+ * Lowers an A2UI surface, starting at its `root` component, to Slack Block Kit.
+ * Problems don't throw: they come back as an `ERROR` or `WAITING` snapshot with
+ * diagnostics, and no actions or inputs.
+ *
+ * @param revision The render number, used in the generated `action_id`s.
+ */
+export function lowerSurface(surface: SurfaceModel, revision: number): LoweredSurface {
+  const noControls = {actions: new Map(), inputs: new Map()};
+  if (surface.componentsModel.entries.next().done) {
+    return {snapshot: {...createEmptySnapshot(revision), surfaceId: surface.id}, ...noControls};
+  }
 
-interface ActiveSurfaceSubscription {
-  readonly surfaceId: string;
-  readonly unsubscribe: () => void;
-}
-
-export function createSlackPreviewSession(
-  actionHandler?: (action: A2uiClientAction) => void | Promise<void>,
-): SlackLoweringPreviewSession {
-  let processor = new MessageProcessor([slackCatalog], actionHandler);
-  let inputResetKey = 0;
-  let snapshot: PreviewSnapshot = {...emptySnapshot(0), inputResetKey};
-  let actions = new Map<string, ActionDispatchEntry>();
-  let inputs = new Map<string, InputDispatchEntry>();
-  let revision = 0;
-  let activeSurfaceSubscription: ActiveSurfaceSubscription | undefined;
-  let lifecycleSubscriptions: SubscriptionLike[] = [];
-  let processingBatch = false;
-  let disposed = false;
-  const listeners = new Set<() => void>();
-  const surfaceCreatedListeners = new Set<(surface: SurfaceModel) => void>();
-
-  const publish = (
-    next: PreviewSnapshot,
-    nextActions = new Map<string, ActionDispatchEntry>(),
-    nextInputs = new Map<string, InputDispatchEntry>(),
-  ) => {
-    snapshot = {...next, inputResetKey};
-    actions = nextActions;
-    inputs = nextInputs;
-    for (const listener of listeners) {
-      listener();
-    }
+  const state: LoweringState = {
+    revision,
+    diagnostics: [],
+    actions: new Map(),
+    inputs: new Map(),
+    nextActionOrdinal: 1,
   };
 
-  const clearActiveSurfaceSubscription = () => {
-    activeSurfaceSubscription?.unsubscribe();
-    activeSurfaceSubscription = undefined;
-  };
-
-  const subscribeToSurface = (surface: SurfaceModel) => {
-    clearActiveSurfaceSubscription();
-    const subscription = surface.dataModel.subscribe('/', () => {
-      if (disposed || processingBatch) {
-        return;
-      }
-      rerender();
-    });
-    activeSurfaceSubscription = {
-      surfaceId: surface.id,
-      unsubscribe: () => {
-        subscription.unsubscribe();
-      },
-    };
-  };
-
-  const unsubscribeFromProcessorLifecycle = () => {
-    for (const subscription of lifecycleSubscriptions) {
-      subscription.unsubscribe();
-    }
-    lifecycleSubscriptions = [];
-    clearActiveSurfaceSubscription();
-  };
-
-  const subscribeToProcessorLifecycle = () => {
-    lifecycleSubscriptions = [
-      processor.onSurfaceCreated(surface => {
-        subscribeToSurface(surface);
-        for (const listener of surfaceCreatedListeners) {
-          listener(surface);
-        }
-      }),
-      processor.onSurfaceDeleted(surfaceId => {
-        if (activeSurfaceSubscription?.surfaceId !== surfaceId) {
-          return;
-        }
-        clearActiveSurfaceSubscription();
-        const surface = lastSurface(processor);
-        if (surface) {
-          subscribeToSurface(surface);
-        }
-      }),
-    ];
-  };
-
-  const rerender = () => {
-    revision += 1;
-    const surface = lastSurface(processor);
-    if (!surface) {
-      publish(emptySnapshot(revision));
-      return;
-    }
-    if (surface.componentsModel.entries.next().done) {
-      publish({...emptySnapshot(revision), surfaceId: surface.id});
-      return;
-    }
-
-    const state: LoweringState = {
-      revision,
-      diagnostics: [],
-      actions: new Map(),
-      inputs: new Map(),
-      nextActionOrdinal: 1,
-    };
-
-    try {
-      const ir = wrapTopLevelButtons(lowerComponent(surface, 'root', '/', new Set(), state));
-      const limitEvidence = collectOutputLimitEvidence(ir);
-      const blocks = renderBlockKit(ir);
-      const nextActions = filterActionsForBlocks(state.actions, blocks, state.diagnostics);
-      validateSlackOutput(blocks);
-      collectOutputLimitDiagnostics(
-        state.actions.size,
-        nextActions.size,
-        limitEvidence,
-        state.diagnostics,
-      );
-      publish(
-        {
-          revision,
-          surfaceId: surface.id,
-          status: 'ready',
-          blocks,
-          diagnostics: state.diagnostics,
-        },
-        nextActions,
-        new Map([...state.inputs].filter(([id]) => collectActionIds(blocks).has(id))),
-      );
-    } catch (error) {
-      if (error instanceof WaitingForComponentError) {
-        publish({
-          revision,
-          surfaceId: surface.id,
-          status: 'waiting',
-          blocks: [],
-          diagnostics: [
-            {
-              level: 'info',
-              code: 'A2UI_WAITING_FOR_COMPONENT',
-              message: error.message,
-              componentId: error.componentId,
-            },
-          ],
-        });
-        return;
-      }
-
-      const diagnostic =
-        error instanceof LoweringError
-          ? {
-              level: 'error' as const,
-              code: error.code,
-              message: error.message,
-              componentId: error.componentId,
-            }
-          : {
-              level: 'error' as const,
-              code: 'A2UI_LOWERING_ERROR',
-              message: error instanceof Error ? error.message : String(error),
-            };
-
-      publish({
+  try {
+    const ir = wrapTopLevelButtons(lowerComponent(surface, 'root', '/', new Set(), state));
+    const limitEvidence = collectOutputLimitEvidence(ir);
+    const blocks = renderBlockKit(ir);
+    const actions = filterActionsForBlocks(state.actions, blocks, state.diagnostics);
+    validateSlackOutput(blocks);
+    collectOutputLimitDiagnostics(
+      state.actions.size,
+      actions.size,
+      limitEvidence,
+      state.diagnostics,
+    );
+    const renderedActionIds = collectActionIds(blocks);
+    return {
+      snapshot: {
         revision,
         surfaceId: surface.id,
-        status: 'error',
-        blocks: [],
-        diagnostics: [diagnostic],
-      });
-    }
-  };
-
-  subscribeToProcessorLifecycle();
-
-  const session: SlackLoweringPreviewSession = {
-    processMessages(messages) {
-      if (disposed) {
-        return;
-      }
-      inputResetKey += 1;
-      processingBatch = true;
-      try {
-        processor.processMessages(messages);
-        processingBatch = false;
-        rerender();
-      } catch (error) {
-        processingBatch = false;
-        revision += 1;
-        actions.clear();
-        publish({
+        status: PreviewStatus.READY,
+        blocks,
+        diagnostics: state.diagnostics,
+      },
+      actions,
+      inputs: new Map([...state.inputs].filter(([id]) => renderedActionIds.has(id))),
+    };
+  } catch (error) {
+    if (error instanceof WaitingForComponentError) {
+      return {
+        snapshot: {
           revision,
-          status: 'error',
+          surfaceId: surface.id,
+          status: PreviewStatus.WAITING,
           blocks: [],
           diagnostics: [
             {
-              level: 'error',
-              code: 'A2UI_PROCESS_MESSAGE_ERROR',
-              message: error instanceof Error ? error.message : String(error),
+              level: DiagnosticLevel.INFO,
+              code: DiagnosticCode.A2UI_WAITING_FOR_COMPONENT,
+              message: error.message,
+              componentId: error.componentId,
             },
           ],
-        });
-      }
-    },
-
-    getSnapshot() {
-      return snapshot;
-    },
-
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-
-    subscribeSurfaceCreated(listener) {
-      surfaceCreatedListeners.add(listener);
-      return () => {
-        surfaceCreatedListeners.delete(listener);
-      };
-    },
-
-    async dispatch(actionId) {
-      const entry = actions.get(actionId);
-      if (!entry) {
-        return;
-      }
-
-      const surface = lastSurface(processor);
-      if (!isCurrentActionEntry(entry, surface)) {
-        return;
-      }
-
-      if (!('functionCall' in entry.action)) {
-        await dispatchCurrentEventAction(actionId, {
-          surface,
-          registry: new Map([[actionId, entry]]),
-        });
-        return;
-      }
-
-      const context = new ComponentContext(surface, entry.sourceComponentId, entry.basePath);
-      const result = dispatchReadOnlyLocalFunctionAction(
-        context,
-        entry.action,
-        entry.sourceComponentId,
-      );
-      if (!result.diagnostics?.length) {
-        return;
-      }
-
-      publish(
-        {
-          ...snapshot,
-          diagnostics: [...snapshot.diagnostics, ...result.diagnostics],
         },
-        actions,
-        inputs,
-      );
-    },
+        ...noControls,
+      };
+    }
 
-    updateInput(actionId, value) {
-      if (disposed) {
-        return;
-      }
-      const entry = inputs.get(actionId);
-      if (!entry || entry.revision !== revision || entry.surface !== lastSurface(processor)) {
-        return;
-      }
-      try {
-        const siblingValues = [...inputs.values()]
-          .filter(sibling => sibling.actionId !== actionId)
-          .map(sibling => ({entry: sibling, value: readFormInputValue(sibling)}));
-        updateFormInput(entry, value);
-        if (
-          siblingValues.some(
-            sibling => !Object.is(readFormInputValue(sibling.entry), sibling.value),
-          )
-        ) {
-          inputResetKey += 1;
-          publish(snapshot, actions, inputs);
-        }
-      } catch (error) {
-        inputResetKey += 1;
-        publish(
-          {
-            ...snapshot,
-            diagnostics: [
-              ...snapshot.diagnostics.filter(diagnostic => diagnostic.code !== 'A2UI_INPUT_ERROR'),
-              {
-                level: 'error',
-                code: 'A2UI_INPUT_ERROR',
-                componentId: entry.componentId,
-                message: error instanceof Error ? error.message : String(error),
-              },
-            ],
-          },
-          actions,
-          inputs,
-        );
-      }
-    },
-
-    clear() {
-      if (disposed) {
-        return;
-      }
-      inputResetKey += 1;
-      unsubscribeFromProcessorLifecycle();
-      processor.model.dispose();
-      processor = new MessageProcessor([slackCatalog], actionHandler);
-      subscribeToProcessorLifecycle();
-      revision += 1;
-      publish(emptySnapshot(revision));
-    },
-
-    dispose() {
-      if (disposed) {
-        return;
-      }
-      disposed = true;
-      unsubscribeFromProcessorLifecycle();
-      processor.model.dispose();
-      listeners.clear();
-      surfaceCreatedListeners.clear();
-      actions.clear();
-      inputs.clear();
-      snapshot = {...emptySnapshot(revision), inputResetKey};
-    },
-    getActiveSurfaceIds() {
-      return Array.from(processor.model.surfacesMap.keys());
-    },
-  };
-
-  return session;
-}
-
-function emptySnapshot(revision: number): PreviewSnapshot {
-  return {
-    revision,
-    status: 'empty',
-    blocks: [],
-    diagnostics: [],
-  };
+    const diagnostic: PreviewDiagnostic =
+      error instanceof LoweringError
+        ? {
+            level: DiagnosticLevel.ERROR,
+            code: error.code,
+            message: error.message,
+            componentId: error.componentId,
+          }
+        : {
+            level: DiagnosticLevel.ERROR,
+            code: DiagnosticCode.A2UI_LOWERING_ERROR,
+            message: error instanceof Error ? error.message : String(error),
+          };
+    return {
+      snapshot: {
+        revision,
+        surfaceId: surface.id,
+        status: PreviewStatus.ERROR,
+        blocks: [],
+        diagnostics: [diagnostic],
+      },
+      ...noControls,
+    };
+  }
 }
 
 function wrapTopLevelButtons(nodes: ChannelNode[]): ChannelNode[] {
@@ -540,8 +253,8 @@ function filterActionsForBlocks(
   const filteredCount = registeredActions.size - nextActions.size;
   if (filteredCount > 0) {
     diagnostics.push({
-      level: 'warning',
-      code: 'SLACK_ACTION_REGISTRY_FILTERED',
+      level: DiagnosticLevel.WARNING,
+      code: DiagnosticCode.SLACK_ACTION_REGISTRY_FILTERED,
       message: `${filteredCount} action ${
         filteredCount === 1 ? 'ID was' : 'IDs were'
       } omitted because it is not present in the final Slack output.`,
@@ -550,7 +263,8 @@ function filterActionsForBlocks(
   return nextActions;
 }
 
-function collectActionIds(value: unknown, actionIds = new Set<string>()): Set<string> {
+/** Every Slack `action_id` in some Block Kit, such as a snapshot's blocks. */
+export function collectActionIds(value: unknown, actionIds = new Set<string>()): Set<string> {
   if (Array.isArray(value)) {
     for (const item of value) {
       collectActionIds(item, actionIds);
@@ -573,7 +287,7 @@ function collectActionIds(value: unknown, actionIds = new Set<string>()): Set<st
 function validateSlackOutput(blocks: readonly KnownBlock[]): void {
   if (blocks.length > SLACK_LIMITS.blocksPerMessage) {
     throw new LoweringError(
-      'SLACK_BLOCK_LIMIT_EXCEEDED',
+      DiagnosticCode.SLACK_BLOCK_LIMIT_EXCEEDED,
       `Slack output rendered ${blocks.length} blocks; the message limit is ${SLACK_LIMITS.blocksPerMessage}.`,
     );
   }
@@ -585,19 +299,19 @@ function validateSlackOutput(blocks: readonly KnownBlock[]): void {
       assertTextLimit(
         blockText(block),
         SLACK_LIMITS.headerText,
-        'SLACK_HEADER_TEXT_LIMIT_EXCEEDED',
+        DiagnosticCode.SLACK_HEADER_TEXT_LIMIT_EXCEEDED,
       );
     }
     if (blockType === 'section') {
       assertTextLimit(
         blockText(block),
         SLACK_LIMITS.sectionText,
-        'SLACK_SECTION_TEXT_LIMIT_EXCEEDED',
+        DiagnosticCode.SLACK_SECTION_TEXT_LIMIT_EXCEEDED,
       );
       const fields = arrayField(block, 'fields');
       if (fields.length > SLACK_LIMITS.fieldsPerSection) {
         throw new LoweringError(
-          'SLACK_SECTION_FIELDS_LIMIT_EXCEEDED',
+          DiagnosticCode.SLACK_SECTION_FIELDS_LIMIT_EXCEEDED,
           `Slack output rendered ${fields.length} section fields; the limit is ${SLACK_LIMITS.fieldsPerSection}.`,
         );
       }
@@ -605,7 +319,7 @@ function validateSlackOutput(blocks: readonly KnownBlock[]): void {
         assertTextLimit(
           textObjectText(field),
           SLACK_LIMITS.fieldText,
-          'SLACK_SECTION_FIELD_TEXT_LIMIT_EXCEEDED',
+          DiagnosticCode.SLACK_SECTION_FIELD_TEXT_LIMIT_EXCEEDED,
         );
       }
     }
@@ -613,7 +327,7 @@ function validateSlackOutput(blocks: readonly KnownBlock[]): void {
       const elements = arrayField(block, 'elements');
       if (elements.length > SLACK_LIMITS.actionsElements) {
         throw new LoweringError(
-          'SLACK_ACTIONS_ELEMENTS_LIMIT_EXCEEDED',
+          DiagnosticCode.SLACK_ACTIONS_ELEMENTS_LIMIT_EXCEEDED,
           `Slack output rendered ${elements.length} action elements; the limit is ${SLACK_LIMITS.actionsElements}.`,
         );
       }
@@ -630,14 +344,18 @@ function validateSlackOutput(blocks: readonly KnownBlock[]): void {
     if (blockType === 'table') {
       const cellTexts = tableCellTexts(block);
       aggregateTableLength += cellTexts.reduce((sum, text) => sum + text.length, 0);
-      if (aggregateTableLength > SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT) {
+      if (aggregateTableLength > SLACK_TABLE_TEXT_MAX_LENGTH) {
         throw new LoweringError(
-          'SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT_EXCEEDED',
-          `Slack output rendered ${aggregateTableLength} aggregate table cell characters; the table and message limit is ${SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT}.`,
+          DiagnosticCode.SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT_EXCEEDED,
+          `Slack output rendered ${aggregateTableLength} aggregate table cell characters; the table and message limit is ${SLACK_TABLE_TEXT_MAX_LENGTH}.`,
         );
       }
       for (const cellText of cellTexts) {
-        assertTextLimit(cellText, SLACK_LIMITS.cellText, 'SLACK_TABLE_CELL_TEXT_LIMIT_EXCEEDED');
+        assertTextLimit(
+          cellText,
+          SLACK_LIMITS.cellText,
+          DiagnosticCode.SLACK_TABLE_CELL_TEXT_LIMIT_EXCEEDED,
+        );
       }
     }
   }
@@ -647,14 +365,18 @@ function validateActionElement(element: unknown): void {
   if (stringField(element, 'type') !== 'button') {
     return;
   }
-  assertTextLimit(blockText(element), SLACK_LIMITS.buttonText, 'SLACK_BUTTON_TEXT_LIMIT_EXCEEDED');
+  assertTextLimit(
+    blockText(element),
+    SLACK_LIMITS.buttonText,
+    DiagnosticCode.SLACK_BUTTON_TEXT_LIMIT_EXCEEDED,
+  );
 }
 
 function validateContextBlock(block: unknown): void {
   const elements = arrayField(block, 'elements');
   if (elements.length > SLACK_LIMITS.contextElements) {
     throw new LoweringError(
-      'SLACK_CONTEXT_ELEMENTS_LIMIT_EXCEEDED',
+      DiagnosticCode.SLACK_CONTEXT_ELEMENTS_LIMIT_EXCEEDED,
       `Slack output rendered ${elements.length} context elements; the limit is ${SLACK_LIMITS.contextElements}.`,
     );
   }
@@ -664,15 +386,15 @@ function validateContextBlock(block: unknown): void {
     if (elementType === 'mrkdwn' || elementType === 'plain_text') {
       assertTextLimit(
         textObjectText(element),
-        SLACK_TEXT_OBJECT_TEXT_LIMIT,
-        'SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED',
+        SLACK_TEXT_OBJECT_MAX_LENGTH,
+        DiagnosticCode.SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED,
       );
     }
     if (elementType === 'image') {
       assertTextLimit(
         stringField(element, 'image_url'),
-        SLACK_IMAGE_URL_LIMIT,
-        'SLACK_CONTEXT_IMAGE_URL_LIMIT_EXCEEDED',
+        SLACK_IMAGE_URL_MAX_LENGTH,
+        DiagnosticCode.SLACK_CONTEXT_IMAGE_URL_LIMIT_EXCEEDED,
       );
     }
   }
@@ -681,22 +403,22 @@ function validateContextBlock(block: unknown): void {
 function validateImageBlock(block: unknown): void {
   assertTextLimit(
     stringField(block, 'image_url'),
-    SLACK_IMAGE_URL_LIMIT,
-    'SLACK_IMAGE_URL_LIMIT_EXCEEDED',
+    SLACK_IMAGE_URL_MAX_LENGTH,
+    DiagnosticCode.SLACK_IMAGE_URL_LIMIT_EXCEEDED,
   );
   assertTextLimit(
     stringField(block, 'alt_text'),
-    SLACK_IMAGE_ALT_TEXT_LIMIT,
-    'SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED',
+    SLACK_IMAGE_ALT_TEXT_MAX_LENGTH,
+    DiagnosticCode.SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED,
   );
   assertTextLimit(
     textObjectText(recordField(block, 'title')),
-    SLACK_IMAGE_TITLE_TEXT_LIMIT,
-    'SLACK_IMAGE_TITLE_TEXT_LIMIT_EXCEEDED',
+    SLACK_IMAGE_TITLE_MAX_LENGTH,
+    DiagnosticCode.SLACK_IMAGE_TITLE_TEXT_LIMIT_EXCEEDED,
   );
 }
 
-function assertTextLimit(text: string | undefined, limit: number, code: string): void {
+function assertTextLimit(text: string | undefined, limit: number, code: DiagnosticCode): void {
   if (text === undefined || text.length <= limit) {
     return;
   }
@@ -714,16 +436,16 @@ function collectOutputLimitDiagnostics(
 ): void {
   if (evidence.blocksTrimmed) {
     pushDiagnostic(diagnostics, {
-      level: 'warning',
-      code: 'SLACK_BLOCKS_TRIMMED',
+      level: DiagnosticLevel.WARNING,
+      code: DiagnosticCode.SLACK_BLOCKS_TRIMMED,
       message: `Slack output was trimmed to the ${SLACK_LIMITS.blocksPerMessage} block message limit.`,
     });
   }
 
   if (registeredActionCount > survivingActionCount && evidence.actionsElementsTrimmed) {
     pushDiagnostic(diagnostics, {
-      level: 'warning',
-      code: 'SLACK_ACTIONS_ELEMENTS_TRIMMED',
+      level: DiagnosticLevel.WARNING,
+      code: DiagnosticCode.SLACK_ACTIONS_ELEMENTS_TRIMMED,
       message: `Slack output was trimmed to the ${SLACK_LIMITS.actionsElements} element actions block limit.`,
     });
   }
@@ -740,19 +462,19 @@ function pushDiagnostic(diagnostics: PreviewDiagnostic[], diagnostic: PreviewDia
   diagnostics.push(diagnostic);
 }
 
-function pushTruncationDiagnostic(diagnostics: PreviewDiagnostic[], code: string): void {
-  const messages: Record<string, string> = {
-    SLACK_HEADER_TEXT_TRUNCATED: `Slack header text was truncated to ${SLACK_LIMITS.headerText} characters.`,
-    SLACK_SECTION_TEXT_TRUNCATED: `Slack section text was truncated to ${SLACK_LIMITS.sectionText} characters.`,
-    SLACK_BUTTON_TEXT_TRUNCATED: `Slack button text was truncated to ${SLACK_LIMITS.buttonText} characters.`,
-    SLACK_TABLE_CELL_TEXT_TRUNCATED: `Slack table cell text was truncated to ${SLACK_LIMITS.cellText} characters.`,
+function pushTruncationDiagnostic(diagnostics: PreviewDiagnostic[], code: DiagnosticCode): void {
+  const messages: Partial<Record<DiagnosticCode, string>> = {
+    [DiagnosticCode.SLACK_HEADER_TEXT_TRUNCATED]: `Slack header text was truncated to ${SLACK_LIMITS.headerText} characters.`,
+    [DiagnosticCode.SLACK_SECTION_TEXT_TRUNCATED]: `Slack section text was truncated to ${SLACK_LIMITS.sectionText} characters.`,
+    [DiagnosticCode.SLACK_BUTTON_TEXT_TRUNCATED]: `Slack button text was truncated to ${SLACK_LIMITS.buttonText} characters.`,
+    [DiagnosticCode.SLACK_TABLE_CELL_TEXT_TRUNCATED]: `Slack table cell text was truncated to ${SLACK_LIMITS.cellText} characters.`,
   };
   const message = messages[code];
   if (!message) {
     return;
   }
   pushDiagnostic(diagnostics, {
-    level: 'warning',
+    level: DiagnosticLevel.WARNING,
     code,
     message,
   });
@@ -815,7 +537,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function collectOutputLimitEvidence(nodes: readonly ChannelNode[]): OutputLimitEvidence {
-  const truncatedCodes = new Set<string>();
+  const truncatedCodes = new Set<DiagnosticCode>();
   const visit = (node: ChannelNode): boolean => {
     let actionsElementsTrimmed = false;
     const nodeType = String(node.type);
@@ -825,7 +547,7 @@ function collectOutputLimitEvidence(nodes: readonly ChannelNode[]): OutputLimitE
         truncatedCodes,
         collectText([node]),
         SLACK_LIMITS.headerText,
-        'SLACK_HEADER_TEXT_TRUNCATED',
+        DiagnosticCode.SLACK_HEADER_TEXT_TRUNCATED,
       );
     }
     if (nodeType === 'section' || nodeType === 'markdown') {
@@ -833,7 +555,7 @@ function collectOutputLimitEvidence(nodes: readonly ChannelNode[]): OutputLimitE
         truncatedCodes,
         markdownToMrkdwn(collectText([node])),
         SLACK_LIMITS.sectionText,
-        'SLACK_SECTION_TEXT_TRUNCATED',
+        DiagnosticCode.SLACK_SECTION_TEXT_TRUNCATED,
       );
     }
     if (nodeType === 'actions') {
@@ -849,7 +571,7 @@ function collectOutputLimitEvidence(nodes: readonly ChannelNode[]): OutputLimitE
         truncatedCodes,
         collectText([node]),
         SLACK_LIMITS.buttonText,
-        'SLACK_BUTTON_TEXT_TRUNCATED',
+        DiagnosticCode.SLACK_BUTTON_TEXT_TRUNCATED,
       );
     } else if (nodeType === 'table') {
       for (const text of tableSourceCellTexts(node)) {
@@ -857,7 +579,7 @@ function collectOutputLimitEvidence(nodes: readonly ChannelNode[]): OutputLimitE
           truncatedCodes,
           text,
           SLACK_LIMITS.cellText,
-          'SLACK_TABLE_CELL_TEXT_TRUNCATED',
+          DiagnosticCode.SLACK_TABLE_CELL_TEXT_TRUNCATED,
         );
       }
     } else {
@@ -881,10 +603,10 @@ function collectOutputLimitEvidence(nodes: readonly ChannelNode[]): OutputLimitE
 }
 
 function addTruncationEvidence(
-  truncatedCodes: Set<string>,
+  truncatedCodes: Set<DiagnosticCode>,
   text: string,
   limit: number,
-  code: string,
+  code: DiagnosticCode,
 ): void {
   if (text.length > limit) {
     truncatedCodes.add(code);
@@ -962,10 +684,6 @@ function isChannelNode(value: unknown): value is ChannelNode {
   return isRecord(value) && typeof value.type === 'string' && isRecord(value.props);
 }
 
-function lastSurface(processor: MessageProcessor<ComponentApi>): SurfaceModel | undefined {
-  return [...processor.model.surfacesMap.values()].at(-1);
-}
-
 function lowerComponent(
   surface: SurfaceModel,
   componentId: string,
@@ -975,7 +693,7 @@ function lowerComponent(
 ): ChannelNode[] {
   if (ancestors.has(componentId)) {
     throw new LoweringError(
-      'A2UI_COMPONENT_CYCLE',
+      DiagnosticCode.A2UI_COMPONENT_CYCLE,
       `Cyclic A2UI component reference at "${componentId}"`,
       componentId,
     );
@@ -989,7 +707,7 @@ function lowerComponent(
   const api = surface.catalog.components.get(model.type);
   if (!api) {
     throw new LoweringError(
-      'A2UI_UNSUPPORTED_COMPONENT',
+      DiagnosticCode.A2UI_UNSUPPORTED_COMPONENT,
       `Unsupported A2UI component "${model.type}"`,
       componentId,
     );
@@ -998,7 +716,7 @@ function lowerComponent(
   const validation = api.schema.safeParse(model.properties);
   if (!validation.success) {
     throw new LoweringError(
-      'A2UI_INVALID_PROPS',
+      DiagnosticCode.A2UI_INVALID_PROPS,
       `Invalid props for A2UI component "${componentId}": ${validation.error.message}`,
       componentId,
     );
@@ -1068,7 +786,7 @@ interface LowerComponentContext {
   readonly rawProps: Readonly<Record<string, unknown>>;
   readonly children: (id: string, basePath?: string) => Renderable;
   readonly dispatch: (action: unknown) => string;
-  readonly input: (type: 'TextField' | 'DateTimeInput') => InputDispatchEntry;
+  readonly input: (type: InputComponentType) => InputDispatchEntry;
   readonly diagnostics: PreviewDiagnostic[];
 }
 
@@ -1090,24 +808,25 @@ function lowerSupportedComponent(
       return lowerLayout(props, context, 'Column');
     case 'Card':
       context.diagnostics.push({
-        level: 'warning',
-        code: 'SLACK_LAYOUT_FLATTENED',
+        level: DiagnosticLevel.WARNING,
+        code: DiagnosticCode.SLACK_LAYOUT_FLATTENED,
         message: 'Slack does not render Card containers; its child was flattened.',
         componentId: context.componentId,
       });
       return props.child ? context.children(String(props.child)) : [];
     case 'Button':
       return lowerButton(props, context);
-    case 'TextField':
-    case 'DateTimeInput':
+    case InputComponentType.TEXT_FIELD:
+    case InputComponentType.DATE_TIME_INPUT:
       return lowerFormInput(context.input(type), props);
     case 'Table':
       return lowerTable(props, context);
     case 'MarketSnapshot':
-      return lowerMarketSnapshot(props as unknown as MarketSnapshotProps, context);
+      // `lowerComponent` validated these props against MarketSnapshotSchema.
+      return lowerMarketSnapshot(props as MarketSnapshotProps, context);
     default:
       throw new LoweringError(
-        'A2UI_UNSUPPORTED_COMPONENT',
+        DiagnosticCode.A2UI_UNSUPPORTED_COMPONENT,
         `Unsupported A2UI component "${type}"`,
         context.componentId,
       );
@@ -1123,8 +842,8 @@ function lowerText(
   if (['h1', 'h2', 'h3', 'h4', 'h5'].includes(variant)) {
     if (variant !== 'h1') {
       context.diagnostics.push({
-        level: 'warning',
-        code: 'SLACK_TEXT_VARIANT_APPROXIMATED',
+        level: DiagnosticLevel.WARNING,
+        code: DiagnosticCode.SLACK_TEXT_VARIANT_APPROXIMATED,
         message: `Slack renders ${variant} text as a header block.`,
         componentId: context.componentId,
       });
@@ -1146,8 +865,8 @@ function lowerImage(
 
   if (props.fit !== undefined || props.variant !== undefined) {
     context.diagnostics.push({
-      level: 'warning',
-      code: 'SLACK_IMAGE_STYLE_APPROXIMATED',
+      level: DiagnosticLevel.WARNING,
+      code: DiagnosticCode.SLACK_IMAGE_STYLE_APPROXIMATED,
       message: 'Slack image blocks do not preserve fit or variant style hints.',
       componentId: context.componentId,
     });
@@ -1161,7 +880,7 @@ function lowerImage(
 function slackImageUrl(value: unknown, componentId: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new LoweringError(
-      'A2UI_INVALID_IMAGE_URL',
+      DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       'Image requires a non-empty URL string for Slack image_url.',
       componentId,
     );
@@ -1172,7 +891,7 @@ function slackImageUrl(value: unknown, componentId: string): string {
     parsedUrl = new URL(value);
   } catch {
     throw new LoweringError(
-      'A2UI_INVALID_IMAGE_URL',
+      DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       'Image requires an absolute URL string for Slack image_url.',
       componentId,
     );
@@ -1180,7 +899,7 @@ function slackImageUrl(value: unknown, componentId: string): string {
 
   if (!['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.hostname.length === 0) {
     throw new LoweringError(
-      'A2UI_INVALID_IMAGE_URL',
+      DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       'Image requires an HTTP(S) URL with a host for Slack image_url.',
       componentId,
     );
@@ -1195,7 +914,7 @@ function slackImageUrl(value: unknown, componentId: string): string {
     !RFC3986_QUERY_OR_FRAGMENT.test(parsedUrl.hash.slice(1))
   ) {
     throw new LoweringError(
-      'A2UI_INVALID_IMAGE_URL',
+      DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       'Image requires a valid URI string for Slack image_url.',
       componentId,
     );
@@ -1207,7 +926,7 @@ function slackImageUrl(value: unknown, componentId: string): string {
 function slackImageAltText(value: unknown, componentId: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new LoweringError(
-      'A2UI_INVALID_IMAGE_ALT_TEXT',
+      DiagnosticCode.A2UI_INVALID_IMAGE_ALT_TEXT,
       'Image requires non-empty description text for Slack alt_text.',
       componentId,
     );
@@ -1231,8 +950,8 @@ function lowerLayout(
   // keeps its layout and only alignment is lost. Any other Row is stacked vertically.
   if ((type === 'Row' && !isButtonGroup) || hasAlignment) {
     context.diagnostics.splice(diagnosticIndex, 0, {
-      level: 'warning',
-      code: 'SLACK_LAYOUT_FLATTENED',
+      level: DiagnosticLevel.WARNING,
+      code: DiagnosticCode.SLACK_LAYOUT_FLATTENED,
       message: isButtonGroup
         ? `Slack shows these buttons in one row and ignores ${type} alignment.`
         : `Slack does not preserve ${type} layout hints; children were flattened.`,
@@ -1247,13 +966,22 @@ function lowerButton(
   context: LowerComponentContext,
 ): Renderable {
   const label = collectText(renderToIR(context.children(String(props.child))));
-  const actionId = context.dispatch(context.rawProps.action);
-  const onClick = {id: actionId} as unknown as ClickHandler;
   return ChannelButton({
     children: label || 'Action',
     style: props.variant === 'primary' ? 'primary' : undefined,
-    onClick,
+    onClick: slackActionHandler(context.dispatch(context.rawProps.action)),
   });
+}
+
+/**
+ * Gives a Slack button the `action_id` of a registered A2UI action. In
+ * `@copilotkit/channels-ui`, a handler is a function that `renderToIR` swaps
+ * for an `{id}` object, and `renderBlockKit` reads only that `id`. This IR goes
+ * straight to `renderBlockKit` and the handler is never called, so passing the
+ * `{id}` object in the function's place is safe.
+ */
+function slackActionHandler(actionId: string): ClickHandler {
+  return {id: actionId} as unknown as ClickHandler;
 }
 
 function lowerTable(
@@ -1268,7 +996,7 @@ function lowerTable(
       (align !== undefined && align !== 'left' && align !== 'center' && align !== 'right')
     ) {
       throw new LoweringError(
-        'A2UI_INVALID_TABLE_HEADER',
+        DiagnosticCode.A2UI_INVALID_TABLE_HEADER,
         'Table headers must resolve to text with a supported alignment.',
         context.componentId,
       );
@@ -1278,7 +1006,7 @@ function lowerTable(
   const rows = arrayField(props, 'rows').map((row, index) => {
     if (!Array.isArray(row) || row.length !== columns.length) {
       throw new LoweringError(
-        'A2UI_INVALID_TABLE_ROW',
+        DiagnosticCode.A2UI_INVALID_TABLE_ROW,
         `Table row ${index + 1} must have exactly ${columns.length} cells, one per column.`,
         context.componentId,
       );
@@ -1287,7 +1015,7 @@ function lowerTable(
       children: row.map(value => {
         if (typeof value !== 'string') {
           throw new LoweringError(
-            'A2UI_INVALID_TABLE_CELL',
+            DiagnosticCode.A2UI_INVALID_TABLE_CELL,
             `Table row ${index + 1} contains a cell that did not resolve to text.`,
             context.componentId,
           );
@@ -1303,12 +1031,13 @@ function lowerMarketSnapshot(
   props: MarketSnapshotProps,
   context: LowerComponentContext,
 ): Renderable {
-  const actionId = context.dispatch({
-    event: {
-      name: 'acknowledge_search_result',
-    },
-  });
-  const onAcknowledge = {id: actionId} as unknown as ClickHandler;
+  const onAcknowledge = slackActionHandler(
+    context.dispatch({
+      event: {
+        name: 'acknowledge_search_result',
+      },
+    }),
+  );
 
   return [
     Header({children: props.headline}),
@@ -1420,44 +1149,23 @@ function registerAction(
   const parsed = ActionSchema.safeParse(rawAction);
   if (!parsed.success) {
     throw new LoweringError(
-      'A2UI_INVALID_ACTION',
+      DiagnosticCode.A2UI_INVALID_ACTION,
       `Component requires a valid A2UI action definition: ${parsed.error.issues
         .map(issue => `${issue.path.join('.') || 'action'} ${issue.message}`)
         .join('; ')}`,
       componentId,
     );
   }
-  const parsedAction = parsed.data as Action;
   const actionId = `a2ui-${state.revision}-${state.nextActionOrdinal}`;
   state.nextActionOrdinal += 1;
-
-  const eventEntry = createEventActionDispatchEntry({
+  state.actions.set(actionId, {
     actionId,
     revision: state.revision,
     surface,
+    surfaceId: surface.id,
     sourceComponentId: componentId,
     basePath,
-    action: parsedAction,
+    action: parsed.data,
   });
-
-  state.actions.set(
-    actionId,
-    eventEntry ?? {
-      actionId,
-      revision: state.revision,
-      surface,
-      surfaceId: surface.id,
-      sourceComponentId: componentId,
-      basePath,
-      action: parsedAction,
-    },
-  );
   return actionId;
-}
-
-function isCurrentActionEntry(
-  entry: ActionDispatchEntry,
-  surface: SurfaceModel | undefined,
-): surface is SurfaceModel {
-  return Boolean(surface && entry.surface === surface && entry.surfaceId === surface.id);
 }

@@ -17,21 +17,26 @@
 import {ComponentContext, type SurfaceModel} from '@a2ui/web_core/v0_9';
 import {createNativeNode, type ChannelNode} from '@copilotkit/channels-ui';
 import {type InputBlock} from '@slack/types';
+import {SLACK_INPUT_LABEL_MAX_LENGTH, SLACK_TEXT_INPUT_MAX_LENGTH} from './slack-limits';
 
-type InputKind = 'shortText' | 'longText' | 'date';
+/** The A2UI components the sample lowers onto Slack inputs. */
+export enum InputComponentType {
+  TEXT_FIELD = 'TextField',
+  DATE_TIME_INPUT = 'DateTimeInput',
+}
 
 /**
- * Slack's limit on an input block's label.
- * https://docs.slack.dev/reference/block-kit/blocks/input-block
+ * Which Slack input element an A2UI input becomes. The two text kinds are also
+ * the A2UI TextField `variant` values the Slack catalog accepts.
  */
-const SLACK_LABEL_MAX_LENGTH = 2_000;
-
-/**
- * Slack's limit on what a user can type into a plain-text input, which this
- * sample also applies to the value it pre-fills from the data model.
- * https://docs.slack.dev/reference/block-kit/block-elements/plain-text-input-element
- */
-const SLACK_TEXT_INPUT_MAX_LENGTH = 3_000;
+export enum InputKind {
+  /** A single-line `plain_text_input`, from a `shortText` TextField. */
+  SHORT_TEXT = 'shortText',
+  /** A multiline `plain_text_input`, from a `longText` TextField. */
+  LONG_TEXT = 'longText',
+  /** A `datepicker`, from a date-only DateTimeInput. */
+  DATE = 'date',
+}
 
 /**
  * An A2UI TextField or DateTimeInput lowered onto a Slack input, kept so text
@@ -70,7 +75,7 @@ export function createInputDispatchEntry(
   surface: SurfaceModel,
   componentId: string,
   basePath: string,
-  type: 'TextField' | 'DateTimeInput',
+  type: InputComponentType,
   props: Readonly<Record<string, unknown>>,
 ): InputDispatchEntry {
   const binding = props.value;
@@ -91,7 +96,11 @@ export function createInputDispatchEntry(
     basePath,
     path: binding.path,
     kind:
-      type === 'DateTimeInput' ? 'date' : props.variant === 'longText' ? 'longText' : 'shortText',
+      type === InputComponentType.DATE_TIME_INPUT
+        ? InputKind.DATE
+        : props.variant === InputKind.LONG_TEXT
+          ? InputKind.LONG_TEXT
+          : InputKind.SHORT_TEXT,
   };
 }
 
@@ -104,9 +113,11 @@ export function lowerFormInput(
   entry: InputDispatchEntry,
   props: Readonly<Record<string, unknown>>,
 ): ChannelNode {
-  const label = props.label ?? (entry.kind === 'date' ? 'Date' : undefined);
-  if (typeof label !== 'string' || !label.trim() || label.length > SLACK_LABEL_MAX_LENGTH) {
-    throw new Error(`Slack input labels must contain 1–${SLACK_LABEL_MAX_LENGTH} characters.`);
+  const label = props.label ?? (entry.kind === InputKind.DATE ? 'Date' : undefined);
+  if (typeof label !== 'string' || !label.trim() || label.length > SLACK_INPUT_LABEL_MAX_LENGTH) {
+    throw new Error(
+      `Slack input labels must contain 1–${SLACK_INPUT_LABEL_MAX_LENGTH} characters.`,
+    );
   }
   const value = readFormInputValue(entry);
   validateInputValue(entry, value);
@@ -116,7 +127,7 @@ export function lowerFormInput(
     optional: true,
     dispatch_action: true,
     element:
-      entry.kind === 'date'
+      entry.kind === InputKind.DATE
         ? {
             type: 'datepicker',
             action_id: entry.actionId,
@@ -125,7 +136,7 @@ export function lowerFormInput(
         : {
             type: 'plain_text_input',
             action_id: entry.actionId,
-            multiline: entry.kind === 'longText',
+            multiline: entry.kind === InputKind.LONG_TEXT,
             max_length: SLACK_TEXT_INPUT_MAX_LENGTH,
             ...(value ? {initial_value: value} : {}),
             dispatch_action_config: {trigger_actions_on: ['on_character_entered']},
@@ -156,7 +167,7 @@ function validateInputValue(entry: InputDispatchEntry, value: unknown): asserts 
   if (typeof value !== 'string') {
     throw new Error('Slack input values must be strings.');
   }
-  if (entry.kind === 'date') {
+  if (entry.kind === InputKind.DATE) {
     if (value === '') {
       return;
     }
@@ -174,7 +185,7 @@ function validateInputValue(entry: InputDispatchEntry, value: unknown): asserts 
   if (value.length > SLACK_TEXT_INPUT_MAX_LENGTH) {
     throw new Error(`Slack text inputs accept at most ${SLACK_TEXT_INPUT_MAX_LENGTH} characters.`);
   }
-  if (entry.kind === 'shortText' && /[\r\n]/.test(value)) {
+  if (entry.kind === InputKind.SHORT_TEXT && /[\r\n]/.test(value)) {
     throw new Error(
       'Slack shortText inputs must contain a single line. Use longText for multiple lines.',
     );

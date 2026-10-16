@@ -34,6 +34,7 @@ const EXAMPLE_BLOCKS: Block[] = [
   },
 ];
 
+/** What the preview shows before there is a surface: a sample message and a prompt. */
 export function SlackEmptyPreview({theme}: {readonly theme?: ThemePreference}) {
   return (
     <div className="slack-preview-empty" role="status" aria-live="polite">

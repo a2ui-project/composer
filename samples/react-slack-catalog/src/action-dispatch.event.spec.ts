@@ -15,6 +15,8 @@
  */
 
 import {
+  A2uiMessageListSchema,
+  ActionSchema,
   MessageProcessor,
   type A2uiClientAction,
   type A2uiMessage,
@@ -23,13 +25,13 @@ import {
   type UpdateComponentsMessage,
 } from '@a2ui/web_core/v0_9';
 import {describe, expect, it} from 'vitest';
+import dataBoundActionJson from '../public/examples/data-bound-action.json';
 import {
-  createEventActionDispatchEntry,
   dispatchCurrentEventAction,
-  type EventActionRegistry,
+  type ActionDispatchEntry,
+  type ActionRegistry,
 } from './action-dispatch';
 import {SLACK_CATALOG_ID, slackCatalog} from './catalog';
-import {DATA_BOUND_ACTION_MESSAGES} from './examples';
 
 const createSurface = (surfaceId = 'test-surface'): A2uiMessage => ({
   version: 'v0.9',
@@ -132,20 +134,29 @@ function currentSurface(processor: MessageProcessor<ComponentApi>): SurfaceModel
   return [...processor.model.surfacesMap.values()].at(-1);
 }
 
-function registryWith(
-  entry: ReturnType<typeof createEventActionDispatchEntry>,
-): EventActionRegistry {
-  return entry ? new Map([[entry.actionId, entry]]) : new Map();
+/** Builds an entry the way lowering registers a Button's action. */
+function createEntry(
+  options: Omit<ActionDispatchEntry, 'surfaceId' | 'action'> & {readonly action: unknown},
+): ActionDispatchEntry {
+  return {
+    ...options,
+    surfaceId: options.surface.id,
+    action: ActionSchema.parse(options.action),
+  };
+}
+
+function registryWith(entry: ActionDispatchEntry): ActionRegistry {
+  return new Map([[entry.actionId, entry]]);
 }
 
 describe('event action dispatch', () => {
   it('dispatches the current Button event once with resolved context', async () => {
     const actions: A2uiClientAction[] = [];
     const processor = createProcessor(actions);
-    processor.processMessages(DATA_BOUND_ACTION_MESSAGES);
+    processor.processMessages(A2uiMessageListSchema.parse(dataBoundActionJson));
     const surface = currentSurface(processor);
     expect(surface).toBeDefined();
-    const entry = createEventActionDispatchEntry({
+    const entry = createEntry({
       actionId: 'a2ui-1-1',
       revision: 1,
       surface: surface!,
@@ -193,7 +204,7 @@ describe('event action dispatch', () => {
       updateComponents('test-surface', buttonComponents()),
     ]);
     const oldSurface = currentSurface(processor);
-    const oldEntry = createEventActionDispatchEntry({
+    const oldEntry = createEntry({
       actionId: 'a2ui-1-1',
       revision: 1,
       surface: oldSurface!,
@@ -210,7 +221,7 @@ describe('event action dispatch', () => {
       }),
     ]);
     const current = currentSurface(processor);
-    const currentEntry = createEventActionDispatchEntry({
+    const currentEntry = createEntry({
       actionId: 'a2ui-2-1',
       revision: 2,
       surface: current!,
@@ -251,7 +262,7 @@ describe('event action dispatch', () => {
       updateComponents('test-surface', repeatedTemplateComponents),
     ]);
     const surface = currentSurface(processor);
-    const firstEntry = createEventActionDispatchEntry({
+    const firstEntry = createEntry({
       actionId: 'a2ui-1-1',
       revision: 1,
       surface: surface!,
@@ -259,7 +270,7 @@ describe('event action dispatch', () => {
       basePath: '/records/0',
       action: repeatedTemplateComponents[1].action,
     });
-    const secondEntry = createEventActionDispatchEntry({
+    const secondEntry = createEntry({
       actionId: 'a2ui-1-2',
       revision: 1,
       surface: surface!,
@@ -316,7 +327,7 @@ describe('event action dispatch', () => {
       updateComponents('test-surface', buttonComponents()),
     ]);
     const initialSurface = currentSurface(processor);
-    const staleEntry = createEventActionDispatchEntry({
+    const staleEntry = createEntry({
       actionId: 'a2ui-1-1',
       revision: 1,
       surface: initialSurface!,
@@ -327,7 +338,7 @@ describe('event action dispatch', () => {
 
     processor.processMessages([updateComponents('test-surface', buttonComponents('updated'))]);
     const updatedSurface = currentSurface(processor);
-    const updatedEntry = createEventActionDispatchEntry({
+    const updatedEntry = createEntry({
       actionId: 'a2ui-2-1',
       revision: 2,
       surface: updatedSurface!,

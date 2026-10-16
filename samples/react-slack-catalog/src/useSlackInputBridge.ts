@@ -13,11 +13,35 @@ import {
 } from 'react';
 import {type KnownBlock, type InputBlock} from '@slack/types';
 
+/**
+ * The elements slack-blocks-to-jsx wraps each text input and date picker in. The
+ * library sets the wrapper's `id` to the input's `action_id`.
+ */
 const INPUT_WRAPPER =
   '.slack_blocks_to_jsx__plain_text_input_element, .slack_blocks_to_jsx__date_picker_element';
 
-/** Adapts the upstream preview's native controls to A2UI bindings and labels.
- * The library exposes neither input callbacks nor accessible field labels.
+/**
+ * The hint slack-blocks-to-jsx 1.1.2 prints under every plain-text input,
+ * matched by its exact English text because the library gives it no class or
+ * attribute. If a later version changes the wording, the hint simply shows
+ * again under our inputs; nothing else breaks.
+ */
+const ENTER_TO_SUBMIT_HINT = "↵ Please 'enter' to submit";
+
+/**
+ * Connects the Slack inputs drawn by the Tightknit preview to A2UI data bindings.
+ *
+ * The preview draws inputs with slack-blocks-to-jsx 1.1.2
+ * (github.com/themashcodee/slack-blocks-to-jsx), which keeps what the user types
+ * in its own React state and offers no change callback. So this listens for
+ * `change` events on the preview's section and sends each value to
+ * `updateInput`. It also corrects, after each render, what that version draws
+ * wrong; each fix is described where it's made. If an upgrade fixes one of
+ * these, its correction here is harmless, but should be removed.
+ *
+ * @param resetKey Changes when the controls were recreated, so the fixes are
+ *     applied to the new elements.
+ * @return Props to spread onto the element that contains the preview.
  */
 export function useSlackInputBridge(
   blocks: readonly KnownBlock[],
@@ -51,20 +75,29 @@ export function useSlackInputBridge(
       if (!block || !control) {
         continue;
       }
+      // The library labels every text input "Select an item"; screen readers
+      // should hear the input block's label instead.
       control.setAttribute('aria-label', block.label.text);
+      // The library makes the wrapper focusable too, which puts an extra, unlabeled
+      // stop before each field when tabbing through the form.
       wrapper.removeAttribute('tabindex');
       if (block.element.type === 'plain_text_input' && control instanceof HTMLTextAreaElement) {
+        // The library ignores `multiline` and draws every text input as a 100px
+        // textarea, so a shortText field would look like a longText one. Size it
+        // from `multiline`, as Slack does; `onKeyDown` below stops Enter adding a
+        // line to a single-line field.
         const multiline = block.element.multiline === true;
         control.rows = multiline ? 3 : 1;
         control.dataset.slackMultiline = String(multiline);
         control.style.minHeight = multiline ? '80px' : '36px';
         control.style.height = multiline ? '100px' : '36px';
         control.style.resize = multiline ? 'vertical' : 'none';
-        // Upstream always advertises Enter-to-submit, including for our
-        // on-character-change inputs. These fields save through the binding.
+        // The library always tells the user to press Enter to submit. These inputs
+        // save on every character (`on_character_entered`), and Enter submits
+        // nothing, so the hint is wrong here.
         for (const hint of wrapper.closest('.slack_blocks_to_jsx__input')?.querySelectorAll('p') ??
           []) {
-          if (hint.textContent === "↵ Please 'enter' to submit") {
+          if (hint.textContent === ENTER_TO_SUBMIT_HINT) {
             hint.hidden = true;
           }
         }

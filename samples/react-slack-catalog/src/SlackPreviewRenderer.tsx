@@ -22,21 +22,37 @@ import {
   type SlackInteractionPayload,
 } from '@tightknitai/storybook-addon-slack-block-kit';
 import {type ThemePreference} from 'a2ui-bridge';
-import {type KnownBlock} from '@slack/types';
-import {type PreviewDiagnostic, type PreviewSnapshot} from './preview-session';
+import {collectActionIds} from './lower-surface';
+import {
+  DiagnosticCode,
+  DiagnosticLevel,
+  type PreviewDiagnostic,
+  type PreviewSnapshot,
+} from './preview-snapshot';
 
+/** The class slack-blocks-to-jsx gives each Block Kit button it draws. */
 const SLACK_BUTTON_CLASS = 'slack_blocks_to_jsx__button_element';
 
-export interface SlackPreviewRendererProps {
+/** Inputs to `SlackPreviewRenderer`. */
+interface SlackPreviewRendererProps {
+  /** A ready render. Its diagnostics are shown by `SlackPreviewState`, not here. */
   readonly snapshot: PreviewSnapshot;
+  /** Composer's theme, which the Slack message follows. */
   readonly theme?: ThemePreference;
+  /** Called with a Slack input's `action_id` and new value as the user types. */
   readonly updateInput: (actionId: string, value: string) => void;
+  /** Called with a Slack button's `action_id` when the user clicks it. */
   readonly dispatch: (actionId: string) => void | Promise<void>;
 }
 
 type SlackRendererBlocks = RendererProps['blocks'];
 type SlackRendererTheme = RendererProps['theme'];
 
+/**
+ * Draws a ready render as a Slack message with the Tightknit Block Kit renderer,
+ * and sends its button clicks and input edits back to the session. Shows an
+ * error if dispatching a click fails.
+ */
 export function SlackPreviewRenderer({
   snapshot,
   theme,
@@ -45,7 +61,7 @@ export function SlackPreviewRenderer({
 }: SlackPreviewRendererProps) {
   const inputResetKey = `${theme ?? 'system'}-${snapshot.inputResetKey ?? 0}`;
   const inputBridge = useSlackInputBridge(snapshot.blocks, updateInput, inputResetKey);
-  const actionIds = useMemo(() => collectCurrentActionIds(snapshot.blocks), [snapshot.blocks]);
+  const actionIds = useMemo(() => collectActionIds(snapshot.blocks), [snapshot.blocks]);
   const [dispatchError, setDispatchError] = useState<PreviewDiagnostic | undefined>();
   const rendererTheme = theme as SlackRendererTheme | undefined;
 
@@ -62,8 +78,8 @@ export function SlackPreviewRenderer({
       setDispatchError(undefined);
       const reportDispatchFailure = (error: unknown) => {
         setDispatchError({
-          level: 'error',
-          code: 'SLACK_ACTION_DISPATCH_FAILED',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.SLACK_ACTION_DISPATCH_FAILED,
           message: error instanceof Error ? error.message : String(error),
         });
       };
@@ -76,6 +92,14 @@ export function SlackPreviewRenderer({
     [actionIds, dispatch],
   );
 
+  // The renderer has two ways to "click" a button, and each reaches only one of
+  // these handlers, so one click dispatches once:
+  // - The drawn Slack buttons. The renderer gives them no click callback, so this
+  //   listens on the section and finds the button by its class; slack-blocks-to-jsx
+  //   sets the button's `id` to its `action_id`.
+  // - The renderer's own "Simulate" buttons, listed under the message. They call
+  //   `onInteraction` and don't have the Slack button class, so `handleNativeClick`
+  //   ignores them.
   const handleNativeClick = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {
       const target = event.target;
@@ -103,10 +127,6 @@ export function SlackPreviewRenderer({
     [dispatchCurrentAction],
   );
 
-  const diagnostics = dispatchError
-    ? [...snapshot.diagnostics, dispatchError]
-    : snapshot.diagnostics;
-
   return (
     <section
       aria-label="Slack preview"
@@ -116,59 +136,22 @@ export function SlackPreviewRenderer({
       onKeyDownCapture={inputBridge.onKeyDown}
       onClick={handleNativeClick}
     >
-      {snapshot.status === 'ready' ? (
-        <Renderer
-          key={inputResetKey}
-          blocks={snapshot.blocks as SlackRendererBlocks}
-          name="A2UI Preview"
-          onInteraction={handleInteraction}
-          surface="message"
-          theme={rendererTheme}
-          validate
-        />
-      ) : (
-        <p style={{padding: 24, color: '#666', fontFamily: 'sans-serif', textAlign: 'center'}}>
-          A2UI Slack Sandbox active. Waiting for Slack RENDER_A2UI payloads...
-        </p>
-      )}
-      {diagnostics.length > 0 ? (
+      <Renderer
+        key={inputResetKey}
+        blocks={snapshot.blocks as SlackRendererBlocks}
+        name="A2UI Preview"
+        onInteraction={handleInteraction}
+        surface="message"
+        theme={rendererTheme}
+        validate
+      />
+      {dispatchError ? (
         <ul aria-label="Preview diagnostics">
-          {diagnostics.map(diagnostic => (
-            <li key={`${snapshot.revision}-${diagnostic.code}-${diagnostic.componentId ?? ''}`}>
-              {diagnostic.level}: {diagnostic.code} {diagnostic.message}
-            </li>
-          ))}
+          <li>
+            {dispatchError.level}: {dispatchError.code} {dispatchError.message}
+          </li>
         </ul>
       ) : null}
     </section>
   );
-}
-
-function collectCurrentActionIds(blocks: readonly KnownBlock[]): ReadonlySet<string> {
-  const actionIds = new Set<string>();
-  for (const block of blocks) {
-    collectActionIds(block, actionIds);
-  }
-  return actionIds;
-}
-
-function collectActionIds(value: unknown, actionIds: Set<string>): void {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      collectActionIds(item, actionIds);
-    }
-    return;
-  }
-
-  if (typeof value !== 'object' || value === null) {
-    return;
-  }
-
-  for (const [key, child] of Object.entries(value)) {
-    if (key === 'action_id' && typeof child === 'string') {
-      actionIds.add(child);
-    } else {
-      collectActionIds(child, actionIds);
-    }
-  }
 }

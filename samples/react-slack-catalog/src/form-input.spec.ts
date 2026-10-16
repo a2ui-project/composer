@@ -23,7 +23,8 @@ import {
 import {type InputBlock} from '@slack/types';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {SLACK_CATALOG_ID} from './catalog';
-import {createSlackPreviewSession, type PreviewSession} from './lower-surface';
+import {createSlackPreviewSession, type PreviewSession} from './preview-session';
+import {DiagnosticCode, PreviewStatus} from './preview-snapshot';
 
 type Components = UpdateComponentsMessage['updateComponents']['components'];
 
@@ -113,7 +114,7 @@ describe('Slack editable form inputs', () => {
 
   it('emits native Slack text and date inputs with initial bound values', () => {
     session.processMessages(messages());
-    expect(session.getSnapshot().status).toBe('ready');
+    expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
     expect(inputs(session)).toMatchObject([
       {
         type: 'input',
@@ -159,7 +160,7 @@ describe('Slack editable form inputs', () => {
         ],
       }),
     );
-    expect(session.getSnapshot().status).toBe('ready');
+    expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
     session.updateInput(inputId(session), 'Updated first');
     expect(inputs(session)[0].element).toMatchObject({initial_value: 'Updated first'});
     expect(inputs(session)[2].element).toMatchObject({initial_value: 'Second'});
@@ -192,7 +193,7 @@ describe('Slack editable form inputs', () => {
     session.updateInput(dateId, '2026-02-30');
     expect(session.getSnapshot().inputResetKey).toBe(resetKey! + 1);
     expect(session.getSnapshot().diagnostics).toContainEqual(
-      expect.objectContaining({code: 'A2UI_INPUT_ERROR'}),
+      expect.objectContaining({code: DiagnosticCode.A2UI_INPUT_ERROR}),
     );
     expect(inputs(session)[1].element).toMatchObject({initial_date: '2026-10-01'});
     await session.dispatch(buttonId);
@@ -200,7 +201,9 @@ describe('Slack editable form inputs', () => {
     session.updateInput(dateId, '2028-02-29');
     expect(inputs(session)[1].element).toMatchObject({initial_date: '2028-02-29'});
     expect(
-      session.getSnapshot().diagnostics.some(diagnostic => diagnostic.code === 'A2UI_INPUT_ERROR'),
+      session
+        .getSnapshot()
+        .diagnostics.some(diagnostic => diagnostic.code === DiagnosticCode.A2UI_INPUT_ERROR),
     ).toBe(false);
   });
 
@@ -271,7 +274,7 @@ describe('Slack editable form inputs', () => {
     'rejects invalid initial dates: %s',
     date => {
       session.processMessages(messages(formComponents(), {location: '', date}));
-      expect(session.getSnapshot()).toMatchObject({status: 'error', blocks: []});
+      expect(session.getSnapshot()).toMatchObject({status: PreviewStatus.ERROR, blocks: []});
     },
   );
 
@@ -289,7 +292,7 @@ describe('Slack editable form inputs', () => {
     {component: 'TextField', label: 'x'.repeat(2001), value: {path: '/location'}},
   ])('rejects unsupported form properties (%#)', props => {
     session.processMessages(messages([{id: 'root', ...props}]));
-    expect(session.getSnapshot()).toMatchObject({status: 'error', blocks: []});
+    expect(session.getSnapshot()).toMatchObject({status: PreviewStatus.ERROR, blocks: []});
   });
 
   it('enforces input length, type, and multiline boundaries', () => {
@@ -302,7 +305,7 @@ describe('Slack editable form inputs', () => {
     session.processMessages([
       {version: 'v0.9', updateDataModel: {surfaceId: 'car', path: '/location', value: 123}},
     ]);
-    expect(session.getSnapshot().status).toBe('error');
+    expect(session.getSnapshot().status).toBe(PreviewStatus.ERROR);
     session.clear();
     session.processMessages(
       messages(

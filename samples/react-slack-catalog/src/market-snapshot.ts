@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {type ComponentApi} from '@a2ui/web_core/v0_9';
 import {z} from 'zod/v3';
 
-export const MarketRowSchema = z
+/** One market in a MarketSnapshot table. */
+const MarketRowSchema = z
   .object({
     name: z.string().describe('Short market or contract label.'),
     price: z.string().describe('Current grounded price including currency and unit.'),
@@ -27,6 +27,11 @@ export const MarketRowSchema = z
   })
   .strict();
 
+/**
+ * Props of MarketSnapshot, a custom component that shows a short market summary:
+ * a headline, a table of three sourced prices, why they matter, and when they
+ * were looked up.
+ */
 export const MarketSnapshotSchema = z
   .object({
     headline: z.string().describe('Short combined market snapshot headline.'),
@@ -43,9 +48,5 @@ export const MarketSnapshotSchema = z
     'Complete root-capable live market snapshot with a headline, sourced table, analysis, and timestamp.',
   );
 
+/** A MarketSnapshot's validated props. */
 export type MarketSnapshotProps = z.infer<typeof MarketSnapshotSchema>;
-
-export const MarketSnapshotApi = {
-  name: 'MarketSnapshot',
-  schema: MarketSnapshotSchema,
-} as unknown as ComponentApi;

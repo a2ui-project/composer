@@ -17,14 +17,20 @@
 import {Component, type ReactNode} from 'react';
 import {type ThemePreference} from 'a2ui-bridge';
 import {SlackEmptyPreview} from './SlackEmptyPreview';
-import {type PreviewSnapshot} from './preview-session';
+import {PreviewStatus, type PreviewSnapshot} from './preview-snapshot';
 
-export type ReadyPreviewSnapshot = PreviewSnapshot & {status: 'ready'};
+/** A snapshot whose blocks hold a render. */
+type ReadyPreviewSnapshot = PreviewSnapshot & {status: PreviewStatus.READY};
 
-export interface SlackPreviewStateProps {
+/** Inputs to `SlackPreviewState`. */
+interface SlackPreviewStateProps {
+  /** The render to show. */
   readonly snapshot: PreviewSnapshot;
+  /** Composer's theme, which the empty-state sample message follows. */
   readonly theme?: ThemePreference;
+  /** Draws a ready render. */
   readonly renderReady: (snapshot: ReadyPreviewSnapshot) => ReactNode;
+  /** Draws controls shown below a ready render, such as the Block Kit export. */
   readonly renderExport?: (snapshot: ReadyPreviewSnapshot) => ReactNode;
 }
 
@@ -37,15 +43,20 @@ interface RevisionErrorBoundaryState {
   readonly error: Error | null;
 }
 
+/**
+ * Chooses what the preview shows for a snapshot's status: the render, the empty
+ * state, or a waiting or error message, followed by the snapshot's diagnostics.
+ * A render that throws shows an error until the next revision.
+ */
 export function SlackPreviewState({
   snapshot,
   theme,
   renderReady,
   renderExport,
 }: SlackPreviewStateProps) {
-  const isReady = snapshot.status === 'ready';
+  const isReady = snapshot.status === PreviewStatus.READY;
   const readySnapshot = isReady ? (snapshot as ReadyPreviewSnapshot) : undefined;
-  const isEmpty = snapshot.status === 'empty' && snapshot.diagnostics.length === 0;
+  const isEmpty = snapshot.status === PreviewStatus.EMPTY && snapshot.diagnostics.length === 0;
 
   return (
     <section className="slack-preview-state" aria-label="Slack preview state">
@@ -60,7 +71,7 @@ export function SlackPreviewState({
       ) : isEmpty ? (
         <SlackEmptyPreview theme={theme} />
       ) : (
-        <PreviewStatus snapshot={snapshot} />
+        <PreviewStatusMessage snapshot={snapshot} />
       )}
       {!isEmpty ? <PreviewDiagnostics snapshot={snapshot} /> : null}
     </section>
@@ -114,8 +125,8 @@ function ReadyPreviewContent({snapshot, renderReady, renderExport}: ReadyPreview
   );
 }
 
-function PreviewStatus({snapshot}: {readonly snapshot: PreviewSnapshot}) {
-  if (snapshot.status === 'error') {
+function PreviewStatusMessage({snapshot}: {readonly snapshot: PreviewSnapshot}) {
+  if (snapshot.status === PreviewStatus.ERROR) {
     return (
       <div role="alert" aria-live="assertive">
         <p>Slack preview could not render.</p>
@@ -124,7 +135,7 @@ function PreviewStatus({snapshot}: {readonly snapshot: PreviewSnapshot}) {
   }
 
   const message =
-    snapshot.status === 'waiting'
+    snapshot.status === PreviewStatus.WAITING
       ? 'Waiting for Slack preview data.'
       : 'A2UI Slack Sandbox active. Waiting for Slack RENDER_A2UI payloads.';
 

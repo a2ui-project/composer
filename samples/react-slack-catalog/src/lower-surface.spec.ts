@@ -15,6 +15,7 @@
  */
 
 import {
+  A2uiMessageListSchema,
   type A2uiClientAction,
   type A2uiMessage,
   type UpdateComponentsMessage,
@@ -26,14 +27,12 @@ import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {Message, type Block} from 'slack-blocks-to-jsx';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
+import dataBoundActionJson from '../public/examples/data-bound-action.json';
+import marketSnapshotJson from '../public/examples/market-snapshot.json';
 import {SLACK_CATALOG_ID} from './catalog';
-import {
-  DATA_BOUND_ACTION_MESSAGES,
-  EXAMPLE_INITIAL_DATA,
-  MARKET_SNAPSHOT_MESSAGES,
-  SLACK_COMPONENT_USAGES,
-} from './examples';
-import {createSlackPreviewSession, type PreviewSession} from './lower-surface';
+import {SLACK_COMPONENT_USAGES} from './examples';
+import {createSlackPreviewSession, type PreviewSession} from './preview-session';
+import {DiagnosticCode, DiagnosticLevel, PreviewStatus} from './preview-snapshot';
 
 const createSurface = (surfaceId = 'test-surface'): A2uiMessage => ({
   version: 'v0.9',
@@ -232,7 +231,7 @@ describe('createSlackPreviewSession', () => {
         createSurface(),
         updateComponents('test-surface', [{id: 'root', component: 'Table', columns, rows}]),
       ]);
-      expect(session.getSnapshot().status).toBe('ready');
+      expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
       expect(session.getSnapshot().blocks).toEqual([
         {
           type: 'table',
@@ -243,7 +242,7 @@ describe('createSlackPreviewSession', () => {
           ],
         },
       ]);
-      expect(diagnosticCodes(session)).not.toContain('SLACK_LAYOUT_FLATTENED');
+      expect(diagnosticCodes(session)).not.toContain(DiagnosticCode.SLACK_LAYOUT_FLATTENED);
       const html = renderToStaticMarkup(
         createElement(Message, {
           blocks: session.getSnapshot().blocks as Block[],
@@ -273,7 +272,7 @@ describe('createSlackPreviewSession', () => {
           },
         ]),
       ]);
-      expect(session.getSnapshot().status).toBe('ready');
+      expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
       expect(tableCellText(session)).toBe('Argentina');
       session.processMessages([updateData('test-surface', {heading: 'Winner', team: 'France'})]);
       expect(tableCellText(session)).toBe('France');
@@ -288,13 +287,13 @@ describe('createSlackPreviewSession', () => {
           {id: 'root', component: 'Table', columns, rows: [['Argentina', '3–3']]},
         ]),
       ]);
-      expect(session.getSnapshot().status).toBe('error');
+      expect(session.getSnapshot().status).toBe(PreviewStatus.ERROR);
       expect(session.getSnapshot().blocks).toEqual([]);
-      expect(diagnosticCodes(session)).toContain('A2UI_INVALID_TABLE_ROW');
+      expect(diagnosticCodes(session)).toContain(DiagnosticCode.A2UI_INVALID_TABLE_ROW);
       session.processMessages([
         updateComponents('test-surface', [{id: 'root', component: 'Table', columns, rows}]),
       ]);
-      expect(session.getSnapshot().status).toBe('ready');
+      expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
     });
 
     it('does not stringify an object-valued data binding into a table cell', () => {
@@ -305,7 +304,7 @@ describe('createSlackPreviewSession', () => {
           {id: 'root', component: 'Table', columns: [{header: 'Team'}], rows: [[{path: '/team'}]]},
         ]),
       ]);
-      expect(session.getSnapshot().status).toBe('error');
+      expect(session.getSnapshot().status).toBe(PreviewStatus.ERROR);
       expect(session.getSnapshot().blocks).toEqual([]);
     });
 
@@ -317,15 +316,15 @@ describe('createSlackPreviewSession', () => {
           {id: 'root', component: 'Table', columns: [{header: 'Team'}], rows: makeRows(99)},
         ]),
       ]);
-      expect(session.getSnapshot().status).toBe('ready');
+      expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
       expect(blockRecord(session.getSnapshot().blocks[0]).rows).toHaveLength(100);
       session.processMessages([
         updateComponents('test-surface', [
           {id: 'root', component: 'Table', columns: [{header: 'Team'}], rows: makeRows(100)},
         ]),
       ]);
-      expect(session.getSnapshot().status).toBe('error');
-      expect(diagnosticCodes(session)).toContain('A2UI_INVALID_PROPS');
+      expect(session.getSnapshot().status).toBe(PreviewStatus.ERROR);
+      expect(diagnosticCodes(session)).toContain(DiagnosticCode.A2UI_INVALID_PROPS);
     });
 
     it('enforces the aggregate text limit across multiple tables', () => {
@@ -338,9 +337,11 @@ describe('createSlackPreviewSession', () => {
           {id: 'two', component: 'Table', columns: [{header: 'Team'}], rows: largeRows},
         ]),
       ]);
-      expect(session.getSnapshot().status).toBe('error');
+      expect(session.getSnapshot().status).toBe(PreviewStatus.ERROR);
       expect(session.getSnapshot().blocks).toEqual([]);
-      expect(diagnosticCodes(session)).toContain('SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT_EXCEEDED');
+      expect(diagnosticCodes(session)).toContain(
+        DiagnosticCode.SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT_EXCEEDED,
+      );
     });
   });
 
@@ -361,7 +362,7 @@ describe('createSlackPreviewSession', () => {
     expect(session.getSnapshot()).toMatchObject({
       revision: 1,
       surfaceId: 'test-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(sectionText(session.getSnapshot().blocks[0])).toBe('Ready for review');
@@ -371,13 +372,13 @@ describe('createSlackPreviewSession', () => {
     expect(session.getSnapshot()).toMatchObject({
       revision: 2,
       surfaceId: 'test-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
     });
     expect(sectionText(session.getSnapshot().blocks[0])).toBe('Approved');
   });
 
   it('allocates revision-local button actions and dispatches resolved event context', async () => {
-    session.processMessages(DATA_BOUND_ACTION_MESSAGES);
+    session.processMessages(A2uiMessageListSchema.parse(dataBoundActionJson));
 
     const firstActionId = actionIds(session)[0];
 
@@ -404,7 +405,7 @@ describe('createSlackPreviewSession', () => {
         sourceComponentId: 'acknowledge-button',
         surfaceId: 'data-bound-action',
         context: {
-          recordId: EXAMPLE_INITIAL_DATA.record.id,
+          recordId: SLACK_COMPONENT_USAGES.Button.data.record.id,
         },
       }),
     ]);
@@ -454,13 +455,13 @@ describe('createSlackPreviewSession', () => {
   });
 
   it('lowers MarketSnapshot into sourced Slack table output and an acknowledge action', async () => {
-    session.processMessages(MARKET_SNAPSHOT_MESSAGES);
+    session.processMessages(A2uiMessageListSchema.parse(marketSnapshotJson));
     const searchedAtText = 'Searched 2026-08-28T12:00:00Z';
 
     expect(session.getSnapshot()).toMatchObject({
       revision: 1,
       surfaceId: 'market-snapshot',
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(session.getSnapshot().blocks).toEqual(
@@ -541,11 +542,11 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [
         expect.objectContaining({
-          level: 'warning',
-          code: 'SLACK_LAYOUT_FLATTENED',
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.SLACK_LAYOUT_FLATTENED,
           componentId: 'root',
         }),
       ],
@@ -638,10 +639,22 @@ describe('createSlackPreviewSession', () => {
     expect(tableCellText(session)).toHaveLength(SLACK_LIMITS.cellText);
     expect(session.getSnapshot().diagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({level: 'warning', code: 'SLACK_HEADER_TEXT_TRUNCATED'}),
-        expect.objectContaining({level: 'warning', code: 'SLACK_SECTION_TEXT_TRUNCATED'}),
-        expect.objectContaining({level: 'warning', code: 'SLACK_BUTTON_TEXT_TRUNCATED'}),
-        expect.objectContaining({level: 'warning', code: 'SLACK_TABLE_CELL_TEXT_TRUNCATED'}),
+        expect.objectContaining({
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.SLACK_HEADER_TEXT_TRUNCATED,
+        }),
+        expect.objectContaining({
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.SLACK_SECTION_TEXT_TRUNCATED,
+        }),
+        expect.objectContaining({
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.SLACK_BUTTON_TEXT_TRUNCATED,
+        }),
+        expect.objectContaining({
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.SLACK_TABLE_CELL_TEXT_TRUNCATED,
+        }),
       ]),
     );
   });
@@ -687,12 +700,12 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT_EXCEEDED',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.SLACK_TABLE_CELL_TEXT_AGGREGATE_LIMIT_EXCEEDED,
         }),
       ],
     });
@@ -709,7 +722,7 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(sectionText(session.getSnapshot().blocks[0])).toBe('Recovered after table budget error');
@@ -731,11 +744,11 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(blockText(session.getSnapshot().blocks[0])).toBe(validHeader);
-    expect(diagnosticCodes(session)).not.toContain('SLACK_HEADER_TEXT_TRUNCATED');
+    expect(diagnosticCodes(session)).not.toContain(DiagnosticCode.SLACK_HEADER_TEXT_TRUNCATED);
   });
 
   it('diagnoses section truncation after Markdown expands to Slack mrkdwn', () => {
@@ -763,7 +776,10 @@ describe('createSlackPreviewSession', () => {
     expect(sectionText(session.getSnapshot().blocks[0])).toHaveLength(SLACK_LIMITS.sectionText);
     expect(session.getSnapshot().diagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({level: 'warning', code: 'SLACK_SECTION_TEXT_TRUNCATED'}),
+        expect.objectContaining({
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.SLACK_SECTION_TEXT_TRUNCATED,
+        }),
       ]),
     );
   });
@@ -796,15 +812,15 @@ describe('createSlackPreviewSession', () => {
       ]),
     ]);
 
-    expect(session.getSnapshot().status).toBe('ready');
+    expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
     expect(contextText(session)).toBe(caption);
     expect(imageBlockField(session, 'alt_text')).toBe(description);
     expect(imageBlockField(session, 'image_url')).toBe(imageUrl);
     expect(diagnosticCodes(session)).not.toEqual(
       expect.arrayContaining([
-        'SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED',
-        'SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED',
-        'SLACK_IMAGE_URL_LIMIT_EXCEEDED',
+        DiagnosticCode.SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED,
+        DiagnosticCode.SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED,
+        DiagnosticCode.SLACK_IMAGE_URL_LIMIT_EXCEEDED,
       ]),
     );
   });
@@ -849,12 +865,12 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'A2UI_INVALID_IMAGE_URL',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
           componentId: 'root',
         }),
       ],
@@ -870,7 +886,7 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(imageBlockField(session, 'image_url')).toBe('https://example.com/chart.png');
@@ -880,7 +896,7 @@ describe('createSlackPreviewSession', () => {
   it.each([
     {
       name: 'missing description',
-      expectedCode: 'A2UI_INVALID_PROPS',
+      expectedCode: DiagnosticCode.A2UI_INVALID_PROPS,
       component: {
         id: 'root',
         component: 'Image',
@@ -889,7 +905,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'empty description',
-      expectedCode: 'A2UI_INVALID_IMAGE_ALT_TEXT',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_ALT_TEXT,
       component: {
         id: 'root',
         component: 'Image',
@@ -899,7 +915,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'empty bound URL',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -910,7 +926,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'invalid URL',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -920,7 +936,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'data URI',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -930,7 +946,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'mailto URI',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -940,7 +956,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'malformed percent escape',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -950,7 +966,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'trailing percent escape',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -960,7 +976,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'unescaped square brackets',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -970,7 +986,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'unescaped pipe in path',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -980,7 +996,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'unescaped braces in query',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -990,7 +1006,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'unescaped caret in fragment',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -1000,7 +1016,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'malformed percent escape in username',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -1010,7 +1026,7 @@ describe('createSlackPreviewSession', () => {
     },
     {
       name: 'malformed percent escape in password',
-      expectedCode: 'A2UI_INVALID_IMAGE_URL',
+      expectedCode: DiagnosticCode.A2UI_INVALID_IMAGE_URL,
       component: {
         id: 'root',
         component: 'Image',
@@ -1028,11 +1044,11 @@ describe('createSlackPreviewSession', () => {
       ]);
 
       expect(session.getSnapshot()).toMatchObject({
-        status: 'error',
+        status: PreviewStatus.ERROR,
         blocks: [],
         diagnostics: [
           expect.objectContaining({
-            level: 'error',
+            level: DiagnosticLevel.ERROR,
             componentId: 'root',
           }),
         ],
@@ -1061,7 +1077,7 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(imageBlockField(session, 'image_url')).toBe(url);
@@ -1093,7 +1109,7 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(imageBlockField(session, 'image_url')).toBe(expectedUrl);
@@ -1122,12 +1138,12 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'SLACK_IMAGE_URL_LIMIT_EXCEEDED',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.SLACK_IMAGE_URL_LIMIT_EXCEEDED,
         }),
       ],
     });
@@ -1147,12 +1163,12 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED,
         }),
       ],
     });
@@ -1172,12 +1188,12 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED,
         }),
       ],
     });
@@ -1197,12 +1213,12 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'SLACK_IMAGE_URL_LIMIT_EXCEEDED',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.SLACK_IMAGE_URL_LIMIT_EXCEEDED,
         }),
       ],
     });
@@ -1233,10 +1249,10 @@ describe('createSlackPreviewSession', () => {
       ]),
     ]);
 
-    expect(session.getSnapshot().status).toBe('ready');
+    expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
     expect(session.getSnapshot().blocks).toHaveLength(SLACK_LIMITS.blocksPerMessage);
-    expect(diagnosticCodes(session)).not.toContain('SLACK_LAYOUT_FLATTENED');
-    expect(diagnosticCodes(session)).not.toContain('SLACK_BLOCKS_TRIMMED');
+    expect(diagnosticCodes(session)).not.toContain(DiagnosticCode.SLACK_LAYOUT_FLATTENED);
+    expect(diagnosticCodes(session)).not.toContain(DiagnosticCode.SLACK_BLOCKS_TRIMMED);
   });
 
   it('bounds Slack actions rows, filters dropped action IDs, then recovers', async () => {
@@ -1248,7 +1264,10 @@ describe('createSlackPreviewSession', () => {
     expect(actionIds(session)).toHaveLength(SLACK_LIMITS.actionsElements);
     expect(session.getSnapshot().diagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({level: 'warning', code: 'SLACK_ACTIONS_ELEMENTS_TRIMMED'}),
+        expect.objectContaining({
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.SLACK_ACTIONS_ELEMENTS_TRIMMED,
+        }),
       ]),
     );
 
@@ -1277,7 +1296,7 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(actionIds(session)).toEqual(['a2ui-2-1']);
@@ -1308,7 +1327,10 @@ describe('createSlackPreviewSession', () => {
     expect(session.getSnapshot().blocks).toHaveLength(SLACK_LIMITS.blocksPerMessage);
     expect(session.getSnapshot().diagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({level: 'warning', code: 'SLACK_BLOCKS_TRIMMED'}),
+        expect.objectContaining({
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.SLACK_BLOCKS_TRIMMED,
+        }),
       ]),
     );
   });
@@ -1355,22 +1377,29 @@ describe('createSlackPreviewSession', () => {
 
   it('distinguishes an untouched surface from submitted components missing their root', () => {
     session.processMessages([createSurface()]);
-    expect(session.getSnapshot()).toMatchObject({status: 'empty', blocks: [], diagnostics: []});
+    expect(session.getSnapshot()).toMatchObject({
+      status: PreviewStatus.EMPTY,
+      blocks: [],
+      diagnostics: [],
+    });
 
     session.processMessages([
       updateComponents('test-surface', [{id: 'main', component: 'Text', text: 'Unlinked content'}]),
     ]);
     expect(session.getSnapshot()).toMatchObject({
-      status: 'waiting',
+      status: PreviewStatus.WAITING,
       diagnostics: [
-        expect.objectContaining({code: 'A2UI_WAITING_FOR_COMPONENT', componentId: 'root'}),
+        expect.objectContaining({
+          code: DiagnosticCode.A2UI_WAITING_FOR_COMPONENT,
+          componentId: 'root',
+        }),
       ],
     });
 
     session.processMessages([
       updateComponents('test-surface', [{id: 'root', component: 'Text', text: 'Ready message'}]),
     ]);
-    expect(session.getSnapshot()).toMatchObject({status: 'ready'});
+    expect(session.getSnapshot()).toMatchObject({status: PreviewStatus.READY});
     expect(sectionText(session.getSnapshot().blocks[0])).toBe('Ready message');
   });
 
@@ -1387,12 +1416,12 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'waiting',
+      status: PreviewStatus.WAITING,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'info',
-          code: 'A2UI_WAITING_FOR_COMPONENT',
+          level: DiagnosticLevel.INFO,
+          code: DiagnosticCode.A2UI_WAITING_FOR_COMPONENT,
           componentId: 'missing-child',
         }),
       ],
@@ -1409,7 +1438,7 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(sectionText(session.getSnapshot().blocks[0])).toBe('Child arrived');
@@ -1427,7 +1456,7 @@ describe('createSlackPreviewSession', () => {
       ]),
     ]);
 
-    expect(session.getSnapshot().status).toBe('ready');
+    expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
 
     session.processMessages([
       updateComponents('test-surface', [
@@ -1440,12 +1469,12 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'A2UI_INVALID_PROPS',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.A2UI_INVALID_PROPS,
           componentId: 'root',
         }),
       ],
@@ -1463,7 +1492,7 @@ describe('createSlackPreviewSession', () => {
       ]),
     ]);
 
-    expect(session.getSnapshot().status).toBe('ready');
+    expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
     expect(sectionText(session.getSnapshot().blocks[0])).toBe('Recovered');
   });
 
@@ -1506,11 +1535,11 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
+          level: DiagnosticLevel.ERROR,
           code: 'EXPRESSION_ERROR',
           componentId: 'root',
         }),
@@ -1531,7 +1560,7 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       diagnostics: [],
     });
     expect(sectionText(session.getSnapshot().blocks[0])).toBe('Recovered after binding error');
@@ -1559,12 +1588,12 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'A2UI_UNSUPPORTED_COMPONENT',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.A2UI_UNSUPPORTED_COMPONENT,
           componentId: 'root',
         }),
       ],
@@ -1581,12 +1610,12 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'error',
+      status: PreviewStatus.ERROR,
       blocks: [],
       diagnostics: [
         expect.objectContaining({
-          level: 'error',
-          code: 'A2UI_COMPONENT_CYCLE',
+          level: DiagnosticLevel.ERROR,
+          code: DiagnosticCode.A2UI_COMPONENT_CYCLE,
           componentId: 'root',
         }),
       ],
@@ -1619,7 +1648,7 @@ describe('createSlackPreviewSession', () => {
     ]);
 
     expect(session.getSnapshot()).toMatchObject({
-      status: 'ready',
+      status: PreviewStatus.READY,
       blocks: [
         expect.objectContaining({
           type: 'header',
@@ -1629,13 +1658,13 @@ describe('createSlackPreviewSession', () => {
       ],
       diagnostics: [
         expect.objectContaining({
-          level: 'warning',
-          code: 'SLACK_LAYOUT_FLATTENED',
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.SLACK_LAYOUT_FLATTENED,
           componentId: 'root',
         }),
         expect.objectContaining({
-          level: 'warning',
-          code: 'SLACK_TEXT_VARIANT_APPROXIMATED',
+          level: DiagnosticLevel.WARNING,
+          code: DiagnosticCode.SLACK_TEXT_VARIANT_APPROXIMATED,
           componentId: 'title',
         }),
       ],
@@ -1657,8 +1686,8 @@ describe('createSlackPreviewSession', () => {
           {id: 'body', component: 'Text', text: 'Content'},
         ]),
       ]);
-      expect(session.getSnapshot().status).toBe('ready');
-      expect(diagnosticCodes(session).includes('SLACK_LAYOUT_FLATTENED')).toBe(warns);
+      expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
+      expect(diagnosticCodes(session).includes(DiagnosticCode.SLACK_LAYOUT_FLATTENED)).toBe(warns);
     },
   );
 
@@ -1688,7 +1717,7 @@ describe('createSlackPreviewSession', () => {
           {id: 'reject-label', component: 'Text', text: 'Reject'},
         ]),
       ]);
-      expect(session.getSnapshot().status).toBe('ready');
+      expect(session.getSnapshot().status).toBe(PreviewStatus.READY);
       expect(session.getSnapshot().blocks).toEqual([
         expect.objectContaining({
           type: 'actions',
@@ -1704,7 +1733,7 @@ describe('createSlackPreviewSession', () => {
           ],
         }),
       ]);
-      expect(diagnosticCodes(session).includes('SLACK_LAYOUT_FLATTENED')).toBe(warns);
+      expect(diagnosticCodes(session).includes(DiagnosticCode.SLACK_LAYOUT_FLATTENED)).toBe(warns);
     },
   );
 
@@ -1722,7 +1751,7 @@ describe('createSlackPreviewSession', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(session.getSnapshot()).toMatchObject({
       revision: 2,
-      status: 'empty',
+      status: PreviewStatus.EMPTY,
       blocks: [],
       diagnostics: [],
     });
