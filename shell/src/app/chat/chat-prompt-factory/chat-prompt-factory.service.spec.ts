@@ -126,7 +126,7 @@ describe('ChatPromptFactoryService', () => {
     expect(prompt).toContain('actual surface IDs, component IDs, and data bindings');
   });
 
-  it('makes Slack-like catalog prompts forbid invalid icon and SVG fallbacks', () => {
+  it('forbids icon and SVG fallbacks for a catalog without an Icon component', () => {
     catalogSpy.activeCatalog.mockReturnValue({
       catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
       components: {
@@ -185,6 +185,64 @@ describe('ChatPromptFactoryService', () => {
     expect(prompt).toContain('trailing downward icon');
     expect(prompt).toContain('search icon');
     expect(prompt).toContain('exact icon names/SVGs');
+  });
+
+  it('reads svgPath and the Image url description from the schema, not from its references', () => {
+    const ref = {
+      $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+    };
+    catalogSpy.activeCatalog.mockReturnValue({
+      catalogId: 'basic-shaped-catalog',
+      components: {
+        Text: {properties: {component: {const: 'Text'}}},
+        Column: {properties: {component: {const: 'Column'}}},
+        Icon: {
+          allOf: [
+            ref,
+            {
+              properties: {
+                component: {const: 'Icon'},
+                name: {
+                  oneOf: [
+                    {type: 'string', enum: ['search']},
+                    {type: 'object', properties: {svgPath: {type: 'string'}}},
+                  ],
+                },
+              },
+            },
+          ],
+        },
+        Image: {
+          allOf: [
+            ref,
+            {properties: {url: {...ref, description: 'The URL of the image to display.'}}},
+          ],
+        },
+      },
+    });
+
+    const prompt = service.systemPrompt();
+
+    expect(prompt).toContain('exact icon names/SVGs');
+    expect(prompt).not.toContain('For Image.url, use only HTTP(S) URLs');
+  });
+
+  it('does not treat an Icon that only mentions SVG as accepting custom SVG paths', () => {
+    catalogSpy.activeCatalog.mockReturnValue({
+      components: {
+        Icon: {
+          properties: {
+            component: {const: 'Icon'},
+            name: {type: 'string', description: 'An icon name; SVG files are not accepted.'},
+          },
+        },
+      },
+    });
+
+    const prompt = service.systemPrompt();
+
+    expect(prompt).toContain('exact supported icon values');
+    expect(prompt).not.toContain('exact icon names/SVGs');
   });
 
   describe('Custom Instructions', () => {
