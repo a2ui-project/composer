@@ -49,7 +49,7 @@ for (const renderer of [
       await page.waitForURL('**/demos');
 
       const cards = page.locator('a2ui-composer-demo-card');
-      await expect(cards).toHaveCount(47);
+      await expect(cards).toHaveCount(46);
       await expect(cards.nth(0).locator('.demo-card-title')).toHaveText('Flight status');
       await expect(cards.nth(1).locator('.demo-card-title')).toHaveText('System dashboard');
       await expect(cards.nth(2).locator('.demo-card-title')).toHaveText('Product checkout');

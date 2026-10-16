@@ -659,7 +659,7 @@ describe('DemoCard sandboxed live demo frame', () => {
     const fixture = mountCard(true);
     sendMessageSpy.mockClear();
 
-    // 37 of the 43 demos set sendDataModel: true, so cards constantly receive
+    // Most demos set sendDataModel: true, so cards constantly receive
     // DATA_MODEL_CHANGE echoes from their own frame that this page has no use for.
     emitFromCard(fixture, PreviewBridgeMessageType.DATA_MODEL_CHANGE, {
       updateDataModel: {surfaceId: 'surface-weather'},

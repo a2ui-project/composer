@@ -3,7 +3,7 @@
 The Angular, Lit, and React sample renderers all serve the same demos to the Composer demo wall, from this directory:
 
 - **`NN_*.json`** are the four showcase demos, written by hand for these samples. They open the demo wall.
-- **`demos.json`** is generated; don't edit it. It holds the four showcases followed by the 43 basic-catalog examples from the pinned `@a2ui/web_core` package, in the order the demo wall shows them.
+- **`demos.json`** is generated; don't edit it. It holds the four showcases followed by the basic-catalog examples from the pinned `@a2ui/web_core` package, in the order the demo wall shows them. A showcase replaces the example with the same name, ignoring case, so the wall has one Flight status card rather than two.
 - **`index.ts`** exports `demos.json` as `DEMOS`, typed as `Demo[]`. Each sample renderer imports it from here.
 
 So the showcases are the only demos defined in this repository; the rest come from the A2UI specification's examples.

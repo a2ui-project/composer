@@ -240,6 +240,16 @@ function readShowcaseDemos() {
 }
 
 /**
+ * Drops the specification examples that a showcase replaces: one with the same name,
+ * ignoring case. Without this the demo wall shows both, as two cards with one title
+ * (our "Flight status" showcase and the specification's "Flight Status" example).
+ */
+function withoutReplacedExamples(examples, showcases) {
+  const showcaseNames = new Set(showcases.map(showcase => showcase.name.toLowerCase()));
+  return examples.filter(example => !showcaseNames.has(example.name.toLowerCase()));
+}
+
+/**
  * Serializes the demos as a JSON array with one demo per line, so a change to one
  * demo shows up as a one-line diff.
  */
@@ -273,7 +283,8 @@ function checkOutput(json, demoCount, version) {
 function main() {
   const version = readPackageVersion();
   const filenames = readExampleFiles();
-  const demos = [...readShowcaseDemos(), ...buildDemos(filenames)];
+  const showcases = readShowcaseDemos();
+  const demos = [...showcases, ...withoutReplacedExamples(buildDemos(filenames), showcases)];
   const json = renderJson(demos);
 
   if (CHECK_MODE) {
