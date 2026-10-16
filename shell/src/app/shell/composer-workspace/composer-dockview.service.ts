@@ -453,8 +453,6 @@ export class ComposerDockview {
               // Grid groups reference these records, so reject the whole layout rather than
               // leaving dangling references by removing retired or invalid panels.
               throw new Error(`Unsupported saved dockview panel: ${key}`);
-            } else if (panel.id === ComposerPanelId.Chat) {
-              panel.title = 'Assistant';
             }
           }
         }
@@ -477,7 +475,7 @@ export class ComposerDockview {
       this.dockviewApi.addPanel({
         id: ComposerPanelId.Chat,
         component: ComposerPanelId.Chat,
-        title: 'Assistant',
+        title: 'Gemini Assistant',
         initialWidth: chatWidth,
         minimumWidth: CHAT_PANEL_MIN_WIDTH,
       });
