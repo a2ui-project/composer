@@ -24,13 +24,13 @@ import {
   getJsonValidationProblems,
   openComposerWithSlackRenderer,
   replaceMonacoJson,
+  SLACK_CATALOG_ID,
   SLACK_RENDERER_URL,
   slackPreviewFrame,
   slackPreviewSurface,
 } from './slack-renderer.helpers';
 import {waitForMonacoEditor} from './helpers';
 
-const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalogs/slack/v1';
 const REACT_RENDERER_URL = 'http://localhost:3458';
 
 test.describe('Slack renderer recovery in Composer', () => {
@@ -345,6 +345,13 @@ function previewDiagnostics(page: Page) {
   return slackPreviewFrame(page).getByRole('list', {name: 'Preview diagnostics'});
 }
 
+/**
+ * Clicks a preview button as if it carried `actionId`. A stale action ID can't be
+ * reached through the UI, because the button that carried it was replaced along with
+ * its render. Relabeling the current button stands in for a click on an old button
+ * that arrives after the preview re-rendered, which is the case the preview must
+ * ignore.
+ */
 async function clickSlackButtonAsAction(
   button: ReturnType<ReturnType<typeof slackPreviewFrame>['getByRole']>,
   actionId: string,

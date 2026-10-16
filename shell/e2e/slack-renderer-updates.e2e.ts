@@ -28,39 +28,13 @@ import {
   openComposerWithSlackRenderer,
   replaceMonacoJson,
   waitForPreviewToSettle,
+  SLACK_CATALOG_ID,
   SLACK_RENDERER_URL,
   slackPreviewFrame,
   slackPreviewSurface,
 } from './slack-renderer.helpers';
 import {waitForMonacoEditor} from './helpers';
 
-export type KnownBlock = Record<string, unknown>;
-
-export interface PreviewDiagnostic {
-  level: 'info' | 'warning' | 'error';
-  code: string;
-  message: string;
-  componentId?: string;
-}
-
-export interface PreviewSnapshot {
-  revision: number;
-  surfaceId?: string;
-  status: 'empty' | 'waiting' | 'ready' | 'error';
-  blocks: KnownBlock[];
-  diagnostics: PreviewDiagnostic[];
-}
-
-export interface PreviewSession {
-  processMessages(messages: A2uiMessage[]): void;
-  getSnapshot(): PreviewSnapshot;
-  subscribe(listener: () => void): () => void;
-  dispatch(actionId: string): Promise<void>;
-  clear(): void;
-  dispose(): void;
-}
-
-const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalogs/slack/v1';
 const MANUAL_SURFACE_ID = 'slack-updates-e2e';
 
 test.describe('Slack renderer update flows in Composer', () => {
