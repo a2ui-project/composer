@@ -8,6 +8,7 @@ import {afterEach, describe, expect, it} from 'vitest';
 import bookingExample from '../public/examples/car-booking.json';
 import config from '../../../shell/src/config.json';
 import {createSlackPreviewSession} from './preview-session';
+import {PreviewStatus} from './preview-snapshot';
 
 describe('Book a Car starter', () => {
   // Sessions are disposed after the test, whether it passes or fails.
@@ -27,7 +28,7 @@ describe('Book a Car starter', () => {
       sessionsToDispose.push(session);
       session.processMessages(messages);
       const snapshot = session.getSnapshot();
-      expect(snapshot.status).toBe('ready');
+      expect(snapshot.status).toBe(PreviewStatus.READY);
       expect(snapshot.diagnostics).toEqual([]);
       expect(snapshot.blocks.filter(block => block.type === 'input')).toHaveLength(3);
       expect(snapshot.blocks).toContainEqual(expect.objectContaining({type: 'actions'}));

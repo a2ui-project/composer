@@ -17,13 +17,14 @@
 import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {type PreviewSnapshot} from './preview-session';
+
 import {BlockKitExport} from './BlockKitExport';
+import {PreviewStatus, type PreviewSnapshot} from './preview-snapshot';
 
 const readySnapshot = (blocks: PreviewSnapshot['blocks']): PreviewSnapshot => ({
   revision: 7,
   surfaceId: 'surface-1',
-  status: 'ready',
+  status: PreviewStatus.READY,
   blocks,
   diagnostics: [],
 });
@@ -83,7 +84,7 @@ describe('BlockKitExport', () => {
     expect(blockKitJson(container)).toEqual({blocks});
   });
 
-  it.each(['empty', 'waiting', 'error'] as const)(
+  it.each([PreviewStatus.EMPTY, PreviewStatus.WAITING, PreviewStatus.ERROR])(
     'disables copy while the snapshot is %s',
     status => {
       renderExport({

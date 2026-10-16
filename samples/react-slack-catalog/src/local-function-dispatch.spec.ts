@@ -25,6 +25,7 @@ import {
 import {describe, expect, it, vi} from 'vitest';
 import {SLACK_CATALOG_ID, slackCatalog} from './catalog';
 import {dispatchReadOnlyLocalFunctionAction} from './local-function-dispatch';
+import {DiagnosticLevel} from './preview-snapshot';
 
 const createSurface = (surfaceId = 'test-surface'): A2uiMessage => ({
   version: 'v0.9',
@@ -92,7 +93,7 @@ describe('dispatchReadOnlyLocalFunctionAction', () => {
 
     expect(result.diagnostics).toEqual([
       expect.objectContaining({
-        level: 'error',
+        level: DiagnosticLevel.ERROR,
         code: 'EXPRESSION_ERROR',
         componentId: 'root',
       }),
@@ -117,7 +118,7 @@ describe('dispatchReadOnlyLocalFunctionAction', () => {
 
     expect(result.diagnostics).toEqual([
       expect.objectContaining({
-        level: 'error',
+        level: DiagnosticLevel.ERROR,
         code: 'EXPRESSION_ERROR',
         componentId: 'root',
       }),

@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import {ActionSchema, ComponentContext, type Action, type SurfaceModel} from '@a2ui/web_core/v0_9';
+import {ComponentContext, type Action, type SurfaceModel} from '@a2ui/web_core/v0_9';
 
 /**
- * An A2UI event action lowered onto a Slack button or menu, kept so a click on
- * that Slack element can be sent back through the A2UI surface it came from.
+ * An A2UI action lowered onto a Slack button, kept so a click on that button
+ * can be run against the A2UI surface it came from.
  */
-export interface EventActionDispatchEntry {
+export interface ActionDispatchEntry {
   /** The Slack `action_id` given to the element that triggers this action. */
   readonly actionId: string;
   /** The preview render this entry was created in; a later render replaces it. */
@@ -33,63 +33,34 @@ export interface EventActionDispatchEntry {
   readonly sourceComponentId: string;
   /** The data model path the component was drawn under, such as a list item's. */
   readonly basePath: string;
-  /** The parsed A2UI event action. Function-call actions are never stored here. */
+  /**
+   * The validated A2UI action: an event, which is sent to Composer, or a
+   * function call, which the preview runs locally.
+   */
   readonly action: Action;
 }
 
-/** Event action entries by Slack `action_id`. */
-export type EventActionRegistry = ReadonlyMap<string, EventActionDispatchEntry>;
+/** Action entries by Slack `action_id`. */
+export type ActionRegistry = ReadonlyMap<string, ActionDispatchEntry>;
 
 /** What `dispatchCurrentEventAction` checks an entry against. */
-export interface EventActionDispatchState {
+interface ActionDispatchState {
   /** The surface the preview shows now, if any. */
   readonly surface?: SurfaceModel;
-  /** The event actions registered for that surface. */
-  readonly registry: EventActionRegistry;
+  /** The actions registered for that surface. */
+  readonly registry: ActionRegistry;
 }
 
 /**
- * Arguments for `createEventActionDispatchEntry`. The fields match
- * `EventActionDispatchEntry`, except that `action` is the component's raw,
- * unvalidated `action` property.
+ * Whether an entry still belongs to the surface the preview shows. A surface
+ * deleted and recreated under the same ID is a new `SurfaceModel`, so a click
+ * left over from the old one is ignored.
  */
-export interface CreateEventActionDispatchEntryOptions {
-  readonly actionId: string;
-  readonly revision: number;
-  readonly surface: SurfaceModel;
-  readonly sourceComponentId: string;
-  readonly basePath: string;
-  readonly action: unknown;
-}
-
-/**
- * Validates a component's action and wraps it for dispatch from Slack.
- *
- * @return The entry, or `undefined` for a function-call action, which the
- *     caller runs locally instead of dispatching.
- * @throws If `action` isn't a valid A2UI action.
- */
-export function createEventActionDispatchEntry({
-  actionId,
-  revision,
-  surface,
-  sourceComponentId,
-  basePath,
-  action,
-}: CreateEventActionDispatchEntryOptions): EventActionDispatchEntry | undefined {
-  const parsedAction = ActionSchema.parse(action) as Action;
-  if ('functionCall' in parsedAction) {
-    return undefined;
-  }
-  return {
-    actionId,
-    revision,
-    surface,
-    surfaceId: surface.id,
-    sourceComponentId,
-    basePath,
-    action: parsedAction,
-  };
+export function isCurrentActionEntry(
+  entry: ActionDispatchEntry,
+  surface: SurfaceModel | undefined,
+): surface is SurfaceModel {
+  return Boolean(surface && entry.surface === surface && entry.surfaceId === surface.id);
 }
 
 /**
@@ -100,16 +71,10 @@ export function createEventActionDispatchEntry({
  */
 export async function dispatchCurrentEventAction(
   actionId: string,
-  state: EventActionDispatchState,
+  state: ActionDispatchState,
 ): Promise<boolean> {
   const entry = state.registry.get(actionId);
-  if (!entry || !state.surface) {
-    return false;
-  }
-  if (entry.surface !== state.surface) {
-    return false;
-  }
-  if (entry.surfaceId !== state.surface.id) {
+  if (!entry || !isCurrentActionEntry(entry, state.surface)) {
     return false;
   }
 

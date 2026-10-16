@@ -22,13 +22,14 @@ import {
   createSlackPreviewBridgeConfig,
   createSlackPreviewSession,
   type PreviewSession,
-  type PreviewSnapshot,
 } from './preview-session';
+import {createEmptySnapshot, type PreviewSnapshot} from './preview-snapshot';
 import {SlackPreview} from './SlackPreview';
 import './styles.css';
 
+/** The Slack renderer app: a preview session attached to Composer's bridge. */
 export function App() {
-  const [snapshot, setSnapshot] = useState<PreviewSnapshot>(initialSnapshot);
+  const [snapshot, setSnapshot] = useState<PreviewSnapshot>(() => createEmptySnapshot(0));
   const [theme, setTheme] = useState<ThemePreference>();
   const sessionRef = useRef<PreviewSession | undefined>(undefined);
 
@@ -78,10 +79,3 @@ export function App() {
     </main>
   );
 }
-
-const initialSnapshot: PreviewSnapshot = {
-  revision: 0,
-  status: 'empty',
-  blocks: [],
-  diagnostics: [],
-};

@@ -22,7 +22,7 @@ import {type A2uiMessage, type UpdateComponentsMessage} from '@a2ui/web_core/v0_
 import {slackCatalogJson} from './catalog';
 import {App} from './App';
 import {SlackPreview} from './SlackPreview';
-import {type PreviewSnapshot} from './preview-session';
+import {PreviewStatus, type PreviewSnapshot} from './preview-snapshot';
 
 const rendererMock = vi.hoisted(() => vi.fn());
 
@@ -104,7 +104,7 @@ describe('SlackPreview', () => {
     const snapshot: PreviewSnapshot = {
       revision: 1,
       surfaceId: 'test-surface',
-      status: 'ready',
+      status: PreviewStatus.READY,
       blocks: [
         {
           type: 'section',
@@ -177,7 +177,7 @@ describe('SlackPreview', () => {
           snapshot={{
             revision: 1,
             surfaceId: 'test-surface',
-            status: 'ready',
+            status: PreviewStatus.READY,
             blocks,
             diagnostics: [],
           }}
@@ -200,7 +200,7 @@ describe('SlackPreview', () => {
           snapshot={{
             revision: 2,
             surfaceId: 'test-surface',
-            status: 'ready',
+            status: PreviewStatus.READY,
             blocks,
             diagnostics: [],
           }}

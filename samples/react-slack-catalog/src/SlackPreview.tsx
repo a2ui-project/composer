@@ -17,16 +17,26 @@
 import {type ThemePreference} from 'a2ui-bridge';
 import {BlockKitExport} from './BlockKitExport';
 import {SlackPreviewRenderer} from './SlackPreviewRenderer';
-import {SlackPreviewState, type ReadyPreviewSnapshot} from './SlackPreviewState';
-import {type PreviewSnapshot} from './preview-session';
+import {SlackPreviewState} from './SlackPreviewState';
+import {type PreviewSnapshot} from './preview-snapshot';
 
-export interface SlackPreviewProps {
+/** Inputs to `SlackPreview`. */
+interface SlackPreviewProps {
+  /** The render to show. */
   readonly snapshot: PreviewSnapshot;
+  /** Composer's theme, which the Slack message follows. */
   readonly theme?: ThemePreference;
+  /** Called with a Slack input's `action_id` and new value as the user types. */
   readonly updateInput: (actionId: string, value: string) => void;
+  /** Called with a Slack button's `action_id` when the user clicks it. */
   readonly dispatch: (actionId: string) => void | Promise<void>;
 }
 
+/**
+ * The Slack preview page: the rendered message and its Block Kit export once a
+ * render is ready, otherwise the empty, waiting or error state, with any
+ * diagnostics below.
+ */
 export function SlackPreview({snapshot, theme, dispatch, updateInput}: SlackPreviewProps) {
   return (
     <SlackPreviewState
@@ -36,22 +46,11 @@ export function SlackPreview({snapshot, theme, dispatch, updateInput}: SlackPrev
         <SlackPreviewRenderer
           dispatch={dispatch}
           updateInput={updateInput}
-          snapshot={withoutStateDiagnostics(readySnapshot)}
+          snapshot={readySnapshot}
           theme={theme}
         />
       )}
       snapshot={snapshot}
     />
   );
-}
-
-function withoutStateDiagnostics(snapshot: ReadyPreviewSnapshot): ReadyPreviewSnapshot {
-  if (snapshot.diagnostics.length === 0) {
-    return snapshot;
-  }
-
-  return {
-    ...snapshot,
-    diagnostics: [],
-  };
 }

@@ -20,7 +20,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {ThemePreference} from 'a2ui-bridge';
 import {type KnownBlock} from '@slack/types';
 import {SlackPreviewRenderer} from './SlackPreviewRenderer';
-import {type PreviewSnapshot} from './preview-session';
+import {PreviewStatus, type PreviewSnapshot} from './preview-snapshot';
 
 const rendererMock = vi.hoisted(() => vi.fn());
 
@@ -81,7 +81,7 @@ vi.mock('@tightknitai/storybook-addon-slack-block-kit', async () => {
 const readySnapshot = (blocks: KnownBlock[]): PreviewSnapshot => ({
   revision: 1,
   surfaceId: 'surface-1',
-  status: 'ready',
+  status: PreviewStatus.READY,
   blocks,
   diagnostics: [],
 });

@@ -20,12 +20,12 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {ThemePreference} from 'a2ui-bridge';
 import {type KnownBlock} from '@slack/types';
 import {SlackPreviewRenderer} from './SlackPreviewRenderer';
-import {type PreviewSnapshot} from './preview-session';
+import {PreviewStatus, type PreviewSnapshot} from './preview-snapshot';
 
 const readySnapshot: PreviewSnapshot = {
   revision: 1,
   surfaceId: 'surface-1',
-  status: 'ready',
+  status: PreviewStatus.READY,
   blocks: [
     {
       type: 'section',
