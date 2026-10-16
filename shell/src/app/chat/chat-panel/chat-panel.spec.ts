@@ -224,8 +224,9 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
         {
           role: MessageRole.USER,
           content:
-            '{"version": "v0.9", "updateComponents": {"surfaceId": "s1", ' +
-            '"components": [{"id":"b1","component":"Button"}]}}',
+            '[{"version":"v0.9","updateComponents":{"surfaceId":"s1",' +
+            '"components":[{"id":"b1","component":"Button"}]}}]',
+          isSnapshot: true,
         },
         {
           role: MessageRole.MODEL,
@@ -247,7 +248,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       expect(bubbles[0]).toBe('please append a basic search form widget');
       expect(bubbleTypes[0]).toBe('human-text');
 
-      // Bubble 2: Layout snapshot block
+      // Bubble 2: Layout snapshot block stamped with isSnapshot: true and no pre-populated componentCount
       expect(bubbleHeaders[1]).toBe('Canvas Revision Snapshot');
       expect(bubbles[1]).toBe('Received 1 A2UI JSON Components');
       expect(bubbleTypes[1]).toBe('layout-snapshot');

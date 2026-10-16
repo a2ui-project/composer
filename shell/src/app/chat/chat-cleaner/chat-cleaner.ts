@@ -16,6 +16,7 @@
 
 import {Injectable} from '@angular/core';
 import {tryParseJsonArray} from '../../utils/json';
+import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 
 const MD_FENCE_REGEX = /```(?:jsonl?|jsonlines|a2ui|html|xml)?\s*([\s\S]*?)\s*```/gi;
 const TAG_REGEX = /<(thought|thinking|reasoning)>([\s\S]*?)(?:<\/\1>|$)/gi;
@@ -163,5 +164,20 @@ export class ChatCleaner {
     }
     const parsedArray = tryParseJsonArray(trimmed);
     return parsedArray.success && isLayoutArray(parsedArray.data);
+  }
+
+  /**
+   * Determines if a message is an unprompted USER canvas layout snapshot
+   * rather than a human prompt turn or a message with attachments.
+   */
+  isUserLayoutSnapshot(msg?: LlmMessage): boolean {
+    if (!msg || msg.role !== MessageRole.USER || msg.promptId || msg.attachments?.length) {
+      return false;
+    }
+    if (msg.isSnapshot !== undefined) {
+      return msg.isSnapshot;
+    }
+    const trimmed = msg.content.trim();
+    return (trimmed.startsWith('[') || trimmed.startsWith('{')) && this.isLayoutSnapshot(trimmed);
   }
 }

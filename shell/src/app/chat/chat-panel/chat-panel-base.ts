@@ -194,7 +194,7 @@ export abstract class ChatPanelBase {
             componentCount: null,
           };
         }
-        if (m.isSnapshot !== undefined) {
+        if (m.isSnapshot === false || (m.isSnapshot === true && m.componentCount != null)) {
           return {
             ...m,
             isSnapshot: m.isSnapshot,
@@ -204,8 +204,8 @@ export abstract class ChatPanelBase {
         }
         const cleaned = m.content ? this.chatCleaner.cleanPayload(m.content) : '';
         const parseResult = cleaned ? parseAndHealJsonLines(cleaned) : null;
-        let isSnapshot = false;
-        if (m.content && parseResult && parseResult.success) {
+        let isSnapshot = Boolean(m.isSnapshot);
+        if (!isSnapshot && m.content && parseResult && parseResult.success) {
           isSnapshot = !parseResult.isConversational;
         }
         if (isSnapshot && m.content) {
@@ -336,9 +336,10 @@ export abstract class ChatPanelBase {
    */
   protected getBubbleClass(message: LlmMessage): string {
     if (message.role === MessageRole.USER) {
-      return message.content && this.chatCleaner.isLayoutSnapshot(message.content)
-        ? 'bubble-user bubble-layout'
-        : 'bubble-user bubble-text';
+      const isLayoutSnapshot =
+        message.isSnapshot ??
+        (Boolean(message.content) && this.chatCleaner.isLayoutSnapshot(message.content));
+      return isLayoutSnapshot ? 'bubble-user bubble-layout' : 'bubble-user bubble-text';
     }
     if (message.role === MessageRole.MODEL) {
       return 'bubble-model';

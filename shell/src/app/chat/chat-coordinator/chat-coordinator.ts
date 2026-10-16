@@ -453,18 +453,19 @@ export class ChatCoordinator {
       parsedBlocks = this.resolveLayoutUpdate(parsedBlocks);
       this.chatState.setPipelineStatus(PipelineStatus.READY);
 
-      // Turn list of updates back into raw formatted JSON text to write to
-      // editor draft
+      // Serialize compact JSON for LLM chat history context while keeping
+      // formatted JSON for the Monaco editor draft.
+      const compactLayoutText = JSON.stringify(parsedBlocks);
       const finalLayoutText = formatJson(parsedBlocks);
 
-      // Update latest MODEL turn message in history to normalized JSON string
+      // Update latest MODEL turn message in history to compact JSON string
       this.chatState.updateChatHistory(history => {
         const updated = [...history];
         const lastIdx = updated.length - 1;
         if (updated[lastIdx]?.role === MessageRole.MODEL) {
           updated[lastIdx] = {
             ...updated[lastIdx],
-            content: finalLayoutText,
+            content: compactLayoutText,
             isSnapshot: true,
             componentCount,
           };

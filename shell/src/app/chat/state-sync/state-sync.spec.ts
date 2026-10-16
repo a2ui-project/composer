@@ -205,7 +205,8 @@ describe('StateSync Autosave Draft Integrations', () => {
     expect(chatStateMock.setChatHistory).toHaveBeenCalledWith([
       {
         role: MessageRole.USER,
-        content: '[\n  {\n    "version": "v0.9"\n  }\n]',
+        content: '[{"version":"v0.9"}]',
+        isSnapshot: true,
       },
     ]);
   });
@@ -215,7 +216,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     chatStateMock.setChatHistory([
       {
         role: MessageRole.USER,
-        content: '[\n  {\n    "version": "v0.9",\n    "orig": true\n  }\n]',
+        content: '[{"version":"v0.9","orig":true}]',
       },
     ]);
 
@@ -228,7 +229,8 @@ describe('StateSync Autosave Draft Integrations', () => {
     expect(chatStateMock.setChatHistory).toHaveBeenCalledWith([
       {
         role: MessageRole.USER,
-        content: '[\n  {\n    "version": "v0.9",\n    "updated": true\n  }\n]',
+        content: '[{"version":"v0.9","updated":true}]',
+        isSnapshot: true,
       },
     ]);
     expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
@@ -238,7 +240,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     chatStateMock.setChatHistory([
       {
         role: MessageRole.USER,
-        content: '[\n  {\n    "version": "v0.9"\n  }\n]',
+        content: '[{"version":"v0.9"}]',
       },
       {
         role: MessageRole.MODEL,
@@ -257,7 +259,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     const initialMockHistory = [
       {
         role: MessageRole.USER,
-        content: '[\n  {\n    "version": "v0.9"\n  }\n]',
+        content: '[{"version":"v0.9"}]',
       },
       {
         role: MessageRole.MODEL,
@@ -269,7 +271,8 @@ describe('StateSync Autosave Draft Integrations', () => {
     expect(updated).toHaveLength(3);
     expect(updated[2]).toEqual({
       role: MessageRole.USER,
-      content: '[\n  {\n    "version": "v0.9",\n    "post-turn": true\n  }\n]',
+      content: '[{"version":"v0.9","post-turn":true}]',
+      isSnapshot: true,
     });
   });
 
@@ -304,7 +307,8 @@ describe('StateSync Autosave Draft Integrations', () => {
     });
     expect(updated[1]).toEqual({
       role: MessageRole.USER,
-      content: '[\n  {\n    "version": "v0.9",\n    "components": []\n  }\n]',
+      content: '[{"version":"v0.9","components":[]}]',
+      isSnapshot: true,
     });
   });
 
@@ -411,11 +415,11 @@ describe('StateSync Autosave Draft Integrations', () => {
         const syncedContent = syncCall[0].content;
 
         // Verify component presence and layout structure integrity
-        expect(syncedContent).toContain('"id": "root"');
-        expect(syncedContent).toContain('"id": "c-1"');
+        expect(syncedContent).toContain('"id":"root"');
+        expect(syncedContent).toContain('"id":"c-1"');
 
         // Verify that 'mock_rules_container' component itself is stripped
-        expect(syncedContent).not.toContain('"id": "mock_rules_container"');
+        expect(syncedContent).not.toContain('"id":"mock_rules_container"');
         // Verify that reference to 'mock_rules_container' in root's children array is pruned
         expect(syncedContent).toContain('"c-1"');
         expect(syncedContent).not.toContain('mock_rules_container');
@@ -437,7 +441,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
       const syncedContent = syncCall[0].content;
 
-      expect(syncedContent).toContain('"id": "c-1"');
+      expect(syncedContent).toContain('"id":"c-1"');
       expect(syncedContent).toContain('"invalid-string-element"');
     });
 
@@ -473,7 +477,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
       const syncedContent = syncCall[0].content;
 
-      expect(syncedContent).toContain('"id": "c-1"');
+      expect(syncedContent).toContain('"id":"c-1"');
     });
 
     it('sanitizes objects inside component array properties', () => {
@@ -492,7 +496,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
       const syncedContent = syncCall[0].content;
 
-      expect(syncedContent).toContain('"label": "L1"');
+      expect(syncedContent).toContain('"label":"L1"');
       expect(syncedContent).not.toContain('mockProp');
     });
 
@@ -533,7 +537,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       const initialSnapshot = [
         {
           role: MessageRole.USER,
-          content: '[\n  {\n    "version": "v0.9"\n  }\n]',
+          content: '[{"version":"v0.9"}]',
         },
       ];
       chatStateMock.setChatHistory(initialSnapshot);
@@ -565,16 +569,114 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(syncedContent).toContain('"primitive-element"');
     });
 
-    it('returns empty array when all layout lines are sanitized to null', () => {
+    it('discards layout when all layout lines are sanitized to null without syncing empty array to history', () => {
       service.updateDraft('[{"registerMockRules": true}]');
       TestBed.tick();
 
       vi.advanceTimersByTime(300);
 
-      const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
-      const syncedContent = syncCall[0].content;
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+    });
 
-      expect(syncedContent).toBe('[]');
+    it('discards empty JSON array [] without syncing to history', () => {
+      service.updateDraft('[]');
+      TestBed.tick();
+
+      vi.advanceTimersByTime(300);
+
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+    });
+
+    it('compacts multi-line formatted JSON in chatHistory while preserving formatting in activeDraft', () => {
+      const prettyDraft =
+        '[\n  {\n    "version": "v0.9",\n    "createSurface": {\n      "surfaceId": "s1"\n    }\n  }\n]';
+      service.updateDraft(prettyDraft);
+      TestBed.tick();
+      vi.advanceTimersByTime(300);
+
+      expect(service.activeDraft()).toBe(prettyDraft);
+      expect(service.activeDraft()).toContain('\n');
+
+      const syncedContent = chatStateMock.chatHistory()[0].content;
+      expect(syncedContent).toBe('[{"version":"v0.9","createSurface":{"surfaceId":"s1"}}]');
+      expect(syncedContent).not.toContain('\n');
+    });
+
+    it('deduplicates whitespace-only editor changes via lastSynchronizedLayout', () => {
+      service.updateDraft('[{"version":"v0.9","createSurface":{"surfaceId":"s1"}}]');
+      TestBed.tick();
+      vi.advanceTimersByTime(300);
+      expect(chatStateMock.setChatHistory).toHaveBeenCalledTimes(1);
+
+      chatStateMock.setChatHistory.mockClear();
+      chatStateMock.updateChatHistory.mockClear();
+
+      service.updateDraft(
+        '[\n  {\n    "version": "v0.9",\n    "createSurface": {\n      "surfaceId": "s1"\n    }\n  }\n]',
+      );
+      TestBed.tick();
+      vi.advanceTimersByTime(300);
+
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+    });
+
+    it('does not append a duplicate USER snapshot when syncActiveDraftToHistory runs after commitLayoutFromLlm without user edits', () => {
+      const prettyLlmLayout = formatJson([
+        {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'basic'}},
+      ]);
+      chatStateMock.setChatHistory([
+        {role: MessageRole.USER, content: 'Create a surface', promptId: 'p1'},
+        {
+          role: MessageRole.MODEL,
+          content: JSON.stringify([
+            {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'basic'}},
+          ]),
+          isSnapshot: true,
+        },
+      ]);
+      chatStateMock.setChatHistory.mockClear();
+      chatStateMock.updateChatHistory.mockClear();
+
+      service.commitLayoutFromLlm(prettyLlmLayout);
+      service.syncActiveDraftToHistory();
+
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.chatHistory()).toHaveLength(2);
+    });
+
+    it('preserves user prompts starting with [ instead of overwriting them in-place', () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.USER,
+          content: '[WIP] please render a login card',
+          promptId: 'p1',
+        },
+      ]);
+      chatStateMock.setChatHistory.mockClear();
+      chatStateMock.updateChatHistory.mockClear();
+
+      service.updateDraft('[{"version": "v0.9", "createSurface": {"surfaceId": "s1"}}]');
+      TestBed.tick();
+      vi.advanceTimersByTime(300);
+
+      expect(chatStateMock.setChatHistory).not.toHaveBeenCalled();
+      expect(chatStateMock.updateChatHistory).toHaveBeenCalledTimes(1);
+      expect(chatStateMock.chatHistory()).toEqual([
+        {
+          role: MessageRole.USER,
+          content: '[WIP] please render a login card',
+          promptId: 'p1',
+        },
+        {
+          role: MessageRole.USER,
+          content: '[{"version":"v0.9","createSurface":{"surfaceId":"s1"}}]',
+          isSnapshot: true,
+        },
+      ]);
     });
 
     it('handles updateComponents without components array during sanitization', () => {
@@ -589,7 +691,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       const syncCall = chatStateMock.setChatHistory.mock.calls[0][0];
       const syncedContent = syncCall[0].content;
 
-      expect(syncedContent).toContain('"components": "not-an-array"');
+      expect(syncedContent).toContain('"components":"not-an-array"');
     });
   });
 
@@ -790,7 +892,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     });
 
     it('populates blank createSurface payload on resetToBlankDraft, synchronously syncs to chatHistory at 0ms, and increments sessionResetNonce', () => {
-      const expectedBlankSurface = formatJson([
+      const blankSurfaceItems = [
         {
           version: 'v0.9',
           createSurface: {
@@ -799,7 +901,9 @@ describe('StateSync Autosave Draft Integrations', () => {
             sendDataModel: true,
           },
         },
-      ]);
+      ];
+      const expectedBlankSurface = formatJson(blankSurfaceItems);
+      const expectedCompactBlankSurface = JSON.stringify(blankSurfaceItems);
 
       chatStateMock.setChatHistory.mockClear();
       expect(service.sessionResetNonce()).toBe(0);
@@ -814,7 +918,8 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(chatStateMock.setChatHistory).toHaveBeenCalledWith([
         {
           role: MessageRole.USER,
-          content: expectedBlankSurface,
+          content: expectedCompactBlankSurface,
+          isSnapshot: true,
         },
       ]);
 
@@ -864,7 +969,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     });
 
     it('cancels pending <300ms updateDraft timer on resetToBlankDraft, flushDraft, and commitLayoutFromLlm, and does not emit duplicate layout bubble at 300ms', () => {
-      const expectedBlankSurface = formatJson([
+      const expectedCompactBlankSurface = JSON.stringify([
         {
           version: 'v0.9',
           createSurface: {
@@ -888,7 +993,8 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(chatStateMock.chatHistory()).toEqual([
         {
           role: MessageRole.USER,
-          content: expectedBlankSurface,
+          content: expectedCompactBlankSurface,
+          isSnapshot: true,
         },
       ]);
 
@@ -933,7 +1039,7 @@ describe('StateSync Autosave Draft Integrations', () => {
     });
 
     it('synchronously re-populates chatHistory across repeated consecutive resetToBlankDraft calls and after commitLayoutFromLlm', () => {
-      const expectedBlankSurface = formatJson([
+      const blankSurfaceItems = [
         {
           version: 'v0.9',
           createSurface: {
@@ -942,14 +1048,16 @@ describe('StateSync Autosave Draft Integrations', () => {
             sendDataModel: true,
           },
         },
-      ]);
+      ];
+      const expectedBlankSurface = formatJson(blankSurfaceItems);
+      const expectedCompactBlankSurface = JSON.stringify(blankSurfaceItems);
 
       // First reset
       chatStateMock.setChatHistory([]);
       service.resetToBlankDraft();
       expect(service.sessionResetNonce()).toBe(1);
       expect(chatStateMock.chatHistory()).toEqual([
-        {role: MessageRole.USER, content: expectedBlankSurface},
+        {role: MessageRole.USER, content: expectedCompactBlankSurface, isSnapshot: true},
       ]);
 
       // Simulate ChatCoordinator clearing history and calling resetToBlankDraft a second time in a row
@@ -957,7 +1065,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       service.resetToBlankDraft();
       expect(service.sessionResetNonce()).toBe(2);
       expect(chatStateMock.chatHistory()).toEqual([
-        {role: MessageRole.USER, content: expectedBlankSurface},
+        {role: MessageRole.USER, content: expectedCompactBlankSurface, isSnapshot: true},
       ]);
 
       // Simulate LLM committing layout, then clearing history and calling resetToBlankDraft again
@@ -967,7 +1075,7 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(service.sessionResetNonce()).toBe(3);
       expect(service.activeDraft()).toBe(expectedBlankSurface);
       expect(chatStateMock.chatHistory()).toEqual([
-        {role: MessageRole.USER, content: expectedBlankSurface},
+        {role: MessageRole.USER, content: expectedCompactBlankSurface, isSnapshot: true},
       ]);
     });
 
