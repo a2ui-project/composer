@@ -30,7 +30,7 @@ import {
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {Catalog} from '../models/catalog-storage.model';
+import {Catalog, getCatalogId} from '../models/catalog-storage.model';
 import {from, of} from 'rxjs';
 import {concatMap} from 'rxjs/operators';
 import {sanitizeHtml} from 'safevalues';
@@ -369,7 +369,7 @@ export class CatalogManagement {
               return of(null);
             }
 
-            const catalogId = catalogObj.catalogId || catalogObj.$id;
+            const catalogId = getCatalogId(catalogObj);
             if (!catalogId) {
               const errorMsg = 'Catalog is missing a valid identifier (catalogId or $id).';
               this._catalogError.set(errorMsg);

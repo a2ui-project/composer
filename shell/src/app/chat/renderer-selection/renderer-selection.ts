@@ -39,7 +39,7 @@ import {
   CatalogManagement,
   sanitizeCatalog,
 } from '../../storage/catalog-management/catalog-management';
-import {Catalog} from '../../storage/models/catalog-storage.model';
+import {Catalog, getCatalogId} from '../../storage/models/catalog-storage.model';
 import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 import {isValidHttpUrl} from '../../utils/url';
 
@@ -422,7 +422,7 @@ class CatalogWait {
     const catalog = sanitizeCatalog(payload);
     this.receivedCatalog = {
       previous: this.app.catalog.activeCatalog(),
-      id: catalog.catalogId || catalog.$id,
+      id: getCatalogId(catalog),
       fingerprint: stableStringify(catalog),
     };
   }
@@ -485,7 +485,7 @@ class CatalogWait {
       !!received &&
       !!activeCatalog &&
       activeCatalog !== received.previous &&
-      (activeCatalog.catalogId || activeCatalog.$id) === received.id &&
+      getCatalogId(activeCatalog) === received.id &&
       stableStringify(activeCatalog) === received.fingerprint &&
       !handshakeInProgress
     );

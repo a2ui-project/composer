@@ -46,6 +46,7 @@ import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
 import {RendererSelection} from '../renderer-selection/renderer-selection';
 import {RendererTool} from '../renderer-selection/renderer-tool';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {getCatalogId} from '../../storage/models/catalog-storage.model';
 
 /** Why a response was cancelled before it finished. */
 enum CancelReason {
@@ -249,8 +250,7 @@ export class ChatCoordinator {
     const promptTurnIndex = options?.promptTurnIndex ?? this.currentTurnIndex() + 1;
     this.currentTurnIndex.set(promptTurnIndex);
 
-    const catalogObj = this.catalogManagement.activeCatalog();
-    const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
+    const catalogId = this.getActiveCatalogId();
 
     const hasScreenshot = attachments.some(
       a => a.name === 'screenshot.png' || a.mimeType?.startsWith('image/'),
@@ -656,7 +656,7 @@ export class ChatCoordinator {
 
   private getActiveCatalogId(): string {
     const catalog = this.catalogManagement.activeCatalog();
-    return catalog ? catalog.catalogId || catalog.$id || '' : '';
+    return (catalog && getCatalogId(catalog)) || '';
   }
 
   /**
