@@ -195,7 +195,8 @@ corepack yarn workspace react-slack-catalog build
 ```
 
 The output is `samples/react-slack-catalog/dist`. It includes the public example
-JSON files and `THIRD_PARTY_NOTICES.md`. Serve `dist` with any static host and
+JSON files and `THIRD_PARTY_BUNDLE_LICENSES.md`, the licenses of the npm
+packages bundled into it. Serve `dist` with any static host and
 register that hosted URL as the Composer renderer URL. For a local production
 asset smoke:
 
@@ -211,14 +212,9 @@ The Vite config uses a relative asset base, so the built bundle can be hosted
 under a path prefix as long as the host serves `index.html` and static assets
 from the same directory.
 
-## Attribution and vendor-removal path
-
-This sample adapts Slack lowering ideas from CopilotKit channel playground code
-under the MIT license. The full notice is in `THIRD_PARTY_NOTICES.md` and is
-copied into `dist`.
+## Replacing the local lowerer
 
 The sample keeps the Slack lowerers local today because the published packages
 do not expose an equivalent persistent-surface lowering API. When CopilotKit
 publishes that API, replace the local lowerer and action registry with the
-vendor API, keep this README's behavior contract, and remove the adapted source
-notice once no adapted source remains.
+vendor API and keep this README's behavior contract.
