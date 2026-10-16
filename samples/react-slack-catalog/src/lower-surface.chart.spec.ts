@@ -15,9 +15,9 @@
  */
 
 import {type A2uiMessage, type UpdateComponentsMessage} from '@a2ui/web_core/v0_9';
-import {describe, expect, it, vi} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import {SLACK_CATALOG_ID} from './catalog';
-import {type DrawnImageStore} from './drawn-image-store';
+import {createFakeDrawnImageStore} from './fake-drawn-image-store';
 import {createSlackPreviewSession} from './preview-session';
 import {DiagnosticCode, DiagnosticLevel, PreviewStatus, blocksForExport} from './preview-snapshot';
 
@@ -53,22 +53,9 @@ const PIE = {
   ],
 };
 
-function createFakeChartImages() {
-  const drawn: string[] = [];
-  const store = {
-    urlFor: vi.fn<DrawnImageStore['urlFor']>(svg => {
-      drawn.push(svg);
-      return `blob:chart-${drawn.length}`;
-    }),
-    release: vi.fn<DrawnImageStore['release']>(),
-    dispose: vi.fn<DrawnImageStore['dispose']>(),
-  };
-  return {store, drawn};
-}
-
 describe('Slack charts', () => {
   it('draws a chart as an image next to native blocks and exports it as an uploaded file', () => {
-    const {store, drawn} = createFakeChartImages();
+    const {store, drawn} = createFakeDrawnImageStore();
     const session = createSlackPreviewSession(undefined, {drawnImages: store});
 
     session.processMessages([createSurface, chartMessage(PIE)]);
@@ -79,7 +66,7 @@ describe('Slack charts', () => {
       expect.objectContaining({type: 'header'}),
       {
         type: 'image',
-        image_url: 'blob:chart-1',
+        image_url: 'blob:image-1',
         alt_text: 'Pie chart, Possession: Argentina 70, Mexico 30',
       },
     ]);
@@ -102,7 +89,7 @@ describe('Slack charts', () => {
   });
 
   it('uses the accessibility label as alt text when the chart has one', () => {
-    const {store} = createFakeChartImages();
+    const {store} = createFakeDrawnImageStore();
     const session = createSlackPreviewSession(undefined, {drawnImages: store});
 
     session.processMessages([
@@ -116,7 +103,7 @@ describe('Slack charts', () => {
   });
 
   it('redraws a chart whose values are bound to the data model', () => {
-    const {store, drawn} = createFakeChartImages();
+    const {store, drawn} = createFakeDrawnImageStore();
     const session = createSlackPreviewSession(undefined, {drawnImages: store});
 
     session.processMessages([
@@ -139,7 +126,7 @@ describe('Slack charts', () => {
   });
 
   it('skips a pie chart with a negative slice and says why, while the rest renders', () => {
-    const {store} = createFakeChartImages();
+    const {store} = createFakeDrawnImageStore();
     const session = createSlackPreviewSession(undefined, {drawnImages: store});
 
     session.processMessages([
@@ -167,7 +154,7 @@ describe('Slack charts', () => {
   });
 
   it('skips a chart whose bound value is not a number', () => {
-    const {store} = createFakeChartImages();
+    const {store} = createFakeDrawnImageStore();
     const session = createSlackPreviewSession(undefined, {drawnImages: store});
 
     session.processMessages([
@@ -184,7 +171,7 @@ describe('Slack charts', () => {
   });
 
   it('skips a chart that has only zero values', () => {
-    const {store} = createFakeChartImages();
+    const {store} = createFakeDrawnImageStore();
     const session = createSlackPreviewSession(undefined, {drawnImages: store});
 
     session.processMessages([
@@ -201,7 +188,7 @@ describe('Slack charts', () => {
   });
 
   it('rejects more than 20 points through the catalog schema', () => {
-    const {store} = createFakeChartImages();
+    const {store} = createFakeDrawnImageStore();
     const session = createSlackPreviewSession(undefined, {drawnImages: store});
 
     session.processMessages([
@@ -218,11 +205,11 @@ describe('Slack charts', () => {
   });
 
   it('frees chart images it no longer shows, and all of them on dispose', () => {
-    const {store} = createFakeChartImages();
+    const {store} = createFakeDrawnImageStore();
     const session = createSlackPreviewSession(undefined, {drawnImages: store});
 
     session.processMessages([createSurface, chartMessage(PIE)]);
-    expect(store.release).toHaveBeenLastCalledWith(new Set(['blob:chart-1']));
+    expect(store.release).toHaveBeenLastCalledWith(new Set(['blob:image-1']));
 
     session.processMessages([
       updateComponents([{id: 'root', component: 'Text', text: 'No chart now'}]),
@@ -234,7 +221,7 @@ describe('Slack charts', () => {
   });
 
   it('freezes the export blocks it publishes', () => {
-    const {store} = createFakeChartImages();
+    const {store} = createFakeDrawnImageStore();
     const session = createSlackPreviewSession(undefined, {drawnImages: store});
 
     session.processMessages([createSurface, chartMessage(PIE)]);

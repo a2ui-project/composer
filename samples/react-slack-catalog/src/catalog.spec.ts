@@ -40,6 +40,7 @@ const EXPECTED_COMPONENTS = [
 ].sort();
 const TableSchema = slackCatalog.components.get('Table')!.schema;
 const ChartSchema = slackCatalog.components.get('Chart')!.schema;
+const ScorecardSchema = slackCatalog.components.get('Scorecard')!.schema;
 const COMMON_TYPES_SCHEMA: SchemaObject = {
   $id: 'common_types.json',
   type: 'object',
@@ -622,5 +623,54 @@ describe('Slack Chart component', () => {
         data: Array.from({length: 21}, (_, index) => ({label: `P${index}`, value: index})),
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('Slack Scorecard component', () => {
+  const usage = SLACK_COMPONENT_USAGES.Scorecard.usage[0];
+  const {id: _id, component: _component, ...usageProps} = usage;
+  const validateScorecard = compileComponentSchema(slackCatalogJson.components.Scorecard);
+
+  it('publishes guidance on when to use it and that it is sent as an image', () => {
+    expect(slackCatalogJson.components.Scorecard).toMatchObject({
+      description: expect.stringContaining(
+        'Slack has no block for a scorecard, so the Slack renderer draws it and sends it as an uploaded image. Give the teams and scores, not an image URL.',
+      ),
+    });
+    expect(slackCatalogJson.description).toContain(
+      'Use Scorecard to show one match result; Slack has no block for it',
+    );
+  });
+
+  it('accepts the Gallery example, text scores, and bound names, scores, and status', () => {
+    const bound = {
+      home: {name: {path: '/home/name'}, score: {path: '/home/score'}},
+      away: {name: 'Mexico', score: '3 (4)'},
+      status: {path: '/status'},
+    };
+
+    expect(ScorecardSchema.safeParse(usageProps).success).toBe(true);
+    expect(validateScorecard(usage)).toBe(true);
+    expect(ScorecardSchema.safeParse(bound).success).toBe(true);
+    expect(validateScorecard({id: 'final-score', component: 'Scorecard', ...bound})).toBe(true);
+  });
+
+  it('rejects a missing team or score, unknown props, and values of the wrong type', () => {
+    const invalid = [
+      {home: usageProps.home},
+      {...usageProps, away: {name: 'Mexico'}},
+      {...usageProps, home: {...usageProps.home, logo: 'https://example.com/logo.png'}},
+      {...usageProps, home: {name: 'Argentina', score: true}},
+      {...usageProps, status: 90},
+      {...usageProps, url: 'https://example.com/scorecard.png'},
+    ];
+
+    for (const props of invalid) {
+      expect(ScorecardSchema.safeParse(props).success, JSON.stringify(props)).toBe(false);
+      expect(
+        validateScorecard({id: 'final-score', component: 'Scorecard', ...props}),
+        JSON.stringify(props),
+      ).toBe(false);
+    }
   });
 });
