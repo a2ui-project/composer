@@ -88,6 +88,9 @@ export declare interface LlmMessage {
   /** Indicates whether the message represents an established state snapshot rather than an incremental delta. */
   readonly isSnapshot?: boolean;
 
+  /** Indicates whether the model turn was stopped/cancelled by the user before completion. */
+  readonly isCancelled?: boolean;
+
   /** The total count of recognized A2UI components contained in this message, or null/undefined if uncounted. */
   readonly componentCount?: number | null;
 }
@@ -116,6 +119,7 @@ export interface LlmResponse {
 }
 
 export const CANCEL_ERROR_NAME = 'CancelError';
+export const STOPPED_RESPONSE_MESSAGE = '*You stopped this response.*';
 
 /**
  * Represents dynamic, real-time incremental tokens compiled asynchronously.

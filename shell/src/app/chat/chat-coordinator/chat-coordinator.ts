@@ -32,6 +32,7 @@ import {
   LlmMessage,
   LlmStreamResponse,
   MessageRole,
+  STOPPED_RESPONSE_MESSAGE,
 } from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
 import {StateSync} from '../state-sync/state-sync';
@@ -79,16 +80,18 @@ export class ChatCoordinator {
   /** Turn index counter for telemetry. */
   readonly currentTurnIndex = signal(0);
 
+  private readonly conversationalMessages = computed<LlmMessage[]>(() =>
+    this.getConversationalMessages(this.chatState.chatHistory()),
+  );
+
   /**
    * A dynamic, reactive, computed signal property constructing conformed JSON
    * catalog schema specifications system instructions.
    */
   readonly systemPrompt = computed<string>(() => {
-    const hasImageAttachment = this.chatState
-      .chatHistory()
-      .some(
-        m => m.role !== MessageRole.ERROR && m.attachments?.some(a => this.isImageAttachment(a)),
-      );
+    const hasImageAttachment = this.conversationalMessages().some(m =>
+      m.attachments?.some(a => this.isImageAttachment(a)),
+    );
     return this.promptFactory.buildSystemPrompt({
       includeMultimodalGuidelines: hasImageAttachment,
     });
@@ -146,23 +149,102 @@ export class ChatCoordinator {
     return isA2aImageAttachment(attachment.mimeType, attachment.name);
   }
 
+  private isFailedOrCancelledOutcome(msg?: LlmMessage): boolean {
+    if (!msg) {
+      return false;
+    }
+    if (msg.role === MessageRole.ERROR) {
+      return true;
+    }
+    if (msg.role === MessageRole.MODEL) {
+      return (
+        Boolean(msg.isCancelled) ||
+        msg.content === STOPPED_RESPONSE_MESSAGE ||
+        Boolean(msg.parseError)
+      );
+    }
+    return false;
+  }
+
+  /**
+   * Pairs each USER prompt turn positionally with its immediately following
+   * non-snapshot outcome message so that retries reusing an earlier turn's
+   * `promptId` only exclude the specific attempt that failed or was cancelled,
+   * without orphaning or dropping an earlier succeeded turn with the same ID.
+   */
+  private getConversationalMessages(history: LlmMessage[]): LlmMessage[] {
+    const filtered = history.filter((m, idx) => {
+      if (this.isFailedOrCancelledOutcome(m)) {
+        return false;
+      }
+      if (m.role === MessageRole.USER && !this.chatCleaner.isUserLayoutSnapshot(m)) {
+        let outcomeIdx = idx + 1;
+        while (
+          outcomeIdx < history.length &&
+          this.chatCleaner.isUserLayoutSnapshot(history[outcomeIdx])
+        ) {
+          outcomeIdx++;
+        }
+        const outcomeMsg = history[outcomeIdx];
+        if (
+          this.isFailedOrCancelledOutcome(outcomeMsg) &&
+          (!outcomeMsg?.promptId || !m.promptId || outcomeMsg.promptId === m.promptId)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // Deduplicate adjacent layout snapshots left behind when an intervening failed/cancelled turn is stripped
+    return filtered.filter(
+      (m, idx, arr) =>
+        !this.chatCleaner.isUserLayoutSnapshot(m) ||
+        !this.chatCleaner.isUserLayoutSnapshot(arr[idx + 1]),
+    );
+  }
+
+  /**
+   * Searches backward from the end of `history` so the most recent MODEL
+   * placeholder matching `promptId` is targeted even if a retry reuses an
+   * earlier turn's `promptId` or a layout snapshot is appended mid-stream.
+   */
+  private findTargetModelMessageIndex(history: LlmMessage[], promptId?: string): number {
+    if (promptId) {
+      for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].role === MessageRole.MODEL && history[i].promptId === promptId) {
+          return i;
+        }
+      }
+    }
+    const lastIdx = history.length - 1;
+    return lastIdx >= 0 && history[lastIdx].role === MessageRole.MODEL ? lastIdx : -1;
+  }
+
+  private updateTargetModelMessage(promptId: string | undefined, patch: Partial<LlmMessage>): void {
+    this.chatState.updateChatHistory(history => {
+      const updated = [...history];
+      const targetIdx = this.findTargetModelMessageIndex(updated, promptId);
+      if (targetIdx >= 0) {
+        updated[targetIdx] = {
+          ...updated[targetIdx],
+          ...patch,
+        };
+      }
+      return updated;
+    });
+  }
+
   /**
    * Constructs System instructions prepended message logs context.
    */
   getFullMessageContext(): LlmMessage[] {
-    const nonErrorMessages = this.chatState.chatHistory().filter(m => m.role !== MessageRole.ERROR);
-    const hasImageAttachment = nonErrorMessages.some(m =>
-      m.attachments?.some(a => this.isImageAttachment(a)),
-    );
-
     return [
       {
         role: MessageRole.SYSTEM,
-        content: this.promptFactory.buildSystemPrompt({
-          includeMultimodalGuidelines: hasImageAttachment,
-        }),
+        content: this.systemPrompt(),
       },
-      ...nonErrorMessages,
+      ...this.conversationalMessages(),
     ];
   }
 
@@ -270,6 +352,7 @@ export class ChatCoordinator {
       {
         role: MessageRole.MODEL,
         content: this.chatCleaner.appendPulse(''),
+        promptId,
       },
     ]);
 
@@ -305,17 +388,11 @@ export class ChatCoordinator {
         }
 
         // Update history bubble in real-time with trailing pulse indicator
-        this.chatState.updateChatHistory(history => {
-          const updated = [...history];
-          const lastIdx = updated.length - 1;
-          if (updated[lastIdx]?.role === MessageRole.MODEL) {
-            updated[lastIdx] = {
-              role: MessageRole.MODEL,
-              content: this.chatCleaner.appendPulse(accumulatedRawText),
-              thinking: accumulatedThinking,
-            };
-          }
-          return updated;
+        this.updateTargetModelMessage(promptId, {
+          role: MessageRole.MODEL,
+          content: this.chatCleaner.appendPulse(accumulatedRawText),
+          thinking: accumulatedThinking,
+          promptId,
         });
       }
 
@@ -325,17 +402,11 @@ export class ChatCoordinator {
 
       // Log the raw LLM response telemetry
       this.chatState.addRawLlmLog(LlmLogType.RESPONSE, finalRawText);
-      this.chatState.updateChatHistory(history => {
-        const updated = [...history];
-        const lastIdx = updated.length - 1;
-        if (updated[lastIdx]?.role === MessageRole.MODEL) {
-          updated[lastIdx] = {
-            role: MessageRole.MODEL,
-            content: finalRawText,
-            thinking: accumulatedThinking,
-          };
-        }
-        return updated;
+      this.updateTargetModelMessage(promptId, {
+        role: MessageRole.MODEL,
+        content: finalRawText,
+        thinking: accumulatedThinking,
+        promptId,
       });
 
       this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
@@ -347,16 +418,10 @@ export class ChatCoordinator {
       if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
         this.finalizeStream(PipelineStatus.IDLE);
         // Replace trailing pulse or partial JSON with stopped message, and force non-snapshot
-        this.chatState.updateChatHistory(history => {
-          const updated = [...history];
-          const lastIdx = updated.length - 1;
-          if (updated[lastIdx]?.role === MessageRole.MODEL) {
-            updated[lastIdx] = {
-              ...updated[lastIdx],
-              content: '*You stopped this response.*',
-            };
-          }
-          return updated;
+        this.updateTargetModelMessage(promptId, {
+          content: STOPPED_RESPONSE_MESSAGE,
+          isCancelled: true,
+          promptId,
         });
       } else {
         this.handleConnectivityError(err, trimmed, attachments, promptId);
@@ -398,14 +463,7 @@ export class ChatCoordinator {
           snippet: parseResult.snippet,
         });
 
-        this.chatState.updateChatHistory(history => {
-          const updated = [...history];
-          const lastIdx = updated.length - 1;
-          if (updated[lastIdx]?.role === MessageRole.MODEL) {
-            updated[lastIdx] = {...updated[lastIdx], parseError: parseResult};
-          }
-          return updated;
-        });
+        this.updateTargetModelMessage(promptId, {parseError: parseResult});
         this.finalizeStream(PipelineStatus.IDLE);
         return;
       }
@@ -459,18 +517,10 @@ export class ChatCoordinator {
       const finalLayoutText = formatJson(parsedBlocks);
 
       // Update latest MODEL turn message in history to compact JSON string
-      this.chatState.updateChatHistory(history => {
-        const updated = [...history];
-        const lastIdx = updated.length - 1;
-        if (updated[lastIdx]?.role === MessageRole.MODEL) {
-          updated[lastIdx] = {
-            ...updated[lastIdx],
-            content: compactLayoutText,
-            isSnapshot: true,
-            componentCount,
-          };
-        }
-        return updated;
+      this.updateTargetModelMessage(promptId, {
+        content: compactLayoutText,
+        isSnapshot: true,
+        componentCount,
       });
 
       // Commit layout synchronously to editor viewport before releasing
@@ -603,7 +653,7 @@ export class ChatCoordinator {
 
     this.chatState.updateChatHistory(history => {
       const updated = [...history];
-      const lastIdx = updated.length - 1;
+      const targetIdx = this.findTargetModelMessageIndex(updated, promptId);
       const errorBubble = {
         role: MessageRole.ERROR,
         content: redactedErrorMessage,
@@ -614,8 +664,8 @@ export class ChatCoordinator {
         promptId,
         ...(parsed.isRetryable ? {isRetryable: true, originalPrompt, attachments} : {}),
       };
-      if (lastIdx >= 0 && updated[lastIdx].role === MessageRole.MODEL) {
-        updated[lastIdx] = errorBubble;
+      if (targetIdx >= 0) {
+        updated[targetIdx] = errorBubble;
         return updated;
       }
       updated.push(errorBubble);
