@@ -24,6 +24,7 @@ import {
   openComposerWithSlackRenderer,
   replaceMonacoJson,
   selectGalleryComponent,
+  SLACK_CATALOG_ID,
   slackPreviewFrame,
   slackPreviewSurface,
 } from './slack-renderer.helpers';
@@ -121,7 +122,7 @@ test.describe('Slack renderer in Composer', () => {
       .toEqual({
         isArray: true,
         commandCount: 3,
-        catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+        catalogId: SLACK_CATALOG_ID,
         updateSurfaceId: 'gallery-preview',
         dataSurfaceId: 'gallery-preview',
         hasButton: true,

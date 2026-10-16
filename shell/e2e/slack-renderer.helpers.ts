@@ -20,6 +20,13 @@ import {waitForMonacoEditor, waitForPreviewTab} from './helpers';
 
 export const SLACK_RENDERER_URL = 'http://127.0.0.1:3460';
 
+/**
+ * The catalog ID the Slack renderer registers. It's `SLACK_CATALOG_ID` in
+ * samples/react-slack-catalog/src/catalog.ts, repeated here rather than imported so
+ * the e2e build doesn't compile the sample's catalog and its dependencies.
+ */
+export const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalogs/slack/v1';
+
 export const DATA_BOUND_ACTION_JSON = readSlackExample('data-bound-action.json');
 export const MARKET_SNAPSHOT_JSON = readSlackExample('market-snapshot.json');
 
@@ -157,6 +164,11 @@ async function trackPreviewActivity(page: Page): Promise<void> {
 /**
  * Waits until the preview has sent no messages for PREVIEW_QUIET_MS, so a render the
  * shell still has queued cannot replace what a test is about to interact with.
+ *
+ * There is no concrete signal to wait on instead. One edit reaches the preview through
+ * more than one debounced path, so it may cause one render or two, and a second render
+ * of the same content changes nothing visible. Waiting for an element, or for one
+ * RENDER_SUCCESS, can therefore return before the last render has replaced the controls.
  */
 export async function waitForPreviewToSettle(page: Page): Promise<void> {
   await trackPreviewActivity(page);
@@ -205,8 +217,11 @@ export async function replaceMonacoJson(page: Page, value: string): Promise<void
 /**
  * Validates the editor's current JSON with the same Monaco JSON worker the editor uses,
  * against the active catalog's schema, and returns the error and warning messages.
- * Asking the worker directly gives a result for the current content without waiting
- * out Composer's debounced error reporting.
+ *
+ * The tests use this to show the JSON has *no* problems, which the visible UI can't
+ * prove: Composer reports problems after a debounce, and nothing on the page says that
+ * validation has finished, so an empty problem list could just mean it hasn't run yet.
+ * Asking the worker gives the result for the current content.
  */
 export async function getJsonValidationProblems(page: Page): Promise<string[]> {
   return page.evaluate(async () => {

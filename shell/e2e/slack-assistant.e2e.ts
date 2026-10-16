@@ -30,11 +30,11 @@ import {
   getBlockKitTextMatches,
   openComposerWithSlackRenderer,
   SLACK_360_EMBED_VIEWPORT,
+  SLACK_CATALOG_ID,
   slackPreviewFrame,
   slackPreviewSurface,
 } from './slack-renderer.helpers';
 
-const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalogs/slack/v1';
 const SURFACE_ID = 'assistant-slack-surface';
 const GENERATED_STATUS = 'Schedule approved for launch';
 const REFINED_STATUS = 'Schedule approved for launch with legal copied';
