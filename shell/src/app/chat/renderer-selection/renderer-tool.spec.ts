@@ -16,61 +16,65 @@
 
 import {TestBed} from '@angular/core/testing';
 import {signal} from '@angular/core';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {beforeEach, describe, expect, it} from 'vitest';
 import {RendererSelection} from './renderer-selection';
 import {RendererTool} from './renderer-tool';
 
 describe('RendererTool', () => {
+  const basic = {
+    id: 'default',
+    name: 'Angular Basic',
+    rendererUrl: 'https://renderers.example/basic/',
+    readOnly: true,
+  };
+  const slack = {
+    id: 'slack',
+    name: 'Slack Block Kit',
+    rendererUrl: 'https://renderers.example/slack/',
+    readOnly: true,
+  };
+  const localSlack = {
+    id: 'slack-local',
+    name: 'Slack Block Kit',
+    rendererUrl: 'http://localhost:4200/slack/',
+    readOnly: true,
+  };
   const selection = {
     selectedRendererId: signal('default'),
-    renderers: signal([
-      {id: 'default', name: 'Angular Basic', rendererUrl: '/basic'},
-      {id: 'slack', name: 'Slack Block Kit', rendererUrl: '/slack'},
-    ]),
-    selectRenderer: vi.fn<(id: string, signal?: AbortSignal) => Promise<void>>(),
+    renderers: signal([basic, slack, localSlack]),
   };
   let tool: RendererTool;
   beforeEach(() => {
-    vi.clearAllMocks();
-    selection.selectRenderer.mockResolvedValue();
     TestBed.configureTestingModule({
       providers: [{provide: RendererSelection, useValue: selection}],
     });
     tool = TestBed.inject(RendererTool);
   });
 
-  it('switches to the requested renderer from a native model call', async () => {
-    const signal = new AbortController().signal;
-    await tool.execute({name: 'switchRenderer', args: {rendererId: 'slack'}}, signal);
-    expect(selection.selectRenderer).toHaveBeenCalledWith('slack', signal);
-    expect(tool.definition().parametersJsonSchema).toMatchObject({
-      properties: {rendererId: {enum: ['default', 'slack']}},
+  it('offers every configured renderer with the origin it is served from', () => {
+    const definition = tool.definition();
+    expect(definition.parametersJsonSchema).toMatchObject({
+      properties: {rendererId: {enum: ['default', 'slack', 'slack-local']}},
     });
-    expect(tool.definition().description).toContain('Current renderer: default');
-    expect(tool.definition().description).toContain('"name":"Slack Block Kit"');
-  });
-
-  it('rejects unknown tools, unknown renderers, URLs and extra arguments before mutation', async () => {
-    const signal = new AbortController().signal;
-    for (const call of [
-      {name: 'otherTool', args: {rendererId: 'slack'}},
-      {name: 'switchRenderer', args: {rendererId: 'https://unregistered.example/'}},
-      {name: 'switchRenderer', args: {rendererId: 'slack', url: 'https://unregistered.example/'}},
-    ]) {
-      await expect(tool.execute(call, signal)).rejects.toThrow();
-    }
-    expect(selection.selectRenderer).not.toHaveBeenCalled();
-  });
-
-  it('propagates switch failures and canceled turns', async () => {
-    const call = {name: 'switchRenderer', args: {rendererId: 'slack'}};
-    selection.selectRenderer.mockRejectedValueOnce(new Error('Renderer did not load'));
-    await expect(tool.execute(call, new AbortController().signal)).rejects.toThrow(
-      'Renderer did not load',
+    expect(definition.description).toContain(
+      'Current renderer: default, origin https://renderers.example.',
     );
-    const abort = new AbortController();
-    abort.abort(new Error('Stopped'));
-    await expect(tool.execute(call, abort.signal)).rejects.toThrow('Stopped');
-    expect(selection.selectRenderer).toHaveBeenCalledTimes(1);
+    expect(definition.description).toContain(
+      '{"id":"slack-local","name":"Slack Block Kit","origin":"http://localhost:4200"}',
+    );
+  });
+
+  it('returns the configured renderer a call names', () => {
+    expect(tool.rendererFor({name: 'switchRenderer', args: {rendererId: 'slack'}})).toBe(slack);
+  });
+
+  it.each([
+    {name: 'otherTool', args: {rendererId: 'slack'}},
+    {name: 'switchRenderer', args: {}},
+    {name: 'switchRenderer', args: {rendererId: 7}},
+    {name: 'switchRenderer', args: {rendererId: 'https://unregistered.example/'}},
+    {name: 'switchRenderer', args: {rendererId: 'slack', url: 'https://unregistered.example/'}},
+  ])('rejects $name with $args', call => {
+    expect(() => tool.rendererFor(call)).toThrow();
   });
 });

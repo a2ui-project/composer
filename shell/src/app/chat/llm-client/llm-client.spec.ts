@@ -192,7 +192,7 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
   // DYNAMIC CONFIGURATION MAPPINGS
   // ---------------------------------------------------------
 
-  it('advertises native frontend tools and keeps function calls out of canvas JSON', async () => {
+  it('advertises tools to the model and keeps function calls out of canvas JSON', async () => {
     const call = {name: 'switchRenderer', args: {rendererId: 'slack'}};
     const definition = {
       name: call.name,
