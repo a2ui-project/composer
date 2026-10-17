@@ -19,6 +19,7 @@ import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {of, Subject, timer} from 'rxjs';
 import {filter, map, skip, switchMap, takeUntil} from 'rxjs/operators';
 import {ChatState} from '../chat-state/chat-state';
+import {ChatCleaner} from '../chat-cleaner/chat-cleaner';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
@@ -51,6 +52,7 @@ const MOCK_RULES_CONTAINER = 'mock_rules_container';
 export class StateSync {
   private readonly destroyRef = inject(DestroyRef);
   private readonly chatState = inject(ChatState);
+  private readonly chatCleaner = inject(ChatCleaner);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly startupConfigState = inject(StartupConfigStateService);
   private readonly logger = inject(ErrorLogger).withTag('[StateSync]');
@@ -178,8 +180,10 @@ export class StateSync {
   commitLayoutFromLlm(value: string): void {
     this.cancelPendingDraftSync$.next();
     this.isDraftModified = true;
-    // Restoring a previous draft after this response must update context again.
-    this.lastSynchronizedLayout = null;
+    // Record the sanitized layout committed by the model so follow-up prompts without
+    // editor modifications do not append a duplicate USER snapshot, while restoring a
+    // previous draft still updates context.
+    this.lastSynchronizedLayout = this.sanitizeLayout(value) || null;
     this._activeDraft.set(value);
   }
 
@@ -279,18 +283,16 @@ export class StateSync {
         {
           role: MessageRole.USER,
           content: sanitizedLayoutString,
+          isSnapshot: true,
         },
       ]);
       return;
     }
 
     const lastMessage = history[history.length - 1];
-    // Verify that the last message is indeed a user message AND starts with
-    // A2UI JSON array brackets.
-    // This ensures plain user text prompt dispatches are preserved
-    // completely intact!
-    const isLastMessageLayoutSnapshot =
-      lastMessage.role === MessageRole.USER && lastMessage.content.trim().startsWith('[');
+    // Verify that the last message is an unprompted user layout snapshot so
+    // plain user text prompts (including those starting with '[') are preserved intact.
+    const isLastMessageLayoutSnapshot = this.chatCleaner.isUserLayoutSnapshot(lastMessage);
 
     if (isLastMessageLayoutSnapshot) {
       // Overwrite trailing turn in-place to avoid array inflation
@@ -299,6 +301,7 @@ export class StateSync {
       updatedHistory[updatedHistory.length - 1] = {
         role: MessageRole.USER,
         content: sanitizedLayoutString,
+        isSnapshot: true,
       };
       this.chatState.setChatHistory(updatedHistory);
     } else {
@@ -309,6 +312,7 @@ export class StateSync {
         {
           role: MessageRole.USER,
           content: sanitizedLayoutString,
+          isSnapshot: true,
         },
       ]);
     }
@@ -333,7 +337,7 @@ export class StateSync {
           return block;
         })
         .filter((b): b is RenderA2uiItem => b !== null);
-      return formatJson(sanitized);
+      return sanitized.length > 0 ? JSON.stringify(sanitized) : '';
     }
 
     this.logger.warn(
