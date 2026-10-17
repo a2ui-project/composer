@@ -31,7 +31,7 @@
     "@angular/router": "22.0.7",
     "@copilotkit/angular": "0.5.2",
     "@google/genai": "2.11.0",
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/sdk": "1.31.0",
     "@monaco-editor/loader": "1.7.0",
     "a2ui-bridge": "0.1.0",
     "dockview-core": "7.0.3",
