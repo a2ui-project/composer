@@ -87,8 +87,10 @@ export class ChatCoordinator {
   readonly pipelineStatus = this.chatState.pipelineStatus;
 
   /**
-   * Public programmatic lock signal protecting against typing deadlocks
-   * during streams.
+   * True while a response is streaming: from when submitPrompt sends a prompt until the
+   * response is written to the canvas, fails, or stops after a cancel. While it's true, the
+   * chat panel shows Stop instead of Send and locks its input, the canvas preview and its
+   * JSON editor don't accept input, and submitPrompt refuses another prompt.
    */
   readonly isProgrammaticStreamActive = this.chatState.isProgrammaticStreamActive;
 
@@ -193,11 +195,31 @@ export class ChatCoordinator {
   }
 
   /**
-   * Cancels the active streaming request if there is one. Only a cancel the user asked
-   * for is tracked as a chat cancel.
+   * Cancels the response that is streaming. Only a cancel the user asked for is tracked as
+   * a chat cancel.
+   *
+   * Nothing happens when no response is streaming, so starting a new session after a
+   * response has finished tracks no cancel. Nothing happens on a second cancel either: the
+   * first cancel's reason decides the note that replaces the response, and whether the
+   * cancel is tracked.
    */
   private cancelStream(reason: CancelReason): void {
-    if (!this.activePromptId) {
+    // Any of these conditions makes the cancel a no-op:
+    // - activePromptId is null before the first prompt and after clearConversation.
+    //   Checking it also narrows its type for trackChatCancel's promptId.
+    // - isProgrammaticStreamActive() is false unless a response is streaming. submitPrompt
+    //   sets it, and it's cleared once the response is written to the canvas, fails, or
+    //   stops after a cancel. activePromptId keeps its value after that, so it can't tell
+    //   a finished response from a streaming one. activePromptId isn't cleared at the same
+    //   point because processRawLlmPayload clears isProgrammaticStreamActive before it
+    //   rethrows a validation error, and submitPrompt's catch block drops errors from a
+    //   prompt whose ID no longer matches activePromptId. The validation error would never
+    //   be shown.
+    // - cancelReason is non-null once this response was cancelled (submitPrompt resets
+    //   it). While the response is still streaming, that means a cancel is under way: it
+    //   was requested, but the response hasn't failed with the cancel error yet. The first
+    //   cancel's reason wins.
+    if (!this.activePromptId || !this.isProgrammaticStreamActive() || this.cancelReason !== null) {
       return;
     }
     this.cancelReason = reason;

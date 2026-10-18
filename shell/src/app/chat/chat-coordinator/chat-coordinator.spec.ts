@@ -17,7 +17,7 @@
 
 import {TestBed} from '@angular/core/testing';
 import {createEnvironmentInjector, EnvironmentInjector, signal} from '@angular/core';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi, type MockInstance} from 'vitest';
 import {ChatCoordinator} from './chat-coordinator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {Catalog} from '../../storage/models/catalog-storage.model';
@@ -120,38 +120,53 @@ async function* createMockStream(chunks: string[]): AsyncIterable<LlmResponse> {
   }
 }
 
+/** A promise and the functions that settle it, so a test decides when it settles. */
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return {promise, resolve, reject};
+}
+
 /**
  * A response that streams nothing until it's cancelled, then fails the way the real client
  * does: its content stream and `complete` both reject with an error named
  * CANCEL_ERROR_NAME.
+ *
+ * By default the response fails as soon as `cancel` is called. With `holdCancel`, it fails
+ * only when the test calls `finishCancel`. The real client's response also fails a moment
+ * after `cancel`, once its request has stopped; holding the cancel lets a test act while
+ * the cancel is under way.
  */
-function createStreamAwaitingCancel() {
-  let markStarted!: () => void;
-  const started = new Promise<void>(resolve => {
-    markStarted = resolve;
-  });
-  let rejectCancelled!: (err: Error) => void;
-  const cancelled = new Promise<never>((_, reject) => {
-    rejectCancelled = reject;
-  });
+function createStreamAwaitingCancel({holdCancel = false} = {}) {
+  const started = createDeferred<void>();
+  const cancelled = createDeferred<never>();
   // As in the real client: once the content stream fails, nobody awaits `complete`.
-  cancelled.catch(() => {});
-  const cancel = vi.fn(() => {
+  cancelled.promise.catch(() => {});
+  const finishCancel = () => {
     const err = new Error('Cancelled');
     err.name = CANCEL_ERROR_NAME;
-    rejectCancelled(err);
+    cancelled.reject(err);
+  };
+  const cancel = vi.fn(() => {
+    if (!holdCancel) {
+      finishCancel();
+    }
   });
   const response: LlmStreamResponse = {
     contentStream: {
       async *[Symbol.asyncIterator]() {
-        markStarted();
-        await cancelled;
+        started.resolve();
+        await cancelled.promise;
       },
     },
-    complete: cancelled,
+    complete: cancelled.promise,
     cancel,
   };
-  return {response, started, cancel};
+  return {response, started: started.promise, cancel, finishCancel};
 }
 
 class MockLlmClient {
@@ -1071,6 +1086,114 @@ I'll output bad JSON.
           turnIndex: 1,
         }),
       );
+    });
+  });
+
+  describe('cancelling when no response is streaming or a cancel is under way', () => {
+    let trackChatCancel: MockInstance<UsageTrackingService['trackChatCancel']>;
+
+    beforeEach(() => {
+      trackChatCancel = vi.spyOn(TestBed.inject(UsageTrackingService), 'trackChatCancel');
+    });
+
+    it('does not track a cancel when a new session starts after a response completes', async () => {
+      await service.submitPrompt('Make a card');
+
+      service.startNewSession();
+
+      expect(trackChatCancel).not.toHaveBeenCalled();
+    });
+
+    it('does not track a cancel when a new session starts after a response fails', async () => {
+      llmClientMock.chatStream.mockRejectedValueOnce(new Error('Connection failed'));
+      await service.submitPrompt('Make a card');
+
+      service.startNewSession();
+
+      expect(trackChatCancel).not.toHaveBeenCalled();
+    });
+
+    it('ignores a second Stop while the response is still connecting', async () => {
+      const connection = createDeferred<LlmStreamResponse>();
+      llmClientMock.chatStream.mockReturnValueOnce(connection.promise);
+      const submission = service.submitPrompt('Make a card', [], {promptId: 'prompt-1'});
+
+      service.cancelActiveStream();
+      service.cancelActiveStream();
+      connection.resolve(createStreamAwaitingCancel().response);
+      await submission;
+
+      expect(trackChatCancel).toHaveBeenCalledExactlyOnceWith({
+        promptId: 'prompt-1',
+        turnIndex: 1,
+        pipelineStatus: PipelineStatus.RECEIVING_STREAM,
+      });
+    });
+
+    it('ignores a second Stop while the first Stop is cancelling the response', async () => {
+      const stream = createStreamAwaitingCancel({holdCancel: true});
+      llmClientMock.chatStream.mockResolvedValueOnce(stream.response);
+      const submission = service.submitPrompt('Make a card', [], {promptId: 'prompt-1'});
+      await stream.started;
+
+      service.cancelActiveStream();
+      service.cancelActiveStream();
+      stream.finishCancel();
+      await submission;
+
+      expect(stream.cancel).toHaveBeenCalledTimes(1);
+      expect(trackChatCancel).toHaveBeenCalledExactlyOnceWith({
+        promptId: 'prompt-1',
+        turnIndex: 1,
+        pipelineStatus: PipelineStatus.RECEIVING_STREAM,
+      });
+    });
+
+    it('keeps the Stop note when the renderer changes while Stop is cancelling the response', async () => {
+      // With an edited canvas, a renderer change keeps the conversation, so the note that
+      // replaces the stopped response stays in the chat. With an unedited canvas, the
+      // renderer change would clear the conversation, and the note would never be added.
+      stateSyncMock.hasEditedDraft.mockReturnValue(true);
+      const stream = createStreamAwaitingCancel({holdCancel: true});
+      llmClientMock.chatStream.mockResolvedValueOnce(stream.response);
+      const submission = service.submitPrompt('Make a card', [], {promptId: 'prompt-1'});
+      await stream.started;
+
+      service.cancelActiveStream();
+      await changeRenderer();
+      stream.finishCancel();
+      await submission;
+
+      expect(chatStateMock.chatHistory()).toEqual([
+        {role: MessageRole.USER, content: 'Make a card', promptId: 'prompt-1'},
+        {role: MessageRole.MODEL, content: '*You stopped this response.*'},
+      ]);
+    });
+
+    it('ignores Stop while a renderer change is cancelling the response', async () => {
+      // With an edited canvas, a renderer change keeps the conversation, and the response
+      // it cancelled keeps streaming until the cancel finishes. With an unedited canvas,
+      // the renderer change would start a new session, and Stop would have no response
+      // to act on.
+      stateSyncMock.hasEditedDraft.mockReturnValue(true);
+      const stream = createStreamAwaitingCancel({holdCancel: true});
+      llmClientMock.chatStream.mockResolvedValueOnce(stream.response);
+      const submission = service.submitPrompt('Make a card', [], {promptId: 'prompt-1'});
+      await stream.started;
+
+      await changeRenderer();
+      service.cancelActiveStream();
+      stream.finishCancel();
+      await submission;
+
+      expect(trackChatCancel).not.toHaveBeenCalled();
+      expect(chatStateMock.chatHistory()).toEqual([
+        {role: MessageRole.USER, content: 'Make a card', promptId: 'prompt-1'},
+        {
+          role: MessageRole.MODEL,
+          content: '*This response was stopped because the renderer changed.*',
+        },
+      ]);
     });
   });
 
