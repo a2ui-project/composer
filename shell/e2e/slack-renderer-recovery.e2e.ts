@@ -25,13 +25,10 @@ import {
   openComposerWithSlackRenderer,
   replaceMonacoJson,
   SLACK_CATALOG_ID,
-  SLACK_RENDERER_URL,
   slackPreviewFrame,
   slackPreviewSurface,
 } from './slack-renderer.helpers';
-import {waitForMonacoEditor} from './helpers';
-
-const REACT_RENDERER_URL = 'http://localhost:3458';
+import {RENDERER_URLS, waitForMonacoEditor} from './helpers';
 
 test.describe('Slack renderer recovery in Composer', () => {
   test('clears old output while waiting for a missing child', async ({page}) => {
@@ -147,11 +144,11 @@ test.describe('Slack renderer recovery in Composer', () => {
     await replaceMonacoJson(page, textPayload('switch-away', 'Before switching away'));
     await expect(slackPreviewSurface(page).getByText('Before switching away')).toBeVisible();
 
-    await allowRendererOrigin(page, REACT_RENDERER_URL);
-    await page.goto(`/?renderer=${REACT_RENDERER_URL}`);
+    await allowRendererOrigin(page, RENDERER_URLS.react);
+    await page.goto(`/?renderer=${RENDERER_URLS.react}`);
     await expect(slackPreviewFrame(page).getByRole('button', {name: 'Search Cars'})).toBeVisible();
 
-    await page.goto(`/?renderer=${SLACK_RENDERER_URL}`);
+    await page.goto(`/?renderer=${RENDERER_URLS.slack}`);
     await waitForMonacoEditor(page);
     await replaceMonacoJson(page, textPayload('switch-back', 'Back on Slack'));
 
@@ -408,7 +405,7 @@ async function allowRendererOrigin(page: Page, rendererUrl: string): Promise<voi
       );
     },
     {
-      slackRendererUrl: SLACK_RENDERER_URL,
+      slackRendererUrl: RENDERER_URLS.slack,
       nextRendererUrl: rendererUrl,
     },
   );

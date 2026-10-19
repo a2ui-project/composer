@@ -16,9 +16,7 @@
 
 import {readFileSync} from 'node:fs';
 import {expect, type FrameLocator, type Locator, type Page} from '@playwright/test';
-import {waitForMonacoEditor, waitForPreviewTab} from './helpers';
-
-export const SLACK_RENDERER_URL = 'http://127.0.0.1:3460';
+import {RENDERER_URLS, waitForMonacoEditor, waitForPreviewTab} from './helpers';
 
 /**
  * The catalog ID the Slack renderer registers. It's `SLACK_CATALOG_ID` in
@@ -93,13 +91,13 @@ export async function openComposerWithSlackRenderer(
       localStorage.setItem('a2ui_composer_allowed_origins', JSON.stringify(rendererOrigins));
     },
     {
-      rendererOrigins: [new URL(SLACK_RENDERER_URL).origin, 'http://localhost:4200'],
+      rendererOrigins: [new URL(RENDERER_URLS.slack).origin, 'http://localhost:4200'],
       authMode: forceAuthMode,
       apiKeyId: selectedApiKeyId,
     },
   );
 
-  await page.goto(rendererId ? `/?rendererId=${rendererId}` : `/?renderer=${SLACK_RENDERER_URL}`);
+  await page.goto(rendererId ? `/?rendererId=${rendererId}` : `/?renderer=${RENDERER_URLS.slack}`);
   await expect(page.locator('.workspace-container')).toBeVisible();
   await expect(page.locator('iframe.preview-iframe').first()).toBeVisible();
   // Wait for the catalog handshake, not just the frame. A cold dev server under parallel
