@@ -23,7 +23,8 @@ import {type PreviewDiagnostic} from './preview-snapshot';
 
 /**
  * What lowering one surface collects while it walks the components: the
- * diagnostics, and the Slack buttons and inputs it drew, by `action_id`.
+ * diagnostics, the Slack buttons and inputs it drew, by `action_id`, and the
+ * images it drew.
  */
 export interface LoweringState {
   readonly revision: number;
@@ -32,7 +33,10 @@ export interface LoweringState {
   readonly inputs: Map<string, InputDispatchEntry>;
   /** Serves the images drawn in this render. */
   readonly drawnImages: DrawnImageStore;
-  /** The URLs of the images drawn in this render, which the export swaps for uploaded files. */
+  /**
+   * The URLs of the images drawn in this render, which the Generated Block Kit export
+   * swaps for uploaded files.
+   */
   readonly drawnImageUrls: Set<string>;
   nextActionOrdinal: number;
 }
