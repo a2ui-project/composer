@@ -581,12 +581,15 @@ describe('Slack Chart component', () => {
   const usage = SLACK_COMPONENT_USAGES.Chart.usage[0];
   const {id: _id, component: _component, ...usageProps} = usage;
 
-  it('publishes guidance telling the model to send numbers, not image URLs', () => {
+  it('tells the model to send numbers, not image URLs', () => {
     expect(slackCatalogJson.components.Chart).toMatchObject({
       description: expect.stringContaining(
         'The native Slack chart block cannot express every chart this catalog allows, so the Slack renderer draws the chart and sends it as an image. Give the numbers, not an image URL.',
       ),
     });
+  });
+
+  it('names Chart in the catalog description', () => {
     expect(slackCatalogJson.description).toContain('Use Chart for bar, line, pie, or donut charts');
   });
 
@@ -603,11 +606,12 @@ describe('Slack Chart component', () => {
     });
   });
 
-  it('accepts the Gallery example and bound labels and values', () => {
-    const validateChart = compileComponentSchema(slackCatalogJson.components.Chart);
-
+  it('accepts the Gallery example', () => {
     expect(ChartSchema.safeParse(usageProps).success).toBe(true);
-    expect(validateChart(usage)).toBe(true);
+    expect(compileComponentSchema(slackCatalogJson.components.Chart)(usage)).toBe(true);
+  });
+
+  it('accepts bound labels and values', () => {
     expect(
       ChartSchema.safeParse({
         type: 'line',
@@ -616,8 +620,11 @@ describe('Slack Chart component', () => {
     ).toBe(true);
   });
 
-  it('rejects unknown chart types and more than 20 points', () => {
+  it('rejects an unknown chart type', () => {
     expect(ChartSchema.safeParse({...usageProps, type: 'scatter'}).success).toBe(false);
+  });
+
+  it('rejects more than 20 points', () => {
     expect(
       ChartSchema.safeParse({
         data: Array.from({length: 21}, (_, index) => ({label: `P${index}`, value: index})),
@@ -631,46 +638,55 @@ describe('Slack Scorecard component', () => {
   const {id: _id, component: _component, ...usageProps} = usage;
   const validateScorecard = compileComponentSchema(slackCatalogJson.components.Scorecard);
 
-  it('publishes guidance on when to use it and that it is sent as an image', () => {
+  it('tells the model it is sent as an image, and to send teams and scores', () => {
     expect(slackCatalogJson.components.Scorecard).toMatchObject({
       description: expect.stringContaining(
         'Slack has no block for a scorecard, so the Slack renderer draws it and sends it as an uploaded image. Give the teams and scores, not an image URL.',
       ),
     });
+  });
+
+  it('tells the model in the catalog description when to use it', () => {
     expect(slackCatalogJson.description).toContain(
       'Use Scorecard to show one match result; Slack has no block for it',
     );
   });
 
-  it('accepts the Gallery example, text scores, and bound names, scores, and status', () => {
-    const bound = {
-      home: {name: {path: '/home/name'}, score: {path: '/home/score'}},
-      away: {name: 'Mexico', score: '3 (4)'},
-      status: {path: '/status'},
-    };
-
+  it('accepts the Gallery example', () => {
     expect(ScorecardSchema.safeParse(usageProps).success).toBe(true);
     expect(validateScorecard(usage)).toBe(true);
-    expect(ScorecardSchema.safeParse(bound).success).toBe(true);
-    expect(validateScorecard({id: 'final-score', component: 'Scorecard', ...bound})).toBe(true);
   });
 
-  it('rejects a missing team or score, unknown props, and values of the wrong type', () => {
-    const invalid = [
-      {home: usageProps.home},
-      {...usageProps, away: {name: 'Mexico'}},
-      {...usageProps, home: {...usageProps.home, logo: 'https://example.com/logo.png'}},
-      {...usageProps, home: {name: 'Argentina', score: true}},
-      {...usageProps, status: 90},
-      {...usageProps, url: 'https://example.com/scorecard.png'},
-    ];
+  it.each([
+    ['a text score', {...usageProps, away: {name: 'Mexico', score: '3 (4)'}}],
+    [
+      'bound names, scores, and status',
+      {
+        home: {name: {path: '/home/name'}, score: {path: '/home/score'}},
+        away: {name: {path: '/away/name'}, score: {path: '/away/score'}},
+        status: {path: '/status'},
+      },
+    ],
+  ])('accepts %s', (_name, props) => {
+    expect(ScorecardSchema.safeParse(props).success).toBe(true);
+    expect(validateScorecard({id: 'final-score', component: 'Scorecard', ...props})).toBe(true);
+  });
 
-    for (const props of invalid) {
-      expect(ScorecardSchema.safeParse(props).success, JSON.stringify(props)).toBe(false);
-      expect(
-        validateScorecard({id: 'final-score', component: 'Scorecard', ...props}),
-        JSON.stringify(props),
-      ).toBe(false);
-    }
+  it.each([
+    ['a missing away team', {home: usageProps.home}],
+    ['a team without a score', {...usageProps, away: {name: 'Mexico'}}],
+    [
+      'an unknown team prop',
+      {...usageProps, home: {...usageProps.home, logo: 'https://example.com/logo.png'}},
+    ],
+    [
+      'a score that is not a number or text',
+      {...usageProps, home: {name: 'Argentina', score: true}},
+    ],
+    ['a status that is not text', {...usageProps, status: 90}],
+    ['an image URL', {...usageProps, url: 'https://example.com/scorecard.png'}],
+  ])('rejects %s', (_name, props) => {
+    expect(ScorecardSchema.safeParse(props).success).toBe(false);
+    expect(validateScorecard({id: 'final-score', component: 'Scorecard', ...props})).toBe(false);
   });
 });

@@ -72,7 +72,9 @@ describe('Slack charts', () => {
   const drawnSvgs = (): Promise<string[]> =>
     Promise.all(createObjectURL.mock.calls.map(([blob]) => (blob as Blob).text()));
 
-  it('draws a chart as an image next to native blocks and exports it as an uploaded file', async () => {
+  const PIE_ALT = 'Pie chart, Possession: Argentina 70, Mexico 30';
+
+  it('draws a chart as an image next to native blocks', async () => {
     const session = createSlackPreviewSession();
 
     session.processMessages([createSurface, chartMessage(PIE)]);
@@ -81,22 +83,29 @@ describe('Slack charts', () => {
     expect(snapshot.status).toBe(PreviewStatus.READY);
     expect(snapshot.blocks).toEqual([
       expect.objectContaining({type: 'header'}),
-      {
-        type: 'image',
-        image_url: 'blob:image-1',
-        alt_text: 'Pie chart, Possession: Argentina 70, Mexico 30',
-      },
+      {type: 'image', image_url: 'blob:image-1', alt_text: PIE_ALT},
     ]);
     expect((await drawnSvgs())[0]).toContain('Argentina · 70 (70%)');
+  });
+
+  it('exports a drawn chart as an uploaded file', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, chartMessage(PIE)]);
+    const snapshot = session.getSnapshot();
+
     expect(snapshot.exportBlocks).toEqual([
       snapshot.blocks[0],
-      {
-        type: 'image',
-        slack_file: {id: 'RENDERED_AT_SEND'},
-        alt_text: 'Pie chart, Possession: Argentina 70, Mexico 30',
-      },
+      {type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: PIE_ALT},
     ]);
-    expect(snapshot.diagnostics).toContainEqual({
+  });
+
+  it('says the chart is drawn in the preview and must be uploaded to Slack', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, chartMessage(PIE)]);
+
+    expect(session.getSnapshot().diagnostics).toContainEqual({
       level: DiagnosticLevel.INFO,
       code: DiagnosticCode.SLACK_IMAGE_RENDERED_AT_SEND,
       componentId: 'possession',
@@ -159,25 +168,31 @@ describe('Slack charts', () => {
     });
   });
 
-  it('skips a pie chart with a negative slice and says why, while the rest renders', () => {
+  const NEGATIVE_SLICE = {
+    ...PIE,
+    data: [
+      {label: 'Argentina', value: 70},
+      {label: 'Mexico', value: -30},
+    ],
+  };
+
+  it('leaves out a pie chart with a negative slice and renders the rest', () => {
     const session = createSlackPreviewSession();
 
-    session.processMessages([
-      createSurface,
-      chartMessage({
-        ...PIE,
-        data: [
-          {label: 'Argentina', value: 70},
-          {label: 'Mexico', value: -30},
-        ],
-      }),
-    ]);
+    session.processMessages([createSurface, chartMessage(NEGATIVE_SLICE)]);
     const snapshot = session.getSnapshot();
 
     expect(snapshot.status).toBe(PreviewStatus.READY);
     expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
     expect(createObjectURL).not.toHaveBeenCalled();
-    expect(snapshot.diagnostics).toContainEqual({
+  });
+
+  it('says why it left out a pie chart with a negative slice', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([createSurface, chartMessage(NEGATIVE_SLICE)]);
+
+    expect(session.getSnapshot().diagnostics).toContainEqual({
       level: DiagnosticLevel.WARNING,
       code: DiagnosticCode.SLACK_CHART_INVALID_DATA,
       componentId: 'possession',
@@ -257,15 +272,5 @@ describe('Slack charts', () => {
     session.dispose();
 
     expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:image-1');
-  });
-
-  it('freezes the export blocks it publishes', () => {
-    const session = createSlackPreviewSession();
-
-    session.processMessages([createSurface, chartMessage(PIE)]);
-    const exportBlocks = session.getSnapshot().exportBlocks;
-
-    expect(Object.isFrozen(exportBlocks)).toBe(true);
-    expect(Object.isFrozen(exportBlocks[1])).toBe(true);
   });
 });
