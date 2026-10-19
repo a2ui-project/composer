@@ -79,8 +79,8 @@ export enum DiagnosticCode {
   SLACK_HEADER_TEXT_TRUNCATED = 'SLACK_HEADER_TEXT_TRUNCATED',
   SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED = 'SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED',
   /**
-   * A Chart is drawn as an image in the preview. In Slack, your Channels app renders
-   * it and uploads the image when it sends the message.
+   * A Chart or Scorecard is drawn as an image in the preview. In Slack, your Channels
+   * app renders it and uploads the image when it sends the message.
    */
   SLACK_IMAGE_RENDERED_AT_SEND = 'SLACK_IMAGE_RENDERED_AT_SEND',
   /** Slack image blocks ignore the A2UI Image `fit` and `variant` hints. */
@@ -89,6 +89,8 @@ export enum DiagnosticCode {
   SLACK_IMAGE_URL_LIMIT_EXCEEDED = 'SLACK_IMAGE_URL_LIMIT_EXCEEDED',
   /** A Row, Column or Card was drawn as a plain sequence of Slack blocks. */
   SLACK_LAYOUT_FLATTENED = 'SLACK_LAYOUT_FLATTENED',
+  /** A Scorecard was left out because a team's name or score is empty or missing. */
+  SLACK_SCORECARD_INVALID = 'SLACK_SCORECARD_INVALID',
   SLACK_SECTION_FIELD_TEXT_LIMIT_EXCEEDED = 'SLACK_SECTION_FIELD_TEXT_LIMIT_EXCEEDED',
   SLACK_SECTION_FIELDS_LIMIT_EXCEEDED = 'SLACK_SECTION_FIELDS_LIMIT_EXCEEDED',
   SLACK_SECTION_TEXT_LIMIT_EXCEEDED = 'SLACK_SECTION_TEXT_LIMIT_EXCEEDED',
