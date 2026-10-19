@@ -56,20 +56,44 @@ function slackComponentApi(name: string, schema: z.ZodTypeAny): ComponentApi {
   return {name, schema} as unknown as ComponentApi;
 }
 
-const DynamicStringSchema = z.union([
-  z.string(),
-  z.object({path: z.string()}).strict(),
-  z
-    .object({
-      call: z.string(),
-      args: z.record(z.unknown()),
-      returnType: z
-        .enum(['string', 'number', 'boolean', 'array', 'object', 'any', 'void'])
-        .default('string')
-        .optional(),
-    })
-    .strict(),
-]);
+/**
+ * A string prop's schema: the given literal string, a data binding, or a
+ * function call that returns a string.
+ */
+function dynamicStringSchema(literal: z.ZodString) {
+  return z.union([
+    literal,
+    z.object({path: z.string()}).strict(),
+    z
+      .object({
+        call: z.string(),
+        args: z.record(z.unknown()),
+        returnType: z
+          .enum(['string', 'number', 'boolean', 'array', 'object', 'any', 'void'])
+          .default('string')
+          .optional(),
+      })
+      .strict(),
+  ]);
+}
+
+const DynamicStringSchema = dynamicStringSchema(z.string());
+
+/**
+ * The JSON Schema `pattern` the published catalog gives a literal Image `url`.
+ * Slack fetches an image block's `image_url` itself and takes only HTTP(S)
+ * URLs, and Composer reads this pattern to tell the assistant so.
+ */
+const HTTP_URL_PATTERN = '^https?://';
+
+/**
+ * A literal Image `url`. At run time it takes any string, as before: lowering
+ * rejects a URL that isn't HTTP(S) with an `A2UI_INVALID_IMAGE_URL`
+ * diagnostic that says what Slack needs, where a regex here would report a
+ * generic `A2UI_INVALID_PROPS` schema error instead. Only the published
+ * catalog adds `HTTP_URL_PATTERN` to it (see `addImageUrlPattern`).
+ */
+const ImageUrlLiteralSchema = z.string();
 
 const AccessibilityAttributesSchema = z
   .object({
@@ -129,7 +153,9 @@ const SlackImageApi = slackComponentApi(
   z
     .object({
       ...CommonProps,
-      url: DynamicStringSchema.describe('The HTTP(S) URL of the image to display in Slack.'),
+      url: dynamicStringSchema(ImageUrlLiteralSchema).describe(
+        'The HTTP(S) URL of the image to display in Slack.',
+      ),
       description: DynamicStringSchema.describe(
         'Required accessibility description rendered as Slack image alt_text.',
       ),
@@ -240,10 +266,25 @@ interface SlackCatalogJson {
 
 type JsonSchemaConverter = (
   schema: unknown,
-  options: {target: 'jsonSchema2019-09'; $refStrategy: 'none'},
+  options: {
+    target: 'jsonSchema2019-09';
+    $refStrategy: 'none';
+    postProcess: (jsonSchema: unknown, def: unknown) => unknown;
+  },
 ) => unknown;
 
 const toJsonSchema = zodToJsonSchema as JsonSchemaConverter;
+
+/**
+ * Called by zod-to-json-schema with each zod schema (`def`) and the JSON
+ * Schema it made from it. Adds `HTTP_URL_PATTERN` to the one made from
+ * `ImageUrlLiteralSchema` and returns every other JSON Schema unchanged.
+ */
+function addImageUrlPattern(jsonSchema: unknown, def: unknown): unknown {
+  return def === ImageUrlLiteralSchema._def
+    ? {...(jsonSchema as Record<string, unknown>), pattern: HTTP_URL_PATTERN}
+    : jsonSchema;
+}
 
 function processRefs(node: unknown): void {
   if (typeof node !== 'object' || node === null) {
@@ -272,6 +313,7 @@ function schemaJsonFor(schema: unknown): Record<string, unknown> {
   const jsonSchema = toJsonSchema(schema, {
     target: 'jsonSchema2019-09',
     $refStrategy: 'none',
+    postProcess: addImageUrlPattern,
   }) as Record<string, unknown>;
   processRefs(jsonSchema);
   return jsonSchema;

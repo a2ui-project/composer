@@ -412,6 +412,35 @@ describe('Slack catalog schema payload', () => {
     expect(image?.schema.safeParse(missingDescriptionProps).success).toBe(false);
   });
 
+  it('publishes an HTTP(S) pattern on a literal Image url only', () => {
+    const image = slackCatalog.components.get('Image');
+    const validateImage = compileComponentSchema(slackCatalogJson.components.Image);
+    const imageProperties = (
+      slackCatalogJson.components.Image as {
+        allOf: Array<{properties?: Record<string, {anyOf: unknown[]}>}>;
+      }
+    ).allOf[1].properties;
+    const mailtoImageProps = {
+      url: 'mailto:image@example.com',
+      description: 'Email URI',
+    };
+
+    expect(imageProperties?.['url'].anyOf[0]).toEqual({type: 'string', pattern: '^https?://'});
+    expect(imageProperties?.['description'].anyOf[0]).toEqual({type: 'string'});
+    expect(
+      validateImage({
+        id: 'chart-image',
+        component: 'Image',
+        url: 'https://example.com/chart.png',
+        description: 'Chart',
+      }),
+    ).toBe(true);
+    expect(validateImage({id: 'chart-image', component: 'Image', ...mailtoImageProps})).toBe(false);
+    // The runtime schema still takes it, so lowering can report it as
+    // A2UI_INVALID_IMAGE_URL rather than as a generic props error.
+    expect(image?.schema.safeParse(mailtoImageProps).success).toBe(true);
+  });
+
   it('defines a strict three-row MarketSnapshot schema', () => {
     const snapshot = {
       headline: 'Rates and equities diverge',
