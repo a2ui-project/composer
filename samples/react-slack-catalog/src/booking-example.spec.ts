@@ -31,18 +31,16 @@ describe('Book a Car starter', () => {
     }
   });
 
-  it('loads the same valid, interactive example from both built-in Slack profiles', () => {
-    for (const renderer of [config.renderers.slack, config.renderers['slack-dev']]) {
-      const messages = A2uiMessageListSchema.parse(JSON.parse(renderer.samplePayload));
-      expect(messages).toEqual(bookingExample);
-      const session = createSlackPreviewSession();
-      sessionsToDispose.push(session);
-      session.processMessages(messages);
-      const snapshot = session.getSnapshot();
-      expect(snapshot.status).toBe(PreviewStatus.READY);
-      expect(snapshot.diagnostics).toEqual([]);
-      expect(snapshot.blocks.filter(block => block.type === 'input')).toHaveLength(3);
-      expect(snapshot.blocks).toContainEqual(expect.objectContaining({type: 'actions'}));
-    }
+  it('loads the same valid, interactive example from the built-in Slack profile', () => {
+    const messages = A2uiMessageListSchema.parse(JSON.parse(config.renderers.slack.samplePayload));
+    expect(messages).toEqual(bookingExample);
+    const session = createSlackPreviewSession();
+    sessionsToDispose.push(session);
+    session.processMessages(messages);
+    const snapshot = session.getSnapshot();
+    expect(snapshot.status).toBe(PreviewStatus.READY);
+    expect(snapshot.diagnostics).toEqual([]);
+    expect(snapshot.blocks.filter(block => block.type === 'input')).toHaveLength(3);
+    expect(snapshot.blocks).toContainEqual(expect.objectContaining({type: 'actions'}));
   });
 });

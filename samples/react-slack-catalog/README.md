@@ -32,8 +32,9 @@ http://localhost:4200/?renderer=http://localhost:3460
 ```
 
 Localhost renderer origins are allowed by the shell startup flow. The shell's
-`slack-dev` profile, `Slack Block Kit Preview (local static)`, loads the sample
-from `http://localhost:4200/samples/react-slack-catalog/` instead.
+`slack` profile, `Slack Block Kit Preview`, loads the sample from
+`samples/react-slack-catalog/` relative to the page, so it uses the copy the
+shell serves, both locally and on GitHub Pages.
 
 For assistant-driven generation and refinement, configure a valid Gemini API key
 through the normal Composer Settings flow.

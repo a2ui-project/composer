@@ -30,7 +30,7 @@ export const MARKET_SNAPSHOT_JSON = readSlackExample('market-snapshot.json');
 
 interface OpenSlackRendererOptions {
   forceAuthMode?: '1p' | '3p';
-  rendererId?: 'slack' | 'slack-dev';
+  rendererId?: 'slack';
   selectedApiKeyId?: string;
 }
 
