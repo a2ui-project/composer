@@ -41,7 +41,7 @@ export const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalog
 const SLACK_CATALOG_SCHEMA = 'https://json-schema.org/draft/2019-09/schema';
 const SLACK_CATALOG_TITLE = 'Slack Preview Renderer Catalog';
 const SLACK_CATALOG_DESCRIPTION =
-  'A2UI catalog for Slack Block Kit preview messages. TextField and date-only DateTimeInput provide editable forms with writable data bindings. Use Table for aligned tabular data such as scores or comparisons. Use Chart for bar, line, pie, or donut charts; Slack has no chart block, so the renderer draws the chart and sends it as an image. Row and Column flatten their children into sequential Slack blocks; they do not preserve horizontal alignment. MarketSnapshot provides a specialized market summary.';
+  'A2UI catalog for Slack Block Kit preview messages. TextField and date-only DateTimeInput provide editable forms with writable data bindings. Use Table for aligned tabular data such as scores or comparisons. Use Chart for bar, line, pie, or donut charts; the native Slack chart block cannot express every chart this catalog allows, so the renderer draws the chart and sends it as an image. Row and Column flatten their children into sequential Slack blocks; they do not preserve horizontal alignment. MarketSnapshot provides a specialized market summary.';
 
 /**
  * Pairs a component name with its props schema. web_core types `ComponentApi`
@@ -270,7 +270,7 @@ const ChartSchema = z
   })
   .strict()
   .describe(
-    'A bar, line, pie, or donut chart drawn from labeled values. Slack has no chart block, so the Slack renderer draws the chart and sends it as an image. Give the numbers, not an image URL.',
+    'A bar, line, pie, or donut chart drawn from labeled values. The native Slack chart block cannot express every chart this catalog allows, so the Slack renderer draws the chart and sends it as an image. Give the numbers, not an image URL.',
   );
 
 const ChartApi = slackComponentApi('Chart', ChartSchema);

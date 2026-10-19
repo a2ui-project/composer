@@ -132,8 +132,8 @@ export interface PreviewSnapshot {
   /** The Slack Block Kit blocks; empty unless `status` is `READY`. */
   blocks: KnownBlock[];
   /**
-   * What "Generated Block Kit" exports, when it differs from `blocks`. Charts are drawn as
-   * local images in the preview; the export marks them as files the app uploads.
+   * Set on ready snapshots: the blocks "Generated Block Kit" exports. Each drawn chart is a
+   * placeholder for a file the Channels app uploads, instead of a local image URL.
    */
   exportBlocks?: KnownBlock[];
   /** Problems found in this render. */

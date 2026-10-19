@@ -255,7 +255,9 @@ test.describe('Slack assistant browser journey', () => {
     await expect(chart).toHaveAttribute('src', /^blob:/);
     await expect(slackPreviewFrame(page).getByText('SLACK_IMAGE_RENDERED_AT_SEND')).toBeVisible();
     const request = (await getCapturedGeminiRequests(page))[0];
-    expect(JSON.stringify(request.body)).toContain('Slack has no chart block');
+    expect(JSON.stringify(request.body)).toContain(
+      'native Slack chart block cannot express every chart this catalog allows',
+    );
     expect(await getBlockKitJson(page)).toMatchObject({
       blocks: expect.arrayContaining([
         {type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: altText},

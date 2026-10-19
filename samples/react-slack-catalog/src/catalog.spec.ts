@@ -582,7 +582,7 @@ describe('Slack Chart component', () => {
   it('publishes guidance telling the model to send numbers, not image URLs', () => {
     expect(slackCatalogJson.components.Chart).toMatchObject({
       description: expect.stringContaining(
-        'Slack has no chart block, so the Slack renderer draws the chart and sends it as an image. Give the numbers, not an image URL.',
+        'The native Slack chart block cannot express every chart this catalog allows, so the Slack renderer draws the chart and sends it as an image. Give the numbers, not an image URL.',
       ),
     });
     expect(slackCatalogJson.description).toContain('Use Chart for bar, line, pie, or donut charts');
