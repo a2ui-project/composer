@@ -19,7 +19,6 @@ import {type ActionDispatchEntry} from './action-dispatch';
 import {type DrawnImage} from './drawn-image-blocks';
 import {type DrawnImageStore} from './drawn-image-store';
 import {type InputComponentType, type InputDispatchEntry} from './form-input';
-import {type LoweredChart} from './lower-chart';
 import {type PreviewDiagnostic} from './preview-snapshot';
 
 /**
@@ -31,7 +30,6 @@ export interface LoweringState {
   readonly diagnostics: PreviewDiagnostic[];
   readonly actions: Map<string, ActionDispatchEntry>;
   readonly inputs: Map<string, InputDispatchEntry>;
-  readonly charts: Map<string, LoweredChart>;
   /** Serves the images drawn in this render. */
   readonly drawnImages: DrawnImageStore;
   /** The URLs of the images drawn in this render, which the export swaps for uploaded files. */
@@ -48,8 +46,6 @@ export interface LowerComponentContext {
   readonly dispatch: (action: unknown) => string;
   readonly input: (type: InputComponentType) => InputDispatchEntry;
   readonly diagnostics: PreviewDiagnostic[];
-  /** Records a chart to draw before Slack conversion and returns the key of its node. */
-  readonly registerChart: (chart: LoweredChart) => string;
   /** Serves an image drawn while lowering and returns the Channels UI `Image` that shows it. */
   readonly placeDrawnImage: (image: DrawnImage) => ChannelNode;
 }

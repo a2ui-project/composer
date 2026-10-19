@@ -198,8 +198,8 @@ limits titles to 50 characters, labels to 20, and a message to 2 charts, and its
 pie values must be above 0. `renderBlockKit` also skips the chart nodes that
 Channels UI's `Chart` produces. So this sample draws every `Chart` as an image
 on purpose, which also covers the donut and horizontal bar charts the native
-block lacks. The chart stays a Channels UI `Chart` until just before
-`renderBlockKit` runs, and is then replaced by the drawing.
+block lacks. Like `Scorecard`, the chart is drawn while its A2UI component is
+lowered, so its diagnostics appear in document order with the others.
 
 Every value must be a number, pie and donut values must be zero or more, and at
 least one value must be non-zero. Otherwise the chart is skipped with a
@@ -211,8 +211,8 @@ message still renders.
 `Scorecard` shows one match result: a `home` and an `away` team, each with a
 `name` and a `score`, plus an optional `status`, such as `Full time`, and an
 optional `competition`. A score can be a number or text such as `3 (4)`, and
-every field accepts data bindings. Slack has no block for a scorecard, and it
-isn't a Channels UI component either, so the sample draws it while lowering. It
+every field accepts data bindings. Slack has no block for a scorecard, and
+Channels UI has no scorecard component either, so the sample draws it. It
 shows that any React component can be sent this way, not only Channels UI's.
 
 If a team's name or score is empty or missing, the scorecard is skipped with a
