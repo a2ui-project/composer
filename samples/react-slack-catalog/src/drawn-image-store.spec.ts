@@ -14,54 +14,56 @@
  * limitations under the License.
  */
 
-import {describe, expect, it, vi} from 'vitest';
-import {createBlobImageStore, type ObjectUrlApi} from './drawn-image-store';
+import {afterEach, beforeEach, describe, expect, it, vi, type MockInstance} from 'vitest';
+import {createBlobImageStore} from './drawn-image-store';
 
 describe('createBlobImageStore', () => {
-  const fakeUrls = () => {
+  let createObjectURL: MockInstance<typeof URL.createObjectURL>;
+  let revokeObjectURL: MockInstance<typeof URL.revokeObjectURL>;
+
+  beforeEach(() => {
     let created = 0;
-    return {
-      createObjectURL: vi.fn<ObjectUrlApi['createObjectURL']>(() => `blob:image-${++created}`),
-      revokeObjectURL: vi.fn<ObjectUrlApi['revokeObjectURL']>(),
-    };
-  };
+    createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockImplementation(() => `blob:image-${++created}`);
+    revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it('serves SVG markup as an image and reuses the URL for identical markup', () => {
-    const urls = fakeUrls();
-    const store = createBlobImageStore(urls);
+    const store = createBlobImageStore();
 
     const first = store.urlFor('<svg>a</svg>');
 
     expect(store.urlFor('<svg>a</svg>')).toBe(first);
-    expect(urls.createObjectURL).toHaveBeenCalledTimes(1);
-    expect(urls.createObjectURL.mock.calls[0][0].type).toBe('image/svg+xml');
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect((createObjectURL.mock.calls[0][0] as Blob).type).toBe('image/svg+xml');
   });
 
   it('keeps URLs from the current and previous release and frees older ones', () => {
-    const urls = fakeUrls();
-    const store = createBlobImageStore(urls);
+    const store = createBlobImageStore();
     const first = store.urlFor('<svg>a</svg>');
     store.release(new Set([first]));
     const second = store.urlFor('<svg>b</svg>');
 
     store.release(new Set([second]));
-    expect(urls.revokeObjectURL).not.toHaveBeenCalled();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
 
     store.release(new Set([second]));
-    expect(urls.revokeObjectURL).toHaveBeenCalledExactlyOnceWith(first);
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(first);
     expect(store.urlFor('<svg>a</svg>')).not.toBe(first);
   });
 
   it('frees every URL on dispose', () => {
-    const urls = fakeUrls();
-    const store = createBlobImageStore(urls);
+    const store = createBlobImageStore();
     const first = store.urlFor('<svg>a</svg>');
     const second = store.urlFor('<svg>b</svg>');
 
     store.dispose();
 
-    expect(urls.revokeObjectURL.mock.calls.map(([url]) => url).sort()).toEqual(
-      [first, second].sort(),
-    );
+    expect(revokeObjectURL.mock.calls.map(([url]) => url).sort()).toEqual([first, second].sort());
   });
 });

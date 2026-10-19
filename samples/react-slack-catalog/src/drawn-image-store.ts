@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-/** Creates and frees object URLs; the global `URL` in the browser. */
-export interface ObjectUrlApi {
-  createObjectURL(blob: Blob): string;
-  revokeObjectURL(url: string): void;
-}
-
 /**
  * Hands out URLs for the images the preview draws, such as charts, and frees the ones no
  * longer shown.
@@ -36,12 +30,8 @@ export interface DrawnImageStore {
   dispose(): void;
 }
 
-/**
- * A `DrawnImageStore` that serves each drawing as an `image/svg+xml` blob URL.
- *
- * @param urls Creates and frees the blob URLs.
- */
-export function createBlobImageStore(urls: ObjectUrlApi = URL): DrawnImageStore {
+/** A `DrawnImageStore` that serves each drawing as an `image/svg+xml` blob URL. */
+export function createBlobImageStore(): DrawnImageStore {
   const urlsByMarkup = new Map<string, string>();
   let previousKeep: ReadonlySet<string> = new Set();
 
@@ -51,7 +41,7 @@ export function createBlobImageStore(urls: ObjectUrlApi = URL): DrawnImageStore 
       if (existing) {
         return existing;
       }
-      const url = urls.createObjectURL(new Blob([svg], {type: 'image/svg+xml'}));
+      const url = URL.createObjectURL(new Blob([svg], {type: 'image/svg+xml'}));
       urlsByMarkup.set(svg, url);
       return url;
     },
@@ -59,7 +49,7 @@ export function createBlobImageStore(urls: ObjectUrlApi = URL): DrawnImageStore 
     release(keep) {
       for (const [svg, url] of urlsByMarkup) {
         if (!keep.has(url) && !previousKeep.has(url)) {
-          urls.revokeObjectURL(url);
+          URL.revokeObjectURL(url);
           urlsByMarkup.delete(svg);
         }
       }
@@ -68,7 +58,7 @@ export function createBlobImageStore(urls: ObjectUrlApi = URL): DrawnImageStore 
 
     dispose() {
       for (const url of urlsByMarkup.values()) {
-        urls.revokeObjectURL(url);
+        URL.revokeObjectURL(url);
       }
       urlsByMarkup.clear();
       previousKeep = new Set();
