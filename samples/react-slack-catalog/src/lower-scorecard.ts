@@ -15,18 +15,17 @@
  */
 
 import {type Renderable} from '@copilotkit/channels-ui';
-import {optionalText, skipWithWarning} from './drawn-component-props';
+import {drawnImageAltText, optionalText, skipWithWarning} from './drawn-component-props';
 import {type LowerComponentContext} from './lowering-context';
 import {DiagnosticCode} from './preview-snapshot';
 import {recordField} from './record-fields';
 import {
   ScorecardSide,
+  describeScorecard,
   renderScorecardSvg,
-  scorecardAltText,
   type ScorecardImageProps,
   type ScorecardTeam,
 } from './scorecard-image';
-import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
 
 /**
  * Draws the sample's `Scorecard` component as an image while lowering. Slack has no block
@@ -50,14 +49,11 @@ export function lowerScorecard(
     status: optionalText(props.status),
     competition: optionalText(props.competition),
   };
-  const label = optionalText(recordField(props.accessibility, 'label'));
   return context.placeDrawnImage({
     componentType: 'Scorecard',
     componentId: context.componentId,
     svg: renderScorecardSvg(scorecard),
-    alt:
-      label?.slice(0, SLACK_IMAGE_ALT_TEXT_MAX_LENGTH) ??
-      scorecardAltText(scorecard, SLACK_IMAGE_ALT_TEXT_MAX_LENGTH),
+    alt: drawnImageAltText(props, describeScorecard(scorecard)),
   });
 }
 

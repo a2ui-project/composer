@@ -15,12 +15,11 @@
  */
 
 import {type ChartDataPoint, type Renderable} from '@copilotkit/channels-ui';
-import {ChartType, chartAltText, renderChartSvg, type ChartImageProps} from './chart-image';
-import {optionalText, skipWithWarning} from './drawn-component-props';
+import {ChartType, describeChart, renderChartSvg, type ChartImageProps} from './chart-image';
+import {drawnImageAltText, optionalText, skipWithWarning} from './drawn-component-props';
 import {type LowerComponentContext} from './lowering-context';
 import {DiagnosticCode} from './preview-snapshot';
 import {recordField} from './record-fields';
-import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
 
 /**
  * Draws the sample's `Chart` component as an image while lowering. Slack's native chart
@@ -48,14 +47,11 @@ export function lowerChart(
     yAxisTitle: optionalText(props.yAxisTitle),
     data,
   };
-  const label = optionalText(recordField(props.accessibility, 'label'));
   return context.placeDrawnImage({
     componentType: 'Chart',
     componentId: context.componentId,
     svg: renderChartSvg(image),
-    alt:
-      label?.slice(0, SLACK_IMAGE_ALT_TEXT_MAX_LENGTH) ??
-      chartAltText(image, SLACK_IMAGE_ALT_TEXT_MAX_LENGTH),
+    alt: drawnImageAltText(props, describeChart(image)),
   });
 }
 

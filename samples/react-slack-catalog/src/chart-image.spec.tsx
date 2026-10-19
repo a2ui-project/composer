@@ -15,7 +15,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {ChartType, chartAltText, renderChartSvg, type ChartImageProps} from './chart-image';
+import {ChartType, describeChart, renderChartSvg, type ChartImageProps} from './chart-image';
 import {DrawnImageColor} from './drawn-image-style';
 
 const possession: ChartImageProps = {
@@ -119,21 +119,8 @@ describe('renderChartSvg', () => {
   });
 });
 
-describe('chartAltText', () => {
-  it('describes the chart for Slack alt text', () => {
-    expect(chartAltText(possession, 2000)).toBe('Pie chart, Possession: Argentina 70, Mexico 30');
-  });
-
-  it('cuts long descriptions to the limit with an ellipsis', () => {
-    const alt = chartAltText(
-      {
-        type: ChartType.LINE,
-        data: Array.from({length: 20}, (_, index) => ({label: 'x'.repeat(200), value: index})),
-      },
-      100,
-    );
-
-    expect(alt).toHaveLength(100);
-    expect(alt.endsWith('…')).toBe(true);
+describe('describeChart', () => {
+  it('describes the chart in words for its alt text', () => {
+    expect(describeChart(possession)).toBe('Pie chart, Possession: Argentina 70, Mexico 30');
   });
 });
