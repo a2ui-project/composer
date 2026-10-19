@@ -232,6 +232,22 @@ test.describe('Slack assistant browser journey', () => {
     expect(unexpectedErrors).toEqual([]);
   });
 
+  test('passes the Slack Image URL pattern to the system instructions', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackAssistant(page);
+    await page.getByLabel('Chat prompt').fill(APPROVAL_PROMPT);
+    await page.getByRole('button', {name: 'Add to prompt'}).click();
+    await page.getByRole('menuitem', {name: /^Instructions/}).click();
+    const instructions = page.getByRole('dialog', {name: 'System Instructions'});
+    // The catalog declares the pattern on Image.url; the shell reads it, not the wording.
+    await expect(instructions.getByLabel('System instructions text')).toContainText(
+      'For Image.url, use only URLs matching `^https?://`',
+    );
+    await instructions.getByRole('button', {name: 'Close', exact: true}).click();
+    await expect(instructions).toBeHidden();
+    expect(unexpectedErrors).toEqual([]);
+  });
+
   test('turns including a screenshot on and off from the prompt menu', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
     await openSlackAssistant(page);
