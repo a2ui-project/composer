@@ -42,6 +42,7 @@ import {ErrorLogger} from '../../debug/error-logger.service';
 
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 import {PreviewUrlParam} from '../preview-url-param';
+import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 
 /**
  * Number of consecutive growing SURFACE_RESIZE reports that makes the growth
@@ -108,6 +109,7 @@ const MAX_OWN_GROWTH_RELEASES_PER_RUN = 2;
 export class RenderedFrame {
   private sanitizer = inject(DomSanitizer);
   private startupResolution = inject(StartupResolution);
+  private environmentContext = inject(EnvironmentContextService);
   private hostCommunication = inject(HostCommunication);
   private configProvider = inject(AppConfigProvider);
   private chatState = inject(ChatState);
@@ -208,10 +210,11 @@ export class RenderedFrame {
       // (e.g., in Server-Side Rendering).
       const baseOrigin = globalThis.location?.origin || undefined;
 
-      // Construct a URL object. Passing baseOrigin as the second argument ensures that
-      // relative URLs (e.g., "/renderer") are parsed correctly relative to the current
-      // domain. Absolute URLs will ignore this base parameter.
-      const url = new URL(currentUrl, baseOrigin);
+      // Without a page location only absolute URLs are loaded; parsing a relative
+      // one throws.
+      const url = baseOrigin
+        ? this.environmentContext.resolveRendererUrl(currentUrl)
+        : new URL(currentUrl);
 
       // Prevent unauthorized cross-site framing by appending parent and
       // ancestor origins.

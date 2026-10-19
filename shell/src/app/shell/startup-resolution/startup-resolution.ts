@@ -75,10 +75,13 @@ export class StartupResolution {
    * allowed yet asks for confirmation first; the selection is only committed
    * once it's allowed, so a denied renderer never replaces the current one.
    *
+   * @param signal Cancels a pending confirmation, for example when the user
+   *     stops the assistant turn that asked for the switch.
    * @return Whether the renderer was selected.
-   * @throws If the selection changed while the confirmation was open.
+   * @throws If the selection changed, or `signal` was aborted, before the
+   *     renderer's origin was approved.
    */
-  async setSelectedRendererId(rendererId: string | null): Promise<boolean> {
+  async setSelectedRendererId(rendererId: string | null, signal?: AbortSignal): Promise<boolean> {
     const previousId = this.startupConfigState.selectedRendererId();
     const previousUrl = this.resolvedUrl();
     const active = rendererId
@@ -86,7 +89,10 @@ export class StartupResolution {
       : null;
     const rendererUrl = active?.rendererUrl;
     if (rendererUrl) {
-      const isAllowed = await this.isOriginAllowed(rendererUrl);
+      const isAllowed = await this.isOriginAllowed(rendererUrl, signal);
+      // The last check before the selection is committed below, so a request canceled
+      // while its origin was being approved, or just after, never changes the renderer.
+      signal?.throwIfAborted();
       // The confirmation dialog can stay open for a while. If anything changed the
       // renderer in the meantime (Settings, a shared link, a config reload), this
       // request is stale and must not overwrite that newer choice.
@@ -147,7 +153,11 @@ export class StartupResolution {
     if (!rawParam) {
       return;
     }
-    const queryRendererUrl = QueryParser.parseRendererUrl(rawParam, this.logger);
+    const queryRendererUrl = QueryParser.parseRendererUrl(
+      rawParam,
+      this.environmentContext,
+      this.logger,
+    );
     const queryRendererId = QueryParser.parseRendererId(rawParam);
     if (queryRendererUrl || queryRendererId) {
       await this.resolveRenderer();
@@ -315,8 +325,8 @@ export class StartupResolution {
 
     // Tier 1 & 2: renderer param from hash or query (subject to origin allowlist check)
     const queryRendererUrl =
-      QueryParser.parseRendererUrl(this.getWindowHash(), this.logger) ||
-      QueryParser.parseRendererUrl(this.getWindowSearch(), this.logger);
+      QueryParser.parseRendererUrl(this.getWindowHash(), this.environmentContext, this.logger) ||
+      QueryParser.parseRendererUrl(this.getWindowSearch(), this.environmentContext, this.logger);
     if (queryRendererUrl) {
       const isAllowed = await this.isOriginAllowed(queryRendererUrl);
       if (isAllowed) {
@@ -346,7 +356,7 @@ export class StartupResolution {
               targetId = customMatch.id ?? null;
             } else {
               try {
-                const urlObj = new URL(queryRendererUrl, this.environmentContext.getBaseOrigin());
+                const urlObj = this.environmentContext.resolveRendererUrl(queryRendererUrl);
                 const hostname = urlObj.hostname || 'custom';
                 const port = urlObj.port ? `:${urlObj.port}` : '';
                 const newId = `custom-${Date.now()}`;
@@ -458,17 +468,16 @@ export class StartupResolution {
     }
   }
 
-  /** Parses a renderer URL, resolving root-relative paths against Composer's origin. */
+  /** Parses a renderer URL, rejecting any that isn't HTTP(S). */
   private parseRendererUrl(url: string): URL {
-    const baseOrigin = this.environmentContext.getBaseOrigin();
-    const parsed = url.startsWith('/') ? new URL(url, baseOrigin) : new URL(url);
+    const parsed = this.environmentContext.resolveRendererUrl(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new Error('Renderer URLs must use HTTP or HTTPS.');
     }
     return parsed;
   }
 
-  async isOriginAllowed(url: string): Promise<boolean> {
+  async isOriginAllowed(url: string, signal?: AbortSignal): Promise<boolean> {
     let origin: string;
     let hostname: string;
     try {
@@ -514,7 +523,7 @@ export class StartupResolution {
       return true;
     }
 
-    const confirmed = await this.confirmOrigin(origin);
+    const confirmed = await this.confirmOrigin(origin, signal);
     if (confirmed) {
       allowedOrigins.push(origin);
       this.localStorageInteractions.setItem(
@@ -527,13 +536,24 @@ export class StartupResolution {
     return false;
   }
 
-  async confirmOrigin(origin: string): Promise<boolean> {
+  async confirmOrigin(origin: string, signal?: AbortSignal): Promise<boolean> {
+    // A signal that is already aborted never fires `abort`, so nothing would close the
+    // dialog below for a request that was canceled before it opened.
+    signal?.throwIfAborted();
     const dialogRef = this.dialog.open(OriginConfirmationDialog, {
       data: {origin},
       width: '450px',
     });
-    const result = await firstValueFrom(dialogRef.afterClosed());
-    return !!result;
+    const onAbort = () => dialogRef.close(false);
+    signal?.addEventListener('abort', onAbort, {once: true});
+    try {
+      const result = await firstValueFrom(dialogRef.afterClosed());
+      // A dialog closed by `onAbort` reports the cancellation, not a denial.
+      signal?.throwIfAborted();
+      return !!result;
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+    }
   }
 
   getResolvedRendererUrl(): string | null {

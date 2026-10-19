@@ -18,6 +18,7 @@ import {Injectable, inject, signal, Signal, OnDestroy, untracked} from '@angular
 import {toSignal} from '@angular/core/rxjs-interop';
 import {ReplaySubject} from 'rxjs';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
+import {EnvironmentContextService} from '../startup-resolution/state/environment-context.service';
 import {
   AppConfigProvider,
   ThemePreference,
@@ -53,6 +54,7 @@ export declare interface MessageEnvelope {
 })
 export class HostCommunication implements OnDestroy {
   private readonly startupResolution = inject(StartupResolution);
+  private readonly environmentContext = inject(EnvironmentContextService);
   private readonly configProvider = inject(AppConfigProvider);
   private readonly errorLogger = inject(ErrorLogger);
   private readonly logger = this.errorLogger.withTag('[HostCommunication]');
@@ -191,7 +193,7 @@ export class HostCommunication implements OnDestroy {
         }
 
         try {
-          const expectedOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
+          const expectedOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
           if (event.origin !== expectedOrigin) {
             return;
           }
@@ -237,7 +239,7 @@ export class HostCommunication implements OnDestroy {
     }
 
     try {
-      const expectedOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
+      const expectedOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
       if (event.origin !== expectedOrigin) {
         return;
       }
@@ -651,7 +653,7 @@ export class HostCommunication implements OnDestroy {
     if (!expectedUrl) return;
 
     try {
-      const targetOrigin = new URL(expectedUrl, globalThis.location?.href).origin;
+      const targetOrigin = this.environmentContext.resolveRendererUrl(expectedUrl).origin;
       targetWindow.postMessage(message, targetOrigin);
       if (message.type === PreviewBridgeMessageType.MCP_RESPONSE) {
         this.recordEnvelope({

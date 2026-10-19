@@ -109,5 +109,11 @@ export default defineConfig({
       reuseExistingServer: !process.env['CI'],
       timeout: 120 * 1000,
     },
+    {
+      command: 'corepack yarn workspace react-slack-catalog start',
+      url: 'http://localhost:3460',
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120 * 1000,
+    },
   ],
 });
