@@ -54,25 +54,33 @@ function slackComponentApi(name: string, schema: z.ZodTypeAny): ComponentApi {
   return {name, schema} as unknown as ComponentApi;
 }
 
+/** A data binding: a prop whose value is read from the data model at `path`. */
+const DataBindingSchema = z.object({path: z.string()}).strict();
+
+/**
+ * A function call: a prop whose value a catalog function computes.
+ *
+ * @param returnType What the call returns when it doesn't say: the prop's type.
+ */
+function functionCallSchema(returnType: A2uiReturnType) {
+  return z
+    .object({
+      call: z.string(),
+      args: z.record(z.unknown()),
+      returnType: z
+        .enum(['string', 'number', 'boolean', 'array', 'object', 'any', 'void'])
+        .default(returnType)
+        .optional(),
+    })
+    .strict();
+}
+
 /**
  * A string prop's schema: the given literal string, a data binding, or a
  * function call that returns a string.
  */
 function dynamicStringSchema(literal: z.ZodString) {
-  return z.union([
-    literal,
-    z.object({path: z.string()}).strict(),
-    z
-      .object({
-        call: z.string(),
-        args: z.record(z.unknown()),
-        returnType: z
-          .enum(['string', 'number', 'boolean', 'array', 'object', 'any', 'void'])
-          .default('string')
-          .optional(),
-      })
-      .strict(),
-  ]);
+  return z.union([literal, DataBindingSchema, functionCallSchema('string')]);
 }
 
 const DynamicStringSchema = dynamicStringSchema(z.string());
@@ -222,20 +230,11 @@ const TableSchema = z
 
 const TableApi = slackComponentApi('Table', TableSchema);
 
-const DynamicNumberSchema = z.union([
-  z.number(),
-  z.object({path: z.string()}).strict(),
-  z
-    .object({
-      call: z.string(),
-      args: z.record(z.unknown()),
-      returnType: z
-        .enum(['string', 'number', 'boolean', 'array', 'object', 'any', 'void'])
-        .default('number')
-        .optional(),
-    })
-    .strict(),
-]);
+/**
+ * A number prop's schema: a literal number, a data binding, or a function call
+ * that returns a number.
+ */
+const DynamicNumberSchema = z.union([z.number(), DataBindingSchema, functionCallSchema('number')]);
 
 const ChartSchema = z
   .object({
