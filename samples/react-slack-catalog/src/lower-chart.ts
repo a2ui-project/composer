@@ -45,9 +45,12 @@ export interface LoweredChart {
 }
 
 /**
- * Replaces each lowered chart with a drawing of it. Slack has no chart block and
- * renderBlockKit skips chart nodes, so the chart is drawn as SVG and placed in the message
- * as an image, the way a Channels app would upload a rendered PNG.
+ * Replaces each lowered chart with a drawing of it. Slack's native chart block,
+ * `data_visualization`, cannot express every chart the catalog allows (it has no donut or
+ * horizontal bar, for one), and Channels' renderBlockKit, which turns components into Slack
+ * blocks, skips chart nodes, the elements that Channels UI's `Chart` produces. So every chart
+ * is drawn as SVG and placed in the message as an image, the way a Channels app would upload
+ * a rendered PNG.
  */
 export function drawCharts(
   nodes: readonly ChannelNode[],
