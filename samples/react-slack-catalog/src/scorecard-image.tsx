@@ -121,20 +121,17 @@ const NAME_LAYOUTS: readonly NameLayout[] = [
 ];
 
 /**
- * Describes the scorecard in words, e.g. "Scorecard: Argentina 2, Mexico 0. Full time.
- * World Cup, Group C."
- *
- * @param maxLength The most characters the description may have, such as Slack's alt
- *     text limit.
+ * Describes the scorecard in words for its alt text, e.g. "Scorecard: Argentina 2, Mexico
+ * 0. Full time. World Cup, Group C."
  */
-export function scorecardAltText(scorecard: ScorecardImageProps, maxLength: number): string {
+export function describeScorecard(scorecard: ScorecardImageProps): string {
   const {home, away} = scorecard;
   const parts = [
     `Scorecard: ${home.name} ${home.score}, ${away.name} ${away.score}`,
     scorecard.status,
     scorecard.competition,
   ].filter((part): part is string => Boolean(part));
-  return clipText(`${parts.join('. ')}.`, maxLength);
+  return `${parts.join('. ')}.`;
 }
 
 /** Draws the scorecard as standalone SVG markup that can be served as an image. */

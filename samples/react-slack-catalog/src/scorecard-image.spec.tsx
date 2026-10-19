@@ -16,7 +16,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {DrawnImageColor} from './drawn-image-style';
-import {renderScorecardSvg, scorecardAltText, type ScorecardImageProps} from './scorecard-image';
+import {describeScorecard, renderScorecardSvg, type ScorecardImageProps} from './scorecard-image';
 
 const final: ScorecardImageProps = {
   home: {name: 'Argentina', score: '2'},
@@ -119,26 +119,19 @@ describe('renderScorecardSvg', () => {
   });
 });
 
-describe('scorecardAltText', () => {
-  it('describes the result, the status, and the competition for Slack alt text', () => {
-    expect(scorecardAltText(final, 2000)).toBe(
+describe('describeScorecard', () => {
+  it('describes the result, the status, and the competition in words for its alt text', () => {
+    expect(describeScorecard(final)).toBe(
       'Scorecard: Argentina 2, Mexico 0. Full time. World Cup, Group C.',
     );
   });
 
   it('leaves out a missing status and competition', () => {
-    expect(scorecardAltText({home: final.home, away: final.away}, 2000)).toBe(
+    expect(describeScorecard({home: final.home, away: final.away})).toBe(
       'Scorecard: Argentina 2, Mexico 0.',
     );
-    expect(scorecardAltText({...final, status: undefined}, 2000)).toBe(
+    expect(describeScorecard({...final, status: undefined})).toBe(
       'Scorecard: Argentina 2, Mexico 0. World Cup, Group C.',
     );
-  });
-
-  it('cuts a long description to the limit with an ellipsis', () => {
-    const alt = scorecardAltText({...final, competition: 'x'.repeat(200)}, 100);
-
-    expect(alt).toHaveLength(100);
-    expect(alt.endsWith('…')).toBe(true);
   });
 });

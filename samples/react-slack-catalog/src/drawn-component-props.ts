@@ -21,8 +21,11 @@
  * renders.
  */
 
+import {clipText} from './drawn-image-style';
 import {type LowerComponentContext} from './lowering-context';
 import {DiagnosticLevel, type DiagnosticCode} from './preview-snapshot';
+import {recordField} from './record-fields';
+import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
 
 /** Reports why a component was left out of the message, and returns nothing to draw. */
 export function skipWithWarning(
@@ -37,6 +40,19 @@ export function skipWithWarning(
     componentId: context.componentId,
   });
   return undefined;
+}
+
+/**
+ * The alt text of a drawn image: the component's accessibility label when it has one,
+ * otherwise `description`, the drawing described in words. Either is cut to Slack's alt
+ * text limit, ending with an ellipsis when cut.
+ */
+export function drawnImageAltText(
+  props: Readonly<Record<string, unknown>>,
+  description: string,
+): string {
+  const label = optionalText(recordField(props.accessibility, 'label'));
+  return clipText(label ?? description, SLACK_IMAGE_ALT_TEXT_MAX_LENGTH);
 }
 
 /** The text of a bound value: a number as text, a string that isn't blank, or `undefined`. */
