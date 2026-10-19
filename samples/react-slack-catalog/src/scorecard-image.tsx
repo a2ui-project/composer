@@ -15,7 +15,14 @@
  */
 
 import {renderToStaticMarkup} from 'react-dom/server';
-import {DRAWN_IMAGE_FONT_FAMILY, DrawnImageColor, clipText} from './drawn-image-style';
+import {
+  DRAWN_IMAGE_FONT_FAMILY,
+  DrawnImageColor,
+  charactersThatFit,
+  clipText,
+  estimateTextWidth,
+  round,
+} from './drawn-image-style';
 
 /** One side of a match: a team and its score. */
 export interface ScorecardTeam {
@@ -71,12 +78,6 @@ const SCORE_WIDTH = 64;
 const SCORE_MAX_FONT_SIZE = 44;
 /** The horizontal distance from the card's center to each score. */
 const SCORE_OFFSET = 24;
-/**
- * The average width of a character, as a fraction of the font size. SVG text doesn't wrap
- * or shrink by itself, so the layout estimates widths with this. It is a little wide for
- * most names, so they fit with room to spare.
- */
-const CHARACTER_WIDTH = 0.6;
 /** Ways to lay out a team name, from largest to smallest. */
 const NAME_LAYOUTS: readonly NameLayout[] = [
   {fontSize: 24, maxLines: 1},
@@ -211,7 +212,7 @@ function TeamColumn({team, side}: TeamColumnProps) {
 function StatusPill({status}: {readonly status: string}) {
   const text = clipText(status, 40);
   const fontSize = 13;
-  const width = Math.min(WIDTH - 2 * PADDING, text.length * fontSize * CHARACTER_WIDTH + 28);
+  const width = Math.min(WIDTH - 2 * PADDING, estimateTextWidth(text, fontSize) + 28);
   const centerY = 162;
   return (
     <g>
@@ -283,15 +284,16 @@ function wrapWords(text: string, perLine: number): string[] {
   return lines;
 }
 
+/** How many characters of a team name fit on one line of its column at `fontSize`. */
 function charactersPerLine(fontSize: number): number {
-  return Math.floor(NAME_WIDTH / (fontSize * CHARACTER_WIDTH));
+  return charactersThatFit(NAME_WIDTH, fontSize);
 }
 
-/** The largest font size, up to `maxFontSize`, at which `text` fits in `width`. */
+/**
+ * The largest font size, up to `maxFontSize`, at which `text` fits in `width`. The
+ * estimated width grows in step with the font size, so it is `width` divided by the
+ * width at size 1.
+ */
 function fitFontSize(text: string, width: number, maxFontSize: number): number {
-  return Math.min(maxFontSize, Math.floor(width / (Math.max(text.length, 1) * CHARACTER_WIDTH)));
-}
-
-function round(value: number): number {
-  return Math.round(value * 100) / 100;
+  return Math.min(maxFontSize, Math.floor(width / estimateTextWidth(text, 1)));
 }
