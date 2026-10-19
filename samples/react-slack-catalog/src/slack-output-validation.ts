@@ -15,10 +15,18 @@
  */
 
 import {SLACK_LIMITS} from '@copilotkit/channels-slack/render';
-import {type KnownBlock} from '@slack/types';
+import {
+  type ActionsBlockElement,
+  type ContextBlock,
+  type ImageBlock,
+  type KnownBlock,
+  type RawTextElement,
+  type RichTextBlock,
+  type TableBlock,
+} from '@slack/types';
 import {LoweringError} from './lowering-error';
 import {DiagnosticCode} from './preview-snapshot';
-import {arrayField, isRecord, recordField, stringField} from './record-fields';
+import {isRecord} from './record-fields';
 import {
   SLACK_IMAGE_ALT_TEXT_MAX_LENGTH,
   SLACK_IMAGE_TITLE_MAX_LENGTH,
@@ -41,21 +49,20 @@ export function validateSlackOutput(blocks: readonly KnownBlock[]): void {
 
   let aggregateTableLength = 0;
   for (const block of blocks) {
-    const blockType = stringField(block, 'type');
-    if (blockType === 'header') {
+    if (block.type === 'header') {
       assertTextLimit(
-        blockText(block),
+        block.text.text,
         SLACK_LIMITS.headerText,
         DiagnosticCode.SLACK_HEADER_TEXT_LIMIT_EXCEEDED,
       );
     }
-    if (blockType === 'section') {
+    if (block.type === 'section') {
       assertTextLimit(
-        blockText(block),
+        block.text?.text,
         SLACK_LIMITS.sectionText,
         DiagnosticCode.SLACK_SECTION_TEXT_LIMIT_EXCEEDED,
       );
-      const fields = arrayField(block, 'fields');
+      const fields = block.fields ?? [];
       if (fields.length > SLACK_LIMITS.fieldsPerSection) {
         throw new LoweringError(
           DiagnosticCode.SLACK_SECTION_FIELDS_LIMIT_EXCEEDED,
@@ -64,14 +71,14 @@ export function validateSlackOutput(blocks: readonly KnownBlock[]): void {
       }
       for (const field of fields) {
         assertTextLimit(
-          textObjectText(field),
+          field.text,
           SLACK_LIMITS.fieldText,
           DiagnosticCode.SLACK_SECTION_FIELD_TEXT_LIMIT_EXCEEDED,
         );
       }
     }
-    if (blockType === 'actions') {
-      const elements = arrayField(block, 'elements');
+    if (block.type === 'actions') {
+      const elements = block.elements;
       if (elements.length > SLACK_LIMITS.actionsElements) {
         throw new LoweringError(
           DiagnosticCode.SLACK_ACTIONS_ELEMENTS_LIMIT_EXCEEDED,
@@ -82,13 +89,13 @@ export function validateSlackOutput(blocks: readonly KnownBlock[]): void {
         validateActionElement(element);
       }
     }
-    if (blockType === 'context') {
+    if (block.type === 'context') {
       validateContextBlock(block);
     }
-    if (blockType === 'image') {
+    if (block.type === 'image') {
       validateImageBlock(block);
     }
-    if (blockType === 'table') {
+    if (block.type === 'table') {
       const cellTexts = tableCellTexts(block);
       aggregateTableLength += cellTexts.reduce((sum, text) => sum + text.length, 0);
       if (aggregateTableLength > SLACK_TABLE_TEXT_MAX_LENGTH) {
@@ -108,19 +115,19 @@ export function validateSlackOutput(blocks: readonly KnownBlock[]): void {
   }
 }
 
-function validateActionElement(element: unknown): void {
-  if (stringField(element, 'type') !== 'button') {
+function validateActionElement(element: ActionsBlockElement): void {
+  if (element.type !== 'button') {
     return;
   }
   assertTextLimit(
-    blockText(element),
+    element.text.text,
     SLACK_LIMITS.buttonText,
     DiagnosticCode.SLACK_BUTTON_TEXT_LIMIT_EXCEEDED,
   );
 }
 
-function validateContextBlock(block: unknown): void {
-  const elements = arrayField(block, 'elements');
+function validateContextBlock(block: ContextBlock): void {
+  const elements = block.elements;
   if (elements.length > SLACK_LIMITS.contextElements) {
     throw new LoweringError(
       DiagnosticCode.SLACK_CONTEXT_ELEMENTS_LIMIT_EXCEEDED,
@@ -129,17 +136,16 @@ function validateContextBlock(block: unknown): void {
   }
 
   for (const element of elements) {
-    const elementType = stringField(element, 'type');
-    if (elementType === 'mrkdwn' || elementType === 'plain_text') {
+    if (element.type === 'mrkdwn' || element.type === 'plain_text') {
       assertTextLimit(
-        textObjectText(element),
+        element.text,
         SLACK_TEXT_OBJECT_MAX_LENGTH,
         DiagnosticCode.SLACK_CONTEXT_TEXT_LIMIT_EXCEEDED,
       );
     }
-    if (elementType === 'image') {
+    if (element.type === 'image') {
       assertTextLimit(
-        stringField(element, 'image_url'),
+        imageUrl(element),
         SLACK_IMAGE_URL_MAX_LENGTH,
         DiagnosticCode.SLACK_CONTEXT_IMAGE_URL_LIMIT_EXCEEDED,
       );
@@ -147,22 +153,30 @@ function validateContextBlock(block: unknown): void {
   }
 }
 
-function validateImageBlock(block: unknown): void {
+function validateImageBlock(block: ImageBlock): void {
   assertTextLimit(
-    stringField(block, 'image_url'),
+    imageUrl(block),
     SLACK_IMAGE_URL_MAX_LENGTH,
     DiagnosticCode.SLACK_IMAGE_URL_LIMIT_EXCEEDED,
   );
   assertTextLimit(
-    stringField(block, 'alt_text'),
+    block.alt_text,
     SLACK_IMAGE_ALT_TEXT_MAX_LENGTH,
     DiagnosticCode.SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED,
   );
   assertTextLimit(
-    textObjectText(recordField(block, 'title')),
+    block.title?.text,
     SLACK_IMAGE_TITLE_MAX_LENGTH,
     DiagnosticCode.SLACK_IMAGE_TITLE_TEXT_LIMIT_EXCEEDED,
   );
+}
+
+/**
+ * The `image_url` of an image block or element. Slack also accepts an image
+ * as a `slack_file` instead, which has no URL to check.
+ */
+function imageUrl(image: ImageBlock | ContextBlock['elements'][number]): string | undefined {
+  return 'image_url' in image ? image.image_url : undefined;
 }
 
 function assertTextLimit(text: string | undefined, limit: number, code: DiagnosticCode): void {
@@ -175,26 +189,15 @@ function assertTextLimit(text: string | undefined, limit: number, code: Diagnost
   );
 }
 
-function blockText(value: unknown): string | undefined {
-  return textObjectText(recordField(value, 'text'));
+function tableCellTexts(block: TableBlock): string[] {
+  return block.rows.flatMap(row => row.flatMap(tableCellTextValues));
 }
 
-function tableCellTexts(block: unknown): string[] {
-  return arrayField(block, 'rows').flatMap(row =>
-    Array.isArray(row) ? row.flatMap(tableCellTextValues) : [],
-  );
-}
-
-function tableCellTextValues(cell: unknown): string[] {
-  const cellType = stringField(cell, 'type');
-  if (cellType === 'raw_text' || cellType === 'raw_number') {
-    const text = stringField(cell, 'text');
-    return text === undefined ? [] : [text];
+function tableCellTextValues(cell: RichTextBlock | RawTextElement): string[] {
+  if (cell.type === 'raw_text') {
+    return [cell.text];
   }
-  if (cellType !== 'rich_text') {
-    return [];
-  }
-  return richTextValues(arrayField(cell, 'elements'));
+  return richTextValues(cell.elements);
 }
 
 function richTextValues(value: unknown): string[] {
@@ -207,8 +210,4 @@ function richTextValues(value: unknown): string[] {
 
   const ownText = typeof value.text === 'string' ? [value.text] : [];
   return [...ownText, ...richTextValues(value.elements)];
-}
-
-function textObjectText(value: unknown): string | undefined {
-  return isRecord(value) && typeof value.text === 'string' ? value.text : undefined;
 }
