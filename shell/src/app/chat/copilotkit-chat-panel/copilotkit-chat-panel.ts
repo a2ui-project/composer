@@ -36,7 +36,6 @@ import {AutoScroll, ChatPanelBase} from '../chat-panel/chat-panel-base';
 import {isRenderA2uiItem, parseAndHealJsonLines} from '../a2ui-payload-parser/a2ui-payload-parser';
 import {LlmMessage, MessageRole} from '../llm-client/llm-client';
 import {RendererSelection} from '../renderer-selection/renderer-selection';
-import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 
 /** A chat turn as the CopilotKit panel presents it. */
 export interface PresentedTurn extends LlmMessage {
@@ -47,8 +46,6 @@ export interface PresentedTurn extends LlmMessage {
   componentCount: number | null;
   /** The text CopilotKit renders for the turn: a summary for canvas JSON, else the message. */
   displayContent: string;
-  /** A key-order-independent fingerprint of a snapshot's JSON, to spot repeats. */
-  snapshotSignature: string | null;
 }
 
 /**
@@ -150,12 +147,10 @@ export class CopilotKitChatPanel extends ChatPanelBase {
    *   instead of prose.
    * - The component count only includes components in `updateComponents`
    *   messages, not surface or data-model commands.
-   * - A snapshot that repeats the assistant snapshot just before it is dropped
-   *   (see `dropRedundantSnapshots`).
    */
   protected readonly presentedTurns = computed<PresentedTurn[]>(() => {
     const history = this.chatState.chatHistory();
-    const turns = history.flatMap((message, index) => {
+    return history.flatMap((message, index) => {
       if (
         message.role === MessageRole.SYSTEM ||
         (!message.content?.trim() &&
@@ -187,8 +182,6 @@ export class CopilotKitChatPanel extends ChatPanelBase {
               .filter(isRenderA2uiItem)
               .reduce((count, block) => count + (block.updateComponents?.components.length ?? 0), 0)
           : null;
-      const snapshotSignature =
-        isSnapshot && parsed?.success ? stableStringify(parsed.blocks) : null;
       const displayContent = parseError
         ? 'This response could not update the canvas.'
         : isSnapshot
@@ -205,35 +198,10 @@ export class CopilotKitChatPanel extends ChatPanelBase {
           componentCount,
           parseError,
           displayContent,
-          snapshotSignature,
         },
       ];
     });
-    return this.dropRedundantSnapshots(turns);
   });
-
-  /**
-   * Drops a canvas snapshot identical to the assistant snapshot just before it.
-   * After a response is applied, Composer records the resulting canvas as the next
-   * context turn, which would otherwise repeat the same summary.
-   */
-  private dropRedundantSnapshots(turns: PresentedTurn[]): PresentedTurn[] {
-    const visibleTurns: PresentedTurn[] = [];
-    for (const turn of turns) {
-      const previousTurn = visibleTurns[visibleTurns.length - 1];
-      const repeatsAssistantSnapshot =
-        turn.isSnapshot &&
-        !!turn.snapshotSignature &&
-        previousTurn?.role === MessageRole.MODEL &&
-        previousTurn.isSnapshot &&
-        previousTurn.snapshotSignature === turn.snapshotSignature;
-      if (repeatsAssistantSnapshot) {
-        continue;
-      }
-      visibleTurns.push(turn);
-    }
-    return visibleTurns;
-  }
 
   // These are read-only projections. Composer owns history, retries, and the active stream.
   protected readonly chatMessages = computed<ReturnType<CopilotChatView['messages']>>(() =>
