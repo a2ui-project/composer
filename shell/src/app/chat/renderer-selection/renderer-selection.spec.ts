@@ -174,6 +174,32 @@ describe('RendererSelection', () => {
     expect(service.error()).toBeNull();
   });
 
+  it('does not take the catalog of the previous page while the new renderer loads', async () => {
+    // Settings points the iframe at the new renderer before the old page unloads, and
+    // the host still reports the old page as ready until the new one sends its handshake.
+    selectRenderer.mockImplementation(async id => {
+      selectedRendererId.set(id);
+      resolvedUrl.set('/lit/');
+      frame.src = '/lit/?origin=http%3A%2F%2Flocalhost%3A3000&theme=dark';
+      return true;
+    });
+    const switched = vi.fn();
+    const selection = service.selectRenderer('lit').then(switched);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sendMessage).not.toHaveBeenCalledWith({type: PreviewBridgeMessageType.GET_CATALOG});
+    // The old page, still in the iframe's window, sends its own catalog.
+    emit(PreviewBridgeMessageType.A2UI_CATALOG, standardCatalog);
+    activeCatalog.set(structuredClone(standardCatalog));
+    TestBed.flushEffects();
+    await Promise.resolve();
+    expect(switched).not.toHaveBeenCalled();
+    ready();
+    finishCatalog();
+    await selection;
+    expect(switched).toHaveBeenCalledOnce();
+  });
+
   it('rejects unregistered IDs without changing settings', async () => {
     await expect(service.selectRenderer('https://untrusted.example')).rejects.toThrow('registered');
     expect(selectRenderer).not.toHaveBeenCalled();

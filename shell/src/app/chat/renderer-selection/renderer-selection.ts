@@ -313,6 +313,13 @@ class CatalogWait {
   } | null = null;
   /** A catalog error that predates this switch and shouldn't fail it. */
   private readonly previousCatalogError: string | null;
+  /**
+   * Whether the preview already showed this renderer's page, ready, when the
+   * switch began. Only then can `acceptSelection` ask that page for its catalog
+   * again. Otherwise Settings has just pointed the iframe at the renderer, and
+   * the page still loaded, and still reporting ready, is the previous renderer.
+   */
+  private readonly rendererPageWasLoaded: boolean;
 
   private readonly subscription: Subscription;
   private readonly watcher: EffectRef;
@@ -333,6 +340,7 @@ class CatalogWait {
       this.reject = reject;
     });
     this.previousCatalogError = app.catalog.catalogError();
+    this.rendererPageWasLoaded = app.host.isRendererReady() && app.frameMatches(renderer);
     // The message stream replays its latest message on subscription. That message
     // belongs to the previous handshake, even when both renderers share an origin,
     // so ignore anything delivered before the subscription is in place.
@@ -366,6 +374,7 @@ class CatalogWait {
     if (
       !this.settled &&
       !this.readySource &&
+      this.rendererPageWasLoaded &&
       this.app.host.isRendererReady() &&
       this.app.frameMatches(this.renderer)
     ) {
