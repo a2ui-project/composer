@@ -15,9 +15,8 @@
  */
 
 import {type A2uiMessage, type UpdateComponentsMessage} from '@a2ui/web_core/v0_9';
-import {describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi, type MockInstance} from 'vitest';
 import {SLACK_CATALOG_ID} from './catalog';
-import {createFakeDrawnImageStore} from './fake-drawn-image-store';
 import {createSlackPreviewSession} from './preview-session';
 import {DiagnosticCode, DiagnosticLevel, PreviewStatus, blocksForExport} from './preview-snapshot';
 
@@ -54,9 +53,27 @@ const PIE = {
 };
 
 describe('Slack charts', () => {
-  it('draws a chart as an image next to native blocks and exports it as an uploaded file', () => {
-    const {store, drawn} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+  let createObjectURL: MockInstance<typeof URL.createObjectURL>;
+  let revokeObjectURL: MockInstance<typeof URL.revokeObjectURL>;
+
+  beforeEach(() => {
+    let created = 0;
+    createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockImplementation(() => `blob:image-${++created}`);
+    revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** The SVG markup of each image drawn so far, in the order it was drawn. */
+  const drawnSvgs = (): Promise<string[]> =>
+    Promise.all(createObjectURL.mock.calls.map(([blob]) => (blob as Blob).text()));
+
+  it('draws a chart as an image next to native blocks and exports it as an uploaded file', async () => {
+    const session = createSlackPreviewSession();
 
     session.processMessages([createSurface, chartMessage(PIE)]);
     const snapshot = session.getSnapshot();
@@ -70,7 +87,7 @@ describe('Slack charts', () => {
         alt_text: 'Pie chart, Possession: Argentina 70, Mexico 30',
       },
     ]);
-    expect(drawn[0]).toContain('Argentina · 70 (70%)');
+    expect((await drawnSvgs())[0]).toContain('Argentina · 70 (70%)');
     expect(blocksForExport(snapshot)).toEqual([
       snapshot.blocks[0],
       {
@@ -89,8 +106,7 @@ describe('Slack charts', () => {
   });
 
   it('uses the accessibility label as alt text when the chart has one', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+    const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
@@ -102,9 +118,8 @@ describe('Slack charts', () => {
     });
   });
 
-  it('redraws a chart whose values are bound to the data model', () => {
-    const {store, drawn} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+  it('redraws a chart whose values are bound to the data model', async () => {
+    const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
@@ -119,15 +134,14 @@ describe('Slack charts', () => {
     ]);
     session.processMessages([updateData(60, '/argentina')]);
 
-    expect(drawn.at(-1)).toContain('Argentina · 60 (67%)');
+    expect((await drawnSvgs()).at(-1)).toContain('Argentina · 60 (67%)');
     expect(session.getSnapshot().blocks[1]).toMatchObject({
       alt_text: 'Pie chart, Possession: Argentina 60, Mexico 30',
     });
   });
 
   it('skips a pie chart with a negative slice and says why, while the rest renders', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+    const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
@@ -143,7 +157,7 @@ describe('Slack charts', () => {
 
     expect(snapshot.status).toBe(PreviewStatus.READY);
     expect(snapshot.blocks).toEqual([expect.objectContaining({type: 'header'})]);
-    expect(store.urlFor).not.toHaveBeenCalled();
+    expect(createObjectURL).not.toHaveBeenCalled();
     expect(snapshot.diagnostics).toContainEqual({
       level: DiagnosticLevel.WARNING,
       code: DiagnosticCode.SLACK_CHART_INVALID_DATA,
@@ -154,8 +168,7 @@ describe('Slack charts', () => {
   });
 
   it('skips a chart whose bound value is not a number', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+    const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
@@ -171,8 +184,7 @@ describe('Slack charts', () => {
   });
 
   it('skips a chart that has only zero values', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+    const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
@@ -188,8 +200,7 @@ describe('Slack charts', () => {
   });
 
   it('rejects more than 20 points through the catalog schema', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+    const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
@@ -204,25 +215,33 @@ describe('Slack charts', () => {
     });
   });
 
-  it('frees chart images it no longer shows, and all of them on dispose', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
-
+  it('revokes the URL of a chart image after two renders in a row leave it out', () => {
+    const session = createSlackPreviewSession();
     session.processMessages([createSurface, chartMessage(PIE)]);
-    expect(store.release).toHaveBeenLastCalledWith(new Set(['blob:image-1']));
 
     session.processMessages([
       updateComponents([{id: 'root', component: 'Text', text: 'No chart now'}]),
     ]);
-    expect(store.release).toHaveBeenLastCalledWith(new Set());
+    // The render before still showed the chart, which React may not have replaced yet.
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    session.processMessages([
+      updateComponents([{id: 'root', component: 'Text', text: 'Still no chart'}]),
+    ]);
+
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:image-1');
+  });
+
+  it('revokes the URL of every chart image it still shows when disposed', () => {
+    const session = createSlackPreviewSession();
+    session.processMessages([createSurface, chartMessage(PIE)]);
 
     session.dispose();
-    expect(store.dispose).toHaveBeenCalledOnce();
+
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:image-1');
   });
 
   it('freezes the export blocks it publishes', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+    const session = createSlackPreviewSession();
 
     session.processMessages([createSurface, chartMessage(PIE)]);
     const exportBlocks = blocksForExport(session.getSnapshot());

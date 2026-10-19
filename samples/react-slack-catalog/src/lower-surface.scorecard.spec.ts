@@ -15,9 +15,8 @@
  */
 
 import {type A2uiMessage, type UpdateComponentsMessage} from '@a2ui/web_core/v0_9';
-import {describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi, type MockInstance} from 'vitest';
 import {SLACK_CATALOG_ID} from './catalog';
-import {createFakeDrawnImageStore} from './fake-drawn-image-store';
 import {createSlackPreviewSession} from './preview-session';
 import {DiagnosticCode, DiagnosticLevel, PreviewStatus, blocksForExport} from './preview-snapshot';
 
@@ -88,9 +87,26 @@ const matchReport = (scorecard: Record<string, unknown> = FINAL_SCORE): A2uiMess
   ]);
 
 describe('Slack scorecards', () => {
-  it('draws a scorecard as an image between native blocks in a message with a chart', () => {
-    const {store, drawn} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+  let createObjectURL: MockInstance<typeof URL.createObjectURL>;
+
+  beforeEach(() => {
+    let created = 0;
+    createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockImplementation(() => `blob:image-${++created}`);
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** The SVG markup of each image drawn so far, in the order it was drawn. */
+  const drawnSvgs = (): Promise<string[]> =>
+    Promise.all(createObjectURL.mock.calls.map(([blob]) => (blob as Blob).text()));
+
+  it('draws a scorecard as an image between native blocks in a message with a chart', async () => {
+    const session = createSlackPreviewSession();
 
     session.processMessages([createSurface, matchReport()]);
     const snapshot = session.getSnapshot();
@@ -103,14 +119,14 @@ describe('Slack scorecards', () => {
       {type: 'image', image_url: 'blob:image-2', alt_text: CHART_ALT},
       expect.objectContaining({type: 'actions'}),
     ]);
-    expect(drawn[0]).toContain('>Argentina</tspan>');
-    expect(drawn[0]).toContain('>Full time</text>');
-    expect(drawn[1]).toContain('Argentina · 70 (70%)');
+    const [scorecard, chart] = await drawnSvgs();
+    expect(scorecard).toContain('>Argentina</tspan>');
+    expect(scorecard).toContain('>Full time</text>');
+    expect(chart).toContain('Argentina · 70 (70%)');
   });
 
   it('exports both drawn images as uploaded files and keeps the native blocks', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+    const session = createSlackPreviewSession();
 
     session.processMessages([createSurface, matchReport()]);
     const snapshot = session.getSnapshot();
@@ -125,8 +141,7 @@ describe('Slack scorecards', () => {
   });
 
   it('says once for each drawn component that your Channels app uploads it at send', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+    const session = createSlackPreviewSession();
 
     session.processMessages([createSurface, matchReport()]);
 
@@ -153,8 +168,7 @@ describe('Slack scorecards', () => {
   });
 
   it('uses the accessibility label as alt text when the scorecard has one', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+    const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
@@ -166,9 +180,8 @@ describe('Slack scorecards', () => {
     });
   });
 
-  it('redraws a scorecard whose names and scores are bound to the data model', () => {
-    const {store, drawn} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+  it('redraws a scorecard whose names and scores are bound to the data model', async () => {
+    const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
@@ -194,15 +207,16 @@ describe('Slack scorecards', () => {
       updateData('Full time', '/match/status'),
     ]);
 
-    expect(drawn.filter(svg => svg.includes('class="team-name"')).at(-1)).toContain('>2</text>');
+    expect((await drawnSvgs()).filter(svg => svg.includes('class="team-name"')).at(-1)).toContain(
+      '>2</text>',
+    );
     expect(session.getSnapshot().blocks[1]).toMatchObject({
       alt_text: 'Scorecard: Argentina 2, Mexico 0. Full time.',
     });
   });
 
-  it('skips a scorecard with an empty team name and says why, while the rest renders', () => {
-    const {store, drawn} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+  it('skips a scorecard with an empty team name and says why, while the rest renders', async () => {
+    const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
@@ -212,7 +226,7 @@ describe('Slack scorecards', () => {
 
     expect(snapshot.status).toBe(PreviewStatus.READY);
     expect(snapshot.blocks.map(({type}) => type)).toEqual(['header', 'table', 'image', 'actions']);
-    expect(drawn).toHaveLength(1);
+    expect(await drawnSvgs()).toHaveLength(1);
     expect(snapshot.diagnostics).toContainEqual({
       level: DiagnosticLevel.WARNING,
       code: DiagnosticCode.SLACK_SCORECARD_INVALID,
@@ -223,8 +237,7 @@ describe('Slack scorecards', () => {
   });
 
   it('skips a scorecard whose bound score is missing', () => {
-    const {store} = createFakeDrawnImageStore();
-    const session = createSlackPreviewSession(undefined, {drawnImages: store});
+    const session = createSlackPreviewSession();
 
     session.processMessages([
       createSurface,
