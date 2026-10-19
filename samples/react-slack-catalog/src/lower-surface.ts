@@ -44,7 +44,7 @@ import {
 } from './form-input';
 import {exportDrawnImages, placeDrawnImage} from './drawn-image-blocks';
 import {type DrawnImageStore} from './drawn-image-store';
-import {drawCharts, lowerChart} from './lower-chart';
+import {lowerChart} from './lower-chart';
 import {lowerImage} from './lower-image';
 import {lowerScorecard} from './lower-scorecard';
 import {lowerTable} from './lower-table';
@@ -117,15 +117,13 @@ export function lowerSurface(
     diagnostics: [],
     actions: new Map(),
     inputs: new Map(),
-    charts: new Map(),
     drawnImages,
     drawnImageUrls: new Set(),
     nextActionOrdinal: 1,
   };
 
   try {
-    const loweredIr = wrapTopLevelButtons(lowerComponent(surface, 'root', '/', new Set(), state));
-    const ir = drawCharts(loweredIr, state);
+    const ir = wrapTopLevelButtons(lowerComponent(surface, 'root', '/', new Set(), state));
     const limitEvidence = collectOutputLimitEvidence(ir);
     const blocks = renderBlockKit(ir);
     const actions = filterActionsForBlocks(state.actions, blocks, state.diagnostics);
@@ -297,11 +295,6 @@ function lowerComponent(
           return entry;
         },
         diagnostics: state.diagnostics,
-        registerChart: chart => {
-          const key = `a2ui-chart-${state.revision}-${state.charts.size + 1}`;
-          state.charts.set(key, chart);
-          return key;
-        },
         placeDrawnImage: image => placeDrawnImage(state, image),
       }),
     );
