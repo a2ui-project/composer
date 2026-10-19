@@ -132,7 +132,10 @@ interface WindowWithPreviewActivity extends Window {
   __lastPreviewMessageAt?: number;
 }
 
-/** Longer than both debounced editor-to-preview paths, plus the guest's reply. */
+/**
+ * How long the preview must stay silent to count as settled: longer than RawFrame's
+ * 300ms editor debounce plus the preview's replies to a render.
+ */
 const PREVIEW_QUIET_MS = 800;
 
 /**
@@ -163,10 +166,19 @@ async function trackPreviewActivity(page: Page): Promise<void> {
  * Waits until the preview has sent no messages for PREVIEW_QUIET_MS, so a render the
  * shell still has queued cannot replace what a test is about to interact with.
  *
- * There is no concrete signal to wait on instead. One edit reaches the preview through
- * more than one debounced path, so it may cause one render or two, and a second render
- * of the same content changes nothing visible. Waiting for an element, or for one
- * RENDER_SUCCESS, can therefore return before the last render has replaced the controls.
+ * This is a workaround, because nothing on the page says which render is the last.
+ * RawFrame sends the canvas to the preview from several places. An editor edit is sent
+ * by onLayoutChange through layoutInput$, after a 300ms debounce; the edit also goes to
+ * StateSync.updateDraft, whose own 300ms debounce only updates the chat history. Each
+ * handshake (page load, renderer switch) sends the canvas again from RawFrame's
+ * RENDERER_READY and A2UI_CATALOG listener and its activeCatalog effect, and from its
+ * activeDraft effect when StateSync then loads the renderer's starter, so the same
+ * content can render several times. The bridge
+ * also renders a payload that creates a surface in two steps: it clears the preview,
+ * then renders on the next task. RENDER_SUCCESS doesn't say which canvas was rendered,
+ * so waiting for an element, or for one RENDER_SUCCESS, can return before the last
+ * render has replaced the controls. Wait on a real signal instead once RawFrame sends
+ * each canvas once, or the bridge reports which canvas it rendered.
  */
 export async function waitForPreviewToSettle(page: Page): Promise<void> {
   await trackPreviewActivity(page);
@@ -184,9 +196,8 @@ export async function waitForPreviewToSettle(page: Page): Promise<void> {
 
 /**
  * Replaces the editor JSON the way a user would, by selecting everything and pasting,
- * then waits for the preview to settle. The editor feeds the preview through more than
- * one debounced path, so a single edit can render twice; without the wait, a late
- * render can replace a field the test has started typing into.
+ * then waits for the preview to settle (see waitForPreviewToSettle), so a render still
+ * on its way can't replace a field the test types into next.
  */
 export async function replaceMonacoJson(page: Page, value: string): Promise<void> {
   await trackPreviewActivity(page);
