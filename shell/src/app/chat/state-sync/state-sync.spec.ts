@@ -65,7 +65,6 @@ class MockCatalogManagement {
 
 class MockStartupConfigState {
   readonly activeRenderer = signal<{samplePayload?: string} | null>(null);
-  readonly selectedRendererId = signal<string | null>(null);
   readonly sharedA2uiPayload = signal<string | null>(null);
 }
 
@@ -688,30 +687,48 @@ describe('StateSync Autosave Draft Integrations', () => {
       expect(service.activeDraft()).toBe(editedPayload);
     });
 
-    it('autonomously refreshes draft template from activeRenderer samplePayload on selectedRendererId$ changes without catalog emission', () => {
-      // Start with basic catalog
-      catalogManagementMock.activeCatalog.set({
-        catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
-      });
+    /** Switches to a renderer with its own sample, as the renderer's catalog arrives. */
+    function switchRenderer(samplePayload: string, catalogId: string): void {
+      startupConfigStateMock.activeRenderer.set({samplePayload});
       TestBed.tick();
+      catalogManagementMock.activeCatalog.set({catalogId});
+      TestBed.tick();
+    }
+
+    const OTHER_SAMPLE = '[{"version": "v0.9", "otherRendererSample": true}]';
+    const OTHER_CATALOG_ID = 'https://example.com/other_catalog.json';
+
+    it("replaces an unedited sample with the new renderer's sample when the renderer changes", () => {
       expect(service.activeDraft()).toBe(CAR_BOOKING);
+      expect(service.hasEditedDraft()).toBe(false);
 
-      // Edit draft
-      service.updateDraft('{"version": "dirty-basic"}');
+      switchRenderer(OTHER_SAMPLE, OTHER_CATALOG_ID);
+
+      expect(service.activeDraft()).toBe(OTHER_SAMPLE);
+      expect(service.hasEditedDraft()).toBe(false);
+    });
+
+    it('keeps a canvas the user edited when the renderer changes', () => {
+      const edited = '[{"version": "v0.9", "edited": true}]';
+      service.updateDraft(edited);
       TestBed.tick();
+      expect(service.hasEditedDraft()).toBe(true);
 
-      // Simulate renderer change updating the activeRenderer's samplePayload
-      const newSamplePayload = '[{"version": "v0.9", "materialSample": true}]';
-      startupConfigStateMock.activeRenderer.set({
-        samplePayload: newSamplePayload,
-      });
+      switchRenderer(OTHER_SAMPLE, OTHER_CATALOG_ID);
 
-      // Explicit renderer change in settings
-      startupConfigStateMock.selectedRendererId.set('renderer-material');
-      TestBed.tick();
+      expect(service.activeDraft()).toBe(edited);
+      expect(service.hasEditedDraft()).toBe(true);
+    });
 
-      // Verify that the new template loaded autonomously from samplePayload without catalog emission
-      expect(service.activeDraft()).toBe(newSamplePayload);
+    it('keeps a canvas the assistant changed when the renderer changes', () => {
+      const fromAssistant = '[{"version": "v0.9", "fromAssistant": true}]';
+      service.commitLayoutFromLlm(fromAssistant);
+      expect(service.hasEditedDraft()).toBe(true);
+
+      switchRenderer(OTHER_SAMPLE, OTHER_CATALOG_ID);
+
+      expect(service.activeDraft()).toBe(fromAssistant);
+      expect(service.hasEditedDraft()).toBe(true);
     });
 
     it('resets draft to clean default template upon flushDraft() even when started from a shared payload', () => {
