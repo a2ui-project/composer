@@ -35,7 +35,7 @@
     "@monaco-editor/loader": "1.7.0",
     "a2ui-bridge": "0.1.0",
     "dockview-core": "7.0.3",
-    "dompurify": "3.4.14",
+    "dompurify": "3.4.16",
     "marked": "18.0.11",
     "monaco-editor": "0.56.0",
     "rxjs": "7.8.2",
