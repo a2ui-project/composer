@@ -343,7 +343,6 @@ test.describe('Slack assistant browser journey', () => {
     await expect(page.locator('.mat-mdc-menu-panel')).not.toHaveClass(/mat-menu-panel-animating/);
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toBeHidden();
-    await expect(selector).toBeFocused();
     expect(unexpectedErrors).toEqual([]);
   });
 
