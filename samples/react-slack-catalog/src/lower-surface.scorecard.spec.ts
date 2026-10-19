@@ -18,7 +18,7 @@ import {type A2uiMessage, type UpdateComponentsMessage} from '@a2ui/web_core/v0_
 import {afterEach, beforeEach, describe, expect, it, vi, type MockInstance} from 'vitest';
 import {SLACK_CATALOG_ID} from './catalog';
 import {createSlackPreviewSession} from './preview-session';
-import {DiagnosticCode, DiagnosticLevel, PreviewStatus, blocksForExport} from './preview-snapshot';
+import {DiagnosticCode, DiagnosticLevel, PreviewStatus} from './preview-snapshot';
 
 const SURFACE = 'match-report';
 const SCORECARD_ALT = 'Scorecard: Argentina 2, Mexico 0. Full time. World Cup, Group C.';
@@ -131,7 +131,7 @@ describe('Slack scorecards', () => {
     session.processMessages([createSurface, matchReport()]);
     const snapshot = session.getSnapshot();
 
-    expect(blocksForExport(snapshot)).toEqual([
+    expect(snapshot.exportBlocks).toEqual([
       snapshot.blocks[0],
       {type: 'image', slack_file: {id: 'RENDERED_AT_SEND'}, alt_text: SCORECARD_ALT},
       snapshot.blocks[2],

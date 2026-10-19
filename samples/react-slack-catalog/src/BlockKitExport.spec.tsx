@@ -26,6 +26,7 @@ const readySnapshot = (blocks: PreviewSnapshot['blocks']): PreviewSnapshot => ({
   surfaceId: 'surface-1',
   status: PreviewStatus.READY,
   blocks,
+  exportBlocks: blocks,
   diagnostics: [],
 });
 
@@ -99,18 +100,20 @@ describe('BlockKitExport', () => {
   it.each([PreviewStatus.EMPTY, PreviewStatus.WAITING, PreviewStatus.ERROR])(
     'disables copy while the snapshot is %s',
     status => {
+      const staleBlocks: PreviewSnapshot['blocks'] = [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: 'Stale block',
+          },
+        },
+      ];
       renderExport({
         revision: 3,
         status,
-        blocks: [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: 'Stale block',
-            },
-          },
-        ],
+        blocks: staleBlocks,
+        exportBlocks: staleBlocks,
         diagnostics: [],
       });
 
