@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Chart as ChannelChart, type ChannelNode, type Renderable} from '@copilotkit/channels-ui';
+import {type Renderable} from '@copilotkit/channels-ui';
 import {
   ChartType,
   chartAltText,
@@ -23,46 +23,19 @@ import {
   type ChartPoint,
 } from './chart-image';
 import {optionalText, skipWithWarning} from './drawn-component-props';
-import {placeDrawnImage} from './drawn-image-blocks';
-import {type LowerComponentContext, type LoweringState} from './lowering-context';
+import {type LowerComponentContext} from './lowering-context';
 import {DiagnosticCode} from './preview-snapshot';
 import {recordField} from './record-fields';
 import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
 
-/** A chart lowered in this render, drawn as an image just before Slack conversion. */
-export interface LoweredChart {
-  readonly componentId: string;
-  readonly image: ChartImageProps;
-  readonly alt: string;
-}
-
 /**
- * Replaces each lowered chart with a drawing of it. Slack's native chart block,
- * `data_visualization`, cannot express every chart the catalog allows (it has no donut or
- * horizontal bar, for one), and Channels' renderBlockKit, which turns Channels UI
- * components into Slack blocks, skips chart nodes, the elements that Channels UI's `Chart`
- * produces. So every chart is drawn as SVG and shown in the message as an image, in place
- * of the PNG your Channels app renders and uploads.
+ * Draws the sample's `Chart` component as an image while lowering. Slack's native chart
+ * block, `data_visualization`, cannot express every chart the catalog allows (it has no
+ * donut or horizontal bar, for one), and Channels' renderBlockKit, which turns Channels UI
+ * components into Slack blocks, skips the nodes that Channels UI's `Chart` produces. So
+ * every chart is drawn as SVG and shown in the message as an image, in place of the PNG
+ * your Channels app renders and uploads.
  */
-export function drawCharts(nodes: readonly ChannelNode[], state: LoweringState): ChannelNode[] {
-  return nodes.map(node => {
-    const chart =
-      String(node.type) === 'chart' && node.key !== undefined
-        ? state.charts.get(String(node.key))
-        : undefined;
-    if (!chart) {
-      return node;
-    }
-    return placeDrawnImage(state, {
-      componentType: 'Chart',
-      componentId: chart.componentId,
-      svg: renderChartSvg(chart.image),
-      alt: chart.alt,
-    });
-  });
-}
-
-/** Lowers the sample's `Chart` component to a Channels UI `Chart`, drawn by `drawCharts`. */
 export function lowerChart(
   props: Readonly<Record<string, unknown>>,
   context: LowerComponentContext,
@@ -80,23 +53,14 @@ export function lowerChart(
     data,
   };
   const label = optionalText(recordField(props.accessibility, 'label'));
-  const key = context.registerChart({
+  return context.placeDrawnImage({
+    componentType: 'Chart',
     componentId: context.componentId,
-    image,
+    svg: renderChartSvg(image),
     alt:
       label?.slice(0, SLACK_IMAGE_ALT_TEXT_MAX_LENGTH) ??
       chartAltText(image, SLACK_IMAGE_ALT_TEXT_MAX_LENGTH),
   });
-  return {
-    ...ChannelChart({
-      type,
-      title: image.title,
-      xAxisTitle: image.xAxisTitle,
-      yAxisTitle: image.yAxisTitle,
-      data: data.map(point => ({...point})),
-    }),
-    key,
-  };
 }
 
 /** Reads the chart's points, or explains in a warning why the chart can't be drawn. */

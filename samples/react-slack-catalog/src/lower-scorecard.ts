@@ -29,9 +29,8 @@ import {
 import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
 
 /**
- * Draws a scorecard as an image while lowering. Slack has no block for a scorecard, and
- * unlike Chart it isn't a Channels UI component, so there is no Channels UI node to keep
- * until renderBlockKit.
+ * Draws the sample's `Scorecard` component as an image while lowering. Slack has no block
+ * for a scorecard, and Channels UI has no scorecard component.
  */
 export function lowerScorecard(
   props: Readonly<Record<string, unknown>>,

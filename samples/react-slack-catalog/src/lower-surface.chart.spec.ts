@@ -105,6 +105,25 @@ describe('Slack charts', () => {
     });
   });
 
+  it('reports a chart in document order, before the components after it', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      updateComponents([
+        {id: 'root', component: 'Column', children: ['possession', 'note']},
+        {id: 'possession', component: 'Chart', ...PIE},
+        {id: 'note', component: 'Card', child: 'note-text'},
+        {id: 'note-text', component: 'Text', text: 'Illustrative numbers'},
+      ]),
+    ]);
+
+    expect(session.getSnapshot().diagnostics.map(({componentId}) => componentId)).toEqual([
+      'possession',
+      'note',
+    ]);
+  });
+
   it('uses the accessibility label as alt text when the chart has one', () => {
     const session = createSlackPreviewSession();
 
