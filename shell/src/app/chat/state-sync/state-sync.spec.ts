@@ -157,6 +157,25 @@ describe('StateSync Autosave Draft Integrations', () => {
     expect(chatStateMock.chatHistory().at(-1)?.content).toContain('original flight');
   });
 
+  it('does not record the model canvas again before the next prompt', () => {
+    const generated = formatJson([{version: 'v0.9', text: 'generated flight'}]);
+    // The calls ChatCoordinator makes for one prompt and a canvas reply.
+    service.injectExternalDraft('[{"version":"v0.9","text":"original flight"}]');
+    service.syncActiveDraftToHistory();
+    chatStateMock.updateChatHistory(history => [
+      ...history,
+      {role: MessageRole.USER, content: 'Change the flight'},
+      {role: MessageRole.MODEL, content: generated, isSnapshot: true},
+    ]);
+    service.commitLayoutFromLlm(generated);
+    const historyAfterReply = [...chatStateMock.chatHistory()];
+
+    // The next prompt, with the canvas unchanged since the reply.
+    service.syncActiveDraftToHistory();
+
+    expect(chatStateMock.chatHistory()).toEqual(historyAfterReply);
+  });
+
   it('syncs an injected draft before its initial observable emission', () => {
     const draft = '[{"version":"v0.9","text":"edited gallery draft","mockRules":[]} ]';
     service.injectExternalDraft(draft);

@@ -68,6 +68,10 @@ export class StateSync {
   //   `_activeDraft` directly, bypassing history sync.
   private previousCatalogId: string | null = null;
   private isDraftEdited = false;
+  /**
+   * The sanitized canvas the chat history last recorded, in a canvas snapshot
+   * or in the model's reply. An unchanged canvas isn't recorded again.
+   */
   private lastSynchronizedLayout: string | null = null;
   private readonly _activeDraft = signal<string>('');
   /**
@@ -183,8 +187,10 @@ export class StateSync {
   commitLayoutFromLlm(value: string): void {
     this.cancelPendingDraftSync$.next();
     this.isDraftEdited = true;
-    // Restoring a previous draft after this response must update context again.
-    this.lastSynchronizedLayout = null;
+    // The model's reply in the chat history already holds this canvas. Mark it
+    // as recorded, so it is added to the history again only after it changes,
+    // for example when the user edits it or restores the previous draft.
+    this.lastSynchronizedLayout = this.sanitizeLayout(value);
     this._activeDraft.set(value);
   }
 
