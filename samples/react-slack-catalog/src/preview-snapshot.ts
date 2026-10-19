@@ -79,8 +79,8 @@ export enum DiagnosticCode {
   SLACK_HEADER_TEXT_TRUNCATED = 'SLACK_HEADER_TEXT_TRUNCATED',
   SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED = 'SLACK_IMAGE_ALT_TEXT_LIMIT_EXCEEDED',
   /**
-   * A Chart is drawn as an image in the preview. In Slack, the Channels app
-   * renders it and uploads the image when it sends the message.
+   * A Chart is drawn as an image in the preview. In Slack, your Channels app renders
+   * it and uploads the image when it sends the message.
    */
   SLACK_IMAGE_RENDERED_AT_SEND = 'SLACK_IMAGE_RENDERED_AT_SEND',
   /** Slack image blocks ignore the A2UI Image `fit` and `variant` hints. */
@@ -132,8 +132,8 @@ export interface PreviewSnapshot {
   /** The Slack Block Kit blocks; empty unless `status` is `READY`. */
   blocks: KnownBlock[];
   /**
-   * Set on ready snapshots: the blocks "Generated Block Kit" exports. Each drawn chart is a
-   * placeholder for a file the Channels app uploads, instead of a local image URL.
+   * Set on ready snapshots: the blocks "Generated Block Kit" exports. Each drawn image is a
+   * placeholder for a file your Channels app uploads, instead of a local image URL.
    */
   exportBlocks?: KnownBlock[];
   /** Problems found in this render. */
