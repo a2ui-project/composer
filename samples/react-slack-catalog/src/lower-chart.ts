@@ -14,28 +14,19 @@
  * limitations under the License.
  */
 
-import {
-  Chart as ChannelChart,
-  Image as ChannelImage,
-  type ChannelNode,
-  type Renderable,
-} from '@copilotkit/channels-ui';
-import {type KnownBlock} from '@slack/types';
+import {Chart as ChannelChart, type ChannelNode, type Renderable} from '@copilotkit/channels-ui';
 import {
   ChartType,
   chartAltText,
   renderChartSvg,
   type ChartImageProps,
-  type ChartImageStore,
   type ChartPoint,
 } from './chart-image';
+import {placeDrawnImage} from './drawn-image-blocks';
 import {type LowerComponentContext, type LoweringState} from './lowering-context';
 import {DiagnosticCode, DiagnosticLevel} from './preview-snapshot';
 import {recordField} from './record-fields';
 import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
-
-/** Stands in for the Slack file id that the Channels app gets back when it uploads a drawn chart. */
-const RENDERED_AT_SEND_FILE_ID = 'RENDERED_AT_SEND';
 
 /** A chart lowered in this render, drawn as an image just before Slack conversion. */
 export interface LoweredChart {
@@ -47,18 +38,13 @@ export interface LoweredChart {
 /**
  * Replaces each lowered chart with a drawing of it. Slack's native chart block,
  * `data_visualization`, cannot express every chart the catalog allows (it has no donut or
- * horizontal bar, for one), and Channels' renderBlockKit, which turns components into Slack
- * blocks, skips chart nodes, the elements that Channels UI's `Chart` produces. So every chart
- * is drawn as SVG and placed in the message as an image, the way a Channels app would upload
- * a rendered PNG.
+ * horizontal bar, for one), and Channels' renderBlockKit, which turns Channels UI
+ * components into Slack blocks, skips chart nodes, the elements that Channels UI's `Chart`
+ * produces. So every chart is drawn as SVG and shown in the message as an image, in place
+ * of the PNG your Channels app renders and uploads.
  */
-export function drawCharts(
-  nodes: readonly ChannelNode[],
-  state: LoweringState,
-  store: ChartImageStore,
-): {ir: ChannelNode[]; chartUrls: Set<string>} {
-  const chartUrls = new Set<string>();
-  const ir = nodes.map(node => {
+export function drawCharts(nodes: readonly ChannelNode[], state: LoweringState): ChannelNode[] {
+  return nodes.map(node => {
     const chart =
       String(node.type) === 'chart' && node.key !== undefined
         ? state.charts.get(String(node.key))
@@ -66,33 +52,12 @@ export function drawCharts(
     if (!chart) {
       return node;
     }
-    const url = store.urlFor(renderChartSvg(chart.image));
-    chartUrls.add(url);
-    state.diagnostics.push({
-      level: DiagnosticLevel.INFO,
-      code: DiagnosticCode.SLACK_IMAGE_RENDERED_AT_SEND,
-      message: `Chart "${chart.componentId}" is drawn in this preview. In Slack, your Channels app renders it to a PNG and uploads it when sending. The export marks it with a placeholder file.`,
+    return placeDrawnImage(state, {
+      componentType: 'Chart',
       componentId: chart.componentId,
+      svg: renderChartSvg(chart.image),
+      alt: chart.alt,
     });
-    return ChannelImage({url, alt: chart.alt});
-  });
-  return {ir, chartUrls};
-}
-
-/** Swaps the preview's local chart images for Slack's uploaded-file form. */
-export function exportChartImages(
-  blocks: readonly KnownBlock[],
-  chartUrls: ReadonlySet<string>,
-): KnownBlock[] {
-  return blocks.map(block => {
-    if (block.type !== 'image' || !('image_url' in block) || !chartUrls.has(block.image_url)) {
-      return block;
-    }
-    return {
-      type: 'image',
-      slack_file: {id: RENDERED_AT_SEND_FILE_ID},
-      alt_text: block.alt_text,
-    };
   });
 }
 

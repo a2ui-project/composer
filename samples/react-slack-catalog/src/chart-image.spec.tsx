@@ -14,15 +14,8 @@
  * limitations under the License.
  */
 
-import {describe, expect, it, vi} from 'vitest';
-import {
-  ChartType,
-  chartAltText,
-  createBlobChartImageStore,
-  renderChartSvg,
-  type ChartImageProps,
-  type ObjectUrlApi,
-} from './chart-image';
+import {describe, expect, it} from 'vitest';
+import {ChartType, chartAltText, renderChartSvg, type ChartImageProps} from './chart-image';
 
 const possession: ChartImageProps = {
   type: ChartType.PIE,
@@ -133,54 +126,5 @@ describe('chartAltText', () => {
 
     expect(alt).toHaveLength(100);
     expect(alt.endsWith('…')).toBe(true);
-  });
-});
-
-describe('createBlobChartImageStore', () => {
-  const fakeUrls = () => {
-    let created = 0;
-    return {
-      createObjectURL: vi.fn<ObjectUrlApi['createObjectURL']>(() => `blob:chart-${++created}`),
-      revokeObjectURL: vi.fn<ObjectUrlApi['revokeObjectURL']>(),
-    };
-  };
-
-  it('serves SVG markup as an image and reuses the URL for identical markup', () => {
-    const urls = fakeUrls();
-    const store = createBlobChartImageStore(urls);
-
-    const first = store.urlFor('<svg>a</svg>');
-
-    expect(store.urlFor('<svg>a</svg>')).toBe(first);
-    expect(urls.createObjectURL).toHaveBeenCalledTimes(1);
-    expect(urls.createObjectURL.mock.calls[0][0].type).toBe('image/svg+xml');
-  });
-
-  it('keeps URLs from the current and previous release and frees older ones', () => {
-    const urls = fakeUrls();
-    const store = createBlobChartImageStore(urls);
-    const first = store.urlFor('<svg>a</svg>');
-    store.release(new Set([first]));
-    const second = store.urlFor('<svg>b</svg>');
-
-    store.release(new Set([second]));
-    expect(urls.revokeObjectURL).not.toHaveBeenCalled();
-
-    store.release(new Set([second]));
-    expect(urls.revokeObjectURL).toHaveBeenCalledExactlyOnceWith(first);
-    expect(store.urlFor('<svg>a</svg>')).not.toBe(first);
-  });
-
-  it('frees every URL on dispose', () => {
-    const urls = fakeUrls();
-    const store = createBlobChartImageStore(urls);
-    const first = store.urlFor('<svg>a</svg>');
-    const second = store.urlFor('<svg>b</svg>');
-
-    store.dispose();
-
-    expect(urls.revokeObjectURL.mock.calls.map(([url]) => url).sort()).toEqual(
-      [first, second].sort(),
-    );
   });
 });

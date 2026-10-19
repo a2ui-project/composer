@@ -15,6 +15,7 @@
  */
 
 import {renderToStaticMarkup} from 'react-dom/server';
+import {DRAWN_IMAGE_FONT_FAMILY, DrawnImageColor, clipText} from './drawn-image-style';
 
 /** Chart kinds the Slack catalog accepts. The values match Channels UI's `ChartProps.type`. */
 export enum ChartType {
@@ -25,7 +26,9 @@ export enum ChartType {
   DONUT = 'donut',
 }
 
+/** One labeled value of a chart: a bar, a point on a line, or a slice of a pie or donut. */
 export interface ChartPoint {
+  /** The category, slice name, or x value. */
   readonly label: string;
   readonly value: number;
 }
@@ -33,31 +36,14 @@ export interface ChartPoint {
 /** Everything needed to draw one chart. */
 export interface ChartImageProps {
   readonly type: ChartType;
+  /** Drawn above the chart. */
   readonly title?: string;
+  /** Drawn under bar and line charts; pie and donut charts ignore it. */
   readonly xAxisTitle?: string;
+  /** Drawn beside bar and line charts; pie and donut charts ignore it. */
   readonly yAxisTitle?: string;
+  /** The values, in the order they are drawn. */
   readonly data: readonly ChartPoint[];
-}
-
-/** Creates and frees object URLs; the global `URL` in the browser. */
-export interface ObjectUrlApi {
-  createObjectURL(blob: Blob): string;
-  revokeObjectURL(url: string): void;
-}
-
-/**
- * Hands out image URLs for drawn charts and frees the ones no longer shown.
- *
- * A URL survives until it has been missing from two releases in a row, so an image the
- * preview still shows while React commits the next render never breaks.
- */
-export interface ChartImageStore {
-  /** Returns a URL serving the SVG markup, reusing the URL of identical markup. */
-  urlFor(svg: string): string;
-  /** Frees URLs that are in neither `keep` nor the previous call's `keep`. */
-  release(keep: ReadonlySet<string>): void;
-  /** Frees every URL. */
-  dispose(): void;
 }
 
 interface Plot {
@@ -81,11 +67,10 @@ interface ChartAreaProps {
 
 const WIDTH = 600;
 const HEIGHT = 360;
-const FONT_FAMILY = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
-const INK = '#1f2328';
-const MUTED = '#57606a';
-const GRID = '#d0d7de';
-const BACKGROUND = '#ffffff';
+const INK = DrawnImageColor.INK;
+const MUTED = DrawnImageColor.MUTED;
+const GRID = DrawnImageColor.RULE;
+const BACKGROUND = DrawnImageColor.BACKGROUND;
 /** Every color has at least 3:1 contrast against the white background. */
 const PALETTE = [
   '#2563eb',
@@ -108,57 +93,28 @@ const TYPE_NAMES: Record<ChartType, string> = {
 
 const VALUE_FORMAT = new Intl.NumberFormat('en-US', {maximumFractionDigits: 2});
 
-export function formatChartValue(value: number): string {
+/** Formats a value for the chart's labels and alt text, with at most two decimal places. */
+function formatChartValue(value: number): string {
   return VALUE_FORMAT.format(value);
 }
 
-/** Describes the chart in words, e.g. "Pie chart, Possession: Argentina 70, Mexico 30". */
+/**
+ * Describes the chart in words, e.g. "Pie chart, Possession: Argentina 70, Mexico 30".
+ *
+ * @param maxLength The most characters the description may have, such as Slack's alt
+ *     text limit.
+ */
 export function chartAltText(chart: ChartImageProps, maxLength: number): string {
   const points = chart.data
     .map(point => `${point.label} ${formatChartValue(point.value)}`)
     .join(', ');
   const text = `${TYPE_NAMES[chart.type]}${chart.title ? `, ${chart.title}` : ''}: ${points}`;
-  return truncate(text, maxLength);
+  return clipText(text, maxLength);
 }
 
 /** Draws the chart as standalone SVG markup that can be served as an image. */
 export function renderChartSvg(chart: ChartImageProps): string {
   return renderToStaticMarkup(<ChartSvg chart={chart} />);
-}
-
-export function createBlobChartImageStore(urls: ObjectUrlApi = URL): ChartImageStore {
-  const urlsByMarkup = new Map<string, string>();
-  let previousKeep: ReadonlySet<string> = new Set();
-
-  return {
-    urlFor(svg) {
-      const existing = urlsByMarkup.get(svg);
-      if (existing) {
-        return existing;
-      }
-      const url = urls.createObjectURL(new Blob([svg], {type: 'image/svg+xml'}));
-      urlsByMarkup.set(svg, url);
-      return url;
-    },
-
-    release(keep) {
-      for (const [svg, url] of urlsByMarkup) {
-        if (!keep.has(url) && !previousKeep.has(url)) {
-          urls.revokeObjectURL(url);
-          urlsByMarkup.delete(svg);
-        }
-      }
-      previousKeep = new Set(keep);
-    },
-
-    dispose() {
-      for (const url of urlsByMarkup.values()) {
-        urls.revokeObjectURL(url);
-      }
-      urlsByMarkup.clear();
-      previousKeep = new Set();
-    },
-  };
 }
 
 function ChartSvg({chart}: {readonly chart: ChartImageProps}) {
@@ -169,12 +125,12 @@ function ChartSvg({chart}: {readonly chart: ChartImageProps}) {
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       width={WIDTH}
       height={HEIGHT}
-      fontFamily={FONT_FAMILY}
+      fontFamily={DRAWN_IMAGE_FONT_FAMILY}
     >
       <rect width={WIDTH} height={HEIGHT} fill={BACKGROUND} />
       {chart.title ? (
         <text x={WIDTH / 2} y={32} textAnchor="middle" fontSize={18} fontWeight={600} fill={INK}>
-          {truncate(chart.title, 60)}
+          {clipText(chart.title, 60)}
         </text>
       ) : null}
       {chart.type === ChartType.PIE || chart.type === ChartType.DONUT ? (
@@ -250,7 +206,7 @@ function PieChart({chart, top}: ChartAreaProps) {
               fill={paletteColor(index)}
             />
             <text x={round(legendX + 20)} y={y + 11} fontSize={13} fill={INK}>
-              {`${truncate(point.label, 28)} · ${formatChartValue(point.value)} (${share}%)`}
+              {`${clipText(point.label, 28)} · ${formatChartValue(point.value)} (${share}%)`}
             </text>
           </g>
         );
@@ -365,7 +321,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
           fontSize={12}
           fill={MUTED}
         >
-          {truncate(point.label, labelLength)}
+          {clipText(point.label, labelLength)}
         </text>
       ))}
       <AxisTitles chart={chart} plot={plot} />
@@ -413,7 +369,7 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
         return (
           <g key={index}>
             <text x={plot.x - 8} y={round(centerY + 4)} textAnchor="end" fontSize={12} fill={MUTED}>
-              {truncate(point.label, 18)}
+              {clipText(point.label, 18)}
             </text>
             <rect
               className="bar"
@@ -453,7 +409,7 @@ function AxisTitles({chart, plot}: {readonly chart: ChartImageProps; readonly pl
           fontSize={12}
           fill={MUTED}
         >
-          {truncate(chart.xAxisTitle, 60)}
+          {clipText(chart.xAxisTitle, 60)}
         </text>
       ) : null}
       {chart.yAxisTitle ? (
@@ -465,7 +421,7 @@ function AxisTitles({chart, plot}: {readonly chart: ChartImageProps; readonly pl
           fontSize={12}
           fill={MUTED}
         >
-          {truncate(chart.yAxisTitle, 40)}
+          {clipText(chart.yAxisTitle, 40)}
         </text>
       ) : null}
     </g>
@@ -531,8 +487,4 @@ function paletteColor(index: number): string {
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function truncate(text: string, maxLength: number): string {
-  return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1)}…`;
 }
