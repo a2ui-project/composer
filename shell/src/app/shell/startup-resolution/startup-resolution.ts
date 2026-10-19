@@ -78,10 +78,10 @@ export class StartupResolution {
    * @param signal Cancels a pending confirmation, for example when the user
    *     stops the assistant turn that asked for the switch.
    * @return Whether the renderer was selected.
-   * @throws If the selection changed while the confirmation was open.
+   * @throws If the selection changed, or `signal` was aborted, before the
+   *     renderer's origin was approved.
    */
   async setSelectedRendererId(rendererId: string | null, signal?: AbortSignal): Promise<boolean> {
-    signal?.throwIfAborted();
     const previousId = this.startupConfigState.selectedRendererId();
     const previousUrl = this.resolvedUrl();
     const active = rendererId
@@ -90,6 +90,8 @@ export class StartupResolution {
     const rendererUrl = active?.rendererUrl;
     if (rendererUrl) {
       const isAllowed = await this.isOriginAllowed(rendererUrl, signal);
+      // The last check before the selection is committed below, so a request canceled
+      // while its origin was being approved, or just after, never changes the renderer.
       signal?.throwIfAborted();
       // The confirmation dialog can stay open for a while. If anything changed the
       // renderer in the meantime (Settings, a shared link, a config reload), this
@@ -476,7 +478,6 @@ export class StartupResolution {
   }
 
   async isOriginAllowed(url: string, signal?: AbortSignal): Promise<boolean> {
-    signal?.throwIfAborted();
     let origin: string;
     let hostname: string;
     try {
@@ -523,7 +524,6 @@ export class StartupResolution {
     }
 
     const confirmed = await this.confirmOrigin(origin, signal);
-    signal?.throwIfAborted();
     if (confirmed) {
       allowedOrigins.push(origin);
       this.localStorageInteractions.setItem(
@@ -537,6 +537,8 @@ export class StartupResolution {
   }
 
   async confirmOrigin(origin: string, signal?: AbortSignal): Promise<boolean> {
+    // A signal that is already aborted never fires `abort`, so nothing would close the
+    // dialog below for a request that was canceled before it opened.
     signal?.throwIfAborted();
     const dialogRef = this.dialog.open(OriginConfirmationDialog, {
       data: {origin},
@@ -546,6 +548,7 @@ export class StartupResolution {
     signal?.addEventListener('abort', onAbort, {once: true});
     try {
       const result = await firstValueFrom(dialogRef.afterClosed());
+      // A dialog closed by `onAbort` reports the cancellation, not a denial.
       signal?.throwIfAborted();
       return !!result;
     } finally {

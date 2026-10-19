@@ -727,6 +727,25 @@ describe('StartupResolution', () => {
       },
     );
 
+    it('neither asks about an origin nor selects a renderer for a canceled request', async () => {
+      localStorage.setItem(
+        LocalStorageKey.CUSTOM_RENDERERS,
+        JSON.stringify([
+          {id: 'external', name: 'External', rendererUrl: 'https://external.example/preview'},
+        ]),
+      );
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        service.setSelectedRendererId('external', controller.signal),
+      ).rejects.toMatchObject({name: 'AbortError'});
+
+      expect(service.dialog.openDialogs).toHaveLength(0);
+      expect(stateService.selectedRendererId()).toBe('standard');
+      expect(service.resolvedUrl()).toBe('/standard/');
+    });
+
     it('closes a pending origin dialog when the selection is canceled', async () => {
       localStorage.setItem(
         LocalStorageKey.CUSTOM_RENDERERS,
