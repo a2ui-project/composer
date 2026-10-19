@@ -214,7 +214,7 @@ describe('Slack scorecards', () => {
     });
   });
 
-  it('skips a scorecard with an empty team name and says why, while the rest renders', async () => {
+  it('leaves out a scorecard with an empty team name and renders the rest', async () => {
     const session = createSlackPreviewSession();
 
     session.processMessages([
@@ -225,8 +225,19 @@ describe('Slack scorecards', () => {
 
     expect(snapshot.status).toBe(PreviewStatus.READY);
     expect(snapshot.blocks.map(({type}) => type)).toEqual(['header', 'table', 'image', 'actions']);
+    // Only the chart was drawn.
     expect(await drawnSvgs()).toHaveLength(1);
-    expect(snapshot.diagnostics).toContainEqual({
+  });
+
+  it('says why it left out a scorecard with an empty team name', () => {
+    const session = createSlackPreviewSession();
+
+    session.processMessages([
+      createSurface,
+      matchReport({...FINAL_SCORE, home: {name: ' ', score: 2}}),
+    ]);
+
+    expect(session.getSnapshot().diagnostics).toContainEqual({
       level: DiagnosticLevel.WARNING,
       code: DiagnosticCode.SLACK_SCORECARD_INVALID,
       componentId: 'final-score',

@@ -33,14 +33,21 @@ describe('createBlobImageStore', () => {
     vi.restoreAllMocks();
   });
 
-  it('serves SVG markup as an image and reuses the URL for identical markup', () => {
+  it('serves SVG markup from a blob URL as an SVG image', async () => {
     const store = createBlobImageStore();
 
+    expect(store.urlFor('<svg>a</svg>')).toBe('blob:image-1');
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    expect(blob.type).toBe('image/svg+xml');
+    expect(await blob.text()).toBe('<svg>a</svg>');
+  });
+
+  it('reuses the URL of identical markup', () => {
+    const store = createBlobImageStore();
     const first = store.urlFor('<svg>a</svg>');
 
     expect(store.urlFor('<svg>a</svg>')).toBe(first);
-    expect(createObjectURL).toHaveBeenCalledTimes(1);
-    expect((createObjectURL.mock.calls[0][0] as Blob).type).toBe('image/svg+xml');
+    expect(createObjectURL).toHaveBeenCalledOnce();
   });
 
   it('frees a URL once two calls to release in a row leave it out', () => {
@@ -54,6 +61,14 @@ describe('createBlobImageStore', () => {
 
     store.release(new Set([second]));
     expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(first);
+  });
+
+  it('serves freed markup again at a new URL', () => {
+    const store = createBlobImageStore();
+    const first = store.urlFor('<svg>a</svg>');
+    store.release(new Set());
+    store.release(new Set());
+
     expect(store.urlFor('<svg>a</svg>')).not.toBe(first);
   });
 
