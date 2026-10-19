@@ -19,7 +19,28 @@ import {type LowerComponentContext} from './lowering-context';
 import {LoweringError} from './lowering-error';
 import {DiagnosticCode, DiagnosticLevel} from './preview-snapshot';
 
+// Why these exist: the Block Kit JSON schema that the preview validates with
+// (@tightknitai/slack-block-kit-validator) gives `image_url` the `uri` format,
+// which means an RFC 3986 URI. `new URL` follows the WHATWG URL standard
+// instead, which keeps some characters RFC 3986 only allows percent-encoded,
+// such as `[`, `]` and `|` in a path, `{` and `}` in a query or `^` in a
+// fragment, and keeps a `%` that isn't followed by two hex digits. So
+// `slackImageUrl` checks each part of the parsed URL against these.
+
+/**
+ * Matches a URL path whose characters RFC 3986 (section 3.3) allows there:
+ * letters, digits, `-._~!$&'()*+,;=:@/`, and `%` followed by two hex digits.
+ */
 const RFC3986_PATH = /^(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/]|%[0-9A-Fa-f]{2})*$/;
+
+/**
+ * Matches a query or fragment, without its leading `?` or `#`, whose
+ * characters RFC 3986 (sections 3.4 and 3.5) allows there: those of
+ * `RFC3986_PATH`, plus `?`. The user name and password are checked with it
+ * too. RFC 3986 allows fewer characters in those, but `new URL` has already
+ * percent-encoded the rest, so there it only finds a `%` that doesn't start an
+ * escape.
+ */
 const RFC3986_QUERY_OR_FRAGMENT = /^(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*$/;
 
 /** Lowers an A2UI `Image` to a Slack image block. */
