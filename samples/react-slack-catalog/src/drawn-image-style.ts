@@ -16,8 +16,9 @@
 
 /**
  * @fileoverview The look that the images the preview draws have in common, so the
- * images in one message match: their font, their neutral colors, how they estimate the
- * width of text and shorten text that doesn't fit, and how they round coordinates.
+ * images in one message match: their font, weights and neutral colors, how they place
+ * text by its baseline, estimate its width and shorten it when it doesn't fit, and how
+ * they round coordinates.
  */
 
 /** The font of drawn images: the system's sans-serif. */
@@ -35,6 +36,31 @@ export enum DrawnImageColor {
   SURFACE = '#f6f8fa',
   /** The image's background. */
   BACKGROUND = '#ffffff',
+}
+
+/** The font weights of drawn text, as CSS `font-weight` numbers. */
+export enum FontWeight {
+  /** Titles, team names, and the status. */
+  SEMIBOLD = 600,
+  /** Scores. */
+  BOLD = 700,
+}
+
+/**
+ * The height of a capital letter, as a fraction of the font size. SVG places text by its
+ * baseline, so the drawings use this to put the middle or the top of a line of text where
+ * they want it.
+ */
+const CAP_HEIGHT = 0.7;
+
+/** The baseline that centers a line of text at `fontSize` on `middleY`. */
+export function baselineCenteredOn(middleY: number, fontSize: number): number {
+  return middleY + (fontSize * CAP_HEIGHT) / 2;
+}
+
+/** The baseline that puts the top of a line of text at `fontSize` at `topY`. */
+export function baselineBelow(topY: number, fontSize: number): number {
+  return topY + fontSize * CAP_HEIGHT;
 }
 
 /**

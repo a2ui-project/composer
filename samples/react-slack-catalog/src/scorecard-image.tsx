@@ -18,6 +18,8 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {
   DRAWN_IMAGE_FONT_FAMILY,
   DrawnImageColor,
+  FontWeight,
+  baselineCenteredOn,
   charactersThatFit,
   clipText,
   estimateTextWidth,
@@ -66,18 +68,50 @@ interface TeamColumnProps {
   readonly side: ScorecardSide;
 }
 
+/** The size of the drawing, in SVG units. Slack scales the image to fit the message. */
 const WIDTH = 560;
 const HEIGHT = 200;
+/** The space between the card's edges and what is drawn on it. */
 const PADDING = 24;
+/** The radius of the card's rounded corners. */
+const CORNER_RADIUS = 12;
+/**
+ * How far the card's border sits inside the image's edge: half of its 1-unit stroke, so
+ * the whole stroke is drawn instead of only its inner half.
+ */
+const BORDER_INSET = 0.5;
 /** The width of each team name's column, between the card's edge and the scores. */
 const NAME_WIDTH = 152;
+/** The distance between the baselines of a wrapped name's lines, as a fraction of font size. */
+const NAME_LINE_HEIGHT = 1.2;
 /** The vertical center of the team names and scores. */
 const MIDDLE_Y = 104;
 /** The widest a score may be, between its team's name and the dash. */
 const SCORE_WIDTH = 64;
+/** The font size of a short score; a longer one is drawn smaller to fit `SCORE_WIDTH`. */
 const SCORE_MAX_FONT_SIZE = 44;
+/** The most characters of a score the card shows, enough for one such as "10 (11)". */
+const SCORE_MAX_CHARACTERS = 8;
 /** The horizontal distance from the card's center to each score. */
 const SCORE_OFFSET = 24;
+/** The font size of the dash between the scores. */
+const DASH_FONT_SIZE = 32;
+/** The competition's font size. */
+const COMPETITION_FONT_SIZE = 14;
+/** The competition's baseline, measured down from the top of the card. */
+const COMPETITION_BASELINE = 40;
+/** The most characters of the competition that fit across the card. */
+const COMPETITION_MAX_CHARACTERS = charactersThatFit(WIDTH - 2 * PADDING, COMPETITION_FONT_SIZE);
+/** The vertical center of the status label, under the scores. */
+const STATUS_MIDDLE_Y = 162;
+/** The status's font size. */
+const STATUS_FONT_SIZE = 13;
+/** The height of the status label; its ends are half circles of this diameter. */
+const STATUS_HEIGHT = 26;
+/** The space between the status text and each end of its label. */
+const STATUS_PADDING = 14;
+/** The most characters of the status the card shows. */
+const STATUS_MAX_CHARACTERS = 40;
 /** Ways to lay out a team name, from largest to smallest. */
 const NAME_LAYOUTS: readonly NameLayout[] = [
   {fontSize: 24, maxLines: 1},
@@ -126,11 +160,11 @@ function ScorecardSvg({scorecard}: {readonly scorecard: ScorecardImageProps}) {
         ))}
       </defs>
       <rect
-        x={0.5}
-        y={0.5}
-        width={WIDTH - 1}
-        height={HEIGHT - 1}
-        rx={12}
+        x={BORDER_INSET}
+        y={BORDER_INSET}
+        width={WIDTH - 2 * BORDER_INSET}
+        height={HEIGHT - 2 * BORDER_INSET}
+        rx={CORNER_RADIUS}
         fill={DrawnImageColor.BACKGROUND}
         stroke={DrawnImageColor.RULE}
       />
@@ -138,20 +172,20 @@ function ScorecardSvg({scorecard}: {readonly scorecard: ScorecardImageProps}) {
         <text
           className="competition"
           x={WIDTH / 2}
-          y={40}
+          y={COMPETITION_BASELINE}
           textAnchor="middle"
-          fontSize={14}
+          fontSize={COMPETITION_FONT_SIZE}
           fill={DrawnImageColor.MUTED}
         >
-          {clipText(scorecard.competition, 60)}
+          {clipText(scorecard.competition, COMPETITION_MAX_CHARACTERS)}
         </text>
       ) : null}
       <TeamColumn team={scorecard.home} side={ScorecardSide.HOME} />
       <text
         x={WIDTH / 2}
-        y={round(MIDDLE_Y + 32 * 0.35)}
+        y={round(baselineCenteredOn(MIDDLE_Y, DASH_FONT_SIZE))}
         textAnchor="middle"
-        fontSize={32}
+        fontSize={DASH_FONT_SIZE}
         fill={DrawnImageColor.MUTED}
       >
         –
@@ -165,10 +199,14 @@ function ScorecardSvg({scorecard}: {readonly scorecard: ScorecardImageProps}) {
 /** A team's name in its column at the card's edge, and its score beside the dash. */
 function TeamColumn({team, side}: TeamColumnProps) {
   const name = fitName(team.name);
-  const lineHeight = name.fontSize * 1.2;
-  const firstBaseline =
-    MIDDLE_Y - ((name.lines.length - 1) * lineHeight) / 2 + name.fontSize * 0.35;
-  const score = clipText(team.score, 8);
+  const lineHeight = name.fontSize * NAME_LINE_HEIGHT;
+  // Center the block of lines on MIDDLE_Y: the middles of its first and last lines sit as
+  // far above it as below it.
+  const firstBaseline = baselineCenteredOn(
+    MIDDLE_Y - ((name.lines.length - 1) * lineHeight) / 2,
+    name.fontSize,
+  );
+  const score = clipText(team.score, SCORE_MAX_CHARACTERS);
   const scoreFontSize = fitFontSize(score, SCORE_WIDTH, SCORE_MAX_FONT_SIZE);
   const isHome = side === ScorecardSide.HOME;
 
@@ -179,7 +217,7 @@ function TeamColumn({team, side}: TeamColumnProps) {
         x={nameColumnX(side) + NAME_WIDTH / 2}
         textAnchor="middle"
         fontSize={name.fontSize}
-        fontWeight={600}
+        fontWeight={FontWeight.SEMIBOLD}
         fill={DrawnImageColor.INK}
         clipPath={`url(#${side}-name)`}
       >
@@ -196,10 +234,10 @@ function TeamColumn({team, side}: TeamColumnProps) {
       <text
         className="score"
         x={isHome ? WIDTH / 2 - SCORE_OFFSET : WIDTH / 2 + SCORE_OFFSET}
-        y={round(MIDDLE_Y + scoreFontSize * 0.35)}
+        y={round(baselineCenteredOn(MIDDLE_Y, scoreFontSize))}
         textAnchor={isHome ? 'end' : 'start'}
         fontSize={scoreFontSize}
-        fontWeight={700}
+        fontWeight={FontWeight.BOLD}
         fill={DrawnImageColor.INK}
       >
         {score}
@@ -210,28 +248,29 @@ function TeamColumn({team, side}: TeamColumnProps) {
 
 /** The match status in a rounded label under the scores. */
 function StatusPill({status}: {readonly status: string}) {
-  const text = clipText(status, 40);
-  const fontSize = 13;
-  const width = Math.min(WIDTH - 2 * PADDING, estimateTextWidth(text, fontSize) + 28);
-  const centerY = 162;
+  const text = clipText(status, STATUS_MAX_CHARACTERS);
+  const width = Math.min(
+    WIDTH - 2 * PADDING,
+    estimateTextWidth(text, STATUS_FONT_SIZE) + 2 * STATUS_PADDING,
+  );
   return (
     <g>
       <rect
         x={round(WIDTH / 2 - width / 2)}
-        y={centerY - 13}
+        y={STATUS_MIDDLE_Y - STATUS_HEIGHT / 2}
         width={round(width)}
-        height={26}
-        rx={13}
+        height={STATUS_HEIGHT}
+        rx={STATUS_HEIGHT / 2}
         fill={DrawnImageColor.SURFACE}
         stroke={DrawnImageColor.RULE}
       />
       <text
         className="status"
         x={WIDTH / 2}
-        y={round(centerY + fontSize * 0.35)}
+        y={round(baselineCenteredOn(STATUS_MIDDLE_Y, STATUS_FONT_SIZE))}
         textAnchor="middle"
-        fontSize={fontSize}
-        fontWeight={600}
+        fontSize={STATUS_FONT_SIZE}
+        fontWeight={FontWeight.SEMIBOLD}
         fill={DrawnImageColor.INK}
       >
         {text}
