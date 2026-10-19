@@ -223,6 +223,43 @@ describe('RenderedFrame Live Preview Viewport', () => {
     );
   });
 
+  describe('with a catalog-relative renderer URL', () => {
+    let base: HTMLBaseElement;
+
+    // A renderer deployed with Composer can be configured relative to the page;
+    // see `RendererConfig.rendererUrl`.
+    async function iframeSrcWithBase(href: string): Promise<string | null> {
+      fixture.destroy();
+      base = document.createElement('base');
+      base.href = href;
+      document.head.appendChild(base);
+      resolvedUrlSignal.set('samples/bundled-renderer/');
+      const relativeFixture = TestBed.createComponent(RenderedFrame);
+      relativeFixture.detectChanges();
+      const relativeHarness = await TestbedHarnessEnvironment.harnessForFixture(
+        relativeFixture,
+        RenderedFrameHarness,
+      );
+      return relativeHarness.getIframeSrc();
+    }
+
+    afterEach(() => {
+      base?.remove();
+    });
+
+    it('resolves it against the GitHub Pages base path', async () => {
+      expect(await iframeSrcWithBase('http://localhost:3000/composer/')).toBe(
+        'http://localhost:3000/composer/samples/bundled-renderer/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    });
+
+    it('resolves it against a PR preview base path', async () => {
+      expect(await iframeSrcWithBase('http://localhost:3000/composer/pr/216/')).toBe(
+        'http://localhost:3000/composer/pr/216/samples/bundled-renderer/?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+      );
+    });
+  });
+
   it('appends all ancestor origins and base origin to the renderer URL query params', async () => {
     fixture.destroy();
     vi.stubGlobal('location', {

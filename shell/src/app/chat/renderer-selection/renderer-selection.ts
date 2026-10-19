@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {DOCUMENT} from '@angular/common';
 import {
   DestroyRef,
   EffectRef,
@@ -35,11 +34,12 @@ import {
 } from '../../shell/host-communication/host-communication';
 import {PreviewUrlParam} from '../../preview/preview-url-param';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
+import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {
   CatalogManagement,
   sanitizeCatalog,
 } from '../../storage/catalog-management/catalog-management';
-import {Catalog} from '../../storage/models/catalog-storage.model';
+import {Catalog, getCatalogId} from '../../storage/models/catalog-storage.model';
 import {stableStringify} from '../../storage/stable-stringify/stable-stringify';
 import {isValidHttpUrl} from '../../utils/url';
 
@@ -68,7 +68,7 @@ export class RendererSelection {
   private readonly catalog = inject(CatalogManagement);
   private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly document = inject(DOCUMENT);
+  private readonly environmentContext = inject(EnvironmentContextService);
   private readonly switching = signal(false);
 
   /** Every renderer the user can switch to, from the app config and Settings. */
@@ -110,10 +110,10 @@ export class RendererSelection {
    * Selects the renderer and resolves once its catalog is active.
    *
    * @throws If the renderer isn't configured, isn't allowed, doesn't become
-   *     ready in time, or the selection changes first. The message is also
-   *     published through `error`.
+   *     ready in time, or the selection changes or is canceled first. The
+   *     message is also published through `error`.
    */
-  async selectRenderer(id: string): Promise<void> {
+  async selectRenderer(id: string, signal?: AbortSignal): Promise<void> {
     if (this.isSwitching()) {
       throw new Error('A renderer change is already in progress.');
     }
@@ -124,18 +124,18 @@ export class RendererSelection {
       this._error.set(error.message);
       throw error;
     }
+    signal?.throwIfAborted();
     const reuseCatalog = this.isReady(renderer);
     if (this.selectedRendererId() === id && reuseCatalog) {
       return;
     }
 
     this.switching.set(true);
-    const wait = new CatalogWait(this.catalogWaitHost(), renderer, reuseCatalog);
+    const wait = new CatalogWait(this.catalogWaitHost(), renderer, reuseCatalog, signal);
     let selectionSettled = false;
     // Settings owns origin approval and persistence. Keep the selector locked until that
-    // operation settles, even if the wait fails first, for example by timing out while
-    // an origin approval is still open.
-    const selection = this.settings.selectRenderer(id).then(
+    // operation settles, even if the caller cancels while an origin approval is pending.
+    const selection = this.settings.selectRenderer(id, signal).then(
       allowed => {
         selectionSettled = true;
         if (!allowed) {
@@ -178,7 +178,7 @@ export class RendererSelection {
   private notAllowedMessage(renderer: RendererOption): string {
     let href = '';
     try {
-      href = new URL(renderer.rendererUrl, this.document.baseURI).href;
+      href = this.environmentContext.resolveRendererUrl(renderer.rendererUrl).href;
     } catch {
       // Reported below as an unusable URL.
     }
@@ -211,8 +211,8 @@ export class RendererSelection {
       return false;
     }
     try {
-      const actual = new URL(frame.src, this.document.baseURI);
-      const expected = new URL(renderer.rendererUrl, this.document.baseURI);
+      const actual = this.environmentContext.resolveRendererUrl(frame.src);
+      const expected = this.environmentContext.resolveRendererUrl(renderer.rendererUrl);
       // Drop the parameters the preview adds, so only the renderer's own URL is compared.
       for (const url of [actual, expected]) {
         for (const param of Object.values(PreviewUrlParam)) {
@@ -241,8 +241,10 @@ export class RendererSelection {
       return false;
     }
     try {
-      const baseUri = this.document.baseURI;
-      return new URL(configuredUrl, baseUri).href === new URL(resolvedUrl, baseUri).href;
+      return (
+        this.environmentContext.resolveRendererUrl(configuredUrl).href ===
+        this.environmentContext.resolveRendererUrl(resolvedUrl).href
+      );
     } catch {
       return configuredUrl === resolvedUrl;
     }
@@ -286,7 +288,7 @@ interface CatalogWaitHost {
  * renderer, and its catalog is active: either the one the renderer just sent,
  * or the current one when the renderer was already loaded (`reuseCatalog`).
  * It rejects if the selection changes, the renderer reports a catalog error,
- * the app is destroyed, or the renderer takes too long.
+ * the caller aborts, the app is destroyed, or the renderer takes too long.
  *
  * Progress is re-checked whenever a bridge message arrives or any signal it
  * reads changes.
@@ -311,23 +313,34 @@ class CatalogWait {
   } | null = null;
   /** A catalog error that predates this switch and shouldn't fail it. */
   private readonly previousCatalogError: string | null;
+  /**
+   * Whether the preview already showed this renderer's page, ready, when the
+   * switch began. Only then can `acceptSelection` ask that page for its catalog
+   * again. Otherwise Settings has just pointed the iframe at the renderer, and
+   * the page still loaded, and still reporting ready, is the previous renderer.
+   */
+  private readonly rendererPageWasLoaded: boolean;
 
   private readonly subscription: Subscription;
   private readonly watcher: EffectRef;
   private readonly timer: ReturnType<typeof setTimeout>;
   private readonly onDestroy = () => this.fail(new Error('Renderer change canceled.'));
+  /** Rejects with the caller's reason, so the caller can recognize its own cancellation. */
+  private readonly onAbort = () => this.fail(this.signal?.reason);
   private readonly unregisterDestroy: () => void;
 
   constructor(
     private readonly app: CatalogWaitHost,
     private readonly renderer: RendererOption,
     private readonly reuseCatalog: boolean,
+    private readonly signal?: AbortSignal,
   ) {
     this.promise = new Promise<void>((resolve, reject) => {
       this.resolve = resolve;
       this.reject = reject;
     });
     this.previousCatalogError = app.catalog.catalogError();
+    this.rendererPageWasLoaded = app.host.isRendererReady() && app.frameMatches(renderer);
     // The message stream replays its latest message on subscription. That message
     // belongs to the previous handshake, even when both renderers share an origin,
     // so ignore anything delivered before the subscription is in place.
@@ -343,6 +356,7 @@ class CatalogWait {
       () => this.fail(new Error('Renderer did not become ready. Try selecting it again.')),
       CATALOG_TIMEOUT_MS,
     );
+    signal?.addEventListener('abort', this.onAbort, {once: true});
     this.unregisterDestroy = app.destroyRef.onDestroy(this.onDestroy);
   }
 
@@ -360,6 +374,7 @@ class CatalogWait {
     if (
       !this.settled &&
       !this.readySource &&
+      this.rendererPageWasLoaded &&
       this.app.host.isRendererReady() &&
       this.app.frameMatches(this.renderer)
     ) {
@@ -374,6 +389,7 @@ class CatalogWait {
     clearTimeout(this.timer);
     this.watcher.destroy();
     this.subscription.unsubscribe();
+    this.signal?.removeEventListener('abort', this.onAbort);
     this.unregisterDestroy();
   }
 
@@ -415,7 +431,7 @@ class CatalogWait {
     const catalog = sanitizeCatalog(payload);
     this.receivedCatalog = {
       previous: this.app.catalog.activeCatalog(),
-      id: catalog.catalogId || catalog.$id,
+      id: getCatalogId(catalog),
       fingerprint: stableStringify(catalog),
     };
   }
@@ -478,7 +494,7 @@ class CatalogWait {
       !!received &&
       !!activeCatalog &&
       activeCatalog !== received.previous &&
-      (activeCatalog.catalogId || activeCatalog.$id) === received.id &&
+      getCatalogId(activeCatalog) === received.id &&
       stableStringify(activeCatalog) === received.fingerprint &&
       !handshakeInProgress
     );

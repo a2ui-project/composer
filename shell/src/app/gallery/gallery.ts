@@ -35,6 +35,7 @@ import {formatJson} from '../utils/json';
 import {PreviewBridgeMessageType, ComponentUsage, RenderA2uiItem} from 'a2ui-bridge';
 import {UsageTrackingService} from '../usage-tracking/usage-tracking.service';
 import {ErrorLogger} from '../debug/error-logger.service';
+import {getCatalogId} from '../storage/models/catalog-storage.model';
 
 /**
  * Displays a split visual catalog gallery enabling search, interactive component selection,
@@ -165,7 +166,7 @@ export class Gallery implements OnInit, OnDestroy {
   protected readonly catalogId = computed<string | null>(() => {
     const catalog = this.catalogManagement.activeCatalog();
     if (!catalog) return null;
-    return catalog.catalogId || catalog.$id || null;
+    return getCatalogId(catalog) || null;
   });
 
   /** The table column names mapped by MatTable. */
