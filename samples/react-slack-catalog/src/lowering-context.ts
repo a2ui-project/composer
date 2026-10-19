@@ -16,6 +16,7 @@
 
 import {type Renderable} from '@copilotkit/channels-ui';
 import {type ActionDispatchEntry} from './action-dispatch';
+import {type DrawnImageStore} from './drawn-image-store';
 import {type InputComponentType, type InputDispatchEntry} from './form-input';
 import {type LoweredChart} from './lower-chart';
 import {type PreviewDiagnostic} from './preview-snapshot';
@@ -30,6 +31,10 @@ export interface LoweringState {
   readonly actions: Map<string, ActionDispatchEntry>;
   readonly inputs: Map<string, InputDispatchEntry>;
   readonly charts: Map<string, LoweredChart>;
+  /** Serves the images drawn in this render. */
+  readonly drawnImages: DrawnImageStore;
+  /** The URLs of the images drawn in this render, which the export swaps for uploaded files. */
+  readonly drawnImageUrls: Set<string>;
   nextActionOrdinal: number;
 }
 
