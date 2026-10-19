@@ -39,7 +39,6 @@ export default defineConfig({
           '@tightknitai/storybook-addon-slack-block-kit',
           '@tightknitai/slack-block-kit-validator',
           'slack-blocks-to-jsx',
-          '@copilotkit/channels',
           '@copilotkit/channels-slack',
         ],
       },

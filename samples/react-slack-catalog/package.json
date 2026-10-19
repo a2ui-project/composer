@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@a2ui/web_core": "0.10.5",
-    "@copilotkit/channels": "0.10.0",
     "@copilotkit/channels-slack": "0.10.0",
     "@copilotkit/channels-ui": "0.10.0",
     "@slack/types": "2.21.1",
