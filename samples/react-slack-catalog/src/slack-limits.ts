@@ -16,17 +16,12 @@
 
 /**
  * @fileoverview Slack Block Kit limits this sample checks that
- * `SLACK_LIMITS` from `@copilotkit/channels-slack` doesn't name. Use
- * `SLACK_LIMITS` directly for the limits it has, so each value has one source.
+ * `SLACK_LIMITS` from `@copilotkit/channels-slack` doesn't name, and values
+ * derived from ones it does. Use `SLACK_LIMITS` directly for the limits it
+ * has, so each value has one source.
  */
 
 import {SLACK_LIMITS} from '@copilotkit/channels-slack/render';
-
-/**
- * The most columns, and so cells per row, a Slack table can have.
- * https://docs.slack.dev/reference/block-kit/blocks/table-block
- */
-export const SLACK_TABLE_MAX_COLUMNS = SLACK_LIMITS.tableColumns;
 
 /**
  * The most body rows a Slack table can have. Slack allows 100 rows, and the
@@ -43,9 +38,11 @@ export const SLACK_TABLE_TEXT_MAX_LENGTH = 10_000;
 
 /**
  * The most characters a text object can hold, such as one in a context block.
+ * `SLACK_LIMITS.sectionText` has the same value, but it is the limit for a
+ * section block's text, which Slack documents separately.
  * https://docs.slack.dev/reference/block-kit/composition-objects/text-object
  */
-export const SLACK_TEXT_OBJECT_MAX_LENGTH = SLACK_LIMITS.sectionText;
+export const SLACK_TEXT_OBJECT_MAX_LENGTH = 3_000;
 
 /**
  * The longest `image_url` an image block or a context block's image element

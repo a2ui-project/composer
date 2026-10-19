@@ -30,13 +30,10 @@ import {
 } from '@a2ui/web_core/v0_9/basic_catalog';
 import {z} from 'zod/v3';
 import {zodToJsonSchema} from 'zod-to-json-schema';
+import {SLACK_LIMITS} from '@copilotkit/channels-slack/render';
 import {InputComponentType, InputKind} from './form-input';
 import {MarketSnapshotSchema} from './market-snapshot';
-import {
-  SLACK_TABLE_MAX_BODY_ROWS,
-  SLACK_TABLE_MAX_COLUMNS,
-  SLACK_TEXT_INPUT_MAX_LENGTH,
-} from './slack-limits';
+import {SLACK_TABLE_MAX_BODY_ROWS, SLACK_TEXT_INPUT_MAX_LENGTH} from './slack-limits';
 
 /** The catalog ID the Slack renderer registers and its surfaces must use. */
 export const SLACK_CATALOG_ID = 'https://a2ui-project.github.io/composer/catalogs/slack/v1';
@@ -207,10 +204,10 @@ const TableSchema = z
           .strict(),
       )
       .min(1)
-      .max(SLACK_TABLE_MAX_COLUMNS)
+      .max(SLACK_LIMITS.tableColumns)
       .describe('Ordered column definitions. Use right alignment for scores or numeric values.'),
     rows: z
-      .array(z.array(DynamicStringSchema).min(1).max(SLACK_TABLE_MAX_COLUMNS))
+      .array(z.array(DynamicStringSchema).min(1).max(SLACK_LIMITS.tableColumns))
       .min(1)
       .max(SLACK_TABLE_MAX_BODY_ROWS)
       .describe(
@@ -219,7 +216,7 @@ const TableSchema = z
   })
   .strict()
   .describe(
-    `An aligned Slack table for scores, rankings, and comparisons. Use this instead of Row/Text combinations for tabular data. Supports 1–${SLACK_TABLE_MAX_COLUMNS} columns and 1–${SLACK_TABLE_MAX_BODY_ROWS} body rows, with matching cell counts in every row.`,
+    `An aligned Slack table for scores, rankings, and comparisons. Use this instead of Row/Text combinations for tabular data. Supports 1–${SLACK_LIMITS.tableColumns} columns and 1–${SLACK_TABLE_MAX_BODY_ROWS} body rows, with matching cell counts in every row.`,
   );
 
 const TableApi = slackComponentApi('Table', TableSchema);
