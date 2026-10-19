@@ -778,7 +778,7 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(stream.cancel).toHaveBeenCalledTimes(1);
     expect(trackChatCancel).not.toHaveBeenCalled();
     expect(chatStateMock.chatHistory()).toEqual([
-      {role: MessageRole.USER, content: 'Make a card', promptId: 'prompt-1'},
+      {role: MessageRole.USER, content: 'Make a card', isSnapshot: false, promptId: 'prompt-1'},
       {
         role: MessageRole.MODEL,
         content: '*This response was stopped because the renderer changed.*',
@@ -1634,6 +1634,150 @@ I'll output bad JSON.
         '[{"version":"v0.9","createSurface":{"surfaceId":"s2","catalogId":"basic"}}]',
         'Follow-up prompt',
       ]);
+    });
+
+    it('updates the matching MODEL placeholder by promptId when a USER layout snapshot is appended mid-stream', async () => {
+      let resolveStream!: (val: string) => void;
+      const streamPromise = new Promise<string>(resolve => {
+        resolveStream = resolve;
+      });
+      async function* delayedGenerator() {
+        const chunk = await streamPromise;
+        yield chunk;
+      }
+      llmClientMock.chatStream.mockResolvedValueOnce({
+        contentStream: delayedGenerator(),
+        complete: streamPromise,
+      });
+
+      const submitPromise = service.submitPrompt('Prompt with mid-stream snapshot', [], {
+        promptId: 'turn-mid-snap',
+      });
+
+      const historyDuringStream = chatStateMock.chatHistory();
+      expect(historyDuringStream[0]).toEqual(
+        expect.objectContaining({
+          role: MessageRole.USER,
+          content: 'Prompt with mid-stream snapshot',
+          isSnapshot: false,
+          promptId: 'turn-mid-snap',
+        }),
+      );
+
+      // Simulate a USER layout snapshot appended after the MODEL placeholder while stream is active
+      chatStateMock.updateChatHistory(h => [
+        ...h,
+        {
+          role: MessageRole.USER,
+          content:
+            '[{"version":"v0.9","createSurface":{"surfaceId":"interleaved","catalogId":"basic"}}]',
+          isSnapshot: true,
+        },
+      ]);
+
+      const validResponse =
+        '{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}';
+      resolveStream(validResponse);
+      await submitPromise;
+
+      const historyAfterComplete = chatStateMock.chatHistory();
+      const modelTurn = historyAfterComplete.find(
+        m => m.role === MessageRole.MODEL && m.promptId === 'turn-mid-snap',
+      );
+      expect(modelTurn?.content).toBe(`[${validResponse}]`);
+    });
+
+    it('excludes a failed or cancelled USER prompt while preserving an interleaved USER layout snapshot', () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.USER,
+          content: 'Failed prompt before snapshot',
+          isSnapshot: false,
+          promptId: 'p-failed',
+        },
+        {
+          role: MessageRole.USER,
+          content:
+            '[{"version":"v0.9","createSurface":{"surfaceId":"kept-snap","catalogId":"basic"}}]',
+          isSnapshot: true,
+        },
+        {
+          role: MessageRole.ERROR,
+          content: '503 Service Unavailable',
+          promptId: 'p-failed',
+        },
+        {
+          role: MessageRole.USER,
+          content: 'Cancelled prompt before snapshot',
+          isSnapshot: false,
+          promptId: 'p-cancelled',
+        },
+        {
+          role: MessageRole.USER,
+          content:
+            '[{"version":"v0.9","createSurface":{"surfaceId":"kept-snap-2","catalogId":"basic"}}]',
+          isSnapshot: true,
+        },
+        {
+          role: MessageRole.MODEL,
+          content: '*You stopped this response.*',
+          isCancelled: true,
+          promptId: 'p-cancelled',
+        },
+        {
+          role: MessageRole.USER,
+          content: 'Active prompt',
+          isSnapshot: false,
+          promptId: 'p-active',
+        },
+      ]);
+
+      const context = service.getFullMessageContext();
+      const userMessages = context.filter(m => m.role === MessageRole.USER);
+      expect(userMessages.map(m => m.content)).toEqual([
+        '[{"version":"v0.9","createSurface":{"surfaceId":"kept-snap-2","catalogId":"basic"}}]',
+        'Active prompt',
+      ]);
+    });
+
+    it('appends a new ERROR bubble instead of overwriting an earlier completed MODEL turn with a different promptId when no matching MODEL placeholder exists', async () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.USER,
+          content: 'Earlier succeeded prompt',
+          isSnapshot: false,
+          promptId: 'earlier-turn',
+        },
+        {
+          role: MessageRole.MODEL,
+          content: '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+          promptId: 'earlier-turn',
+        },
+      ]);
+
+      llmClientMock.chatStream.mockImplementationOnce(async () => {
+        // Remove the newly appended 'later-turn' MODEL placeholder (and USER prompt) so the last
+        // entry in chatHistory is the earlier completed MODEL turn with promptId 'earlier-turn'
+        chatStateMock.updateChatHistory(h => h.filter(m => m.promptId !== 'later-turn'));
+        throw new Error('HTTP 503 Service Unavailable');
+      });
+
+      await service.submitPrompt('Later failed prompt', [], {promptId: 'later-turn'});
+
+      const history = chatStateMock.chatHistory();
+      expect(history).toHaveLength(3);
+      expect(history[1]).toEqual({
+        role: MessageRole.MODEL,
+        content: '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+        promptId: 'earlier-turn',
+      });
+      expect(history[2]).toEqual(
+        expect.objectContaining({
+          role: MessageRole.ERROR,
+          promptId: 'later-turn',
+          originalPrompt: 'Later failed prompt',
+        }),
+      );
     });
   });
 });

@@ -260,10 +260,10 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     },
   );
 
-  it('classifies turns wrapped in ```jsonl code blocks as layout snapshots and calculates component counts', async () => {
+  it('classifies model turns wrapped in ```jsonl code blocks as layout snapshots and calculates component counts', async () => {
     const historyMocks: LlmMessage[] = [
       {
-        role: MessageRole.USER,
+        role: MessageRole.MODEL,
         content:
           '```jsonl\n{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id":"b1","component":"Button"}, {"id":"b2","component":"Button"}]}}\n```',
       },
@@ -276,14 +276,14 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     const bubbleTypes = await harness.getBubbleTypes();
 
     expect(bubbles.length).toBe(1);
-    expect(bubbleTypes[0]).toBe('layout-snapshot');
+    expect(bubbleTypes[0]).toBe('model-response');
     expect(bubbles[0]).toBe('Received 2 A2UI JSON Components');
   });
 
-  it('classifies turns containing preamble text and ```jsonl code blocks as layout snapshots', async () => {
+  it('classifies model turns containing preamble text and ```jsonl code blocks as layout snapshots', async () => {
     const historyMocks: LlmMessage[] = [
       {
-        role: MessageRole.USER,
+        role: MessageRole.MODEL,
         content:
           'Here is your layout:\n```jsonl\n{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id":"b1","component":"Button"}]}}\n```',
       },
@@ -296,8 +296,41 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     const bubbleTypes = await harness.getBubbleTypes();
 
     expect(bubbles.length).toBe(1);
-    expect(bubbleTypes[0]).toBe('layout-snapshot');
+    expect(bubbleTypes[0]).toBe('model-response');
     expect(bubbles[0]).toBe('Received 1 A2UI JSON Components');
+  });
+
+  it('renders user prompts containing fenced A2UI JSON snippets as conversational user messages rather than layout snapshots', async () => {
+    const promptWithFencedA2ui =
+      'Please fix this button:\n```jsonl\n{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id":"b1","component":"Button"}]}}\n```';
+    const fencedOnlyPrompt =
+      '```jsonl\n{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id":"b1","component":"Button"}]}}\n```';
+    const historyMocks: LlmMessage[] = [
+      {
+        role: MessageRole.USER,
+        content: promptWithFencedA2ui,
+        isSnapshot: false,
+        promptId: 'prompt-1',
+      },
+      {
+        // Legacy user prompt without explicit isSnapshot or promptId
+        role: MessageRole.USER,
+        content: fencedOnlyPrompt,
+      },
+    ];
+
+    chatStateMock.chatHistory.set(historyMocks);
+    fixture.detectChanges();
+
+    const bubbles = await harness.getBubblesText();
+    const bubbleTypes = await harness.getBubbleTypes();
+    const bubbleHeaders = await harness.getBubbleHeaders();
+
+    expect(bubbles.length).toBe(2);
+    expect(bubbleHeaders).toEqual(['You', 'You']);
+    expect(bubbleTypes).toEqual(['human-text', 'human-text']);
+    expect(bubbles[0]).toContain('Please fix this button:');
+    expect(bubbles[1]).toContain('"updateComponents"');
   });
 
   it('does not classify plain text messages mentioning "version" as layout snapshots', async () => {
@@ -456,7 +489,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
   it('strips XML/HTML thinking tags and streaming pulse indicators when classifying layout snapshots', async () => {
     const historyMocks: LlmMessage[] = [
       {
-        role: MessageRole.USER,
+        role: MessageRole.MODEL,
         content: `<thought>Thinking process...</thought>\n{"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id":"b1","component":"Button"}]}} ●●●`,
       },
     ];
@@ -468,14 +501,14 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     const bubbleTypes = await harness.getBubbleTypes();
 
     expect(bubbles.length).toBe(1);
-    expect(bubbleTypes[0]).toBe('layout-snapshot');
+    expect(bubbleTypes[0]).toBe('model-response');
     expect(bubbles[0]).toBe('Received 1 A2UI JSON Components');
   });
 
   it('ignores prose text brackets when extracting JSON content for snapshot classification', async () => {
     const historyMocks: LlmMessage[] = [
       {
-        role: MessageRole.USER,
+        role: MessageRole.MODEL,
         content:
           'Here is the layout [note]: {"version": "v0.9", "updateComponents": {"surfaceId": "s1", "components": [{"id":"b1","component":"Button"}]}}',
       },
@@ -488,7 +521,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     const bubbleTypes = await harness.getBubbleTypes();
 
     expect(bubbles.length).toBe(1);
-    expect(bubbleTypes[0]).toBe('layout-snapshot');
+    expect(bubbleTypes[0]).toBe('model-response');
     expect(bubbles[0]).toBe('Received 1 A2UI JSON Components');
   });
 
@@ -715,8 +748,23 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       includeMultimodalGuidelines: true,
     });
 
-    // Disabling includeScreenshot and staging an image attachment also switches systemPrompt() to multimodal
+    // Disabling includeScreenshot switches systemPrompt() back to text-only
     await harness.toggleScreenshot();
+    fixture.detectChanges();
+    expect(component.systemPrompt()).toBe('Initial system prompt instructions block');
+
+    // Staging a non-image attachment keeps systemPrompt() text-only
+    component.attachedFiles.set([
+      {
+        name: 'data.json',
+        mimeType: 'application/json',
+        data: 'e30=',
+      },
+    ]);
+    fixture.detectChanges();
+    expect(component.systemPrompt()).toBe('Initial system prompt instructions block');
+
+    // Staging an image attachment switches systemPrompt() to multimodal
     promptFactoryMock.buildSystemPrompt.mockClear();
     component.attachedFiles.set([
       {

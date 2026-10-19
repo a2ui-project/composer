@@ -194,20 +194,23 @@ export abstract class ChatPanelBase {
             componentCount: null,
           };
         }
-        if (m.isSnapshot === false || (m.isSnapshot === true && m.componentCount != null)) {
+        if (
+          m.role === MessageRole.ERROR ||
+          m.isSnapshot === false ||
+          (m.role === MessageRole.USER && !this.chatCleaner.isUserLayoutSnapshot(m)) ||
+          (m.isSnapshot === true && m.componentCount != null)
+        ) {
           return {
             ...m,
-            isSnapshot: m.isSnapshot,
+            isSnapshot: Boolean(m.isSnapshot),
             isStreaming: false,
             componentCount: m.componentCount ?? null,
           };
         }
         const cleaned = m.content ? this.chatCleaner.cleanPayload(m.content) : '';
         const parseResult = cleaned ? parseAndHealJsonLines(cleaned) : null;
-        let isSnapshot = Boolean(m.isSnapshot);
-        if (!isSnapshot && m.content && parseResult && parseResult.success) {
-          isSnapshot = !parseResult.isConversational;
-        }
+        const isSnapshot =
+          Boolean(m.isSnapshot) || Boolean(parseResult?.success && !parseResult.isConversational);
         if (isSnapshot && m.content) {
           return {
             ...m,
@@ -336,9 +339,7 @@ export abstract class ChatPanelBase {
    */
   protected getBubbleClass(message: LlmMessage): string {
     if (message.role === MessageRole.USER) {
-      const isLayoutSnapshot =
-        message.isSnapshot ??
-        (Boolean(message.content) && this.chatCleaner.isLayoutSnapshot(message.content));
+      const isLayoutSnapshot = message.isSnapshot ?? this.chatCleaner.isUserLayoutSnapshot(message);
       return isLayoutSnapshot ? 'bubble-user bubble-layout' : 'bubble-user bubble-text';
     }
     if (message.role === MessageRole.MODEL) {

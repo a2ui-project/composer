@@ -57,7 +57,9 @@ export class FileIngestionService {
           name: file.name,
           mimeType,
           data: base64Data,
-          previewUrl: isImageAttachment(mimeType, file.name) ? result : undefined,
+          previewUrl: isImageAttachment(mimeType, file.name)
+            ? `data:${mimeType};base64,${base64Data}`
+            : undefined,
         });
       };
       reader.onerror = err => reject(err);

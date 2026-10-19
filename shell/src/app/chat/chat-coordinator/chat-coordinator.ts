@@ -251,7 +251,11 @@ export class ChatCoordinator {
       }
     }
     const lastIdx = history.length - 1;
-    return lastIdx >= 0 && history[lastIdx].role === MessageRole.MODEL ? lastIdx : -1;
+    return lastIdx >= 0 &&
+      history[lastIdx].role === MessageRole.MODEL &&
+      (!promptId || !history[lastIdx].promptId)
+      ? lastIdx
+      : -1;
   }
 
   private updateTargetModelMessage(promptId: string | undefined, patch: Partial<LlmMessage>): void {
@@ -383,6 +387,7 @@ export class ChatCoordinator {
         role: MessageRole.USER,
         content: trimmed,
         attachments: attachments.length > 0 ? attachments : undefined,
+        isSnapshot: false,
         promptId,
       },
     ]);
