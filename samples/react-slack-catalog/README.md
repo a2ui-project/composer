@@ -160,9 +160,14 @@ components put the preview in a waiting state and recover when the child arrives
 
 ## Charts
 
-Slack has no chart block, and Channels' Slack renderer skips chart nodes. The
-`Chart` component shows how a Channels app mixes native Slack blocks with a
-component it renders as an image:
+Slack's native chart block, `data_visualization` (`Slack.Block.DataVisualization`
+in `@copilotkit/channels-slack`), draws only pie, bar, area, and line charts. It
+limits titles to 50 characters, labels to 20, and a message to 2 charts, and its
+pie values must be above 0. Channels' Slack renderer also skips chart nodes, the
+elements that Channels UI's `Chart` produces. So this sample draws every `Chart`
+as an image on purpose. That covers the donut and horizontal bar charts the
+native block lacks, and it shows how a Channels app mixes native Slack blocks
+with a component it renders as an image:
 
 - The preview draws the chart as SVG in the browser and shows it as a Slack
   image block, between the native blocks around it.
