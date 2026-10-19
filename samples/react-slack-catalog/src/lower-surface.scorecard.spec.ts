@@ -207,9 +207,8 @@ describe('Slack scorecards', () => {
       updateData('Full time', '/match/status'),
     ]);
 
-    expect((await drawnSvgs()).filter(svg => svg.includes('class="team-name"')).at(-1)).toContain(
-      '>2</text>',
-    );
+    // The chart didn't change, so it kept its image and only the scorecard was drawn again.
+    expect((await drawnSvgs()).at(-1)).toContain('>2</text>');
     expect(session.getSnapshot().blocks[1]).toMatchObject({
       alt_text: 'Scorecard: Argentina 2, Mexico 0. Full time.',
     });
