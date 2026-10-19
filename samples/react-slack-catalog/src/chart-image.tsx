@@ -19,6 +19,9 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {
   DRAWN_IMAGE_FONT_FAMILY,
   DrawnImageColor,
+  FontWeight,
+  baselineBelow,
+  baselineCenteredOn,
   charactersThatFit,
   clipText,
   round,
@@ -72,6 +75,7 @@ interface ChartAreaProps {
   readonly top: number;
 }
 
+/** The size of the drawing, in SVG units. Slack scales the image to fit the message. */
 const WIDTH = 600;
 const HEIGHT = 360;
 const INK = DrawnImageColor.INK;
@@ -89,6 +93,101 @@ const PALETTE = [
   '#db2777',
   '#65a30d',
 ];
+
+/** The chart title's font size. */
+const TITLE_FONT_SIZE = 18;
+/** The font size of a pie or donut chart's legend. */
+const LEGEND_FONT_SIZE = 13;
+/** The font size of category labels, value labels, and axis titles. */
+const LABEL_FONT_SIZE = 12;
+/** The font size of the numbers along the value axis. */
+const TICK_FONT_SIZE = 11;
+
+/** The height of the band at the top that holds the title, when the chart has one. */
+const TITLE_HEIGHT = 52;
+/** The title's baseline, measured down from the top of the image. */
+const TITLE_BASELINE = 32;
+/** The space above the chart when it has no title. */
+const UNTITLED_TOP_MARGIN = 20;
+/** The most characters of the title, or of the x-axis title, the chart shows. */
+const TITLE_MAX_CHARACTERS = 60;
+/** The most characters of the y-axis title the chart shows. */
+const Y_AXIS_TITLE_MAX_CHARACTERS = 40;
+/** The extra room left of the plot that a y-axis title takes. */
+const Y_AXIS_TITLE_WIDTH = 16;
+/** The extra room below the plot that an x-axis title takes. */
+const X_AXIS_TITLE_HEIGHT = 20;
+/** The x-axis title's baseline, measured up from the bottom of the image. */
+const X_AXIS_TITLE_BOTTOM = 12;
+/** The y-axis title's baseline, measured from the left of the image. It reads upward. */
+const Y_AXIS_TITLE_LEFT = 16;
+
+/** The room left of a vertical bar or line chart's plot, for the value axis's numbers. */
+const VERTICAL_PLOT_LEFT = 56;
+/** The room right of a vertical bar or line chart's plot. */
+const VERTICAL_PLOT_RIGHT = 24;
+/** The room below a vertical bar or line chart's plot, for the category labels. */
+const VERTICAL_PLOT_BOTTOM = 44;
+/** The room left of a horizontal bar chart's plot, for the category labels. */
+const HORIZONTAL_PLOT_LEFT = 124;
+/** The room right of a horizontal bar chart's plot, for the longest bar's value label. */
+const HORIZONTAL_PLOT_RIGHT = 48;
+/** The room below a horizontal bar chart's plot, for the value axis's numbers. */
+const HORIZONTAL_PLOT_BOTTOM = 36;
+/** The space between the plot's edge and the labels and numbers beside it. */
+const AXIS_LABEL_GAP = 8;
+/** The fewest characters a vertical chart's category label keeps, however narrow its band. */
+const MIN_CATEGORY_LABEL_CHARACTERS = 4;
+/** The most characters of a horizontal bar chart's category label, which sits left of the plot. */
+const HORIZONTAL_CATEGORY_LABEL_MAX_CHARACTERS = 18;
+/** The width of the gridline at each number on the value axis. */
+const GRID_LINE_WIDTH = 1;
+/** About how many steps the value axis is split into; see `niceDomain`. */
+const TARGET_TICK_STEPS = 4;
+
+/** How much of its category's band a bar fills; the rest is the space between bars. */
+const BAR_BAND_FRACTION = 0.6;
+/** The widest a vertical bar can be. */
+const VERTICAL_BAR_MAX_WIDTH = 64;
+/** The thickest a horizontal bar can be. */
+const HORIZONTAL_BAR_MAX_HEIGHT = 28;
+/** The radius of the rounded corners of bars and legend swatches. */
+const CORNER_RADIUS = 2;
+/** The space between the end of a bar, or a line chart's point, and its value label. */
+const VALUE_LABEL_GAP = 6;
+/** The width of a line chart's line. */
+const LINE_WIDTH = 3;
+/** The radius of the dot at each point of a line chart. */
+const POINT_RADIUS = 4;
+
+/** The largest radius of a pie or donut, which leaves the right of the image for the legend. */
+const PIE_MAX_RADIUS = 130;
+/** The space between the image's left edge and the pie. */
+const PIE_LEFT_MARGIN = 32;
+/** The space between the pie and the image's bottom edge. */
+const PIE_BOTTOM_MARGIN = 16;
+/** The radius of a donut's hole, as a fraction of the donut's radius. */
+const DONUT_HOLE_RATIO = 0.56;
+/** The width of the background-colored line drawn between slices, which keeps them apart. */
+const SLICE_SEPARATOR_WIDTH = 2;
+/**
+ * How close to a full turn a slice must be to be drawn as a circle. An SVG arc can't draw
+ * a full circle, and floating-point error can leave a slice that holds the whole pie a
+ * hair short of one.
+ */
+const FULL_TURN_TOLERANCE = 1e-9;
+/** The space between the pie and its legend. */
+const LEGEND_GAP = 36;
+/** The space between the top of the drawing area and the first legend row. */
+const LEGEND_TOP_PADDING = 8;
+/** The tallest a legend row can be. Rows get shorter when there are many slices. */
+const LEGEND_MAX_ROW_HEIGHT = 22;
+/** The size of the colored square in front of each legend entry. */
+const SWATCH_SIZE = 12;
+/** The space between a legend swatch and its text. */
+const SWATCH_GAP = 8;
+/** The most characters of a slice's label the legend shows, leaving room for its value. */
+const LEGEND_LABEL_MAX_CHARACTERS = 28;
 
 const TYPE_NAMES: Record<ChartType, string> = {
   [ChartType.VERTICAL_BAR]: 'Bar chart',
@@ -125,7 +224,7 @@ export function renderChartSvg(chart: ChartImageProps): string {
 }
 
 function ChartSvg({chart}: {readonly chart: ChartImageProps}) {
-  const top = chart.title ? 52 : 20;
+  const top = chart.title ? TITLE_HEIGHT : UNTITLED_TOP_MARGIN;
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -136,8 +235,15 @@ function ChartSvg({chart}: {readonly chart: ChartImageProps}) {
     >
       <rect width={WIDTH} height={HEIGHT} fill={BACKGROUND} />
       {chart.title ? (
-        <text x={WIDTH / 2} y={32} textAnchor="middle" fontSize={18} fontWeight={600} fill={INK}>
-          {clipText(chart.title, 60)}
+        <text
+          x={WIDTH / 2}
+          y={TITLE_BASELINE}
+          textAnchor="middle"
+          fontSize={TITLE_FONT_SIZE}
+          fontWeight={FontWeight.SEMIBOLD}
+          fill={INK}
+        >
+          {clipText(chart.title, TITLE_MAX_CHARACTERS)}
         </text>
       ) : null}
       {chart.type === ChartType.PIE || chart.type === ChartType.DONUT ? (
@@ -152,14 +258,14 @@ function ChartSvg({chart}: {readonly chart: ChartImageProps}) {
 }
 
 function PieChart({chart, top}: ChartAreaProps) {
-  const available = HEIGHT - top - 16;
-  const radius = Math.min(130, available / 2);
-  const cx = 32 + radius;
+  const available = HEIGHT - top - PIE_BOTTOM_MARGIN;
+  const radius = Math.min(PIE_MAX_RADIUS, available / 2);
+  const cx = PIE_LEFT_MARGIN + radius;
   const cy = top + available / 2;
   const total = chart.data.reduce((sum, point) => sum + point.value, 0);
   const slices = sliceAngles(chart.data.map(point => point.value));
-  const rowHeight = Math.min(22, available / chart.data.length);
-  const legendX = cx + radius + 36;
+  const rowHeight = Math.min(LEGEND_MAX_ROW_HEIGHT, available / chart.data.length);
+  const legendX = cx + radius + LEGEND_GAP;
 
   return (
     <g>
@@ -167,7 +273,7 @@ function PieChart({chart, top}: ChartAreaProps) {
         if (end === start) {
           return null;
         }
-        if (end - start >= 2 * Math.PI - 1e-9) {
+        if (end - start >= 2 * Math.PI - FULL_TURN_TOLERANCE) {
           return (
             <circle
               key={index}
@@ -186,7 +292,7 @@ function PieChart({chart, top}: ChartAreaProps) {
             d={slicePath(cx, cy, radius, start, end)}
             fill={paletteColor(index)}
             stroke={BACKGROUND}
-            strokeWidth={2}
+            strokeWidth={SLICE_SEPARATOR_WIDTH}
           />
         );
       })}
@@ -195,25 +301,30 @@ function PieChart({chart, top}: ChartAreaProps) {
           className="donut-hole"
           cx={round(cx)}
           cy={round(cy)}
-          r={round(radius * 0.56)}
+          r={round(radius * DONUT_HOLE_RATIO)}
           fill={BACKGROUND}
         />
       ) : null}
       {chart.data.map((point, index) => {
-        const y = round(top + 8 + rowHeight * index);
+        const y = top + LEGEND_TOP_PADDING + rowHeight * index;
         const share = total > 0 ? Math.round((point.value / total) * 100) : 0;
         return (
           <g key={index}>
             <rect
               x={round(legendX)}
-              y={y}
-              width={12}
-              height={12}
-              rx={2}
+              y={round(y)}
+              width={SWATCH_SIZE}
+              height={SWATCH_SIZE}
+              rx={CORNER_RADIUS}
               fill={paletteColor(index)}
             />
-            <text x={round(legendX + 20)} y={y + 11} fontSize={13} fill={INK}>
-              {`${clipText(point.label, 28)} · ${formatChartValue(point.value)} (${share}%)`}
+            <text
+              x={round(legendX + SWATCH_SIZE + SWATCH_GAP)}
+              y={round(baselineCenteredOn(y + SWATCH_SIZE / 2, LEGEND_FONT_SIZE))}
+              fontSize={LEGEND_FONT_SIZE}
+              fill={INK}
+            >
+              {`${clipText(point.label, LEGEND_LABEL_MAX_CHARACTERS)} · ${formatChartValue(point.value)} (${share}%)`}
             </text>
           </g>
         );
@@ -224,15 +335,23 @@ function PieChart({chart, top}: ChartAreaProps) {
 
 /** Vertical bars or a line, both with categories along the bottom. */
 function VerticalChart({chart, top}: ChartAreaProps) {
-  const left = chart.yAxisTitle ? 72 : 56;
-  const bottom = chart.xAxisTitle ? 64 : 44;
-  const plot: Plot = {x: left, y: top, width: WIDTH - left - 24, height: HEIGHT - top - bottom};
+  const left = VERTICAL_PLOT_LEFT + (chart.yAxisTitle ? Y_AXIS_TITLE_WIDTH : 0);
+  const bottom = VERTICAL_PLOT_BOTTOM + (chart.xAxisTitle ? X_AXIS_TITLE_HEIGHT : 0);
+  const plot: Plot = {
+    x: left,
+    y: top,
+    width: WIDTH - left - VERTICAL_PLOT_RIGHT,
+    height: HEIGHT - top - bottom,
+  };
   const domain = niceDomain(chart.data.map(point => point.value));
   const valueY = (value: number) =>
     plot.y + plot.height - ((value - domain.min) / (domain.max - domain.min)) * plot.height;
   const band = plot.width / chart.data.length;
   const centerX = (index: number) => plot.x + band * index + band / 2;
-  const labelLength = Math.max(4, charactersThatFit(band, 12));
+  const labelLength = Math.max(
+    MIN_CATEGORY_LABEL_CHARACTERS,
+    charactersThatFit(band, LABEL_FONT_SIZE),
+  );
   const zeroY = valueY(0);
 
   return (
@@ -245,13 +364,13 @@ function VerticalChart({chart, top}: ChartAreaProps) {
             y1={round(valueY(tick))}
             y2={round(valueY(tick))}
             stroke={GRID}
-            strokeWidth={1}
+            strokeWidth={GRID_LINE_WIDTH}
           />
           <text
-            x={plot.x - 8}
-            y={round(valueY(tick) + 4)}
+            x={plot.x - AXIS_LABEL_GAP}
+            y={round(baselineCenteredOn(valueY(tick), TICK_FONT_SIZE))}
             textAnchor="end"
-            fontSize={11}
+            fontSize={TICK_FONT_SIZE}
             fill={MUTED}
           >
             {formatChartValue(tick)}
@@ -264,7 +383,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
             className="line"
             fill="none"
             stroke={PALETTE[0]}
-            strokeWidth={3}
+            strokeWidth={LINE_WIDTH}
             strokeLinejoin="round"
             points={chart.data
               .map((point, index) => `${round(centerX(index))},${round(valueY(point.value))}`)
@@ -276,14 +395,14 @@ function VerticalChart({chart, top}: ChartAreaProps) {
                 className="point"
                 cx={round(centerX(index))}
                 cy={round(valueY(point.value))}
-                r={4}
+                r={POINT_RADIUS}
                 fill={PALETTE[0]}
               />
               <text
                 x={round(centerX(index))}
-                y={round(valueY(point.value) - 10)}
+                y={round(valueY(point.value) - POINT_RADIUS - VALUE_LABEL_GAP)}
                 textAnchor="middle"
-                fontSize={12}
+                fontSize={LABEL_FONT_SIZE}
                 fill={INK}
               >
                 {formatChartValue(point.value)}
@@ -293,7 +412,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
         </g>
       ) : (
         chart.data.map((point, index) => {
-          const barWidth = Math.min(64, band * 0.6);
+          const barWidth = Math.min(VERTICAL_BAR_MAX_WIDTH, band * BAR_BAND_FRACTION);
           const end = valueY(point.value);
           return (
             <g key={index}>
@@ -303,14 +422,18 @@ function VerticalChart({chart, top}: ChartAreaProps) {
                 y={round(Math.min(zeroY, end))}
                 width={round(barWidth)}
                 height={round(Math.abs(zeroY - end))}
-                rx={2}
+                rx={CORNER_RADIUS}
                 fill={PALETTE[0]}
               />
               <text
                 x={round(centerX(index))}
-                y={round(point.value >= 0 ? end - 6 : end + 14)}
+                y={round(
+                  point.value >= 0
+                    ? end - VALUE_LABEL_GAP
+                    : baselineBelow(end + VALUE_LABEL_GAP, LABEL_FONT_SIZE),
+                )}
                 textAnchor="middle"
-                fontSize={12}
+                fontSize={LABEL_FONT_SIZE}
                 fill={INK}
               >
                 {formatChartValue(point.value)}
@@ -323,9 +446,9 @@ function VerticalChart({chart, top}: ChartAreaProps) {
         <text
           key={index}
           x={round(centerX(index))}
-          y={round(plot.y + plot.height + 18)}
+          y={round(baselineBelow(plot.y + plot.height + AXIS_LABEL_GAP, LABEL_FONT_SIZE))}
           textAnchor="middle"
-          fontSize={12}
+          fontSize={LABEL_FONT_SIZE}
           fill={MUTED}
         >
           {clipText(point.label, labelLength)}
@@ -337,14 +460,19 @@ function VerticalChart({chart, top}: ChartAreaProps) {
 }
 
 function HorizontalBarChart({chart, top}: ChartAreaProps) {
-  const left = chart.yAxisTitle ? 140 : 124;
-  const bottom = chart.xAxisTitle ? 56 : 36;
-  const plot: Plot = {x: left, y: top, width: WIDTH - left - 48, height: HEIGHT - top - bottom};
+  const left = HORIZONTAL_PLOT_LEFT + (chart.yAxisTitle ? Y_AXIS_TITLE_WIDTH : 0);
+  const bottom = HORIZONTAL_PLOT_BOTTOM + (chart.xAxisTitle ? X_AXIS_TITLE_HEIGHT : 0);
+  const plot: Plot = {
+    x: left,
+    y: top,
+    width: WIDTH - left - HORIZONTAL_PLOT_RIGHT,
+    height: HEIGHT - top - bottom,
+  };
   const domain = niceDomain(chart.data.map(point => point.value));
   const valueX = (value: number) =>
     plot.x + ((value - domain.min) / (domain.max - domain.min)) * plot.width;
   const band = plot.height / chart.data.length;
-  const barHeight = Math.min(28, band * 0.6);
+  const barHeight = Math.min(HORIZONTAL_BAR_MAX_HEIGHT, band * BAR_BAND_FRACTION);
   const zeroX = valueX(0);
 
   return (
@@ -357,13 +485,13 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
             y1={plot.y}
             y2={plot.y + plot.height}
             stroke={GRID}
-            strokeWidth={1}
+            strokeWidth={GRID_LINE_WIDTH}
           />
           <text
             x={round(valueX(tick))}
-            y={round(plot.y + plot.height + 16)}
+            y={round(baselineBelow(plot.y + plot.height + AXIS_LABEL_GAP, TICK_FONT_SIZE))}
             textAnchor="middle"
-            fontSize={11}
+            fontSize={TICK_FONT_SIZE}
             fill={MUTED}
           >
             {formatChartValue(tick)}
@@ -372,11 +500,18 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
       ))}
       {chart.data.map((point, index) => {
         const centerY = plot.y + band * index + band / 2;
+        const baseline = round(baselineCenteredOn(centerY, LABEL_FONT_SIZE));
         const end = valueX(point.value);
         return (
           <g key={index}>
-            <text x={plot.x - 8} y={round(centerY + 4)} textAnchor="end" fontSize={12} fill={MUTED}>
-              {clipText(point.label, 18)}
+            <text
+              x={plot.x - AXIS_LABEL_GAP}
+              y={baseline}
+              textAnchor="end"
+              fontSize={LABEL_FONT_SIZE}
+              fill={MUTED}
+            >
+              {clipText(point.label, HORIZONTAL_CATEGORY_LABEL_MAX_CHARACTERS)}
             </text>
             <rect
               className="bar"
@@ -384,14 +519,14 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
               y={round(centerY - barHeight / 2)}
               width={round(Math.abs(end - zeroX))}
               height={round(barHeight)}
-              rx={2}
+              rx={CORNER_RADIUS}
               fill={PALETTE[0]}
             />
             <text
-              x={round(point.value >= 0 ? end + 6 : end - 6)}
-              y={round(centerY + 4)}
+              x={round(point.value >= 0 ? end + VALUE_LABEL_GAP : end - VALUE_LABEL_GAP)}
+              y={baseline}
               textAnchor={point.value >= 0 ? 'start' : 'end'}
-              fontSize={12}
+              fontSize={LABEL_FONT_SIZE}
               fill={INK}
             >
               {formatChartValue(point.value)}
@@ -411,24 +546,24 @@ function AxisTitles({chart, plot}: {readonly chart: ChartImageProps; readonly pl
       {chart.xAxisTitle ? (
         <text
           x={round(plot.x + plot.width / 2)}
-          y={HEIGHT - 12}
+          y={HEIGHT - X_AXIS_TITLE_BOTTOM}
           textAnchor="middle"
-          fontSize={12}
+          fontSize={LABEL_FONT_SIZE}
           fill={MUTED}
         >
-          {clipText(chart.xAxisTitle, 60)}
+          {clipText(chart.xAxisTitle, TITLE_MAX_CHARACTERS)}
         </text>
       ) : null}
       {chart.yAxisTitle ? (
         <text
-          x={16}
+          x={Y_AXIS_TITLE_LEFT}
           y={middleY}
-          transform={`rotate(-90 16 ${middleY})`}
+          transform={`rotate(-90 ${Y_AXIS_TITLE_LEFT} ${middleY})`}
           textAnchor="middle"
-          fontSize={12}
+          fontSize={LABEL_FONT_SIZE}
           fill={MUTED}
         >
-          {clipText(chart.yAxisTitle, 40)}
+          {clipText(chart.yAxisTitle, Y_AXIS_TITLE_MAX_CHARACTERS)}
         </text>
       ) : null}
     </g>
@@ -447,6 +582,12 @@ function sliceAngles(values: readonly number[]): Array<{start: number; end: numb
   });
 }
 
+/**
+ * The SVG path of one pie slice: from the center out to the start angle, along the edge
+ * clockwise to the end angle, and back. The arc command takes the radii, an x-axis
+ * rotation of 0, the large-arc flag, set when the slice is more than half the pie, and the
+ * sweep flag, 1 for clockwise.
+ */
 function slicePath(cx: number, cy: number, radius: number, start: number, end: number): string {
   const largeArc = end - start > Math.PI ? 1 : 0;
   return [
@@ -458,7 +599,10 @@ function slicePath(cx: number, cy: number, radius: number, start: number, end: n
   ].join(' ');
 }
 
-/** A value range that includes zero and ends on round numbers, with about four steps. */
+/**
+ * A value range that includes zero and ends on round numbers, split into about
+ * `TARGET_TICK_STEPS` steps.
+ */
 function niceDomain(values: readonly number[]): Domain {
   const lowest = Math.min(0, ...values);
   let min = lowest;
@@ -466,7 +610,7 @@ function niceDomain(values: readonly number[]): Domain {
   if (min === max) {
     max = min + 1;
   }
-  const step = niceStep((max - min) / 4);
+  const step = niceStep((max - min) / TARGET_TICK_STEPS);
   min = Math.floor(min / step) * step;
   max = Math.ceil(max / step) * step;
   // A negative bar's value label sits past the end of the bar; leave room for it so it
@@ -475,12 +619,18 @@ function niceDomain(values: readonly number[]): Domain {
     min -= step;
   }
   const steps = Math.round((max - min) / step);
+  // `toFixed` drops floating-point error from the sums, such as 0.30000000000000004 for
+  // three steps of 0.1, which would otherwise show up in the axis labels.
   const ticks = Array.from({length: steps + 1}, (_, index) =>
     Number((min + index * step).toFixed(10)),
   );
   return {min, max, ticks};
 }
 
+/**
+ * The smallest round step that is at least `rough`. Round steps are 1, 2 or 5 times a
+ * power of ten, the steps people expect on an axis.
+ */
 function niceStep(rough: number): number {
   const magnitude = 10 ** Math.floor(Math.log10(rough));
   const residual = rough / magnitude;
