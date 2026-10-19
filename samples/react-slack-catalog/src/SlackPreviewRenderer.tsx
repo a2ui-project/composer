@@ -22,7 +22,7 @@ import {
   type SlackInteractionPayload,
 } from '@tightknitai/storybook-addon-slack-block-kit';
 import {type ThemePreference} from 'a2ui-bridge';
-import {collectActionIds} from './lower-surface';
+import {collectActionIds} from './action-registry';
 import {
   DiagnosticCode,
   DiagnosticLevel,
