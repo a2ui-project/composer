@@ -162,10 +162,14 @@ Slack buttons use opaque revision-local action IDs like
 `a2ui-<revision>-<ordinal>`. IDs are regenerated on each accepted update; stale
 IDs become inert after replacement, deletion, or recreation.
 
-Native Slack button clicks and the Tightknit `Simulate` control both call the
-same local renderer dispatch path. Event actions resolve against the current
-live A2UI surface and are delivered back to Composer as local Composer events
-through `a2uiBridge.sendAction`. They are not sent to Slack.
+The preview is drawn by the Tightknit renderer: the `Renderer` component of
+the `@tightknitai/storybook-addon-slack-block-kit` package, which draws Block
+Kit JSON the way Slack would. Clicking a Slack button in the preview and
+clicking that button's `Simulate` control, which the renderer lists under the
+message, both call the same local renderer dispatch path. Event actions
+resolve against the current live A2UI surface and are delivered back to
+Composer as local Composer events through `a2uiBridge.sendAction`. They are
+not sent to Slack.
 
 Read-only local function actions, such as `formatString`, are evaluated
 synchronously with `dataContext.resolveAction`. They do not send bridge server
