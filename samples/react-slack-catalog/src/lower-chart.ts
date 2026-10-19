@@ -27,7 +27,7 @@ import {recordField} from './record-fields';
  * donut or horizontal bar, for one), and Channels' renderBlockKit, which turns Channels UI
  * components into Slack blocks, skips the nodes that Channels UI's `Chart` produces. So
  * every chart is drawn as SVG and shown in the message as an image, in place of the PNG
- * your Channels app renders and uploads.
+ * that the app that sends the message to Slack renders and uploads.
  */
 export function lowerChart(
   props: Readonly<Record<string, unknown>>,

@@ -56,6 +56,7 @@ export interface ChartImageProps extends Readonly<ChartProps> {
   readonly type: ChartType;
 }
 
+/** The area inside the axes, where the bars or the line and the gridlines are drawn. */
 interface Plot {
   readonly x: number;
   readonly y: number;
@@ -71,7 +72,7 @@ interface Domain {
 
 interface ChartAreaProps {
   readonly chart: ChartImageProps;
-  /** Where the drawing area starts, below the title. */
+  /** Where the chart starts, below the title. */
   readonly top: number;
 }
 
@@ -178,7 +179,7 @@ const SLICE_SEPARATOR_WIDTH = 2;
 const FULL_TURN_TOLERANCE = 1e-9;
 /** The space between the pie and its legend. */
 const LEGEND_GAP = 36;
-/** The space between the top of the drawing area and the first legend row. */
+/** The space between the top of the chart, below the title, and the first legend row. */
 const LEGEND_TOP_PADDING = 8;
 /** The tallest a legend row can be. Rows get shorter when there are many slices. */
 const LEGEND_MAX_ROW_HEIGHT = 22;
@@ -340,6 +341,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
   const domain = niceDomain(chart.data.map(point => point.value));
   const valueY = (value: number) =>
     plot.y + plot.height - ((value - domain.min) / (domain.max - domain.min)) * plot.height;
+  // Each category gets an equal band of the plot's width, with its bar or point centered.
   const band = plot.width / chart.data.length;
   const centerX = (index: number) => plot.x + band * index + band / 2;
   const labelLength = Math.max(
@@ -462,6 +464,7 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
   const domain = niceDomain(chart.data.map(point => point.value));
   const valueX = (value: number) =>
     plot.x + ((value - domain.min) / (domain.max - domain.min)) * plot.width;
+  // Each category gets an equal band of the plot's height, with its bar centered.
   const band = plot.height / chart.data.length;
   const barHeight = Math.min(HORIZONTAL_BAR_MAX_HEIGHT, band * BAR_BAND_FRACTION);
   const zeroX = valueX(0);

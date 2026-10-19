@@ -18,8 +18,9 @@
  * Hands out URLs for the images the preview draws, such as charts, and frees the ones no
  * longer shown.
  *
- * A URL survives until it has been missing from two releases in a row, so an image the
- * preview still shows while React commits the next render never breaks.
+ * Each time the session publishes a snapshot, it calls `release` with the URLs that
+ * snapshot shows. A URL is freed only once two calls in a row leave it out, so an image
+ * the previous snapshot shows keeps loading until React has replaced it with the next.
  */
 export interface DrawnImageStore {
   /** Returns a URL serving the SVG markup, reusing the URL of identical markup. */

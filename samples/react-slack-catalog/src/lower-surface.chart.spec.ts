@@ -101,7 +101,7 @@ describe('Slack charts', () => {
       code: DiagnosticCode.SLACK_IMAGE_RENDERED_AT_SEND,
       componentId: 'possession',
       message:
-        'Chart "possession" is drawn in this preview. In Slack, your Channels app renders it to a PNG and uploads it when sending. The export marks it with a placeholder file.',
+        'Chart "possession" is drawn as an image in this preview. The app that sends the message to Slack must render it to a PNG and upload it. The Generated Block Kit export marks it with the placeholder file ID RENDERED_AT_SEND, which that app replaces with the ID of the uploaded file.',
     });
   });
 

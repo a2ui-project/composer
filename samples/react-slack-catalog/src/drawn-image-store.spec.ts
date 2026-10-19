@@ -43,7 +43,7 @@ describe('createBlobImageStore', () => {
     expect((createObjectURL.mock.calls[0][0] as Blob).type).toBe('image/svg+xml');
   });
 
-  it('keeps URLs from the current and previous release and frees older ones', () => {
+  it('frees a URL once two calls to release in a row leave it out', () => {
     const store = createBlobImageStore();
     const first = store.urlFor('<svg>a</svg>');
     store.release(new Set([first]));

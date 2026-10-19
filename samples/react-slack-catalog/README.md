@@ -172,23 +172,24 @@ Slack message carries both kinds. This section uses these terms:
   lowers A2UI components to them.
 - **`renderBlockKit`** (`@copilotkit/channels-slack`): the Slack renderer's
   function that turns Channels UI components into Slack blocks.
-- **Your Channels app**: the app you build with Channels to send these messages
-  to Slack. The preview stands in for it in the browser.
+- **The app that sends the message**: whatever sends the message to Slack,
+  built with Channels or not. The preview stands in for it in the browser.
 
 For each drawn component:
 
 - The preview draws it as SVG in the browser and shows it as a Slack image
   block, between the native blocks around it.
 - `Generated Block Kit` exports that block in Slack's uploaded-file form,
-  `{"type": "image", "slack_file": {"id": "RENDERED_AT_SEND"}, ...}`. Your
-  Channels app renders the component to a PNG, uploads it, and uses the
-  uploaded file's ID when it sends the message.
+  `{"type": "image", "slack_file": {"id": "RENDERED_AT_SEND"}, ...}`. The app
+  that sends the message renders the component to a PNG, uploads it, and puts
+  the uploaded file's ID in place of `RENDERED_AT_SEND`.
 - An info diagnostic, `SLACK_IMAGE_RENDERED_AT_SEND`, names the component and
   says the same in the preview.
 
-The Tightknit renderer's own `Copy JSON` and `Open in Block Kit Builder` buttons
-use the preview blocks, so a drawn image there carries a local `blob:` URL that
-only loads inside the preview. Copy from `Generated Block Kit` instead.
+The `Copy JSON` and `Open in Block Kit Builder` buttons of the Tightknit
+renderer, which draws the preview (see Actions), use the preview blocks, so a
+drawn image there carries a local `blob:` URL that only loads inside the
+preview. Copy from `Generated Block Kit` instead.
 
 ### Chart
 
