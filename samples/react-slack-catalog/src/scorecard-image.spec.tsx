@@ -15,6 +15,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {DrawnImageColor} from './drawn-image-style';
 import {renderScorecardSvg, scorecardAltText, type ScorecardImageProps} from './scorecard-image';
 
 const final: ScorecardImageProps = {
@@ -24,12 +25,16 @@ const final: ScorecardImageProps = {
   competition: 'World Cup, Group C',
 };
 
-const countOf = (markup: string, fragment: string): number => markup.split(fragment).length - 1;
+const parse = (svg: string): Document => new DOMParser().parseFromString(svg, 'image/svg+xml');
+
+/** The text of each text element in the drawing, in the order they are drawn. */
+const texts = (svg: string): string[] =>
+  [...parse(svg).querySelectorAll('text')].map(text => text.textContent ?? '');
 
 /** The font size and lines of each team name in the drawing, home first. */
 function teamNames(svg: string): Array<{fontSize: string | null; lines: string[]}> {
-  const drawing = new DOMParser().parseFromString(svg, 'image/svg+xml');
-  return [...drawing.querySelectorAll('.team-name')].map(name => ({
+  // Team names are the text clipped to a column.
+  return [...parse(svg).querySelectorAll('text[clip-path]')].map(name => ({
     fontSize: name.getAttribute('font-size'),
     lines: [...name.querySelectorAll('tspan')].map(line => line.textContent ?? ''),
   }));
@@ -46,19 +51,23 @@ describe('renderScorecardSvg', () => {
       {fontSize: '24', lines: ['Argentina']},
       {fontSize: '24', lines: ['Mexico']},
     ]);
-    expect(countOf(svg, 'class="score"')).toBe(2);
-    expect(svg).toContain('>2</text>');
-    expect(svg).toContain('>0</text>');
-    expect(svg).toContain('>Full time</text>');
-    expect(svg).toContain('>World Cup, Group C</text>');
+    expect(texts(svg)).toEqual([
+      'World Cup, Group C',
+      'Argentina',
+      '2',
+      '–',
+      'Mexico',
+      '0',
+      'Full time',
+    ]);
   });
 
   it('leaves out the status and competition when the scorecard has none', () => {
     const svg = renderScorecardSvg({home: final.home, away: final.away});
 
-    expect(svg).not.toContain('class="status"');
-    expect(svg).not.toContain('class="competition"');
-    expect(countOf(svg, 'class="score"')).toBe(2);
+    expect(texts(svg)).toEqual(['Argentina', '2', '–', 'Mexico', '0']);
+    // The status is drawn on a filled label, which goes with it.
+    expect(parse(svg).querySelectorAll(`rect[fill="${DrawnImageColor.SURFACE}"]`)).toHaveLength(0);
   });
 
   it('escapes team names and scores instead of emitting markup', () => {
@@ -106,7 +115,7 @@ describe('renderScorecardSvg', () => {
 
     expect(svg).toContain('clip-path="url(#home-name)"');
     expect(svg).toContain('clip-path="url(#away-name)"');
-    expect(countOf(svg, '<clipPath')).toBe(2);
+    expect(parse(svg).querySelectorAll('clipPath')).toHaveLength(2);
   });
 });
 
