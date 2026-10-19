@@ -163,7 +163,11 @@ components put the preview in a waiting state and recover when the child arrives
 
 Most of the catalog becomes native Slack blocks. `Chart` and `Scorecard` don't:
 the renderer draws each with a React component and sends it as an image, so one
-Slack message carries both kinds. This section uses these terms:
+Slack message carries both kinds. The component is rendered once, to static SVG
+markup, with `renderToStaticMarkup` from `react-dom/server`, and that markup is
+the image. So a component drawn this way can't use state, effects, or event
+handlers, since none of them run, and must draw only SVG elements, not HTML.
+This section uses these terms:
 
 - **Channels**: CopilotKit's channel SDK. Its Slack renderer turns Channels UI
   components into Block Kit.
@@ -214,7 +218,8 @@ message still renders.
 optional `competition`. A score can be a number or text such as `3 (4)`, and
 every field accepts data bindings. Slack has no block for a scorecard, and
 Channels UI has no scorecard component either, so the sample draws it. It
-shows that any React component can be sent this way, not only Channels UI's.
+shows that a component Channels UI doesn't have can be sent this way too, as
+long as its React component renders to static SVG as described above.
 
 If a team's name or score is empty or missing, the scorecard is skipped with a
 `SLACK_SCORECARD_INVALID` warning, and the rest of the message still renders.
@@ -250,9 +255,10 @@ When the preview is ready, the `Generated Block Kit` section contains:
 }
 ```
 
-with the current Slack blocks in place of the empty array. `Copy Block Kit`
-copies the same JSON. If iframe clipboard access is unavailable, the JSON
-remains selectable in the expanded section.
+with the current Slack blocks in place of the empty array. Each image drawn for
+a `Chart` or `Scorecard` is in Slack's uploaded-file form; see React components
+drawn as images. `Copy Block Kit` copies the same JSON. If iframe clipboard
+access is unavailable, the JSON remains selectable in the expanded section.
 
 ## Static hosting
 
