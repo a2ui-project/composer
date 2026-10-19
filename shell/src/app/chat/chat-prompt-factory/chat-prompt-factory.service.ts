@@ -448,17 +448,21 @@ export class ChatPromptFactoryService {
   }
 
   /**
-   * Guidance for a catalog whose Image `url` property says, in its description,
-   * that it takes HTTP(S) URLs. Only that property's description is read: a
-   * component's schema also holds `$ref` URLs, which say nothing about its values.
+   * Guidance for a catalog whose Image `url` property declares a JSON Schema
+   * `pattern` for literal URLs, when that pattern rejects data URLs. Asked for
+   * an image it can't see, a model tends to invent an inline SVG data URL, which
+   * such a catalog doesn't accept. The guidance quotes the catalog's pattern
+   * instead of describing it, so it holds for any catalog that declares one.
    */
   private imageUrlGuidance(catalog: Catalog): string {
-    const description = findPropertySchema(catalog.components?.['Image'], 'url')?.['description'];
-    if (typeof description === 'string' && /\bhttps?\b/i.test(description)) {
-      return `* For Image.url, use only HTTP(S) URLs. If no suitable HTTP(S) URL is
-    provided or visible, omit the Image component instead of inventing a URL.`;
+    const pattern = findLiteralStringPattern(
+      findPropertySchema(catalog.components?.['Image'], 'url'),
+    );
+    if (!pattern || !patternRejectsDataUrl(pattern)) {
+      return '';
     }
-    return '';
+    return `* For Image.url, use only URLs matching \`${pattern}\`. If no suitable URL
+    is provided or visible, omit the Image component instead of inventing a URL.`;
   }
 
   /** Whether the catalog's Icon component accepts custom SVG path data (`svgPath`). */
@@ -555,6 +559,48 @@ export class ChatPromptFactoryService {
 
 /** The Icon property the basic catalog uses for custom SVG path data. */
 const SVG_PATH_PROPERTY = 'svgPath';
+
+/**
+ * A data URL of the kind a model invents for an image it can't see: an empty
+ * SVG (`<svg/>`), base64-encoded. Checking a catalog's URL pattern against it
+ * tells Composer whether invented data URLs would be accepted.
+ */
+const DATA_URL_PROBE = 'data:image/svg+xml;base64,PHN2Zy8+';
+
+/**
+ * The JSON Schema `pattern` a property declares for literal strings: either on
+ * the property's schema or on the `type: "string"` member of its `anyOf` or
+ * `oneOf`. A2UI properties are often a union of a literal string, a data
+ * binding and a function call, so the pattern sits on the string member.
+ */
+function findLiteralStringPattern(schema: Record<string, unknown> | undefined): string | undefined {
+  if (typeof schema?.['pattern'] === 'string') {
+    return schema['pattern'];
+  }
+  const members = [schema?.['anyOf'], schema?.['oneOf']].flatMap(union =>
+    Array.isArray(union) ? (union as unknown[]) : [],
+  );
+  for (const member of members) {
+    const {type, pattern} = (member ?? {}) as Record<string, unknown>;
+    if (type === 'string' && typeof pattern === 'string') {
+      return pattern;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Whether a JSON Schema `pattern` rejects {@link DATA_URL_PROBE}. A pattern that
+ * JavaScript can't compile counts as not rejecting it: Composer can't tell what
+ * such a pattern accepts, so it gives no guidance rather than guessing.
+ */
+function patternRejectsDataUrl(pattern: string): boolean {
+  try {
+    return !new RegExp(pattern).test(DATA_URL_PROBE);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Finds a property's schema anywhere in a component's schema, including inside

@@ -135,7 +135,10 @@ describe('ChatPromptFactoryService', () => {
           properties: {
             component: {const: 'Image'},
             url: {
-              type: 'string',
+              anyOf: [
+                {type: 'string', pattern: '^https?://'},
+                {type: 'object', properties: {path: {type: 'string'}}},
+              ],
               description: 'The HTTP(S) URL of the image to display in Slack.',
             },
           },
@@ -149,7 +152,7 @@ describe('ChatPromptFactoryService', () => {
 
     expect(prompt).toContain('Do NOT invent Icon');
     expect(prompt).toContain('data:image/svg+xml fallbacks');
-    expect(prompt).toContain('For Image.url, use only HTTP(S) URLs');
+    expect(prompt).toContain('For Image.url, use only URLs matching `^https?://`');
     expect(prompt).not.toContain('Fallback to SVG');
     expect(prompt).not.toContain('leading text/icons');
     expect(prompt).not.toContain('trailing downward icon');
@@ -187,7 +190,7 @@ describe('ChatPromptFactoryService', () => {
     expect(prompt).toContain('exact icon names/SVGs');
   });
 
-  it('reads svgPath and the Image url description from the schema, not from its references', () => {
+  it('reads svgPath from the schema, not from its references', () => {
     const ref = {
       $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
     };
@@ -212,19 +215,10 @@ describe('ChatPromptFactoryService', () => {
             },
           ],
         },
-        Image: {
-          allOf: [
-            ref,
-            {properties: {url: {...ref, description: 'The URL of the image to display.'}}},
-          ],
-        },
       },
     });
 
-    const prompt = service.systemPrompt();
-
-    expect(prompt).toContain('exact icon names/SVGs');
-    expect(prompt).not.toContain('For Image.url, use only HTTP(S) URLs');
+    expect(service.systemPrompt()).toContain('exact icon names/SVGs');
   });
 
   it('does not treat an Icon that only mentions SVG as accepting custom SVG paths', () => {
@@ -243,6 +237,52 @@ describe('ChatPromptFactoryService', () => {
 
     expect(prompt).toContain('exact supported icon values');
     expect(prompt).not.toContain('exact icon names/SVGs');
+  });
+
+  describe('Image url guidance', () => {
+    /** Makes the active catalog one whose Image `url` property has the given schema. */
+    function useImageUrlSchema(url: Record<string, unknown>): void {
+      catalogSpy.activeCatalog.mockReturnValue({
+        components: {Image: {properties: {component: {const: 'Image'}, url}}},
+      });
+    }
+
+    it('names a pattern declared on the url property itself', () => {
+      useImageUrlSchema({type: 'string', pattern: '^https://'});
+
+      expect(service.systemPrompt()).toContain('For Image.url, use only URLs matching `^https://`');
+    });
+
+    it('names a pattern declared on the string member of a oneOf', () => {
+      useImageUrlSchema({
+        oneOf: [
+          {type: 'object', properties: {path: {type: 'string'}}},
+          {type: 'string', pattern: '^https?://'},
+        ],
+      });
+
+      expect(service.systemPrompt()).toContain(
+        'For Image.url, use only URLs matching `^https?://`',
+      );
+    });
+
+    it('gives no guidance when the url only describes its URLs in prose', () => {
+      useImageUrlSchema({type: 'string', description: 'The HTTP(S) URL of the image.'});
+
+      expect(service.systemPrompt()).not.toContain('For Image.url');
+    });
+
+    it('gives no guidance when the pattern accepts data URLs', () => {
+      useImageUrlSchema({type: 'string', pattern: '^(https?|data):'});
+
+      expect(service.systemPrompt()).not.toContain('For Image.url');
+    });
+
+    it('gives no guidance when the pattern is not a valid regular expression', () => {
+      useImageUrlSchema({type: 'string', pattern: '^https?://('});
+
+      expect(service.systemPrompt()).not.toContain('For Image.url');
+    });
   });
 
   describe('Custom Instructions', () => {
