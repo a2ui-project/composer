@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import {type Renderable} from '@copilotkit/channels-ui';
+import {type ChannelNode, type Renderable} from '@copilotkit/channels-ui';
 import {type ActionDispatchEntry} from './action-dispatch';
+import {type DrawnImage} from './drawn-image-blocks';
 import {type DrawnImageStore} from './drawn-image-store';
 import {type InputComponentType, type InputDispatchEntry} from './form-input';
 import {type LoweredChart} from './lower-chart';
@@ -49,4 +50,6 @@ export interface LowerComponentContext {
   readonly diagnostics: PreviewDiagnostic[];
   /** Records a chart to draw before Slack conversion and returns the key of its node. */
   readonly registerChart: (chart: LoweredChart) => string;
+  /** Serves an image drawn while lowering and returns the Channels UI `Image` that shows it. */
+  readonly placeDrawnImage: (image: DrawnImage) => ChannelNode;
 }

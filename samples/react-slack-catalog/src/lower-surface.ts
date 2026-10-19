@@ -48,10 +48,11 @@ import {
   type InputDispatchEntry,
 } from './form-input';
 import {parseHttpUrl} from './http-url';
-import {exportDrawnImages} from './drawn-image-blocks';
+import {exportDrawnImages, placeDrawnImage} from './drawn-image-blocks';
 import {type DrawnImageStore} from './drawn-image-store';
 import {drawCharts, lowerChart} from './lower-chart';
 import {lowerImage} from './lower-image';
+import {lowerScorecard} from './lower-scorecard';
 import {lowerTable} from './lower-table';
 import {type LowerComponentContext, type LoweringState} from './lowering-context';
 import {LoweringError} from './lowering-error';
@@ -104,8 +105,8 @@ class WaitingForComponentError extends Error {
  * diagnostics, and no actions or inputs.
  *
  * @param revision The render number, used in the generated `action_id`s.
- * @param drawnImages Serves the images drawn for components sent as images, such as
- *     charts.
+ * @param drawnImages Serves the images drawn for components sent as images: charts and
+ *     scorecards.
  */
 export function lowerSurface(
   surface: SurfaceModel,
@@ -298,6 +299,7 @@ function lowerComponent(
           state.charts.set(key, chart);
           return key;
         },
+        placeDrawnImage: image => placeDrawnImage(state, image),
       }),
     );
   } finally {
@@ -353,6 +355,8 @@ function lowerSupportedComponent(
       return lowerTable(props, context);
     case 'Chart':
       return lowerChart(props, context);
+    case 'Scorecard':
+      return lowerScorecard(props, context);
     case 'MarketSnapshot':
       // `lowerComponent` validated these props against MarketSnapshotSchema.
       return lowerMarketSnapshot(props as MarketSnapshotProps, context);

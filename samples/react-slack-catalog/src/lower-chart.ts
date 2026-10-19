@@ -22,9 +22,10 @@ import {
   type ChartImageProps,
   type ChartPoint,
 } from './chart-image';
+import {optionalText, skipWithWarning} from './drawn-component-props';
 import {placeDrawnImage} from './drawn-image-blocks';
 import {type LowerComponentContext, type LoweringState} from './lowering-context';
-import {DiagnosticCode, DiagnosticLevel} from './preview-snapshot';
+import {DiagnosticCode} from './preview-snapshot';
 import {recordField} from './record-fields';
 import {SLACK_IMAGE_ALT_TEXT_MAX_LENGTH} from './slack-limits';
 
@@ -115,14 +116,14 @@ function chartData(
           ? Number(raw)
           : Number.NaN;
     if (!Number.isFinite(number)) {
-      return warnChart(
+      return skipWithWarning(
         context,
         DiagnosticCode.SLACK_CHART_INVALID_DATA,
         `Chart "${context.componentId}" has a value for "${label}" that isn't a number. Use a number such as 70.`,
       );
     }
     if ((type === ChartType.PIE || type === ChartType.DONUT) && number < 0) {
-      return warnChart(
+      return skipWithWarning(
         context,
         DiagnosticCode.SLACK_CHART_INVALID_DATA,
         `Chart "${context.componentId}" has a negative value for "${label}". Pie and donut slices must be zero or more.`,
@@ -131,32 +132,11 @@ function chartData(
     points.push({label, value: number});
   }
   if (points.every(point => point.value === 0)) {
-    return warnChart(
+    return skipWithWarning(
       context,
       DiagnosticCode.SLACK_CHART_EMPTY,
       `Chart "${context.componentId}" has only zero values, so there is nothing to draw. Give at least one value that isn't zero.`,
     );
   }
   return points;
-}
-
-function warnChart(
-  context: LowerComponentContext,
-  code: DiagnosticCode,
-  message: string,
-): undefined {
-  context.diagnostics.push({
-    level: DiagnosticLevel.WARNING,
-    code,
-    message,
-    componentId: context.componentId,
-  });
-  return undefined;
-}
-
-function optionalText(value: unknown): string | undefined {
-  if (typeof value === 'number') {
-    return String(value);
-  }
-  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }
