@@ -16,7 +16,13 @@
 
 import {type ChartProps, type ChartType as ChannelChartType} from '@copilotkit/channels-ui';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {DRAWN_IMAGE_FONT_FAMILY, DrawnImageColor, clipText} from './drawn-image-style';
+import {
+  DRAWN_IMAGE_FONT_FAMILY,
+  DrawnImageColor,
+  charactersThatFit,
+  clipText,
+  round,
+} from './drawn-image-style';
 
 /**
  * Chart kinds the Slack catalog accepts: Channels UI's `ChartType`, as an enum. The checks
@@ -226,7 +232,7 @@ function VerticalChart({chart, top}: ChartAreaProps) {
     plot.y + plot.height - ((value - domain.min) / (domain.max - domain.min)) * plot.height;
   const band = plot.width / chart.data.length;
   const centerX = (index: number) => plot.x + band * index + band / 2;
-  const labelLength = Math.max(4, Math.floor(band / 7));
+  const labelLength = Math.max(4, charactersThatFit(band, 12));
   const zeroY = valueY(0);
 
   return (
@@ -484,8 +490,4 @@ function niceStep(rough: number): number {
 
 function paletteColor(index: number): string {
   return PALETTE[index % PALETTE.length];
-}
-
-function round(value: number): number {
-  return Math.round(value * 100) / 100;
 }
