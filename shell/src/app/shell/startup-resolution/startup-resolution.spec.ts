@@ -1406,6 +1406,35 @@ describe('StartupResolution', () => {
       expect(stateService.selectedRendererId()).toBe('angular-dev');
     });
 
+    describe('with Composer served from a sub-path', () => {
+      let base: HTMLBaseElement;
+
+      beforeEach(() => {
+        base = document.createElement('base');
+        base.href = `${globalThis.location.origin}/composer/pr/7/`;
+        document.head.appendChild(base);
+      });
+
+      afterEach(() => {
+        base.remove();
+      });
+
+      it('1c1. selects the configured renderer a page-relative ?renderer= link names', async () => {
+        mockFetchConfig({
+          renderers: {
+            default: {rendererUrl: 'https://default.example.com'},
+            bundled: {rendererUrl: 'samples/bundled-renderer/'},
+          },
+        });
+        vi.spyOn(service, 'getWindowSearch').mockReturnValue('?renderer=samples/bundled-renderer/');
+
+        const url = await service.resolveRenderer();
+
+        expect(url).toBe(`${globalThis.location.origin}/composer/pr/7/samples/bundled-renderer/`);
+        expect(stateService.selectedRendererId()).toBe('bundled');
+      });
+    });
+
     it('1d. matches custom renderer ID when query contains matching custom renderer URL', async () => {
       mockFetchConfig({
         renderers: {

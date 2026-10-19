@@ -151,7 +151,11 @@ export class StartupResolution {
     if (!rawParam) {
       return;
     }
-    const queryRendererUrl = QueryParser.parseRendererUrl(rawParam, this.logger);
+    const queryRendererUrl = QueryParser.parseRendererUrl(
+      rawParam,
+      this.environmentContext,
+      this.logger,
+    );
     const queryRendererId = QueryParser.parseRendererId(rawParam);
     if (queryRendererUrl || queryRendererId) {
       await this.resolveRenderer();
@@ -319,8 +323,8 @@ export class StartupResolution {
 
     // Tier 1 & 2: renderer param from hash or query (subject to origin allowlist check)
     const queryRendererUrl =
-      QueryParser.parseRendererUrl(this.getWindowHash(), this.logger) ||
-      QueryParser.parseRendererUrl(this.getWindowSearch(), this.logger);
+      QueryParser.parseRendererUrl(this.getWindowHash(), this.environmentContext, this.logger) ||
+      QueryParser.parseRendererUrl(this.getWindowSearch(), this.environmentContext, this.logger);
     if (queryRendererUrl) {
       const isAllowed = await this.isOriginAllowed(queryRendererUrl);
       if (isAllowed) {

@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+import {TestBed} from '@angular/core/testing';
 import {QueryParser} from './query-parser';
+import {EnvironmentContextService} from '../startup-resolution/state/environment-context.service';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 
 describe('QueryParser', () => {
@@ -24,8 +26,12 @@ describe('QueryParser', () => {
     info: ReturnType<typeof vi.fn>;
     debug: ReturnType<typeof vi.fn>;
   };
+  let environmentContext: EnvironmentContextService;
+  /** A `<base>` element a test adds to serve Composer from a sub-path. */
+  let base: HTMLBaseElement | undefined;
 
   beforeEach(() => {
+    environmentContext = TestBed.inject(EnvironmentContextService);
     mockLogger = {
       warn: vi.fn(),
       error: vi.fn(),
@@ -35,33 +41,50 @@ describe('QueryParser', () => {
   });
 
   afterEach(() => {
+    base?.remove();
+    base = undefined;
     vi.restoreAllMocks();
   });
 
   it('extracts the first valid renderer URI string', () => {
-    const url = QueryParser.parseRendererUrl('?renderer=http://localhost:3000', mockLogger);
+    const url = QueryParser.parseRendererUrl(
+      '?renderer=http://localhost:3000',
+      environmentContext,
+      mockLogger,
+    );
     expect(url).toBe('http://localhost:3000/');
   });
 
   it('extracts renderer URI string from URL hash fragment', () => {
-    const url = QueryParser.parseRendererUrl('#renderer=http://localhost:3000', mockLogger);
+    const url = QueryParser.parseRendererUrl(
+      '#renderer=http://localhost:3000',
+      environmentContext,
+      mockLogger,
+    );
     expect(url).toBe('http://localhost:3000/');
   });
 
   it('evaluates the first valid instance when multiple renderer parameters exist', () => {
     const url = QueryParser.parseRendererUrl(
       '?renderer=http://first:3000&renderer=http://second:3000',
+      environmentContext,
       mockLogger,
     );
     expect(url).toBe('http://first:3000/');
   });
 
   it('strips malformed parameter strings and logs a warning', () => {
-    const url = QueryParser.parseRendererUrl('?renderer=not-a-url', mockLogger);
+    const url = QueryParser.parseRendererUrl('?renderer=http://', environmentContext, mockLogger);
     expect(url).toBeNull();
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      "Malformed renderer parameter string encountered: 'not-a-url'. Stripping invalid URI.",
+      "Malformed renderer parameter string encountered: 'http://'. Stripping invalid URI.",
     );
+  });
+
+  it('ignores a renderer parameter that is not an HTTP(S) URL', () => {
+    expect(
+      QueryParser.parseRendererUrl('?renderer=javascript:alert(1)', environmentContext, mockLogger),
+    ).toBeNull();
   });
 
   it('resolves relative renderer paths starting with "/" against window.location.origin', () => {
@@ -69,24 +92,28 @@ describe('QueryParser', () => {
     const expectedPrefix = globalThis.location?.origin || 'http://localhost';
     const url = QueryParser.parseRendererUrl(
       '?renderer=/samples/ng-basic-catalog/index.html',
+      environmentContext,
       mockLogger,
     );
     expect(url).toBe(`${expectedPrefix}/samples/ng-basic-catalog/index.html`);
   });
 
-  it('rejects relative renderer paths that do not start with "/"', () => {
+  it('resolves a page-relative renderer path under the path Composer is served from', () => {
+    base = document.createElement('base');
+    base.href = `${globalThis.location.origin}/composer/pr/7/`;
+    document.head.appendChild(base);
+
     const url = QueryParser.parseRendererUrl(
-      '?renderer=samples/ng-basic-catalog/index.html',
+      '?renderer=samples/ng-basic-catalog/',
+      environmentContext,
       mockLogger,
     );
-    expect(url).toBeNull();
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      "Malformed renderer parameter string encountered: 'samples/ng-basic-catalog/index.html'. Stripping invalid URI.",
-    );
+
+    expect(url).toBe(`${globalThis.location.origin}/composer/pr/7/samples/ng-basic-catalog/`);
   });
 
   it('returns null when no renderer parameter exists', () => {
-    expect(QueryParser.parseRendererUrl('', mockLogger)).toBeNull();
+    expect(QueryParser.parseRendererUrl('', environmentContext, mockLogger)).toBeNull();
   });
 
   describe('parseRendererId', () => {
