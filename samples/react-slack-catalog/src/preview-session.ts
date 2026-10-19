@@ -230,6 +230,7 @@ export function createSlackPreviewSession(
           revision,
           status: PreviewStatus.ERROR,
           blocks: [],
+          exportBlocks: [],
           diagnostics: [
             {
               level: DiagnosticLevel.ERROR,
