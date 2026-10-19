@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
+import {type ChartProps, type ChartType as ChannelChartType} from '@copilotkit/channels-ui';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {DRAWN_IMAGE_FONT_FAMILY, DrawnImageColor, clipText} from './drawn-image-style';
 
-/** Chart kinds the Slack catalog accepts. The values match Channels UI's `ChartProps.type`. */
+/**
+ * Chart kinds the Slack catalog accepts: Channels UI's `ChartType`, as an enum. The checks
+ * below fail the build if the two lists drift apart.
+ */
 export enum ChartType {
   VERTICAL_BAR = 'verticalBar',
   HORIZONTAL_BAR = 'horizontalBar',
@@ -26,24 +30,21 @@ export enum ChartType {
   DONUT = 'donut',
 }
 
-/** One labeled value of a chart: a bar, a point on a line, or a slice of a pie or donut. */
-export interface ChartPoint {
-  /** The category, slice name, or x value. */
-  readonly label: string;
-  readonly value: number;
-}
+/** Compiles only when `A` is assignable to `B`, so a check written with it fails the build. */
+type AssignableTo<A extends B, B> = A;
 
-/** Everything needed to draw one chart. */
-export interface ChartImageProps {
+// Fail the build if `ChartType` and Channels UI's `ChartType` stop listing the same chart
+// kinds. `${ChartType}` is the union of the enum's string values. Checking both directions
+// catches a kind added to either list.
+type _EnumChartTypesInChannelsUi = AssignableTo<`${ChartType}`, ChannelChartType>;
+type _ChannelsUiChartTypesInEnum = AssignableTo<ChannelChartType, `${ChartType}`>;
+
+/**
+ * Everything needed to draw one chart: Channels UI's `ChartProps`, with the chart type
+ * required. `data` holds the values in the order they are drawn.
+ */
+export interface ChartImageProps extends Readonly<ChartProps> {
   readonly type: ChartType;
-  /** Drawn above the chart. */
-  readonly title?: string;
-  /** Drawn under bar and line charts; pie and donut charts ignore it. */
-  readonly xAxisTitle?: string;
-  /** Drawn beside bar and line charts; pie and donut charts ignore it. */
-  readonly yAxisTitle?: string;
-  /** The values, in the order they are drawn. */
-  readonly data: readonly ChartPoint[];
 }
 
 interface Plot {
