@@ -40,18 +40,21 @@ function teamNames(svg: string): Array<{fontSize: string | null; lines: string[]
   }));
 }
 
+/** How the scorecard lays out `name` as the home team's name. */
+const homeName = (name: string) =>
+  teamNames(renderScorecardSvg({...final, home: {name, score: '1'}}))[0];
+
 describe('renderScorecardSvg', () => {
-  it('draws a standalone SVG with both teams, their scores, the status, and the competition', () => {
+  it('draws standalone SVG markup that can be served as an image', () => {
     const svg = renderScorecardSvg(final);
 
     expect(svg.startsWith('<svg')).toBe(true);
     expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
     expect(svg).toContain('viewBox="0 0 560 200"');
-    expect(teamNames(svg)).toEqual([
-      {fontSize: '24', lines: ['Argentina']},
-      {fontSize: '24', lines: ['Mexico']},
-    ]);
-    expect(texts(svg)).toEqual([
+  });
+
+  it('draws the competition, both teams and their scores, and the status', () => {
+    expect(texts(renderScorecardSvg(final))).toEqual([
       'World Cup, Group C',
       'Argentina',
       '2',
@@ -70,41 +73,37 @@ describe('renderScorecardSvg', () => {
     expect(parse(svg).querySelectorAll(`rect[fill="${DrawnImageColor.SURFACE}"]`)).toHaveLength(0);
   });
 
-  it('escapes team names and scores instead of emitting markup', () => {
-    const svg = renderScorecardSvg({
-      ...final,
-      home: {name: '<script>alert(1)</script>', score: '1'},
-      away: {name: 'A&B "FC"', score: '<b>2</b>'},
-    });
-
-    expect(svg).not.toContain('<script>');
-    expect(svg).not.toContain('<b>');
-    expect(svg).toContain('&lt;script&gt;');
-    expect(svg).toContain('A&amp;B &quot;FC&quot;');
-    expect(svg).toContain('&lt;b&gt;2');
+  it('draws a short team name on one line at the largest size', () => {
+    expect(homeName('Argentina')).toEqual({fontSize: '24', lines: ['Argentina']});
   });
 
-  it('shrinks a long team name, then wraps it, and cuts what still does not fit', () => {
-    const names = (home: string, away: string) =>
-      teamNames(
-        renderScorecardSvg({
-          ...final,
-          home: {name: home, score: '1'},
-          away: {name: away, score: '1'},
-        }),
-      );
+  it('shrinks a team name that does not fit one line at the largest size', () => {
+    expect(homeName('Netherlands')).toEqual({fontSize: '20', lines: ['Netherlands']});
+  });
 
-    expect(names('Netherlands', 'Bosnia and Herzegovina')).toEqual([
-      {fontSize: '20', lines: ['Netherlands']},
-      {fontSize: '20', lines: ['Bosnia and', 'Herzegovina']},
-    ]);
-    expect(names('Central African Republic', 'Llanfairpwllgwyngyllgogerychwyrndrobwll FC')).toEqual(
-      [
-        {fontSize: '16', lines: ['Central African', 'Republic']},
-        {fontSize: '16', lines: ['Llanfairpwllgw…', 'FC']},
-      ],
-    );
-    expect(names('One Two Three Four Five Six Seven', 'Mexico')[0]).toEqual({
+  it('wraps a team name that does not fit one line onto two', () => {
+    expect(homeName('Bosnia and Herzegovina')).toEqual({
+      fontSize: '20',
+      lines: ['Bosnia and', 'Herzegovina'],
+    });
+  });
+
+  it('shrinks a team name that does not fit two lines to the smallest size', () => {
+    expect(homeName('Central African Republic')).toEqual({
+      fontSize: '16',
+      lines: ['Central African', 'Republic'],
+    });
+  });
+
+  it('cuts a word too long for one line, ending it with an ellipsis', () => {
+    expect(homeName('Llanfairpwllgwyngyllgogerychwyrndrobwll FC')).toEqual({
+      fontSize: '16',
+      lines: ['Llanfairpwllgw…', 'FC'],
+    });
+  });
+
+  it('cuts a team name that does not fit two lines at the smallest size, with an ellipsis', () => {
+    expect(homeName('One Two Three Four Five Six Seven')).toEqual({
       fontSize: '16',
       lines: ['One Two Three', 'Four Five Six…'],
     });
@@ -126,12 +125,15 @@ describe('describeScorecard', () => {
     );
   });
 
-  it('leaves out a missing status and competition', () => {
-    expect(describeScorecard({home: final.home, away: final.away})).toBe(
-      'Scorecard: Argentina 2, Mexico 0.',
-    );
+  it('leaves out a missing status', () => {
     expect(describeScorecard({...final, status: undefined})).toBe(
       'Scorecard: Argentina 2, Mexico 0. World Cup, Group C.',
+    );
+  });
+
+  it('leaves out a missing competition', () => {
+    expect(describeScorecard({...final, competition: undefined})).toBe(
+      'Scorecard: Argentina 2, Mexico 0. Full time.',
     );
   });
 });

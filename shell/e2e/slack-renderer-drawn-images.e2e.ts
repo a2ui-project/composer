@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test, type Page} from '@playwright/test';
 import {type A2uiMessage} from '@a2ui/web_core/v0_9';
 import {
   collectUnexpectedErrors,
@@ -89,14 +89,11 @@ const MATCH_REPORT: A2uiMessage[] = [
 ];
 
 test.describe('Slack renderer drawn images in Composer', () => {
-  test('shows a scorecard and a chart as images among native blocks and exports them as uploaded files', async ({
+  test('shows a scorecard and a chart as images among native blocks, in message order', async ({
     page,
   }) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
-
-    await openComposerWithSlackRenderer(page);
-    await waitForMonacoEditor(page);
-    await replaceMonacoJson(page, JSON.stringify(MATCH_REPORT, null, 2));
+    await openMatchReport(page);
 
     const preview = slackPreviewSurface(page);
     const scorecard = preview.getByRole('img', {name: SCORECARD_ALT});
@@ -121,12 +118,30 @@ test.describe('Slack renderer drawn images in Composer', () => {
       );
     }
 
+    expect(await getJsonValidationProblems(page)).toEqual([]);
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('notes for each drawn image that it is uploaded when the message is sent', async ({
+    page,
+  }) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openMatchReport(page);
+
     await expect(
       slackPreviewFrame(page)
         .getByRole('list', {name: 'Preview diagnostics'})
         .getByRole('listitem')
         .filter({hasText: 'SLACK_IMAGE_RENDERED_AT_SEND'}),
     ).toHaveCount(2);
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('exports the scorecard and the chart as uploaded files between native blocks', async ({
+    page,
+  }) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openMatchReport(page);
 
     const blockKit = await getBlockKitJson(page);
     expect(blockKit).toMatchObject({
@@ -139,8 +154,14 @@ test.describe('Slack renderer drawn images in Composer', () => {
       ],
     });
     expect(JSON.stringify(blockKit)).not.toContain('blob:');
-
-    expect(await getJsonValidationProblems(page)).toEqual([]);
     expect(unexpectedErrors).toEqual([]);
   });
 });
+
+/** Opens Composer on the Slack renderer and pastes the match report into the editor. */
+async function openMatchReport(page: Page): Promise<void> {
+  await openComposerWithSlackRenderer(page);
+  await waitForMonacoEditor(page);
+  await replaceMonacoJson(page, JSON.stringify(MATCH_REPORT, null, 2));
+  await expect(slackPreviewSurface(page).getByRole('img', {name: SCORECARD_ALT})).toBeVisible();
+}
