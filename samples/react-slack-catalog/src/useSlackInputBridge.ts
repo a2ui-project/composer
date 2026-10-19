@@ -21,17 +21,20 @@ const INPUT_WRAPPER =
   '.slack_blocks_to_jsx__plain_text_input_element, .slack_blocks_to_jsx__date_picker_element';
 
 /**
- * The hint slack-blocks-to-jsx 1.1.2 prints under every plain-text input,
- * matched by its exact English text because the library gives it no class or
+ * The hint slack-blocks-to-jsx 1.1.2 prints under every plain-text input
+ * (https://github.com/themashcodee/slack-blocks-to-jsx/issues/121), matched
+ * by its exact English text because the library gives it no class or
  * attribute. If a later version changes the wording, the hint simply shows
  * again under our inputs; nothing else breaks.
  */
 const ENTER_TO_SUBMIT_HINT = "↵ Please 'enter' to submit";
 
 /**
- * Connects the Slack inputs drawn by the Tightknit preview to A2UI data bindings.
+ * Connects the Slack inputs drawn by the Tightknit renderer (the `Renderer`
+ * component of @tightknitai/storybook-addon-slack-block-kit) to A2UI data
+ * bindings.
  *
- * The preview draws inputs with slack-blocks-to-jsx 1.1.2
+ * The renderer draws inputs with slack-blocks-to-jsx 1.1.2
  * (github.com/themashcodee/slack-blocks-to-jsx), which keeps what the user types
  * in its own React state and offers no change callback. So this listens for
  * `change` events on the preview's section and sends each value to
@@ -75,26 +78,30 @@ export function useSlackInputBridge(
       if (!block || !control) {
         continue;
       }
-      // The library labels every text input "Select an item"; screen readers
-      // should hear the input block's label instead.
+      // slack-blocks-to-jsx 1.1.2 names every text input "Select an item" and
+      // every date picker "Select a date"; screen readers should hear the input
+      // block's label instead.
       control.setAttribute('aria-label', block.label.text);
-      // The library makes the wrapper focusable too, which puts an extra, unlabeled
-      // stop before each field when tabbing through the form.
+      // slack-blocks-to-jsx 1.1.2 makes a text input's wrapper focusable too,
+      // which puts an extra, unlabeled stop before each field when tabbing
+      // through the form.
       wrapper.removeAttribute('tabindex');
       if (block.element.type === 'plain_text_input' && control instanceof HTMLTextAreaElement) {
-        // The library ignores `multiline` and draws every text input as a 100px
-        // textarea, so a shortText field would look like a longText one. Size it
-        // from `multiline`, as Slack does; `onKeyDown` below stops Enter adding a
-        // line to a single-line field.
+        // slack-blocks-to-jsx 1.1.2 ignores `multiline` and draws every text input
+        // as a 100px textarea, so a shortText field would look like a longText
+        // one (https://github.com/themashcodee/slack-blocks-to-jsx/issues/121).
+        // Size it from `multiline`, as Slack does; `onKeyDown` below stops Enter
+        // adding a line to a single-line field.
         const multiline = block.element.multiline === true;
         control.rows = multiline ? 3 : 1;
         control.dataset.slackMultiline = String(multiline);
         control.style.minHeight = multiline ? '80px' : '36px';
         control.style.height = multiline ? '100px' : '36px';
         control.style.resize = multiline ? 'vertical' : 'none';
-        // The library always tells the user to press Enter to submit. These inputs
-        // save on every character (`on_character_entered`), and Enter submits
-        // nothing, so the hint is wrong here.
+        // slack-blocks-to-jsx 1.1.2 always tells the user to press Enter to
+        // submit (issue 121 above). These inputs save on every character
+        // (`on_character_entered`), and Enter submits nothing, so the hint is
+        // wrong here.
         for (const hint of wrapper.closest('.slack_blocks_to_jsx__input')?.querySelectorAll('p') ??
           []) {
           if (hint.textContent === ENTER_TO_SUBMIT_HINT) {
@@ -103,8 +110,12 @@ export function useSlackInputBridge(
         }
       }
     }
-    // Shared bindings and rejected edits need an exceptional remount of the
-    // upstream controls. Keep the user's cursor in the field they were editing.
+    // Typing normally leaves the library's controls in place, but two kinds of
+    // edit change `resetKey`, and SlackPreviewRenderer then remounts all the
+    // controls: an edit that also changes another input, because both are bound
+    // to the same data path, and an edit the session rejects. The remount
+    // replaces the field the user was typing in, so put their cursor back in
+    // its replacement.
     const focus = pendingFocus.current;
     pendingFocus.current = null;
     if (focus && !focus.control.isConnected && document.activeElement === document.body) {
