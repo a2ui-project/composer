@@ -205,17 +205,14 @@ function formatChartValue(value: number): string {
 }
 
 /**
- * Describes the chart in words, e.g. "Pie chart, Possession: Argentina 70, Mexico 30".
- *
- * @param maxLength The most characters the description may have, such as Slack's alt
- *     text limit.
+ * Describes the chart in words for its alt text, e.g. "Pie chart, Possession: Argentina 70,
+ * Mexico 30".
  */
-export function chartAltText(chart: ChartImageProps, maxLength: number): string {
+export function describeChart(chart: ChartImageProps): string {
   const points = chart.data
     .map(point => `${point.label} ${formatChartValue(point.value)}`)
     .join(', ');
-  const text = `${TYPE_NAMES[chart.type]}${chart.title ? `, ${chart.title}` : ''}: ${points}`;
-  return clipText(text, maxLength);
+  return `${TYPE_NAMES[chart.type]}${chart.title ? `, ${chart.title}` : ''}: ${points}`;
 }
 
 /** Draws the chart as standalone SVG markup that can be served as an image. */
