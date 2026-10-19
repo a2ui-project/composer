@@ -34,13 +34,9 @@ import {waitForMonacoEditor} from './helpers';
 const REACT_RENDERER_URL = 'http://localhost:3458';
 
 test.describe('Slack renderer recovery in Composer', () => {
-  test('clears old output while waiting for a missing child and recovers when it arrives', async ({
-    page,
-  }) => {
+  test('clears old output while waiting for a missing child', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
-
-    await openComposerWithSlackRenderer(page);
-    await waitForMonacoEditor(page);
+    await openSlackEditor(page);
 
     await replaceMonacoJson(page, textPayload('waiting-recovery', 'Stable baseline'));
     await expect(slackPreviewSurface(page).getByText('Stable baseline')).toBeVisible();
@@ -54,6 +50,16 @@ test.describe('Slack renderer recovery in Composer', () => {
     await expect(blockKitDetails(page)).toHaveCount(0);
     await expect(previewDiagnostics(page)).toContainText('A2UI_WAITING_FOR_COMPONENT');
     await expect(previewDiagnostics(page)).toContainText('late-copy');
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('renders the waiting component once its missing child arrives', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackEditor(page);
+    await replaceMonacoJson(page, missingChildPayload());
+    await expect(slackPreviewFrame(page).getByRole('status')).toContainText(
+      'Waiting for Slack preview data.',
+    );
 
     await replaceMonacoJson(page, recoveredChildPayload());
 
@@ -66,13 +72,9 @@ test.describe('Slack renderer recovery in Composer', () => {
     expect(unexpectedErrors).toEqual([]);
   });
 
-  test('clears old output on unsupported component errors and recovers on valid replacement', async ({
-    page,
-  }) => {
+  test('clears old output when a component is unsupported', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
-
-    await openComposerWithSlackRenderer(page);
-    await waitForMonacoEditor(page);
+    await openSlackEditor(page);
 
     await replaceMonacoJson(page, buttonPayload('unsupported-recovery', 'Old action', 'old_event'));
     await expect(slackPreviewFrame(page).getByRole('button', {name: 'Old action'})).toBeVisible();
@@ -86,6 +88,16 @@ test.describe('Slack renderer recovery in Composer', () => {
     await expect(blockKitDetails(page)).toHaveCount(0);
     await expect(previewDiagnostics(page)).toContainText('A2UI_UNSUPPORTED_COMPONENT');
     await expect(previewDiagnostics(page)).toContainText('root');
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('recovers from an unsupported component when it is replaced', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackEditor(page);
+    await replaceMonacoJson(page, unsupportedComponentPayload());
+    await expect(slackPreviewFrame(page).getByRole('alert')).toContainText(
+      'Slack preview could not render.',
+    );
 
     await replaceMonacoJson(page, textPayload('unsupported-recovery', 'Recovered replacement'));
 
@@ -96,37 +108,44 @@ test.describe('Slack renderer recovery in Composer', () => {
     expect(unexpectedErrors).toEqual([]);
   });
 
-  test('recovers after delete and recreate, then survives switching renderers away and back', async ({
-    page,
-  }) => {
+  test('shows the empty preview when the surface is deleted', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
-
-    await openComposerWithSlackRenderer(page);
-    await waitForMonacoEditor(page);
+    await openSlackEditor(page);
 
     await replaceMonacoJson(page, textPayload('delete-recreate', 'Delete me'));
     await expect(slackPreviewSurface(page).getByText('Delete me')).toBeVisible();
 
-    await replaceMonacoJson(
-      page,
-      formatMessages([
-        {
-          version: 'v0.9',
-          deleteSurface: {
-            surfaceId: 'delete-recreate',
-          },
-        },
-      ]),
-    );
+    await replaceMonacoJson(page, deleteSurfacePayload('delete-recreate'));
 
     await expect(slackPreviewFrame(page).getByRole('status')).toContainText(
       'Your Slack preview starts here',
     );
     await expect(slackPreviewSurface(page).getByText('Delete me')).toHaveCount(0);
     await expect(blockKitDetails(page)).toHaveCount(0);
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('renders a surface recreated after it was deleted', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackEditor(page);
+    await replaceMonacoJson(page, textPayload('delete-recreate', 'Delete me'));
+    await expect(slackPreviewSurface(page).getByText('Delete me')).toBeVisible();
+    await replaceMonacoJson(page, deleteSurfacePayload('delete-recreate'));
+    await expect(slackPreviewFrame(page).getByRole('status')).toContainText(
+      'Your Slack preview starts here',
+    );
 
     await replaceMonacoJson(page, textPayload('delete-recreate', 'Recreated surface'));
+
     await expect(slackPreviewSurface(page).getByText('Recreated surface')).toBeVisible();
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('renders Slack content after switching to another renderer and back', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackEditor(page);
+    await replaceMonacoJson(page, textPayload('switch-away', 'Before switching away'));
+    await expect(slackPreviewSurface(page).getByText('Before switching away')).toBeVisible();
 
     await allowRendererOrigin(page, REACT_RENDERER_URL);
     await page.goto(`/?renderer=${REACT_RENDERER_URL}`);
@@ -144,9 +163,7 @@ test.describe('Slack renderer recovery in Composer', () => {
 
   test('keeps stale action IDs inert after a replacement revision', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
-
-    await openComposerWithSlackRenderer(page);
-    await waitForMonacoEditor(page);
+    await openSlackEditor(page);
 
     await replaceMonacoJson(
       page,
@@ -198,6 +215,12 @@ test.describe('Slack renderer recovery in Composer', () => {
   });
 });
 
+/** Opens Composer on the Slack renderer with the JSON editor ready. */
+async function openSlackEditor(page: Page): Promise<void> {
+  await openComposerWithSlackRenderer(page);
+  await waitForMonacoEditor(page);
+}
+
 function textPayload(surfaceId: string, text: string): string {
   return formatMessages([
     createSurface(surfaceId),
@@ -208,6 +231,17 @@ function textPayload(surfaceId: string, text: string): string {
         text,
       },
     ]),
+  ]);
+}
+
+function deleteSurfacePayload(surfaceId: string): string {
+  return formatMessages([
+    {
+      version: 'v0.9',
+      deleteSurface: {
+        surfaceId,
+      },
+    },
   ]);
 }
 

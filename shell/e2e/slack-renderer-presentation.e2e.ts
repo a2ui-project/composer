@@ -41,11 +41,13 @@ const COPY_STATUS = {
 } as const;
 
 test.describe('Slack renderer presentation in Composer', () => {
-  test('updates theme, fits a 360px embed, and exposes copy fallback without browser errors', async ({
-    page,
-  }) => {
-    const unexpectedErrors = collectUnexpectedErrors(page);
+  // These tests look at the preview the way a 360px Slack embed shows it.
+  test.beforeEach(async ({page}) => {
     await page.setViewportSize(SLACK_360_EMBED_VIEWPORT);
+  });
+
+  test('follows the Composer theme', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
     await loadDataBoundActionExample(page);
 
     await expect(slackPreviewFrame(page).locator('.slack-preview-shell')).toHaveAttribute(
@@ -67,9 +69,22 @@ test.describe('Slack renderer presentation in Composer', () => {
       'light',
     );
 
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('fits a 360px embed without horizontal overflow', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await loadDataBoundActionExample(page);
+
     await expectEmbeddedPreviewWidth(page);
     expect(await collectOverflowDiagnostics(page)).toEqual([]);
 
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('copies the generated Block Kit to the clipboard', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await loadDataBoundActionExample(page);
     await openGeneratedBlockKit(page);
     await expect(
       slackPreviewFrame(page).getByRole('button', {name: 'Copy Block Kit'}),
@@ -81,6 +96,14 @@ test.describe('Slack renderer presentation in Composer', () => {
     await stubClipboardSuccess(page);
     expect(await clickGeneratedBlockKitCopy(page, [COPY_STATUS.copied])).toBe(COPY_STATUS.copied);
     await expect.poll(async () => getLastCopiedBlockKitJson(page)).toContain('Ready for review');
+
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('asks the user to copy the Block Kit when the clipboard is unavailable', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await loadDataBoundActionExample(page);
+    await openGeneratedBlockKit(page);
 
     await stubClipboardFailure(page);
     expect(await clickGeneratedBlockKitCopy(page, [COPY_STATUS.fallback])).toBe(

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 import type {RenderA2uiItem} from 'a2ui-bridge';
 import {
   FAKE_GEMINI_API_KEY,
@@ -40,6 +40,43 @@ const GENERATED_STATUS = 'Schedule approved for launch';
 const REFINED_STATUS = 'Schedule approved for launch with legal copied';
 const GENERATED_BUTTON_LABEL = 'Approve launch';
 const GENERATED_ACTION_ID_PATTERN = /^a2ui-\d+-1$/;
+/** A prompt asking the assistant for a Slack approval message. */
+const APPROVAL_PROMPT = 'Create a Slack approval message with one action button.';
+
+/** The assistant's World Cup score table, from which the table tests start. */
+const TABLE_MESSAGES: RenderA2uiItem[] = [
+  {version: 'v0.9', createSurface: {surfaceId: 'scores', catalogId: SLACK_CATALOG_ID}},
+  {
+    version: 'v0.9',
+    updateDataModel: {surfaceId: 'scores', path: '/', value: {finalScore: '3–3 (4–2 pens)'}},
+  },
+  {
+    version: 'v0.9',
+    updateComponents: {
+      surfaceId: 'scores',
+      components: [
+        {id: 'root', component: 'Column', children: ['title', 'scores', 'note']},
+        {id: 'title', component: 'Text', variant: 'h1', text: '🏆 World Cup · Classic matches'},
+        {
+          id: 'scores',
+          component: 'Table',
+          columns: [{header: 'Team A'}, {header: 'Score', align: 'center'}, {header: 'Team B'}],
+          rows: [
+            ['🇦🇷 Argentina', {path: '/finalScore'}, '🇫🇷 France'],
+            ['🇭🇷 Croatia', '2–1', '🇲🇦 Morocco'],
+            ['🇫🇷 France', '2–0', '🇲🇦 Morocco'],
+          ],
+        },
+        {
+          id: 'note',
+          component: 'Text',
+          variant: 'caption',
+          text: 'Selected matches from Qatar 2022 · Historical example',
+        },
+      ],
+    },
+  },
+];
 
 test.describe('Slack assistant browser journey', () => {
   test.beforeEach(async ({page}) => {
@@ -71,54 +108,25 @@ test.describe('Slack assistant browser journey', () => {
     expect(await emptyState.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(
       true,
     );
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('applies the dark theme to the empty Slack preview', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openComposerWithSlackRenderer(page, {forceAuthMode: '3p'});
+    const frame = slackPreviewFrame(page);
+    await expect(
+      frame.getByRole('status').getByRole('heading', {name: 'Your Slack preview starts here'}),
+    ).toBeVisible();
     await page.getByRole('button', {name: 'Switch to dark theme'}).click();
     await expect(frame.locator('main.slack-preview-shell')).toHaveAttribute('data-theme', 'dark');
     expect(unexpectedErrors).toEqual([]);
   });
 
-  test('generates and edits a Slack score table with aligned columns', async ({page}) => {
+  test('generates a Slack score table with aligned columns', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
-    await openComposerWithSlackRenderer(page, {rendererId: 'slack', forceAuthMode: '3p'});
-    await addFakeGeminiApiKeyThroughSettings(page);
-    await page.getByRole('link', {name: 'Composer Workspace'}).click();
-    const tableMessages: RenderA2uiItem[] = [
-      {version: 'v0.9', createSurface: {surfaceId: 'scores', catalogId: SLACK_CATALOG_ID}},
-      {
-        version: 'v0.9',
-        updateDataModel: {surfaceId: 'scores', path: '/', value: {finalScore: '3–3 (4–2 pens)'}},
-      },
-      {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: 'scores',
-          components: [
-            {id: 'root', component: 'Column', children: ['title', 'scores', 'note']},
-            {id: 'title', component: 'Text', variant: 'h1', text: '🏆 World Cup · Classic matches'},
-            {
-              id: 'scores',
-              component: 'Table',
-              columns: [{header: 'Team A'}, {header: 'Score', align: 'center'}, {header: 'Team B'}],
-              rows: [
-                ['🇦🇷 Argentina', {path: '/finalScore'}, '🇫🇷 France'],
-                ['🇭🇷 Croatia', '2–1', '🇲🇦 Morocco'],
-                ['🇫🇷 France', '2–0', '🇲🇦 Morocco'],
-              ],
-            },
-            {
-              id: 'note',
-              component: 'Text',
-              variant: 'caption',
-              text: 'Selected matches from Qatar 2022 · Historical example',
-            },
-          ],
-        },
-      },
-    ];
-    await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(toJsonl(tableMessages))}]);
-    await submitPrompt(page, 'Build a table with World Cup scores.');
-    const preview = slackPreviewSurface(page);
-    const table = preview.getByRole('table');
-    await expect(table).toBeVisible();
+    await generateScoreTable(page);
+    const table = slackPreviewSurface(page).getByRole('table');
     await expect(
       slackPreviewFrame(page).getByRole('heading', {name: 'Your Slack preview starts here'}),
     ).toHaveCount(0);
@@ -141,10 +149,16 @@ test.describe('Slack assistant browser journey', () => {
       '🇦🇷 Argentina',
       '3–3 (4–2 pens)',
     ]);
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('scrolls a wide generated table inside a 360px embed', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await generateScoreTable(page);
     // In a 360px Slack embed the table is wider than the message, so it scrolls inside
     // its own container while the page itself still fits.
     await page.setViewportSize(SLACK_360_EMBED_VIEWPORT);
-    const tableContainer = preview.locator('.slack_blocks_to_jsx__table');
+    const tableContainer = slackPreviewSurface(page).locator('.slack_blocks_to_jsx__table');
     await expect
       .poll(() =>
         tableContainer.evaluate(element => {
@@ -159,16 +173,25 @@ test.describe('Slack assistant browser journey', () => {
         }),
       )
       .toEqual({pageFits: true, scrollable: true, lastCellVisible: true});
-    await tableContainer.evaluate(element => {
-      element.scrollLeft = 0;
-    });
-    await page.setViewportSize({width: 1920, height: 1080});
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('applies the dark theme to a generated table', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await generateScoreTable(page);
     await page.getByRole('button', {name: 'Switch to dark theme'}).click();
     await expect(slackPreviewFrame(page).locator('main.slack-preview-shell')).toHaveAttribute(
       'data-theme',
       'dark',
     );
-    await page.setViewportSize({width: 1440, height: 1000});
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('refines a generated table cell from a data model update', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await generateScoreTable(page);
+    const table = slackPreviewSurface(page).getByRole('table');
+    const cells = table.getByRole('row').nth(1).getByRole('cell');
     await setGeminiScenarios(page, [
       {
         chunks: splitTextIntoGeminiChunks(
@@ -194,15 +217,11 @@ test.describe('Slack assistant browser journey', () => {
     expect(unexpectedErrors).toEqual([]);
   });
 
-  test('changes renderer from the composer pill and from the assistant tool', async ({page}) => {
+  test('shows the Slack catalog in the system instructions', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
-    await openComposerWithSlackRenderer(page, {rendererId: 'slack', forceAuthMode: '3p'});
-    await addFakeGeminiApiKeyThroughSettings(page);
-    await page.getByRole('link', {name: 'Composer Workspace'}).click();
-    const prompt = page.getByLabel('Chat prompt');
-    await prompt.fill('Create a Slack approval message with one action button.');
-    const add = page.getByRole('button', {name: 'Add to prompt'});
-    await add.click();
+    await openSlackAssistant(page);
+    await page.getByLabel('Chat prompt').fill(APPROVAL_PROMPT);
+    await page.getByRole('button', {name: 'Add to prompt'}).click();
     await page.getByRole('menuitem', {name: /^Instructions/}).click();
     const instructions = page.getByRole('dialog', {name: 'System Instructions'});
     await expect(instructions.getByLabel('System instructions text')).toContainText(
@@ -210,6 +229,14 @@ test.describe('Slack assistant browser journey', () => {
     );
     await instructions.getByRole('button', {name: 'Close', exact: true}).click();
     await expect(instructions).toBeHidden();
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('turns including a screenshot on and off from the prompt menu', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackAssistant(page);
+    await page.getByLabel('Chat prompt').fill(APPROVAL_PROMPT);
+    const add = page.getByRole('button', {name: 'Add to prompt'});
     await add.click();
     await page.getByRole('menuitemcheckbox', {name: 'Include screenshot'}).click();
     await expect(add).toHaveAttribute('aria-description', /screenshot will be included/);
@@ -220,17 +247,22 @@ test.describe('Slack assistant browser journey', () => {
     await screenshotOption.click();
     await expect(page.getByRole('menu')).toBeHidden();
     await expect(page.locator('.submit-action-bar button')).toHaveCount(3);
-    const selector = page.getByRole('button', {
-      name: 'Choose renderer, current: Slack Block Kit Preview',
-    });
-    await expect(selector).toBeEnabled();
-    await selector.click();
-    await page.getByRole('menuitemradio', {name: 'Angular Basic (local)', exact: true}).click();
-    await expect(
-      page.getByRole('button', {name: 'Choose renderer, current: Angular Basic (local)'}),
-    ).toBeEnabled();
-    await expect(prompt).toHaveValue('Create a Slack approval message with one action button.');
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('changes renderer from the composer pill and keeps the prompt', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackAssistant(page);
+    await switchToAngularFromPill(page);
+    await expect(page.getByLabel('Chat prompt')).toHaveValue(APPROVAL_PROMPT);
     await expect(page.getByRole('button', {name: 'Send prompt'})).toBeEnabled();
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('changes renderer back to Slack from the assistant tool', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackAssistant(page);
+    await switchToAngularFromPill(page);
     await setGeminiScenarios(page, [
       {
         chunks: [
@@ -250,7 +282,7 @@ test.describe('Slack assistant browser journey', () => {
     ]);
     await page.getByRole('button', {name: 'Send prompt'}).click();
     await expect(slackPreviewSurface(page).getByText(GENERATED_STATUS)).toBeVisible();
-    await expect(selector).toBeEnabled();
+    await expect(slackRendererPill(page)).toBeEnabled();
     const requests = await getCapturedGeminiRequests(page);
     expect(requests).toHaveLength(2);
     expect(requests[0].body).toMatchObject({
@@ -259,6 +291,16 @@ test.describe('Slack assistant browser journey', () => {
     expect(JSON.stringify(requests[1].body)).toContain(SLACK_CATALOG_ID);
     expect(JSON.stringify(requests[1].body)).toContain('Create a Slack approval message');
     expect(requests[1].body).not.toHaveProperty('tools');
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('opens the renderer menu from the keyboard with the current renderer checked', async ({
+    page,
+  }) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackAssistant(page);
+    const selector = slackRendererPill(page);
+    await expect(selector).toBeEnabled();
     await selector.focus();
     await page.keyboard.press('Enter');
     await expect(
@@ -268,6 +310,14 @@ test.describe('Slack assistant browser journey', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toBeHidden();
     await expect(selector).toBeFocused();
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('opens the renderer menu in the dark theme', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackAssistant(page);
+    const selector = slackRendererPill(page);
+    await expect(selector).toBeEnabled();
     await page.getByRole('button', {name: 'Switch to dark theme'}).click();
     await expect(page.locator('body')).toHaveClass(/dark-theme/);
     await selector.click();
@@ -281,9 +331,7 @@ test.describe('Slack assistant browser journey', () => {
     expect(unexpectedErrors).toEqual([]);
   });
 
-  test('generates and refines Slack Block Kit through selected static renderer discovery', async ({
-    page,
-  }) => {
+  test('selects the built-in Slack renderer and shows it in Settings', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
     await openComposerWithSlackRenderer(page, {rendererId: 'slack', forceAuthMode: '3p'});
 
@@ -306,9 +354,18 @@ test.describe('Slack assistant browser journey', () => {
     await expect(
       slackPreviewFrame(page).getByRole('textbox', {name: 'Pick-up Location'}),
     ).toBeVisible();
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('generates Slack Block Kit with the built-in Slack renderer', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackAssistant(page);
+    await expect(
+      slackPreviewFrame(page).getByRole('textbox', {name: 'Pick-up Location'}),
+    ).toBeVisible();
 
     await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(toJsonl(generation()))}]);
-    await submitPrompt(page, 'Create a Slack approval message with one action button.');
+    await submitPrompt(page, APPROVAL_PROMPT);
 
     await expect(slackPreviewSurface(page).getByText(GENERATED_STATUS)).toBeVisible();
     await expect(
@@ -322,6 +379,15 @@ test.describe('Slack assistant browser journey', () => {
       expect.arrayContaining([expect.stringMatching(GENERATED_ACTION_ID_PATTERN)]),
     );
     await expectCapturedGeminiRequest(page, 'Slack Preview Renderer Catalog');
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('refines generated Slack Block Kit with a data model update', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackAssistant(page);
+    await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(toJsonl(generation()))}]);
+    await submitPrompt(page, APPROVAL_PROMPT);
+    await expect(slackPreviewSurface(page).getByText(GENERATED_STATUS)).toBeVisible();
 
     await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(toJsonl(refinement()))}]);
     await submitPrompt(page, 'Refine the Slack message to mention legal has copied.');
@@ -338,10 +404,44 @@ test.describe('Slack assistant browser journey', () => {
       expect.arrayContaining([expect.stringMatching(GENERATED_ACTION_ID_PATTERN)]),
     );
     await expectCapturedGeminiRequest(page, GENERATED_STATUS);
-
     expect(unexpectedErrors).toEqual([]);
   });
 });
+
+/**
+ * Opens Composer on the built-in Slack renderer with a fake Gemini key, back on the
+ * workspace, ready for a prompt.
+ */
+async function openSlackAssistant(page: Page): Promise<void> {
+  await openComposerWithSlackRenderer(page, {rendererId: 'slack', forceAuthMode: '3p'});
+  await addFakeGeminiApiKeyThroughSettings(page);
+  await page.getByRole('link', {name: 'Composer Workspace'}).click();
+}
+
+/** Has the assistant generate the World Cup score table and waits for it to render. */
+async function generateScoreTable(page: Page): Promise<void> {
+  await openSlackAssistant(page);
+  await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(toJsonl(TABLE_MESSAGES))}]);
+  await submitPrompt(page, 'Build a table with World Cup scores.');
+  await expect(slackPreviewSurface(page).getByRole('table')).toBeVisible();
+}
+
+/** The composer's renderer pill while the Slack renderer is selected. */
+function slackRendererPill(page: Page): Locator {
+  return page.getByRole('button', {name: 'Choose renderer, current: Slack Block Kit Preview'});
+}
+
+/** Types APPROVAL_PROMPT, then switches to Angular from the renderer pill. */
+async function switchToAngularFromPill(page: Page): Promise<void> {
+  await page.getByLabel('Chat prompt').fill(APPROVAL_PROMPT);
+  const selector = slackRendererPill(page);
+  await expect(selector).toBeEnabled();
+  await selector.click();
+  await page.getByRole('menuitemradio', {name: 'Angular Basic (local)', exact: true}).click();
+  await expect(
+    page.getByRole('button', {name: 'Choose renderer, current: Angular Basic (local)'}),
+  ).toBeEnabled();
+}
 
 async function addFakeGeminiApiKeyThroughSettings(page: Page): Promise<void> {
   await page.getByRole('link', {name: 'Settings'}).click();

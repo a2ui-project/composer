@@ -52,23 +52,22 @@ async function expectExampleJson(page: Page, fragments: string[]): Promise<void>
   }
 }
 
-test.describe('Slack renderer in Composer', () => {
-  test('registers the Slack catalog and renders Button, Table, and MarketSnapshot Gallery usages', async ({
-    page,
-    context,
-  }) => {
+test.describe('Slack renderer in the Components Gallery', () => {
+  test('lists the Slack catalog components', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-
-    await openComposerWithSlackRenderer(page);
-    await page.getByRole('link', {name: 'Components Gallery'}).click();
-    await page.waitForURL('**/gallery');
-    await expect(page.locator('.gallery-container')).toBeVisible();
+    await openSlackGallery(page);
 
     const navItems = page.locator('.catalog-list').getByRole('button');
     await expect(navItems).toHaveCount(EXPECTED_COMPONENTS.length);
     const componentNames = (await navItems.allTextContents()).map(text => text.trim()).sort();
     expect(componentNames).toEqual(EXPECTED_COMPONENTS);
+
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('renders the Button usage', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackGallery(page);
 
     await selectGalleryComponent(page, 'Button');
     await expectExampleJson(page, ['"component": "Button"', '"name": "acknowledge"']);
@@ -76,6 +75,17 @@ test.describe('Slack renderer in Composer', () => {
       slackPreviewSurface(page).getByText('Ready for review', {exact: true}),
     ).toBeVisible();
     await expect(slackPreviewFrame(page).getByRole('button', {name: 'Acknowledge'})).toBeVisible();
+
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('copies the Button usage as Slack catalog messages', async ({page, context}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await openSlackGallery(page);
+    await selectGalleryComponent(page, 'Button');
+    // Copy only once the Button's example is shown, or the copy is of another usage.
+    await expectExampleJson(page, ['"component": "Button"']);
 
     // At the default 720px-tall viewport the Copy button starts below the fold. On the
     // Linux CI runner, the click after scrolling it into view landed on the preview
@@ -129,6 +139,13 @@ test.describe('Slack renderer in Composer', () => {
         greeting: 'Ready for review',
       });
 
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('renders the Table usage', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackGallery(page);
+
     await selectGalleryComponent(page, 'Table');
     await expectExampleJson(page, ['"component": "Table"']);
     const scoreTable = slackPreviewSurface(page).getByRole('table');
@@ -136,6 +153,13 @@ test.describe('Slack renderer in Composer', () => {
     await expect(scoreTable.getByRole('row').nth(1).getByRole('cell')).toHaveCount(3);
     await expect(scoreTable.getByText('Argentina', {exact: true})).toBeVisible();
     await expect(scoreTable.getByText('Won on penalties', {exact: true})).toBeVisible();
+
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('renders the MarketSnapshot usage', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openSlackGallery(page);
 
     await selectGalleryComponent(page, 'MarketSnapshot');
     await expectExampleJson(page, ['"component": "MarketSnapshot"', 'Brent crude']);
@@ -147,12 +171,11 @@ test.describe('Slack renderer in Composer', () => {
 
     expect(unexpectedErrors).toEqual([]);
   });
+});
 
-  test('renders complete Slack examples from Monaco after validation debounce settles', async ({
-    page,
-  }) => {
+test.describe('Slack examples in the JSON editor', () => {
+  test('renders the data-bound action example', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
-
     await openComposerWithSlackRenderer(page);
     await waitForMonacoEditor(page);
 
@@ -163,6 +186,17 @@ test.describe('Slack renderer in Composer', () => {
     await expect(slackPreviewFrame(page).getByRole('button', {name: 'Acknowledge'})).toBeVisible();
 
     expect(await getJsonValidationProblems(page)).toEqual([]);
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('updates the data-bound example when its text is edited', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openComposerWithSlackRenderer(page);
+    await waitForMonacoEditor(page);
+    await replaceMonacoJson(page, DATA_BOUND_ACTION_JSON);
+    await expect(
+      slackPreviewSurface(page).getByText('Ready for review', {exact: true}),
+    ).toBeVisible();
 
     const updatedDataBoundJson = DATA_BOUND_ACTION_JSON.replace(
       '"Ready for review"',
@@ -174,6 +208,13 @@ test.describe('Slack renderer in Composer', () => {
     await expectBlockKitJsonToContain(page, 'Ready for detailed review');
 
     expect(await getJsonValidationProblems(page)).toEqual([]);
+    expect(unexpectedErrors).toEqual([]);
+  });
+
+  test('renders an edited market snapshot example', async ({page}) => {
+    const unexpectedErrors = collectUnexpectedErrors(page);
+    await openComposerWithSlackRenderer(page);
+    await waitForMonacoEditor(page);
 
     const updatedMarketJson = MARKET_SNAPSHOT_JSON.replace(
       '"Illustrative historical energy market snapshot"',
@@ -192,7 +233,14 @@ test.describe('Slack renderer in Composer', () => {
     await expectBlockKitJsonToContain(page, '$81.03/bbl');
 
     expect(await getJsonValidationProblems(page)).toEqual([]);
-
     expect(unexpectedErrors).toEqual([]);
   });
 });
+
+/** Opens Composer on the Slack renderer and shows the Components Gallery. */
+async function openSlackGallery(page: Page): Promise<void> {
+  await openComposerWithSlackRenderer(page);
+  await page.getByRole('link', {name: 'Components Gallery'}).click();
+  await page.waitForURL('**/gallery');
+  await expect(page.locator('.gallery-container')).toBeVisible();
+}
