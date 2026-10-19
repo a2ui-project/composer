@@ -157,6 +157,7 @@ export function lowerSurface(
           surfaceId: surface.id,
           status: PreviewStatus.WAITING,
           blocks: [],
+          exportBlocks: [],
           diagnostics: [
             {
               level: DiagnosticLevel.INFO,
@@ -189,6 +190,7 @@ export function lowerSurface(
         surfaceId: surface.id,
         status: PreviewStatus.ERROR,
         blocks: [],
+        exportBlocks: [],
         diagnostics: [diagnostic],
       },
       ...noControls,

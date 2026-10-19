@@ -22,32 +22,35 @@ import {type KnownBlock} from '@slack/types';
 import {SlackPreviewRenderer} from './SlackPreviewRenderer';
 import {PreviewStatus, type PreviewSnapshot} from './preview-snapshot';
 
+const readyBlocks = [
+  {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: '*Ready for review*',
+    },
+  },
+  {
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: 'Acknowledge',
+        },
+        action_id: 'a2ui-1-1',
+      },
+    ],
+  },
+] as KnownBlock[];
+
 const readySnapshot: PreviewSnapshot = {
   revision: 1,
   surfaceId: 'surface-1',
   status: PreviewStatus.READY,
-  blocks: [
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: '*Ready for review*',
-      },
-    },
-    {
-      type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: {
-            type: 'plain_text',
-            text: 'Acknowledge',
-          },
-          action_id: 'a2ui-1-1',
-        },
-      ],
-    },
-  ] as KnownBlock[],
+  blocks: readyBlocks,
+  exportBlocks: readyBlocks,
   diagnostics: [],
 };
 

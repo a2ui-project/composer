@@ -18,7 +18,7 @@ import {type A2uiMessage, type UpdateComponentsMessage} from '@a2ui/web_core/v0_
 import {afterEach, beforeEach, describe, expect, it, vi, type MockInstance} from 'vitest';
 import {SLACK_CATALOG_ID} from './catalog';
 import {createSlackPreviewSession} from './preview-session';
-import {DiagnosticCode, DiagnosticLevel, PreviewStatus, blocksForExport} from './preview-snapshot';
+import {DiagnosticCode, DiagnosticLevel, PreviewStatus} from './preview-snapshot';
 
 const SURFACE = 'charts';
 
@@ -88,7 +88,7 @@ describe('Slack charts', () => {
       },
     ]);
     expect((await drawnSvgs())[0]).toContain('Argentina · 70 (70%)');
-    expect(blocksForExport(snapshot)).toEqual([
+    expect(snapshot.exportBlocks).toEqual([
       snapshot.blocks[0],
       {
         type: 'image',
@@ -244,7 +244,7 @@ describe('Slack charts', () => {
     const session = createSlackPreviewSession();
 
     session.processMessages([createSurface, chartMessage(PIE)]);
-    const exportBlocks = blocksForExport(session.getSnapshot());
+    const exportBlocks = session.getSnapshot().exportBlocks;
 
     expect(Object.isFrozen(exportBlocks)).toBe(true);
     expect(Object.isFrozen(exportBlocks[1])).toBe(true);

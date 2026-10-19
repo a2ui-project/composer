@@ -134,10 +134,11 @@ export interface PreviewSnapshot {
   /** The Slack Block Kit blocks; empty unless `status` is `READY`. */
   blocks: KnownBlock[];
   /**
-   * Set on ready snapshots: the blocks "Generated Block Kit" exports. Each drawn image is a
-   * placeholder for a file your Channels app uploads, instead of a local image URL.
+   * The blocks "Generated Block Kit" exports; empty unless `status` is `READY`. They are
+   * `blocks` with each drawn image as a placeholder for a file your Channels app uploads,
+   * instead of a local image URL.
    */
-  exportBlocks?: KnownBlock[];
+  exportBlocks: KnownBlock[];
   /** Problems found in this render. */
   diagnostics: PreviewDiagnostic[];
 }
@@ -148,11 +149,7 @@ export function createEmptySnapshot(revision: number): PreviewSnapshot {
     revision,
     status: PreviewStatus.EMPTY,
     blocks: [],
+    exportBlocks: [],
     diagnostics: [],
   };
-}
-
-/** The blocks to export or copy: `exportBlocks` when present, otherwise the preview blocks. */
-export function blocksForExport(snapshot: PreviewSnapshot): KnownBlock[] {
-  return snapshot.exportBlocks ?? snapshot.blocks;
 }

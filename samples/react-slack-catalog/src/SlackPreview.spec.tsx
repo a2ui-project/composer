@@ -101,19 +101,21 @@ describe('SlackPreview', () => {
   });
 
   it('composes ready Slack rendering with a current Block Kit export', async () => {
+    const blocks: PreviewSnapshot['blocks'] = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: 'Ready for Slack review',
+        },
+      },
+    ];
     const snapshot: PreviewSnapshot = {
       revision: 1,
       surfaceId: 'test-surface',
       status: PreviewStatus.READY,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: 'Ready for Slack review',
-          },
-        },
-      ],
+      blocks,
+      exportBlocks: blocks,
       diagnostics: [],
     };
 
@@ -179,6 +181,7 @@ describe('SlackPreview', () => {
             surfaceId: 'test-surface',
             status: PreviewStatus.READY,
             blocks,
+            exportBlocks: blocks,
             diagnostics: [],
           }}
         />,
@@ -202,6 +205,7 @@ describe('SlackPreview', () => {
             surfaceId: 'test-surface',
             status: PreviewStatus.READY,
             blocks,
+            exportBlocks: blocks,
             diagnostics: [],
           }}
         />,
