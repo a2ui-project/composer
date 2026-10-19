@@ -16,6 +16,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {ChartType, chartAltText, renderChartSvg, type ChartImageProps} from './chart-image';
+import {DrawnImageColor} from './drawn-image-style';
 
 const possession: ChartImageProps = {
   type: ChartType.PIE,
@@ -26,7 +27,15 @@ const possession: ChartImageProps = {
   ],
 };
 
-const countOf = (markup: string, fragment: string): number => markup.split(fragment).length - 1;
+/** How many elements of the drawing match `selector`. */
+const countOf = (markup: string, selector: string): number =>
+  new DOMParser().parseFromString(markup, 'image/svg+xml').querySelectorAll(selector).length;
+
+/** A pie slice is a path, or a circle when one value holds the whole pie. */
+const SLICE = 'path';
+/** Bars are the only rounded rectangles in a bar chart. */
+const BAR = 'rect[rx]';
+const DONUT_HOLE = `circle[fill="${DrawnImageColor.BACKGROUND}"]`;
 
 describe('renderChartSvg', () => {
   it('draws a standalone SVG with the title, one slice per value, and a legend', () => {
@@ -36,21 +45,21 @@ describe('renderChartSvg', () => {
     expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
     expect(svg).toContain('viewBox="0 0 600 360"');
     expect(svg).toContain('>Possession</text>');
-    expect(countOf(svg, 'class="slice"')).toBe(2);
+    expect(countOf(svg, SLICE)).toBe(2);
     expect(svg).toContain('Argentina · 70 (70%)');
     expect(svg).toContain('Mexico · 30 (30%)');
-    expect(svg).not.toContain('donut-hole');
+    expect(countOf(svg, DONUT_HOLE)).toBe(0);
   });
 
   it('cuts a hole in the middle of a donut chart', () => {
-    expect(renderChartSvg({...possession, type: ChartType.DONUT})).toContain('class="donut-hole"');
+    expect(countOf(renderChartSvg({...possession, type: ChartType.DONUT}), DONUT_HOLE)).toBe(1);
   });
 
   it('draws a full circle when one value holds the whole pie', () => {
     const svg = renderChartSvg({type: ChartType.PIE, data: [{label: 'All', value: 5}]});
 
-    expect(countOf(svg, 'class="slice"')).toBe(1);
-    expect(svg).toContain('<circle class="slice"');
+    expect(countOf(svg, SLICE)).toBe(0);
+    expect(countOf(svg, 'circle')).toBe(1);
   });
 
   it('draws one labeled bar per value on vertical and horizontal bar charts', () => {
@@ -62,7 +71,7 @@ describe('renderChartSvg', () => {
 
     for (const type of [ChartType.VERTICAL_BAR, ChartType.HORIZONTAL_BAR]) {
       const svg = renderChartSvg({type, data, xAxisTitle: 'Quarter', yAxisTitle: 'Revenue'});
-      expect(countOf(svg, 'class="bar"')).toBe(3);
+      expect(countOf(svg, BAR)).toBe(3);
       expect(svg).toContain('>18.5</text>');
       expect(svg).toContain('>Q2</text>');
       expect(svg).toContain('>Quarter</text>');
@@ -79,7 +88,7 @@ describe('renderChartSvg', () => {
       ],
     });
 
-    expect(countOf(svg, 'class="bar"')).toBe(2);
+    expect(countOf(svg, BAR)).toBe(2);
     expect(svg).toContain('>-2</text>');
     // The axis reaches one step below -2, so the -2 label never sits on the "Loss" label.
     expect(svg).toContain('>-4</text>');
@@ -95,8 +104,8 @@ describe('renderChartSvg', () => {
       ],
     });
 
-    expect(countOf(svg, 'class="line"')).toBe(1);
-    expect(countOf(svg, 'class="point"')).toBe(3);
+    expect(countOf(svg, 'polyline')).toBe(1);
+    expect(countOf(svg, 'circle')).toBe(3);
   });
 
   it('escapes labels instead of emitting markup', () => {

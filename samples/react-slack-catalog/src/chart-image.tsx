@@ -277,7 +277,6 @@ function PieChart({chart, top}: ChartAreaProps) {
           return (
             <circle
               key={index}
-              className="slice"
               cx={round(cx)}
               cy={round(cy)}
               r={round(radius)}
@@ -288,7 +287,6 @@ function PieChart({chart, top}: ChartAreaProps) {
         return (
           <path
             key={index}
-            className="slice"
             d={slicePath(cx, cy, radius, start, end)}
             fill={paletteColor(index)}
             stroke={BACKGROUND}
@@ -298,7 +296,6 @@ function PieChart({chart, top}: ChartAreaProps) {
       })}
       {chart.type === ChartType.DONUT ? (
         <circle
-          className="donut-hole"
           cx={round(cx)}
           cy={round(cy)}
           r={round(radius * DONUT_HOLE_RATIO)}
@@ -380,7 +377,6 @@ function VerticalChart({chart, top}: ChartAreaProps) {
       {chart.type === ChartType.LINE ? (
         <g>
           <polyline
-            className="line"
             fill="none"
             stroke={PALETTE[0]}
             strokeWidth={LINE_WIDTH}
@@ -392,7 +388,6 @@ function VerticalChart({chart, top}: ChartAreaProps) {
           {chart.data.map((point, index) => (
             <g key={index}>
               <circle
-                className="point"
                 cx={round(centerX(index))}
                 cy={round(valueY(point.value))}
                 r={POINT_RADIUS}
@@ -417,7 +412,6 @@ function VerticalChart({chart, top}: ChartAreaProps) {
           return (
             <g key={index}>
               <rect
-                className="bar"
                 x={round(centerX(index) - barWidth / 2)}
                 y={round(Math.min(zeroY, end))}
                 width={round(barWidth)}
@@ -514,7 +508,6 @@ function HorizontalBarChart({chart, top}: ChartAreaProps) {
               {clipText(point.label, HORIZONTAL_CATEGORY_LABEL_MAX_CHARACTERS)}
             </text>
             <rect
-              className="bar"
               x={round(Math.min(zeroX, end))}
               y={round(centerY - barHeight / 2)}
               width={round(Math.abs(end - zeroX))}

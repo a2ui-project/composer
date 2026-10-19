@@ -170,7 +170,6 @@ function ScorecardSvg({scorecard}: {readonly scorecard: ScorecardImageProps}) {
       />
       {scorecard.competition ? (
         <text
-          className="competition"
           x={WIDTH / 2}
           y={COMPETITION_BASELINE}
           textAnchor="middle"
@@ -213,7 +212,6 @@ function TeamColumn({team, side}: TeamColumnProps) {
   return (
     <g>
       <text
-        className="team-name"
         x={nameColumnX(side) + NAME_WIDTH / 2}
         textAnchor="middle"
         fontSize={name.fontSize}
@@ -232,7 +230,6 @@ function TeamColumn({team, side}: TeamColumnProps) {
         ))}
       </text>
       <text
-        className="score"
         x={isHome ? WIDTH / 2 - SCORE_OFFSET : WIDTH / 2 + SCORE_OFFSET}
         y={round(baselineCenteredOn(MIDDLE_Y, scoreFontSize))}
         textAnchor={isHome ? 'end' : 'start'}
@@ -265,7 +262,6 @@ function StatusPill({status}: {readonly status: string}) {
         stroke={DrawnImageColor.RULE}
       />
       <text
-        className="status"
         x={WIDTH / 2}
         y={round(baselineCenteredOn(STATUS_MIDDLE_Y, STATUS_FONT_SIZE))}
         textAnchor="middle"
