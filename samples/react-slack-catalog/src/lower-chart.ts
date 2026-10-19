@@ -14,14 +14,8 @@
  * limitations under the License.
  */
 
-import {type Renderable} from '@copilotkit/channels-ui';
-import {
-  ChartType,
-  chartAltText,
-  renderChartSvg,
-  type ChartImageProps,
-  type ChartPoint,
-} from './chart-image';
+import {type ChartDataPoint, type Renderable} from '@copilotkit/channels-ui';
+import {ChartType, chartAltText, renderChartSvg, type ChartImageProps} from './chart-image';
 import {optionalText, skipWithWarning} from './drawn-component-props';
 import {type LowerComponentContext} from './lowering-context';
 import {DiagnosticCode} from './preview-snapshot';
@@ -40,6 +34,8 @@ export function lowerChart(
   props: Readonly<Record<string, unknown>>,
   context: LowerComponentContext,
 ): Renderable {
+  // `lowerComponent` validated these props against the Chart schema, whose `type` is an
+  // optional `ChartType`. It accepts no binding, so the bound value is the validated one.
   const type = (props.type as ChartType | undefined) ?? ChartType.VERTICAL_BAR;
   const data = chartData(props.data, type, context);
   if (!data) {
@@ -68,8 +64,8 @@ function chartData(
   value: unknown,
   type: ChartType,
   context: LowerComponentContext,
-): ChartPoint[] | undefined {
-  const points: ChartPoint[] = [];
+): ChartDataPoint[] | undefined {
+  const points: ChartDataPoint[] = [];
   for (const [index, point] of (Array.isArray(value) ? value : []).entries()) {
     const label = optionalText(recordField(point, 'label')) ?? `Point ${index + 1}`;
     const raw = recordField(point, 'value');
