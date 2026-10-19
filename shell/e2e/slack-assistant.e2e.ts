@@ -46,9 +46,7 @@ test.describe('Slack assistant browser journey', () => {
     await installGeminiFixture(page);
   });
 
-  test('shows a calm empty Slack preview when a custom renderer has no starter', async ({
-    page,
-  }, testInfo) => {
+  test('shows a calm empty Slack preview when a custom renderer has no starter', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
     await openComposerWithSlackRenderer(page, {forceAuthMode: '3p'});
     const frame = slackPreviewFrame(page);
@@ -73,15 +71,12 @@ test.describe('Slack assistant browser journey', () => {
     expect(await emptyState.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(
       true,
     );
-    await emptyState.screenshot({path: testInfo.outputPath('slack-empty-light.png')});
     await page.getByRole('button', {name: 'Switch to dark theme'}).click();
     await expect(frame.locator('main.slack-preview-shell')).toHaveAttribute('data-theme', 'dark');
-    await emptyState.screenshot({path: testInfo.outputPath('slack-empty-dark.png')});
-    await page.screenshot({path: testInfo.outputPath('slack-empty-workspace-dark.png')});
     expect(unexpectedErrors).toEqual([]);
   });
 
-  test('generates and edits a Slack score table with aligned columns', async ({page}, testInfo) => {
+  test('generates and edits a Slack score table with aligned columns', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
     await openComposerWithSlackRenderer(page, {rendererId: 'slack', forceAuthMode: '3p'});
     await addFakeGeminiApiKeyThroughSettings(page);
@@ -168,13 +163,11 @@ test.describe('Slack assistant browser journey', () => {
       element.scrollLeft = 0;
     });
     await page.setViewportSize({width: 1920, height: 1080});
-    await preview.screenshot({path: testInfo.outputPath('world-cup-table-light.png')});
     await page.getByRole('button', {name: 'Switch to dark theme'}).click();
     await expect(slackPreviewFrame(page).locator('main.slack-preview-shell')).toHaveAttribute(
       'data-theme',
       'dark',
     );
-    await preview.screenshot({path: testInfo.outputPath('world-cup-table-dark.png')});
     await page.setViewportSize({width: 1440, height: 1000});
     await setGeminiScenarios(page, [
       {
@@ -201,9 +194,7 @@ test.describe('Slack assistant browser journey', () => {
     expect(unexpectedErrors).toEqual([]);
   });
 
-  test('changes renderer from the composer pill and from the assistant tool', async ({
-    page,
-  }, testInfo) => {
+  test('changes renderer from the composer pill and from the assistant tool', async ({page}) => {
     const unexpectedErrors = collectUnexpectedErrors(page);
     await openComposerWithSlackRenderer(page, {rendererId: 'slack', forceAuthMode: '3p'});
     await addFakeGeminiApiKeyThroughSettings(page);
@@ -274,7 +265,6 @@ test.describe('Slack assistant browser journey', () => {
       page.getByRole('menuitemradio', {name: 'Slack Block Kit Preview', exact: true}),
     ).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator('.mat-mdc-menu-panel')).not.toHaveClass(/mat-menu-panel-animating/);
-    await page.screenshot({path: testInfo.outputPath('renderer-menu-light.png')});
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toBeHidden();
     await expect(selector).toBeFocused();
@@ -285,7 +275,6 @@ test.describe('Slack assistant browser journey', () => {
       page.getByRole('menuitemradio', {name: 'Slack Block Kit Preview', exact: true}),
     ).toBeVisible();
     await expect(page.locator('.mat-mdc-menu-panel')).not.toHaveClass(/mat-menu-panel-animating/);
-    await page.screenshot({path: testInfo.outputPath('renderer-menu-dark.png')});
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toBeHidden();
     await expect(selector).toBeFocused();

@@ -30,7 +30,7 @@ interface FormActionWindow extends Window {
 test.describe('Slack native booking form', () => {
   test('starts with the same booking task, preserves typing focus and submits bound values', async ({
     page,
-  }, testInfo) => {
+  }) => {
     const errors = collectUnexpectedErrors(page);
     await openComposerWithSlackRenderer(page, {rendererId: 'slack'});
     const frame = slackPreviewFrame(page);
@@ -89,14 +89,11 @@ test.describe('Slack native booking form', () => {
     });
     await expect(preview.getByText('✓ Valid Block Kit payload', {exact: true})).toBeVisible();
     await expect(frame.getByRole('list', {name: 'Preview diagnostics'})).toHaveCount(0);
-    await preview.screenshot({path: testInfo.outputPath('slack-booking-light.png')});
     await page.getByRole('button', {name: 'Switch to dark theme'}).click();
     await expect(frame.locator('main')).toHaveAttribute('data-theme', 'dark');
     await expect(preview.getByRole('textbox', {name: 'Pick-up Location'})).toHaveValue(
       'San Francisco airport',
     );
-    await preview.screenshot({path: testInfo.outputPath('slack-booking-dark.png')});
-    await page.screenshot({path: testInfo.outputPath('slack-booking-workspace.png')});
     await page.evaluate(messageType => {
       const capture = window as FormActionWindow;
       capture.__slackFormActions = [];
