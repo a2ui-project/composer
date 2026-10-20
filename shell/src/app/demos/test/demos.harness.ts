@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {ComponentHarness} from '@angular/cdk/testing';
+import {ComponentHarness, HarnessPredicate} from '@angular/cdk/testing';
+import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
 
 /**
  * Harness for interacting with the Demos route component in unit tests.
@@ -24,13 +25,18 @@ export class DemosHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-demos';
 
   private readonly getCoordinatorWrapper = this.locatorForOptional('.coordinator-frame');
-  private readonly getCoordinatorFrame = this.locatorForOptional(
-    '.coordinator-frame a2ui-composer-rendered-frame',
-  );
   private readonly getCards = this.locatorForAll('a2ui-composer-demo-card');
   private readonly getEmptySubtitle = this.locatorForOptional('.empty-subtitle');
   private readonly getEmptyRendererUrl = this.locatorForOptional('.empty-renderer-url');
   private readonly getRetry = this.locatorFor('button');
+
+  /**
+   * The hidden coordinator frame: the page's default message target, which
+   * answers untargeted catalog requests. Null if it is not mounted.
+   */
+  readonly getCoordinatorFrame = this.locatorForOptional(
+    new HarnessPredicate(RenderedFrameHarness, {ancestor: '.coordinator-frame'}),
+  );
 
   /** Retries a failed demos request. */
   async retry(): Promise<void> {

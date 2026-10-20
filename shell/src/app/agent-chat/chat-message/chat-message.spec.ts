@@ -578,6 +578,11 @@ describe('A2aChatMessage', () => {
     expect(await harness.hasCanvasButton()).toBe(false);
     expect(await harness.hasInlineSurface()).toBe(true);
     expect(await harness.inlineSurfacePrecedesText()).toBe(false);
+
+    // The chat history grows with its content, so only the inline frame follows
+    // the guest's reported height.
+    const frame = await harness.getInlineFrame();
+    expect(await frame!.getSizing()).toBe('content');
   });
 
   it('renders the inline surface above the text when the surface led the message', async () => {

@@ -39,19 +39,6 @@
 }
 
 :host ::ng-deep .dockview-root {
-  // The frame follows the renderer's reported content height, so a docked
-  // preview taller than its panel scrolls inside the panel instead of being
-  // clipped beneath the adjacent debug panel.
-  a2ui-composer-rendered-frame {
-    overflow-y: auto;
-  }
-
-  // Without a reported height, fill the panel however short it is.
-  a2ui-composer-rendered-frame .rendered-frame-container,
-  a2ui-composer-rendered-frame .rendered-frame-container .preview-iframe {
-    min-height: 0;
-  }
-
   // Dockview puts its own theme classes on inner elements (the shell and the
   // grid), which would otherwise redefine these variables below the root.
   &,

@@ -423,7 +423,7 @@
                     *ngTemplateOutlet="playgroundHeader; context: {activeTab: 'preview'}"
                   ></ng-container>
                 </mat-card-header>
-                <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
+                <a2ui-composer-rendered-frame sizing="fill"></a2ui-composer-rendered-frame>
               </mat-card>
 
               <mat-card class="json-card" [class.hidden-frame]="activePlaygroundTab() !== 'json'">

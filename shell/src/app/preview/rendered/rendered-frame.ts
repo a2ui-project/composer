@@ -24,6 +24,7 @@ import {
   DestroyRef,
   untracked,
   input,
+  OnInit,
   signal,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
@@ -41,6 +42,9 @@ import {StateSync} from '../../chat/state-sync/state-sync';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
+
+/** How a {@link RenderedFrame} is sized; see {@link RenderedFrame.sizing}. */
+export type RenderedFrameSizing = 'fill' | 'content';
 
 /**
  * Number of consecutive growing SURFACE_RESIZE reports that makes the growth
@@ -104,7 +108,7 @@ const MAX_OWN_GROWTH_RELEASES_PER_RUN = 2;
   templateUrl: './rendered-frame.ng.html',
   styleUrl: './rendered-frame.scss',
 })
-export class RenderedFrame {
+export class RenderedFrame implements OnInit {
   private sanitizer = inject(DomSanitizer);
   private startupResolution = inject(StartupResolution);
   private hostCommunication = inject(HostCommunication);
@@ -112,27 +116,36 @@ export class RenderedFrame {
   private chatState = inject(ChatState);
   private stateSync = inject(StateSync);
   private errorLogger = inject(ErrorLogger);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly logger = this.errorLogger.withTag('[RenderedFrame]');
 
   /** Optional layout payload to render immediately into the guest iframe. */
   readonly payload = input<unknown[] | null | undefined>(null);
 
   /**
-   * Sizes the frame to its container instead of to the guest's reported
-   * surface height.
+   * How the frame is sized. Required, so that every host chooses explicitly.
    *
-   * An inline preview sizes itself to its content, so the host follows the
-   * guest's SURFACE_RESIZE reports. A side panel is a fixed viewport whose
-   * content scrolls, like the canvas panels of production hosts, so there the
-   * frame fills the panel and the reports are ignored. With the frame's size
-   * no longer depending on the guest, a guest laid out against its own
-   * viewport (`100%`, `100vh`) cannot feed back into it, and the growth
-   * circuit breaker has nothing to guard.
+   * - `fill`: the frame takes its host's height and the guest document
+   *   scrolls inside it. Use it wherever the host has a definite height: a
+   *   side canvas, a Dockview panel, a fixed-height card, or a hidden frame.
+   *   With the frame's size independent of the guest, a guest laid out
+   *   against its own viewport (`100%`, `100vh`) cannot feed back into it.
+   * - `content`: the frame follows the guest's SURFACE_RESIZE reports, with a
+   *   280px floor until the first report. Use it only where the host grows
+   *   with its content, such as an inline preview in the chat history.
+   *
+   * The guest's latest report is kept in either mode, so a switch to
+   * `content` applies it at once.
    */
-  readonly fillContainer = input<boolean>(false);
+  readonly sizing = input.required<RenderedFrameSizing>();
 
-  /** Tracks dynamic surface height reported by the guest renderer frame. */
-  readonly dynamicHeight = signal<number | null>(null);
+  private readonly reportedHeight = signal<number | null>(null);
+
+  /**
+   * Latest surface height reported by the guest renderer frame, in pixels,
+   * whatever the sizing mode; see {@link frameHeight} for the height in effect.
+   */
+  readonly dynamicHeight = this.reportedHeight.asReadonly();
 
   private readonly growthBreakerLatched = signal<boolean>(false);
 
@@ -169,11 +182,11 @@ export class RenderedFrame {
 
   /**
    * Usable height reported by the guest, in pixels, or null when there is none
-   * or the frame fills its container, in which case the container falls back to
+   * or the frame fills its host, in which case the container falls back to
    * 100% of its host.
    */
   readonly frameHeight = computed(() => {
-    if (this.fillContainer()) {
+    if (this.sizing() === 'fill') {
       return null;
     }
     const h = this.dynamicHeight();
@@ -181,8 +194,8 @@ export class RenderedFrame {
   });
 
   /**
-   * `frameHeight` as a CSS length, or undefined when the guest has not
-   * reported one.
+   * `frameHeight` as a CSS length, or undefined when the frame fills its host
+   * or the guest has not reported a usable height.
    *
    * Applied as both `height` and `min-height` so that a reported height wins
    * over the stylesheet's minimum, which would otherwise leave a tall empty
@@ -238,16 +251,7 @@ export class RenderedFrame {
       }
     });
 
-    // Inbound bridge listener: adjusts the iframe container height to fit the rendered
-    // A2UI content dimensions, eliminating unnecessary inner scrollbars or clipping.
-    // Subscribed directly to messageStream$ rather than an effect so bursts of
-    // messages (e.g. SURFACE_RESIZE followed immediately by DATA_MODEL_CHANGE)
-    // do not coalesce and drop the resize report.
-    this.hostCommunication.messageStream$.pipe(takeUntilDestroyed()).subscribe(envelope => {
-      this.trackReportedGrowth(envelope);
-      this.handleInboundEnvelope(envelope);
-    });
-    inject(DestroyRef).onDestroy(() => this.clearSettleTimer());
+    this.destroyRef.onDestroy(() => this.clearSettleTimer());
 
     // A different renderer means a different guest; give it a clean slate.
     effect(() => {
@@ -260,17 +264,60 @@ export class RenderedFrame {
       });
     });
 
+    // The breaker only runs for a content-sized frame. A hold left over from
+    // content sizing would otherwise apply its settled height, or clamp the
+    // reports a filling frame stores, once the frame fills its host.
+    effect(() => {
+      if (this.sizing() === 'fill') {
+        untracked(() => this.resetGrowthBreaker());
+      }
+    });
+
     // Reset dynamic height and growth breaker latch when starting a new session.
     effect(() => {
       const nonce = this.stateSync.sessionResetNonce();
       if (nonce > this.lastHandledResetNonce) {
         this.lastHandledResetNonce = nonce;
         untracked(() => {
-          this.dynamicHeight.set(null);
+          this.reportedHeight.set(null);
           this.resetGrowthBreaker();
         });
       }
     });
+  }
+
+  ngOnInit(): void {
+    // Inbound bridge listener. It re-sends the payload when the guest
+    // announces RENDERER_READY or A2UI_CATALOG, and stores every
+    // SURFACE_RESIZE report: a content-sized frame applies it as its height,
+    // while a filling frame only keeps it, for a later switch to content.
+    // Subscribed directly to messageStream$ rather than an effect so bursts of
+    // messages (e.g. SURFACE_RESIZE followed immediately by DATA_MODEL_CHANGE)
+    // do not coalesce and drop the resize report.
+    //
+    // Subscribed here rather than in the constructor because messageStream$
+    // replays its last envelope synchronously, and handling it reads the
+    // required `sizing` input, which the host has set only by now (NG0950).
+    this.hostCommunication.messageStream$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(envelope => {
+        this.trackReportedGrowth(envelope);
+        this.handleInboundEnvelope(envelope);
+      });
+  }
+
+  /**
+   * True when an envelope was sent by a frame other than this one. Until this
+   * frame's iframe exists (a replay delivered on subscription), an envelope
+   * that names a source window cannot be this frame's, so it counts as
+   * foreign; an envelope without one, as in a single-frame host, does not.
+   */
+  private isFromOtherFrame(envelope: MessageEnvelope): boolean {
+    if (!envelope.sourceWindow) {
+      return false;
+    }
+    const myWindow = untracked(() => this.iframeRef()?.nativeElement)?.contentWindow;
+    return envelope.sourceWindow !== myWindow;
   }
 
   /**
@@ -278,17 +325,11 @@ export class RenderedFrame {
    * without dropping messages during rapid bursts.
    */
   private handleInboundEnvelope(envelope: MessageEnvelope | null): void {
-    if (!envelope) {
+    if (!envelope || this.isFromOtherFrame(envelope)) {
       return;
     }
 
     const myIframe = untracked(() => this.iframeRef()?.nativeElement);
-    const myWindow = myIframe?.contentWindow;
-
-    // In multi-frame environments, ignore messages dispatched by other iframes
-    if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
-      return;
-    }
 
     if (
       envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
@@ -299,15 +340,12 @@ export class RenderedFrame {
         this.hostCommunication.sendRenderA2UI(payload, myIframe);
       }
     } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-      // A frame that fills its container has a fixed size; the guest's
-      // measurements are informational only. Read untracked so that a mode
-      // switch does not replay the last report.
-      if (
-        !untracked(() => this.fillContainer()) &&
-        CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)
-      ) {
+      // Stored in either sizing mode; `frameHeight` decides whether it applies.
+      // A frame that fills its host keeps its default size, and a switch to
+      // content sizing applies the latest report without waiting for another.
+      if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
         const resizePayload = envelope.payload as {height: number; width?: number};
-        this.dynamicHeight.set(this.capReportedHeight(resizePayload.height));
+        this.reportedHeight.set(this.capReportedHeight(resizePayload.height));
       }
     }
   }
@@ -325,13 +363,12 @@ export class RenderedFrame {
    */
   private trackReportedGrowth(envelope: MessageEnvelope | null): void {
     // A feedback loop needs the host to apply the reports; a frame that fills
-    // its container never does, so there is nothing to count.
-    if (!envelope || untracked(() => this.fillContainer())) {
+    // its host never does, so there is nothing to count.
+    if (!envelope || untracked(() => this.sizing()) === 'fill') {
       return;
     }
 
-    const myWindow = untracked(() => this.iframeRef()?.nativeElement)?.contentWindow;
-    if (envelope.sourceWindow && myWindow && envelope.sourceWindow !== myWindow) {
+    if (this.isFromOtherFrame(envelope)) {
       return;
     }
 
@@ -467,7 +504,7 @@ export class RenderedFrame {
     this.growthRunLength = 0;
     this.settleProbePending = true;
     this.releaseHold();
-    this.dynamicHeight.set(settledHeight);
+    this.reportedHeight.set(settledHeight);
   }
 
   private armSettleTimer(): void {

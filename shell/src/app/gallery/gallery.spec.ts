@@ -828,6 +828,16 @@ describe('Gallery Component', () => {
     expect(hasFrame).toBe(true);
   });
 
+  it('sizes the gallery frame to fill its card, hidden or previewing', async () => {
+    // With nothing selected the same frame is the hidden default target that
+    // answers untargeted RENDER_A2UI messages.
+    expect(await (await harness.getPreviewFrame())!.getSizing()).toBe('fill');
+
+    catalogServiceMock.selectedComponentKey.set('Text');
+    fixture.detectChanges();
+    expect(await (await harness.getPreviewFrame())!.getSizing()).toBe('fill');
+  });
+
   it('triggers another rendering update call when changing component selection', async () => {
     catalogManagementMock.activeCatalog.set({
       catalogId: 'https://a2ui.org/custom_catalog.json',

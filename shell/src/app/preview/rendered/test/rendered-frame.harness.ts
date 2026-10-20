@@ -15,6 +15,7 @@
  */
 
 import {ComponentHarness, TestElement} from '@angular/cdk/testing';
+import type {RenderedFrameSizing} from '../rendered-frame';
 
 export class RenderedFrameHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-rendered-frame';
@@ -46,20 +47,52 @@ export class RenderedFrameHarness extends ComponentHarness {
     return await container.hasClass('is-locked');
   }
 
-  /** True when the frame is sized to its container rather than to the guest's reports. */
-  async fillsContainer(): Promise<boolean> {
+  /**
+   * How the frame is sized: `fill` when it takes its host's height, `content`
+   * when it follows the guest's reported surface height.
+   */
+  async getSizing(): Promise<RenderedFrameSizing> {
     const container = await this.locatorFor('.rendered-frame-container')();
-    return await container.hasClass('fill-container');
+    const sizing = await container.getAttribute('data-sizing');
+    if (sizing !== 'fill' && sizing !== 'content') {
+      throw new Error(`Unexpected data-sizing on the frame container: ${sizing}.`);
+    }
+    return sizing;
   }
 
   /**
-   * Height the template applies to the frame container, as CSS: `520px` when a
-   * guest height is in effect, `100%` when none is. The host sizes the iframe
-   * from this value and the guest measures itself inside it, so it is the
-   * observable that matters, not the signal behind it.
+   * Guest height applied to the frame, in pixels, or null when none is and
+   * the frame takes its host's full height.
+   *
+   * A guest height is applied as the container's `height` and `min-height`
+   * and as the iframe's `min-height`, so that it wins over the stylesheet's
+   * floors; this throws if those disagree, which would mean the frame is only
+   * partly sized to the guest. The host sizes the iframe from this value and
+   * the guest measures itself inside it, so it is the observable that
+   * matters, not the signal behind it.
    */
-  async getFrameHeight(): Promise<string> {
+  async getAppliedHeightPx(): Promise<number | null> {
     const container = await this.locatorFor('.rendered-frame-container')();
-    return await container.getCssValue('height');
+    const iframe = await this.getIframeElement();
+    const height = await container.getCssValue('height');
+    const containerMinHeight = await container.getCssValue('min-height');
+    const iframeMinHeight = iframe ? await iframe.getCssValue('min-height') : height;
+
+    if (height === '100%') {
+      return null;
+    }
+    if (!height.endsWith('px') || containerMinHeight !== height || iframeMinHeight !== height) {
+      throw new Error(
+        `Inconsistent applied height: container height ${height}, container min-height ` +
+          `${containerMinHeight}, iframe min-height ${iframeMinHeight}.`,
+      );
+    }
+    return parseFloat(height);
+  }
+
+  /** Fires the guest iframe's `load` event, as the browser does once a document loads. */
+  async simulateFrameLoad(): Promise<void> {
+    const iframe = await this.locatorFor('iframe')();
+    await iframe.dispatchEvent('load');
   }
 }

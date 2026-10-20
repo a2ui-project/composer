@@ -15,7 +15,18 @@
  */
 
 import {test, expect, type Page} from '@playwright/test';
-import {WindowWithMonaco} from './helpers';
+import {
+  WindowWithMonaco,
+  demosCoordinator,
+  expectNoCatalogWatchdog,
+  trackRendererReady,
+} from './helpers';
+
+/** Number of demos every bundled renderer provides. */
+const DEMO_CARD_COUNT = 46;
+
+/** Text the first demo (Flight status) renders once its guest is live. */
+const FIRST_DEMO_MARKER = 'VIE';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -40,6 +51,32 @@ for (const renderer of [
       });
     });
 
+    test('bootstraps the catalog through the hidden coordinator frame', async ({page}) => {
+      await trackRendererReady(page);
+      // Straight to /demos, so the coordinator is the only frame that can
+      // answer the catalog handshake that gates the wall.
+      await page.goto(`/demos?renderer=http://localhost:${renderer.port}`);
+
+      // The coordinator fills a 0x0 host. It must still load its guest and
+      // answer GET_CATALOG: a frame that stopped answering would show up only
+      // as a catalog watchdog error and an empty wall, not as a sizing bug.
+      const coordinator = demosCoordinator(page);
+      await expect(coordinator).toHaveCount(1);
+      expect(
+        await coordinator.evaluate(host => {
+          const rect = host.getBoundingClientRect();
+          return {width: rect.width, height: rect.height};
+        }),
+      ).toEqual({width: 0, height: 0});
+
+      const cards = page.locator('a2ui-composer-demo-card');
+      await expect(cards).toHaveCount(DEMO_CARD_COUNT);
+      await expect(
+        cards.nth(0).frameLocator('iframe').getByText(FIRST_DEMO_MARKER, {exact: true}),
+      ).toBeVisible();
+      await expectNoCatalogWatchdog(page);
+    });
+
     test('populates the demos wall with live renderer content', async ({page}, testInfo) => {
       await page.setViewportSize({width: 1440, height: 1120});
       await page.goto(`/?renderer=http://localhost:${renderer.port}`);
@@ -49,7 +86,7 @@ for (const renderer of [
       await page.waitForURL('**/demos');
 
       const cards = page.locator('a2ui-composer-demo-card');
-      await expect(cards).toHaveCount(46);
+      await expect(cards).toHaveCount(DEMO_CARD_COUNT);
       await expect(cards.nth(0).locator('.demo-card-title')).toHaveText('Flight status');
       await expect(cards.nth(1).locator('.demo-card-title')).toHaveText('System dashboard');
       await expect(cards.nth(2).locator('.demo-card-title')).toHaveText('Product checkout');

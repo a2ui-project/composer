@@ -15,7 +15,22 @@
  */
 
 import {test, expect} from '@playwright/test';
-import {RENDERER_URLS, getMonacoContent, setMonacoContent} from './helpers';
+import {
+  RENDERER_URLS,
+  expectNoCatalogWatchdog,
+  galleryPreview,
+  getMonacoContent,
+  guestContentHeight,
+  guestScrollRange,
+  setMonacoContent,
+  trackRendererReady,
+} from './helpers';
+
+/** Minimum height of the gallery's Preview frame, set in gallery.scss. */
+const PREVIEW_CARD_HEIGHT_PX = 400;
+
+/** Height of the content added to the guest to make it taller than the card. */
+const TALL_CONTENT_HEIGHT_PX = 1200;
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -255,48 +270,6 @@ test.describe('Components Gallery User Journey', () => {
     });
   });
 
-  test('keeps tall renderer controls inside the preview card and reachable', async ({page}) => {
-    await page.goto('/?renderer=http://localhost:3456');
-    await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
-    await page.getByRole('link', {name: 'Components Gallery'}).click();
-
-    const preview = page.frameLocator('.preview-card iframe');
-    await expect(preview.locator('main')).toBeVisible();
-    await preview.locator('body').evaluate(body => {
-      const content = document.createElement('div');
-      content.style.cssText = 'min-height:700px;display:flex;align-items:flex-end';
-      const button = document.createElement('button');
-      button.textContent = 'Tall preview action';
-      button.addEventListener('click', () => (button.textContent = 'Action completed'));
-      content.append(button);
-      body.append(content);
-    });
-
-    const frame = page.locator('.preview-card iframe');
-    await expect
-      .poll(async () => (await frame.boundingBox())?.height ?? 0)
-      .toBeGreaterThanOrEqual(700);
-    await expect
-      .poll(async () => {
-        const cardBounds = await page.locator('.preview-card').boundingBox();
-        const frameBounds = await frame.boundingBox();
-        if (!cardBounds || !frameBounds) {
-          return -1;
-        }
-        return cardBounds.y + cardBounds.height - frameBounds.y - frameBounds.height;
-      })
-      .toBeGreaterThanOrEqual(0);
-
-    await page.locator('.gallery-content').evaluate(el => {
-      const card = el.querySelector('.preview-card')!;
-      el.scrollTop += card.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom;
-    });
-    const action = preview.getByRole('button', {name: 'Tall preview action'});
-    await expect(action).toBeInViewport();
-    await action.click();
-    await expect(preview.getByRole('button', {name: 'Action completed'})).toBeVisible();
-  });
-
   test('keeps the gallery beside its drawer when shell navigation changes width', async ({
     page,
   }) => {
@@ -315,6 +288,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(page.locator('.gallery-sidenav')).toHaveCSS('width', '208px');
     await expect(page.locator('.gallery-content')).toHaveCSS('margin-left', '208px');
   });
+
   test('lays out every property with its name on top of its control, JSON fields included', async ({
     page,
   }) => {
@@ -377,5 +351,82 @@ test.describe('Components Gallery User Journey', () => {
     await expect(
       page.frameLocator('.workspace-container iframe').getByText(edited, {exact: true}),
     ).toBeVisible();
+  });
+
+  test('keeps the preview card at 400px whatever the component height', async ({page}) => {
+    await trackRendererReady(page);
+    await page.goto(`/gallery?renderer=${RENDERER_URLS.angular}`);
+    await expect(page.locator('.gallery-container')).toBeVisible();
+
+    await page.locator('.catalog-list').getByRole('button', {name: 'Text', exact: true}).click();
+    await expect(page.getByRole('heading', {name: 'Text', exact: true})).toBeVisible();
+
+    const preview = galleryPreview(page);
+    const guest = preview.locator('iframe.preview-iframe').contentFrame();
+    // Wait for the component to render before measuring it.
+    await expect
+      .poll(() =>
+        guest
+          .locator('body')
+          .evaluate(() => document.body.firstElementChild?.getBoundingClientRect().height ?? 0),
+      )
+      .toBeGreaterThan(0);
+
+    /** The frame host, its content box, and the iframe inside it, which fills it. */
+    const sizes = () =>
+      preview.evaluate(host => {
+        const style = getComputedStyle(host);
+        return {
+          host: Math.round(host.clientHeight),
+          card: Math.round(
+            host.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+          ),
+          frame: Math.round(host.querySelector('iframe')!.getBoundingClientRect().height),
+        };
+      });
+
+    // A small component: the card does not shrink to it.
+    const small = await guestContentHeight(guest);
+    const initial = await sizes();
+    expect(initial.host).toBeGreaterThanOrEqual(PREVIEW_CARD_HEIGHT_PX);
+    expect(initial.frame).toBe(initial.card);
+    expect(small).toBeLessThan(initial.frame);
+    expect(await guestScrollRange(guest)).toBeLessThanOrEqual(1);
+
+    // A tall component: no component in the basic catalog renders taller than
+    // the card at this width, so the guest's content is made taller in place.
+    // The guest reports the new height; the card must not follow it, and the
+    // extra content must scroll inside the frame instead.
+    const tallReport = page.evaluate(
+      minHeight =>
+        new Promise<number>(resolve => {
+          window.addEventListener('message', event => {
+            const data = event.data as {type?: string; payload?: {height?: number}} | null;
+            if (data?.type === 'SURFACE_RESIZE' && (data.payload?.height ?? 0) >= minHeight) {
+              resolve(data.payload!.height!);
+            }
+          });
+        }),
+      TALL_CONTENT_HEIGHT_PX,
+    );
+    await guest.locator('body').evaluate((body, height) => {
+      const filler = document.createElement('div');
+      filler.style.height = `${height}px`;
+      body.appendChild(filler);
+    }, TALL_CONTENT_HEIGHT_PX);
+    expect(await tallReport).toBeGreaterThanOrEqual(TALL_CONTENT_HEIGHT_PX);
+    expect(await guestScrollRange(guest)).toBeGreaterThan(0);
+    expect(await sizes()).toEqual(initial);
+    expect(
+      await guest.locator('html').evaluate(el => {
+        el.scrollTop = el.scrollHeight;
+        return el.scrollTop;
+      }),
+    ).toBeGreaterThan(0);
+
+    // This frame is the gallery's default bridge target, and in fill mode it
+    // takes its host's height (none while hidden before a selection). It
+    // must keep answering the catalog handshake either way.
+    await expectNoCatalogWatchdog(page);
   });
 });
