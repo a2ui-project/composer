@@ -629,43 +629,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(await harness.getAppliedHeightPx()).toBe(480);
   });
 
-  it('forwards wheel events from iframe contentWindow to parent scrollable container', () => {
-    const parentContainer = document.createElement('div');
-    parentContainer.className = 'chat-history-container';
-    parentContainer.scrollBy = vi.fn();
-
-    const iframe = document.createElement('iframe');
-    parentContainer.appendChild(iframe);
-    document.body.appendChild(parentContainer);
-
-    let wheelListener: ((event: WheelEvent) => void) | undefined;
-    const fakeContentWindow = {
-      addEventListener: vi.fn((type: string, listener: (event: WheelEvent) => void) => {
-        if (type === 'wheel') {
-          wheelListener = listener;
-        }
-      }),
-    };
-    Object.defineProperty(iframe, 'contentWindow', {
-      value: fakeContentWindow,
-      configurable: true,
-    });
-
-    fixture.componentInstance['setupIframeWheelForwarding'](iframe);
-    expect(fakeContentWindow.addEventListener).toHaveBeenCalledWith('wheel', expect.any(Function), {
-      passive: true,
-    });
-
-    wheelListener?.({deltaY: 50, deltaX: 0} as WheelEvent);
-    expect(parentContainer.scrollBy).toHaveBeenCalledWith({
-      top: 50,
-      left: 0,
-      behavior: 'auto',
-    });
-
-    document.body.removeChild(parentContainer);
-  });
-
   /**
    * Growth behavior of a content-sized frame. Each scenario reads the frame
    * only through the height it applies, after every timer it may have armed

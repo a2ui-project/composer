@@ -155,11 +155,7 @@ export class RenderedFrame implements OnInit {
     // from the host/parent component to the renderer iframe over postMessage whenever
     // the payload input signal emits a non-empty array and the iframe element is available.
     effect(() => {
-      const payload = this.payload();
-      const iframe = this.iframeRef()?.nativeElement;
-      if (iframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
-        this.hostCommunication.sendRenderA2UI(payload, iframe);
-      }
+      this.dispatchPayload(this.payload(), this.iframeRef()?.nativeElement);
     });
 
     // A new session starts from the default size until the guest reports again.
@@ -212,16 +208,14 @@ export class RenderedFrame implements OnInit {
       return;
     }
 
-    const myIframe = untracked(() => this.iframeRef()?.nativeElement);
-
     if (
       envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
       envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
     ) {
-      const payload = untracked(() => this.payload());
-      if (myIframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
-        this.hostCommunication.sendRenderA2UI(payload, myIframe);
-      }
+      this.dispatchPayload(
+        untracked(() => this.payload()),
+        untracked(() => this.iframeRef()?.nativeElement),
+      );
     } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
       // Stored in either sizing mode; `frameHeightPx` decides whether it applies.
       // A frame that fills its host keeps its default size, and a switch to
@@ -234,41 +228,19 @@ export class RenderedFrame implements OnInit {
   }
 
   /**
-   * Forwards wheel events from the guest iframe to parent scroll containers
-   * to ensure mouse/trackpad scrolling is not trapped by iframe viewports.
-   */
-  protected setupIframeWheelForwarding(iframe: HTMLIFrameElement): void {
-    try {
-      iframe.contentWindow?.addEventListener(
-        'wheel',
-        (event: WheelEvent) => {
-          const scrollParent = iframe.closest('.chat-history-container, .side-canvas-viewport');
-          if (scrollParent) {
-            scrollParent.scrollBy({
-              top: event.deltaY,
-              left: event.deltaX,
-              behavior: 'auto',
-            });
-          }
-        },
-        {passive: true},
-      );
-    } catch {
-      // Safe fallback if frame is restricted by cross-origin policies
-    }
-  }
-
-  /**
    * Dispatches the active A2UI payload to the renderer iframe once the DOM iframe element finishes loading.
    */
   protected syncPayloadOnIframeLoad(): void {
-    const payload = this.payload();
-    const iframe = this.iframeRef()?.nativeElement;
-    if (iframe) {
-      this.setupIframeWheelForwarding(iframe);
-      if (payload !== null && Array.isArray(payload) && payload.length > 0) {
-        this.hostCommunication.sendRenderA2UI(payload, iframe);
-      }
+    this.dispatchPayload(this.payload(), this.iframeRef()?.nativeElement);
+  }
+
+  /** Sends `payload` to `iframe` when the iframe exists and the payload is a non-empty array. */
+  private dispatchPayload(
+    payload: unknown[] | null | undefined,
+    iframe: HTMLIFrameElement | undefined,
+  ): void {
+    if (iframe && Array.isArray(payload) && payload.length > 0) {
+      this.hostCommunication.sendRenderA2UI(payload, iframe);
     }
   }
 }

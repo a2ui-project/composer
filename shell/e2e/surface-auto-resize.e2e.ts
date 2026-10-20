@@ -17,12 +17,14 @@
 import {test, expect, type FrameLocator, type Page} from '@playwright/test';
 import {
   RENDERER_URLS,
+  chatHistory,
   dockedPreview,
   dockedPreviewGeometry,
   dragPreviewSplitter,
   guestContentHeight,
   guestScrollRange,
   inlineSurfaceContainer,
+  inlineSurfaceIframe,
   setMonacoContent,
   showInlineSurface,
   waitForPreviewTab,
@@ -69,6 +71,27 @@ const QUIET_SAMPLE_INTERVAL_MS = 100;
 
 /** Allowance for sub-pixel rounding between the capped frame and the cap. */
 const CAP_TOLERANCE_PX = 1;
+
+/**
+ * Viewport for the wheel tests: short enough that the chat history can scroll
+ * both ways around a frame at the cap.
+ */
+const WHEEL_TEST_VIEWPORT = {width: 1280, height: 700};
+
+/** Distance of one wheel notch, in pixels. */
+const WHEEL_STEP_PX = 120;
+
+/**
+ * Wheel notches sent in one direction: enough to scroll the guest through its
+ * whole overflow and then the chat history through its own.
+ */
+const WHEEL_STEPS = 25;
+
+/** Pause between wheel notches, so each one is handled before the next. */
+const WHEEL_STEP_INTERVAL_MS = 60;
+
+/** Where the inline frame's top edge is put, below the chat history's top edge. */
+const FRAME_OFFSET_IN_HISTORY_PX = 80;
 
 /**
  * Rows in the tall surface: about 350px, taller than CONTENT_FLOOR_PX and
@@ -217,9 +240,7 @@ async function inlineFrameOffset(
   frame: FrameLocator,
 ): Promise<{offset: number; frameHeight: number; contentHeight: number}> {
   const contentHeight = await guestContentHeight(frame);
-  const frameHeight = await inlineSurfaceContainer(page).evaluate(
-    el => el.getBoundingClientRect().height,
-  );
+  const frameHeight = await inlineFrameHeight(page);
   return {
     offset: Math.abs(frameHeight - Math.min(contentHeight, MAX_CONTENT_HEIGHT_PX)),
     frameHeight,
@@ -258,6 +279,24 @@ async function expectInlineFrameAtCap(page: Page, frame: FrameLocator): Promise<
   expect(await guestContentHeight(frame)).toBeGreaterThan(MAX_CONTENT_HEIGHT_PX);
 }
 
+/**
+ * Renders a surface of OVER_CAP_ROW_COUNT rows inline, against the given
+ * renderer, and waits until its frame rests at the cap. Returns the guest
+ * document.
+ */
+async function showCappedInlineSurface(page: Page, rendererUrl: string): Promise<FrameLocator> {
+  const frame = await showInlineSurface(
+    page,
+    rendererUrl,
+    generateSurfacePayload(OVER_CAP_ROW_COUNT),
+  );
+  await expect(frame.getByText('Row item index 0 ')).toBeVisible({
+    timeout: SURFACE_RENDER_TIMEOUT_MS,
+  });
+  await expectInlineFrameAtCap(page, frame);
+  return frame;
+}
+
 /** Asserts that the inline frame keeps exactly one height for QUIET_PERIOD_MS. */
 async function expectInlineFrameQuiet(page: Page): Promise<void> {
   const heights: number[] = [];
@@ -266,6 +305,49 @@ async function expectInlineFrameQuiet(page: Page): Promise<void> {
     await page.waitForTimeout(QUIET_SAMPLE_INTERVAL_MS);
   }
   expect(new Set(heights).size, `heights: ${heights}`).toBe(1);
+}
+
+/** The chat history's scroll position and how far it can scroll. */
+function chatHistoryScroll(page: Page): Promise<{top: number; range: number}> {
+  return chatHistory(page).evaluate(el => ({
+    top: el.scrollTop,
+    range: el.scrollHeight - el.clientHeight,
+  }));
+}
+
+/** How far the guest's document is scrolled. */
+function guestScrollTop(frame: FrameLocator): Promise<number> {
+  return frame.locator('html').evaluate(el => el.scrollTop);
+}
+
+/**
+ * Scrolls the chat history so the inline frame's top edge sits
+ * FRAME_OFFSET_IN_HISTORY_PX below the history's top edge, leaving history to
+ * scroll both above and below the frame.
+ */
+async function placeInlineFrameNearHistoryTop(page: Page): Promise<void> {
+  const frameBox = (await inlineSurfaceIframe(page).boundingBox())!;
+  const historyBox = (await chatHistory(page).boundingBox())!;
+  const deltaPx = frameBox.y - historyBox.y - FRAME_OFFSET_IN_HISTORY_PX;
+  await chatHistory(page).evaluate((el, delta) => {
+    el.scrollTop += delta;
+  }, deltaPx);
+}
+
+/**
+ * Turns the wheel WHEEL_STEPS notches of `deltaY` with the pointer over the
+ * visible part of the inline frame.
+ */
+async function wheelOverInlineFrame(page: Page, deltaY: number): Promise<void> {
+  const frameBox = (await inlineSurfaceIframe(page).boundingBox())!;
+  const historyBox = (await chatHistory(page).boundingBox())!;
+  const top = Math.max(frameBox.y, historyBox.y);
+  const bottom = Math.min(frameBox.y + frameBox.height, historyBox.y + historyBox.height);
+  await page.mouse.move(frameBox.x + frameBox.width / 2, (top + bottom) / 2);
+  for (let i = 0; i < WHEEL_STEPS; i++) {
+    await page.mouse.wheel(0, deltaY);
+    await page.waitForTimeout(WHEEL_STEP_INTERVAL_MS);
+  }
 }
 
 /**
@@ -344,16 +426,7 @@ test.describe('Surface Auto-Resize & Height Latch Prevention', () => {
     }) => {
       test.setTimeout(AUTO_RESIZE_TEST_TIMEOUT_MS);
 
-      const frame = await showInlineSurface(
-        page,
-        renderer.url,
-        generateSurfacePayload(OVER_CAP_ROW_COUNT),
-      );
-      await expect(frame.getByText('Row item index 0 ')).toBeVisible({
-        timeout: SURFACE_RENDER_TIMEOUT_MS,
-      });
-
-      await expectInlineFrameAtCap(page, frame);
+      const frame = await showCappedInlineSurface(page, renderer.url);
       await expectInlineFrameQuiet(page);
 
       // The guest scrolls, and its last row can be brought fully into its own
@@ -370,6 +443,39 @@ test.describe('Surface Auto-Resize & Height Latch Prevention', () => {
       });
       expect(lastRowBox.top).toBeGreaterThanOrEqual(0);
       expect(lastRowBox.overflow).toBeLessThanOrEqual(0);
+    });
+  }
+
+  // The renderers run on another origin, so the host cannot listen to wheel
+  // events inside the guest. The browser chains scrolling instead: once the
+  // guest reaches a scroll edge, further wheeling scrolls the chat history.
+  for (const renderer of RENDERERS) {
+    test(`chains the wheel from a capped ${renderer.name} inline frame to the chat history`, async ({
+      page,
+    }) => {
+      test.setTimeout(AUTO_RESIZE_TEST_TIMEOUT_MS);
+      await page.setViewportSize(WHEEL_TEST_VIEWPORT);
+
+      const frame = await showCappedInlineSurface(page, renderer.url);
+
+      // Down: the guest scrolls to its bottom edge, then the history follows.
+      await placeInlineFrameNearHistoryTop(page);
+      const beforeDown = await chatHistoryScroll(page);
+      expect(beforeDown.top, 'history must be able to scroll down').toBeLessThan(beforeDown.range);
+      await wheelOverInlineFrame(page, WHEEL_STEP_PX);
+      const guestRange = await guestScrollRange(frame);
+      await expect.poll(() => guestScrollTop(frame)).toBeGreaterThanOrEqual(guestRange - 1);
+      await expect
+        .poll(async () => (await chatHistoryScroll(page)).top)
+        .toBeGreaterThan(beforeDown.top);
+
+      // Up: the guest scrolls back to its top edge, then the history follows.
+      await placeInlineFrameNearHistoryTop(page);
+      const beforeUp = await chatHistoryScroll(page);
+      expect(beforeUp.top, 'history must be able to scroll up').toBeGreaterThan(0);
+      await wheelOverInlineFrame(page, -WHEEL_STEP_PX);
+      await expect.poll(() => guestScrollTop(frame)).toBe(0);
+      await expect.poll(async () => (await chatHistoryScroll(page)).top).toBeLessThan(beforeUp.top);
     });
   }
 

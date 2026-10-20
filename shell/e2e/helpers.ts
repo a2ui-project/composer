@@ -193,9 +193,19 @@ export function inlineSurfaceContainer(page: Page): Locator {
   return page.locator('.inline-surface-card .rendered-frame-container');
 }
 
+/** The iframe of the inline chat surface. */
+export function inlineSurfaceIframe(page: Page): Locator {
+  return page.locator('.inline-surface-card iframe.preview-iframe');
+}
+
 /** The guest document of the inline chat surface. */
 export function inlineSurfaceFrame(page: Page): FrameLocator {
-  return page.locator('.inline-surface-card iframe.preview-iframe').contentFrame();
+  return inlineSurfaceIframe(page).contentFrame();
+}
+
+/** The chat history's scroll container. */
+export function chatHistory(page: Page): Locator {
+  return page.locator('.chat-history-container');
 }
 
 /**
