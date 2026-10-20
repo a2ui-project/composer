@@ -50,16 +50,19 @@
       [class.hidden-frame]="!selectedComponentKey() || !catalogManagement.activeCatalog()"
     >
       <mat-card class="playground-card">
+        <mat-card-header>
+          <mat-card-title>Interactive Playground</mat-card-title>
+        </mat-card-header>
         <mat-card-content>
-          @if (selectedComponentKey() && catalogManagement.activeCatalog()) {
+          <ng-template #playgroundHeader let-activeTab="activeTab">
             <div class="playground-toolbar">
               <div class="playground-tabs" role="tablist" aria-label="Playground view">
                 <button
                   type="button"
                   role="tab"
                   class="playground-tab"
-                  [class.active]="activePlaygroundTab() === 'preview'"
-                  [attr.aria-selected]="activePlaygroundTab() === 'preview'"
+                  [class.active]="activeTab === 'preview'"
+                  [attr.aria-selected]="activeTab === 'preview'"
                   (click)="selectPlaygroundTab('preview')"
                 >
                   Preview
@@ -68,15 +71,15 @@
                   type="button"
                   role="tab"
                   class="playground-tab"
-                  [class.active]="activePlaygroundTab() === 'json'"
-                  [attr.aria-selected]="activePlaygroundTab() === 'json'"
+                  [class.active]="activeTab === 'json'"
+                  [attr.aria-selected]="activeTab === 'json'"
                   (click)="selectPlaygroundTab('json')"
                 >
                   Edit JSON
                 </button>
               </div>
               <div class="playground-actions">
-                @if (!loadingUsages()) {
+                @if (activeTab === 'json' && !loadingUsages()) {
                   <button
                     mat-stroked-button
                     type="button"
@@ -101,13 +104,11 @@
                 </button>
               </div>
             </div>
-          }
+          </ng-template>
+
           <div class="gallery-cards">
             @if (selectedComponentKey() && catalogManagement.activeCatalog()) {
               <div class="usage-card">
-                <div class="usage-header">
-                  <h3 class="usage-title">Usage</h3>
-                </div>
                 <div class="usage-content">
                   @if (loadingUsages()) {
                     <div class="usage-loading-spinner">
@@ -417,15 +418,19 @@
                 class="preview-card"
                 [class.hidden-frame]="activePlaygroundTab() !== 'preview'"
               >
-                <mat-card-header>
-                  <mat-card-title>Preview</mat-card-title>
+                <mat-card-header class="playground-card-header">
+                  <ng-container
+                    *ngTemplateOutlet="playgroundHeader; context: {activeTab: 'preview'}"
+                  ></ng-container>
                 </mat-card-header>
                 <a2ui-composer-rendered-frame></a2ui-composer-rendered-frame>
               </mat-card>
 
               <mat-card class="json-card" [class.hidden-frame]="activePlaygroundTab() !== 'json'">
-                <mat-card-header>
-                  <mat-card-title>Edit JSON</mat-card-title>
+                <mat-card-header class="playground-card-header">
+                  <ng-container
+                    *ngTemplateOutlet="playgroundHeader; context: {activeTab: 'json'}"
+                  ></ng-container>
                 </mat-card-header>
                 <mat-card-content class="json-tab">
                   @if (draft().preset) {

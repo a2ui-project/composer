@@ -568,7 +568,7 @@ describe('Gallery Component', () => {
     fixture.detectChanges();
 
     const titles = await harness.getCardTitlesText();
-    expect(titles).toEqual(['Preview', 'Edit JSON', 'Properties']);
+    expect(titles).toEqual(['Interactive Playground', 'Properties']);
   });
 
   it('switches between the Preview and Edit JSON tabs while keeping the preview frame mounted', async () => {

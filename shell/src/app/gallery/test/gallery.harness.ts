@@ -36,7 +36,10 @@ export class GalleryHarness extends ComponentHarness {
   private readonly getTitle = this.locatorForOptional('.component-title');
   private readonly getDescription = this.locatorForOptional('.component-description');
   private readonly getCopyButton = this.locatorForOptional(
-    MatButtonHarness.with({selector: '.copy-button'}),
+    MatButtonHarness.with({
+      selector:
+        '.playground-wrapper:not(.hidden-frame) .preview-slot > mat-card:not(.hidden-frame) .copy-button',
+    }),
   );
   private readonly getEmptySubtitle = this.locatorForOptional('.empty-subtitle');
   private readonly getCardTitles = this.locatorForAll('mat-card-title');
@@ -94,7 +97,9 @@ export class GalleryHarness extends ComponentHarness {
    * It should be 'Preview' or 'Edit JSON'.
    */
   async getPlaygroundTabsText(): Promise<string[]> {
-    const tabs = await this.locatorForAll('.playground-tab')();
+    const tabs = await this.locatorForAll(
+      '.preview-slot > mat-card:not(.hidden-frame) .playground-tab',
+    )();
     return Promise.all(tabs.map(async tab => (await tab.text()).trim()));
   }
 
@@ -103,7 +108,9 @@ export class GalleryHarness extends ComponentHarness {
    * It should be 'Preview' or 'Edit JSON'.
    */
   async getActivePlaygroundTabText(): Promise<string | null> {
-    const activeTab = await this.locatorForOptional('.playground-tab[aria-selected="true"]')();
+    const activeTab = await this.locatorForOptional(
+      '.playground-wrapper:not(.hidden-frame) .preview-slot > mat-card:not(.hidden-frame) .playground-tab[aria-selected="true"]',
+    )();
     return activeTab ? (await activeTab.text()).trim() : null;
   }
 
@@ -157,6 +164,10 @@ export class GalleryHarness extends ComponentHarness {
    * Clicks the clipboard copy button.
    */
   async clickCopyButton(): Promise<void> {
+    const activeTab = await this.getActivePlaygroundTabText();
+    if (activeTab !== 'Edit JSON' && activeTab !== null) {
+      await this.selectPlaygroundTab('Edit JSON');
+    }
     const button = await this.getCopyButton();
     if (!button) {
       throw new Error('Clipboard copy button is not present');
@@ -250,7 +261,14 @@ export class GalleryHarness extends ComponentHarness {
    * Launches the current last valid example in Composer.
    */
   async openInComposer(): Promise<void> {
-    await (await this.locatorFor(MatButtonHarness.with({text: /Open in Composer/}))()).click();
+    await (
+      await this.locatorFor(
+        MatButtonHarness.with({
+          selector: '.preview-slot > mat-card:not(.hidden-frame) button',
+          text: /Open in Composer/,
+        }),
+      )()
+    ).click();
   }
 
   /**

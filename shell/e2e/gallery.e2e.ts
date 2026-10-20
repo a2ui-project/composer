@@ -72,7 +72,7 @@ test.describe('Components Gallery User Journey', () => {
 
     // Assert card headers are visible (only Preview, Edit JSON, and Properties are mat-cards)
     const cardHeaders = page.locator('mat-card-header mat-card-title');
-    await expect(cardHeaders).toHaveText(['Preview', 'Edit JSON', 'Properties']);
+    await expect(cardHeaders).toHaveText(['Interactive Playground', 'Properties']);
 
     // 6. Verify the Playground toolbar has Preview/Edit JSON tabs on the top left, Copy JSON/Open in Composer on the top right,
     // Usage section on the left (narrower than Preview/Edit JSON) with Reset example at its bottom, and Preview card on the right by default
@@ -86,8 +86,8 @@ test.describe('Components Gallery User Journey', () => {
 
     await expect
       .poll(async () => {
-        const tabsBox = await page.locator('.playground-tabs').boundingBox();
-        const actionsBox = await page.locator('.playground-actions').boundingBox();
+        const tabsBox = await page.locator('.playground-tabs:visible').boundingBox();
+        const actionsBox = await page.locator('.playground-actions:visible').boundingBox();
         const usageCard = await page.locator('.usage-card').boundingBox();
         const previewCard = await page.locator('.preview-card').boundingBox();
         const previewSlot = await page.locator('.preview-slot').boundingBox();
@@ -163,7 +163,8 @@ test.describe('Components Gallery User Journey', () => {
     await expect(iframe).toBeVisible();
     await expect(iframe).toHaveAttribute('data-test-marker', 'persistent-preview');
 
-    // 10. Click copy to clipboard and assert clipboard content represents a JSON array envelope
+    // 10. Switch to Edit JSON tab to click copy to clipboard and assert clipboard content represents a JSON array envelope
+    await editJsonTab.click();
     const copyButton = page.getByRole('button', {name: /copy/i});
     await expect(copyButton).toBeVisible();
     await copyButton.click();
@@ -362,6 +363,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(page.getByRole('alert').filter({hasText: 'last valid example'})).toBeVisible();
     await page.getByRole('tab', {name: 'Preview', exact: true}).click();
     await expect(preview.getByText(edited, {exact: true})).toBeVisible();
+    await page.getByRole('tab', {name: 'Edit JSON', exact: true}).click();
     await page.getByRole('button', {name: 'Copy JSON', exact: true}).click();
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     expect(copied).toContain(edited);

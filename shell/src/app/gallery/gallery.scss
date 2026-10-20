@@ -146,18 +146,36 @@
   border: 1px solid var(--mat-sys-outline-variant);
   background-color: var(--mat-sys-surface-container-lowest, var(--mat-sys-surface));
   box-shadow: none !important;
+
+  mat-card-header {
+    padding: 20px 24px 16px;
+  }
+
+  mat-card-title {
+    font: var(--mat-sys-title-small);
+    letter-spacing: var(--mat-sys-title-small-tracking);
+  }
+
   > mat-card-content {
-    padding: 24px;
+    padding: 0 24px 24px;
   }
 }
 
+.playground-card-header {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+}
+
 .playground-toolbar {
+  box-sizing: border-box;
+  min-width: 0;
+  flex: 1;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 20px;
 }
 
 .playground-tabs {
@@ -308,12 +326,6 @@
   flex-direction: column;
 }
 
-.usage-title {
-  margin: 0 0 12px;
-  font: var(--mat-sys-title-small);
-  letter-spacing: var(--mat-sys-title-small-tracking);
-}
-
 .usage-content {
   display: flex;
   flex-direction: column;
@@ -330,12 +342,6 @@
   border-radius: 4px;
   font-style: italic;
   color: var(--mat-sys-on-surface-variant);
-}
-
-.usage-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .copy-button {
@@ -451,8 +457,13 @@
     gap: 16px;
   }
 
-  .playground-card > mat-card-content {
-    padding: 16px;
+  .playground-card {
+    mat-card-header {
+      padding: 16px;
+    }
+    > mat-card-content {
+      padding: 0 16px 16px;
+    }
   }
 
   .preview-card,
