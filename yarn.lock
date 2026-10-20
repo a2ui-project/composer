@@ -896,17 +896,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@angular/router@npm:22.0.7":
-  version: 22.0.7
-  resolution: "@angular/router@npm:22.0.7"
+"@angular/router@npm:22.2.1":
+  version: 22.2.1
+  resolution: "@angular/router@npm:22.2.1"
   dependencies:
     tslib: "npm:^2.3.0"
   peerDependencies:
-    "@angular/common": 22.0.7
-    "@angular/core": 22.0.7
-    "@angular/platform-browser": 22.0.7
+    "@angular/common": 22.2.1
+    "@angular/core": 22.2.1
+    "@angular/platform-browser": 22.2.1
     rxjs: ^6.5.3 || ^7.4.0
-  checksum: 10c0/990f085fbe04f424ce9ff5b2d203e0741c55639e04ea4913b11a39fce0e82d6caeaa2947bade5946e686bbc8fdfba109168141d56a243f8c4657e9538009a4da
+  checksum: 10c0/54a78d666d18766d49b15544ffc531ed435fe1c431af50f2a1e380ba524cf8941bf23b1557e6d67752e4fffe8ef337080f436268bea169d296e268212db9328c
   languageName: node
   linkType: hard
 
@@ -6304,7 +6304,7 @@ __metadata:
     "@angular/material": "npm:22.0.5"
     "@angular/platform-browser": "npm:22.0.7"
     "@angular/platform-browser-dynamic": "npm:22.0.7"
-    "@angular/router": "npm:22.0.7"
+    "@angular/router": "npm:22.2.1"
     "@axe-core/playwright": "npm:4.13.0"
     "@copilotkit/angular": "npm:0.5.2"
     "@google/genai": "npm:2.11.0"
@@ -10612,7 +10612,7 @@ __metadata:
     "@angular/forms": "npm:22.0.7"
     "@angular/platform-browser": "npm:22.0.7"
     "@angular/platform-browser-dynamic": "npm:22.0.7"
-    "@angular/router": "npm:22.0.7"
+    "@angular/router": "npm:22.2.1"
     "@types/jsdom": "npm:28.0.3"
     a2ui-bridge: "npm:0.1.0"
     angular-eslint: "npm:22.1.0"
