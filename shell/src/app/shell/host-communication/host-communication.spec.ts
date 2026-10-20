@@ -437,6 +437,58 @@ describe('HostCommunication', () => {
     sub.unsubscribe();
   });
 
+  it('keeps SURFACE_RESIZE out of the capped history only, not the stream or latestEnvelope', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+
+    const emitted: MessageEnvelope[] = [];
+    const sub = service.messageStream$.subscribe(envelope => {
+      emitted.push(envelope);
+    });
+
+    // Each kept message is followed by a resize, so resizes that took buffer
+    // slots would evict kept messages well before the cap is reached.
+    const keptCount = 150;
+    for (let index = 0; index < keptCount; index++) {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {type: PreviewBridgeMessageType.SEND_TO_SERVER, payload: {index}},
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.SURFACE_RESIZE,
+            payload: {height: 100 + index},
+          },
+        }),
+      );
+    }
+
+    const history = service.getEnvelopeHistory();
+    expect(history.length).toBe(100);
+    expect(history.every(env => env.type === PreviewBridgeMessageType.SEND_TO_SERVER)).toBe(true);
+    expect(history[0].payload).toEqual({index: keptCount - 100});
+    expect(history[99].payload).toEqual({index: keptCount - 1});
+
+    const emittedResizes = emitted.filter(
+      env => env.type === PreviewBridgeMessageType.SURFACE_RESIZE,
+    );
+    expect(emitted.length).toBe(keptCount * 2);
+    expect(emittedResizes.length).toBe(keptCount);
+    expect(emittedResizes[keptCount - 1].payload).toEqual({height: 100 + keptCount - 1});
+
+    const latest = service.latestEnvelope();
+    expect(latest?.type).toBe(PreviewBridgeMessageType.SURFACE_RESIZE);
+    expect(latest).toBe(emitted[emitted.length - 1]);
+
+    sub.unsubscribe();
+  });
+
   it('buffers early messages when no iframe is registered and replays them upon registration', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
 
