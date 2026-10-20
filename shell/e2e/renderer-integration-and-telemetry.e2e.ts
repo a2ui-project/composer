@@ -28,6 +28,7 @@ import {
   waitForPreviewTab,
 } from './helpers';
 import {CAR_BOOKING} from '../src/app/chat/chat-service/initial-draft';
+import {MAX_CONTENT_HEIGHT_PX} from '../src/app/preview/content-height';
 
 /** A single SURFACE_RESIZE message observed on the postMessage wire. */
 interface SurfaceResizeLogEntry {
@@ -204,27 +205,14 @@ const HEIGHT_STABILITY_TIMEOUT_MS = 5_000;
 const STABILITY_PROBE_INTERVAL_MS = 100;
 
 /**
- * Upper bound for a settled preview frame. The sample content is roughly 360px
- * tall and the test viewport is 800px, so anything beyond this means the frame
- * is still growing under its own resize traffic.
- */
-const MAX_SETTLED_FRAME_HEIGHT_PX = 1500;
-
-/**
  * Upper bound on SURFACE_RESIZE messages recorded for one preview session.
  *
- * Measured at 1280x800, from the postMessage wire, when this ran against the
- * docked preview:
- *   healthy   Angular 4, React 5, Lit 7  (Lit re-renders twice: 32,148,288,312,148,288,312)
- *   reverted guest CSS, host breaker active   13 and 15
- *   reverted guest CSS, no host breaker       212 and 239
- * Remeasured inline in the chat (12 runs): healthy Angular 4, React 4-5,
- * Lit 2-3. The broken-guest figures have only been measured on the docked
- * preview.
- * The bound has to clear the healthy maximum with margin and stay below what
- * a broken guest sends while the host breaker holds it, which happens after
- * MAX_MONOTONIC_GROWTH_REPORTS growing reports (rendered-frame.ts); 10
- * separates the two by three messages on either side.
+ * Measured at 1280x800, from the postMessage wire: healthy guests send
+ * Angular 4, React 4-5, Lit 2-7 (Lit re-renders twice:
+ * 32,148,288,312,148,288,312). 10 is that maximum plus a margin of three. A
+ * guest caught in a feedback loop stops at MAX_CONTENT_HEIGHT_PX, so it may
+ * send fewer than this; under the cap the detectors for it are the
+ * frame-versus-content and below-the-cap assertions.
  */
 const MAX_IDLE_RESIZE_MESSAGES = 10;
 
@@ -671,9 +659,11 @@ for (const config of CONFIGS) {
       expect
         .soft(Math.max(...settled) - Math.min(...settled), `heights: ${heights}`)
         .toBeLessThanOrEqual(1);
-      expect
-        .soft(heights[heights.length - 1], `heights: ${heights}`)
-        .toBeLessThan(MAX_SETTLED_FRAME_HEIGHT_PX);
+      // The sample is shorter than the cap, so a frame resting at the cap was
+      // driven there by a feedback loop rather than by the content.
+      expect(heights[heights.length - 1], `heights: ${heights}`).toBeLessThan(
+        MAX_CONTENT_HEIGHT_PX,
+      );
 
       const resizeLog = await page.evaluate((history: CapturedBridgeEnvelope[]) => {
         return history
@@ -710,12 +700,12 @@ for (const config of CONFIGS) {
       // against the guest's own content box rather than a literal keeps this
       // valid when the sample payload changes. Hard, not soft: this is the
       // assertion with real margin (off by 16-32px when the fix is reverted)
-      // and it cannot be satisfied by MAX_SURFACE_DIMENSION or by the host
-      // growth breaker. In content sizing the 280px floor in
-      // rendered-frame.scss holds only until the first report; RenderedFrame
-      // then applies the reported height as an inline min-height, which wins
-      // over the floor, so a surface shorter than 280px is still measured on
-      // its content.
+      // and it cannot be satisfied by MAX_SURFACE_DIMENSION or by the content
+      // height cap, which the sample stays below. In content sizing the 280px
+      // floor in rendered-frame.scss holds only until the first report;
+      // RenderedFrame then applies the reported height as an inline
+      // min-height, which wins over the floor, so a surface shorter than
+      // 280px is still measured on its content.
       //
       // It is also the only thing standing between React and no coverage at
       // all: on a reverted React guest, the message count, run-length and

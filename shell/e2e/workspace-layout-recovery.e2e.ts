@@ -168,7 +168,7 @@ test('resets modified dockview layout back to default when clicking Reset Layout
         }),
       );
 
-    // Verify no spurious errors were logged to the Errors tab (circuit breaker did not false-trip)
+    // Verify no spurious errors were logged to the Errors tab while the preview settled
     await expect(page.locator('.dv-tab', {hasText: /^Errors/})).toHaveText('Errors');
   }
 

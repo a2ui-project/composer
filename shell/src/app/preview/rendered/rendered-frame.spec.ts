@@ -16,6 +16,7 @@
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {RenderedFrame, RenderedFrameSizing} from './rendered-frame';
+import {MAX_CONTENT_HEIGHT_PX} from '../content-height';
 import {PreviewUrlParam} from '../preview-url-param';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RenderedFrameHarness} from './test/rendered-frame.harness';
@@ -374,6 +375,8 @@ describe('RenderedFrame Live Preview Viewport', () => {
     );
   });
   it('applies a reported surface height to the frame container', async () => {
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
     emitBridgeMessage(surfaceResizeEnvelope(520));
     fixture.detectChanges();
 
@@ -389,17 +392,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
     fixture.detectChanges();
 
     expect(await harness.getAppliedHeightPx()).toBe(264);
-  });
-
-  it('shrinks the applied height when a smaller surface height is reported', async () => {
-    emitBridgeMessage(surfaceResizeEnvelope(540));
-    fixture.detectChanges();
-    expect(await harness.getAppliedHeightPx()).toBe(540);
-
-    emitBridgeMessage(surfaceResizeEnvelope(394));
-    fixture.detectChanges();
-
-    expect(await harness.getAppliedHeightPx()).toBe(394);
   });
 
   it('keeps the frame at panel height when the guest reports zero', async () => {
@@ -476,18 +468,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
 
     expect(await lateHarness.getAppliedHeightPx()).toBeNull();
     lateFixture.destroy();
-  });
-
-  it('applies reported heights in content mode', async () => {
-    expect(await harness.getAppliedHeightPx()).toBeNull();
-
-    emitBridgeMessage(surfaceResizeEnvelope(520));
-    fixture.detectChanges();
-    expect(await harness.getAppliedHeightPx()).toBe(520);
-
-    emitBridgeMessage(surfaceResizeEnvelope(264));
-    fixture.detectChanges();
-    expect(await harness.getAppliedHeightPx()).toBe(264);
   });
 
   it('stays at host height in fill mode', async () => {
@@ -687,12 +667,11 @@ describe('RenderedFrame Live Preview Viewport', () => {
   });
 
   /**
-   * Growth behavior of a content-sized frame, asserted only through the height
-   * it applies, after every timer it may have armed has run. These scenarios
-   * do not depend on how the frame bounds growth, so they hold for the growth
-   * breaker and for any replacement of it. Every scenario ends below 560px;
-   * the runaway and transition scenarios send at least 16 consecutive growing
-   * reports, enough to engage the breaker.
+   * Growth behavior of a content-sized frame. Each scenario reads the frame
+   * only through the height it applies, after every timer it may have armed
+   * has run. Every scenario except RT-4 ends below MAX_CONTENT_HEIGHT_PX, and
+   * the runaway and transition runs are long enough to trip any count- or
+   * time-based limit on growth.
    */
   describe('growth behavior', () => {
     const START_TIME = 1_700_000_000_000;
@@ -705,7 +684,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     /** Growing reports in a runaway or transition run: 100px to 490px. */
     const RUN_REPORTS = 27;
     const RUN_FINAL_PX = BASE_PX + (RUN_REPORTS - 1) * STEP_PX;
-    /** Reports that leave a runaway run mid-flight (held, for the breaker). */
+    /** Fast growing reports that leave a run in progress when an event arrives. */
     const MID_RUN_REPORTS = 17;
     const NEW_CONTENT = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
 
@@ -757,6 +736,8 @@ describe('RenderedFrame Live Preview Viewport', () => {
     });
 
     it('RT-4 stops growing when the guest grows with every applied height', async () => {
+      const logger = TestBed.inject(ErrorLogger);
+      logger.clear();
       const result = await simulateGuest(host, viewportBoundGuest(), {
         cadenceMs: LOOP_CADENCE_MS,
       });
@@ -765,6 +746,9 @@ describe('RenderedFrame Live Preview Viewport', () => {
       // Long enough to have run into whatever bounds the growth.
       expect(result.reports).toBeGreaterThan(16);
       expect(await settle(host)).toBe(result.applied);
+      expect(result.applied).toBe(MAX_CONTENT_HEIGHT_PX);
+      // Reaching the cap is normal and logs nothing.
+      expect(logger.getHistory()).toEqual([]);
     });
 
     it('RT-5 follows a transition of more than 48 reports to its final height', async () => {
@@ -885,385 +869,72 @@ describe('RenderedFrame Live Preview Viewport', () => {
     });
   });
 
-  describe('runaway growth circuit breaker', () => {
-    /** Cadence of the observed SURFACE_RESIZE feedback loop, in milliseconds. */
-    const LOOP_CADENCE_MS = 24;
-    /** Growth increment of the observed loop (guest body padding), in pixels. */
-    const LOOP_STEP_PX = 32;
-    /** Cadence of per-frame reports from a CSS height transition at 60fps. */
-    const FRAME_MS = 16;
-    /** Per-frame growth of such a transition, in pixels. */
-    const TRANSITION_STEP_PX = 20;
-    /** Quiet period after which a held guest counts as settled. */
-    const SETTLE_MS = 500;
-    /**
-     * Index (counting from 0) of the first report of a run that is held: the
-     * sixteenth consecutive growing report reaches the limit.
-     */
-    const HOLD_AT = 15;
-    const BASE_HEIGHT_PX = 300;
-    const START_TIME = 1_700_000_000_000;
-    const NEW_CONTENT = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+  describe('content height cap', () => {
+    it('applies the cap for a report above it', async () => {
+      emitBridgeMessage(surfaceResizeEnvelope(MAX_CONTENT_HEIGHT_PX + 200));
+      fixture.detectChanges();
+
+      expect(await harness.getAppliedHeightPx()).toBe(MAX_CONTENT_HEIGHT_PX);
+    });
+
+    it('follows a smaller report after clamping', async () => {
+      emitBridgeMessage(surfaceResizeEnvelope(MAX_CONTENT_HEIGHT_PX + 200));
+      fixture.detectChanges();
+      emitBridgeMessage(surfaceResizeEnvelope(320));
+      fixture.detectChanges();
+
+      expect(await harness.getAppliedHeightPx()).toBe(320);
+    });
+
+    it('rounds a fractional report up', async () => {
+      emitBridgeMessage(surfaceResizeEnvelope(320.4));
+      fixture.detectChanges();
+
+      expect(await harness.getAppliedHeightPx()).toBe(321);
+    });
+
+    it('ignores a report above the cap in fill mode', async () => {
+      fixture.componentRef.setInput('sizing', 'fill');
+      fixture.detectChanges();
+      emitBridgeMessage(surfaceResizeEnvelope(MAX_CONTENT_HEIGHT_PX + 200));
+      fixture.detectChanges();
+
+      expect(await harness.getAppliedHeightPx()).toBeNull();
+    });
+  });
+
+  describe('sizing mode switches', () => {
+    let host: GuestSimulationHost;
 
     beforeEach(() => {
       vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'Date']});
-      vi.setSystemTime(START_TIME);
+      vi.setSystemTime(1_700_000_000_000);
+      host = guestHost();
     });
 
     afterEach(() => {
       vi.useRealTimers();
     });
 
-    /**
-     * Emits through both the uncoalesced stream and the coalesced signal, as the
-     * host does. An envelope's timestamp is the host's receipt time, so the clock
-     * moves there first; timers armed from then on count from it.
-     */
-    function emit(envelope: MessageEnvelope): void {
-      vi.setSystemTime(envelope.timestamp);
-      messageStreamSubject.next(envelope);
-      messageStreamSignal.set(envelope);
-    }
+    // Invariant: the latest report wins, whatever mode the frame was in when
+    // earlier reports arrived.
+    it('applies the report stored while filling once switched back to content', async () => {
+      const capped = await simulateGuest(host, viewportBoundGuest(), {
+        cadenceMs: LOOP_CADENCE_MS,
+      });
+      expect(capped.applied).toBe(MAX_CONTENT_HEIGHT_PX);
 
-    /** Emits a SURFACE_RESIZE report of `height` pixels that the host receives at `time`. */
-    function emitResize(height: number, time: number): void {
-      emit(surfaceResizeEnvelope(height, {timestamp: time}));
-    }
-
-    function logged(logger: ErrorLogger, level: 'warn' | 'info'): string[] {
-      return logger
-        .getHistory()
-        .filter(item => item.level === level)
-        .map(item => item.message);
-    }
-
-    function appliedHeight(): number | null {
-      return fixture.componentInstance.dynamicHeight();
-    }
-
-    /**
-     * Drives the component with a guest stuck in a resize feedback loop: every
-     * time the host applies a reported height, the guest lays out LOOP_STEP_PX
-     * taller and reports that. Like a real loop it falls silent as soon as the
-     * host stops applying its reports. Returns the last report it made.
-     */
-    function runFeedbackLoop(
-      startHeight = BASE_HEIGHT_PX,
-      startTime = START_TIME,
-    ): {height: number; time: number} {
-      let height = startHeight;
-      let time = startTime;
-      emitResize(height, time);
-      fixture.detectChanges();
-      for (let step = 0; step < 40 && appliedHeight() === height; step++) {
-        height += LOOP_STEP_PX;
-        time += LOOP_CADENCE_MS;
-        emitResize(height, time);
-        fixture.detectChanges();
-      }
-      return {height, time};
-    }
-
-    /** Emits `count` per-frame reports of a height transition, returning the last one. */
-    function runTransition(count: number, startTime = START_TIME): {height: number; time: number} {
-      let height = BASE_HEIGHT_PX;
-      let time = startTime;
-      for (let i = 0; i < count; i++) {
-        height = BASE_HEIGHT_PX + i * TRANSITION_STEP_PX;
-        time = startTime + i * FRAME_MS;
-        emitResize(height, time);
-        fixture.detectChanges();
-      }
-      return {height, time};
-    }
-
-    it('holds the frame once a guest grows in response to every applied height', () => {
-      const logger = TestBed.inject(ErrorLogger);
-      logger.clear();
-
-      const last = runFeedbackLoop();
-
-      // The report that reaches the limit is held, so the one before it is the last applied.
-      expect(last.height).toBe(BASE_HEIGHT_PX + HOLD_AT * LOOP_STEP_PX);
-      expect(appliedHeight()).toBe(BASE_HEIGHT_PX + (HOLD_AT - 1) * LOOP_STEP_PX);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-      expect(logged(logger, 'info').filter(message => message.includes('held'))).toHaveLength(1);
-      expect(logged(logger, 'warn')).toHaveLength(0);
-    });
-
-    it('drops a content-mode hold when switched to fill', async () => {
-      const last = runFeedbackLoop();
-      expect(await harness.getAppliedHeightPx()).toBeLessThan(last.height);
-
-      // While filling, the guest settles smaller. Neither the hold's settle
-      // timer nor its ceiling may overwrite that report.
+      // While filling, the guest settles smaller; nothing from the run that
+      // reached the cap may overwrite that report.
       fixture.componentRef.setInput('sizing', 'fill');
       fixture.detectChanges();
-      emitResize(264, last.time + LOOP_CADENCE_MS);
+      report(host, 264, 24);
       fixture.detectChanges();
-      vi.runAllTimers();
-      fixture.detectChanges();
+      await settle(host);
 
       fixture.componentRef.setInput('sizing', 'content');
       fixture.detectChanges();
       expect(await harness.getAppliedHeightPx()).toBe(264);
-    });
-
-    it('confirms the loop when the guest grows again as soon as its settled height applies', () => {
-      const logger = TestBed.inject(ErrorLogger);
-      logger.clear();
-      const last = runFeedbackLoop();
-
-      // Held, the guest is silent. Once it counts as settled its last report is applied...
-      vi.advanceTimersByTime(SETTLE_MS);
-      expect(appliedHeight()).toBe(last.height);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
-
-      // ...and the guest reacts to that like it reacts to every applied height.
-      const reactionTime = last.time + SETTLE_MS + LOOP_CADENCE_MS;
-      emitResize(last.height + LOOP_STEP_PX, reactionTime);
-      fixture.detectChanges();
-
-      expect(appliedHeight()).toBe(last.height);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-      const warnings = logged(logger, 'warn').filter(message => message.includes('feedback loop'));
-      expect(warnings).toHaveLength(1);
-
-      // A confirmed hold is not probed again: the frame stays put however long the guest is silent.
-      vi.advanceTimersByTime(10 * SETTLE_MS);
-      expect(appliedHeight()).toBe(last.height);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-    });
-
-    it('releases the hold when the guest keeps growing while the frame is held', () => {
-      const logger = TestBed.inject(ErrorLogger);
-      logger.clear();
-
-      // A long height transition: growing per-frame reports independent of the
-      // host, more than the limit plus the few it takes to prove that.
-      const last = runTransition(HOLD_AT + 11);
-
-      expect(appliedHeight()).toBe(last.height);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
-      expect(logged(logger, 'warn')).toHaveLength(0);
-    });
-
-    it('applies the settled height when a held guest stops reporting', () => {
-      const logger = TestBed.inject(ErrorLogger);
-      logger.clear();
-
-      // Too few reports after the hold to prove the growth is the guest's own.
-      const last = runTransition(HOLD_AT + 2);
-      expect(appliedHeight()).toBe(BASE_HEIGHT_PX + (HOLD_AT - 1) * TRANSITION_STEP_PX);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-
-      vi.advanceTimersByTime(SETTLE_MS);
-
-      expect(appliedHeight()).toBe(last.height);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
-      expect(logged(logger, 'warn')).toHaveLength(0);
-    });
-
-    it('does not take growth caused by new content for a reaction to the settled height', () => {
-      const logger = TestBed.inject(ErrorLogger);
-      logger.clear();
-      const last = runTransition(HOLD_AT + 2);
-      vi.advanceTimersByTime(SETTLE_MS);
-      expect(appliedHeight()).toBe(last.height);
-
-      fixture.componentRef.setInput('payload', NEW_CONTENT);
-      fixture.detectChanges();
-      emitResize(last.height + 200, last.time + SETTLE_MS + LOOP_CADENCE_MS);
-      fixture.detectChanges();
-
-      expect(appliedHeight()).toBe(last.height + 200);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
-      expect(logged(logger, 'warn')).toHaveLength(0);
-    });
-
-    it('drops a settle timer armed for the previous content when new content is sent', () => {
-      const logger = TestBed.inject(ErrorLogger);
-      logger.clear();
-      const last = runTransition(HOLD_AT + 2);
-      const heldHeight = appliedHeight();
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-
-      // New content is sent while the hold is still waiting for the previous
-      // content to settle. Firing that timer afterwards would apply the previous
-      // content's height as a probe and take the new content's first report for
-      // a reaction to it.
-      fixture.componentRef.setInput('payload', NEW_CONTENT);
-      fixture.detectChanges();
-      vi.advanceTimersByTime(SETTLE_MS);
-      expect(appliedHeight()).toBe(heldHeight);
-
-      emitResize(last.height + 200, last.time + SETTLE_MS + LOOP_CADENCE_MS);
-      fixture.detectChanges();
-
-      expect(appliedHeight()).toBe(last.height + 200);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
-      expect(logged(logger, 'warn')).toHaveLength(0);
-    });
-
-    it('holds a burst delivered inside a single change detection tick', () => {
-      emitResize(BASE_HEIGHT_PX, START_TIME);
-      fixture.detectChanges();
-      expect(appliedHeight()).toBe(BASE_HEIGHT_PX);
-
-      for (let i = 1; i <= HOLD_AT + 1; i++) {
-        emitResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS);
-      }
-      fixture.detectChanges();
-
-      expect(appliedHeight()).toBe(BASE_HEIGHT_PX + (HOLD_AT - 1) * LOOP_STEP_PX);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-
-      vi.advanceTimersByTime(SETTLE_MS);
-      expect(appliedHeight()).toBe(BASE_HEIGHT_PX + (HOLD_AT + 1) * LOOP_STEP_PX);
-    });
-
-    it('keeps applying growth when reports arrive slower than the runaway window', () => {
-      const logger = TestBed.inject(ErrorLogger);
-      logger.clear();
-
-      const slowIntervalMs = 600;
-      for (let i = 0; i < 20; i++) {
-        emitResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * slowIntervalMs);
-        fixture.detectChanges();
-      }
-
-      expect(appliedHeight()).toBe(BASE_HEIGHT_PX + 19 * LOOP_STEP_PX);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
-      expect(logged(logger, 'info')).toHaveLength(0);
-    });
-
-    it('restarts the growth run when a report does not grow', () => {
-      let time = START_TIME;
-      for (let cycle = 0; cycle < 4; cycle++) {
-        for (let i = 0; i < HOLD_AT - 2; i++) {
-          emitResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, time);
-          time += LOOP_CADENCE_MS;
-          fixture.detectChanges();
-        }
-        // A single non-growing report ends the run before it reaches the limit.
-        emitResize(BASE_HEIGHT_PX, time);
-        time += LOOP_CADENCE_MS;
-        fixture.detectChanges();
-      }
-
-      emitResize(BASE_HEIGHT_PX + LOOP_STEP_PX, time);
-      fixture.detectChanges();
-
-      expect(appliedHeight()).toBe(BASE_HEIGHT_PX + LOOP_STEP_PX);
-    });
-
-    it('ends the hold when the guest reports a smaller height', () => {
-      const last = runFeedbackLoop();
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-
-      emitResize(264, last.time + LOOP_CADENCE_MS);
-      fixture.detectChanges();
-      expect(appliedHeight()).toBe(264);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
-
-      // Growth after that is a new run and is applied again.
-      emitResize(264 + LOOP_STEP_PX, last.time + 2 * LOOP_CADENCE_MS);
-      fixture.detectChanges();
-      expect(appliedHeight()).toBe(264 + LOOP_STEP_PX);
-    });
-
-    it('ends a confirmed hold when the guest reports again after a pause', () => {
-      const last = runFeedbackLoop();
-      vi.advanceTimersByTime(SETTLE_MS);
-      const reactionTime = last.time + SETTLE_MS + LOOP_CADENCE_MS;
-      emitResize(last.height + LOOP_STEP_PX, reactionTime);
-      fixture.detectChanges();
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-
-      emitResize(500, reactionTime + SETTLE_MS + 1);
-      fixture.detectChanges();
-
-      expect(appliedHeight()).toBe(500);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
-    });
-
-    it('keeps a confirmed hold while new content is rendered', () => {
-      const last = runFeedbackLoop();
-      vi.advanceTimersByTime(SETTLE_MS);
-      const reactionTime = last.time + SETTLE_MS + LOOP_CADENCE_MS;
-      emitResize(last.height + LOOP_STEP_PX, reactionTime);
-      fixture.detectChanges();
-
-      fixture.componentRef.setInput('payload', NEW_CONTENT);
-      fixture.detectChanges();
-      emitResize(last.height + 2 * LOOP_STEP_PX, reactionTime + LOOP_CADENCE_MS);
-      fixture.detectChanges();
-
-      expect(appliedHeight()).toBe(last.height);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-    });
-
-    it('holds for good within a run once the guest has been released twice', () => {
-      // Grows to the limit, 3 held reports and a release, twice over, then held until settled.
-      const releasedTwiceAt = 2 * (HOLD_AT + 3);
-      const lastAppliedBeforeHold = releasedTwiceAt + HOLD_AT - 1;
-      const last = runTransition(lastAppliedBeforeHold + 6);
-
-      expect(appliedHeight()).toBe(BASE_HEIGHT_PX + lastAppliedBeforeHold * TRANSITION_STEP_PX);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-
-      vi.advanceTimersByTime(SETTLE_MS);
-      expect(appliedHeight()).toBe(last.height);
-    });
-
-    it('clears the hold when the renderer signals that it is ready again', () => {
-      const last = runFeedbackLoop();
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-
-      emit(
-        bridgeEnvelope(
-          PreviewBridgeMessageType.RENDERER_READY,
-          {},
-          {
-            timestamp: last.time + LOOP_CADENCE_MS,
-          },
-        ),
-      );
-      fixture.detectChanges();
-
-      emitResize(500, last.time + 2 * LOOP_CADENCE_MS);
-      fixture.detectChanges();
-
-      expect(appliedHeight()).toBe(500);
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
-    });
-
-    it('resets dynamicHeight to null and clears the hold when sessionResetNonce increments', () => {
-      const last = runFeedbackLoop();
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-      expect(appliedHeight()).not.toBeNull();
-
-      stateSyncMock.sessionResetNonce.update(n => n + 1);
-      fixture.detectChanges();
-
-      expect(appliedHeight()).toBeNull();
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
-
-      // Subsequent resize reports in the new session are not clamped by the prior hold.
-      emitResize(500, last.time + SETTLE_MS);
-      fixture.detectChanges();
-      expect(appliedHeight()).toBe(500);
-    });
-
-    it('drops the settle timer when the component is destroyed', () => {
-      runTransition(HOLD_AT + 2);
-      const heldHeight = appliedHeight();
-      expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
-
-      fixture.destroy();
-      vi.advanceTimersByTime(SETTLE_MS);
-
-      expect(fixture.componentInstance.dynamicHeight()).toBe(heldHeight);
     });
   });
 });

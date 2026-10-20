@@ -27,6 +27,7 @@ import {
   showInlineSurface,
   waitForPreviewTab,
 } from './helpers';
+import {MAX_CONTENT_HEIGHT_PX} from '../src/app/preview/content-height';
 
 /** Guest samples this file exercises, one per renderer. */
 const RENDERERS: ReadonlyArray<{name: string; url: string}> = [
@@ -42,23 +43,36 @@ const RENDERERS: ReadonlyArray<{name: string; url: string}> = [
 const CONTENT_FLOOR_PX = 280;
 
 /**
- * Height above which the fixtures here would stop measuring how a
- * content-sized frame follows its content. Every fixture stays below it, and
- * the expectations compare against min(content, cap), so they also hold for a
- * frame that caps its height there.
- */
-const CONTENT_HEIGHT_CAP_PX = 560;
-
-/**
  * Rows in the growable surface. Filled, they add about 190px (24px each) to a
  * surface of about 225px, so the grown surface stays below
- * CONTENT_HEIGHT_CAP_PX.
+ * MAX_CONTENT_HEIGHT_PX.
  */
 const GROWABLE_LINE_COUNT = 8;
 
 /**
+ * Rows in the growable surface when it has to outgrow the cap: filled, about
+ * 225px + 20 × 24px, well above MAX_CONTENT_HEIGHT_PX.
+ */
+const OVER_CAP_LINE_COUNT = 20;
+
+/** Rows in a surface taller than the cap: about 27px each, so about 800px. */
+const OVER_CAP_ROW_COUNT = 30;
+
+/** Fractional device scale factors at which a frame could creep by a pixel. */
+const FRACTIONAL_SCALE_FACTORS = [1.25, 1.5] as const;
+
+/** How long a settled inline frame must keep its height. */
+const QUIET_PERIOD_MS = 1000;
+
+/** Interval between height samples during the quiet period. */
+const QUIET_SAMPLE_INTERVAL_MS = 100;
+
+/** Allowance for sub-pixel rounding between the capped frame and the cap. */
+const CAP_TOLERANCE_PX = 1;
+
+/**
  * Rows in the tall surface: about 350px, taller than CONTENT_FLOOR_PX and
- * below CONTENT_HEIGHT_CAP_PX.
+ * below MAX_CONTENT_HEIGHT_PX.
  */
 const TALL_ROW_COUNT = 13;
 
@@ -136,13 +150,13 @@ function generateSurfacePayload(rowCount: number): string {
 
 /**
  * A surface whose height the guest changes by itself: a text field plus
- * GROWABLE_LINE_COUNT Text rows bound to the same data path. Typing into the
+ * `lineCount` Text rows bound to the same data path. Typing into the
  * field fills every row; clearing it empties them again. The renderer, not the
  * host, makes the content grow and shrink, inside one guest document, which is
  * what a guest latched to its own viewport height would fail to follow.
  */
-function growableSurfacePayload(): unknown[] {
-  const lineIds = Array.from({length: GROWABLE_LINE_COUNT}, (_, i) => `line_${i}`);
+function growableSurfacePayload(lineCount = GROWABLE_LINE_COUNT): unknown[] {
+  const lineIds = Array.from({length: lineCount}, (_, i) => `line_${i}`);
   return [
     {
       version: 'v0.9',
@@ -207,7 +221,7 @@ async function inlineFrameOffset(
     el => el.getBoundingClientRect().height,
   );
   return {
-    offset: Math.abs(frameHeight - Math.min(contentHeight, CONTENT_HEIGHT_CAP_PX)),
+    offset: Math.abs(frameHeight - Math.min(contentHeight, MAX_CONTENT_HEIGHT_PX)),
     frameHeight,
     contentHeight,
   };
@@ -223,9 +237,35 @@ async function expectInlineFrameOnContent(page: Page, frame: FrameLocator): Prom
   const {frameHeight, contentHeight} = await inlineFrameOffset(page, frame);
   // Fixture guard: above the cap the frame stops following the content.
   expect(contentHeight, 'fixture must stay below the content height cap').toBeLessThan(
-    CONTENT_HEIGHT_CAP_PX,
+    MAX_CONTENT_HEIGHT_PX,
   );
   return frameHeight;
+}
+
+/** Rendered height of the inline frame's container. */
+function inlineFrameHeight(page: Page): Promise<number> {
+  return inlineSurfaceContainer(page).evaluate(el => el.getBoundingClientRect().height);
+}
+
+/** Waits until the inline frame sits at the cap, for content taller than it. */
+async function expectInlineFrameAtCap(page: Page, frame: FrameLocator): Promise<void> {
+  await expect
+    .poll(async () => Math.abs((await inlineFrameHeight(page)) - MAX_CONTENT_HEIGHT_PX), {
+      timeout: RESIZE_POLL_TIMEOUT_MS,
+    })
+    .toBeLessThanOrEqual(CAP_TOLERANCE_PX);
+  // Fixture guard: the content really is taller than the cap.
+  expect(await guestContentHeight(frame)).toBeGreaterThan(MAX_CONTENT_HEIGHT_PX);
+}
+
+/** Asserts that the inline frame keeps exactly one height for QUIET_PERIOD_MS. */
+async function expectInlineFrameQuiet(page: Page): Promise<void> {
+  const heights: number[] = [];
+  for (let elapsed = 0; elapsed <= QUIET_PERIOD_MS; elapsed += QUIET_SAMPLE_INTERVAL_MS) {
+    heights.push(await inlineFrameHeight(page));
+    await page.waitForTimeout(QUIET_SAMPLE_INTERVAL_MS);
+  }
+  expect(new Set(heights).size, `heights: ${heights}`).toBe(1);
 }
 
 /**
@@ -295,7 +335,96 @@ test.describe('Surface Auto-Resize & Height Latch Prevention', () => {
     );
     expect(lastRowOverflow).toBeLessThanOrEqual(0);
   });
+
+  // The cap is what ends a feedback loop: content taller than it must leave
+  // the frame resting at the cap, with the rest reachable inside the guest.
+  for (const renderer of RENDERERS) {
+    test(`rests the ${renderer.name} inline frame at the cap for taller content`, async ({
+      page,
+    }) => {
+      test.setTimeout(AUTO_RESIZE_TEST_TIMEOUT_MS);
+
+      const frame = await showInlineSurface(
+        page,
+        renderer.url,
+        generateSurfacePayload(OVER_CAP_ROW_COUNT),
+      );
+      await expect(frame.getByText('Row item index 0 ')).toBeVisible({
+        timeout: SURFACE_RENDER_TIMEOUT_MS,
+      });
+
+      await expectInlineFrameAtCap(page, frame);
+      await expectInlineFrameQuiet(page);
+
+      // The guest scrolls, and its last row can be brought fully into its own
+      // viewport.
+      expect(await guestScrollRange(frame)).toBeGreaterThan(0);
+      const lastRow = frame.getByText(`Row item index ${OVER_CAP_ROW_COUNT - 1} `);
+      await lastRow.scrollIntoViewIfNeeded();
+      const lastRowBox = await lastRow.evaluate(el => {
+        const rect = el.getBoundingClientRect();
+        return {
+          top: rect.top,
+          overflow: rect.bottom - document.documentElement.clientHeight,
+        };
+      });
+      expect(lastRowBox.top).toBeGreaterThanOrEqual(0);
+      expect(lastRowBox.overflow).toBeLessThanOrEqual(0);
+    });
+  }
+
+  // No expandable component (such as an accordion) exists in the bundled
+  // catalogs, so content that the guest grows by itself past the cap stands
+  // in for one: the frame must follow it all the way to the cap, not stall.
+  test('follows a growing inline surface all the way up to the cap', async ({page}) => {
+    test.setTimeout(AUTO_RESIZE_TEST_TIMEOUT_MS);
+
+    const frame = await showInlineSurface(
+      page,
+      RENDERER_URLS.angular,
+      growableSurfacePayload(OVER_CAP_LINE_COUNT),
+    );
+    const input = frame.locator('input[type="text"]').first();
+    await expect(input).toBeVisible({timeout: SURFACE_RENDER_TIMEOUT_MS});
+    await expectInlineFrameOnContent(page, frame);
+
+    await input.fill('Grown line');
+    await expect(frame.getByText('Grown line').nth(OVER_CAP_LINE_COUNT - 1)).toBeAttached();
+
+    await expectInlineFrameAtCap(page, frame);
+    await expectInlineFrameQuiet(page);
+  });
 });
+
+/**
+ * At a fractional device scale factor a guest's measured height can round to
+ * a value one pixel above the frame it lays out in. A frame that kept
+ * following such reports would creep up a pixel at a time; it must come to
+ * rest instead.
+ */
+for (const scaleFactor of FRACTIONAL_SCALE_FACTORS) {
+  test.describe(`Inline frame at device scale factor ${scaleFactor}`, () => {
+    test.use({deviceScaleFactor: scaleFactor});
+
+    for (const renderer of RENDERERS) {
+      test(`keeps the ${renderer.name} inline frame still once settled`, async ({page}) => {
+        test.setTimeout(AUTO_RESIZE_TEST_TIMEOUT_MS);
+
+        const frame = await showInlineSurface(
+          page,
+          renderer.url,
+          generateSurfacePayload(TALL_ROW_COUNT),
+        );
+        await expect(frame.getByText(`Row item index ${TALL_ROW_COUNT - 1} `)).toBeVisible({
+          timeout: SURFACE_RENDER_TIMEOUT_MS,
+        });
+
+        await expectInlineFrameOnContent(page, frame);
+        await expectInlineFrameQuiet(page);
+      });
+    }
+  });
+}
 
 /**
  * A docked preview fills its Dockview panel whatever the guest reports: its

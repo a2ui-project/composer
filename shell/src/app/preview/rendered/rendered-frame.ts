@@ -31,6 +31,7 @@ import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {DomSanitizer} from '@angular/platform-browser';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {buildRendererUrl} from '../renderer-url';
+import {clampContentHeight} from '../content-height';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {
   HostCommunication,
@@ -47,59 +48,11 @@ import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame
 export type RenderedFrameSizing = 'fill' | 'content';
 
 /**
- * Number of consecutive growing SURFACE_RESIZE reports that makes the growth
- * circuit breaker hold the frame. A healthy renderer settles within a handful
- * of reports, so this bounds a feedback loop to a fraction of a second while
- * rarely firing on legitimate content; when it does, the hold is released
- * again as described on {@link HELD_GROWTH_REPORTS_TO_RELEASE}.
- *
- * This covers monotonic divergence, which is the failure mode that scrolls
- * content out of view and pins the frame at its maximum. It deliberately does
- * not try to detect an oscillating loop: healthy renderers oscillate too. The
- * Lit sample reports 32,148,288,312,148,288,312 for one ordinary re-render, so
- * alternation is not a signal that can be separated from normal behaviour
- * here. Oscillation is covered by the settle assertion in
- * shell/e2e/renderer-integration-and-telemetry.e2e.ts instead.
- */
-const MAX_MONOTONIC_GROWTH_REPORTS = 16;
-
-/**
- * Maximum gap between two reports for them to belong to the same growth run.
- * Legitimate streaming also grows the frame step by step, but not at the
- * sub-frame cadence a resize feedback loop runs at.
- *
- * Doubles as the quiet period after which a held guest counts as settled, and
- * as the window within which growth following an applied height counts as a
- * reaction to it.
- */
-const RUNAWAY_REPORT_INTERVAL_MS = 500;
-
-/**
- * Number of further growing reports a held guest sends before the hold is
- * released as a false alarm.
- *
- * A resize feedback loop only grows because the host applies each reported
- * height, so a held guest falls silent after at most the report already in
- * flight. A guest that keeps reporting larger heights while the frame is held
- * is growing on its own, for example through a CSS height transition (Angular
- * Material's expansion panel animates its height over 225ms, which is a dozen
- * per-frame reports at 60Hz and twice that on a 120Hz display) or a streaming
- * surface, and has to be followed or its content ends up clipped.
- */
-const HELD_GROWTH_REPORTS_TO_RELEASE = 3;
-
-/**
- * Maximum number of times within one growth run that a hold is released
- * because the guest kept growing. A guest that answers every applied height
- * with a long burst of growth would otherwise alternate between holding and
- * releasing forever; after this many releases the hold lasts until the reports
- * settle.
- */
-const MAX_OWN_GROWTH_RELEASES_PER_RUN = 2;
-
-/**
  * Orchestrates the secure, sandboxed iframe rendering the active preview target,
  * synchronizing layouts, data models, and diagnostic telemetry.
+ *
+ * In content sizing the applied height comes from `clampContentHeight`, which
+ * documents how the cap bounds growth.
  */
 @Component({
   selector: 'a2ui-composer-rendered-frame',
@@ -130,79 +83,40 @@ export class RenderedFrame implements OnInit {
    *   side canvas, a Dockview panel, a fixed-height card, or a hidden frame.
    *   With the frame's size independent of the guest, a guest laid out
    *   against its own viewport (`100%`, `100vh`) cannot feed back into it.
-   * - `content`: the frame follows the guest's SURFACE_RESIZE reports, with a
-   *   280px floor until the first report. Use it only where the host grows
-   *   with its content, such as an inline preview in the chat history.
+   * - `content`: the frame follows the guest's SURFACE_RESIZE reports through
+   *   `clampContentHeight`, with a 280px floor until the first report. Use it
+   *   only where the host grows with its content, such as an inline preview
+   *   in the chat history.
    *
    * The guest's latest report is kept in either mode, so a switch to
    * `content` applies it at once.
    */
   readonly sizing = input.required<RenderedFrameSizing>();
 
-  private readonly reportedHeight = signal<number | null>(null);
-
   /**
    * Latest surface height reported by the guest renderer frame, in pixels,
-   * whatever the sizing mode; see {@link frameHeight} for the height in effect.
+   * whatever the sizing mode.
    */
-  readonly dynamicHeight = this.reportedHeight.asReadonly();
+  private readonly reportedHeight = signal<number | null>(null);
 
-  private readonly growthBreakerLatched = signal<boolean>(false);
-
-  /**
-   * True while the frame is held because the guest looked like it was driving
-   * the frame into unbounded growth.
-   */
-  readonly isGrowthBreakerLatched = this.growthBreakerLatched.asReadonly();
-
-  /** Height reported by the first message of the current growth run, in pixels. */
-  private growthRunStartHeight: number | null = null;
-  private lastReportedHeight: number | null = null;
-  private lastReportTimestamp = 0;
-  private growthRunLength = 0;
-  /** Growing reports received since the frame was last held. */
-  private heldGrowthReports = 0;
-  /** Holds released in the current run because the guest kept growing while held. */
-  private ownGrowthReleases = 0;
-  /**
-   * Set while the frame waits for a held guest to settle, in which case its last
-   * reported height is applied as a probe for the feedback loop.
-   */
-  private settleTimer: ReturnType<typeof setTimeout> | null = null;
-  /** True once a settled guest's height has been applied and its reaction is awaited. */
-  private settleProbePending = false;
-  /**
-   * True once the guest grew again right after its settled height was applied,
-   * which confirms the feedback loop and ends the probing for this run.
-   */
-  private loopConfirmed = false;
-  /** Renderer URL the current breaker state belongs to; undefined until first read. */
-  private trackedRendererUrl: string | null | undefined = undefined;
   private lastHandledResetNonce = this.stateSync.sessionResetNonce();
 
   /**
-   * Usable height reported by the guest, in pixels, or null when there is none
-   * or the frame fills its host, in which case the container falls back to
-   * 100% of its host.
-   */
-  readonly frameHeight = computed(() => {
-    if (this.sizing() === 'fill') {
-      return null;
-    }
-    const h = this.dynamicHeight();
-    return h && h > 0 ? h : null;
-  });
-
-  /**
-   * `frameHeight` as a CSS length, or undefined when the frame fills its host
-   * or the guest has not reported a usable height.
+   * Height applied in content sizing, as a CSS length: the latest report
+   * through `clampContentHeight`. Undefined when the frame fills its host or
+   * the guest has not reported a usable height, in which case the container
+   * falls back to 100% of its host.
    *
    * Applied as both `height` and `min-height` so that a reported height wins
    * over the stylesheet's minimum, which would otherwise leave a tall empty
    * area below a short surface.
    */
   protected readonly frameHeightPx = computed<string | undefined>(() => {
-    const height = this.frameHeight();
+    if (this.sizing() === 'fill') {
+      return undefined;
+    }
+    const reported = this.reportedHeight();
+    const height = reported === null ? null : clampContentHeight(reported);
     return height === null ? undefined : `${height}px`;
   });
 
@@ -225,7 +139,6 @@ export class RenderedFrame implements OnInit {
       const ref = this.iframeRef();
       const el = ref?.nativeElement ?? null;
       if (el) {
-        this.resetGrowthRun();
         this.hostCommunication.registerIframe(el);
         onCleanup(() => {
           this.hostCommunication.unregisterIframe(el);
@@ -246,42 +159,15 @@ export class RenderedFrame implements OnInit {
       const iframe = this.iframeRef()?.nativeElement;
       if (iframe && payload !== null && Array.isArray(payload) && payload.length > 0) {
         this.hostCommunication.sendRenderA2UI(payload, iframe);
-        // New content legitimately resizes the surface; start counting afresh.
-        this.resetGrowthRun();
       }
     });
 
-    this.destroyRef.onDestroy(() => this.clearSettleTimer());
-
-    // A different renderer means a different guest; give it a clean slate.
-    effect(() => {
-      const rendererUrl = this.startupResolution.resolvedUrl();
-      untracked(() => {
-        if (this.trackedRendererUrl !== undefined && rendererUrl !== this.trackedRendererUrl) {
-          this.resetGrowthBreaker();
-        }
-        this.trackedRendererUrl = rendererUrl;
-      });
-    });
-
-    // The breaker only runs for a content-sized frame. A hold left over from
-    // content sizing would otherwise apply its settled height, or clamp the
-    // reports a filling frame stores, once the frame fills its host.
-    effect(() => {
-      if (this.sizing() === 'fill') {
-        untracked(() => this.resetGrowthBreaker());
-      }
-    });
-
-    // Reset dynamic height and growth breaker latch when starting a new session.
+    // A new session starts from the default size until the guest reports again.
     effect(() => {
       const nonce = this.stateSync.sessionResetNonce();
       if (nonce > this.lastHandledResetNonce) {
         this.lastHandledResetNonce = nonce;
-        untracked(() => {
-          this.reportedHeight.set(null);
-          this.resetGrowthBreaker();
-        });
+        untracked(() => this.reportedHeight.set(null));
       }
     });
   }
@@ -300,10 +186,7 @@ export class RenderedFrame implements OnInit {
     // required `sizing` input, which the host has set only by now (NG0950).
     this.hostCommunication.messageStream$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(envelope => {
-        this.trackReportedGrowth(envelope);
-        this.handleInboundEnvelope(envelope);
-      });
+      .subscribe(envelope => this.handleInboundEnvelope(envelope));
   }
 
   /**
@@ -340,222 +223,14 @@ export class RenderedFrame implements OnInit {
         this.hostCommunication.sendRenderA2UI(payload, myIframe);
       }
     } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-      // Stored in either sizing mode; `frameHeight` decides whether it applies.
+      // Stored in either sizing mode; `frameHeightPx` decides whether it applies.
       // A frame that fills its host keeps its default size, and a switch to
       // content sizing applies the latest report without waiting for another.
       if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
         const resizePayload = envelope.payload as {height: number; width?: number};
-        this.reportedHeight.set(this.capReportedHeight(resizePayload.height));
+        this.reportedHeight.set(resizePayload.height);
       }
     }
-  }
-
-  /**
-   * Counts consecutive growing surface reports, holds the frame when a guest
-   * appears to drive it into unbounded growth, and releases the hold again
-   * once the guest proves otherwise.
-   *
-   * A feedback loop only grows because the host applies each reported height,
-   * so holding the frame is also the test for one: a looping guest falls
-   * silent, while a guest that is growing on its own keeps reporting. A silent
-   * guest gets its last height applied once the reports settle; growing again
-   * right after that confirms the loop.
-   */
-  private trackReportedGrowth(envelope: MessageEnvelope | null): void {
-    // A feedback loop needs the host to apply the reports; a frame that fills
-    // its host never does, so there is nothing to count.
-    if (!envelope || untracked(() => this.sizing()) === 'fill') {
-      return;
-    }
-
-    if (this.isFromOtherFrame(envelope)) {
-      return;
-    }
-
-    if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
-      this.resetGrowthBreaker();
-      return;
-    }
-
-    if (envelope.type === PreviewBridgeMessageType.RENDER_SUCCESS) {
-      this.resetGrowthRun();
-      return;
-    }
-
-    if (
-      envelope.type !== PreviewBridgeMessageType.SURFACE_RESIZE ||
-      !CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)
-    ) {
-      return;
-    }
-
-    const height = (envelope.payload as {height: number}).height;
-    const grewAtLoopCadence =
-      this.lastReportedHeight !== null &&
-      height > this.lastReportedHeight &&
-      envelope.timestamp - this.lastReportTimestamp <= RUNAWAY_REPORT_INTERVAL_MS;
-
-    if (!grewAtLoopCadence) {
-      // A report that does not grow, or that arrives after a pause, ends the
-      // run: whatever burst the guest was in is over, so any hold ends with it.
-      this.resetGrowthBreaker();
-      this.growthRunStartHeight = height;
-    }
-    this.growthRunLength++;
-    this.lastReportedHeight = height;
-    this.lastReportTimestamp = envelope.timestamp;
-
-    if (this.settleProbePending) {
-      // The guest grew again as soon as its settled height was applied, which
-      // is the host feeding the loop. Hold until the run ends.
-      this.settleProbePending = false;
-      this.holdFrame(height, /* confirmed= */ true);
-      return;
-    }
-
-    if (this.growthBreakerLatched()) {
-      this.heldGrowthReports++;
-      if (
-        this.heldGrowthReports >= HELD_GROWTH_REPORTS_TO_RELEASE &&
-        this.ownGrowthReleases < MAX_OWN_GROWTH_RELEASES_PER_RUN
-      ) {
-        // The frame did not move, yet the guest kept growing: it is not reacting
-        // to the host. Follow it, and start counting afresh so a guest that does
-        // run away eventually is still caught.
-        this.ownGrowthReleases++;
-        this.growthRunLength = 1;
-        this.releaseHold();
-      } else if (!this.loopConfirmed) {
-        this.armSettleTimer();
-      }
-      return;
-    }
-
-    if (this.growthRunLength >= MAX_MONOTONIC_GROWTH_REPORTS) {
-      this.holdFrame(height, /* confirmed= */ false);
-    }
-  }
-
-  /**
-   * Holds the frame at its current height. An unconfirmed hold is a probe that
-   * {@link trackReportedGrowth} or {@link applySettledHeight} release again; a
-   * confirmed one lasts until the growth run ends.
-   */
-  private holdFrame(reportedHeight: number, confirmed: boolean): void {
-    const heldHeight = untracked(() => this.dynamicHeight()) ?? this.growthRunStartHeight;
-    this.growthBreakerLatched.set(true);
-    this.heldGrowthReports = 0;
-
-    if (confirmed) {
-      this.loopConfirmed = true;
-      this.clearSettleTimer();
-      this.errorLogger.warn({
-        message:
-          `Preview frame growth stopped: the renderer grew again as soon as its reported ` +
-          `height was applied, which confirms a resize feedback loop. Frame held at ` +
-          `${heldHeight}px; last reported height ${reportedHeight}px. The hold ends when ` +
-          `the renderer reports a smaller height or pauses for more than ` +
-          `${RUNAWAY_REPORT_INTERVAL_MS}ms.`,
-        sourceTag: '[Shell]',
-      });
-      return;
-    }
-
-    if (this.ownGrowthReleases === 0) {
-      this.errorLogger.info({
-        message:
-          `Preview frame growth held: the renderer reported ${this.growthRunLength} ` +
-          `consecutive larger heights within ${RUNAWAY_REPORT_INTERVAL_MS}ms, which may be a ` +
-          `runaway resize loop. Frame held at ${heldHeight}px; last reported height ` +
-          `${reportedHeight}px. The hold is released if the renderer keeps growing on its ` +
-          `own or once its reports settle.`,
-        sourceTag: '[Shell]',
-      });
-    }
-    this.armSettleTimer();
-  }
-
-  /** Lets reported heights through again; the current growth run continues. */
-  private releaseHold(): void {
-    this.clearSettleTimer();
-    this.heldGrowthReports = 0;
-    this.growthBreakerLatched.set(false);
-  }
-
-  /**
-   * Applies a held guest's last reported height once it has stopped reporting.
-   *
-   * The silence means the burst is over; for a transition, the last report is
-   * where it ended and withholding it would leave the content clipped. The
-   * apply doubles as a probe: a guest that grows again within the runaway
-   * window was reacting to it, and {@link trackReportedGrowth} then confirms
-   * the loop.
-   */
-  private applySettledHeight(): void {
-    this.settleTimer = null;
-    const settledHeight = this.lastReportedHeight;
-    if (!this.growthBreakerLatched() || settledHeight === null) {
-      return;
-    }
-    // Reports are timed against the apply from here on, so a reaction to it is
-    // recognised as such rather than as the start of an unrelated run. Envelope
-    // timestamps are the host's receipt times, so this is the same clock.
-    this.lastReportTimestamp = Date.now();
-    this.growthRunLength = 0;
-    this.settleProbePending = true;
-    this.releaseHold();
-    this.reportedHeight.set(settledHeight);
-  }
-
-  private armSettleTimer(): void {
-    this.clearSettleTimer();
-    this.settleTimer = setTimeout(() => this.applySettledHeight(), RUNAWAY_REPORT_INTERVAL_MS);
-  }
-
-  private clearSettleTimer(): void {
-    if (this.settleTimer !== null) {
-      clearTimeout(this.settleTimer);
-      this.settleTimer = null;
-    }
-  }
-
-  /**
-   * Clamps a reported height so a held guest can shrink the frame but never
-   * grow it further.
-   */
-  private capReportedHeight(height: number): number {
-    if (!untracked(() => this.growthBreakerLatched())) {
-      return height;
-    }
-    const ceiling = untracked(() => this.dynamicHeight()) ?? this.growthRunStartHeight;
-    return ceiling === null ? height : Math.min(height, ceiling);
-  }
-
-  /**
-   * Restarts the growth count without ending an existing hold. The last report
-   * is kept so the next one is still judged against it: a hold ends only when
-   * the guest stops growing, not when the host sends it new content. New
-   * content is also a legitimate reason to grow right after a settled height
-   * was applied, so an outstanding probe is withdrawn, and a settle timer still
-   * armed for the previous content is dropped: firing it later would apply that
-   * content's height and take the new content's first report for a reaction.
-   */
-  private resetGrowthRun(): void {
-    this.growthRunLength = 0;
-    this.growthRunStartHeight = null;
-    this.settleProbePending = false;
-    this.clearSettleTimer();
-  }
-
-  /** Ends the growth run and any hold, restoring unrestricted sizing. */
-  private resetGrowthBreaker(): void {
-    this.resetGrowthRun();
-    this.lastReportedHeight = null;
-    this.lastReportTimestamp = 0;
-    this.heldGrowthReports = 0;
-    this.ownGrowthReleases = 0;
-    this.loopConfirmed = false;
-    this.growthBreakerLatched.set(false);
   }
 
   /**
@@ -591,7 +266,6 @@ export class RenderedFrame implements OnInit {
     const iframe = this.iframeRef()?.nativeElement;
     if (iframe) {
       this.setupIframeWheelForwarding(iframe);
-      this.resetGrowthRun();
       if (payload !== null && Array.isArray(payload) && payload.length > 0) {
         this.hostCommunication.sendRenderA2UI(payload, iframe);
       }
