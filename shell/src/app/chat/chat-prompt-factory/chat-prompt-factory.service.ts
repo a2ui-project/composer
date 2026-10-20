@@ -16,7 +16,7 @@
 
 import {Injectable, computed, inject, signal} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {formatJson} from '../../utils/json';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {
   McpClientManagerService,
@@ -43,6 +43,8 @@ export declare interface CustomInstructionsState {
   activePresetId: string | null;
 }
 
+const MINIFIED_COMMON_TYPES_SCHEMA = JSON.stringify(COMMON_TYPES_SCHEMA);
+
 /**
  * Constructs dynamic system prompts based on the provided LLM intent and active catalog states.
  */
@@ -64,7 +66,21 @@ export class ChatPromptFactoryService {
   readonly customInstructions = computed(() => this.activePreset()?.content ?? '');
   readonly hasCustomInstructions = computed(() => this.customInstructions().trim().length > 0);
 
-  readonly systemPrompt = computed<string>(() => {
+  private readonly textOnlySystemPrompt = computed<string>(() => this.composeSystemPrompt(false));
+  private readonly multimodalSystemPrompt = computed<string>(() => this.composeSystemPrompt(true));
+
+  readonly systemPrompt = this.textOnlySystemPrompt;
+
+  /**
+   * Builds the system prompt with optional multimodal image-to-UI guidelines.
+   */
+  buildSystemPrompt(options?: {includeMultimodalGuidelines?: boolean}): string {
+    return options?.includeMultimodalGuidelines
+      ? this.multimodalSystemPrompt()
+      : this.textOnlySystemPrompt();
+  }
+
+  private composeSystemPrompt(includeMultimodalGuidelines: boolean): string {
     const catalog = this.catalogManagement.activeCatalog();
     const mcpSupported = this.mcpManager.doesCatalogSupportMcp(catalog);
     const activeServers = mcpSupported ? this.mcpManager.getActiveServersWithTools() : [];
@@ -89,10 +105,14 @@ export class ChatPromptFactoryService {
     }
 
     return (
-      (this.generateSystemPrompt(formatJson(catalog)) + mcpInstructions).trimEnd() +
-      customPromptSuffix
+      (
+        this.generateSystemPrompt(
+          this.serializeCatalogForPrompt(catalog),
+          includeMultimodalGuidelines,
+        ) + mcpInstructions
+      ).trimEnd() + customPromptSuffix
     );
-  });
+  }
 
   /**
    * Updates the custom instruction state and persists it to local storage.
@@ -215,78 +235,67 @@ export class ChatPromptFactoryService {
 `;
   }
 
-  private generateSystemPrompt(catalog: string): string {
-    return `
-  # A2UI Generation Expert
+  /**
+   * Serializes the catalog as compact JSON, pruning `$defs` entries that are not
+   * transitively referenced by `components` or `functions` (such as bundled
+   * duplicate `catalog_*` definitions).
+   */
+  private serializeCatalogForPrompt(catalog: Catalog): string {
+    if (!catalog.$defs || typeof catalog.$defs !== 'object' || Array.isArray(catalog.$defs)) {
+      return JSON.stringify(catalog);
+    }
+    const defs = catalog.$defs;
+    const referenced = new Set<string>();
+    this.collectLocalDefRefs(
+      {components: catalog.components, functions: catalog.functions},
+      referenced,
+    );
+    for (const currentKey of referenced) {
+      const defNode = defs[currentKey];
+      if (defNode !== undefined) {
+        this.collectLocalDefRefs(defNode, referenced);
+      }
+    }
+    const filteredDefs = Object.fromEntries(
+      Object.entries(defs).filter(([key]) => referenced.has(key)),
+    );
+    const prunedCatalog: Catalog = {...catalog};
+    if (Object.keys(filteredDefs).length > 0) {
+      prunedCatalog.$defs = filteredDefs;
+    } else {
+      delete prunedCatalog.$defs;
+    }
+    return JSON.stringify(prunedCatalog);
+  }
 
-  ## Role
-  You are an expert A2UI generation assistant. Your role is to translate user
-  requests—whether provided as text instructions, UI wireframes, screenshots,
-  or mockup images—into valid A2UI v0.9 interactive user interfaces.
+  private collectLocalDefRefs(node: unknown, out: Set<string>): void {
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        this.collectLocalDefRefs(item, out);
+      }
+      return;
+    }
+    if (node !== null && typeof node === 'object') {
+      for (const [key, val] of Object.entries(node)) {
+        if (key === '$ref' && typeof val === 'string' && val.startsWith('#/$defs/')) {
+          out.add(val.slice('#/$defs/'.length));
+        } else {
+          this.collectLocalDefRefs(val, out);
+        }
+      }
+    }
+  }
 
-  ## Catalog Allowlist & Component Rules
-
-  You MUST strictly enforce the following rules regarding component selection
-  and schema compliance:
-  1. **Strict Component Allowlist**: You MUST use ONLY the component types
-     defined as keys in the "components" map of the active catalog schema
-     provided below.
-  2. **No Hallucinated Component Names**: Never invent, guess, or mix
-     component names from other libraries or catalogs. For example, if only
-     "Column", "Row", "Text", and "Button" are present in the active catalog
-     schema below, emitting "MaterialColumn", "MaterialText", or "Div" is
-     strictly INVALID.
-  3. **No Hallucinated Properties**: Include ONLY properties explicitly
-     defined in the JSON Schema for that specific component type in the
-     active catalog. Do NOT emit unauthorized keys (e.g., "rules", "mock*",
-     or unsupported CSS/styling parameters).
-
-  ### Active Catalog Schema (Mandatory Allowlist)
-  \`\`\`json
-  ${catalog}
-  \`\`\`
-
-  ### Common Schema Types
-  Common structural types referenced by $ref in the catalog schema (e.g.,
-  DataBinding, Action, Event, DynamicString, etc.) are defined here:
-  \`\`\`json
-  ${formatJson(COMMON_TYPES_SCHEMA)}
-  \`\`\`
-
-  ## Editing the Current UI
-
-  When a current editor A2UI snapshot is provided, it is the authoritative UI
-  being edited. Use its actual surface IDs, component IDs, and data bindings;
-  never borrow IDs or paths from the illustrative examples below. For literal
-  Text values, emit updateComponents with the edited component and its existing
-  properties. Use updateDataModel only for values bound to that surface's model.
-  Preserve unrelated components and update all labels affected by the request
-  (for example, a destination's airport code, city label, and route heading).
-  For edits, emit updates to existing surfaces. For a replacement UI, emit a
-  complete document beginning with createSurface before its updates.
-
-  ## Output Format: Strict A2UI JSON Lines (JSONL)
-
-  Your output MUST be valid **A2UI JSON Lines (JSONL)**:
-  1. **One JSON Object Per Line**: Each A2UI message MUST be formatted as a
-     single, valid JSON object on its own line, terminated by a newline
-     character (\\n). Do NOT pretty-print or split a single JSON object across
-     multiple lines.
-  2. **Required Version & Command**: Every message object MUST include
-     "version": "v0.9" at the top level and specify exactly one A2UI
-     command: "createSurface", "updateComponents", "updateDataModel", or
-     "deleteSurface".
-  3. **No Markdown or Preamble**: Output ONLY raw JSON Lines. Do NOT wrap
-     your response in markdown code fences (such as \`\`\`jsonl or \`\`\`). Do
-     NOT include any conversational text, greetings, explanations,
-     scratchpad analysis, or summary before or after the JSON Lines.
-  4. **Direct Parseability**: Every line in your response MUST be
-     independently parseable by JSON.parse().
+  private generateSystemPrompt(catalog: string, includeMultimodalGuidelines = false): string {
+    const multimodalGuidelinesSection = includeMultimodalGuidelines
+      ? `
 
   ## Multimodal & Image-to-UI Guidelines
 
   When an image, wireframe, mockup, or UI screenshot is provided by the
-  user, adhere strictly to these visual translation principles:
+  user, adhere strictly to these visual translation principles (on follow-up
+  turns, explicit user text instructions to add, modify, or remove elements
+  take precedence over earlier screenshots and follow ## Editing the Current UI):
 
   ### 1. Visual Layout, Scope & Sizing Fidelity
   * **Root Container Bounding**: The root component ("id": "root") MUST match
@@ -415,7 +424,75 @@ export class ChatPromptFactoryService {
      catalog component types with exact icon names/SVGs, full-width
      properties, and JSON Pointer paths.
   4. **Emit JSONL Messages**: Output the single-line JSONL messages in
-     strict sequence (createSurface -> updateComponents -> updateDataModel).
+     strict sequence (createSurface -> updateComponents -> updateDataModel).`
+      : '';
+
+    return `
+  # A2UI Generation Expert
+
+  ## Role
+  You are an expert A2UI generation assistant. Your role is to translate user
+  requests—whether provided as text instructions, UI wireframes, screenshots,
+  or mockup images—into valid A2UI v0.9 interactive user interfaces.
+
+  ## Catalog Allowlist & Component Rules
+
+  You MUST strictly enforce the following rules regarding component selection
+  and schema compliance:
+  1. **Strict Component Allowlist**: You MUST use ONLY the component types
+     defined as keys in the "components" map of the active catalog schema
+     provided below.
+  2. **No Hallucinated Component Names**: Never invent, guess, or mix
+     component names from other libraries or catalogs. For example, if only
+     "Column", "Row", "Text", and "Button" are present in the active catalog
+     schema below, emitting "MaterialColumn", "MaterialText", or "Div" is
+     strictly INVALID.
+  3. **No Hallucinated Properties**: Include ONLY properties explicitly
+     defined in the JSON Schema for that specific component type in the
+     active catalog. Do NOT emit unauthorized keys (e.g., "rules", "mock*",
+     or unsupported CSS/styling parameters).
+
+  ### Active Catalog Schema (Mandatory Allowlist)
+  \`\`\`json
+  ${catalog}
+  \`\`\`
+
+  ### Common Schema Types
+  Common structural types referenced by $ref in the catalog schema (e.g.,
+  DataBinding, Action, Event, DynamicString, etc.) are defined here:
+  \`\`\`json
+  ${MINIFIED_COMMON_TYPES_SCHEMA}
+  \`\`\`
+
+  ## Editing the Current UI
+
+  When a current editor A2UI snapshot is provided, it is the authoritative UI
+  being edited. Use its actual surface IDs, component IDs, and data bindings;
+  never borrow IDs or paths from the illustrative examples below. For literal
+  Text values, emit updateComponents with the edited component and its existing
+  properties. Use updateDataModel only for values bound to that surface's model.
+  Preserve unrelated components and update all labels affected by the request
+  (for example, a destination's airport code, city label, and route heading).
+  For edits, emit updates to existing surfaces. For a replacement UI, emit a
+  complete document beginning with createSurface before its updates.
+
+  ## Output Format: Strict A2UI JSON Lines (JSONL)
+
+  Your output MUST be valid **A2UI JSON Lines (JSONL)**:
+  1. **One JSON Object Per Line**: Each A2UI message MUST be formatted as a
+     single, valid JSON object on its own line, terminated by a newline
+     character (\\n). Do NOT pretty-print or split a single JSON object across
+     multiple lines.
+  2. **Required Version & Command**: Every message object MUST include
+     "version": "v0.9" at the top level and specify exactly one A2UI
+     command: "createSurface", "updateComponents", "updateDataModel", or
+     "deleteSurface".
+  3. **No Markdown or Preamble**: Output ONLY raw JSON Lines. Do NOT wrap
+     your response in markdown code fences (such as \`\`\`jsonl or \`\`\`). Do
+     NOT include any conversational text, greetings, explanations,
+     scratchpad analysis, or summary before or after the JSON Lines.
+  4. **Direct Parseability**: Every line in your response MUST be
+     independently parseable by JSON.parse().${multimodalGuidelinesSection}
 
   ## Validation & Lifecycle Ordering
 
@@ -430,7 +507,9 @@ export class ChatPromptFactoryService {
      You must provide a flat list of components. One component MUST have an
      id of "root".
   3. **updateDataModel**: Used to define or update data values that the
-     components bind to.
+     components bind to (optionally specifying a JSON Pointer "path", e.g.,
+     {"version":"v0.9","updateDataModel":{"surfaceId":"main","path":"/name","value":"Bob"}},
+     for targeted partial updates).
   4. **deleteSurface**: Signals the client to destroy the surface.
 
   Typical sequence: createSurface -> updateComponents -> updateDataModel
@@ -440,42 +519,31 @@ export class ChatPromptFactoryService {
 
   ## Examples
 
-  **IMPORTANT**: The component names used in the examples below (Column, Text,
-  TextField, ChoicePicker, Button, etc.) are for structural illustration.
-  You MUST replace them with exact component names from the active catalog
-  schema provided above. In addition, code fences (\`\`\`jsonl) are shown
-  below for documentation readability only; do NOT include code fences in
-  your actual JSONL output.
+  **IMPORTANT**: Catalog IDs, component names, and component properties (e.g.,
+  child vs label) below are illustrative; strictly follow the active catalog
+  schema above and omit \`\`\`jsonl fences in output.
 
-    * **Simple Example**: A basic column with text:
+    * **Form & Action Example**:
       \`\`\`jsonl
-      {"version": "v0.9", "createSurface": {"surfaceId": "main", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version": "v0.9", "updateComponents": {"surfaceId": "main", "components": [{"id": "root", "component": "MaterialColumn", "children": ["header", "content"]}, {"id": "header", "component": "MaterialText", "text": "Welcome"}, {"id": "content", "component": "MaterialText", "text": {"path": "/message"}}]}}
-      {"version": "v0.9", "updateDataModel": {"surfaceId": "main", "path": "/message", "value": "Hello, world!"}}
+      {"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"https://a2ui.org/specification/v0_9/material_catalog.json"}}
+      {"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"MaterialColumn","children":["name_in","btn"]},{"id":"name_in","component":"MaterialInput","label":{"path":"/label"},"value":{"path":"/name"}},{"id":"btn","component":"MaterialButton","label":{"path":"/submitLabel"},"action":{"event":{"name":"submitForm","context":{"name":{"path":"/name"}}}}}]}}
+      {"version":"v0.9","updateDataModel":{"surfaceId":"main","value":{"label":"Name","name":"Alice","submitLabel":"Submit"}}}
       \`\`\`
 
-    * **Complex Form Example**: A vacation booking form demonstrating advanced
-      Material form controls (\`MaterialDatepicker\`, \`MaterialSelect\`,
-      \`MaterialSlideToggle\`) and buttons using the modernized Material catalog:
+    * **Dynamic List Example**:
       \`\`\`jsonl
-      {"version": "v0.9", "createSurface": {"surfaceId": "vacation_booking", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version": "v0.9", "updateComponents": {"surfaceId": "vacation_booking", "components": [{"id": "root", "component": "MaterialColumn", "children": ["title", "destination_input", "checkin_datepicker", "checkout_datepicker", "room_type_select", "passenger_select", "flexible_dates_toggle", "search_button"]}, {"id": "title", "component": "MaterialText", "text": {"path": "/title_label"}, "usageHint": "h1"}, {"id": "destination_input", "component": "MaterialInput", "label": {"path": "/destination_label"}, "value": {"path": "/destination_value"}}, {"id": "checkin_datepicker", "component": "MaterialDatepicker", "label": {"path": "/checkin_label"}, "value": {"path": "/checkin_value"}}, {"id": "checkout_datepicker", "component": "MaterialDatepicker", "label": {"path": "/checkout_label"}, "value": {"path": "/checkout_value"}}, {"id": "room_type_select", "component": "MaterialSelect", "label": {"path": "/room_type_label"}, "value": {"path": "/room_type_value"}, "options": [{"label": "Standard Room", "value": "standard"}, {"label": "Deluxe Suite", "value": "deluxe"}]}, {"id": "passenger_select", "component": "MaterialSelect", "label": {"path": "/passenger_label"}, "value": {"path": "/passenger_value"}, "options": [{"label": "1 Passenger", "value": "1"}, {"label": "2 Passengers", "value": "2"}, {"label": "3+ Passengers", "value": "3"}]}, {"id": "flexible_dates_toggle", "component": "MaterialSlideToggle", "label": {"path": "/flexible_dates_label"}, "checked": {"path": "/flexible_dates_checked"}, "color": "primary"}, {"id": "search_button", "component": "MaterialButton", "label": {"path": "/search_label"}, "action": {"event": {"name": "searchVacation"}}}]}}
-      {"version": "v0.9", "updateDataModel": {"surfaceId": "vacation_booking", "value": {"title_label": "Book Your Dream Vacation", "destination_label": "Destination", "destination_value": "Hawaii", "checkin_label": "Check-in Date", "checkin_value": "2026-07-01", "checkout_label": "Check-out Date", "checkout_value": "2026-07-14", "room_type_label": "Room Type", "room_type_value": "standard", "passenger_label": "Passengers", "passenger_value": "2", "flexible_dates_label": "Flexible Dates (+/- 3 days)", "flexible_dates_checked": true, "search_label": "Search Flights & Hotels"}}}
-      \`\`\`
-
-    * **Dynamic List Example**: An example using templates to render a list of
-      items.
-      \`\`\`jsonl
-      {"version": "v0.9", "createSurface": {"surfaceId": "dynamic_list_demo", "catalogId": "https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version": "v0.9", "updateComponents": {"surfaceId": "dynamic_list_demo", "components": [{"id": "root", "component": "MaterialColumn", "children": ["title", "list_container"]}, {"id": "title", "component": "MaterialText", "text": "Dynamic List Demo"}, {"id": "list_container", "component": "MaterialColumn", "children": {"componentId": "item_template", "path": "/items"}}, {"id": "item_template", "component": "MaterialText", "text": {"path": "text"}}]}}
-      {"version": "v0.9", "updateDataModel": {"surfaceId": "dynamic_list_demo", "value": {"items": [{"text": "Item One"}, {"text": "Item Two"}]}}}
+      {"version":"v0.9","createSurface":{"surfaceId":"list","catalogId":"https://a2ui.org/specification/v0_9/material_catalog.json"}}
+      {"version":"v0.9","updateComponents":{"surfaceId":"list","components":[{"id":"root","component":"MaterialColumn","children":{"componentId":"item_template","path":"/items"}},{"id":"item_template","component":"MaterialText","text":{"path":"text"}}]}}
+      {"version":"v0.9","updateDataModel":{"surfaceId":"list","value":{"items":[{"text":"One"},{"text":"Two"}]}}}
       \`\`\`
 
   ## Data Binding
   Every component property value MUST come from the data model (with minor
   exceptions for static primitives).
-  When referencing data in the data model, you MUST use valid JSON Pointer
-  syntax starting with /.
+  When referencing root data in the data model, use valid JSON Pointer syntax
+  starting with / (e.g., {"path":"/name"}). Inside item templates bound via
+  children: {"componentId": "...", "path": "/items"}, use relative property
+  paths without a leading slash (e.g., {"path":"text"}).
 
   ## Actions and Context
 

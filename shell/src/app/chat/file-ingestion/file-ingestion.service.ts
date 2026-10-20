@@ -15,6 +15,7 @@
  */
 
 import {Injectable} from '@angular/core';
+import {inferMimeType, isImageAttachment} from '../a2a/a2a-attachments';
 import {Attachment} from '../llm-client/llm-client';
 
 /**
@@ -51,11 +52,14 @@ export class FileIngestionService {
           return;
         }
         const base64Data = result.substring(commaIndex + 1);
+        const mimeType = inferMimeType(file.name, file.type);
         resolve({
           name: file.name,
-          mimeType: file.type || 'application/octet-stream',
+          mimeType,
           data: base64Data,
-          previewUrl: file.type.startsWith('image/') ? result : undefined,
+          previewUrl: isImageAttachment(mimeType, file.name)
+            ? `data:${mimeType};base64,${base64Data}`
+            : undefined,
         });
       };
       reader.onerror = err => reject(err);

@@ -255,7 +255,81 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     const prompt = service.systemPrompt();
 
     expect(prompt).toContain('"Empty Catalog"');
-    expect(prompt).toContain('"components": {}');
+    expect(prompt).toContain('"components":{}');
+  });
+
+  describe('Multimodal Guidelines Conditional Injection', () => {
+    beforeEach(() => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'basic',
+        components: {Text: {}},
+      });
+    });
+
+    it('omits Multimodal & Image-to-UI Guidelines on text-only turns', async () => {
+      await service.submitPrompt('Build a login card');
+      const messages = llmClientMock.chatStream.mock.calls[0][0];
+      expect(messages[0].role).toBe(MessageRole.SYSTEM);
+      expect(messages[0].content).not.toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.systemPrompt()).not.toContain('## Multimodal & Image-to-UI Guidelines');
+    });
+
+    it('omits Multimodal & Image-to-UI Guidelines when only non-image attachments (e.g., application/json) are present', async () => {
+      await service.submitPrompt('Import this data', [
+        {name: 'data.json', mimeType: 'application/json', data: 'e30='},
+      ]);
+      const messages = llmClientMock.chatStream.mock.calls[0][0];
+      expect(messages[0].role).toBe(MessageRole.SYSTEM);
+      expect(messages[0].content).not.toContain('## Multimodal & Image-to-UI Guidelines');
+    });
+
+    it('omits Multimodal & Image-to-UI Guidelines when image attachments exist only on MessageRole.ERROR messages', () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.ERROR,
+          content: 'Failed turn',
+          attachments: [{name: 'screenshot.png', mimeType: 'image/png', data: 'base64'}],
+        },
+      ]);
+      const context = service.getFullMessageContext();
+      expect(context[0].content).not.toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.systemPrompt()).not.toContain('## Multimodal & Image-to-UI Guidelines');
+    });
+
+    it('includes Multimodal & Image-to-UI Guidelines when an image attachment is present and updates systemPrompt() reactively', async () => {
+      await service.submitPrompt('Match this mockup', [
+        {name: 'mockup.png', mimeType: 'image/png', data: 'base64'},
+      ]);
+      const messages = llmClientMock.chatStream.mock.calls[0][0];
+      expect(messages[0].role).toBe(MessageRole.SYSTEM);
+      expect(messages[0].content).toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.systemPrompt()).toContain('## Multimodal & Image-to-UI Guidelines');
+    });
+
+    it('includes Multimodal & Image-to-UI Guidelines for screenshot.png, uppercase MIME types, and extension-inferred image files', async () => {
+      await service.submitPrompt('Fix spacing', [
+        {name: 'screenshot.png', mimeType: '', data: 'base64'},
+      ]);
+      expect(llmClientMock.chatStream.mock.calls[0][0][0].content).toContain(
+        '## Multimodal & Image-to-UI Guidelines',
+      );
+
+      service.startNewSession();
+      await service.submitPrompt('Check uppercase MIME', [
+        {name: 'upload', mimeType: 'IMAGE/PNG', data: 'base64'},
+      ]);
+      expect(llmClientMock.chatStream.mock.calls[1][0][0].content).toContain(
+        '## Multimodal & Image-to-UI Guidelines',
+      );
+
+      service.startNewSession();
+      await service.submitPrompt('Check extension fallback', [
+        {name: 'wireframe.webp', mimeType: 'application/octet-stream', data: 'base64'},
+      ]);
+      expect(llmClientMock.chatStream.mock.calls[2][0][0].content).toContain(
+        '## Multimodal & Image-to-UI Guidelines',
+      );
+    });
   });
 
   describe('editing an imported demo', () => {
@@ -377,10 +451,13 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(service.pipelineStatus()).toBe(PipelineStatus.READY);
     expect(service.isProgrammaticStreamActive()).toBe(false);
 
-    // Verify raw content streamed directly inside model's turn logs
+    // Verify compact JSON content stored in model's turn log
     const updatedHistory = chatStateMock.chatHistory();
     expect(updatedHistory[1].role).toBe(MessageRole.MODEL);
-    expect(updatedHistory[1].content).toContain('"createSurface": {');
+    expect(updatedHistory[1].content).toBe(
+      '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+    );
+    expect(updatedHistory[1].content).not.toContain('\n');
     expect(updatedHistory[1].content).not.toContain('●●●');
 
     // Verify layout committed back in a single commit transaction
@@ -701,10 +778,12 @@ describe('ChatCoordinator Pipeline & State Integration', () => {
     expect(stream.cancel).toHaveBeenCalledTimes(1);
     expect(trackChatCancel).not.toHaveBeenCalled();
     expect(chatStateMock.chatHistory()).toEqual([
-      {role: MessageRole.USER, content: 'Make a card', promptId: 'prompt-1'},
+      {role: MessageRole.USER, content: 'Make a card', isSnapshot: false, promptId: 'prompt-1'},
       {
         role: MessageRole.MODEL,
         content: '*This response was stopped because the renderer changed.*',
+        isCancelled: true,
+        promptId: 'prompt-1',
       },
     ]);
     expect(service.pipelineStatus()).toBe(PipelineStatus.IDLE);
@@ -895,9 +974,9 @@ I should generate a text field.
       const history = chatStateMock.chatHistory();
       const lastMessage = history[history.length - 1];
 
-      // Extract the updated content - it should be cleanly parsed JSON text structure
+      // Extract the updated content - it should be cleanly parsed compact JSON text structure
       // that is successfully parsed from the payload.
-      expect(lastMessage.content).toContain('"version": "v0.9"');
+      expect(lastMessage.content).toContain('"version":"v0.9"');
       expect(lastMessage.content).toContain('"createSurface"');
       expect(lastMessage.content).toContain('"TextField"');
 
@@ -1314,6 +1393,391 @@ I'll output bad JSON.
       service.cancelActiveStream();
       await secondPromise;
       expect(secondCancel).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Failed Turn Context Exclusion', () => {
+    it('excludes failed user prompt turns and their attachments from LLM context on retry while preserving them in chatHistory', async () => {
+      const screenshotAttachment = {
+        name: 'screenshot.png',
+        mimeType: 'image/png',
+        data: 'base64-image-data',
+      };
+      llmClientMock.chatStream.mockRejectedValueOnce(new Error('HTTP 503 Service Unavailable'));
+
+      await service.submitPrompt('Build this complex dashboard', [screenshotAttachment]);
+
+      const historyAfterFailure = chatStateMock.chatHistory();
+      expect(historyAfterFailure).toHaveLength(2);
+      expect(historyAfterFailure[0].role).toBe(MessageRole.USER);
+      expect(historyAfterFailure[1].role).toBe(MessageRole.ERROR);
+      const failedPromptId = historyAfterFailure[0].promptId;
+      expect(failedPromptId).toBeDefined();
+
+      // Restore working stream for retry
+      const validResponse =
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "basic"}}\n';
+      llmClientMock.chatStream.mockResolvedValueOnce({
+        contentStream: createMockStream([validResponse]),
+        complete: Promise.resolve(validResponse),
+      });
+
+      await service.submitPrompt('Build this complex dashboard', [screenshotAttachment], {
+        retryOfPromptId: failedPromptId,
+      });
+
+      const retryMessages = llmClientMock.chatStream.mock.calls[1][0];
+      const userMessagesSentToLlm = retryMessages.filter(m => m.role === MessageRole.USER);
+      expect(userMessagesSentToLlm).toHaveLength(1);
+      expect(userMessagesSentToLlm[0].content).toBe('Build this complex dashboard');
+      expect(userMessagesSentToLlm[0].promptId).not.toBe(failedPromptId);
+
+      // UI chatHistory still retains the failed user turn and error message
+      expect(chatStateMock.chatHistory().some(m => m.role === MessageRole.ERROR)).toBe(true);
+      expect(
+        chatStateMock
+          .chatHistory()
+          .filter(m => m.role === MessageRole.USER && m.content === 'Build this complex dashboard'),
+      ).toHaveLength(2);
+    });
+
+    it('preserves a succeeded retry that reuses promptId in getFullMessageContext() on subsequent follow-up turns', async () => {
+      llmClientMock.chatStream.mockRejectedValueOnce(new Error('HTTP 503 Service Unavailable'));
+      await service.submitPrompt('Build a profile card', [], {promptId: 'reused-prompt-id'});
+
+      const validResponse =
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "basic"}}\n';
+      llmClientMock.chatStream.mockResolvedValue({
+        contentStream: createMockStream([validResponse]),
+        complete: Promise.resolve(validResponse),
+      });
+
+      // Retry reusing the same promptId and succeed
+      await service.submitPrompt('Build a profile card', [], {
+        promptId: 'reused-prompt-id',
+        retryOfPromptId: 'reused-prompt-id',
+      });
+
+      // Submit a subsequent follow-up turn
+      await service.submitPrompt('Now add an avatar', [], {promptId: 'followup-prompt-id'});
+
+      const followupMessages = llmClientMock.chatStream.mock.calls[2][0];
+      const userMessages = followupMessages.filter(m => m.role === MessageRole.USER);
+      expect(userMessages.map(m => m.content)).toEqual([
+        'Build a profile card',
+        'Now add an avatar',
+      ]);
+    });
+
+    it('excludes cancelled turns (*You stopped this response.*) and their preceding user messages/attachments from subsequent LLM requests', async () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'basic',
+        components: {Text: {}},
+      });
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.USER,
+          content: '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+        },
+        {
+          role: MessageRole.USER,
+          content: 'Cancelled image prompt',
+          promptId: 'cancelled-id',
+          attachments: [{name: 'screenshot.png', mimeType: 'image/png', data: 'base64'}],
+        },
+        {role: MessageRole.MODEL, content: '*You stopped this response.*'},
+      ]);
+
+      await service.submitPrompt('Text-only follow-up after cancel');
+
+      const sentMessages = llmClientMock.chatStream.mock.calls[0][0];
+      expect(sentMessages[0].role).toBe(MessageRole.SYSTEM);
+      // Since the cancelled turn with the image attachment was excluded, multimodal guidelines should be omitted
+      expect(sentMessages[0].content).not.toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(sentMessages.some(m => m.content === '*You stopped this response.*')).toBe(false);
+      expect(sentMessages.some(m => m.content === 'Cancelled image prompt')).toBe(false);
+      expect(sentMessages.filter(m => m.role === MessageRole.USER).map(m => m.content)).toEqual([
+        '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+        'Text-only follow-up after cancel',
+      ]);
+    });
+
+    it('excludes un-tagged failed user messages immediately preceding an error while preserving layout snapshots', () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.USER,
+          content: '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+          isSnapshot: true,
+        },
+        {role: MessageRole.USER, content: 'Failed prompt without promptId'},
+        {role: MessageRole.ERROR, content: 'Service unavailable'},
+        {role: MessageRole.USER, content: 'Successful followup', promptId: 'valid-id'},
+      ]);
+
+      const context = service.getFullMessageContext();
+      const userContents = context.filter(m => m.role === MessageRole.USER).map(m => m.content);
+      expect(userContents).toEqual([
+        '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+        'Successful followup',
+      ]);
+    });
+
+    it('preserves an earlier succeeded turn when a later retry reusing the same promptId fails', async () => {
+      const validResponse =
+        '{"version": "v0.9", "createSurface": {"surfaceId": "s1", "catalogId": "basic"}}\n';
+      llmClientMock.chatStream.mockResolvedValueOnce({
+        contentStream: createMockStream([validResponse]),
+        complete: Promise.resolve(validResponse),
+      });
+
+      // Turn 1 succeeds with promptId 'p1'
+      await service.submitPrompt('Initial succeeded prompt', [], {promptId: 'p1'});
+
+      // Turn 2 reuses promptId 'p1' and fails
+      llmClientMock.chatStream.mockRejectedValueOnce(new Error('HTTP 503 Service Unavailable'));
+      await service.submitPrompt('Retried prompt that fails', [], {
+        promptId: 'p1',
+        retryOfPromptId: 'p1',
+      });
+
+      const context = service.getFullMessageContext();
+      const nonSystem = context.filter(m => m.role !== MessageRole.SYSTEM);
+      expect(nonSystem.map(m => ({role: m.role, content: m.content}))).toEqual([
+        {role: MessageRole.USER, content: 'Initial succeeded prompt'},
+        {
+          role: MessageRole.MODEL,
+          content: '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+        },
+      ]);
+    });
+
+    it('excludes MODEL turns with parseError and their preceding USER prompt and image attachments from context and systemPrompt()', async () => {
+      catalogManagementMock.activeCatalog.set({
+        catalogId: 'basic',
+        components: {Text: {}},
+      });
+      const unparseableRawText = '<thinking>bad</thinking>\n{"version": "v';
+      llmClientMock.chatStream.mockResolvedValueOnce({
+        contentStream: createMockStream([unparseableRawText]),
+        complete: Promise.resolve(unparseableRawText),
+      });
+
+      await service.submitPrompt('Broken image prompt', [
+        {name: 'screenshot.png', mimeType: 'image/png', data: 'base64'},
+      ]);
+
+      const context = service.getFullMessageContext();
+      expect(context).toHaveLength(1);
+      expect(context[0].role).toBe(MessageRole.SYSTEM);
+      expect(context[0].content).not.toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.systemPrompt()).not.toContain('## Multimodal & Image-to-UI Guidelines');
+    });
+
+    it('excludes a cancelled user prompt even when the prompt text contains an A2UI JSON snippet', () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.USER,
+          content:
+            'Please fix this layout:\n```json\n[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]\n```',
+          promptId: 'cancelled-json-prompt',
+        },
+        {
+          role: MessageRole.MODEL,
+          content: '*You stopped this response.*',
+          isCancelled: true,
+          promptId: 'cancelled-json-prompt',
+        },
+        {
+          role: MessageRole.USER,
+          content: 'Fresh prompt',
+          promptId: 'fresh-prompt',
+        },
+      ]);
+
+      const context = service.getFullMessageContext();
+      const userMessages = context.filter(m => m.role === MessageRole.USER);
+      expect(userMessages.map(m => m.content)).toEqual(['Fresh prompt']);
+    });
+
+    it('deduplicates consecutive layout snapshots left adjacent after stripping an intervening failed turn', () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.USER,
+          content: '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+          isSnapshot: true,
+        },
+        {
+          role: MessageRole.USER,
+          content: 'Failed prompt between snapshots',
+          promptId: 'failed-p1',
+        },
+        {
+          role: MessageRole.ERROR,
+          content: '503 Service Unavailable',
+          promptId: 'failed-p1',
+        },
+        {
+          role: MessageRole.USER,
+          content: '[{"version":"v0.9","createSurface":{"surfaceId":"s2","catalogId":"basic"}}]',
+          isSnapshot: true,
+        },
+        {
+          role: MessageRole.USER,
+          content: 'Follow-up prompt',
+          promptId: 'valid-p2',
+        },
+      ]);
+
+      const context = service.getFullMessageContext();
+      const userMessages = context.filter(m => m.role === MessageRole.USER);
+      expect(userMessages.map(m => m.content)).toEqual([
+        '[{"version":"v0.9","createSurface":{"surfaceId":"s2","catalogId":"basic"}}]',
+        'Follow-up prompt',
+      ]);
+    });
+
+    it('updates the matching MODEL placeholder by promptId when a USER layout snapshot is appended mid-stream', async () => {
+      let resolveStream!: (val: string) => void;
+      const streamPromise = new Promise<string>(resolve => {
+        resolveStream = resolve;
+      });
+      async function* delayedGenerator() {
+        const chunk = await streamPromise;
+        yield chunk;
+      }
+      llmClientMock.chatStream.mockResolvedValueOnce({
+        contentStream: delayedGenerator(),
+        complete: streamPromise,
+      });
+
+      const submitPromise = service.submitPrompt('Prompt with mid-stream snapshot', [], {
+        promptId: 'turn-mid-snap',
+      });
+
+      const historyDuringStream = chatStateMock.chatHistory();
+      expect(historyDuringStream[0]).toEqual(
+        expect.objectContaining({
+          role: MessageRole.USER,
+          content: 'Prompt with mid-stream snapshot',
+          isSnapshot: false,
+          promptId: 'turn-mid-snap',
+        }),
+      );
+
+      // Simulate a USER layout snapshot appended after the MODEL placeholder while stream is active
+      chatStateMock.updateChatHistory(h => [
+        ...h,
+        {
+          role: MessageRole.USER,
+          content:
+            '[{"version":"v0.9","createSurface":{"surfaceId":"interleaved","catalogId":"basic"}}]',
+          isSnapshot: true,
+        },
+      ]);
+
+      const validResponse =
+        '{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}';
+      resolveStream(validResponse);
+      await submitPromise;
+
+      const historyAfterComplete = chatStateMock.chatHistory();
+      const modelTurn = historyAfterComplete.find(
+        m => m.role === MessageRole.MODEL && m.promptId === 'turn-mid-snap',
+      );
+      expect(modelTurn?.content).toBe(`[${validResponse}]`);
+    });
+
+    it('excludes a failed or cancelled USER prompt while preserving an interleaved USER layout snapshot', () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.USER,
+          content: 'Failed prompt before snapshot',
+          isSnapshot: false,
+          promptId: 'p-failed',
+        },
+        {
+          role: MessageRole.USER,
+          content:
+            '[{"version":"v0.9","createSurface":{"surfaceId":"kept-snap","catalogId":"basic"}}]',
+          isSnapshot: true,
+        },
+        {
+          role: MessageRole.ERROR,
+          content: '503 Service Unavailable',
+          promptId: 'p-failed',
+        },
+        {
+          role: MessageRole.USER,
+          content: 'Cancelled prompt before snapshot',
+          isSnapshot: false,
+          promptId: 'p-cancelled',
+        },
+        {
+          role: MessageRole.USER,
+          content:
+            '[{"version":"v0.9","createSurface":{"surfaceId":"kept-snap-2","catalogId":"basic"}}]',
+          isSnapshot: true,
+        },
+        {
+          role: MessageRole.MODEL,
+          content: '*You stopped this response.*',
+          isCancelled: true,
+          promptId: 'p-cancelled',
+        },
+        {
+          role: MessageRole.USER,
+          content: 'Active prompt',
+          isSnapshot: false,
+          promptId: 'p-active',
+        },
+      ]);
+
+      const context = service.getFullMessageContext();
+      const userMessages = context.filter(m => m.role === MessageRole.USER);
+      expect(userMessages.map(m => m.content)).toEqual([
+        '[{"version":"v0.9","createSurface":{"surfaceId":"kept-snap-2","catalogId":"basic"}}]',
+        'Active prompt',
+      ]);
+    });
+
+    it('appends a new ERROR bubble instead of overwriting an earlier completed MODEL turn with a different promptId when no matching MODEL placeholder exists', async () => {
+      chatStateMock.setChatHistory([
+        {
+          role: MessageRole.USER,
+          content: 'Earlier succeeded prompt',
+          isSnapshot: false,
+          promptId: 'earlier-turn',
+        },
+        {
+          role: MessageRole.MODEL,
+          content: '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+          promptId: 'earlier-turn',
+        },
+      ]);
+
+      llmClientMock.chatStream.mockImplementationOnce(async () => {
+        // Remove the newly appended 'later-turn' MODEL placeholder (and USER prompt) so the last
+        // entry in chatHistory is the earlier completed MODEL turn with promptId 'earlier-turn'
+        chatStateMock.updateChatHistory(h => h.filter(m => m.promptId !== 'later-turn'));
+        throw new Error('HTTP 503 Service Unavailable');
+      });
+
+      await service.submitPrompt('Later failed prompt', [], {promptId: 'later-turn'});
+
+      const history = chatStateMock.chatHistory();
+      expect(history).toHaveLength(3);
+      expect(history[1]).toEqual({
+        role: MessageRole.MODEL,
+        content: '[{"version":"v0.9","createSurface":{"surfaceId":"s1","catalogId":"basic"}}]',
+        promptId: 'earlier-turn',
+      });
+      expect(history[2]).toEqual(
+        expect.objectContaining({
+          role: MessageRole.ERROR,
+          promptId: 'later-turn',
+          originalPrompt: 'Later failed prompt',
+        }),
+      );
     });
   });
 });

@@ -18,6 +18,7 @@ import {TestBed} from '@angular/core/testing';
 import {ChatPromptFactoryService} from './chat-prompt-factory.service';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {McpClientManagerService} from '../../mcp/mcp-client-manager.service';
+import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
@@ -216,6 +217,198 @@ describe('ChatPromptFactoryService', () => {
           presets: [{id: 'p-1', name: 'Preset 1', content: 'Some instructions'}],
           activePresetId: null,
         }),
+      );
+    });
+  });
+
+  describe('Multimodal Guidelines', () => {
+    beforeEach(() => {
+      catalogSpy.activeCatalog.mockReturnValue({components: {}});
+    });
+
+    it('omits ## Multimodal & Image-to-UI Guidelines by default in systemPrompt() and buildSystemPrompt() with clean section boundary formatting', () => {
+      const prompt = service.systemPrompt();
+      expect(prompt).not.toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.buildSystemPrompt()).not.toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(service.buildSystemPrompt({includeMultimodalGuidelines: false})).not.toContain(
+        '## Multimodal & Image-to-UI Guidelines',
+      );
+      expect(prompt).toContain(
+        'independently parseable by JSON.parse().\n\n  ## Validation & Lifecycle Ordering',
+      );
+      expect(prompt).not.toContain('\n\n\n');
+    });
+
+    it('includes ## Multimodal & Image-to-UI Guidelines when includeMultimodalGuidelines is true with follow-up precedence note and clean boundaries', () => {
+      const prompt = service.buildSystemPrompt({includeMultimodalGuidelines: true});
+      expect(prompt).toContain('## Multimodal & Image-to-UI Guidelines');
+      expect(prompt).toContain(
+        'explicit user text instructions to add, modify, or remove elements\n  take precedence over earlier screenshots and follow ## Editing the Current UI',
+      );
+      expect(prompt).toContain('### 1. Visual Layout, Scope & Sizing Fidelity');
+      expect(prompt).toContain('### 6. Image-to-UI Processing Sequence');
+      expect(prompt).toContain(
+        'independently parseable by JSON.parse().\n\n  ## Multimodal & Image-to-UI Guidelines',
+      );
+      expect(prompt).toContain(
+        '(createSurface -> updateComponents -> updateDataModel).\n\n  ## Validation & Lifecycle Ordering',
+      );
+      expect(prompt).not.toContain('\n\n\n');
+    });
+  });
+
+  describe('Schema Minification', () => {
+    it('serializes catalog and COMMON_TYPES_SCHEMA as compact single-line JSON while preserving COMMON_TYPES_SCHEMA descriptions', () => {
+      const catalog = {
+        catalogId: 'compact-cat',
+        components: {
+          Text: {
+            type: 'object',
+            properties: {text: {type: 'string'}},
+          },
+        },
+      };
+      catalogSpy.activeCatalog.mockReturnValue(catalog);
+
+      const prompt = service.systemPrompt();
+      expect(prompt).toContain(
+        '{"catalogId":"compact-cat","components":{"Text":{"type":"object","properties":{"text":{"type":"string"}}}}}',
+      );
+      expect(prompt).toContain(JSON.stringify(COMMON_TYPES_SCHEMA));
+      expect(prompt).toContain(
+        'Attributes to enhance accessibility when using assistive technologies',
+      );
+    });
+
+    it('preserves transitively referenced $defs (including common_types_* and custom $defs) while pruning unreferenced $defs without mutating input catalog', () => {
+      const catalog = {
+        catalogId: 'defs-cat',
+        components: {
+          Button: {
+            type: 'object',
+            properties: {
+              label: {$ref: '#/$defs/common_types_DynamicString'},
+              variant: {$ref: '#/$defs/CustomVariant'},
+            },
+          },
+        },
+        $defs: {
+          common_types_DynamicString: {
+            anyOf: [{type: 'string'}, {$ref: '#/$defs/common_types_DataBinding'}],
+          },
+          common_types_DataBinding: {type: 'object'},
+          CustomVariant: {type: 'string', enum: ['primary', 'secondary']},
+          catalog_Button: {type: 'object', description: 'Unreferenced duplicate component copy'},
+          UnusedDef: {type: 'number'},
+        },
+      };
+      catalogSpy.activeCatalog.mockReturnValue(catalog);
+
+      const prompt = service.systemPrompt();
+      expect(prompt).toContain('"common_types_DynamicString"');
+      expect(prompt).toContain('"common_types_DataBinding"');
+      expect(prompt).toContain('"CustomVariant":{"type":"string","enum":["primary","secondary"]}');
+      expect(prompt).not.toContain('catalog_Button');
+      expect(prompt).not.toContain('UnusedDef');
+      // Input catalog object must not be mutated
+      expect(catalog.$defs.catalog_Button).toBeDefined();
+      expect(catalog.$defs.UnusedDef).toEqual({type: 'number'});
+    });
+
+    it('omits $defs when catalog.$defs contains only unreferenced entries', () => {
+      const unreferencedDefsCatalog = {
+        catalogId: 'only-unreferenced-defs',
+        components: {Text: {type: 'object'}},
+        $defs: {
+          catalog_Text: {type: 'object'},
+        },
+      };
+      catalogSpy.activeCatalog.mockReturnValue(unreferencedDefsCatalog);
+      expect(service.systemPrompt()).toContain(
+        '{"catalogId":"only-unreferenced-defs","components":{"Text":{"type":"object"}}}',
+      );
+      expect(unreferencedDefsCatalog.$defs.catalog_Text).toEqual({type: 'object'});
+    });
+  });
+
+  describe('Condensed Few-Shot Examples', () => {
+    beforeEach(() => {
+      catalogSpy.activeCatalog.mockReturnValue({components: {}});
+    });
+
+    it('replaces the verbose vacation_booking example with compact valid JSONL examples covering core A2UI features', () => {
+      const prompt = service.systemPrompt();
+      expect(prompt).not.toContain('vacation_booking');
+      expect(prompt).not.toContain('Book Your Dream Vacation');
+
+      const examplesMatch = prompt.match(/## Examples([\s\S]*?)## Data Binding/);
+      expect(examplesMatch).not.toBeNull();
+      const examplesSection = examplesMatch![1];
+      expect(examplesSection.length).toBeLessThanOrEqual(1500);
+
+      const jsonlBlocks = Array.from(examplesSection.matchAll(/```jsonl\n([\s\S]*?)```/g)).map(m =>
+        m[1].trim(),
+      );
+      expect(jsonlBlocks.length).toBeGreaterThanOrEqual(2);
+
+      for (const block of jsonlBlocks) {
+        const rawLines = block.split('\n').map(line => line.trim());
+        for (const rawLine of rawLines) {
+          expect(rawLine).toBe(JSON.stringify(JSON.parse(rawLine)));
+        }
+
+        const blockMessages = rawLines.map(line => JSON.parse(line));
+        const createMsg = blockMessages.find(m => m.createSurface);
+        const updateCompMsg = blockMessages.find(m => m.updateComponents);
+        const updateDataMsg = blockMessages.find(m => m.updateDataModel);
+        expect(createMsg).toBeDefined();
+        expect(updateCompMsg).toBeDefined();
+        expect(updateDataMsg).toBeDefined();
+
+        const surfaceId = createMsg.createSurface.surfaceId;
+        expect(updateCompMsg.updateComponents.surfaceId).toBe(surfaceId);
+        expect(updateDataMsg.updateDataModel.surfaceId).toBe(surfaceId);
+
+        const components: Array<{
+          id: string;
+          child?: string;
+          children?: string[] | {componentId?: string};
+        }> = updateCompMsg.updateComponents.components;
+        const componentIds = new Set(components.map(c => c.id));
+        expect(componentIds.has('root')).toBe(true);
+
+        for (const comp of components) {
+          if (typeof comp.child === 'string') {
+            expect(componentIds.has(comp.child)).toBe(true);
+          }
+          if (Array.isArray(comp.children)) {
+            for (const childId of comp.children) {
+              expect(componentIds.has(childId)).toBe(true);
+            }
+          } else if (comp.children && typeof comp.children.componentId === 'string') {
+            expect(componentIds.has(comp.children.componentId)).toBe(true);
+          }
+        }
+      }
+
+      const parsedLines = jsonlBlocks
+        .flatMap(block => block.split('\n'))
+        .map(line => JSON.parse(line.trim()));
+
+      expect(parsedLines.some(msg => msg.version === 'v0.9' && msg.createSurface)).toBe(true);
+      expect(parsedLines.some(msg => msg.version === 'v0.9' && msg.updateComponents)).toBe(true);
+      expect(parsedLines.some(msg => msg.version === 'v0.9' && msg.updateDataModel)).toBe(true);
+
+      const serializedExamples = JSON.stringify(parsedLines);
+      // JSON Pointer data binding
+      expect(serializedExamples).toContain('"path":"/');
+      // Button event action with context binding
+      expect(serializedExamples).toContain(
+        '"action":{"event":{"name":"submitForm","context":{"name":{"path":"/name"}}}}',
+      );
+      // Dynamic list template
+      expect(serializedExamples).toContain(
+        '"children":{"componentId":"item_template","path":"/items"}',
       );
     });
   });

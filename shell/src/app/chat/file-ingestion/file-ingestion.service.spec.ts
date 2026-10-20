@@ -45,4 +45,22 @@ describe('FileIngestionService', () => {
     expect(result.data).toBe(btoa('blobdata'));
     expect(result.previewUrl).toContain('data:image/png;base64,');
   });
+
+  it('infers image MIME type and constructs normalized previewUrl from filename extension when File.type is empty or application/octet-stream', async () => {
+    const webpFile = new File(['webpdata'], 'wireframe.webp', {type: ''});
+    const webpResult = await service.readFileAsAttachment(webpFile);
+
+    expect(webpResult.name).toBe('wireframe.webp');
+    expect(webpResult.mimeType).toBe('image/webp');
+    expect(webpResult.data).toBe(btoa('webpdata'));
+    expect(webpResult.previewUrl).toBe(`data:image/webp;base64,${btoa('webpdata')}`);
+
+    const svgFile = new File(['<svg></svg>'], 'icon.svg', {type: 'application/octet-stream'});
+    const svgResult = await service.readFileAsAttachment(svgFile);
+
+    expect(svgResult.name).toBe('icon.svg');
+    expect(svgResult.mimeType).toBe('image/svg+xml');
+    expect(svgResult.data).toBe(btoa('<svg></svg>'));
+    expect(svgResult.previewUrl).toBe(`data:image/svg+xml;base64,${btoa('<svg></svg>')}`);
+  });
 });
