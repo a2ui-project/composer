@@ -34,8 +34,19 @@ import {
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {signal, WritableSignal} from '@angular/core';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {bridgeEnvelope, surfaceResizeEnvelope} from '../testing/bridge-envelopes';
+import {
+  GuestSimulationHost,
+  LOOP_CADENCE_MS,
+  growingHeights,
+  playReports,
+  report,
+  settle,
+  simulateGuest,
+  viewportBoundGuest,
+} from '../testing/simulate-guest';
 
 class MockStateSync {
   readonly sessionResetNonce = signal(0);
@@ -83,6 +94,15 @@ describe('RenderedFrame Live Preview Viewport', () => {
     return frameFixture;
   }
 
+  /** The default frame, driven as a guest simulation; see simulate-guest.ts. */
+  function guestHost(): GuestSimulationHost {
+    return {
+      frame: harness,
+      deliver: emitBridgeMessage,
+      detectChanges: () => fixture.detectChanges(),
+    };
+  }
+
   beforeEach(async () => {
     resolvedUrlSignal = signal('http://localhost:3000/renderer');
     themePreferenceSignal = signal<ThemePreference>(ThemePreference.LIGHT);
@@ -126,6 +146,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
           provide: StateSync,
           useClass: MockStateSync,
         },
+        provideNoopAnimations(),
       ],
     }).compileComponents();
 
@@ -136,7 +157,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     harness = await TestbedHarnessEnvironment.harnessForFixture(fixture, RenderedFrameHarness);
   });
 
-  afterEach(() => async () => {
+  afterEach(() => {
     vi.unstubAllGlobals();
   });
 
@@ -360,9 +381,9 @@ describe('RenderedFrame Live Preview Viewport', () => {
   });
 
   it('lowers the applied height when a smaller SURFACE_RESIZE arrives', async () => {
-    emitBridgeMessage(surfaceResizeEnvelope(3224));
+    emitBridgeMessage(surfaceResizeEnvelope(520));
     fixture.detectChanges();
-    expect(await harness.getAppliedHeightPx()).toBe(3224);
+    expect(await harness.getAppliedHeightPx()).toBe(520);
 
     emitBridgeMessage(surfaceResizeEnvelope(264));
     fixture.detectChanges();
@@ -371,9 +392,9 @@ describe('RenderedFrame Live Preview Viewport', () => {
   });
 
   it('shrinks the applied height when a smaller surface height is reported', async () => {
-    emitBridgeMessage(surfaceResizeEnvelope(600));
+    emitBridgeMessage(surfaceResizeEnvelope(540));
     fixture.detectChanges();
-    expect(await harness.getAppliedHeightPx()).toBe(600);
+    expect(await harness.getAppliedHeightPx()).toBe(540);
 
     emitBridgeMessage(surfaceResizeEnvelope(394));
     fixture.detectChanges();
@@ -548,7 +569,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(sendSpy).toHaveBeenCalledWith(payload, expect.anything());
   });
 
-  it('triggers syncPayloadOnIframeLoad and dispatches payload if available', () => {
+  it('dispatches the payload when the frame loads', async () => {
     const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
     fixture.componentRef.setInput('payload', payload);
     fixture.detectChanges();
@@ -556,7 +577,7 @@ describe('RenderedFrame Live Preview Viewport', () => {
     const sendSpy = vi.spyOn(hostCommunicationServiceMock, 'sendRenderA2UI');
     sendSpy.mockClear();
 
-    fixture.componentInstance['syncPayloadOnIframeLoad']();
+    await harness.simulateFrameLoad();
     expect(sendSpy).toHaveBeenCalledWith(payload, expect.anything());
   });
 
@@ -575,16 +596,20 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(sendSpy).not.toHaveBeenCalled();
   });
 
-  it('ignores SURFACE_RESIZE when height is missing or not a number', () => {
+  it('ignores SURFACE_RESIZE when height is missing or not a number', async () => {
     const newFixture = createFrame();
     newFixture.detectChanges();
+    const newHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      newFixture,
+      RenderedFrameHarness,
+    );
 
     messageStreamSubject.next(
       bridgeEnvelope(PreviewBridgeMessageType.SURFACE_RESIZE, {width: 500}),
     );
     newFixture.detectChanges();
 
-    expect(newFixture.componentInstance.dynamicHeight()).toBeNull();
+    expect(await newHarness.getAppliedHeightPx()).toBeNull();
   });
 
   it('does not dispatch when RENDERER_READY arrives and payload is empty', () => {
@@ -601,23 +626,27 @@ describe('RenderedFrame Live Preview Viewport', () => {
     expect(sendSpy).not.toHaveBeenCalled();
   });
 
-  it('ignores incoming bridge messages when sourceWindow belongs to a different frame', () => {
+  it('ignores incoming bridge messages when sourceWindow belongs to a different frame', async () => {
     const newFixture = createFrame();
     newFixture.detectChanges();
+    const newHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      newFixture,
+      RenderedFrameHarness,
+    );
 
     const otherWindow = {postMessage: vi.fn()} as unknown as Window;
-    messageStreamSubject.next(surfaceResizeEnvelope(999, {sourceWindow: otherWindow}));
+    messageStreamSubject.next(surfaceResizeEnvelope(480, {sourceWindow: otherWindow}));
     newFixture.detectChanges();
 
-    expect(newFixture.componentInstance.dynamicHeight()).toBeNull();
+    expect(await newHarness.getAppliedHeightPx()).toBeNull();
   });
 
-  it('does not drop SURFACE_RESIZE when followed immediately by other messages in the same tick', () => {
-    messageStreamSubject.next(surfaceResizeEnvelope(720));
+  it('does not drop SURFACE_RESIZE when followed immediately by other messages in the same tick', async () => {
+    messageStreamSubject.next(surfaceResizeEnvelope(480));
     messageStreamSubject.next(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS));
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.dynamicHeight()).toBe(720);
+    expect(await harness.getAppliedHeightPx()).toBe(480);
   });
 
   it('forwards wheel events from iframe contentWindow to parent scrollable container', () => {
@@ -655,6 +684,205 @@ describe('RenderedFrame Live Preview Viewport', () => {
     });
 
     document.body.removeChild(parentContainer);
+  });
+
+  /**
+   * Growth behavior of a content-sized frame, asserted only through the height
+   * it applies, after every timer it may have armed has run. These scenarios
+   * do not depend on how the frame bounds growth, so they hold for the growth
+   * breaker and for any replacement of it. Every scenario ends below 560px;
+   * the runaway and transition scenarios send at least 16 consecutive growing
+   * reports, enough to engage the breaker.
+   */
+  describe('growth behavior', () => {
+    const START_TIME = 1_700_000_000_000;
+    const BASE_PX = 100;
+    const STEP_PX = 15;
+    /** Per-frame reports at 60Hz. */
+    const FRAME_MS = 16;
+    /** Per-frame reports at 120Hz, the fastest a guest reports. */
+    const FAST_FRAME_MS = 8;
+    /** Growing reports in a runaway or transition run: 100px to 490px. */
+    const RUN_REPORTS = 27;
+    const RUN_FINAL_PX = BASE_PX + (RUN_REPORTS - 1) * STEP_PX;
+    /** Reports that leave a runaway run mid-flight (held, for the breaker). */
+    const MID_RUN_REPORTS = 17;
+    const NEW_CONTENT = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+
+    let host: GuestSimulationHost;
+
+    beforeEach(() => {
+      vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'Date']});
+      vi.setSystemTime(START_TIME);
+      host = guestHost();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Leaves a runaway run of fast growing reports in flight, without settling. */
+    function startRunaway(): void {
+      for (const height of growingHeights(MID_RUN_REPORTS, BASE_PX, STEP_PX)) {
+        report(host, height, FAST_FRAME_MS);
+        fixture.detectChanges();
+      }
+    }
+
+    it('RT-1a follows a short expansion transition to its final height', async () => {
+      const heights = growingHeights(14, BASE_PX, STEP_PX);
+
+      expect(await playReports(host, heights, {cadenceMs: FRAME_MS})).toBe(heights.at(-1));
+    });
+
+    it('RT-1b follows a long expansion transition at 120Hz to its final height', async () => {
+      const heights = growingHeights(RUN_REPORTS, BASE_PX, STEP_PX);
+
+      expect(await playReports(host, heights, {cadenceMs: FAST_FRAME_MS})).toBe(RUN_FINAL_PX);
+    });
+
+    it('RT-2 follows streaming growth in small steps', async () => {
+      const heights = growingHeights(20, BASE_PX, 10);
+
+      expect(await playReports(host, heights, {cadenceMs: 200})).toBe(heights.at(-1));
+    });
+
+    it('RT-3 follows an expansion down and back up without ratcheting', async () => {
+      const expand = growingHeights(RUN_REPORTS, BASE_PX, STEP_PX);
+      const collapse = growingHeights(RUN_REPORTS, RUN_FINAL_PX, -STEP_PX);
+
+      expect(await playReports(host, expand, {cadenceMs: FAST_FRAME_MS})).toBe(RUN_FINAL_PX);
+      expect(await playReports(host, collapse, {cadenceMs: FAST_FRAME_MS})).toBe(BASE_PX);
+      expect(await playReports(host, expand, {cadenceMs: FAST_FRAME_MS})).toBe(RUN_FINAL_PX);
+    });
+
+    it('RT-4 stops growing when the guest grows with every applied height', async () => {
+      const result = await simulateGuest(host, viewportBoundGuest(), {
+        cadenceMs: LOOP_CADENCE_MS,
+      });
+
+      expect(result.converged).toBe(true);
+      // Long enough to have run into whatever bounds the growth.
+      expect(result.reports).toBeGreaterThan(16);
+      expect(await settle(host)).toBe(result.applied);
+    });
+
+    it('RT-5 follows a transition of more than 48 reports to its final height', async () => {
+      const heights = growingHeights(56, BASE_PX, 6);
+
+      expect(await playReports(host, heights, {cadenceMs: FAST_FRAME_MS})).toBe(heights.at(-1));
+    });
+
+    it('RT-6 follows streaming that runs straight into an expansion', async () => {
+      for (const height of growingHeights(10, BASE_PX, 10)) {
+        report(host, height, 200);
+        fixture.detectChanges();
+      }
+      const expansion = growingHeights(RUN_REPORTS, 200, 10);
+
+      expect(await playReports(host, expansion, {cadenceMs: FAST_FRAME_MS})).toBe(expansion.at(-1));
+    });
+
+    it('RT-7 applies every report of growth that arrives 600ms apart', async () => {
+      for (const height of growingHeights(20, BASE_PX, STEP_PX)) {
+        report(host, height, 600);
+        fixture.detectChanges();
+        expect(await harness.getAppliedHeightPx()).toBe(height);
+      }
+    });
+
+    it('RT-8 follows a new payload down and then up', async () => {
+      startRunaway();
+      fixture.componentRef.setInput('payload', NEW_CONTENT);
+      fixture.detectChanges();
+
+      report(host, 200, FAST_FRAME_MS);
+      fixture.detectChanges();
+      expect(await harness.getAppliedHeightPx()).toBe(200);
+
+      report(host, 300, FAST_FRAME_MS);
+      fixture.detectChanges();
+      expect(await settle(host)).toBe(300);
+    });
+
+    it('RT-9 applies a smaller report after the renderer signals ready again', async () => {
+      startRunaway();
+      vi.advanceTimersByTime(FAST_FRAME_MS);
+      emitBridgeMessage(
+        bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY, {}, {timestamp: Date.now()}),
+      );
+      fixture.detectChanges();
+
+      report(host, 200, FAST_FRAME_MS);
+      fixture.detectChanges();
+
+      expect(await settle(host)).toBe(200);
+    });
+
+    it('RT-10 returns to its default size on a session reset, then follows new reports', async () => {
+      startRunaway();
+      stateSyncMock.sessionResetNonce.update(n => n + 1);
+      fixture.detectChanges();
+      expect(await harness.getAppliedHeightPx()).toBeNull();
+
+      report(host, 250, FAST_FRAME_MS);
+      fixture.detectChanges();
+      expect(await harness.getAppliedHeightPx()).toBe(250);
+
+      report(host, 300, FAST_FRAME_MS);
+      fixture.detectChanges();
+      expect(await settle(host)).toBe(300);
+    });
+
+    it('RT-11 neither throws nor logs when destroyed in the middle of a run', () => {
+      const logger = TestBed.inject(ErrorLogger);
+      logger.clear();
+      const unhandled = vi.fn();
+      const previousHandler = rxjsConfig.onUnhandledError;
+      rxjsConfig.onUnhandledError = unhandled;
+      try {
+        startRunaway();
+        fixture.destroy();
+
+        expect(() => vi.runAllTimers()).not.toThrow();
+        expect(() => report(host, 400, FAST_FRAME_MS)).not.toThrow();
+        expect(() => vi.runAllTimers()).not.toThrow();
+        expect(unhandled).not.toHaveBeenCalled();
+        expect(logger.getHistory().filter(item => item.level === 'error')).toEqual([]);
+      } finally {
+        rxjsConfig.onUnhandledError = previousHandler;
+      }
+    });
+
+    it('RT-12 applies the final report of a burst delivered within one tick', async () => {
+      report(host, BASE_PX, FAST_FRAME_MS);
+      fixture.detectChanges();
+      const burst = growingHeights(RUN_REPORTS, BASE_PX + STEP_PX, STEP_PX);
+
+      expect(await playReports(host, burst, {cadenceMs: FAST_FRAME_MS, oneTick: true})).toBe(
+        burst.at(-1),
+      );
+    });
+
+    it('RT-13 follows a run interrupted by one report that does not grow', async () => {
+      const first = growingHeights(13, BASE_PX, STEP_PX);
+      const second = growingHeights(13, first.at(-1)! + STEP_PX, STEP_PX);
+      const heights = [...first, first.at(-1)!, ...second];
+
+      expect(await playReports(host, heights, {cadenceMs: FAST_FRAME_MS})).toBe(second.at(-1));
+    });
+
+    it('applies no height in fill mode, even after a runaway burst settles', async () => {
+      const logger = TestBed.inject(ErrorLogger);
+      logger.clear();
+      fixture.componentRef.setInput('sizing', 'fill');
+      fixture.detectChanges();
+
+      // A whole runaway burst, at the cadence of an observed feedback loop.
+      const burst = growingHeights(RUN_REPORTS, BASE_PX, STEP_PX);
+      expect(await playReports(host, burst, {cadenceMs: LOOP_CADENCE_MS})).toBeNull();
+      expect(logger.getHistory()).toEqual([]);
+    });
   });
 
   describe('runaway growth circuit breaker', () => {
@@ -761,25 +989,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
       expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
       expect(logged(logger, 'info').filter(message => message.includes('held'))).toHaveLength(1);
       expect(logged(logger, 'warn')).toHaveLength(0);
-    });
-
-    it('applies no height in fill mode, even after a runaway burst settles', async () => {
-      const logger = TestBed.inject(ErrorLogger);
-      logger.clear();
-      fixture.componentRef.setInput('sizing', 'fill');
-      fixture.detectChanges();
-
-      // A whole runaway burst, long enough to hold a content-sized frame.
-      for (let i = 0; i <= HOLD_AT; i++) {
-        emitResize(BASE_HEIGHT_PX + i * LOOP_STEP_PX, START_TIME + i * LOOP_CADENCE_MS);
-        fixture.detectChanges();
-      }
-      vi.runAllTimers();
-      fixture.detectChanges();
-
-      expect(await harness.getAppliedHeightPx()).toBeNull();
-      expect(logged(logger, 'warn')).toHaveLength(0);
-      expect(logged(logger, 'info')).toHaveLength(0);
     });
 
     it('drops a content-mode hold when switched to fill', async () => {
@@ -971,10 +1180,10 @@ describe('RenderedFrame Live Preview Viewport', () => {
       fixture.detectChanges();
       expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(true);
 
-      emitResize(1024, reactionTime + SETTLE_MS + 1);
+      emitResize(500, reactionTime + SETTLE_MS + 1);
       fixture.detectChanges();
 
-      expect(appliedHeight()).toBe(1024);
+      expect(appliedHeight()).toBe(500);
       expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
     });
 
@@ -1022,10 +1231,10 @@ describe('RenderedFrame Live Preview Viewport', () => {
       );
       fixture.detectChanges();
 
-      emitResize(1024, last.time + 2 * LOOP_CADENCE_MS);
+      emitResize(500, last.time + 2 * LOOP_CADENCE_MS);
       fixture.detectChanges();
 
-      expect(appliedHeight()).toBe(1024);
+      expect(appliedHeight()).toBe(500);
       expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
     });
 
@@ -1041,9 +1250,9 @@ describe('RenderedFrame Live Preview Viewport', () => {
       expect(fixture.componentInstance.isGrowthBreakerLatched()).toBe(false);
 
       // Subsequent resize reports in the new session are not clamped by the prior hold.
-      emitResize(1024, last.time + SETTLE_MS);
+      emitResize(500, last.time + SETTLE_MS);
       fixture.detectChanges();
-      expect(appliedHeight()).toBe(1024);
+      expect(appliedHeight()).toBe(500);
     });
 
     it('drops the settle timer when the component is destroyed', () => {
