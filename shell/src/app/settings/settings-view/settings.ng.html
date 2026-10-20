@@ -28,6 +28,9 @@
             (rendererSelected)="onRendererSelected($event)"
           >
           </a2ui-composer-renderer-selector>
+          @if (rendererError(); as error) {
+            <mat-error role="alert">{{ error }}</mat-error>
+          }
         </div>
 
         @if (isThirdPartyAuth()) {

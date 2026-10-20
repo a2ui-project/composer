@@ -45,6 +45,21 @@ export declare interface MessageEnvelope {
 }
 
 /**
+ * What registering a frame does to the default target: the frame that
+ * `sendMessage` posts to when it is called without a target.
+ */
+export enum DefaultTarget {
+  /** The newly registered frame becomes the default target. */
+  REPLACE = 'replace',
+  /**
+   * The default target stays as it is, and the frame receives only messages
+   * addressed to it. `unregisterIframe` can still fall back to it if the
+   * default frame is unregistered first.
+   */
+  KEEP = 'keep',
+}
+
+/**
  * Core service managing cross-frame message passing and event dispatching
  * between the primary workspace shell and rendering client frames.
  */
@@ -517,9 +532,19 @@ export class HostCommunication implements OnDestroy {
    * Registering a frame starts a fresh handshake for that frame only: its own
    * queued messages and previous readiness are discarded, while frames that
    * are already up keep their readiness and their queued messages.
+   *
+   * Services such as CatalogManagement send without a target, so their
+   * requests go to the default target. A page that mounts many frames next to
+   * the one that should answer those requests registers the others with
+   * {@link DefaultTarget.KEEP}.
    * @param target Target iframe element, window reference, or null to unregister all
+   * @param defaultTarget Whether the frame becomes the default target. Ignored
+   *     when `target` is null.
    */
-  registerIframe(target: HTMLIFrameElement | Window | null): void {
+  registerIframe(
+    target: HTMLIFrameElement | Window | null,
+    defaultTarget = DefaultTarget.REPLACE,
+  ): void {
     if (!target) {
       this.outboundMessageBuffer.length = 0;
       this.iframeElement = null;
@@ -539,7 +564,6 @@ export class HostCommunication implements OnDestroy {
       if (previousWindow) {
         this.readyWindows.delete(previousWindow);
       }
-      this.iframeElement = target;
       this.registeredIframes.add(target);
       windowTarget = target.contentWindow;
       if (windowTarget) {
@@ -548,7 +572,6 @@ export class HostCommunication implements OnDestroy {
         this.iframeWindows.delete(target);
       }
     } else {
-      this.iframeElement = null;
       this.registeredWindows.add(target);
       windowTarget = target;
     }
@@ -556,13 +579,17 @@ export class HostCommunication implements OnDestroy {
     if (windowTarget) {
       this.readyWindows.delete(windowTarget);
     }
-    // Untargeted messages were meant for the previous default frame. This
-    // frame is now the default, so replaying them would misroute them here;
-    // drop them. Messages addressed to other frames stay queued.
-    this.dropQueuedMessages(
-      queuedTarget => !queuedTarget || this.addressesTarget(queuedTarget, target, windowTarget),
+    this.dropQueuedMessages(queuedTarget =>
+      this.addressesTarget(queuedTarget, target, windowTarget),
     );
-    this.iframeWindow = windowTarget;
+    if (defaultTarget === DefaultTarget.REPLACE) {
+      this.iframeElement = this.isIframeElement(target) ? target : null;
+      this.iframeWindow = windowTarget;
+      // Untargeted messages were meant for the previous default frame. This
+      // frame is now the default, so replaying them would misroute them here;
+      // drop them. Messages addressed to other frames stay queued.
+      this.dropQueuedMessages(queuedTarget => !queuedTarget);
+    }
     this.isRendererReadySignal.set(this.readyWindows.size > 0);
     if (windowTarget) {
       this.flushEarlyMessages();

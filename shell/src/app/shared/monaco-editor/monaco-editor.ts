@@ -560,6 +560,10 @@ export class MonacoEditor {
         } else {
           model = monacoInstance.editor.createModel(this.value(), 'json', modelUri);
         }
+        // Monaco uses the platform's line ending, CRLF on Windows. The drafts Composer
+        // writes use LF, so on Windows every draft written into the editor came back as a
+        // different string and was reported as a user edit. Keep the model on LF.
+        model.setEOL(monacoInstance.editor.EndOfLineSequence.LF);
 
         const editor = monacoInstance.editor.create(this.editorContainer().nativeElement, {
           model,

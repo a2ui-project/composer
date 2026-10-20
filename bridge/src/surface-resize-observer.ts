@@ -23,6 +23,8 @@
 export declare interface SurfaceDimensions {
   height: number;
   width: number;
+  /** Viewport width captured with these dimensions, when available. */
+  viewportWidth?: number;
 }
 
 export type SurfaceResizeCallback = (dimensions: SurfaceDimensions) => void;
@@ -38,6 +40,7 @@ export class SurfaceResizeObserver {
 
   private lastKnownHeight: number | null = null;
   private lastKnownWidth: number | null = null;
+  private lastKnownViewportWidth?: number;
 
   constructor(private readonly onResize: SurfaceResizeCallback) {
     this.init();
@@ -109,18 +112,28 @@ export class SurfaceResizeObserver {
     // that a root scroll box following the frame does not trip the dedupe below
     // while the height stays put.
     const height = Math.max(
+      // Integer DOM dimensions can round down fractional line heights, leaving a
+      // fitted iframe fractionally too short and showing an unnecessary scrollbar.
+      Math.ceil(body?.getBoundingClientRect().height || 0),
       body?.scrollHeight || 0,
       body?.offsetHeight || 0,
       docEl?.offsetHeight || 0,
     );
     const width = Math.max(body?.scrollWidth || 0, body?.offsetWidth || 0, docEl?.offsetWidth || 0);
+    const viewportWidth = docEl?.clientWidth || undefined;
 
     if (height <= 0) return;
 
-    if (force || height !== this.lastKnownHeight || width !== this.lastKnownWidth) {
+    if (
+      force ||
+      height !== this.lastKnownHeight ||
+      width !== this.lastKnownWidth ||
+      viewportWidth !== this.lastKnownViewportWidth
+    ) {
       this.lastKnownHeight = height;
       this.lastKnownWidth = width;
-      this.onResize({height, width});
+      this.lastKnownViewportWidth = viewportWidth;
+      this.onResize({height, width, ...(viewportWidth ? {viewportWidth} : {})});
     }
   }
 
@@ -146,5 +159,6 @@ export class SurfaceResizeObserver {
     }
     this.lastKnownHeight = null;
     this.lastKnownWidth = null;
+    this.lastKnownViewportWidth = undefined;
   }
 }

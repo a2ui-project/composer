@@ -128,6 +128,7 @@
       align-items: center;
       justify-content: center;
       user-select: none;
+      touch-action: none;
       transition: background 0.15s ease;
 
       .resize-grip {
@@ -161,5 +162,16 @@
       display: flex;
       flex-direction: column;
     }
+  }
+
+  .inline-config-panel {
+    align-items: safe center;
+    box-sizing: border-box;
+    display: flex;
+    flex: 1;
+    justify-content: center;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
   }
 }

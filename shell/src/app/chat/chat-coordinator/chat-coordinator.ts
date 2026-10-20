@@ -44,6 +44,23 @@ import {ChatErrorFormatterService} from '../chat-error-formatter/chat-error-form
 import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
+/** Why a response was cancelled before it finished. */
+enum CancelReason {
+  /** The user pressed Stop or started a new session. */
+  USER = 'user',
+  /**
+   * The renderer changed. The response was written for the old renderer's catalog, so
+   * it's no longer wanted.
+   */
+  RENDERER_CHANGED = 'rendererChanged',
+}
+
+/** Shown in place of a response the user cancelled. */
+const USER_CANCELLED_NOTE = '*You stopped this response.*';
+
+/** Shown in place of a response cancelled because the renderer changed. */
+const RENDERER_CHANGED_NOTE = '*This response was stopped because the renderer changed.*';
+
 /**
  * Dynamic chat panel coordinator managing system prompt generation using
  * dynamic component configurations. Manages LLM completions transport
@@ -87,21 +104,41 @@ export class ChatCoordinator {
   private activePromptId: string | null = null;
 
   constructor() {
-    // Effect monitoring dynamic host preview configurations mapping cache
-    // resets
+    // Reacts to renderer changes; see handleRendererChange.
     toObservable(this.configProvider.rendererUrl)
-      // skip(1) prevents wiping the cache on the initial startup signal emission
+      // skip(1) ignores the renderer chosen at startup
       .pipe(skip(1), takeUntilDestroyed())
       .subscribe(() => {
-        queueMicrotask(() => this.wipeEnvironmentCache());
+        queueMicrotask(() => this.handleRendererChange());
       });
+  }
+
+  /**
+   * Cancels any response still streaming, since it was written for the old renderer's
+   * catalog. Then keeps an edited canvas, so it can be viewed in the new renderer, or
+   * starts a new session from the new renderer's sample if the canvas is unedited.
+   */
+  private handleRendererChange(): void {
+    this.cancelStream(CancelReason.RENDERER_CHANGED);
+    // The conversation is kept only along with the canvas. It's the history of how an
+    // edited canvas got its content, and the assistant needs it for follow-up prompts,
+    // so it stays with an edited canvas. An unedited canvas is the old renderer's sample
+    // and is replaced; nothing in the conversation changed it, and the conversation was
+    // about the old renderer's catalog, so it's cleared with it.
+    if (this.stateSync.hasEditedDraft()) {
+      // The new renderer draws the kept canvas as is. If it has no catalog with the
+      // canvas's createSurface catalogId, it can't draw the canvas and reports
+      // `Catalog not found` as a render error; the canvas is left for the user to fix.
+      return;
+    }
+    this.wipeEnvironmentCache();
   }
 
   private clearConversation(): void {
     this.currentTurnIndex.set(0);
     this.activePromptId = null;
     this.activeStreamResponse = undefined;
-    this.isCancelRequested = false;
+    this.cancelReason = null;
     this.chatState.setChatHistory([]);
     this.finalizeStream(PipelineStatus.IDLE);
     this.chatState.clearRawLlmHistory();
@@ -120,9 +157,7 @@ export class ChatCoordinator {
    * resetting the layout to a blank surface rather than the catalog sample template.
    */
   startNewSession(): void {
-    if (this.activePromptId || this.activeStreamResponse) {
-      this.cancelActiveStream();
-    }
+    this.cancelActiveStream();
     this.clearConversation();
     this.stateSync.resetToBlankDraft();
   }
@@ -146,14 +181,27 @@ export class ChatCoordinator {
   }
 
   private activeStreamResponse?: LlmStreamResponse;
-  private isCancelRequested = false;
+  /** Why the active response was cancelled, or null if it wasn't. */
+  private cancelReason: CancelReason | null = null;
 
   /**
-   * Cancels the currently active streaming request if there is one.
+   * Cancels the currently active streaming request, at the user's request, if there is
+   * one.
    */
   cancelActiveStream(): void {
-    this.isCancelRequested = true;
-    if (this.activePromptId) {
+    this.cancelStream(CancelReason.USER);
+  }
+
+  /**
+   * Cancels the active streaming request if there is one. Only a cancel the user asked
+   * for is tracked as a chat cancel.
+   */
+  private cancelStream(reason: CancelReason): void {
+    if (!this.activePromptId) {
+      return;
+    }
+    this.cancelReason = reason;
+    if (reason === CancelReason.USER) {
       this.usageTrackingService.trackChatCancel({
         promptId: this.activePromptId,
         turnIndex: this.currentTurnIndex(),
@@ -258,7 +306,7 @@ export class ChatCoordinator {
 
     let responseStream: LlmStreamResponse | undefined;
     try {
-      this.isCancelRequested = false;
+      this.cancelReason = null;
       // Trigger streaming GenAI completions call using client facade
       responseStream = await this.llmClient.chatStream(fullContext);
 
@@ -268,7 +316,7 @@ export class ChatCoordinator {
       }
 
       // If a cancel was requested while the stream connection was establishing
-      if (this.isCancelRequested) {
+      if (this.cancelReason !== null) {
         responseStream?.cancel?.();
         const err = new Error('Cancelled');
         err.name = CANCEL_ERROR_NAME;
@@ -336,7 +384,10 @@ export class ChatCoordinator {
           if (updated[lastIdx]?.role === MessageRole.MODEL) {
             updated[lastIdx] = {
               ...updated[lastIdx],
-              content: '*You stopped this response.*',
+              content:
+                this.cancelReason === CancelReason.RENDERER_CHANGED
+                  ? RENDERER_CHANGED_NOTE
+                  : USER_CANCELLED_NOTE,
             };
           }
           return updated;

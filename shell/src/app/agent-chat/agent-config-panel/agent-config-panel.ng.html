@@ -14,129 +14,120 @@
  limitations under the License.
 -->
 
-<div class="agent-config-panel-backdrop">
-  <div
-    class="agent-config-panel-card"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="a2a-config-title"
-    cdkTrapFocus
-    cdkTrapFocusAutoCapture
-  >
-    <div class="config-header">
-      <div class="header-avatar">
-        <img [src]="a2aProtocolIconUrl" alt="A2A Protocol Icon" class="avatar-image" />
-      </div>
-      <div class="header-meta">
-        <h2 id="a2a-config-title" class="config-title">A2A Agent Configuration</h2>
-        <p class="config-subtitle">
-          Configure the target A2A service endpoint (e.g.
-          <code class="mono-code">http://localhost:8088</code> ) to test real-time conversational
-          A2UI surfaces.
-        </p>
-      </div>
+<div class="agent-config-panel">
+  <div class="config-header">
+    <div class="header-avatar">
+      <img [src]="a2aProtocolIconUrl" alt="A2A Protocol Icon" class="avatar-image" />
     </div>
+    <div class="header-meta">
+      <h2 id="a2a-config-title" class="config-title">A2A Agent Configuration</h2>
+      <p class="config-subtitle">
+        Configure the target A2A service endpoint (e.g.
+        <code class="mono-code">http://localhost:8088</code> ) to test real-time conversational A2UI
+        surfaces.
+      </p>
+    </div>
+  </div>
 
-    <form [formGroup]="form" (ngSubmit)="saveAndConnectAgent()" class="config-form">
-      @if (backendOptions.length > 1) {
-        <mat-form-field appearance="outline" class="form-field full-width">
-          <mat-label>Agent Backend</mat-label>
-          <mat-select [formControl]="form.controls.backendMode">
-            @for (opt of backendOptions; track opt.id) {
-              <mat-option [value]="opt.id">
-                {{ opt.label }}
-              </mat-option>
-            }
-          </mat-select>
-          <mat-icon matPrefix>tune</mat-icon>
-          <mat-hint>Select the protocol transport implementation</mat-hint>
-        </mat-form-field>
-      }
-
+  <form [formGroup]="form" (ngSubmit)="saveAndConnectAgent()" class="config-form">
+    @if (backendOptions.length > 1) {
       <mat-form-field appearance="outline" class="form-field full-width">
-        <mat-label>Agent Endpoint URL</mat-label>
-        <input
-          matInput
-          [formControl]="form.controls.endpoint"
-          placeholder="http://localhost:8088"
-          autocomplete="off"
-          aria-label="Agent Endpoint URL"
-          required
-        />
-        <mat-icon matPrefix>link</mat-icon>
-        <mat-hint>Local or remote A2A HTTP / REST bridge URL</mat-hint>
-        @if (form.controls.endpoint.hasError('required')) {
-          <mat-error>Endpoint URL is required</mat-error>
-        }
-        @if (form.controls.endpoint.hasError('invalidHttpUrl')) {
-          <mat-error>Please enter a valid HTTP or HTTPS URL</mat-error>
-        }
+        <mat-label>Agent Backend</mat-label>
+        <mat-select [formControl]="form.controls.backendMode">
+          @for (opt of backendOptions; track opt.id) {
+            <mat-option [value]="opt.id">
+              {{ opt.label }}
+            </mat-option>
+          }
+        </mat-select>
+        <mat-icon matPrefix>tune</mat-icon>
+        <mat-hint>Select the protocol transport implementation</mat-hint>
       </mat-form-field>
+    }
 
-      <mat-form-field appearance="outline" class="form-field full-width">
-        <mat-label>Tenant ID</mat-label>
-        <input
-          matInput
-          [formControl]="form.controls.tenantId"
-          placeholder="Tenant ID"
-          autocomplete="off"
-          aria-label="Tenant ID"
-        />
-        <mat-icon matPrefix>domain</mat-icon>
-        <mat-hint>Target tenant namespace for multi-tenant A2A backends</mat-hint>
-      </mat-form-field>
-
-      @if (connectionError()) {
-        <div class="connection-error-box" role="alert">
-          <mat-icon>error_outline</mat-icon>
-          <div class="error-msg">{{ connectionError() }}</div>
-        </div>
+    <mat-form-field appearance="outline" class="form-field full-width">
+      <mat-label>Agent Endpoint URL</mat-label>
+      <input
+        matInput
+        [formControl]="form.controls.endpoint"
+        placeholder="http://localhost:8088"
+        autocomplete="off"
+        aria-label="Agent Endpoint URL"
+        required
+      />
+      <mat-icon matPrefix>link</mat-icon>
+      <mat-hint>Local or remote A2A HTTP / REST bridge URL</mat-hint>
+      @if (form.controls.endpoint.hasError('required')) {
+        <mat-error>Endpoint URL is required</mat-error>
       }
+      @if (form.controls.endpoint.hasError('invalidHttpUrl')) {
+        <mat-error>Please enter a valid HTTP or HTTPS URL</mat-error>
+      }
+    </mat-form-field>
 
-      <div class="config-actions">
+    <mat-form-field appearance="outline" class="form-field full-width">
+      <mat-label>Tenant ID</mat-label>
+      <input
+        matInput
+        [formControl]="form.controls.tenantId"
+        placeholder="Tenant ID"
+        autocomplete="off"
+        aria-label="Tenant ID"
+      />
+      <mat-icon matPrefix>domain</mat-icon>
+      <mat-hint>Target tenant namespace for multi-tenant A2A backends</mat-hint>
+    </mat-form-field>
+
+    @if (connectionError()) {
+      <div class="connection-error-box" role="alert">
+        <mat-icon>error_outline</mat-icon>
+        <div class="error-msg">{{ connectionError() }}</div>
+      </div>
+    }
+
+    <div class="config-actions">
+      <button
+        mat-button
+        type="button"
+        class="clear-address-btn"
+        (click)="clearConfiguration()"
+        [disabled]="isConnecting()"
+        aria-label="Clear Address"
+      >
+        <mat-icon>delete_outline</mat-icon>
+        Clear Address
+      </button>
+
+      <span class="spacer"></span>
+
+      @if (canCancel()) {
         <button
           mat-button
           type="button"
-          class="clear-address-btn"
-          (click)="clearConfiguration()"
+          class="cancel-btn"
+          (click)="dismissPanel.emit()"
           [disabled]="isConnecting()"
-          aria-label="Clear Address"
+          aria-label="Cancel"
         >
-          <mat-icon>delete_outline</mat-icon>
-          Clear Address
+          Cancel
         </button>
+      }
 
-        <span class="spacer"></span>
-
-        @if (canCancel()) {
-          <button
-            mat-button
-            type="button"
-            class="cancel-btn"
-            (click)="dismissPanel.emit()"
-            [disabled]="isConnecting()"
-            aria-label="Cancel"
-          >
-            Cancel
-          </button>
+      <button
+        mat-flat-button
+        color="primary"
+        type="submit"
+        class="save-btn"
+        [disabled]="isConnecting() || form.invalid"
+        aria-label="Connect Agent"
+      >
+        @if (isConnecting()) {
+          <mat-spinner diameter="16" class="btn-spinner"></mat-spinner>
+          Connecting...
+        } @else {
+          Connect Agent
         }
-
-        <button
-          mat-flat-button
-          color="primary"
-          type="submit"
-          class="save-btn"
-          [disabled]="isConnecting() || form.invalid"
-          aria-label="Connect Agent"
-        >
-          @if (isConnecting()) {
-            <mat-spinner diameter="16" class="btn-spinner"></mat-spinner>
-            Connecting...
-          } @else {
-            Connect Agent
-          }
-        </button>
-      </div>
-    </form>
-  </div>
+      </button>
+    </div>
+  </form>
 </div>

@@ -17,7 +17,7 @@
 import {Injectable, inject, signal, DestroyRef} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {of, Subject, timer} from 'rxjs';
-import {filter, map, skip, switchMap, takeUntil} from 'rxjs/operators';
+import {filter, map, switchMap, takeUntil} from 'rxjs/operators';
 import {ChatState} from '../chat-state/chat-state';
 import {MessageRole} from '../llm-client/llm-client';
 import {CAR_BOOKING} from '../chat-service/initial-draft';
@@ -67,7 +67,7 @@ export class StateSync {
   //   user edits back to the history. LLM-initiated edits update
   //   `_activeDraft` directly, bypassing history sync.
   private previousCatalogId: string | null = null;
-  private isDraftModified = false;
+  private isDraftEdited = false;
   private lastSynchronizedLayout: string | null = null;
   private readonly _activeDraft = signal<string>('');
   /**
@@ -85,12 +85,6 @@ export class StateSync {
   private readonly cancelPendingDraftSync$ = new Subject<void>();
 
   constructor() {
-    toObservable(this.startupConfigState.selectedRendererId)
-      .pipe(skip(1), takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => {
-        this.flushDraft();
-      });
-
     toObservable(this.catalogManagement.activeCatalog)
       .pipe(
         filter(catalog => !!catalog),
@@ -102,7 +96,7 @@ export class StateSync {
         const isCatalogChange =
           this.previousCatalogId !== null && this.previousCatalogId !== catalogId;
 
-        if ((isInitialHandshake || isCatalogChange) && !this.isDraftModified) {
+        if ((isInitialHandshake || isCatalogChange) && !this.isDraftEdited) {
           const initial = this.getInitialDraft(catalogId);
           this._activeDraft.set(initial);
           this.userDraftInput$.next(initial);
@@ -144,7 +138,7 @@ export class StateSync {
    * queueing synchronization.
    */
   updateDraft(value: string): void {
-    this.isDraftModified = true;
+    this.isDraftEdited = true;
     this._activeDraft.set(value);
     this.userDraftInput$.next(value);
   }
@@ -153,7 +147,7 @@ export class StateSync {
    * Injects an external layout draft (e.g. from deep link shared payload).
    */
   injectExternalDraft(value: string): void {
-    this.isDraftModified = true;
+    this.isDraftEdited = true;
     this._activeDraft.set(value);
     this.userDraftInput$.next(value);
   }
@@ -161,6 +155,17 @@ export class StateSync {
   /** Synchronizes the current sanitized canvas before a prompt is submitted. */
   syncActiveDraftToHistory(): void {
     this.syncLayoutToHistory(this._activeDraft());
+  }
+
+  /**
+   * Whether the canvas has been edited since it was last reset to the renderer's sample
+   * or a blank New Session canvas. An edit is anything that replaces the canvas: the user
+   * typing in the JSON editor, an assistant response that changes it, or a shared link
+   * opening a design. The canvas stays edited even if it's changed back to match the
+   * sample.
+   */
+  hasEditedDraft(): boolean {
+    return this.isDraftEdited;
   }
 
   /**
@@ -177,7 +182,7 @@ export class StateSync {
    */
   commitLayoutFromLlm(value: string): void {
     this.cancelPendingDraftSync$.next();
-    this.isDraftModified = true;
+    this.isDraftEdited = true;
     // Restoring a previous draft after this response must update context again.
     this.lastSynchronizedLayout = null;
     this._activeDraft.set(value);
@@ -189,7 +194,7 @@ export class StateSync {
    */
   flushDraft(): void {
     this.cancelPendingDraftSync$.next();
-    this.isDraftModified = false;
+    this.isDraftEdited = false;
     this.lastSynchronizedLayout = null;
     this.previousCatalogId = null;
     const catalog = this.catalogManagement.activeCatalog();
@@ -216,7 +221,7 @@ export class StateSync {
     const catalog = this.catalogManagement.activeCatalog();
     const effectiveCatalogId =
       (catalog ? catalog.catalogId || catalog.$id || '' : '') || BASIC_CATALOG_ID;
-    this.isDraftModified = false;
+    this.isDraftEdited = false;
     this.lastSynchronizedLayout = null;
     this.previousCatalogId = effectiveCatalogId;
     const blank = this.buildBlankSurfaceDraft(effectiveCatalogId);

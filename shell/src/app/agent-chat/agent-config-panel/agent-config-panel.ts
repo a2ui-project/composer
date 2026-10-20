@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Component, HostListener, inject, input, OnInit, output} from '@angular/core';
+import {Component, inject, input, OnInit, output} from '@angular/core';
 import {
   AbstractControl,
   FormBuilder,
@@ -23,7 +23,6 @@ import {
   ValidatorFn,
   Validators,
 } from '@angular/forms';
-import {A11yModule} from '@angular/cdk/a11y';
 import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatIconModule} from '@angular/material/icon';
@@ -50,13 +49,12 @@ export function httpUrlValidator(): ValidatorFn {
 }
 
 /**
- * Configuration dialog/modal for connecting to A2A agent endpoints and selecting transport options.
+ * Configuration panel for connecting to A2A agent endpoints and selecting transport options.
  */
 @Component({
   selector: 'a2ui-composer-agent-config-panel',
   imports: [
     ReactiveFormsModule,
-    A11yModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
@@ -105,13 +103,6 @@ export class AgentConfigPanel implements OnInit {
     tenantId: [''],
     backendMode: [this.defaultBackendMode],
   });
-
-  @HostListener('keydown.escape')
-  protected handleEscape(): void {
-    if (this.canCancel() && !this.isConnecting()) {
-      this.dismissPanel.emit();
-    }
-  }
 
   ngOnInit(): void {
     this.form.setValue({

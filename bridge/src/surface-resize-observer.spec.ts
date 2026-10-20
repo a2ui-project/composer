@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {SurfaceResizeObserver} from './surface-resize-observer';
+import {describe, it, expect, vi, beforeEach, afterEach, type Mock} from 'vitest';
+import {SurfaceResizeObserver, type SurfaceResizeCallback} from './surface-resize-observer';
 
 describe('SurfaceResizeObserver', () => {
   let observer: SurfaceResizeObserver;
-  let onResizeMock: ReturnType<typeof vi.fn>;
+  let onResizeMock: Mock<SurfaceResizeCallback>;
 
   beforeEach(() => {
-    onResizeMock = vi.fn();
+    onResizeMock = vi.fn<SurfaceResizeCallback>();
   });
 
   afterEach(() => {
@@ -48,6 +48,16 @@ describe('SurfaceResizeObserver', () => {
     observer.measureAndDispatch();
 
     expect(onResizeMock).toHaveBeenCalledWith({height: 500, width: 900});
+  });
+
+  it('rounds fractional content up without growing on identical measurements', () => {
+    Object.defineProperty(document.body, 'scrollHeight', {value: 320, configurable: true});
+    vi.spyOn(document.body, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 600, 320.4));
+    observer = new SurfaceResizeObserver(onResizeMock);
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenLastCalledWith(expect.objectContaining({height: 321}));
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenCalledTimes(1);
   });
 
   it('deduplicates redundant measurements when dimensions have not changed', () => {
@@ -79,6 +89,34 @@ describe('SurfaceResizeObserver', () => {
 
     // Force dispatch with identical values
     observer.measureAndDispatch(true);
+    expect(onResizeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports the viewport from the same measurement and dispatches viewport-only changes', () => {
+    Object.defineProperty(document.body, 'scrollHeight', {value: 300, configurable: true});
+    Object.defineProperty(document.body, 'scrollWidth', {value: 1230, configurable: true});
+    const viewport = vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1230);
+    observer = new SurfaceResizeObserver(onResizeMock);
+    observer.measureAndDispatch();
+
+    // The iframe can resize before its asynchronous postMessage reaches the host.
+    // The earlier report must retain its original viewport instead of appearing
+    // to overflow merely because the host is now looking at a narrower iframe.
+    viewport.mockReturnValue(1124);
+    expect(onResizeMock).toHaveBeenLastCalledWith({
+      height: 300,
+      width: 1230,
+      viewportWidth: 1230,
+    });
+
+    observer.measureAndDispatch();
+    expect(onResizeMock).toHaveBeenCalledTimes(2);
+    expect(onResizeMock).toHaveBeenLastCalledWith({
+      height: 300,
+      width: 1230,
+      viewportWidth: 1124,
+    });
+    observer.measureAndDispatch();
     expect(onResizeMock).toHaveBeenCalledTimes(2);
   });
 

@@ -42,7 +42,7 @@ test.describe('AgentConfigPanel Visual Regression & Layout', () => {
   test('renders default modal configuration card with avatar, title, subtitle, and input hints', async ({
     page,
   }) => {
-    const panel = page.locator('.agent-config-panel-card');
+    const panel = page.locator('.agent-config-panel');
     await expect(panel).toBeVisible();
 
     // Verify DOM structure, avatar logo, titles, and button states
@@ -77,7 +77,7 @@ test.describe('AgentConfigPanel Visual Regression & Layout', () => {
     });
 
     await page.goto('/a2a');
-    const panel = page.locator('.agent-config-panel-card');
+    const panel = page.locator('.agent-config-panel');
     await expect(panel).toBeVisible();
 
     const avatar = panel.locator('.avatar-image');
@@ -101,7 +101,7 @@ test.describe('AgentConfigPanel Visual Regression & Layout', () => {
     page,
   }) => {
     await page.goto('/a2a');
-    const panel = page.locator('.agent-config-panel-card');
+    const panel = page.locator('.agent-config-panel');
     await expect(panel).toBeVisible();
 
     const avatar = panel.locator('.avatar-image');

@@ -534,6 +534,23 @@ describe('Settings', () => {
 
       expect(component.selectedRendererId()).toBe('initial-renderer');
     });
+
+    it('shows the selected renderer and the reason when SettingsService.selectRenderer throws', async () => {
+      const {fixture, component, harness} = await setupComponent();
+      const message =
+        "The renderer selection changed while this one was waiting for approval, so it wasn't applied.";
+      vi.spyOn(component.settingsService, 'selectRenderer').mockImplementation(async () => {
+        // Another selection is committed while this one waits for approval.
+        mockSelectedRendererId.set('newer-renderer');
+        throw new Error(message);
+      });
+
+      await component.onRendererSelected('stale-renderer');
+      fixture.detectChanges();
+
+      expect(component.selectedRendererId()).toBe('newer-renderer');
+      expect(await harness.getErrorsText()).toEqual([message]);
+    });
   });
 
   describe('onApiKeySelected', () => {
