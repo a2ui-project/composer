@@ -38,6 +38,7 @@ import {
 import {IframeMcpClient} from './iframe-mcp-client';
 
 import {SurfaceResizeObserver, type SurfaceDimensions} from './surface-resize-observer';
+import {waitForContentToSettle, withinSettleCap} from './content-settle';
 export * from './surface-resize-observer';
 
 import type {
@@ -428,17 +429,30 @@ export class PreviewBridge {
 
     this.awaitingContentRender = true;
     const generation = this.contentRenderGeneration;
+    const superseded = () =>
+      generation !== this.contentRenderGeneration || renderer !== this.activeRenderer;
+    // The cap counts from the render, the moment the host's own fallback starts, so
+    // a slow onInitialRender can't push readiness past it.
+    const startedAt = Date.now();
     void (async () => {
       try {
-        await onInitialRender();
-        if (generation !== this.contentRenderGeneration || renderer !== this.activeRenderer) return;
+        await withinSettleCap(onInitialRender(), startedAt);
+        if (superseded()) return;
+        // The first content is in the DOM, but not necessarily at its final size: see
+        // content-settle.ts. Readiness is what a host sizes its frame by once.
+        const outcome = await waitForContentToSettle({
+          measure: () => this.surfaceResizeObserver.measure(),
+          isCancelled: superseded,
+          startedAt,
+        });
+        if (outcome === 'cancelled' || superseded()) return;
         this.awaitingContentRender = false;
         this.contentReady = true;
         // A readiness transition must reach the host even if the startup screen
         // and the first rendered content happen to have identical dimensions.
         this.scheduleSurfaceResize(true);
       } catch (error) {
-        if (generation !== this.contentRenderGeneration || renderer !== this.activeRenderer) return;
+        if (superseded()) return;
         this.awaitingContentRender = false;
         console.error('PreviewBridge: Error waiting for surface content to render:', error);
       }
