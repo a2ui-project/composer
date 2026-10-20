@@ -15,6 +15,7 @@
  */
 
 export * from './bridge-message.js';
+export {CONTENT_QUIET_MS, CONTENT_SETTLE_MAX_MS} from './content-settle.js';
 export * from './domain-origin-verification.js';
 export * from './instrumentation-overrides.js';
 // TODO: Replace './mcp/index.js' with '@a2ui/mcp-catalog/v0_9' once published to NPM.

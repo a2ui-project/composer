@@ -93,8 +93,10 @@ export declare interface RendererConfig {
   /**
    * Called once after the first root component of a new or reset surface is
    * processed; the returned promise resolves when the framework has committed
-   * that content to the DOM. The bridge then reports `contentReady: true` with
-   * the next SURFACE_RESIZE. Renderers without this hook report dimensions only.
+   * that content to the DOM. Once that content has also settled (webfonts and
+   * images loaded, dimensions unchanged for a quiet period; see
+   * content-settle.ts), the bridge reports `contentReady: true` with the next
+   * SURFACE_RESIZE. Renderers without this hook report dimensions only.
    */
   onInitialRender?: () => Promise<void>;
   /** Invoked when the surface needs to unmount or reset. */

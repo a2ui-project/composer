@@ -22,7 +22,7 @@ import {getTestBed, TestBed} from '@angular/core/testing';
 import {Component, Type, inject} from '@angular/core';
 import {BrowserTestingModule, platformBrowserTesting} from '@angular/platform-browser/testing';
 import {A2uiSandboxConnection, provideA2uiSandbox} from './angular-bridge';
-import {A2UI_RENDERER_CONFIG, A2uiRendererService} from '@a2ui/angular/v0_9';
+import {A2UI_RENDERER_CONFIG, A2uiRendererService, MarkdownRenderer} from '@a2ui/angular/v0_9';
 import {a2uiBridge} from '../preview-bridge';
 import {Catalog, ComponentApi, A2uiClientAction, A2uiMessage} from '@a2ui/web_core/v0_9';
 
@@ -173,6 +173,88 @@ describe('Angular Sandbox Connection Spec', () => {
     expect(committed).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.textContent).toBe('ready');
     fixture.destroy();
+  });
+
+  /** Renders a host for the connection, with the given markdown renderer. */
+  function renderWithMarkdown(render: (markdown: string) => Promise<string>) {
+    @Component({template: '{{connection.surfaceId()}}'})
+    class TestHost {
+      readonly connection = inject(A2uiSandboxConnection);
+    }
+    TestBed.configureTestingModule({
+      imports: [TestHost],
+      providers: [
+        {
+          provide: A2uiRendererService,
+          useValue: {
+            surfaceGroup: {onSurfaceCreated: {subscribe: () => ({unsubscribe() {}})}},
+            processMessages() {},
+          },
+        },
+        {provide: A2UI_RENDERER_CONFIG, useValue: {}},
+        {provide: MarkdownRenderer, useValue: {render}},
+        {provide: A2uiSandboxConnection, useFactory: () => new A2uiSandboxConnection()},
+      ],
+    });
+    const attachSpy = vi.spyOn(a2uiBridge, 'attachRenderer');
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.detectChanges();
+    const config = attachSpy.mock.lastCall![1];
+    config.onSurfaceReady('ready');
+    return {fixture, config};
+  }
+
+  it('acknowledges content only once the markdown renderer has loaded', async () => {
+    // The default renderer loads markdown-it lazily, and body text renders empty
+    // until it has: content measured before then is missing its text.
+    let finishLoading!: () => void;
+    const loaded = new Promise<void>(resolve => (finishLoading = resolve));
+    const {fixture, config} = renderWithMarkdown(async markdown => {
+      await loaded;
+      return markdown;
+    });
+    const committed = vi.fn();
+    const pending = config.onInitialRender!().then(committed);
+    await fixture.whenStable();
+    // Let every pending render and microtask run: only the load can resolve it.
+    for (let flush = 0; flush < 5; flush++) {
+      await Promise.resolve();
+      await fixture.whenStable();
+    }
+    expect(committed).not.toHaveBeenCalled();
+
+    finishLoading();
+    await fixture.whenStable();
+    await pending;
+    expect(committed).toHaveBeenCalledOnce();
+    fixture.destroy();
+  });
+
+  it('acknowledges content when the markdown renderer fails to load', async () => {
+    const {fixture, config} = renderWithMarkdown(() => Promise.reject(new Error('offline')));
+    const committed = vi.fn();
+    const pending = config.onInitialRender!().then(committed);
+    await fixture.whenStable();
+    await pending;
+    expect(committed).toHaveBeenCalledOnce();
+    fixture.destroy();
+  });
+
+  it('does not schedule afterNextRender if destroyed while the markdown renderer is loading', async () => {
+    let finishLoading!: () => void;
+    const loaded = new Promise<void>(resolve => (finishLoading = resolve));
+    const {fixture, config} = renderWithMarkdown(async markdown => {
+      await loaded;
+      return markdown;
+    });
+    const connection = fixture.componentInstance.connection;
+    const pending = config.onInitialRender!();
+    connection.ngOnDestroy();
+    fixture.destroy();
+
+    finishLoading();
+    await expect(pending).resolves.toBeUndefined();
+    expect(connection['pendingContentRender']).toBeUndefined();
   });
 
   it('configures standalone DI providers via provideA2uiSandbox and routes actions to a2uiBridge.sendAction', () => {
