@@ -128,12 +128,13 @@ export class HostCommunication implements OnDestroy {
   });
 
   /**
-   * Recent envelopes retained to seed the raw messages panel when it opens.
+   * Recent envelopes retained to seed the debug panels (raw messages, events,
+   * data model) when they open.
    *
    * Capped at `MAX_HISTORY_BUFFER_SIZE`, so a high-frequency type would evict
    * everything else within seconds. Those types are listed in
-   * `UNBUFFERED_MESSAGE_TYPES` and skipped here, but are still broadcast on
-   * `messageStream$`.
+   * `UNBUFFERED_MESSAGE_TYPES` and skipped here, but still update
+   * `latestEnvelope` and are still broadcast on `messageStream$`.
    */
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
   private readonly earlyMessageBuffer: MessageEvent[] = [];
