@@ -116,12 +116,14 @@ vi.mock('@monaco-editor/loader', () => ({
       editor: {
         defineTheme: vi.fn(),
         create: createMockMonaco,
+        EndOfLineSequence: {LF: 0, CRLF: 1},
         getModel: vi.fn(() => null),
         createModel: vi.fn((value: string, language: string, uri: unknown) => ({
           value,
           language,
           uri,
           setValue: vi.fn(),
+          setEOL: vi.fn(),
           dispose: vi.fn(),
         })),
         onDidChangeMarkers: vi.fn(() => ({dispose: () => {}})),

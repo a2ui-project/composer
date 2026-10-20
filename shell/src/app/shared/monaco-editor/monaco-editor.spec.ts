@@ -13,20 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
-import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { signal, WritableSignal } from '@angular/core';
-import { MonacoEditor } from './monaco-editor';
-import { CatalogManagement } from '../../storage/catalog-management/catalog-management';
-import { Catalog } from '../../storage/models/catalog-storage.model';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {ComponentFixture, TestBed} from '@angular/core/testing';
+import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
+import {provideNoopAnimations} from '@angular/platform-browser/animations';
+import {signal, WritableSignal} from '@angular/core';
+import {MonacoEditor} from './monaco-editor';
+import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 import {
   AppConfigProvider,
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
-import { ErrorLogger } from '../../debug/error-logger.service';
-import { MonacoEditorHarness } from './test/monaco-editor.harness';
+import {ErrorLogger} from '../../debug/error-logger.service';
+import {MonacoEditorHarness} from './test/monaco-editor.harness';
 import type * as monaco from 'monaco-editor';
 
 const {
@@ -62,26 +62,26 @@ const {
     setEOL: mockSetEOL,
     dispose: vi.fn(),
   }));
-  const mockModelContentDisposable = { dispose: vi.fn() };
-  const mockCursorPositionDisposable = { dispose: vi.fn() };
-  const mockCursorSelectionDisposable = { dispose: vi.fn() };
-  const mockKeyDownDisposable = { dispose: vi.fn() };
-  const mockMouseDownDisposable = { dispose: vi.fn() };
+  const mockModelContentDisposable = {dispose: vi.fn()};
+  const mockCursorPositionDisposable = {dispose: vi.fn()};
+  const mockCursorSelectionDisposable = {dispose: vi.fn()};
+  const mockKeyDownDisposable = {dispose: vi.fn()};
+  const mockMouseDownDisposable = {dispose: vi.fn()};
   const mockSetDiagnosticsOptions = vi.fn();
 
   const mockOnDidChangeModelContent = vi.fn<
-    (listener: () => void) => { dispose: ReturnType<typeof vi.fn> }
+    (listener: () => void) => {dispose: ReturnType<typeof vi.fn>}
   >(() => mockModelContentDisposable);
   const mockOnDidChangeCursorPosition = vi.fn<
-    (listener: () => void) => { dispose: ReturnType<typeof vi.fn> }
+    (listener: () => void) => {dispose: ReturnType<typeof vi.fn>}
   >(() => mockCursorPositionDisposable);
   const mockOnDidChangeCursorSelection = vi.fn<
-    (listener: () => void) => { dispose: ReturnType<typeof vi.fn> }
+    (listener: () => void) => {dispose: ReturnType<typeof vi.fn>}
   >(() => mockCursorSelectionDisposable);
-  const mockOnKeyDown = vi.fn<(listener: () => void) => { dispose: ReturnType<typeof vi.fn> }>(
+  const mockOnKeyDown = vi.fn<(listener: () => void) => {dispose: ReturnType<typeof vi.fn>}>(
     () => mockKeyDownDisposable,
   );
-  const mockOnMouseDown = vi.fn<(listener: () => void) => { dispose: ReturnType<typeof vi.fn> }>(
+  const mockOnMouseDown = vi.fn<(listener: () => void) => {dispose: ReturnType<typeof vi.fn>}>(
     () => mockMouseDownDisposable,
   );
 
@@ -107,8 +107,8 @@ const {
     dispose: vi.fn(),
   }));
   const mockOnDidChangeMarkers = vi.fn<
-    (listener: (uris: readonly monaco.Uri[]) => void) => { dispose: ReturnType<typeof vi.fn> }
-  >(() => ({ dispose: vi.fn() }));
+    (listener: (uris: readonly monaco.Uri[]) => void) => {dispose: ReturnType<typeof vi.fn>}
+  >(() => ({dispose: vi.fn()}));
   const mockGetModelMarkers = vi.fn<() => Partial<monaco.editor.IMarker>[]>(() => []);
   return {
     mockGetModel,
@@ -142,13 +142,13 @@ vi.mock('@monaco-editor/loader', () => ({
     config: vi.fn(),
     init: vi.fn().mockResolvedValue({
       Uri: {
-        parse: vi.fn((uri: string) => ({ toString: () => uri })),
+        parse: vi.fn((uri: string) => ({toString: () => uri})),
       },
       editor: {
         defineTheme: mockDefineTheme,
         getModel: mockGetModel,
         createModel: mockCreateModel,
-        EndOfLineSequence: { LF: 0, CRLF: 1 },
+        EndOfLineSequence: {LF: 0, CRLF: 1},
         create: mockEditorCreate,
         onDidChangeMarkers: mockOnDidChangeMarkers,
         getModelMarkers: mockGetModelMarkers,
@@ -183,7 +183,7 @@ class MockErrorLogger {
 describe('MonacoEditor utilities', () => {
   describe('resolveJsonPointer', () => {
     it('normalizes and decodes paths', () => {
-      const obj = { 'foo/bar': { 'baz~qux': { 'encoded%20': 42 } } };
+      const obj = {'foo/bar': {'baz~qux': {'encoded%20': 42}}};
       expect(MonacoEditor['resolveJsonPointer'](obj, '#/foo~1bar/baz~0qux/encoded%2520')).toBe(42);
     });
 
@@ -195,14 +195,14 @@ describe('MonacoEditor utilities', () => {
     });
 
     it('returns undefined if non-object is encountered in path', () => {
-      const obj = { a: 42 };
+      const obj = {a: 42};
       expect(MonacoEditor['resolveJsonPointer'](obj, '#/a/b')).toBeUndefined();
     });
   });
 
   describe('resolveAndFlattenSchemaForDraft07', () => {
     it('halts recursion and returns empty schema when depth > 50', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const result = MonacoEditor['resolveAndFlattenSchemaForDraft07'](
         {},
         {},
@@ -221,7 +221,7 @@ describe('MonacoEditor utilities', () => {
     it('scopes definitions strictly to root', () => {
       const externalSchemas = {
         'foo.json': {
-          target: { type: 'string' },
+          target: {type: 'string'},
         },
       };
 
@@ -246,8 +246,8 @@ describe('MonacoEditor utilities', () => {
     it('processes allOf properly and merges required properties', () => {
       const raw = {
         allOf: [
-          { properties: { a: { type: 'string' } }, required: ['a'] },
-          { properties: { b: { type: 'number' } }, required: ['b'] },
+          {properties: {a: {type: 'string'}}, required: ['a']},
+          {properties: {b: {type: 'number'}}, required: ['b']},
         ],
       };
 
@@ -269,7 +269,7 @@ describe('MonacoEditor utilities', () => {
             address: {
               type: 'object',
               properties: {
-                street: { type: 'string' },
+                street: {type: 'string'},
               },
             },
           },
@@ -280,7 +280,7 @@ describe('MonacoEditor utilities', () => {
         type: 'object',
         properties: {
           user: {
-            allOf: [{ properties: { name: { type: 'string' } } }, { properties: { age: { type: 'number' } } }],
+            allOf: [{properties: {name: {type: 'string'}}}, {properties: {age: {type: 'number'}}}],
           },
           home: {
             $ref: 'common.json#/definitions/address',
@@ -315,7 +315,7 @@ describe('MonacoEditor utilities', () => {
         type: 'array',
         items: {
           additionalProperties: false,
-          allOf: [{ properties: { id: { type: 'string' } } }, { properties: { active: { type: 'boolean' } } }],
+          allOf: [{properties: {id: {type: 'string'}}}, {properties: {active: {type: 'boolean'}}}],
         },
       };
 
@@ -330,7 +330,7 @@ describe('MonacoEditor utilities', () => {
 
     it('preserves open additionalProperties when source does not disallow them', () => {
       const raw = {
-        allOf: [{ properties: { a: { type: 'string' } } }],
+        allOf: [{properties: {a: {type: 'string'}}}],
       };
       const flattened = MonacoEditor.resolveAndFlattenSchemaForDraft07(raw);
       expect(flattened['additionalProperties']).toBeUndefined();
@@ -339,7 +339,7 @@ describe('MonacoEditor utilities', () => {
     it('sets additionalProperties to false when source declares additionalProperties false', () => {
       const raw = {
         additionalProperties: false,
-        allOf: [{ properties: { a: { type: 'string' } } }],
+        allOf: [{properties: {a: {type: 'string'}}}],
       };
       const flattened = MonacoEditor.resolveAndFlattenSchemaForDraft07(raw);
       expect(flattened['additionalProperties']).toBe(false);
@@ -348,7 +348,7 @@ describe('MonacoEditor utilities', () => {
     it('sets additionalProperties to false when source declares unevaluatedProperties false', () => {
       const raw = {
         unevaluatedProperties: false,
-        allOf: [{ properties: { a: { type: 'string' } } }],
+        allOf: [{properties: {a: {type: 'string'}}}],
       };
       const flattened = MonacoEditor.resolveAndFlattenSchemaForDraft07(raw);
       expect(flattened['additionalProperties']).toBe(false);
@@ -359,14 +359,14 @@ describe('MonacoEditor utilities', () => {
         anyOf: [
           {
             allOf: [
-              { properties: { kind: { type: 'string' } } },
-              { properties: { radius: { type: 'number' } } },
+              {properties: {kind: {type: 'string'}}},
+              {properties: {radius: {type: 'number'}}},
             ],
           },
         ],
         oneOf: [
           {
-            allOf: [{ properties: { kind: { type: 'string' } } }, { properties: { side: { type: 'number' } } }],
+            allOf: [{properties: {kind: {type: 'string'}}}, {properties: {side: {type: 'number'}}}],
           },
         ],
       };
@@ -398,9 +398,9 @@ describe('MonacoEditor component', () => {
       imports: [MonacoEditor],
       providers: [
         provideNoopAnimations(),
-        { provide: CatalogManagement, useClass: MockCatalogManagement },
-        { provide: AppConfigProvider, useClass: MockAppConfigProvider },
-        { provide: ErrorLogger, useClass: MockErrorLogger },
+        {provide: CatalogManagement, useClass: MockCatalogManagement},
+        {provide: AppConfigProvider, useClass: MockAppConfigProvider},
+        {provide: ErrorLogger, useClass: MockErrorLogger},
       ],
     });
   });
@@ -426,17 +426,17 @@ describe('MonacoEditor component', () => {
       base: 'vs',
       inherit: true,
       rules: [],
-      colors: { 'editor.background': '#f7f8fa', 'editorGutter.background': '#f7f8fa' },
+      colors: {'editor.background': '#f7f8fa', 'editorGutter.background': '#f7f8fa'},
     });
     expect(mockDefineTheme).toHaveBeenCalledWith('composer-dark', {
       base: 'vs-dark',
       inherit: true,
       rules: [],
-      colors: { 'editor.background': '#1c1e22', 'editorGutter.background': '#1c1e22' },
+      colors: {'editor.background': '#1c1e22', 'editorGutter.background': '#1c1e22'},
     });
     expect(mockEditorCreate).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ theme: 'composer-light' }),
+      expect.objectContaining({theme: 'composer-light'}),
     );
   });
 
@@ -454,7 +454,7 @@ describe('MonacoEditor component', () => {
     expect(mockCreateModel).toHaveBeenCalledWith(
       '{"initial": true}',
       'json',
-      expect.objectContaining({ toString: expect.anything() }),
+      expect.objectContaining({toString: expect.anything()}),
     );
     expect(mockSetValue).not.toHaveBeenCalled();
   });
@@ -642,7 +642,7 @@ describe('MonacoEditor component', () => {
 
       fixture.componentInstance.navigateToPosition(5, 12);
 
-      expect(mockSetPosition).toHaveBeenCalledWith({ lineNumber: 5, column: 12 });
+      expect(mockSetPosition).toHaveBeenCalledWith({lineNumber: 5, column: 12});
       expect(mockRevealPositionInCenterIfOutsideViewport).toHaveBeenCalledWith({
         lineNumber: 5,
         column: 12,
@@ -650,7 +650,7 @@ describe('MonacoEditor component', () => {
       expect(mockFocus).toHaveBeenCalledTimes(1);
 
       fixture.componentInstance.navigateToPosition(0, -3);
-      expect(mockSetPosition).toHaveBeenCalledWith({ lineNumber: 1, column: 1 });
+      expect(mockSetPosition).toHaveBeenCalledWith({lineNumber: 1, column: 1});
       expect(mockRevealPositionInCenterIfOutsideViewport).toHaveBeenCalledWith({
         lineNumber: 1,
         column: 1,
@@ -850,7 +850,7 @@ describe('MonacoEditor component', () => {
       expect(emittedMarkers).toHaveLength(1);
 
       // Distinct marker emission
-      const updatedMarker = createMockMarker({ startLineNumber: 5 });
+      const updatedMarker = createMockMarker({startLineNumber: 5});
       mockGetModelMarkers.mockReturnValue([updatedMarker]);
       markerCallback([layoutUri]);
       vi.advanceTimersByTime(3000);
@@ -914,14 +914,14 @@ describe('MonacoEditor component', () => {
     expect(fixture.componentInstance['modelUri']).toContain('inmemory://model/gallery-draft-');
     expect(mockEditorCreate).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ ariaLabel: 'Edit components and optional data' }),
+      expect.objectContaining({ariaLabel: 'Edit components and optional data'}),
     );
     expect(mockSetDiagnosticsOptions).toHaveBeenCalledWith(
       expect.objectContaining({
         validate: true,
         schemaValidation: 'error',
         schemas: expect.arrayContaining([
-          expect.objectContaining({ uri: 'a2ui-gallery-example-schema' }),
+          expect.objectContaining({uri: 'a2ui-gallery-example-schema'}),
         ]),
       }),
     );
@@ -945,7 +945,7 @@ describe('MonacoEditor component', () => {
       },
     ]);
 
-    expect(fixture.componentInstance.getFirstErrorMarker()).toEqual({ line: 7, column: 14 });
+    expect(fixture.componentInstance.getFirstErrorMarker()).toEqual({line: 7, column: 14});
   });
 
   it('debounces and emits markers when warning markers (severity 4) are present', async () => {
@@ -959,7 +959,7 @@ describe('MonacoEditor component', () => {
     await Promise.resolve();
 
     const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
-      uris: readonly { toString: () => string }[],
+      uris: readonly {toString: () => string}[],
     ) => void;
 
     const warningMarker = {
@@ -969,7 +969,7 @@ describe('MonacoEditor component', () => {
       startColumn: 5,
     };
     mockGetModelMarkers.mockReturnValue([warningMarker]);
-    const modelUri = { toString: () => fixture.componentInstance['modelUri'] };
+    const modelUri = {toString: () => fixture.componentInstance['modelUri']};
 
     markerListener([modelUri]);
 
@@ -1027,7 +1027,7 @@ describe('MonacoEditor component', () => {
       await Promise.resolve();
 
       const markerListener = mockOnDidChangeMarkers.mock.calls[0][0] as (
-        uris: readonly { toString: () => string }[],
+        uris: readonly {toString: () => string}[],
       ) => void;
       const errorMarker = {
         severity: 8,
@@ -1036,7 +1036,7 @@ describe('MonacoEditor component', () => {
         startColumn: 1,
       };
       mockGetModelMarkers.mockReturnValue([errorMarker]);
-      const modelUri = { toString: () => fixture.componentInstance['modelUri'] };
+      const modelUri = {toString: () => fixture.componentInstance['modelUri']};
 
       // Queue a 3000ms error marker debounce
       markerListener([modelUri]);
@@ -1058,8 +1058,8 @@ describe('MonacoEditor component', () => {
       // Model setValue called and readOnly temporarily unlocked then relocked
       expect(mockSetValue).toHaveBeenCalledWith(blankVal);
       expect(mockEditorSetValue).not.toHaveBeenCalled();
-      expect(mockEditorUpdateOptions).toHaveBeenCalledWith({ readOnly: false });
-      expect(mockEditorUpdateOptions).toHaveBeenLastCalledWith({ readOnly: true });
+      expect(mockEditorUpdateOptions).toHaveBeenCalledWith({readOnly: false});
+      expect(mockEditorUpdateOptions).toHaveBeenLastCalledWith({readOnly: true});
 
       // Resetting with the exact same value forces a two-step setValue('') -> setValue(blankVal) to flush undo history
       mockSetValue.mockClear();
