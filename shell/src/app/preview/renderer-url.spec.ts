@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {afterEach, describe, it, expect, vi} from 'vitest';
 import {ThemePreference} from 'a2ui-bridge';
 import {TaggedLogger} from '../debug/error-logger.service';
+import {PreviewUrlParam} from './preview-url-param';
 import {buildRendererUrl} from './renderer-url';
 
 describe('buildRendererUrl', () => {
@@ -46,5 +47,81 @@ describe('buildRendererUrl', () => {
     expect(result).toBe(
       'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
     );
+  });
+
+  it('adds only the query parameters listed in PreviewUrlParam', () => {
+    // RendererSelection removes these before comparing the iframe's URL with a
+    // renderer's, so a parameter added without being listed would break that match.
+    const src = new URL(buildRendererUrl('/renderer', ThemePreference.LIGHT, logger)!);
+    const listed: string[] = Object.values(PreviewUrlParam);
+    expect([...new Set(src.searchParams.keys())].filter(key => !listed.includes(key))).toEqual([]);
+  });
+
+  it('returns null for a malformed URL', () => {
+    expect(buildRendererUrl('http://[invalid]', ThemePreference.LIGHT, logger)).toBeNull();
+  });
+
+  it('resolves a relative renderer URL against the current origin', () => {
+    expect(buildRendererUrl('/renderer', ThemePreference.LIGHT, logger)).toBe(
+      'http://localhost:3000/renderer?origin=http%3A%2F%2Flocalhost%3A3000&theme=light',
+    );
+  });
+
+  describe('ancestor origins', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('appends every ancestor origin after the base origin', () => {
+      vi.stubGlobal('location', {
+        origin: 'http://localhost:3000',
+        ancestorOrigins: ['https://proxy.googlers.com', 'https://jetski.corp.google.com'],
+      });
+
+      const src = buildRendererUrl('/renderer', ThemePreference.LIGHT, logger);
+
+      expect(src).toContain('origin=http%3A%2F%2Flocalhost%3A3000');
+      expect(src).toContain('origin=https%3A%2F%2Fproxy.googlers.com');
+      expect(src).toContain('origin=https%3A%2F%2Fjetski.corp.google.com');
+    });
+
+    it('deduplicates ancestor origins matching the base origin or each other', () => {
+      vi.stubGlobal('location', {
+        origin: 'http://localhost:3000',
+        ancestorOrigins: [
+          'http://localhost:3000',
+          'https://proxy.googlers.com',
+          'https://proxy.googlers.com',
+        ],
+      });
+
+      const src = buildRendererUrl('/renderer', ThemePreference.LIGHT, logger);
+
+      expect(src!.match(/origin=http%3A%2F%2Flocalhost%3A3000/g)?.length).toBe(1);
+      expect(src!.match(/origin=https%3A%2F%2Fproxy\.googlers\.com/g)?.length).toBe(1);
+    });
+
+    it('handles a location without ancestorOrigins (e.g. Firefox)', () => {
+      vi.stubGlobal('location', {origin: 'http://localhost:3000'});
+
+      const src = buildRendererUrl('/renderer', ThemePreference.LIGHT, logger);
+
+      expect(src).toContain('origin=http%3A%2F%2Flocalhost%3A3000');
+      expect(src!.match(/origin=/g)?.length).toBe(1);
+    });
+
+    it('appends no origin to an absolute URL where there is no location (SSR)', () => {
+      vi.stubGlobal('location', undefined);
+
+      expect(
+        buildRendererUrl('http://localhost:3000/renderer', ThemePreference.LIGHT, logger),
+      ).toBe('http://localhost:3000/renderer?theme=light');
+    });
+
+    it('returns null for a relative URL where there is no location (SSR)', () => {
+      vi.stubGlobal('location', undefined);
+
+      expect(buildRendererUrl('/renderer', ThemePreference.LIGHT, logger)).toBeNull();
+    });
   });
 });

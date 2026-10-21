@@ -111,6 +111,15 @@ describe('HostCommunication', () => {
     service.ngOnDestroy();
   });
 
+  /**
+   * Changes the theme preference and lets HostCommunication's broadcast effect
+   * run, as a toggle in the app does.
+   */
+  function changeTheme(theme: ThemePreference): void {
+    themePreferenceSignal.set(theme);
+    TestBed.tick();
+  }
+
   it('initializes successfully', () => {
     expect(service).toBeTruthy();
   });
@@ -712,7 +721,7 @@ describe('HostCommunication', () => {
     expect(service.getEnvelopeHistory().length).toBe(0);
   });
 
-  it('dispatches SET_THEME message via sendTheme', () => {
+  it('broadcasts a theme preference change as SET_THEME to a ready frame', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
     window.dispatchEvent(
@@ -723,7 +732,7 @@ describe('HostCommunication', () => {
       }),
     );
 
-    service.sendTheme(ThemePreference.DARK);
+    changeTheme(ThemePreference.DARK);
 
     expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
       {
@@ -732,6 +741,54 @@ describe('HostCommunication', () => {
       },
       'http://localhost:3000',
     );
+  });
+
+  it('broadcasts nothing until the preference changes', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+    service.registerIframe(mockIframeWindow);
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+      }),
+    );
+    vi.mocked(mockIframeWindow.postMessage).mockClear();
+
+    // The frame already got the current theme in its URL and its handshake.
+    TestBed.tick();
+
+    expect(mockIframeWindow.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('queues no theme while no frame is registered; a later frame gets it once from its handshake', () => {
+    changeTheme(ThemePreference.DARK);
+    expect(mockErrorLogger.info).not.toHaveBeenCalledWith(
+      expect.objectContaining({message: expect.stringContaining('Queueing outbound message')}),
+    );
+
+    const frameWindow = {postMessage: vi.fn()} as unknown as Window;
+    const frame = {contentWindow: frameWindow} as unknown as HTMLIFrameElement;
+    service.registerIframe(frame, DefaultTarget.KEEP);
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frameWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY},
+      }),
+    );
+
+    const themes = vi
+      .mocked(frameWindow.postMessage)
+      .mock.calls.filter(
+        call => (call[0] as {type?: string})?.type === PreviewBridgeMessageType.SET_THEME,
+      );
+    expect(themes).toEqual([
+      [
+        {type: PreviewBridgeMessageType.SET_THEME, payload: {theme: ThemePreference.DARK}},
+        'http://localhost:3000',
+      ],
+    ]);
   });
 
   it('automatically re-sends current themePreference when RENDERER_READY is received', () => {
@@ -1281,13 +1338,13 @@ describe('HostCommunication', () => {
       );
       vi.mocked(iframeWindow.postMessage).mockClear();
 
-      service.sendTheme(ThemePreference.DARK);
+      changeTheme(ThemePreference.DARK);
       expect(iframeWindow.postMessage).toHaveBeenCalled();
 
       vi.mocked(iframeWindow.postMessage).mockClear();
       service.unregisterIframe(iframeElement);
 
-      service.sendTheme(ThemePreference.LIGHT);
+      changeTheme(ThemePreference.LIGHT);
       expect(iframeWindow.postMessage).not.toHaveBeenCalled();
     });
 
@@ -1743,7 +1800,7 @@ describe('HostCommunication', () => {
       service.registerIframe(canvasIframe);
       vi.mocked(inlineWindow.postMessage).mockClear();
 
-      service.sendTheme(ThemePreference.DARK);
+      changeTheme(ThemePreference.DARK);
       expect(inlineWindow.postMessage).toHaveBeenCalledTimes(1);
       expect(inlineWindow.postMessage).toHaveBeenCalledWith(
         {type: PreviewBridgeMessageType.SET_THEME, payload: {theme: ThemePreference.DARK}},
@@ -2043,6 +2100,38 @@ describe('HostCommunication', () => {
       service.unregisterIframe(card.frame);
 
       expect(service.getIframeElement()).toBeNull();
+    });
+
+    it('sends one theme change once to each ready frame and queues nothing for the rest', () => {
+      // The /demos page: a default-target coordinator plus KEEP cards, some of
+      // which are still loading when the theme is toggled.
+      const coordinator = createFrame();
+      service.registerIframe(coordinator.frame);
+      const cards = [createFrame(), createFrame(), createFrame(), createFrame()];
+      for (const card of cards) service.registerIframe(card.frame, DefaultTarget.KEEP);
+      const ready = [coordinator, cards[0], cards[2]];
+      const loading = [cards[1], cards[3]];
+      for (const frame of ready) announce(frame.frameWindow);
+      const all = [coordinator, ...cards];
+      for (const frame of all) vi.mocked(frame.frameWindow.postMessage).mockClear();
+      const isTheme = (call: unknown[]) =>
+        (call[0] as {type?: string})?.type === PreviewBridgeMessageType.SET_THEME;
+      const themeCalls = (frame: {frameWindow: Window}) =>
+        vi.mocked(frame.frameWindow.postMessage).mock.calls.filter(isTheme);
+      const dark = {
+        type: PreviewBridgeMessageType.SET_THEME,
+        payload: {theme: ThemePreference.DARK},
+      };
+
+      changeTheme(ThemePreference.DARK);
+
+      for (const frame of ready) expect(themeCalls(frame)).toEqual([[dark, RENDERER_ORIGIN]]);
+      for (const frame of loading) expect(themeCalls(frame)).toEqual([]);
+
+      // A frame that comes up later gets the theme from its own handshake, once;
+      // no queued copy of the broadcast trails behind it.
+      for (const frame of loading) announce(frame.frameWindow);
+      for (const frame of all) expect(themeCalls(frame)).toEqual([[dark, RENDERER_ORIGIN]]);
     });
   });
 });

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Injectable, inject, signal, Signal, OnDestroy, untracked} from '@angular/core';
+import {Injectable, effect, inject, signal, Signal, OnDestroy, untracked} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {ReplaySubject} from 'rxjs';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
@@ -376,6 +376,18 @@ export class HostCommunication implements OnDestroy {
     if (typeof window !== 'undefined') {
       window.addEventListener('message', this.messageListener);
     }
+
+    // The one owner of the theme broadcast, so every page's frames get each
+    // change once, whichever components are mounted. Only a change is
+    // broadcast: a frame already has the current theme, from its URL and
+    // from its RENDERER_READY handshake.
+    let broadcastTheme = untracked(() => this.configProvider.themePreference());
+    effect(() => {
+      const theme = this.configProvider.themePreference();
+      if (theme === broadcastTheme) return;
+      broadcastTheme = theme;
+      untracked(() => this.sendTheme(theme));
+    });
   }
 
   private flushEarlyMessages(): void {
@@ -660,11 +672,11 @@ export class HostCommunication implements OnDestroy {
       return;
     }
 
-    // Callers run inside component effects (RenderedFrame's payload and theme
-    // effects). Readiness must not become a dependency of those effects, or
-    // every frame's handshake would re-run them and re-send their payloads.
-    // Only the fallback branch of isTargetReady reads a signal today; the
-    // untracked read keeps that from changing by accident.
+    // Callers can run inside effects (GuestFrame's payload effect, this
+    // service's theme effect). Readiness must not become a dependency of
+    // those effects, or every frame's handshake would re-run them and re-send
+    // their messages. Only the fallback branch of isTargetReady reads a signal
+    // today; the untracked read keeps that from changing by accident.
     if (!untracked(() => this.isTargetReady(target))) {
       this.logger.info('Queueing outbound message; renderer is not yet ready.', message);
       this.outboundMessageBuffer.push({message, target});
@@ -702,23 +714,18 @@ export class HostCommunication implements OnDestroy {
   }
 
   /**
-   * Dispatches a SET_THEME message to every registered frame that is up. A
-   * frame that has not completed its handshake is skipped rather than queued
-   * for: it receives the current theme on its own RENDERER_READY, so a queued
-   * copy would only arrive as a duplicate. With nothing registered the message
-   * waits for the default frame, as any other message does.
+   * Posts a SET_THEME message to every registered frame that is up. Nothing is
+   * ever queued: a frame that has not completed its handshake, or that is not
+   * registered yet, gets the current theme in its URL and again on its own
+   * RENDERER_READY, so a queued copy would only arrive as a duplicate.
    * @param theme Target theme option
    */
-  sendTheme(theme: ThemePreference): void {
+  private sendTheme(theme: ThemePreference): void {
     const message = this.themeMessage(theme);
     const targets: Array<HTMLIFrameElement | Window> = [
       ...this.registeredIframes,
       ...this.registeredWindows,
     ];
-    if (targets.length === 0) {
-      this.sendMessage(message);
-      return;
-    }
     const postedWindows = new Set<Window>();
     for (const target of targets) {
       const targetWindow = this.resolveTargetWindow(target);

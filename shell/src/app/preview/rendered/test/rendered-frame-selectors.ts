@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {GUEST_FRAME_SELECTORS} from '../../guest-frame/test/guest-frame-selectors';
+
 /**
  * CSS selectors for the elements inside a RenderedFrame, relative to its host.
  * RenderedFrameHarness and the e2e and visual tests read them from here, so a
@@ -23,6 +25,12 @@
 export const RENDERED_FRAME_SELECTORS = {
   /** The sized box around the guest iframe; it carries `data-sizing` and `is-locked`. */
   container: '.rendered-frame-container',
-  /** The sandboxed iframe that loads the guest renderer. */
-  iframe: 'iframe.preview-iframe',
+  /**
+   * The sandboxed iframe that loads the guest renderer, inside the frame's
+   * GuestFrame. It is selected through the container, which no other preview
+   * uses.
+   */
+  iframe: `.rendered-frame-container ${GUEST_FRAME_SELECTORS.host} ${GUEST_FRAME_SELECTORS.iframe}`,
+  /** Shown in place of the iframe while there is no renderer URL. */
+  placeholder: '.rendered-frame-placeholder',
 } as const;

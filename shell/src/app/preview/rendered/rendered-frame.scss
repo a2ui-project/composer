@@ -61,36 +61,28 @@ $content-sized-floor: 280px;
     }
   }
 
-  .preview-iframe {
+  // The GuestFrame takes whatever height the container has; its iframe fills it.
+  .preview-frame {
     flex: 1 1 auto;
     width: 100%;
-    height: 100%;
-    // A flex item's automatic minimum would let the iframe's intrinsic 150px
-    // push it past a shorter host; a filling frame takes exactly its host's
-    // height and lets the guest document scroll inside it.
+    // A filling frame takes exactly its host's height and lets the guest
+    // document scroll inside it.
     min-height: 0;
-    border: none;
-    display: block;
-    isolation: isolate;
   }
 
   // A content-sized frame (an inline preview) keeps a usable height until the
   // guest reports its own, which the template then applies as an inline
-  // `min-height` that wins over these floors.
+  // `min-height` that wins over this floor.
   &[data-sizing='content'] {
     min-height: $content-sized-floor;
-
-    .preview-iframe {
-      min-height: $content-sized-floor;
-    }
   }
 
   .rendered-frame-placeholder {
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 100%;
     color: var(--mat-sys-on-surface-variant);
     font-family: sans-serif;
   }
