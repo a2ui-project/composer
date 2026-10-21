@@ -42,15 +42,19 @@
       [attr.aria-busy]="showPlaceholder() && !hasError()"
       [style.height.px]="surfaceHeight()"
     >
-      @if (mount() && safeRendererUrl()) {
-        <iframe
-          #demoIframe
-          [src]="safeRendererUrl()"
-          sandbox="allow-scripts allow-same-origin allow-forms"
+      @if (mount()) {
+        <a2ui-composer-guest-frame
+          #guestFrame
           class="demo-card-frame"
-          [title]="demo().name + ' live demo'"
-          (load)="onFrameLoad()"
-        ></iframe>
+          [payload]="demo().a2ui"
+          [defaultTarget]="frameDefaultTarget"
+          [frameTitle]="demo().name + ' live demo'"
+          (rendererReady)="onRendererReady()"
+          (surfaceResize)="onSurfaceResize($event)"
+          (renderSuccess)="onRenderSuccess()"
+          (renderError)="onRenderError()"
+          (documentReplaced)="onDocumentReplaced()"
+        />
       }
 
       @if (showPlaceholder()) {

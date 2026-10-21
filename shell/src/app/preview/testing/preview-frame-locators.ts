@@ -30,6 +30,26 @@ import {RENDERED_FRAME_SELECTORS} from '../rendered/test/rendered-frame-selector
  * load it.
  */
 
+/**
+ * The element around each kind of preview frame the shell embeds, from the
+ * innermost host out where they nest. Like the selector modules, usable as
+ * arguments to code that runs in the page.
+ */
+export const PREVIEW_FRAME_HOSTS = {
+  /** An inline surface in the A2A chat transcript. */
+  inlineSurface: '.inline-surface-card',
+  /** The A2A chat's side canvas. */
+  sideCanvas: '.side-canvas-viewport',
+  /** A card on the /demos wall. */
+  demoCard: 'a2ui-composer-demo-card',
+  /** The hidden frame that coordinates the /demos page. */
+  demosCoordinator: '.coordinator-frame',
+  /** The Components Gallery's Preview card. */
+  galleryPreview: '.preview-card',
+  /** The composer workspace's Dockview layout. */
+  dockview: '.dockview-root',
+} as const;
+
 /** Where a locator searches: the whole page, or inside an element. */
 type Scope = Page | Locator;
 
@@ -55,22 +75,22 @@ export function renderedFrameContainer(scope: Scope): Locator {
 
 /** The preview frame host in the Components Gallery's Preview card. */
 export function galleryPreview(page: Page): Locator {
-  return page.locator('.preview-card a2ui-composer-rendered-frame');
+  return page.locator(`${PREVIEW_FRAME_HOSTS.galleryPreview} a2ui-composer-rendered-frame`);
 }
 
 /** The hidden preview frame host that coordinates the /demos page. */
 export function demosCoordinator(page: Page): Locator {
-  return page.locator('.coordinator-frame a2ui-composer-rendered-frame');
+  return page.locator(`${PREVIEW_FRAME_HOSTS.demosCoordinator} a2ui-composer-rendered-frame`);
 }
 
 /** The preview frame host in the composer workspace's "Rendered" Dockview panel. */
 export function dockedPreview(page: Page): Locator {
-  return page.locator('.dockview-root a2ui-composer-rendered-frame');
+  return page.locator(`${PREVIEW_FRAME_HOSTS.dockview} a2ui-composer-rendered-frame`);
 }
 
 /** The sized container of the inline chat surface. */
 export function inlineSurfaceContainer(page: Page): Locator {
-  return renderedFrameContainer(page.locator('.inline-surface-card'));
+  return renderedFrameContainer(page.locator(PREVIEW_FRAME_HOSTS.inlineSurface));
 }
 
 /**
@@ -78,7 +98,7 @@ export function inlineSurfaceContainer(page: Page): Locator {
  * (0-based) when `index` is given.
  */
 export function inlineSurfaceIframe(scope: Scope, index?: number): Locator {
-  const iframes = previewIframe(scope.locator('.inline-surface-card'));
+  const iframes = previewIframe(scope.locator(PREVIEW_FRAME_HOSTS.inlineSurface));
   return index === undefined ? iframes : iframes.nth(index);
 }
 
@@ -92,7 +112,7 @@ export function inlineSurfaceFrame(scope: Scope, index?: number): FrameLocator {
 
 /** The guest document of the A2A chat's side canvas. */
 export function sideCanvasFrame(page: Page): FrameLocator {
-  return previewFrame(page.locator('.side-canvas-viewport'));
+  return previewFrame(page.locator(PREVIEW_FRAME_HOSTS.sideCanvas));
 }
 
 /** The demo card's iframe, which exists only while the card holds a frame slot. */
