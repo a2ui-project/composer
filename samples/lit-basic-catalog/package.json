@@ -22,7 +22,7 @@
     "@lit/context": "1.1.6",
     "a2ui-bridge": "0.1.0",
     "lit": "3.3.3",
-    "markdown-it": "14.2.0"
+    "markdown-it": "14.3.3"
   },
   "devDependencies": {
     "eslint": "10.7.0",
