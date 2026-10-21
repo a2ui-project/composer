@@ -652,7 +652,7 @@ export class A2aChatView implements OnInit {
     }
 
     this.messages.update(msgs =>
-      msgs.map(m => {
+      msgs.map((m, index) => {
         if (m.id !== agentMessageId) return m;
 
         const updatedText = parsed.textChunk
@@ -663,7 +663,11 @@ export class A2aChatView implements OnInit {
           : m.thinking;
         const updatedPayload =
           parsed.a2uiItems.length > 0
-            ? mergeA2uiItems(m.a2uiPayload || [], parsed.a2uiItems)
+            ? mergeA2uiItems(
+                m.a2uiPayload || [],
+                parsed.a2uiItems,
+                msgs.slice(0, index).flatMap(message => message.a2uiPayload ?? []),
+              )
             : m.a2uiPayload;
         const updatedToolCalls =
           parsed.toolCalls && parsed.toolCalls.length > 0

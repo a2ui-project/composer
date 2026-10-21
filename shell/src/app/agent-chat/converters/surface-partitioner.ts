@@ -376,18 +376,54 @@ export function normalizeA2uiItems(
   return normalized;
 }
 
+function getItemSurfaceId(item: RenderA2uiItem): string | undefined {
+  return (
+    item.createSurface?.surfaceId ??
+    item.updateComponents?.surfaceId ??
+    item.updateDataModel?.surfaceId ??
+    item.deleteSurface?.surfaceId
+  );
+}
+
+function extractPriorSurfaceItems(
+  priorItems: readonly RenderA2uiItem[],
+  targetSurfaceIds: ReadonlySet<string>,
+): RenderA2uiItem[] {
+  const itemsBySurface = new Map<string, RenderA2uiItem[]>();
+
+  for (const item of priorItems) {
+    const surfaceId = getItemSurfaceId(item);
+    if (!surfaceId || !targetSurfaceIds.has(surfaceId)) continue;
+
+    if (item.deleteSurface) {
+      itemsBySurface.delete(surfaceId);
+    } else if (item.createSurface) {
+      itemsBySurface.set(surfaceId, [item]);
+    } else {
+      const surfaceItems = itemsBySurface.get(surfaceId) ?? [];
+      surfaceItems.push(item);
+      itemsBySurface.set(surfaceId, surfaceItems);
+    }
+  }
+
+  return Array.from(targetSurfaceIds).flatMap(surfaceId => itemsBySurface.get(surfaceId) ?? []);
+}
+
 /**
- * Merges newly received A2UI items into an existing payload across streaming chunks.
- * If newItems re-declares an existing surface via `createSurface`, prior messages for that
- * surface in existingItems are replaced rather than duplicated.
+ * Merges newly received A2UI items into an existing payload across streaming
+ * chunks. If newItems re-declares an existing surface via `createSurface`,
+ * prior messages for that surface in existingItems are replaced rather than
+ * duplicated. If newItems updates a surface without `createSurface` and that
+ * surface is not yet present in existingItems, its active items from
+ * `priorSessionItems` (if provided) are carried forward.
  */
 export function mergeA2uiItems(
   existingItems: readonly RenderA2uiItem[],
   newItems: readonly RenderA2uiItem[],
+  priorSessionItems?: readonly RenderA2uiItem[],
 ): RenderA2uiItem[] {
   const normalizedNew = normalizeA2uiItems(newItems);
-  if (!existingItems || existingItems.length === 0) return normalizedNew;
-  if (!normalizedNew || normalizedNew.length === 0) return [...existingItems];
+  if (!normalizedNew || normalizedNew.length === 0) return existingItems ? [...existingItems] : [];
 
   const newCreateSurfaces = new Set<string>();
   for (const item of normalizedNew) {
@@ -396,17 +432,36 @@ export function mergeA2uiItems(
     }
   }
 
+  let priorAndExistingItems = existingItems ?? [];
+  if (priorSessionItems && priorSessionItems.length > 0) {
+    const knownSurfaces = new Set([
+      ...priorAndExistingItems.map(getItemSurfaceId),
+      ...newCreateSurfaces,
+    ]);
+    const missingSurfaces = new Set<string>();
+    for (const item of normalizedNew) {
+      const surfaceId = item.updateComponents?.surfaceId ?? item.updateDataModel?.surfaceId;
+      if (surfaceId && !knownSurfaces.has(surfaceId)) {
+        missingSurfaces.add(surfaceId);
+      }
+    }
+    if (missingSurfaces.size > 0) {
+      priorAndExistingItems = [
+        ...extractPriorSurfaceItems(priorSessionItems, missingSurfaces),
+        ...priorAndExistingItems,
+      ];
+    }
+  }
+
+  if (priorAndExistingItems.length === 0) return normalizedNew;
+
   const filteredExisting =
     newCreateSurfaces.size > 0
-      ? existingItems.filter(item => {
-          const surfaceId =
-            item.createSurface?.surfaceId ??
-            item.updateComponents?.surfaceId ??
-            item.updateDataModel?.surfaceId ??
-            item.deleteSurface?.surfaceId;
+      ? priorAndExistingItems.filter(item => {
+          const surfaceId = getItemSurfaceId(item);
           return surfaceId == null || !newCreateSurfaces.has(surfaceId);
         })
-      : existingItems;
+      : priorAndExistingItems;
 
   return [...filteredExisting, ...normalizedNew];
 }
@@ -431,9 +486,10 @@ interface CategorizedSurfaceItems {
 }
 
 function categorizeSurfaceItems(items: RenderA2uiItem[]): CategorizedSurfaceItems {
-  const allComponents: Array<Record<string, unknown>> = [];
   const createSurfaceItems: RenderA2uiItem[] = [];
   const updateDataModelItems: RenderA2uiItem[] = [];
+  const componentMap = new Map<string, Record<string, unknown>>();
+  const priorChildIds = new Set<string>();
   const otherItems: RenderA2uiItem[] = [];
 
   for (const item of items) {
@@ -444,9 +500,16 @@ function categorizeSurfaceItems(items: RenderA2uiItem[]): CategorizedSurfaceItem
       updateDataModelItems.push(item);
     }
     if (item.updateComponents?.components && Array.isArray(item.updateComponents.components)) {
+      for (const existingComponent of componentMap.values()) {
+        for (const reference of extractChildReferences(existingComponent)) {
+          priorChildIds.add(reference);
+        }
+      }
       for (const comp of item.updateComponents.components) {
         if (typeof comp === 'object' && comp !== null) {
-          allComponents.push(comp as Record<string, unknown>);
+          const componentObject = comp as Record<string, unknown>;
+          const id = String(componentObject['id'] ?? '');
+          componentMap.set(id, {...componentMap.get(id), ...componentObject});
         }
       }
     }
@@ -454,6 +517,16 @@ function categorizeSurfaceItems(items: RenderA2uiItem[]): CategorizedSurfaceItem
       otherItems.push(item);
     }
   }
+
+  if (priorChildIds.size > 0) {
+    const rootIds = new Set(Array.from(componentMap.keys()).filter(id => !priorChildIds.has(id)));
+    const reachableIds = collectDescendantIds(rootIds, componentMap);
+    for (const id of componentMap.keys()) {
+      if (!reachableIds.has(id)) componentMap.delete(id);
+    }
+  }
+
+  const allComponents = Array.from(componentMap.values());
 
   return {createSurfaceItems, updateDataModelItems, allComponents, otherItems};
 }
