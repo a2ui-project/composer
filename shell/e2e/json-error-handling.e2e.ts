@@ -15,6 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {CHAT_PANELS, useChatPanel} from './helpers';
 
 interface MonacoModel {
@@ -212,12 +213,11 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     page,
   }) => {
     // Wait for the iframe
-    const iframeLoc = page.frameLocator('iframe.preview-iframe');
+    const iframeLoc = previewFrame(page);
     await expect(iframeLoc.locator('body')).toBeVisible();
 
     // Wait until composer handshake finishes / timeouts.
-    await page
-      .frameLocator('iframe.preview-iframe')
+    await previewFrame(page)
       .locator('body')
       .evaluate(_ => {
         window.parent.postMessage(
@@ -246,8 +246,7 @@ test.describe('JSON Error Handling & Diagnostics', () => {
     page,
   }) => {
     // Trigger a structured error from host-communication to appear in the panel
-    await page
-      .frameLocator('iframe.preview-iframe')
+    await previewFrame(page)
       .locator('body')
       .evaluate(_ => {
         window.parent.postMessage(

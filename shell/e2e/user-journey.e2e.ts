@@ -23,6 +23,7 @@ import {
   waitForMonacoEditor,
   waitForPreviewTab,
 } from './helpers';
+import {firstPreviewFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {ELECTRIC_CAR_CHARGING_UI, EV_CHARGE_CONTROL_A2UI} from './samples';
 
 /**
@@ -202,9 +203,7 @@ test.describe('E2E Workspace User Journey', () => {
     await expect(editorLocator).toBeVisible();
 
     await waitForPreviewTab(recipientPage);
-    const previewIframe = recipientPage
-      .frameLocator('.preview-frame iframe, iframe.preview-iframe, iframe')
-      .first();
+    const previewIframe = firstPreviewFrame(recipientPage);
     await expect(previewIframe.locator('body')).toBeVisible({
       timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
     });
@@ -247,9 +246,7 @@ test.describe('E2E Workspace User Journey', () => {
       .toContain('ev_charging');
 
     await waitForPreviewTab(page);
-    const previewIframe = page
-      .frameLocator('.preview-frame iframe, iframe.preview-iframe, iframe')
-      .first();
+    const previewIframe = firstPreviewFrame(page);
     await expect(previewIframe.locator('body')).toBeVisible({
       timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
     });
@@ -395,9 +392,7 @@ test.describe('E2E Workspace User Journey', () => {
       await expect(page.locator('.chat-history-log .bubble-layout')).toHaveCount(1);
 
       await waitForPreviewTab(page);
-      const previewIframe = page
-        .frameLocator('.preview-frame iframe, iframe.preview-iframe, iframe')
-        .first();
+      const previewIframe = firstPreviewFrame(page);
       await expect(previewIframe.locator('a2ui-v09-surface').first()).toBeVisible({
         timeout: REMOTE_PAYLOAD_LOAD_TIMEOUT_MS,
       });

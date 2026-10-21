@@ -17,6 +17,8 @@
 import {expect, test} from '@playwright/test';
 import type {SerializedDockview} from 'dockview-core';
 import {LocalStorageKey} from '../src/app/storage/models/local-storage-keys';
+import {RENDERED_FRAME_SELECTORS} from '../src/app/preview/rendered/test/rendered-frame-selectors';
+import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 
 const rendererUrl = 'http://localhost:3456';
 
@@ -69,7 +71,7 @@ for (const invalidState of ['retired panel', 'mismatched panel ID']) {
     await expect(page.locator('.dv-tab')).toHaveCount(7);
     await expect(page.locator('.dv-tab', {hasText: /^Rendered A2UI Preview/})).toBeVisible();
 
-    const preview = page.frameLocator('iframe.preview-iframe');
+    const preview = previewFrame(page);
     await preview.getByRole('button', {name: 'Search Cars'}).click();
     await expect(page.locator('.dv-tab', {hasText: /^Events/})).toContainText('(1)');
     await page.locator('.dv-tab', {hasText: /^Data Model/}).click();
@@ -90,7 +92,7 @@ test('resets modified dockview layout back to default when clicking Reset Layout
   await page.goto(`/?renderer=${rendererUrl}`);
   await expect(page.locator('.workspace-container')).toBeVisible();
 
-  const preview = page.frameLocator('iframe.preview-iframe');
+  const preview = previewFrame(page);
 
   for (let cycle = 1; cycle <= 3; cycle++) {
     // Initially default tabs are active: Rendered A2UI Preview and Data Model
@@ -153,14 +155,14 @@ test('resets modified dockview layout back to default when clicking Reset Layout
     // Verify the preview iframe properly expands and is not clipped to the ~130px initial sandbox fallback banner.
     await expect
       .poll(async () => {
-        return page.evaluate(() => {
-          const iframe = document.querySelector<HTMLIFrameElement>('iframe.preview-iframe');
+        return page.evaluate(iframeSelector => {
+          const iframe = document.querySelector<HTMLIFrameElement>(iframeSelector);
           const iframeHeight = iframe?.getBoundingClientRect().height ?? 0;
           return {
             iframeHeight,
             iframeExpanded: iframeHeight > 300,
           };
-        });
+        }, RENDERED_FRAME_SELECTORS.iframe);
       })
       .toEqual(
         expect.objectContaining({

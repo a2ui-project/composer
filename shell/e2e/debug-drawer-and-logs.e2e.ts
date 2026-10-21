@@ -16,6 +16,7 @@
 
 import {test, expect} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
+import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -56,7 +57,7 @@ test.beforeEach(async ({page}) => {
 
 test.describe('Debugging Panels & Diagnostic Logs', () => {
   test('verifies diagnostic logs routing', async ({page}) => {
-    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    const iframeBody = previewFrame(page).locator('body');
     await expect(iframeBody).toBeVisible();
 
     const clickMsg = {
@@ -117,7 +118,7 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
   });
 
   test('verifies console log warning routing from preview frame to Errors tab', async ({page}) => {
-    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    const iframeBody = previewFrame(page).locator('body');
     await expect(iframeBody).toBeVisible();
 
     const logMsg = {
@@ -145,7 +146,7 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     const errorsTabLabel = page.locator('.dv-tab', {hasText: /^Errors/});
     await expect(errorsTabLabel).not.toContainText('(1)');
 
-    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    const iframeBody = previewFrame(page).locator('body');
     await expect(iframeBody).toBeVisible();
 
     const unreadClickMsg = {
@@ -196,7 +197,7 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
     const rawMessagesTabLabel = page.locator('.dv-tab', {hasText: /^Raw Messages/});
     const dataModelField = page.locator('.data-model-field textarea');
 
-    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    const iframeBody = previewFrame(page).locator('body');
     await expect(iframeBody).toBeVisible();
 
     await iframeBody.evaluate(
@@ -331,7 +332,7 @@ test.describe('Debugging Panels & Diagnostic Logs', () => {
   test('hides expanded raw message payload when switching to another debug tab and restores visibility on return', async ({
     page,
   }) => {
-    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    const iframeBody = previewFrame(page).locator('body');
     await expect(iframeBody).toBeVisible();
 
     const clickMsg = {

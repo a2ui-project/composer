@@ -31,7 +31,9 @@ $content-sized-floor: 280px;
   container-type: inline-size;
   container-name: renderedFrame;
   overflow: hidden;
-  background-color: var(--mat-sys-surface);
+  // An embedder sets --rendered-frame-background on the host to replace the
+  // surface colour, e.g. a chat bubble that keeps its own background.
+  background-color: var(--rendered-frame-background, var(--mat-sys-surface));
   position: relative;
 
   &.is-locked {
@@ -114,7 +116,7 @@ $content-sized-floor: 280px;
 /* Dark theme overrides mapping default classes dynamic styling contexts */
 :host-context(.dark-theme) {
   .rendered-frame-container {
-    background-color: var(--mat-sys-surface-container);
+    background-color: var(--rendered-frame-background, var(--mat-sys-surface-container));
 
     &.is-locked::after {
       background-color: color-mix(

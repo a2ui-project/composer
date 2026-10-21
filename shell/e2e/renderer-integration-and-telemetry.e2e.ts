@@ -17,16 +17,19 @@
 import {test, expect, Locator, FrameLocator, Page, JSHandle} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {
-  RENDERER_URLS,
   dockedPreviewGeometry,
   getMonacoContent,
   guestContentHeight,
   guestScrollRange,
-  inlineSurfaceContainer,
   setMonacoContent,
   showInlineSurface,
   waitForPreviewTab,
 } from './helpers';
+import {
+  inlineSurfaceContainer,
+  previewFrame,
+} from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 import {CAR_BOOKING} from '../src/app/chat/chat-service/initial-draft';
 import {MAX_CONTENT_HEIGHT_PX} from '../src/app/preview/content-height';
 
@@ -146,7 +149,7 @@ async function waitForPreviewSettled(
     {history: historyHandle, quietMs: STARTUP_DEBOUNCE_QUIET_MS},
   );
 
-  const iframe = page.frameLocator('iframe.preview-iframe');
+  const iframe = previewFrame(page);
   await awaitIframeUpdates(iframe);
 }
 
@@ -319,7 +322,7 @@ for (const config of CONFIGS) {
 
       // Verify actual styles, not just readable DOM text: broken CSS bundles can
       // leave the form functional while displaying browser-default controls.
-      const styledFrame = page.frameLocator('iframe.preview-iframe');
+      const styledFrame = previewFrame(page);
       await expect(styledFrame.locator('body')).toHaveCSS(
         'font-family',
         'Arial, Helvetica, sans-serif',
@@ -396,7 +399,7 @@ for (const config of CONFIGS) {
       await page.waitForLoadState('load');
       await expect(page.locator('.workspace-container')).toBeVisible();
 
-      const iframe = page.frameLocator('iframe.preview-iframe');
+      const iframe = previewFrame(page);
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible({
         timeout: PREVIEW_GUEST_READY_TIMEOUT_MS,
       });
@@ -438,7 +441,7 @@ for (const config of CONFIGS) {
       await page.waitForLoadState('load');
       await expect(page.locator('.workspace-container')).toBeVisible();
 
-      const iframe = page.frameLocator('iframe.preview-iframe');
+      const iframe = previewFrame(page);
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible({
         timeout: PREVIEW_GUEST_READY_TIMEOUT_MS,
       });
@@ -492,7 +495,7 @@ for (const config of CONFIGS) {
 
       await waitForPreviewTab(page);
 
-      const iframe = page.frameLocator('iframe.preview-iframe');
+      const iframe = previewFrame(page);
       const searchButton = iframe.getByRole('button', {name: 'Search Rental Cars'});
       await expect(searchButton).toBeVisible();
       await expect(searchButton).toBeEnabled();
@@ -502,7 +505,7 @@ for (const config of CONFIGS) {
       await page.setViewportSize({width: 1280, height: 480});
       await page.goto(`/?renderer=${config.rendererUrl}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
-      const iframe = page.frameLocator('iframe.preview-iframe');
+      const iframe = previewFrame(page);
       const searchButton = iframe.getByRole('button', {name: 'Search Cars'});
       await expect(searchButton).toBeVisible();
 
@@ -535,7 +538,7 @@ for (const config of CONFIGS) {
       await page.waitForLoadState('load');
       await expect(page.locator('.workspace-container')).toBeVisible();
 
-      const iframe = page.frameLocator('iframe.preview-iframe');
+      const iframe = previewFrame(page);
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible({
         timeout: PREVIEW_GUEST_READY_TIMEOUT_MS,
       });
@@ -744,7 +747,7 @@ test.describe('Bridge Telemetry Layout Constraints', () => {
     await page.waitForLoadState('load');
     await expect(page.locator('.workspace-container')).toBeVisible();
 
-    const iframeBody = page.frameLocator('iframe.preview-iframe').locator('body');
+    const iframeBody = previewFrame(page).locator('body');
     await expect(iframeBody).toBeVisible();
 
     const blockingMsg = {

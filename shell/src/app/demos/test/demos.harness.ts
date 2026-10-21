@@ -16,6 +16,7 @@
 
 import {ComponentHarness, HarnessPredicate} from '@angular/cdk/testing';
 import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.harness';
+import {DEMO_CARD_SELECTORS} from './demo-card-selectors';
 
 /**
  * Harness for interacting with the Demos route component in unit tests.
@@ -45,7 +46,7 @@ export class DemosHarness extends ComponentHarness {
 
   private readonly getLoading = this.locatorForOptional('.demos-loading');
   private readonly getMountedFrames = this.locatorForAll(
-    'a2ui-composer-demo-card iframe.demo-card-frame',
+    `a2ui-composer-demo-card ${DEMO_CARD_SELECTORS.iframe}`,
   );
 
   /**

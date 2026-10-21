@@ -15,6 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {sideCanvasFrame} from '../preview/testing/preview-frame-locators';
 import {connectMockAgent} from './test/mock-a2a-agent';
 
 test.describe('A2aChatView Full Orchestration Visual Regression & Layout', () => {
@@ -41,7 +42,7 @@ test.describe('A2aChatView Full Orchestration Visual Regression & Layout', () =>
     await textarea.fill('Find non-stop flights from SFO to NRT next month');
     await textarea.press('Enter');
     // Wait for the A2UI surface to be fully rendered inside the side canvas viewport iframe
-    const canvasFrame = page.frameLocator('.side-canvas-viewport iframe.preview-iframe');
+    const canvasFrame = sideCanvasFrame(page);
     await expect(canvasFrame.getByText('Available Non-Stop Flights')).toBeVisible();
     await expect(canvasFrame.getByText('Select ANA NH007 & Continue')).toBeVisible();
 
