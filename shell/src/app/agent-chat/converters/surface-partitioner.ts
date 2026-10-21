@@ -432,7 +432,7 @@ export function mergeA2uiItems(
     }
   }
 
-  let priorAndExistingItems = existingItems ?? [];
+  let priorAndExistingItems = existingItems;
   if (priorSessionItems && priorSessionItems.length > 0) {
     const knownSurfaces = new Set([
       ...priorAndExistingItems.map(getItemSurfaceId),
