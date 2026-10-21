@@ -57,20 +57,30 @@ export const MONACO_MODEL_TIMEOUT_MS = 10_000;
  */
 export const MONACO_DRAFT_DEBOUNCE_MS = 350;
 
-/** Waits until the Raw A2UI editor is visible and has a Monaco model. */
+/**
+ * Waits until the Monaco editor is visible and has a model in either the
+ * Workspace Dockview tab or the Components Gallery card.
+ */
 export async function waitForMonacoEditor(page: Page): Promise<void> {
   const editorTab = page.locator('.dv-tab:has-text("A2UI JSON Editor")');
+  const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
   try {
-    await editorTab.waitFor({state: 'attached', timeout: TAB_VISIBILITY_TIMEOUT_MS});
-    const isActive = await editorTab.evaluate(el => el.classList.contains('dv-active-tab'));
-    if (!isActive) {
-      await editorTab.click();
+    // Monaco is used both inside a Dockview tab (Workspace) and directly inside
+    // a card (Components Gallery), so wait for whichever is present first.
+    await editorTab
+      .or(editorLocator)
+      .first()
+      .waitFor({state: 'attached', timeout: TAB_VISIBILITY_TIMEOUT_MS});
+    if ((await editorTab.count()) > 0) {
+      const isActive = await editorTab.evaluate(el => el.classList.contains('dv-active-tab'));
+      if (!isActive) {
+        await editorTab.click();
+      }
     }
   } catch {
     // If no tab is present, proceed to editorLocator check
   }
 
-  const editorLocator = page.locator('a2ui-composer-monaco-editor .monaco-editor').first();
   await expect(editorLocator).toBeVisible({timeout: TAB_VISIBILITY_TIMEOUT_MS});
 
   await page.waitForFunction(

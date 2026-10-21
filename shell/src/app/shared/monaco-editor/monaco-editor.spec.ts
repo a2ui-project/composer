@@ -27,6 +27,7 @@ import {
 } from '../../settings/app-config-provider/app-config-provider';
 import {ErrorLogger} from '../../debug/error-logger.service';
 import {MonacoEditorHarness} from './test/monaco-editor.harness';
+import type * as monaco from 'monaco-editor';
 
 const {
   mockDefineTheme,
@@ -68,19 +69,29 @@ const {
   const mockMouseDownDisposable = {dispose: vi.fn()};
   const mockSetDiagnosticsOptions = vi.fn();
 
-  const mockOnDidChangeModelContent = vi.fn(() => mockModelContentDisposable);
-  const mockOnDidChangeCursorPosition = vi.fn(() => mockCursorPositionDisposable);
-  const mockOnDidChangeCursorSelection = vi.fn(() => mockCursorSelectionDisposable);
-  const mockOnKeyDown = vi.fn(() => mockKeyDownDisposable);
-  const mockOnMouseDown = vi.fn(() => mockMouseDownDisposable);
+  const mockOnDidChangeModelContent = vi.fn<
+    (listener: () => void) => {dispose: ReturnType<typeof vi.fn>}
+  >(() => mockModelContentDisposable);
+  const mockOnDidChangeCursorPosition = vi.fn<
+    (listener: () => void) => {dispose: ReturnType<typeof vi.fn>}
+  >(() => mockCursorPositionDisposable);
+  const mockOnDidChangeCursorSelection = vi.fn<
+    (listener: () => void) => {dispose: ReturnType<typeof vi.fn>}
+  >(() => mockCursorSelectionDisposable);
+  const mockOnKeyDown = vi.fn<(listener: () => void) => {dispose: ReturnType<typeof vi.fn>}>(
+    () => mockKeyDownDisposable,
+  );
+  const mockOnMouseDown = vi.fn<(listener: () => void) => {dispose: ReturnType<typeof vi.fn>}>(
+    () => mockMouseDownDisposable,
+  );
 
   const mockSetPosition = vi.fn();
   const mockRevealPositionInCenterIfOutsideViewport = vi.fn();
   const mockRevealPositionInCenter = vi.fn();
   const mockFocus = vi.fn();
 
-  const mockEditorCreate = vi.fn(() => ({
-    getModel: vi.fn(() => null),
+  const mockEditorCreate = vi.fn<() => Record<string, unknown>>(() => ({
+    getModel: vi.fn<() => unknown>(() => null),
     getValue: vi.fn(() => ''),
     setValue: vi.fn(),
     updateOptions: vi.fn(),
@@ -95,8 +106,10 @@ const {
     onMouseDown: mockOnMouseDown,
     dispose: vi.fn(),
   }));
-  const mockOnDidChangeMarkers = vi.fn(() => ({dispose: vi.fn()}));
-  const mockGetModelMarkers = vi.fn(() => []);
+  const mockOnDidChangeMarkers = vi.fn<
+    (listener: (uris: readonly monaco.Uri[]) => void) => {dispose: ReturnType<typeof vi.fn>}
+  >(() => ({dispose: vi.fn()}));
+  const mockGetModelMarkers = vi.fn<() => Partial<monaco.editor.IMarker>[]>(() => []);
   return {
     mockGetModel,
     mockCreateModel,
@@ -883,8 +896,10 @@ describe('MonacoEditor component', () => {
     });
   });
 
-  it('configures schemaValidation as error in jsonDefaults', async () => {
+  it('configures schemaValidation as error in jsonDefaults and supports gallery-example schemaMode and ariaLabel', async () => {
     fixture = TestBed.createComponent(MonacoEditor);
+    fixture.componentRef.setInput('schemaMode', 'gallery-example');
+    fixture.componentRef.setInput('ariaLabel', 'Edit components and optional data');
     const catalogService = TestBed.inject(CatalogManagement);
     (catalogService.activeCatalog as WritableSignal<Catalog | null>).set({
       catalogId: 'test-catalog',
@@ -896,10 +911,18 @@ describe('MonacoEditor component', () => {
     await Promise.resolve();
     fixture.detectChanges();
 
+    expect(fixture.componentInstance['modelUri']).toContain('inmemory://model/gallery-draft-');
+    expect(mockEditorCreate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ariaLabel: 'Edit components and optional data'}),
+    );
     expect(mockSetDiagnosticsOptions).toHaveBeenCalledWith(
       expect.objectContaining({
         validate: true,
         schemaValidation: 'error',
+        schemas: expect.arrayContaining([
+          expect.objectContaining({uri: 'a2ui-gallery-example-schema'}),
+        ]),
       }),
     );
   });

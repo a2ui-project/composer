@@ -93,14 +93,20 @@ function registerSurfaceThemes(monacoInstance: typeof monaco): void {
   styleUrl: './monaco-editor.scss',
 })
 export class MonacoEditor {
-  private readonly modelUri = 'inmemory://model/layout-' + generateUuid() + '.json';
-  readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
-
   readonly value = input<string>('');
   readonly readOnly = input<boolean>(false);
+  readonly ariaLabel = input<string>('Raw layout JSON');
+  readonly schemaMode = input<'layout' | 'gallery-example'>('layout');
   readonly valueChange = output<string>();
   readonly markersChange = output<monaco.editor.IMarker[]>();
   readonly userInteraction = output<void>();
+
+  private readonly uuid = generateUuid();
+  private get modelUri(): string {
+    const prefix = this.schemaMode() === 'gallery-example' ? 'gallery-draft' : 'layout';
+    return `inmemory://model/${prefix}-${this.uuid}.json`;
+  }
+  readonly editorContainer = viewChild.required<ElementRef<HTMLDivElement>>('editorContainer');
 
   private editor?: monaco.editor.IStandaloneCodeEditor;
   private readonly monacoInstance = signal<typeof monaco | null>(null);
@@ -410,6 +416,7 @@ export class MonacoEditor {
         return;
       }
 
+      const componentSchemas = Object.values(catalog.components || {});
       const layoutSchema = {
         ...catalog,
         type: 'array',
@@ -440,7 +447,7 @@ export class MonacoEditor {
                 components: {
                   type: 'array',
                   items: {
-                    anyOf: Object.values(catalog.components || {}),
+                    anyOf: componentSchemas,
                   },
                 },
               },
@@ -460,6 +467,24 @@ export class MonacoEditor {
         },
       };
 
+      const galleryExampleSchema = {
+        ...catalog,
+        type: 'object',
+        properties: {
+          components: {
+            type: 'array',
+            items: {
+              anyOf: componentSchemas,
+            },
+          },
+          data: {
+            type: 'object',
+          },
+        },
+        required: ['components'],
+        additionalProperties: false,
+      };
+
       // @types/monaco-editor deprecates `monaco.languages.json` in favor of `monaco.json`,
       // but our AMD loader still attaches the JSON API to `monaco.languages.json`.
       // We safely cast through `unknown` to the modern ESM type, as the runtime structures
@@ -468,7 +493,7 @@ export class MonacoEditor {
       jsonContrib.jsonDefaults.setDiagnosticsOptions({
         validate: true,
         schemaValidation: 'error',
-        schemas: this.buildValidationSchemas(layoutSchema),
+        schemas: this.buildValidationSchemas(layoutSchema, galleryExampleSchema),
       });
     });
 
@@ -479,6 +504,16 @@ export class MonacoEditor {
       untracked(() => {
         if (this.editor) {
           this.editor.updateOptions({theme});
+        }
+      });
+    });
+
+    // Update the editor's ariaLabel when the corresponding input signal changes.
+    effect(() => {
+      const label = this.ariaLabel();
+      untracked(() => {
+        if (this.editor) {
+          this.editor.updateOptions({ariaLabel: label});
         }
       });
     });
@@ -542,7 +577,7 @@ export class MonacoEditor {
           lineNumbers: 'on',
           folding: true,
           wordWrap: 'on',
-          ariaLabel: 'Raw layout JSON',
+          ariaLabel: this.ariaLabel(),
         });
         this.editor = editor;
 
@@ -697,17 +732,26 @@ export class MonacoEditor {
    *
    * @param layoutSchema The dynamically generated schema representing the full A2UI layout
    *        structure, including the active catalog's components.
+   * @param galleryExampleSchema The schema for Gallery example drafts (`{components, data}`).
    * @return An array of schemas configured with URIs that match `$ref` references
    *          within the component schemas. We map local constants (like COMMON_TYPES_SCHEMA)
    *          to both `file:///` and HTTP URIs so the Monaco JSON worker can resolve them
    *          synchronously without needing an external schema request service.
    */
-  private buildValidationSchemas(layoutSchema: unknown): monaco.json.DiagnosticsOptions['schemas'] {
+  private buildValidationSchemas(
+    layoutSchema: unknown,
+    galleryExampleSchema: unknown,
+  ): monaco.json.DiagnosticsOptions['schemas'] {
     return [
       {
         uri: 'a2ui-catalog-schema',
-        fileMatch: [this.modelUri],
+        fileMatch: ['inmemory://model/layout-*.json'],
         schema: structuredClone(layoutSchema),
+      },
+      {
+        uri: 'a2ui-gallery-example-schema',
+        fileMatch: ['inmemory://model/gallery-draft-*.json'],
+        schema: structuredClone(galleryExampleSchema),
       },
       {
         uri: 'file:///common_types.json',
