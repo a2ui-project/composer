@@ -1103,6 +1103,18 @@ describe('A2aChatView', () => {
       return vi.mocked(hostComm.sendRenderA2UI).mock.calls;
     };
 
+    /** Delivers the canvas guest's RENDERER_READY, after which its frame sends. */
+    function announce(iframe: HTMLIFrameElement): void {
+      mockMessageStream$.next({
+        type: PreviewBridgeMessageType.RENDERER_READY,
+        payload: {},
+        origin: 'http://localhost:3000',
+        timestamp: Date.now(),
+        sourceWindow: iframe.contentWindow,
+      });
+      fixture.detectChanges();
+    }
+
     it('dispatches the canvas payload to the side-canvas iframe, not to an inline frame', async () => {
       const payload: RenderA2uiItem[] = [
         {version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}},
@@ -1112,6 +1124,7 @@ describe('A2aChatView', () => {
 
       const iframe = await canvasIframe();
       expect(iframe).toBeInstanceOf(HTMLIFrameElement);
+      announce(iframe);
       expect(renderCalls()).toContainEqual([payload, iframe]);
     });
 
@@ -1127,12 +1140,13 @@ describe('A2aChatView', () => {
       ];
       fixture.componentInstance['openCanvasSurface'](first);
       fixture.detectChanges();
+      const iframe = await canvasIframe();
+      announce(iframe);
       // Replacing the active payload while the canvas is open takes the same
       // path a later turn does.
       fixture.componentInstance['openCanvasSurface'](second);
       fixture.detectChanges();
 
-      const iframe = await canvasIframe();
       const calls = renderCalls();
       expect(calls.map(call => call[0])).toEqual(expect.arrayContaining([first, second]));
       for (const call of calls) {

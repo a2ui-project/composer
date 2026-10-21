@@ -14,42 +14,21 @@
  * limitations under the License.
  */
 
-import {
-  Component,
-  inject,
-  viewChild,
-  ElementRef,
-  effect,
-  computed,
-  DestroyRef,
-  untracked,
-  input,
-  OnInit,
-  signal,
-} from '@angular/core';
-import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {DomSanitizer} from '@angular/platform-browser';
-import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {buildRendererUrl} from '../renderer-url';
+import {Component, inject, effect, computed, untracked, input, signal} from '@angular/core';
+import {type SurfaceResizePayload} from 'a2ui-bridge';
 import {clampContentHeight} from '../content-height';
-import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
-import {
-  HostCommunication,
-  MessageEnvelope,
-} from '../../shell/host-communication/host-communication';
-import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {GuestFrame} from '../guest-frame/guest-frame';
 import {ChatState} from '../../chat/chat-state/chat-state';
 import {StateSync} from '../../chat/state-sync/state-sync';
-import {ErrorLogger} from '../../debug/error-logger.service';
-
-import {CrossFrameValidator} from '../../shell/cross-frame-validator/cross-frame-validator';
 
 /** How a {@link RenderedFrame} is sized; see {@link RenderedFrame.sizing}. */
 export type RenderedFrameSizing = 'fill' | 'content';
 
 /**
- * Orchestrates the secure, sandboxed iframe rendering the active preview target,
- * synchronizing layouts, data models, and diagnostic telemetry.
+ * Renders the active preview target in a {@link GuestFrame}, which owns the
+ * sandboxed iframe, its registration and the payload sends. This component
+ * sizes that frame, locks it while a model streams, and forgets the guest's
+ * height when a new session starts.
  *
  * In content sizing the applied height comes from `clampContentHeight`, which
  * documents how the cap bounds growth.
@@ -57,28 +36,20 @@ export type RenderedFrameSizing = 'fill' | 'content';
 @Component({
   selector: 'a2ui-composer-rendered-frame',
   standalone: true,
-  imports: [],
+  imports: [GuestFrame],
   templateUrl: './rendered-frame.ng.html',
   styleUrl: './rendered-frame.scss',
 })
-export class RenderedFrame implements OnInit {
-  private sanitizer = inject(DomSanitizer);
-  private startupResolution = inject(StartupResolution);
-  private hostCommunication = inject(HostCommunication);
-  private configProvider = inject(AppConfigProvider);
+export class RenderedFrame {
   private chatState = inject(ChatState);
   private stateSync = inject(StateSync);
-  private errorLogger = inject(ErrorLogger);
-  private readonly destroyRef = inject(DestroyRef);
-  private readonly logger = this.errorLogger.withTag('[RenderedFrame]');
 
   /**
-   * Optional layout payload to render immediately into the guest iframe.
-   * Defaults to `undefined` so the frame can distinguish an unbound `[payload]`
-   * (such as a `fill` host or a test driving heights directly) from an
-   * explicitly bound `[payload]`.
+   * The A2UI messages to render in the guest. Sent once the guest's document
+   * has announced itself with RENDERER_READY, and again when the content
+   * changes; see GuestFrame.
    */
-  readonly payload = input<unknown[] | null | undefined>(undefined);
+  readonly payload = input<unknown[] | null | undefined>(null);
 
   /**
    * How the frame is sized. Required, so that every host chooses explicitly.
@@ -105,9 +76,6 @@ export class RenderedFrame implements OnInit {
   private readonly reportedHeight = signal<number | null>(null);
 
   private lastHandledResetNonce = this.stateSync.sessionResetNonce();
-  private lastResolvedUrl = this.startupResolution.resolvedUrl();
-  private awaitingRender = false;
-  private hasRenderError = false;
 
   /**
    * Height applied in content sizing, as a CSS length: the latest report
@@ -131,177 +99,24 @@ export class RenderedFrame implements OnInit {
   /** Programmatic streams active locking Signal, mapping visual lock bounds. */
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
-  protected iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('previewIframe');
-
-  protected safeRendererUrl = computed(() => {
-    const built = buildRendererUrl(
-      this.startupResolution.resolvedUrl(),
-      untracked(() => this.configProvider.themePreference()),
-      this.logger,
-    );
-    return built ? this.sanitizer.bypassSecurityTrustResourceUrl(built) : null;
-  });
-
   constructor() {
-    effect(onCleanup => {
-      const ref = this.iframeRef();
-      const el = ref?.nativeElement ?? null;
-      if (el) {
-        this.hostCommunication.registerIframe(el);
-        onCleanup(() => {
-          this.hostCommunication.unregisterIframe(el);
-        });
-      }
-    });
-
-    effect(() => {
-      const theme = this.configProvider.themePreference();
-      this.hostCommunication.sendTheme(theme);
-    });
-
-    // Outbound payload dispatch: forwards updated A2UI declarative JSON payloads
-    // from the host/parent component to the renderer iframe over postMessage whenever
-    // the payload input signal emits a non-empty array and the iframe element is available.
-    effect(() => {
-      const payload = this.payload();
-      const iframe = this.iframeRef()?.nativeElement;
-      if (payload !== undefined && (!Array.isArray(payload) || payload.length === 0)) {
-        this.awaitingRender = false;
-        this.hasRenderError = false;
-        untracked(() => this.reportedHeight.set(null));
-        return;
-      }
-      this.dispatchPayload(payload, iframe);
-    });
-
     // A new session starts from the default size until the guest reports again.
     effect(() => {
       const nonce = this.stateSync.sessionResetNonce();
       if (nonce > this.lastHandledResetNonce) {
         this.lastHandledResetNonce = nonce;
-        this.awaitingRender = false;
-        this.hasRenderError = false;
-        untracked(() => this.reportedHeight.set(null));
-      }
-    });
-
-    // Switching the resolved renderer URL starts from the default size until
-    // the new guest reports.
-    effect(() => {
-      const url = this.startupResolution.resolvedUrl();
-      if (url !== this.lastResolvedUrl) {
-        this.lastResolvedUrl = url;
-        this.awaitingRender = false;
-        this.hasRenderError = false;
         untracked(() => this.reportedHeight.set(null));
       }
     });
   }
 
-  ngOnInit(): void {
-    // Inbound bridge listener. It re-sends the payload when the guest
-    // announces RENDERER_READY or A2UI_CATALOG, and stores every
-    // SURFACE_RESIZE report: a content-sized frame applies it as its height,
-    // while a filling frame only keeps it, for a later switch to content.
-    // Subscribed directly to messageStream$ rather than an effect so bursts of
-    // messages (e.g. SURFACE_RESIZE followed immediately by DATA_MODEL_CHANGE)
-    // do not coalesce and drop the resize report.
-    //
-    // Subscribed here rather than in the constructor because messageStream$
-    // replays its last envelope synchronously, and handling it reads the
-    // required `sizing` input, which the host has set only by now (NG0950).
-    this.hostCommunication.messageStream$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(envelope => this.handleInboundEnvelope(envelope));
-  }
-
   /**
-   * True when an envelope was sent by a frame other than this one. Until this
-   * frame's iframe exists (a replay delivered on subscription), an envelope
-   * that names a source window cannot be this frame's, so it counts as
-   * foreign; an envelope without one, as in a single-frame host, does not.
+   * Stores the guest's report in either sizing mode; `frameHeightPx` decides
+   * whether it applies. A frame that fills its host keeps its default size,
+   * and a switch to content sizing applies the latest report without waiting
+   * for another.
    */
-  private isFromOtherFrame(envelope: MessageEnvelope): boolean {
-    if (!envelope.sourceWindow) {
-      return false;
-    }
-    const myWindow = untracked(() => this.iframeRef()?.nativeElement)?.contentWindow;
-    return envelope.sourceWindow !== myWindow;
-  }
-
-  /**
-   * Handles incoming bridge messages (renderer ready, catalog ready, surface resize)
-   * without dropping messages during rapid bursts.
-   */
-  private handleInboundEnvelope(envelope: MessageEnvelope | null): void {
-    if (!envelope || this.isFromOtherFrame(envelope)) {
-      return;
-    }
-
-    if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
-      const currentPayload = untracked(() => this.payload());
-      this.hasRenderError = false;
-      if (Array.isArray(currentPayload) && currentPayload.length > 0) {
-        this.awaitingRender = true;
-        this.reportedHeight.set(null);
-      }
-      this.dispatchPayload(
-        currentPayload,
-        untracked(() => this.iframeRef()?.nativeElement),
-      );
-    } else if (envelope.type === PreviewBridgeMessageType.A2UI_CATALOG) {
-      this.dispatchPayload(
-        untracked(() => this.payload()),
-        untracked(() => this.iframeRef()?.nativeElement),
-      );
-    } else if (envelope.type === PreviewBridgeMessageType.RENDER_SUCCESS) {
-      this.awaitingRender = false;
-      this.hasRenderError = false;
-    } else if (envelope.type === PreviewBridgeMessageType.RENDER_ERROR) {
-      this.awaitingRender = false;
-      this.hasRenderError = true;
-      this.reportedHeight.set(null);
-    } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
-      // Stored in either sizing mode; `frameHeightPx` decides whether it applies.
-      // A frame that fills its host keeps its default size, and a switch to
-      // content sizing applies the latest report without waiting for another.
-      const currentPayload = untracked(() => this.payload());
-      if (
-        this.hasRenderError ||
-        this.awaitingRender ||
-        (currentPayload !== undefined &&
-          (!Array.isArray(currentPayload) || currentPayload.length === 0))
-      ) {
-        return;
-      }
-      if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
-        const resizePayload = envelope.payload as {
-          height: number;
-          width?: number;
-          contentReady?: boolean;
-        };
-        if (resizePayload.contentReady === false) {
-          return;
-        }
-        this.reportedHeight.set(resizePayload.height);
-      }
-    }
-  }
-
-  /**
-   * Dispatches the active A2UI payload to the renderer iframe once the DOM iframe element finishes loading.
-   */
-  protected syncPayloadOnIframeLoad(): void {
-    this.dispatchPayload(this.payload(), this.iframeRef()?.nativeElement);
-  }
-
-  /** Sends `payload` to `iframe` when the iframe exists and the payload is a non-empty array. */
-  private dispatchPayload(
-    payload: unknown[] | null | undefined,
-    iframe: HTMLIFrameElement | undefined,
-  ): void {
-    if (iframe && Array.isArray(payload) && payload.length > 0) {
-      this.hostCommunication.sendRenderA2UI(payload, iframe);
-    }
+  protected onSurfaceResize(report: SurfaceResizePayload): void {
+    this.reportedHeight.set(report.height);
   }
 }
