@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {GUEST_FRAME_SELECTORS} from '../../preview/guest-frame/test/guest-frame-selectors';
+
 /**
  * CSS selectors for the preview elements inside a DemoCard, relative to its
  * host. DemoCardHarness, DemosHarness and the e2e tests read them from here, so
@@ -23,8 +25,10 @@
 export const DEMO_CARD_SELECTORS = {
   /** The box the frame sits in; it gains `is-measured` once the card commits a height. */
   surface: '.demo-card-surface',
+  /** The card's GuestFrame, which the card sizes and scales; its iframe fills it. */
+  frame: `${GUEST_FRAME_SELECTORS.host}.demo-card-frame`,
   /** The sandboxed iframe that loads the demo in the guest renderer. */
-  iframe: 'iframe.demo-card-frame',
+  iframe: `${GUEST_FRAME_SELECTORS.host}.demo-card-frame ${GUEST_FRAME_SELECTORS.iframe}`,
   /** The skeleton that covers the frame until the card reveals its demo. */
   placeholder: '.demo-card-placeholder',
 } as const;

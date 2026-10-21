@@ -15,13 +15,14 @@
  */
 
 import {ComponentHarness, TestElement} from '@angular/cdk/testing';
+import {GuestFrameHarness} from '../../preview/guest-frame/test/guest-frame.harness';
 import {DEMO_CARD_SELECTORS} from './demo-card-selectors';
 
 /** Harness for one demo card on the demo wall. */
 export class DemoCardHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-demo-card';
 
-  private readonly getIframeElement = this.locatorForOptional(DEMO_CARD_SELECTORS.iframe);
+  private readonly getGuestFrame = this.locatorForOptional(GuestFrameHarness);
   private readonly getSurfaceElement = this.locatorFor(DEMO_CARD_SELECTORS.surface);
   private readonly getPlaceholder = this.locatorForOptional(DEMO_CARD_SELECTORS.placeholder);
   private readonly getError = this.locatorForOptional('.demo-card-error');
@@ -31,11 +32,20 @@ export class DemoCardHarness extends ComponentHarness {
 
   /**
    * The renderer iframe, or null while the card is unmounted. For checks that need
-   * the element itself (its window, or a stubbed width), resolve it with
+   * the element itself (its window), resolve it with
    * `TestbedHarnessEnvironment.getNativeElement`.
    */
   async getIframe(): Promise<TestElement | null> {
-    return await this.getIframeElement();
+    return (await (await this.getGuestFrame())?.getIframe()) ?? null;
+  }
+
+  /**
+   * The GuestFrame the iframe fills, which the card sizes, scales and watches for
+   * visibility, or null while the card is unmounted. For checks that need the element
+   * itself (a stubbed width), resolve it with `TestbedHarnessEnvironment.getNativeElement`.
+   */
+  async getFrame(): Promise<TestElement | null> {
+    return (await (await this.getGuestFrame())?.host()) ?? null;
   }
 
   /** The surface the frame sits in; see {@link getIframe} for reaching the element. */
@@ -121,9 +131,12 @@ export class DemoCardHarness extends ComponentHarness {
     return open >= 0 && frame > open;
   }
 
-  /** Fires the iframe's `load` event, as the browser does once a document loads. */
+  /**
+   * Fires the iframe's `load` event, as the browser does once a document loads; see
+   * GuestFrameHarness.simulateFrameLoad.
+   */
   async simulateFrameLoad(): Promise<void> {
-    await (await this.getIframeElement())?.dispatchEvent('load');
+    await (await this.getGuestFrame())?.simulateFrameLoad();
   }
 
   private async inlineStyle(element: TestElement, property: string): Promise<string> {

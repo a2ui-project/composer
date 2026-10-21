@@ -24,6 +24,7 @@ import {DemoCard, DemoCardState} from './demo-card';
 import {DemoCardHarness} from './test/demo-card.harness';
 import {MEASURE_HEIGHT_PX, READY_TIMEOUT_MS, SIZING_WINDOW_MS} from './demo-card-sizing';
 import {MAX_CONTENT_HEIGHT_PX} from '../preview/content-height';
+import {showGuestDocument} from '../preview/testing/guest-document';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {
   DefaultTarget,
@@ -185,6 +186,13 @@ describe('DemoCard sandboxed live demo frame', () => {
     return TestbedHarnessEnvironment.getNativeElement(await harness.getSurface()) as HTMLElement;
   }
 
+  /** The GuestFrame host the card sizes and scales, which its iframe fills. */
+  async function frameHostOf(harness: DemoCardHarness): Promise<HTMLElement> {
+    const frame = await harness.getFrame();
+    if (!frame) throw new Error('The card has no frame.');
+    return TestbedHarnessEnvironment.getNativeElement(frame) as HTMLElement;
+  }
+
   /** Runs the card's timers forward and lets the resulting signal writes render. */
   function advance(fixture: ComponentFixture<DemoCard>, ms: number): void {
     vi.advanceTimersByTime(ms);
@@ -333,28 +341,42 @@ describe('DemoCard sandboxed live demo frame', () => {
     ]);
   });
 
-  it('resends the demo payload after its own frame reloads', async () => {
+  it('sends the demo once when its frame loads between two handshakes', async () => {
     const {fixture, harness} = await mountCard(true);
     const iframe = (await frameOf(harness))!;
+    // The renderer's document is cross-origin, which GuestFrame tells apart from the
+    // iframe's initial about:blank document; jsdom only ever shows the latter.
+    showGuestDocument(iframe, 'renderer');
     sendMessageSpy.mockClear();
 
+    // The iframe's load event can land between a StrictMode guest's two
+    // announcements. Both belong to the same document, which already has the demo;
+    // a second send would replay createSurface and lose the demo's form state.
     emitFrom(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY, {});
-    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
-
-    // Switching renderers in Settings changes resolvedUrl(), which changes the frame's
-    // src and reloads it, so a freshly booted guest announces RENDERER_READY again.
-    // contentWindow keeps a stable WindowProxy identity across the frame's own
-    // navigations, so dedup keyed on that identity suppresses the resend and strands the
-    // card on the renderer's idle placeholder. Sent state must be per frame load.
     await harness.simulateFrameLoad();
     emitFrom(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY, {});
 
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.state()).toBe(DemoCardState.READY);
+  });
+
+  it('resends the demo after the renderer changes and the new document announces itself', async () => {
+    const {fixture, harness} = await mountCard(true);
+    const iframe = (await frameOf(harness))!;
+    sendMessageSpy.mockClear();
+    emitFrom(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY, {});
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+
+    // Switching renderers changes resolvedUrl(), so the frame loads the other
+    // renderer's document. That document has been sent nothing, and gets the demo once
+    // it announces itself; until then nothing is sent.
+    resolvedUrlSignal.set('http://localhost:3000/other-renderer');
+    fixture.detectChanges();
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+
+    emitFrom(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY, {});
+
     expect(sendMessageSpy).toHaveBeenCalledTimes(2);
-    expect(sendMessageSpy).toHaveBeenNthCalledWith(
-      1,
-      {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
-      iframe,
-    );
     expect(sendMessageSpy).toHaveBeenNthCalledWith(
       2,
       {type: PreviewBridgeMessageType.RENDER_A2UI, payload: DEMO.a2ui},
@@ -580,7 +602,7 @@ describe('DemoCard sandboxed live demo frame', () => {
       const {fixture, harness} = await visibleCard();
       const iframe = (await frameOf(harness))!;
       const surface = await surfaceOf(harness);
-      vi.spyOn(iframe, 'clientWidth', 'get').mockReturnValue(400);
+      vi.spyOn(await frameHostOf(harness), 'clientWidth', 'get').mockReturnValue(400);
       vi.spyOn(surface, 'clientWidth', 'get').mockReturnValue(400);
 
       // Start widening on an overflowing report.
@@ -621,8 +643,11 @@ describe('DemoCard sandboxed live demo frame', () => {
     it('fits overflowing content and asks for a wider card without reloading the frame', async () => {
       const {fixture, harness} = await visibleCard();
       const frame = (await frameOf(harness))!;
+      // An older bridge leaves out viewportWidth; the card falls back to the width
+      // it gives its frame.
+      const frameWidth = vi.spyOn(await frameHostOf(harness), 'clientWidth', 'get');
+      frameWidth.mockReturnValue(400);
       const surface = await surfaceOf(harness);
-      vi.spyOn(frame, 'clientWidth', 'get').mockReturnValue(400);
       vi.spyOn(surface, 'clientWidth', 'get').mockReturnValue(400);
 
       resize(fixture, frame, {height: 500, width: 800, contentReady: true});
@@ -630,7 +655,7 @@ describe('DemoCard sandboxed live demo frame', () => {
       expect(fixture.componentInstance.minimumCardWidth()).toBe(800);
 
       // Widened to 800px, the demo fits, and the card commits the height it has there.
-      vi.spyOn(frame, 'clientWidth', 'get').mockReturnValue(800);
+      frameWidth.mockReturnValue(800);
       resize(fixture, frame, {height: 460, width: 800, contentReady: true});
       expect(fixture.componentInstance.cardHeight()).toBe(460);
       expect(await harness.getSurfaceHeightPx()).toBe(230);
@@ -644,7 +669,7 @@ describe('DemoCard sandboxed live demo frame', () => {
     it('compares content width with the viewport at measurement time', async () => {
       const {fixture, harness} = await visibleCard();
       const frame = (await frameOf(harness))!;
-      vi.spyOn(frame, 'clientWidth', 'get').mockReturnValue(1124);
+      vi.spyOn(await frameHostOf(harness), 'clientWidth', 'get').mockReturnValue(1124);
       vi.spyOn(await surfaceOf(harness), 'clientWidth', 'get').mockReturnValue(1124);
 
       resize(fixture, frame, {height: 300, width: 1230, viewportWidth: 1230, contentReady: true});
@@ -733,6 +758,10 @@ describe('DemoCard sandboxed live demo frame', () => {
       sourceWindow: {} as Window,
     };
     hostCommunication.TEST_ONLY.triggerMessageStreamForTesting(foreignEnvelope);
+    // So must one that names no window at all: with many frames on the page, it
+    // cannot be told to be this card's.
+    const {sourceWindow: _omitted, ...windowless} = foreignEnvelope;
+    hostCommunication.TEST_ONLY.triggerMessageStreamForTesting(windowless);
     fixture.detectChanges();
 
     expect(fixture.componentInstance.cardHeight()).toBeNull();
