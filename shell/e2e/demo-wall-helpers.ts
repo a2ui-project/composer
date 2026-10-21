@@ -15,7 +15,12 @@
  */
 
 import {expect, type Locator, type Page} from '@playwright/test';
-import {RENDERER_URLS} from './helpers';
+import {
+  demoCardFrame,
+  demoCardIframe,
+  demoCardPlaceholder,
+} from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 
 /** Helpers shared by the demo wall's e2e tests. */
 
@@ -59,7 +64,7 @@ export function cardTitled(page: Page, title: string): Locator {
 export async function revealCard(card: Locator, timeout = REVEAL_TIMEOUT_MS): Promise<void> {
   await expect(async () => {
     await card.scrollIntoViewIfNeeded();
-    await expect(card.locator('.demo-card-placeholder')).toBeHidden({timeout: 1000});
+    await expect(demoCardPlaceholder(card)).toBeHidden({timeout: 1000});
   }).toPass({timeout});
 }
 
@@ -76,9 +81,7 @@ export interface GuestContent {
  * document.fonts.ready, and the width it is laid out at.
  */
 export function measureGuestContent(card: Locator, timeout = 5_000): Promise<GuestContent> {
-  return card
-    .locator('iframe.demo-card-frame')
-    .contentFrame()
+  return demoCardFrame(card)
     .locator('body')
     .evaluate(
       async () => {
@@ -109,7 +112,5 @@ export async function guestContentHeight(card: Locator): Promise<number> {
 
 /** The card frame's height in guest pixels: the height the card committed. */
 export function committedHeight(card: Locator): Promise<number> {
-  return card
-    .locator('iframe.demo-card-frame')
-    .evaluate(frame => (frame as HTMLIFrameElement).offsetHeight);
+  return demoCardIframe(card).evaluate(frame => (frame as HTMLIFrameElement).offsetHeight);
 }

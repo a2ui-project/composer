@@ -15,14 +15,15 @@
  */
 
 import {ComponentHarness, TestElement} from '@angular/cdk/testing';
+import {DEMO_CARD_SELECTORS} from './demo-card-selectors';
 
 /** Harness for one demo card on the demo wall. */
 export class DemoCardHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-demo-card';
 
-  private readonly getIframeElement = this.locatorForOptional('iframe.demo-card-frame');
-  private readonly getSurfaceElement = this.locatorFor('.demo-card-surface');
-  private readonly getPlaceholder = this.locatorForOptional('.demo-card-placeholder');
+  private readonly getIframeElement = this.locatorForOptional(DEMO_CARD_SELECTORS.iframe);
+  private readonly getSurfaceElement = this.locatorFor(DEMO_CARD_SELECTORS.surface);
+  private readonly getPlaceholder = this.locatorForOptional(DEMO_CARD_SELECTORS.placeholder);
   private readonly getError = this.locatorForOptional('.demo-card-error');
   private readonly getOpenButton = this.locatorFor('button.demo-card-open');
   private readonly getSubtitle = this.locatorFor('.demo-card-subtitle');

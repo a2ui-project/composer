@@ -16,11 +16,13 @@
 
 import {ComponentHarness, TestElement} from '@angular/cdk/testing';
 import type {RenderedFrameSizing} from '../rendered-frame';
+import {RENDERED_FRAME_SELECTORS} from './rendered-frame-selectors';
 
 export class RenderedFrameHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-rendered-frame';
 
-  protected getIframeElement = this.locatorForOptional('iframe');
+  protected getIframeElement = this.locatorForOptional(RENDERED_FRAME_SELECTORS.iframe);
+  private readonly getContainer = this.locatorFor(RENDERED_FRAME_SELECTORS.container);
 
   async hasIframe(): Promise<boolean> {
     const iframe = await this.getIframeElement();
@@ -43,7 +45,7 @@ export class RenderedFrameHarness extends ComponentHarness {
   }
 
   async isLocked(): Promise<boolean> {
-    const container = await this.locatorFor('.rendered-frame-container')();
+    const container = await this.getContainer();
     return await container.hasClass('is-locked');
   }
 
@@ -52,7 +54,7 @@ export class RenderedFrameHarness extends ComponentHarness {
    * when it follows the guest's reported surface height.
    */
   async getSizing(): Promise<RenderedFrameSizing> {
-    const container = await this.locatorFor('.rendered-frame-container')();
+    const container = await this.getContainer();
     const sizing = await container.getAttribute('data-sizing');
     if (sizing !== 'fill' && sizing !== 'content') {
       throw new Error(`Unexpected data-sizing on the frame container: ${sizing}.`);
@@ -72,7 +74,7 @@ export class RenderedFrameHarness extends ComponentHarness {
    * matters, not the signal behind it.
    */
   async getAppliedHeightPx(): Promise<number | null> {
-    const container = await this.locatorFor('.rendered-frame-container')();
+    const container = await this.getContainer();
     const iframe = await this.getIframeElement();
     const height = await container.getCssValue('height');
     const containerMinHeight = await container.getCssValue('min-height');
@@ -92,7 +94,7 @@ export class RenderedFrameHarness extends ComponentHarness {
 
   /** Fires the guest iframe's `load` event, as the browser does once a document loads. */
   async simulateFrameLoad(): Promise<void> {
-    const iframe = await this.locatorFor('iframe')();
+    const iframe = await this.locatorFor(RENDERED_FRAME_SELECTORS.iframe)();
     await iframe.dispatchEvent('load');
   }
 }

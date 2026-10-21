@@ -16,7 +16,8 @@
 
 import {expect, test, type Page} from '@playwright/test';
 import {connectMockAgent} from '../src/app/agent-chat/test/mock-a2a-agent';
-import {RENDERER_URLS} from './helpers';
+import {inlineSurfaceFrame} from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 
 const AGENT_URL = 'http://mock-agent.local';
 
@@ -82,10 +83,7 @@ function bubbleBlockOrder(page: Page, index: number): Promise<string[]> {
 }
 
 async function expectInlineSurface(page: Page, index: number, text: string) {
-  const frame = page
-    .locator('.inline-surface-card iframe.preview-iframe')
-    .nth(index)
-    .contentFrame();
+  const frame = inlineSurfaceFrame(page, index);
   await expect(frame.locator('body')).toContainText(text, {timeout: SURFACE_RENDER_TIMEOUT_MS});
 }
 

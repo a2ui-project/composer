@@ -16,7 +16,11 @@
 
 import {expect, test, type FrameLocator, type Page} from '@playwright/test';
 import {connectMockAgent, sseEvent} from '../src/app/agent-chat/test/mock-a2a-agent';
-import {RENDERER_URLS} from './helpers';
+import {
+  inlineSurfaceFrame,
+  sideCanvasFrame,
+} from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 
 const AGENT_URL = 'http://mock-agent.local';
 
@@ -85,15 +89,6 @@ async function sendPrompt(page: Page, text: string) {
   await prompt.press('Enter');
 }
 
-/** The guest document of the n-th inline surface in the transcript (0-based). */
-function inlineFrame(page: Page, index: number): FrameLocator {
-  return page.locator('.inline-surface-card iframe.preview-iframe').nth(index).contentFrame();
-}
-
-function canvasFrame(page: Page): FrameLocator {
-  return page.locator('.side-canvas-viewport iframe.preview-iframe').contentFrame();
-}
-
 async function expectSurface(frame: FrameLocator, text: string) {
   await expect(frame.locator('body')).toContainText(text, {timeout: SURFACE_RENDER_TIMEOUT_MS});
 }
@@ -116,7 +111,7 @@ test('inline surfaces keep their own content while the side canvas is opened and
   await sendPrompt(page, 'turn one');
   await expect(page.locator('.agent-text-content')).toContainText('Reply for turn 1.');
   await expect(page.locator('.inline-surface-card')).toHaveCount(1);
-  await expectSurface(inlineFrame(page, 0), 'INLINE SURFACE #1');
+  await expectSurface(inlineSurfaceFrame(page, 0), 'INLINE SURFACE #1');
 
   // Opening canvas #1 mounts a second frame. Its payload must reach that
   // frame only: the inline frame, which was the default dispatch target until
@@ -126,28 +121,30 @@ test('inline surfaces keep their own content while the side canvas is opened and
   // down. The permanent variant of the same misrouting is covered below.
   await page.getByRole('button', {name: 'View Turn 1 details in Canvas'}).click();
   await expect(page.locator('.side-canvas-column')).toBeVisible();
-  await expectSurface(canvasFrame(page), 'CANVAS CONTENT #1');
-  await expectSurface(inlineFrame(page, 0), 'INLINE SURFACE #1');
-  await expect(inlineFrame(page, 0).locator('body')).not.toContainText('CANVAS CONTENT');
+  await expectSurface(sideCanvasFrame(page), 'CANVAS CONTENT #1');
+  await expectSurface(inlineSurfaceFrame(page, 0), 'INLINE SURFACE #1');
+  await expect(inlineSurfaceFrame(page, 0).locator('body')).not.toContainText('CANVAS CONTENT');
 
   // Turn 2 arrives while the canvas is open and mounts a new inline frame,
   // which becomes the newest frame. Nothing already on screen may change.
   await sendPrompt(page, 'turn two');
   await expect(page.locator('.inline-surface-card')).toHaveCount(2);
-  await expectSurface(inlineFrame(page, 1), 'INLINE SURFACE #2');
-  await expectSurface(inlineFrame(page, 0), 'INLINE SURFACE #1');
-  await expectSurface(canvasFrame(page), 'CANVAS CONTENT #1');
+  await expectSurface(inlineSurfaceFrame(page, 1), 'INLINE SURFACE #2');
+  await expectSurface(inlineSurfaceFrame(page, 0), 'INLINE SURFACE #1');
+  await expectSurface(sideCanvasFrame(page), 'CANVAS CONTENT #1');
 
   // Opening canvas #2 replaces the canvas payload. Before readiness was
   // tracked per frame this payload also went to the newest frame, so the
   // turn-2 inline surface was overwritten with the canvas content for good.
   await page.getByRole('button', {name: 'View Turn 2 details in Canvas'}).click();
-  await expectSurface(canvasFrame(page), 'CANVAS CONTENT #2');
-  await expectSurface(inlineFrame(page, 1), 'INLINE SURFACE #2');
-  await expectSurface(inlineFrame(page, 0), 'INLINE SURFACE #1');
+  await expectSurface(sideCanvasFrame(page), 'CANVAS CONTENT #2');
+  await expectSurface(inlineSurfaceFrame(page, 1), 'INLINE SURFACE #2');
+  await expectSurface(inlineSurfaceFrame(page, 0), 'INLINE SURFACE #1');
   for (const index of [0, 1]) {
-    await expect(inlineFrame(page, index).locator('body')).not.toContainText('CANVAS CONTENT');
+    await expect(inlineSurfaceFrame(page, index).locator('body')).not.toContainText(
+      'CANVAS CONTENT',
+    );
   }
-  await expect(canvasFrame(page).locator('body')).not.toContainText('CANVAS CONTENT #1');
-  await expect(canvasFrame(page).locator('body')).not.toContainText('INLINE SURFACE');
+  await expect(sideCanvasFrame(page).locator('body')).not.toContainText('CANVAS CONTENT #1');
+  await expect(sideCanvasFrame(page).locator('body')).not.toContainText('INLINE SURFACE');
 });
