@@ -110,9 +110,9 @@ const MOUNT_ROOT_MARGIN = '50% 0px';
  *
  * Without it, two cards on opposite sides of the reader and near-equidistant
  * would trade one slot back and forth every time the wall reflowed or the reader
- * nudged the scrollbar, and each trade costs a frame teardown, a fresh boot and
- * a re-measure (see `DemoCard.applyReportedHeight`), which is worse than the
- * blank card this scheduling exists to avoid.
+ * nudged the scrollbar, and each trade costs a frame teardown and a fresh boot
+ * behind the card's placeholder, which is worse than the blank card this
+ * scheduling exists to avoid.
  *
  * 200px is a quarter of the 800px viewport this was measured at and under two
  * thirds of the wall's median card height there (318px), which puts it either

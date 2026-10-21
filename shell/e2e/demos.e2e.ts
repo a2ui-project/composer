@@ -21,9 +21,7 @@ import {
   expectNoCatalogWatchdog,
   trackRendererReady,
 } from './helpers';
-
-/** Number of demos every bundled renderer provides. */
-const DEMO_CARD_COUNT = 46;
+import {DEMO_CARD_COUNT, cardTitled, revealCard} from './demo-wall-helpers';
 
 /** Text the first demo (Flight status) renders once its guest is live. */
 const FIRST_DEMO_MARKER = 'VIE';
@@ -195,10 +193,11 @@ for (const renderer of [
     }) => {
       await page.setViewportSize({width: 1440, height: 1120});
       await page.goto(`/demos?renderer=http://localhost:${renderer.port}`);
-      const incremental = page.locator('a2ui-composer-demo-card', {
-        has: page.locator('.demo-card-title', {hasText: /^Incremental$/}),
-      });
-      await incremental.scrollIntoViewIfNeeded();
+      // A card commits its height only while its frame is on screen, so bring each
+      // one into view until it has revealed its demo.
+      for (const title of INCREMENTAL_AND_FOLLOWING_DEMOS) {
+        await revealCard(cardTitled(page, title), 20_000);
+      }
 
       // Incremental's list is one of the tallest demos, and three short demos follow it.
       // Pairing the first of them with the list stretched its card to the list's height,
