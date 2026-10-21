@@ -31,8 +31,9 @@ import {DomSanitizer} from '@angular/platform-browser';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
 import {MatIconModule} from '@angular/material/icon';
-import {Demo, PreviewBridgeMessageType} from 'a2ui-bridge';
+import {Demo, PreviewBridgeMessageType, SurfaceResizePayload} from 'a2ui-bridge';
 import {buildRendererUrl} from '../preview/renderer-url';
+import {MAX_CONTENT_HEIGHT_PX} from '../preview/content-height';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 import {
   DefaultTarget,
@@ -43,6 +44,15 @@ import {AppConfigProvider} from '../settings/app-config-provider/app-config-prov
 import {CrossFrameValidator} from '../shell/cross-frame-validator/cross-frame-validator';
 import {DemoLauncher} from './services/demo-launcher';
 import {ErrorLogger} from '../debug/error-logger.service';
+import {
+  initialSizing,
+  MEASURE_HEIGHT_PX,
+  previewScale,
+  READY_TIMEOUT_MS,
+  reduceSizing,
+  SizingEvent,
+  windowFor,
+} from './demo-card-sizing';
 
 /** Where a demo card is in loading its renderer iframe. */
 export enum DemoCardState {
@@ -52,125 +62,9 @@ export enum DemoCardState {
   MOUNTING = 'mounting',
   /** The renderer is ready and has been sent the demo. */
   READY = 'ready',
-  /** Nothing rendered within {@link READY_TIMEOUT_MS}. */
+  /** Nothing rendered within {@link READY_TIMEOUT_MS}, or the demo failed to render. */
   ERROR = 'error',
 }
-
-/**
- * How a card treats the height reports from its current iframe. A report is a
- * SURFACE_RESIZE message the renderer sends whenever its page changes size. See {@link
- * DemoCard.applyReportedHeight}.
- */
-enum MeasurementPhase {
-  /** Collecting reports. The last one before {@link MEASURE_SETTLE_MS} is committed. */
-  MEASURING = 'measuring',
-  /** A height is committed. Only a taller report changes it. */
-  GROWING = 'growing',
-  /** No growth for {@link GROWTH_SETTLE_MS}. Further reports are ignored. */
-  SETTLED = 'settled',
-}
-
-/**
- * CSS height the renderer frame is held at until a measurement commits.
- *
- * This constant is not cosmetic — it is the *measurement floor*. The guest bridge
- * reports `max(body.scrollHeight, documentElement.scrollHeight, body.offsetHeight,
- * documentElement.offsetHeight)`, and `documentElement.scrollHeight` can never fall
- * below the frame's own viewport, i.e. below this height. So every report the card
- * receives is `max(trueContentHeight, MEASURE_HEIGHT_PX)`, and any demo shorter than
- * this floor is indistinguishable from one exactly this tall.
- *
- * It is therefore deliberately far below any plausible rendered demo: the shortest
- * demo in the basic catalog (Row Layout) measures 56px, so a 32px floor leaves every
- * real demo measurable while still swallowing the empty pre-render document (whose
- * body is nothing but its own 16px padding, exactly this height).
- *
- * Must match the `--demo-card-measure-h` custom property in demo-card.scss.
- */
-const MEASURE_HEIGHT_PX = 32;
-
-/**
- * Largest height a demo card's rendered surface is allowed to occupy.
- *
- * A demo taller than this is committed at the clamp and scrolls inside its own frame
- * rather than being truncated: the frame is a real viewport, so the guest document
- * simply overflows it and the reader can scroll the demo in place. Tall examples scroll internally so they do not dominate a row.
- *
- * Must match the `--demo-card-max-h` custom property declared on `:host` in
- * demo-card.scss.
- */
-const MAX_CARD_HEIGHT_PX = 560;
-
-/**
- * Overflow in pixels a frame's width report may show without counting as overflow:
- * fractional widths round in either direction on both sides of the frame.
- */
-const ROUNDING_TOLERANCE_PX = 2;
-
-/**
- * Largest overflow, in pixels, that may repeat while a scaled demo still counts as
- * converging. React's invitation builder overflows by 3px twice before it fits. See
- * {@link DemoCard.recordsOverflow}.
- */
-const MAX_REPEATED_OVERFLOW_PX = 3;
-
-/**
- * Most times in a row a card widens a scaled frame for a demo that still overflows it.
- * React's invitation builder converges in 12 at its narrowest card. See
- * {@link DemoCard.recordsOverflow}.
- */
-const MAX_SCALED_WIDENINGS = 20;
-
-/**
- * How long a card collects height reports before committing one, for renderers that
- * don't say when the demo has rendered.
- *
- * Reports from this repository's bridge carry `contentReady`, and the card commits the
- * first report marked true. A renderer built on an older bridge leaves it out, so the
- * card waits instead: the first report starts this timer, and the last report received
- * before it fires is committed.
- *
- * The card can't simply commit the first report, because it usually isn't the demo.
- * While a renderer starts up it shows its own "waiting for a payload" screen, which is
- * 166px tall in the Angular sample. Once the iframe has a committed height, reports never
- * come back smaller than that height, so committing the waiting screen would leave every
- * shorter demo stuck at 166px.
- *
- * 1s comes from timing the Angular sample renderer: a visible card goes from the waiting
- * screen to the finished demo in about 60ms (the slowest, Login Form with Validation, took
- * 53ms: 166, 417, 465). That leaves plenty of headroom and is still short enough that the
- * placeholder is gone before the reader scrolls to the card, since cards load a full
- * viewport ahead.
- *
- * Later reports don't restart the timer, so a demo whose height never stops changing
- * still gets a height.
- */
-const MEASURE_SETTLE_MS = 1000;
-
-/**
- * Quiet period a committed card waits out before it stops listening for growth.
- *
- * A demo does not reach its final size in one report and not all of it arrives in the
- * first burst: images decode late, and a frame that mounted off screen is render
- * throttled by the browser and only finishes once it is scrolled into view. Recipe Card
- * grows 228 -> 395 when its image lands, up to 5.1s after the report that preceded it in
- * the runs this constant was measured from. 8s covers that with headroom.
- *
- * A long window is close to free, which is why it is set from the worst case rather than
- * the typical one. Guest reports are deduplicated and floored at the frame's own height,
- * so a card that has grown to fit its content is told nothing new and nothing moves; the
- * window governs how long a card stays *willing* to grow, not how long it churns. What it
- * does bound is a demo that animates its own height, which would otherwise reshuffle the
- * grid columns under the reader for as long as the wall is open.
- */
-const GROWTH_SETTLE_MS = 8000;
-
-/**
- * Grace period allowed for a freshly mounted frame to report RENDERER_READY.
- * Renderer-side failures are only logged inside the guest frame, so without
- * this deadline a broken demo would present as a silently blank card.
- */
-const READY_TIMEOUT_MS = 8000;
 
 /**
  * Renders one live A2UI demo inside its own sandboxed renderer iframe.
@@ -179,12 +73,11 @@ const READY_TIMEOUT_MS = 8000;
  * a wall of cards lazy, and the demo payload is dispatched exactly once per frame
  * load after that frame's own RENDERER_READY handshake.
  *
- * Height is measured rather than assumed. Until a card has a height, its frame is held at
- * {@link MEASURE_HEIGHT_PX} — far below any real demo — so the guest's reports carry the
- * content's height rather than the frame's own; the card commits the last height reported
- * inside a short window, then follows growth until the reports stop, which keeps the
- * surrounding grid from reflowing underneath the reader. See {@link
- * DemoCard.applyReportedHeight} for why no single report can be trusted on its own.
+ * The card commits its height once, while it is on screen, from the first report the
+ * guest marks ready, and then locks it: content that changes later scrolls inside the
+ * card, so the wall doesn't reflow under the reader. The rules live in the pure reducer
+ * in demo-card-sizing.ts; this component only feeds it events and renders its state.
+ * Until it commits, the frame is held at `--demo-card-measure-h` under a placeholder.
  */
 @Component({
   selector: 'a2ui-composer-demo-card',
@@ -196,6 +89,9 @@ const READY_TIMEOUT_MS = 8000;
   host: {
     // The iframe and its layout box share a scale, including after viewport changes.
     '[style.--demo-preview-scale]': 'previewScale()',
+    // The stylesheet holds the frame and caps the surface with the reducer's constants.
+    '[style.--demo-card-measure-h]': 'measureHeightCss',
+    '[style.--demo-card-max-h]': 'maxHeightCss',
   },
 })
 export class DemoCard {
@@ -213,35 +109,34 @@ export class DemoCard {
   /** Gate controlling frame attachment; the owning route drives it from viewport visibility. */
   readonly mount = input<boolean>(false);
 
-  private readonly currentState = signal(DemoCardState.IDLE);
-  /** Where this card is in loading its renderer iframe. */
-  readonly state = this.currentState.asReadonly();
+  protected readonly measureHeightCss = `${MEASURE_HEIGHT_PX}px`;
+  protected readonly maxHeightCss = `${MAX_CONTENT_HEIGHT_PX}px`;
 
-  /** Whether the renderer failed to show anything in time. */
+  /** Where the frame is in its handshake; the sizing state adds the error case. */
+  private readonly handshakeState = signal(DemoCardState.IDLE);
+
+  private readonly sizing = signal(initialSizing());
+
+  /** Where this card is in loading its renderer iframe. */
+  readonly state = computed(() =>
+    this.sizing().kind === 'error' ? DemoCardState.ERROR : this.handshakeState(),
+  );
+
+  /** Whether the renderer failed to show anything in time, or failed to render the demo. */
   protected readonly hasError = computed(() => this.state() === DemoCardState.ERROR);
 
-  private readonly currentHeight = signal<number | null>(null);
-  private readonly hasRenderedContent = signal(false);
   /**
-   * Readonly measured height in pixels, or null before any rendered report.
+   * The committed height in pixels, or null before the card has committed one.
    *
    * This is the height in the *guest's* coordinate space — what the demo measures inside
    * its own unscaled viewport — not the height the card occupies on the wall. See {@link
    * DemoCard.surfaceHeight} for the latter.
    */
-  readonly cardHeight = this.currentHeight.asReadonly();
+  readonly cardHeight = computed(() => this.sizing().height);
 
-  private readonly availableWidth = signal(0);
-  private readonly contentWidth = signal(0);
-  /**
-   * How far the demo overflowed its frame, in pixels, in the report that last widened
-   * {@link DemoCard.contentWidth}. See {@link DemoCard.recordsOverflow}.
-   */
-  private recordedOverflow = Number.POSITIVE_INFINITY;
-  /** Widenings recorded in a row from a scaled frame. See {@link DemoCard.recordsOverflow}. */
-  private scaledWidenings = 0;
   /** Width of the card around its surface: its borders and the surface's margin. */
   private readonly surfaceInset = signal(0);
+
   /**
    * Narrowest card, in pixels, that shows this demo without scaling it down, or 0 while
    * the demo has fit every card it has been shown in.
@@ -250,15 +145,13 @@ export class DemoCard {
    * widest content the demo has reported beyond its frame. The wall gives a card that
    * needs more than its half of a row a wider slot or a full row.
    */
-  readonly minimumCardWidth = computed(() =>
-    this.contentWidth() > 0 ? this.contentWidth() + this.surfaceInset() : 0,
-  );
+  readonly minimumCardWidth = computed(() => {
+    const content = this.sizing().width.content;
+    return content > 0 ? content + this.surfaceInset() : 0;
+  });
 
   /** Fit wide, interactive content without reloading the frame or losing form state. */
-  protected readonly previewScale = computed(() => {
-    const available = this.availableWidth();
-    return available > 0 && this.contentWidth() > available ? available / this.contentWidth() : 1;
-  });
+  protected readonly previewScale = computed(() => previewScale(this.sizing()));
 
   /** Names the demo when assistive technology lists the wall's launch controls. */
   protected readonly openLabel = computed(() => `Open in Composer: ${this.demo().name}`);
@@ -270,16 +163,15 @@ export class DemoCard {
   });
 
   /**
-   * How this card is treating its iframe's height reports. Goes back to measuring
-   * whenever the card gets a new iframe, so a card the wall unloads and reloads measures
-   * the demo again instead of keeping the first height it caught.
+   * The window the sizing state is waiting on. Tokens never repeat, so a new token
+   * (or a window appearing or going away) restarts the timer.
    */
-  private phase = MeasurementPhase.MEASURING;
+  private readonly sizingWindow = computed(() => windowFor(this.sizing()), {
+    equal: (a, b) => a?.token === b?.token,
+  });
 
-  /** Latest height reported inside the open measurement window, or null when none is. */
-  private pendingHeight: number | null = null;
-
-  private settleTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  /** Whether the card has committed its height and is showing it. */
+  private readonly committed = computed(() => this.sizing().kind === 'committed');
 
   /**
    * Whether the demo payload has already been sent for the frame's current document.
@@ -309,14 +201,12 @@ export class DemoCard {
   /**
    * Whether the loading placeholder should cover the surface.
    *
-   * It covers an unmounted card, as it always has, and now also a mounted card that has
-   * not committed a height yet: during that window the frame is deliberately held at
-   * {@link MEASURE_HEIGHT_PX} so the guest's reports describe its content rather than
-   * its frame, and a stunted frame — showing the renderer's own pre-payload idle screen
-   * across the top of an otherwise blank surface — is not what the reader should see.
+   * It covers an unmounted card, and a mounted card whose frame isn't showing the demo
+   * yet: before the commit the frame is held at `--demo-card-measure-h`, and a remounted
+   * frame shows the renderer's own startup screen until it renders the demo again.
    */
   protected readonly showPlaceholder = computed(
-    () => !this.hasRenderedContent() || !this.mount() || !this.safeRendererUrl(),
+    () => !this.sizing().revealed || !this.mount() || !this.safeRendererUrl(),
   );
 
   constructor() {
@@ -331,15 +221,21 @@ export class DemoCard {
     // Mount gate: opening the gate starts the ready deadline for this card only.
     effect(onCleanup => {
       if (!this.mount()) {
+        untracked(() => this.handshakeState.set(DemoCardState.IDLE));
         return;
       }
       untracked(() => {
-        if (this.currentState() === DemoCardState.IDLE) {
-          this.currentState.set(DemoCardState.MOUNTING);
+        if (this.handshakeState() === DemoCardState.IDLE) {
+          this.handshakeState.set(DemoCardState.MOUNTING);
         }
+        this.startReadyTimeout();
       });
-      this.startReadyTimeout();
       onCleanup(() => this.clearReadyTimeout());
+    });
+
+    // Once the height is committed, the ready deadline has nothing left to guard.
+    effect(() => {
+      if (this.committed()) untracked(() => this.clearReadyTimeout());
     });
 
     // Frame binding: registers this card's iframe with HostCommunication and handles
@@ -359,7 +255,7 @@ export class DemoCard {
       }
 
       this.payloadSentForCurrentLoad = false;
-      this.hasRenderedContent.set(false);
+      this.dispatch({type: 'FrameAttached'});
       this.hostCommunication.registerIframe(element, DefaultTarget.KEEP);
       const guestWindow = element.contentWindow;
       const subscription = guestWindow
@@ -367,11 +263,12 @@ export class DemoCard {
             untracked(() => this.handleEnvelope(envelope, element, guestWindow)),
           )
         : null;
+      const visibility = this.observeVisibility(element);
 
       onCleanup(() => {
+        visibility?.disconnect();
         subscription?.unsubscribe();
         this.hostCommunication.unregisterIframe(element);
-        this.endMeasurementForTornDownFrame();
       });
     });
 
@@ -387,28 +284,60 @@ export class DemoCard {
     // `load` listener (see {@link DemoCard.onFrameLoad}) remains as the cover for a
     // guest-initiated reload that doesn't change safeRendererUrl().
     effect(() => {
-      this.safeRendererUrl();
+      const url = this.safeRendererUrl();
       untracked(() => {
         this.payloadSentForCurrentLoad = false;
-        // A different renderer lays the same demo out differently, so the height measured
-        // for the outgoing one is not evidence about the incoming one. Dropping back to
-        // the measuring floor is what lets the new guest report its own content height
-        // instead of inheriting the old card's floor.
-        this.currentHeight.set(null);
-        this.hasRenderedContent.set(false);
-        this.contentWidth.set(0);
-        this.recordedOverflow = Number.POSITIVE_INFINITY;
-        this.scaledWidenings = 0;
-        this.pendingHeight = null;
-        this.phase = MeasurementPhase.MEASURING;
-        this.clearSettleTimeout();
+        // A different renderer lays the same demo out differently, so the height
+        // committed for the outgoing one is not evidence about the incoming one.
+        this.dispatch({type: 'RendererChanged'});
+        const mounting = this.mount() && url !== null;
+        this.handshakeState.set(mounting ? DemoCardState.MOUNTING : DemoCardState.IDLE);
+        if (mounting) {
+          this.startReadyTimeout();
+        } else {
+          this.clearReadyTimeout();
+        }
       });
     });
 
-    inject(DestroyRef).onDestroy(() => {
-      this.clearSettleTimeout();
-      this.clearReadyTimeout();
+    // Runs the window the sizing state asks for and reports it back by its token.
+    effect(onCleanup => {
+      const open = this.sizingWindow();
+      if (!open) return;
+      const timeoutId = setTimeout(
+        () => this.dispatch({type: 'WindowElapsed', token: open.token}),
+        open.ms,
+      );
+      onCleanup(() => clearTimeout(timeoutId));
     });
+
+    inject(DestroyRef).onDestroy(() => this.clearReadyTimeout());
+  }
+
+  private dispatch(event: SizingEvent): void {
+    untracked(() => this.sizing.update(state => reduceSizing(state, event)));
+  }
+
+  /**
+   * Reports whether the frame is on screen. Chrome stops rendering a cross-origin frame
+   * that is scrolled out of view, so only a frame on screen can be trusted to report
+   * what it shows. The iframe is observed rather than the surface, because the surface
+   * is taller than the measuring frame at its top, and no root margin is used: the
+   * question is whether the frame is on screen, not whether it is near. Where the
+   * platform has no IntersectionObserver, the frame counts as on screen, so the card
+   * still commits.
+   */
+  private observeVisibility(frame: HTMLIFrameElement): IntersectionObserver | null {
+    if (typeof IntersectionObserver === 'undefined') {
+      this.dispatch({type: 'VisibilityChanged', visible: true});
+      return null;
+    }
+    const observer = new IntersectionObserver(entries => {
+      const latest = entries[entries.length - 1];
+      if (latest) this.dispatch({type: 'VisibilityChanged', visible: latest.isIntersecting});
+    });
+    observer.observe(frame);
+    return observer;
   }
 
   /**
@@ -428,7 +357,7 @@ export class DemoCard {
 
     switch (envelope.type) {
       case PreviewBridgeMessageType.RENDERER_READY: {
-        this.currentState.set(DemoCardState.READY);
+        this.handshakeState.set(DemoCardState.READY);
         // React renderers under StrictMode announce readiness twice; the payload
         // must be dispatched exactly once per frame load.
         if (this.payloadSentForCurrentLoad) {
@@ -445,86 +374,36 @@ export class DemoCard {
         if (!CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
           return;
         }
-        const {height, width, viewportWidth, contentReady} = envelope.payload as {
-          height: number;
-          width?: number;
-          viewportWidth?: number;
-          contentReady?: boolean;
-        };
-        // Reports from this repository's bridge say whether the demo has rendered yet.
-        // Reports without contentReady come from older bridges and use the measurement
-        // window instead.
-        if (contentReady === false) {
-          // This renderer will mark the report that shows the demo, so don't commit from
-          // the window. A report the bridge sent while starting up, before it knew it could
-          // mark readiness, may already have opened one at the waiting screen's height.
-          if (this.phase === MeasurementPhase.MEASURING) {
-            this.clearSettleTimeout();
-            this.pendingHeight = null;
-          }
-          return;
-        }
+        const report = envelope.payload as SurfaceResizePayload;
         const surface = this.surfaceRef()?.nativeElement;
         if (surface) this.measureAvailableWidth(surface);
-        // Ignore the viewport's own width and fractional rounding. Only actual
-        // horizontal overflow earns a larger canvas, retained across lazy remounts.
-        const measuredViewport = viewportWidth ?? iframe.clientWidth;
-        if (measuredViewport > 0 && width !== undefined) {
-          const overflow = width - measuredViewport;
-          if (overflow > ROUNDING_TOLERANCE_PX && this.recordsOverflow(overflow)) {
-            this.contentWidth.set(Math.max(this.contentWidth(), Math.ceil(width)));
-          }
-        }
-        if (this.phase !== MeasurementPhase.SETTLED) this.applyReportedHeight(height);
-        if (
-          contentReady === true &&
-          this.phase === MeasurementPhase.MEASURING &&
-          this.pendingHeight !== null
-        ) {
-          this.clearSettleTimeout();
-          this.closeMeasurementWindow();
-        }
+        // Older bridges don't report their viewport, so fall back to the frame's width.
+        const measuredViewport = report.viewportWidth ?? iframe.clientWidth;
+        this.dispatch({
+          type: 'Resize',
+          report: {
+            height: report.height,
+            width: report.width,
+            viewportWidth: measuredViewport > 0 ? measuredViewport : undefined,
+            contentReady: report.contentReady,
+          },
+        });
         return;
       }
+      case PreviewBridgeMessageType.RENDER_SUCCESS:
+        this.dispatch({type: 'RenderSuccess'});
+        return;
+      case PreviewBridgeMessageType.RENDER_ERROR:
+        this.dispatch({type: 'RenderError'});
+        return;
       default:
         return;
     }
   }
 
-  /**
-   * Decides whether a report that overflows the frame by `overflow` pixels widens
-   * {@link DemoCard.contentWidth}, and remembers it if so.
-   *
-   * Overflow in an unscaled frame always counts. A scaled frame is widened to the
-   * content width already recorded, and some demos lay out wider in a wider frame, so
-   * the demo can overflow again. It's recorded again while that converges: while the
-   * overflow shrinks, or is within rounding of shrinking, up to
-   * {@link MAX_SCALED_WIDENINGS} times in a row. React's invitation builder settles
-   * that way, overflowing by 45, 34, 26 and so on down to 3px. A demo that is always
-   * wider than its frame by the same amount (the sample Task Card is, by about 65px at
-   * any width) stops after one, instead of shrinking its preview without end.
-   */
-  private recordsOverflow(overflow: number): boolean {
-    if (this.previewScale() === 1) {
-      this.scaledWidenings = 0;
-    } else {
-      const shrinking = overflow < this.recordedOverflow;
-      // Widths are reported in whole pixels, rounded up, so an overflow that is still
-      // shrinking can show the same few pixels twice.
-      const shrinkingWithinRounding =
-        overflow === this.recordedOverflow && overflow <= MAX_REPEATED_OVERFLOW_PX;
-      if (this.scaledWidenings >= MAX_SCALED_WIDENINGS || !(shrinking || shrinkingWithinRounding)) {
-        return false;
-      }
-      this.scaledWidenings++;
-    }
-    this.recordedOverflow = overflow;
-    return true;
-  }
-
   private measureAvailableWidth(surface: HTMLElement): void {
     if (surface.clientWidth > 0) {
-      this.availableWidth.set(surface.clientWidth);
+      this.dispatch({type: 'AvailableWidthChanged', width: surface.clientWidth});
       this.surfaceInset.set(Math.max(0, this.host.nativeElement.offsetWidth - surface.clientWidth));
     }
   }
@@ -555,120 +434,6 @@ export class DemoCard {
     this.payloadSentForCurrentLoad = false;
   }
 
-  /**
-   * Folds a height the guest has just reported into this frame's measurement.
-   *
-   * Everything here follows from one fact about the report: the guest measures
-   * `max(body/documentElement scroll and offset heights)`, and
-   * `documentElement.scrollHeight` can never come back smaller than the frame's own
-   * viewport. Every report is therefore `max(trueContentHeight, currentFrameHeight)` —
-   * the frame's height is an input to its own measurement — which is what makes a
-   * measurement *window* necessary rather than a single trusted report.
-   *
-   * **Measuring.** The window opens on the first usable report and the last report inside
-   * it wins. It has to work that way because the first report is not the demo: the
-   * renderer draws its own "waiting for a payload" screen while it boots, which measures
-   * 166px against the Angular sample, and the demo that replaces it is very often shorter.
-   * On a card's first frame nothing is committed yet, so the frame is still held at {@link
-   * MEASURE_HEIGHT_PX} and reports carry the content's own height, free to move down as
-   * well as up. On a later frame the floor is instead the height already on screen, which
-   * is what keeps the card from flashing a placeholder every time the wall remounts it;
-   * the idle screen may briefly measure above that floor, but it is never the last report
-   * in the window.
-   *
-   * **Growing.** Past the window, only a larger report carries information: the frame now
-   * fills the committed height, so a shorter measurement is not observable and an equal
-   * one says only that the content still fits. Growth is real — a late image decode, a
-   * frame that finished rendering once the browser stopped throttling it — so the card
-   * follows it upwards, converging rather than oscillating, until {@link
-   * GROWTH_SETTLE_MS} of silence settles it.
-   *
-   * In both phases a report at or below {@link MEASURE_HEIGHT_PX} is discarded. The
-   * renderer sends RENDERER_READY and a SURFACE_RESIZE together, before any content
-   * exists, so that first report measures an empty page and comes back as exactly the
-   * iframe's own height. If the card committed it, every card on the wall would be 32px
-   * tall with its demo clipped, because `.demo-card-surface` hides overflow. An earlier
-   * version of this wall had that bug. {@link DemoCard.payloadSentForCurrentLoad} can't
-   * filter the report out, because it's already true when the report arrives, so the
-   * height is the only way to tell.
-   *
-   * @param height Raw height in pixels as reported by this card's guest frame.
-   */
-  private applyReportedHeight(height: number): void {
-    const clampedHeight = Math.min(
-      MAX_CARD_HEIGHT_PX,
-      Math.max(MEASURE_HEIGHT_PX, Math.round(height)),
-    );
-    if (clampedHeight <= MEASURE_HEIGHT_PX) {
-      return;
-    }
-
-    if (this.phase === MeasurementPhase.MEASURING) {
-      this.pendingHeight = clampedHeight;
-      // Armed once, not restarted per report, so that measuring terminates even for a
-      // demo whose height never stops moving.
-      if (this.settleTimeoutId === null) {
-        this.settleTimeoutId = setTimeout(() => {
-          this.settleTimeoutId = null;
-          this.closeMeasurementWindow();
-        }, MEASURE_SETTLE_MS);
-      }
-      return;
-    }
-
-    const committedHeight = this.currentHeight();
-    if (committedHeight !== null && clampedHeight <= committedHeight) {
-      return;
-    }
-    this.currentHeight.set(clampedHeight);
-    this.restartGrowthTimeout();
-  }
-
-  /** Commits the last height measured inside the window and opens the growth phase. */
-  private closeMeasurementWindow(): void {
-    this.phase = MeasurementPhase.GROWING;
-    if (this.pendingHeight !== null) {
-      this.currentHeight.set(this.pendingHeight);
-      this.hasRenderedContent.set(true);
-      this.currentState.set(DemoCardState.READY);
-      this.clearReadyTimeout();
-      this.pendingHeight = null;
-    }
-    this.restartGrowthTimeout();
-  }
-
-  /**
-   * Closes out the measurement of a frame the wall has just taken away.
-   *
-   * A frame torn down mid-window still measured something real, so that height is
-   * committed rather than discarded: it beats leaving the card as a bare placeholder, and
-   * costs nothing if it was a fragment, because the next frame this card is given opens
-   * its own window and measures the demo again from scratch.
-   */
-  private endMeasurementForTornDownFrame(): void {
-    this.clearSettleTimeout();
-    if (this.phase === MeasurementPhase.MEASURING && this.pendingHeight !== null) {
-      this.currentHeight.set(this.pendingHeight);
-    }
-    this.pendingHeight = null;
-    this.phase = MeasurementPhase.MEASURING;
-  }
-
-  private restartGrowthTimeout(): void {
-    this.clearSettleTimeout();
-    this.settleTimeoutId = setTimeout(() => {
-      this.settleTimeoutId = null;
-      this.phase = MeasurementPhase.SETTLED;
-    }, GROWTH_SETTLE_MS);
-  }
-
-  private clearSettleTimeout(): void {
-    if (this.settleTimeoutId !== null) {
-      clearTimeout(this.settleTimeoutId);
-      this.settleTimeoutId = null;
-    }
-  }
-
   private clearReadyTimeout(): void {
     if (this.readyTimeoutId !== null) {
       clearTimeout(this.readyTimeoutId);
@@ -678,8 +443,7 @@ export class DemoCard {
 
   private startReadyTimeout(): void {
     this.clearReadyTimeout();
-    this.readyTimeoutId = setTimeout(() => {
-      if (!this.hasRenderedContent()) this.currentState.set(DemoCardState.ERROR);
-    }, READY_TIMEOUT_MS);
+    if (this.committed()) return;
+    this.readyTimeoutId = setTimeout(() => this.dispatch({type: 'ReadyTimeout'}), READY_TIMEOUT_MS);
   }
 }

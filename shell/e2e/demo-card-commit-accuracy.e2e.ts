@@ -23,49 +23,39 @@ import {
   type TestInfo,
 } from '@playwright/test';
 import {MAX_CONTENT_HEIGHT_PX} from '../src/app/preview/content-height';
-import {RENDERER_URLS} from './helpers';
+import {
+  COMMIT_TOLERANCE_PX,
+  DEMO_CARD_COUNT,
+  DEMO_RENDERERS,
+  type DemoRenderer,
+  measureGuestContent,
+  REVEAL_TIMEOUT_MS,
+  revealCard,
+} from './demo-wall-helpers';
 
 /**
  * Commit-accuracy sweep for the demo wall.
  *
  * For every demo and every bundled renderer, the height a DemoCard commits for
- * its frame must equal the guest's content height (capped at
- * MAX_CONTENT_HEIGHT_PX) within COMMIT_TOLERANCE_PX. The variants change the
- * height the frame is held at before it commits (`--demo-card-measure-h`), and
- * each variant's commits must match the default run's, to show that the
- * measurement doesn't depend on the frame's own height (DF-12).
- *
- * This is the baseline for making DemoCard commit its height once and then
- * lock it: the same sweep must pass before and after that change.
+ * its frame equals the guest's content height (capped at MAX_CONTENT_HEIGHT_PX)
+ * within COMMIT_TOLERANCE_PX, including after the wall changes the card's width.
+ * The variants change the height the frame is held at before it commits
+ * (`--demo-card-measure-h`), and each variant's commits match the default run's,
+ * so the measurement doesn't depend on the frame's own height. A throttled run
+ * checks the same under CPU load.
  */
-
-/** Number of demos every bundled renderer provides. */
-const DEMO_CARD_COUNT = 46;
-
-/**
- * Largest difference allowed between the committed and the content height, in
- * guest pixels. A scaled card's surface height is floored in wall pixels, so
- * its frame can be up to 1/previewScale guest pixels short of the commit.
- */
-const COMMIT_TOLERANCE_PX = 2;
-
-/** How long one card may take to mount and reveal its demo. */
-const REVEAL_TIMEOUT_MS = 30_000;
 
 /** How long a revealed card's committed height may take to reach its content height. */
 const CONVERGE_TIMEOUT_MS = 5_000;
 
-const RENDERERS = [
-  {name: 'Angular', url: RENDERER_URLS.angular},
-  {name: 'Lit', url: RENDERER_URLS.lit},
-  {name: 'React', url: RENDERER_URLS.react},
-] as const;
-
 /**
- * Pre-commit frame heights to sweep. null keeps the stylesheet's own
+ * Pre-commit frame heights to sweep. null keeps the card's own
  * `--demo-card-measure-h`; the others override it.
  */
 const MEASURE_HEIGHTS = [null, '600px', '100px'] as const;
+
+/** How much the throttled run slows the CPU down. */
+const CPU_THROTTLING_RATE = 4;
 
 /** One SURFACE_RESIZE as the top window received it. */
 interface SurfaceReport {
@@ -94,12 +84,11 @@ interface CardMeasurement {
   content: number;
   /** The same measurement taken before waiting for document.fonts.ready. */
   contentBeforeFonts: number;
-  /** Height of the first report marked contentReady: what the card committed at reveal. */
+  /** Height of the first report marked contentReady from the card's current frame. */
   firstReadyHeight: number | null;
   /**
    * Every width the demo has been laid out at since it revealed, in any of the
-   * card's frames: the widths of the ready reports and the current one. More
-   * than one means the wall resized the card after it committed.
+   * card's frames: the widths of the ready reports and the current one.
    */
   widths: number[];
   /** The width the demo is laid out at now, in guest pixels. */
@@ -114,8 +103,8 @@ interface CardMeasurement {
  * Records every SURFACE_RESIZE the top window receives and, for a variant,
  * overrides the pre-commit frame height. Runs in every frame; only the top
  * window acts. The style goes in before the app boots, so no card can mount
- * at the stylesheet's height first, which page.addStyleTag after navigation
- * could not guarantee.
+ * at its own measuring height first, which page.addStyleTag after navigation
+ * could not guarantee; `!important` wins over the height the card binds.
  */
 async function installProbe(page: Page, measureHeight: string | null): Promise<void> {
   await page.addInitScript(override => {
@@ -158,41 +147,7 @@ function cardByKey(page: Page, key: string): Locator {
   return page.locator(`a2ui-composer-demo-card[data-demo-key=${JSON.stringify(key)}]`);
 }
 
-/**
- * The guest's content height after its webfonts have loaded, and the width it
- * is laid out at. Mirrors measureAndDispatch() in
- * bridge/src/surface-resize-observer.ts.
- */
-function guestContent(
-  card: Locator,
-): Promise<{beforeFonts: number; afterFonts: number; width: number}> {
-  return card
-    .locator('iframe.demo-card-frame')
-    .contentFrame()
-    .locator('body')
-    .evaluate(
-      async () => {
-        const measure = () =>
-          Math.max(
-            Math.ceil(document.body.getBoundingClientRect().height),
-            document.body.scrollHeight,
-            document.body.offsetHeight,
-            document.documentElement.offsetHeight,
-          );
-        const beforeFonts = measure();
-        await document.fonts.ready;
-        return {
-          beforeFonts,
-          afterFonts: measure(),
-          width: document.documentElement.clientWidth,
-        };
-      },
-      undefined,
-      {timeout: CONVERGE_TIMEOUT_MS},
-    );
-}
-
-/** The card's committed frame height and the reports its current frame sent. */
+/** The card's committed frame height and the reports its frames sent. */
 function cardState(card: Locator) {
   return card.evaluate(host => {
     const iframe = host.querySelector<HTMLIFrameElement>('iframe.demo-card-frame');
@@ -200,8 +155,7 @@ function cardState(card: Locator) {
     const reports = allReports.filter(
       report => iframe !== null && report.source === iframe.contentWindow,
     );
-    const firstReadyIndex = reports.findIndex(report => report.contentReady === true);
-    const readyReports = firstReadyIndex < 0 ? [] : reports.slice(firstReadyIndex);
+    const firstReady = reports.find(report => report.contentReady === true);
     const key = host.getAttribute('data-demo-key');
     return {
       title: host.querySelector('.demo-card-title')?.textContent?.trim() ?? '',
@@ -209,7 +163,7 @@ function cardState(card: Locator) {
       previewScale:
         parseFloat(getComputedStyle(host).getPropertyValue('--demo-preview-scale')) || 1,
       measureHeight: getComputedStyle(host).getPropertyValue('--demo-card-measure-h').trim(),
-      firstReadyHeight: readyReports[0]?.height ?? null,
+      firstReadyHeight: firstReady?.height ?? null,
       // Every frame the card has had: the wall remounts frames as the reader scrolls.
       readyWidths: allReports.flatMap(report =>
         report.cardKey === key && report.contentReady === true && report.viewportWidth !== undefined
@@ -238,20 +192,11 @@ function isAccurate(measurement: CardMeasurement): boolean {
 }
 
 /**
- * Whether the wall resized the card after it committed. The wall packs cards
- * into rows by their heights, so a card's width can change as its neighbours
- * commit, and a wider demo is often shorter. The current DemoCard follows only
- * growth after its commit, so it keeps the taller height. The commit-once
- * change accepts a fresh commit when the available width changes (DF-15);
- * remove this exemption there, so the sweep checks that too.
+ * Takes one measurement of a card that holds a frame. `slowdown` stretches the
+ * timeout for a throttled CPU.
  */
-function relaidOutAfterCommit(measurement: CardMeasurement): boolean {
-  return measurement.widths.length > 1;
-}
-
-/** Takes one measurement of a card that holds a frame. */
-async function measureCard(card: Locator, key: string): Promise<CardMeasurement> {
-  const content = await guestContent(card);
+async function measureCard(card: Locator, key: string, slowdown: number): Promise<CardMeasurement> {
+  const content = await measureGuestContent(card, CONVERGE_TIMEOUT_MS * slowdown);
   const state = await cardState(card);
   return {
     key,
@@ -270,28 +215,28 @@ async function measureCard(card: Locator, key: string): Promise<CardMeasurement>
 
 /**
  * Brings a card on screen, waits for it to reveal its demo, and measures it,
- * giving its committed height time to follow its content (the current growth
- * phase does). Returns the last measurement whether or not it is accurate.
+ * giving it time to take the one fresh commit it is allowed when the wall
+ * changes its width as neighbours commit. Returns the last measurement whether
+ * or not it is accurate.
  *
  * The card has to be on screen: Chrome stops rendering a cross-origin frame
  * that is scrolled out of view, so the guest's ResizeObserver, and with it
- * every SURFACE_RESIZE, waits until the frame is visible again. A card that
- * mounts off screen and then gets a late image only grows once the reader
- * scrolls to it.
+ * every SURFACE_RESIZE, waits until the frame is visible again.
  */
-async function measureOnScreen(card: Locator, key: string): Promise<CardMeasurement> {
-  await expect(async () => {
-    await card.scrollIntoViewIfNeeded();
-    await expect(card.locator('.demo-card-placeholder')).toBeHidden({timeout: 1000});
-  }).toPass({timeout: REVEAL_TIMEOUT_MS});
+async function measureOnScreen(
+  card: Locator,
+  key: string,
+  slowdown: number,
+): Promise<CardMeasurement> {
+  await revealCard(card, REVEAL_TIMEOUT_MS * slowdown);
   const result: {last?: CardMeasurement} = {};
   try {
     await expect(async () => {
       // Neighbours that finish measuring can push the card back off screen.
       await card.scrollIntoViewIfNeeded();
-      result.last = await measureCard(card, key);
+      result.last = await measureCard(card, key, slowdown);
       expect(isAccurate(result.last)).toBe(true);
-    }).toPass({timeout: CONVERGE_TIMEOUT_MS});
+    }).toPass({timeout: CONVERGE_TIMEOUT_MS * slowdown});
   } catch (error) {
     // An inaccurate card is reported with all the others by the caller.
     if (!result.last) throw error;
@@ -305,7 +250,7 @@ async function measureOnScreen(card: Locator, key: string): Promise<CardMeasurem
  * wall keeps at most MAX_MOUNTED_CARDS frames and mounts the cards nearest the
  * viewport, so each card mounts as the sweep reaches it.
  */
-async function sweepWall(page: Page): Promise<CardMeasurement[]> {
+async function sweepWall(page: Page, slowdown: number): Promise<CardMeasurement[]> {
   const cards = page.locator('a2ui-composer-demo-card');
   await expect(cards).toHaveCount(DEMO_CARD_COUNT);
   const keys = await cards.evaluateAll(elements =>
@@ -313,21 +258,21 @@ async function sweepWall(page: Page): Promise<CardMeasurement[]> {
   );
   const measurements: CardMeasurement[] = [];
   for (const key of keys) {
-    measurements.push(await measureOnScreen(cardByKey(page, key), key));
+    measurements.push(await measureOnScreen(cardByKey(page, key), key, slowdown));
   }
   return measurements;
 }
 
-function table(rows: readonly CardMeasurement[], renderer: string): string {
+function table(rows: readonly CardMeasurement[], label: string): string {
   const header =
-    'demo | renderer | committed | content | before fonts | first ready | widths | scale | ' +
+    'demo | run | committed | content | before fonts | first ready | widths | scale | ' +
     'reports (height[? = not ready]@frame height/w viewport width)';
   return [
     header,
     ...rows.map(row =>
       [
         `${row.title} (${row.key})`,
-        renderer,
+        label,
         row.error ? 'error' : row.committed,
         row.content,
         row.contentBeforeFonts,
@@ -341,14 +286,15 @@ function table(rows: readonly CardMeasurement[], renderer: string): string {
 }
 
 /**
- * Attaches what the commit-once change needs to know, without asserting it:
- * demos whose content changed once webfonts loaded (DF-14), demos whose
- * content differs from the report a card that commits once would keep (late
- * images, late layout), and demos the wall resized after their commit.
+ * Attaches evidence for diagnosing a failure: demos whose content changed once
+ * webfonts loaded, demos whose content differs from their first contentReady
+ * report (late images, late layout), and demos the wall laid out at more than
+ * one width after they revealed, which rely on the fresh commit a width change
+ * allows.
  */
 async function attachEvidence(
   testInfo: TestInfo,
-  renderer: string,
+  label: string,
   measurements: readonly CardMeasurement[],
 ): Promise<void> {
   const fontsChanged = measurements.filter(
@@ -360,37 +306,41 @@ async function attachEvidence(
       Math.abs(expectedHeight(row.content) - expectedHeight(Math.ceil(row.firstReadyHeight))) >
         COMMIT_TOLERANCE_PX,
   );
-  const relaidOut = measurements.filter(row => !isAccurate(row) && relaidOutAfterCommit(row));
+  const relaidOut = measurements.filter(row => row.widths.length > 1);
   const report = [
     `Content changed after document.fonts.ready (${fontsChanged.length}):`,
-    table(fontsChanged, renderer),
+    table(fontsChanged, label),
     '',
-    `Content differs from the first contentReady report, which a card that commits once ` +
-      `would keep (${changedSinceReveal.length}):`,
-    table(changedSinceReveal, renderer),
+    `Content differs from the first contentReady report (${changedSinceReveal.length}):`,
+    table(changedSinceReveal, label),
     '',
-    `Inaccurate, but resized by the wall after the commit; not asserted (${relaidOut.length}):`,
-    table(relaidOut, renderer),
+    `Laid out at more than one width after revealing (${relaidOut.length}):`,
+    table(relaidOut, label),
     '',
     'All demos:',
-    table(measurements, renderer),
+    table(measurements, label),
   ].join('\n');
-  await testInfo.attach('commit-accuracy', {body: report, contentType: 'text/plain'});
-  console.log(`[${renderer} ${testInfo.title}]\n${report}`);
+  await testInfo.attach(`commit-accuracy ${label}`, {body: report, contentType: 'text/plain'});
+  console.log(`[${testInfo.title} ${label}]\n${report}`);
 }
 
 /**
  * Sweeps the wall once in a fresh page, with the given pre-commit frame height
- * (null for the stylesheet's own), and attaches the evidence.
+ * (null for the card's own), and attaches the evidence.
  */
 async function sweepVariant(
   context: BrowserContext,
   testInfo: TestInfo,
-  renderer: {name: string; url: string},
+  renderer: DemoRenderer,
   measureHeight: string | null,
+  {cpuThrottlingRate = 1} = {},
 ): Promise<CardMeasurement[]> {
   const page = await context.newPage();
   try {
+    if (cpuThrottlingRate !== 1) {
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', {rate: cpuThrottlingRate});
+    }
     await page.emulateMedia({colorScheme: 'light'});
     await installProbe(page, measureHeight);
     await page.goto(`/demos?renderer=${renderer.url}`);
@@ -402,12 +352,25 @@ async function sweepVariant(
       expect((await cardState(first)).measureHeight).toBe(measureHeight);
     }
 
-    const measurements = await sweepWall(page);
+    const measurements = await sweepWall(page, cpuThrottlingRate);
     await attachEvidence(testInfo, `${renderer.name} ${measureHeight ?? 'default'}`, measurements);
     return measurements;
   } finally {
     await page.close();
   }
+}
+
+function expectAccurate(
+  label: string,
+  renderer: DemoRenderer,
+  measurements: readonly CardMeasurement[],
+): void {
+  const inaccurate = measurements.filter(row => !isAccurate(row));
+  expect(
+    inaccurate,
+    `${label}: committed height differs from min(content, ${MAX_CONTENT_HEIGHT_PX}) by ` +
+      `more than ${COMMIT_TOLERANCE_PX}px:\n${table(inaccurate, renderer.name)}`,
+  ).toEqual([]);
 }
 
 /** A variant's commit that differs from the default run's for the same demo. */
@@ -436,7 +399,6 @@ function compareWithBaseline(
     for (const row of measurements) {
       const base = byKey.get(row.key);
       if (!base || base.error || row.error) continue;
-      if (relaidOutAfterCommit(base) || relaidOutAfterCommit(row)) continue;
       if (Math.abs(base.frameWidth - row.frameWidth) > COMMIT_TOLERANCE_PX) {
         skipped.push(`${row.key} at ${variant}: ${row.frameWidth} vs ${base.frameWidth}px wide`);
         continue;
@@ -454,7 +416,7 @@ function compareWithBaseline(
   return {mismatches, skipped};
 }
 
-for (const renderer of RENDERERS) {
+for (const renderer of DEMO_RENDERERS) {
   test(`${renderer.name} demo cards commit their content height at any pre-commit height`, async ({
     context,
   }, testInfo) => {
@@ -462,20 +424,14 @@ for (const renderer of RENDERERS) {
     test.setTimeout(240_000);
     const runs: Array<{variant: string; measurements: CardMeasurement[]}> = [];
     for (const measureHeight of MEASURE_HEIGHTS) {
-      const variant = measureHeight ?? 'default';
       runs.push({
-        variant,
+        variant: measureHeight ?? 'default',
         measurements: await sweepVariant(context, testInfo, renderer, measureHeight),
       });
     }
 
     for (const {variant, measurements} of runs) {
-      const inaccurate = measurements.filter(row => !isAccurate(row) && !relaidOutAfterCommit(row));
-      expect(
-        inaccurate,
-        `${variant}: committed height differs from min(content, ${MAX_CONTENT_HEIGHT_PX}) by ` +
-          `more than ${COMMIT_TOLERANCE_PX}px:\n${table(inaccurate, renderer.name)}`,
-      ).toEqual([]);
+      expectAccurate(variant, renderer, measurements);
     }
 
     const [baseline, ...variants] = runs;
@@ -489,5 +445,21 @@ for (const renderer of RENDERERS) {
       `Committed height depends on the pre-commit frame height (skipped as laid out at ` +
         `another width: ${skipped.length})`,
     ).toEqual([]);
+  });
+}
+
+// The renderers whose first contentReady report most often differed from the
+// final height before the bridge waited for the content to settle.
+for (const renderer of DEMO_RENDERERS.filter(({name}) => name !== 'Lit')) {
+  test(`${renderer.name} demo cards commit their content height under CPU load`, async ({
+    context,
+  }, testInfo) => {
+    test.slow();
+    // A whole-wall sweep at a quarter of the CPU.
+    test.setTimeout(360_000);
+    const measurements = await sweepVariant(context, testInfo, renderer, null, {
+      cpuThrottlingRate: CPU_THROTTLING_RATE,
+    });
+    expectAccurate(`${CPU_THROTTLING_RATE}x CPU throttling`, renderer, measurements);
   });
 }
