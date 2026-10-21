@@ -423,7 +423,7 @@ export function mergeA2uiItems(
   priorSessionItems?: readonly RenderA2uiItem[],
 ): RenderA2uiItem[] {
   const normalizedNew = normalizeA2uiItems(newItems);
-  if (!normalizedNew || normalizedNew.length === 0) return existingItems ? [...existingItems] : [];
+  if (normalizedNew.length === 0) return [...existingItems];
 
   const newCreateSurfaces = new Set<string>();
   for (const item of normalizedNew) {
