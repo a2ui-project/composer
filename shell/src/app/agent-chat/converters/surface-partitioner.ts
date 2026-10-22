@@ -489,7 +489,7 @@ function categorizeSurfaceItems(items: RenderA2uiItem[]): CategorizedSurfaceItem
   const createSurfaceItems: RenderA2uiItem[] = [];
   const updateDataModelItems: RenderA2uiItem[] = [];
   const componentMap = new Map<string, Record<string, unknown>>();
-  const priorChildIds = new Set<string>();
+  const childIds = new Set<string>();
   const otherItems: RenderA2uiItem[] = [];
 
   for (const item of items) {
@@ -500,15 +500,13 @@ function categorizeSurfaceItems(items: RenderA2uiItem[]): CategorizedSurfaceItem
       updateDataModelItems.push(item);
     }
     if (item.updateComponents?.components && Array.isArray(item.updateComponents.components)) {
-      for (const existingComponent of componentMap.values()) {
-        for (const reference of extractChildReferences(existingComponent)) {
-          priorChildIds.add(reference);
-        }
-      }
       for (const comp of item.updateComponents.components) {
         if (typeof comp === 'object' && comp !== null) {
           const componentObject = comp as Record<string, unknown>;
-          const id = String(componentObject['id'] ?? '');
+          for (const reference of extractChildReferences(componentObject)) {
+            childIds.add(reference);
+          }
+          const id = String(componentObject['id']);
           componentMap.set(id, {...componentMap.get(id), ...componentObject});
         }
       }
@@ -518,8 +516,10 @@ function categorizeSurfaceItems(items: RenderA2uiItem[]): CategorizedSurfaceItem
     }
   }
 
-  if (priorChildIds.size > 0) {
-    const rootIds = new Set(Array.from(componentMap.keys()).filter(id => !priorChildIds.has(id)));
+  // Prune child components from earlier updates that are no longer reachable
+  // after a parent component's children were replaced.
+  if (childIds.size > 0) {
+    const rootIds = new Set(Array.from(componentMap.keys()).filter(id => !childIds.has(id)));
     const reachableIds = collectDescendantIds(rootIds, componentMap);
     for (const id of componentMap.keys()) {
       if (!reachableIds.has(id)) componentMap.delete(id);
