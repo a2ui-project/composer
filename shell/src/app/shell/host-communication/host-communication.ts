@@ -52,9 +52,10 @@ export enum DefaultTarget {
   /** The newly registered frame becomes the default target. */
   REPLACE = 'replace',
   /**
-   * The default target stays as it is, and the frame receives only messages
-   * addressed to it. `unregisterIframe` can still fall back to it if the
-   * default frame is unregistered first.
+   * The default target stays as it is (or becomes this frame if none is
+   * registered yet), and the frame otherwise receives only messages addressed
+   * to it. `unregisterIframe` can also fall back to it if the default frame is
+   * unregistered first.
    */
   KEEP = 'keep',
 }
@@ -520,6 +521,11 @@ export class HostCommunication implements OnDestroy {
         this.iframeWindows.set(iframe, sourceWindow);
       }
     }
+    if (!this.hasExplicitDefaultTarget && !this.isTargetReady(undefined)) {
+      this.iframeElement =
+        Array.from(this.registeredIframes).find(f => f.contentWindow === sourceWindow) ?? null;
+      this.iframeWindow = sourceWindow;
+    }
     this.isRendererReadySignal.set(true);
   }
 
@@ -568,6 +574,8 @@ export class HostCommunication implements OnDestroy {
     }
   }
 
+  private hasExplicitDefaultTarget = false;
+
   /**
    * Registers an active iframe DOM element or content window target and flushes
    * any buffered early messages. Supports multiple concurrent iframes.
@@ -592,6 +600,7 @@ export class HostCommunication implements OnDestroy {
       this.outboundMessageBuffer.length = 0;
       this.iframeElement = null;
       this.iframeWindow = null;
+      this.hasExplicitDefaultTarget = false;
       this.registeredIframes.clear();
       this.registeredWindows.clear();
       this.iframeWindows.clear();
@@ -628,10 +637,14 @@ export class HostCommunication implements OnDestroy {
     if (defaultTarget === DefaultTarget.REPLACE) {
       this.iframeElement = this.isIframeElement(target) ? target : null;
       this.iframeWindow = windowTarget;
+      this.hasExplicitDefaultTarget = true;
       // Untargeted messages were meant for the previous default frame. This
       // frame is now the default, so replaying them would misroute them here;
       // drop them. Messages addressed to other frames stay queued.
       this.dropQueuedMessages(queuedTarget => !queuedTarget);
+    } else if (this.iframeElement === null && this.iframeWindow === null) {
+      this.iframeElement = this.isIframeElement(target) ? target : null;
+      this.iframeWindow = windowTarget;
     }
     this.isRendererReadySignal.set(this.readyWindows.size > 0);
     if (windowTarget) {
@@ -650,12 +663,17 @@ export class HostCommunication implements OnDestroy {
   unregisterIframe(target: HTMLIFrameElement | Window): void {
     if (!target) return;
     let targetWindow: Window | null = null;
+    let wasDefaultTarget = false;
     if (this.isIframeElement(target)) {
       targetWindow = this.iframeWindows.get(target) ?? target.contentWindow;
       this.iframeWindows.delete(target);
       this.registeredIframes.delete(target);
       if (this.iframeElement === target) {
-        this.iframeElement = this.registeredIframes.values().next().value ?? null;
+        wasDefaultTarget = true;
+        const readyIframe = Array.from(this.registeredIframes).find(
+          f => f.contentWindow !== null && this.readyWindows.has(f.contentWindow),
+        );
+        this.iframeElement = readyIframe ?? this.registeredIframes.values().next().value ?? null;
         this.iframeWindow = this.iframeElement
           ? this.iframeElement.contentWindow
           : (this.registeredWindows.values().next().value ?? null);
@@ -665,6 +683,7 @@ export class HostCommunication implements OnDestroy {
       targetWindow = target;
       this.registeredWindows.delete(target);
       if (this.iframeWindow === target) {
+        wasDefaultTarget = true;
         const nextWindow = this.registeredWindows.values().next().value ?? null;
         if (nextWindow) {
           this.iframeWindow = nextWindow;
@@ -687,6 +706,12 @@ export class HostCommunication implements OnDestroy {
       this.readyWindows.clear();
     }
     this.isRendererReadySignal.set(this.readyWindows.size > 0);
+    if (wasDefaultTarget) {
+      this.hasExplicitDefaultTarget = false;
+      if (this.isTargetReady(undefined)) {
+        this.flushOutboundMessages();
+      }
+    }
   }
 
   /**
@@ -805,6 +830,7 @@ export class HostCommunication implements OnDestroy {
     this.readyWindows.clear();
     this.iframeElement = null;
     this.iframeWindow = null;
+    this.hasExplicitDefaultTarget = false;
     this.messageStreamSubject.complete();
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this.messageListener);

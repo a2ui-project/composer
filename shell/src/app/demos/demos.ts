@@ -36,6 +36,7 @@ import {DemosCatalog} from './services/demos-catalog';
 import {DemoCard} from './demo-card';
 import {BentoGrid, bentoLayout} from './bento-layout';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
+import {DefaultTarget} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 
 /**
@@ -175,6 +176,7 @@ const DEMO_KEY_ATTRIBUTE = 'data-demo-key';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Demos implements OnInit, OnDestroy {
+  protected readonly DefaultTarget = DefaultTarget;
   private readonly demosCatalog = inject(DemosCatalog);
   private readonly startupResolution = inject(StartupResolution);
 

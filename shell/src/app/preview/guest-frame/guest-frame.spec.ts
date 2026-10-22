@@ -427,10 +427,60 @@ describe('GuestFrame', () => {
           return {...mounted, iframe};
         }
 
-        it('is sent nothing by its load', async () => {
-          await reloadAnnouncedBeforeLoad();
+        it('immediately re-sends the current payload on load without waiting for a repeat READY or payload change', async () => {
+          const {iframe} = await reloadAnnouncedBeforeLoad();
 
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+        });
+
+        it('delivers the payload on READY #3 when a StrictMode guest (READY #1 -> load #1 -> READY #2) reloads with load #2 before READY #3', async () => {
+          const {fixture, iframe} = await reloadAnnouncedBeforeLoad();
+          // If READY #2 was Document 1's post-load StrictMode repeat and load #2
+          // was Document 2's load before READY #3, Document 2 was not listening
+          // at load #2 and needs the payload when its READY #3 arrives.
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(3);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+
+          // A StrictMode repeat READY #4 on Document 2 does not send again.
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(3);
+        });
+
+        it('resets on load #2 and waits for READY #3 when Document 1 completed rendering after its StrictMode repeat READY #2', async () => {
+          const {fixture, harness} = await mount(host => host.payload.set(PAYLOAD));
+          const iframe = await iframeOf(harness);
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          await harness.simulateFrameLoad();
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDER_SUCCESS);
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
+
+          await harness.simulateFrameLoad();
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
+
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+        });
+
+        it('delivers the payload on load #2 without revoking readiness when Document 1 loaded before READY #1 and Document 2 announced READY #2 before load #2', async () => {
+          const {fixture, harness} = await mount(host => host.payload.set(PAYLOAD));
+          const iframe = await iframeOf(harness);
+          // Document 1: load #1 -> READY #1
+          await harness.simulateFrameLoad();
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
+          hostCommunication.registerIframe.mockClear();
+
+          // Document 2: READY #2 -> load #2
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          await harness.simulateFrameLoad();
+
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+          expect(hostCommunication.registerIframe).not.toHaveBeenCalled();
         });
 
         it('gets the next payload change at once', async () => {
@@ -439,17 +489,37 @@ describe('GuestFrame', () => {
           fixture.componentInstance.payload.set(NEXT_PAYLOAD);
           fixture.detectChanges();
 
-          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(3);
           expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(NEXT_PAYLOAD, iframe);
         });
 
-        it('gets the current payload when it announces itself again', async () => {
-          const {fixture, iframe} = await reloadAnnouncedBeforeLoad();
+        it('delivers the payload on READY #3 after a StrictMode guest loaded before its two READY announcements, both with and without RENDER_SUCCESS', async () => {
+          const {fixture, harness} = await mount(host => host.payload.set(PAYLOAD));
+          const iframe = await iframeOf(harness);
+          // First document (React StrictMode): load -> READY #1 -> READY #2 -> RENDER_SUCCESS
+          await harness.simulateFrameLoad();
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDER_SUCCESS);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
+
+          // Reloaded document: load arrives before the new document's READY.
+          await harness.simulateFrameLoad();
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
 
           fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
           fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
-
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+
+          // Reload again before RENDER_SUCCESS arrives after the StrictMode repeat READY:
+          // load #3 sends in case READY was pre-load, and READY #5 still delivers to the new document.
+          await harness.simulateFrameLoad();
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(3);
+
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(4);
           expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
         });
       });
@@ -519,6 +589,27 @@ describe('GuestFrame', () => {
           fixture.componentInstance.payload.set(structuredClone(PAYLOAD));
           fixture.detectChanges();
 
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(3);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+        });
+
+        it('is sent again after the payload is cleared to null or empty and then restored', async () => {
+          const {fixture, harness} = await mount(host => host.payload.set(PAYLOAD));
+          const iframe = await iframeOf(harness);
+          fromGuest(fixture, iframe, PreviewBridgeMessageType.RENDERER_READY);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(1);
+
+          fixture.componentInstance.payload.set(null);
+          fixture.detectChanges();
+          fixture.componentInstance.payload.set(structuredClone(PAYLOAD));
+          fixture.detectChanges();
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(2);
+          expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
+
+          fixture.componentInstance.payload.set([]);
+          fixture.detectChanges();
+          fixture.componentInstance.payload.set(structuredClone(PAYLOAD));
+          fixture.detectChanges();
           expect(hostCommunication.sendRenderA2UI).toHaveBeenCalledTimes(3);
           expect(hostCommunication.sendRenderA2UI).toHaveBeenLastCalledWith(PAYLOAD, iframe);
         });
@@ -630,6 +721,16 @@ describe('GuestFrame', () => {
           {output: 'documentReplaced'},
           {output: 'documentReplaced'},
         ]);
+      });
+
+      it('does not report documentReplaced when resolvedUrl transitions from initial null to the first URL', async () => {
+        resolvedUrl.set(null);
+        const {fixture} = await mount();
+        expect(fixture.componentInstance.events).toEqual([]);
+
+        resolvedUrl.set(RENDERER_URL);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.events).toEqual([]);
       });
 
       it('does not report documentReplaced for a reload of the same URL', async () => {

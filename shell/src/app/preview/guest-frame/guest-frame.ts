@@ -108,6 +108,12 @@ export class GuestFrame implements OnInit {
    * nothing was sent, because the document already has it or there is none.
    */
   readonly rendererReady = output<void>();
+  /**
+   * Emits whenever `syncPayload` dispatches `RENDER_A2UI` to the guest frame:
+   * `true` for the first payload sent to the current document, and `false` for
+   * subsequent payload updates on the same document.
+   */
+  readonly payloadDispatched = output<boolean>();
   /** The guest rendered the payload. */
   readonly renderSuccess = output<void>();
   /** The guest failed to render the payload. */
@@ -120,6 +126,11 @@ export class GuestFrame implements OnInit {
   readonly documentReplaced = output<void>();
 
   private readonly iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('guestIframe');
+
+  /** Whether an iframe element is currently rendered for a valid renderer URL. */
+  readonly hasIframe = computed(
+    () => this.safeRendererUrl() !== null && this.iframeRef() !== undefined,
+  );
 
   protected readonly safeRendererUrl = computed(() => {
     const built = buildRendererUrl(
@@ -134,10 +145,18 @@ export class GuestFrame implements OnInit {
   private readyForCurrentLoad = false;
   /** The current document has fired its `load` event. */
   private loadedCurrentDocument = false;
-  /** The current document announced itself before its `load` event. */
-  private announcedBeforeLoad = false;
-  /** A RENDERER_READY arrived after the most recent `load` event. */
+  /**
+   * A repeat RENDERER_READY arrived while the current document was already
+   * ready and has not yet completed a render cycle.
+   */
   private readySinceLoad = false;
+  /**
+   * The most recent `load` event took the pre-load reload path and sent the
+   * payload immediately; if another RENDERER_READY arrives before a render
+   * completion, that `load` was a post-load reload and the new document needs
+   * the payload on its RENDERER_READY.
+   */
+  private reloadedOnLoad = false;
   /**
    * The payload last sent to the current document, as `stableStringify`
    * writes it, or null while the document has been sent nothing.
@@ -155,13 +174,17 @@ export class GuestFrame implements OnInit {
     });
 
     // A new renderer URL loads a new document, which announces itself again.
-    let mounted = false;
+    let previousUrl = untracked(() => this.safeRendererUrl());
     effect(() => {
-      this.safeRendererUrl();
+      const url = this.safeRendererUrl();
       untracked(() => {
+        if (url === previousUrl) return;
+        const hadDocument = previousUrl !== null;
+        previousUrl = url;
         this.resetForNewDocument();
-        if (mounted) this.documentReplaced.emit();
-        mounted = true;
+        if (hadDocument) {
+          this.documentReplaced.emit();
+        }
       });
     });
 
@@ -182,8 +205,7 @@ export class GuestFrame implements OnInit {
   }
 
   /**
-   * Tells a reloaded document from the current one. Neither this nor a URL
-   * change ever sends: only RENDERER_READY says a document can receive.
+   * Tells a reloaded document from the current one.
    *
    * The `load` event and the guest's RENDERER_READY arrive in either order,
    * and a React guest under StrictMode announces itself twice per document.
@@ -196,31 +218,22 @@ export class GuestFrame implements OnInit {
    * ignored. The renderer's document is cross-origin or has a real URL.
    *
    * A reloaded document that announces itself before its `load` looks like a
-   * repeat of the old document's announcement. When the old document also
-   * announced itself before its `load`, a READY since that load is taken as
-   * the new document's: the frame stays ready and only forgets what it sent,
-   * so the next payload change, or a repeat READY, sends to the new document.
-   * Its current payload still waits for one of those, since nothing is sent
-   * on `load`. Otherwise the frame waits for the new document's READY and
-   * holds every payload change until then.
-   *
-   * Both rules guess, since RENDERER_READY carries no per-document id:
-   * - A reloaded document that announces itself before its `load`, after an
-   *   old document that announced itself after its own, is taken for a
-   *   repeat. The frame then holds every payload change, for good.
-   * - A StrictMode repeat that arrives after the old document's `load`, when
-   *   that document announced itself before it, is taken for a reloaded
-   *   document's announcement. If the next document then loads before it
-   *   announces itself, a payload change in between is posted before its
-   *   renderer listens, and is lost.
+   * repeat of the old document's announcement. When a repeat READY arrived
+   * after the first document's READY without a subsequent render completion,
+   * that `load` forgets what was sent to the old document, immediately
+   * synchronizes the current payload with the reloaded document, and marks
+   * `reloadedOnLoad` in case the repeat READY was actually a StrictMode repeat
+   * before a post-load reload. Otherwise the frame resets for the new document
+   * and waits for its RENDERER_READY.
    */
   protected onLoad(): void {
     if (this.iframeRef()?.nativeElement.contentDocument?.URL === 'about:blank') return;
     if (!this.loadedCurrentDocument) {
       this.loadedCurrentDocument = true;
-      this.announcedBeforeLoad = this.readyForCurrentLoad;
-    } else if (this.announcedBeforeLoad && this.readySinceLoad) {
+    } else if (this.readySinceLoad) {
+      this.reloadedOnLoad = true;
       this.lastSentPayload = null;
+      this.syncPayload();
     } else {
       this.resetForNewDocument();
       this.loadedCurrentDocument = true;
@@ -231,8 +244,8 @@ export class GuestFrame implements OnInit {
   private resetForNewDocument(): void {
     this.readyForCurrentLoad = false;
     this.loadedCurrentDocument = false;
-    this.announcedBeforeLoad = false;
     this.readySinceLoad = false;
+    this.reloadedOnLoad = false;
     this.lastSentPayload = null;
     const iframe = this.iframeRef()?.nativeElement;
     if (iframe) {
@@ -247,21 +260,33 @@ export class GuestFrame implements OnInit {
     }
 
     switch (envelope.type) {
-      case PreviewBridgeMessageType.RENDERER_READY:
+      case PreviewBridgeMessageType.RENDERER_READY: {
+        const wasReady = this.readyForCurrentLoad;
         this.readyForCurrentLoad = true;
-        this.readySinceLoad = true;
+        if (wasReady) {
+          this.readySinceLoad = true;
+        }
+        if (this.reloadedOnLoad) {
+          this.reloadedOnLoad = false;
+          this.lastSentPayload = null;
+        }
         this.syncPayload();
         this.rendererReady.emit();
         return;
+      }
       case PreviewBridgeMessageType.SURFACE_RESIZE:
         if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
           this.surfaceResize.emit(envelope.payload as SurfaceResizePayload);
         }
         return;
       case PreviewBridgeMessageType.RENDER_SUCCESS:
+        this.readySinceLoad = false;
+        this.reloadedOnLoad = false;
         this.renderSuccess.emit();
         return;
       case PreviewBridgeMessageType.RENDER_ERROR:
+        this.readySinceLoad = false;
+        this.reloadedOnLoad = false;
         this.renderError.emit();
         return;
       default:
@@ -280,13 +305,19 @@ export class GuestFrame implements OnInit {
    * replay createSurface and lose what the user typed.
    */
   private syncPayload(): void {
+    const payload = this.payload();
+    if (!Array.isArray(payload) || payload.length === 0) {
+      this.lastSentPayload = null;
+      return;
+    }
     if (!this.readyForCurrentLoad) return;
     const iframe = this.iframeRef()?.nativeElement;
-    const payload = this.payload();
-    if (!iframe || !Array.isArray(payload) || payload.length === 0) return;
+    if (!iframe) return;
     const content = stableStringify(payload);
     if (content === this.lastSentPayload) return;
+    const initialForDocument = this.lastSentPayload === null;
     this.lastSentPayload = content;
     this.hostCommunication.sendRenderA2UI(payload, iframe);
+    this.payloadDispatched.emit(initialForDocument);
   }
 }

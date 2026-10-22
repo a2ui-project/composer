@@ -502,6 +502,36 @@ describe('DemoCard sandboxed live demo frame', () => {
       expect(fixture.componentInstance.state()).toBe(DemoCardState.ERROR);
     });
 
+    it('stays idle and does not start a ready timeout or observe visibility when mounted without a valid renderer URL', async () => {
+      resolvedUrlSignal.set(null);
+      Object.defineProperty(window, 'IntersectionObserver', {
+        value: undefined,
+        writable: true,
+      });
+
+      const {fixture, harness} = await mountCard(true);
+      expect(await harness.getIframe()).toBeNull();
+      expect(fixture.componentInstance.state()).toBe(DemoCardState.IDLE);
+
+      advance(fixture, READY_TIMEOUT_MS);
+      expect(fixture.componentInstance.state()).toBe(DemoCardState.IDLE);
+      expect(await harness.isErrorShown()).toBe(false);
+
+      // Unsafe URL also stays IDLE without arming a ready timeout.
+      resolvedUrlSignal.set('javascript:alert(1)');
+      fixture.detectChanges();
+      advance(fixture, READY_TIMEOUT_MS);
+      expect(fixture.componentInstance.state()).toBe(DemoCardState.IDLE);
+      expect(await harness.isErrorShown()).toBe(false);
+
+      // Once a valid renderer URL resolves, the card transitions to MOUNTING and arms its timeout.
+      resolvedUrlSignal.set(RENDERER_URL);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.state()).toBe(DemoCardState.MOUNTING);
+      advance(fixture, READY_TIMEOUT_MS);
+      expect(fixture.componentInstance.state()).toBe(DemoCardState.ERROR);
+    });
+
     it('recovers from a timeout when the demo renders after all', async () => {
       const {fixture, harness} = await visibleCard();
       const iframe = (await frameOf(harness))!;

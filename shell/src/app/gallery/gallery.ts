@@ -44,7 +44,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {CategorizedComponents, GalleryCatalog} from './services/gallery-catalog';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
-import {HostCommunication} from '../shell/host-communication/host-communication';
+import {DefaultTarget, HostCommunication} from '../shell/host-communication/host-communication';
 import {formatJson} from '../utils/json';
 import {PreviewBridgeMessageType, ComponentUsage, RenderA2uiItem} from 'a2ui-bridge';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
@@ -125,6 +125,7 @@ interface JsonFieldError {
   styleUrl: './gallery.scss',
 })
 export class Gallery implements OnInit, OnDestroy {
+  protected readonly DefaultTarget = DefaultTarget;
   private readonly catalogService = inject(GalleryCatalog);
   protected readonly catalogManagement = inject(CatalogManagement);
   private readonly hostCommunication = inject(HostCommunication);

@@ -177,6 +177,8 @@ export class DemoCard {
 
   protected readonly surfaceRef = viewChild<ElementRef<HTMLElement>>('demoSurface');
 
+  private readonly guestFrame = viewChild<GuestFrame>('guestFrame');
+
   /**
    * The card's GuestFrame, as the element the card sizes and scales; its iframe fills
    * it exactly, so its box is the iframe's.
@@ -204,9 +206,11 @@ export class DemoCard {
       onCleanup(() => observer.disconnect());
     });
 
-    // Mount gate: opening the gate starts the ready deadline for this card only.
+    // Mount gate: opening the gate starts the ready deadline for this card only when an
+    // iframe is actually rendered inside the guest frame.
     effect(onCleanup => {
-      if (!this.mount()) {
+      const hasIframe = this.guestFrame()?.hasIframe() ?? false;
+      if (!this.mount() || !hasIframe) {
         untracked(() => this.handshakeState.set(DemoCardState.IDLE));
         return;
       }
@@ -229,7 +233,8 @@ export class DemoCard {
     // messages its own guest window sends.
     effect(onCleanup => {
       const frame = this.frameRef()?.nativeElement;
-      if (!frame) {
+      const hasIframe = this.guestFrame()?.hasIframe() ?? false;
+      if (!frame || !hasIframe) {
         return;
       }
       this.dispatch({type: 'FrameAttached'});
@@ -300,7 +305,8 @@ export class DemoCard {
    */
   protected onDocumentReplaced(): void {
     this.dispatch({type: 'RendererChanged'});
-    if (this.mount()) {
+    const hasIframe = this.guestFrame()?.hasIframe() ?? false;
+    if (this.mount() && hasIframe) {
       this.handshakeState.set(DemoCardState.MOUNTING);
       this.startReadyTimeout();
     } else {

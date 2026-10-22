@@ -2097,6 +2097,27 @@ describe('HostCommunication', () => {
       return {frame: {contentWindow: frameWindow} as unknown as HTMLIFrameElement, frameWindow};
     }
 
+    it('becomes the initial default target when no default target is registered yet, and keeps it when later KEEP frames register', () => {
+      const firstInline = createFrame();
+      service.registerIframe(firstInline.frame, DefaultTarget.KEEP);
+      expect(service.getIframeElement()).toBe(firstInline.frame);
+
+      const secondInline = createFrame();
+      service.registerIframe(secondInline.frame, DefaultTarget.KEEP);
+      expect(service.getIframeElement()).toBe(firstInline.frame);
+
+      announce(firstInline.frameWindow);
+      announce(secondInline.frameWindow);
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+
+      const getCatalog = {type: PreviewBridgeMessageType.GET_CATALOG};
+      expect(firstInline.frameWindow.postMessage).toHaveBeenCalledWith(getCatalog, RENDERER_ORIGIN);
+      expect(secondInline.frameWindow.postMessage).not.toHaveBeenCalledWith(
+        getCatalog,
+        RENDERER_ORIGIN,
+      );
+    });
+
     it('leaves untargeted messages going to the frame that is already the default target', () => {
       const coordinator = createFrame();
       service.registerIframe(coordinator.frame);
@@ -2216,6 +2237,53 @@ describe('HostCommunication', () => {
       // no queued copy of the broadcast trails behind it.
       for (const frame of loading) announce(frame.frameWindow);
       for (const frame of all) expect(themeCalls(frame)).toEqual([[dark, RENDERER_ORIGIN]]);
+    });
+
+    it('promotes a ready DefaultTarget.KEEP frame when no explicit REPLACE target is registered and the first KEEP frame is not ready yet', () => {
+      const firstKeep = createFrame();
+      const secondKeep = createFrame();
+      service.registerIframe(firstKeep.frame, DefaultTarget.KEEP);
+      service.registerIframe(secondKeep.frame, DefaultTarget.KEEP);
+
+      // Queued while neither KEEP frame is ready.
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      expect(firstKeep.frameWindow.postMessage).not.toHaveBeenCalled();
+      expect(secondKeep.frameWindow.postMessage).not.toHaveBeenCalled();
+
+      // The second KEEP frame finishes handshaking before the first one.
+      announce(secondKeep.frameWindow);
+      expect(service.getIframeElement()).toBe(secondKeep.frame);
+
+      const getCatalog = {type: PreviewBridgeMessageType.GET_CATALOG};
+      expect(secondKeep.frameWindow.postMessage).toHaveBeenCalledWith(getCatalog, RENDERER_ORIGIN);
+      expect(firstKeep.frameWindow.postMessage).not.toHaveBeenCalledWith(
+        getCatalog,
+        RENDERER_ORIGIN,
+      );
+    });
+
+    it('prefers a ready fallback frame and flushes queued untargeted messages when the unready default target is unregistered', () => {
+      const coordinator = createFrame();
+      const unreadyCard = createFrame();
+      const readyCard = createFrame();
+      service.registerIframe(coordinator.frame, DefaultTarget.REPLACE);
+      service.registerIframe(unreadyCard.frame, DefaultTarget.KEEP);
+      service.registerIframe(readyCard.frame, DefaultTarget.KEEP);
+
+      // readyCard is already up, while coordinator is still unready when GET_CATALOG is queued.
+      announce(readyCard.frameWindow);
+      vi.mocked(readyCard.frameWindow.postMessage).mockClear();
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+      expect(readyCard.frameWindow.postMessage).not.toHaveBeenCalled();
+
+      // Unregistering the unready coordinator falls back to the ready card and flushes GET_CATALOG.
+      service.unregisterIframe(coordinator.frame);
+      expect(service.getIframeElement()).toBe(readyCard.frame);
+      expect(readyCard.frameWindow.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.GET_CATALOG},
+        RENDERER_ORIGIN,
+      );
+      expect(unreadyCard.frameWindow.postMessage).not.toHaveBeenCalled();
     });
   });
 });
