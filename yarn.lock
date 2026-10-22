@@ -5,30 +5,30 @@ __metadata:
   version: 8
   cacheKey: 10c0
 
-"@a2ui/angular@npm:0.10.4":
-  version: 0.10.4
-  resolution: "@a2ui/angular@npm:0.10.4"
+"@a2ui/angular@npm:0.10.7":
+  version: 0.10.7
+  resolution: "@a2ui/angular@npm:0.10.7"
   dependencies:
-    "@a2ui/web_core": "npm:^0.10.5"
+    "@a2ui/web_core": "npm:^0.11.0"
     tslib: "npm:^2.8.1"
     zod: "npm:^3.25.76"
   peerDependencies:
-    "@a2ui/markdown-it": "*"
+    "@a2ui/markdown-it": ^0.1.2
     "@angular/common": ^21.2.5
     "@angular/core": ^21.2.5
     "@angular/platform-browser": ^21.2.5
   peerDependenciesMeta:
     "@a2ui/markdown-it":
       optional: true
-  checksum: 10c0/ead6f0691c533c1b7a6c2d7378b7bb187e2a0387db2c8dbbbecf23a81dd7c51e04bacd654b4ab20431a951de13946a0ab5bc6f070c42ebbfae666893257d210e
+  checksum: 10c0/ef6da1f8d700fe40d34f881742322d9c783c930248eebd289b5f90156b2af682f0b22e2e6abd0162bf772b4a4854efea4433dc422a916ff0bc6a6567d244b15e
   languageName: node
   linkType: hard
 
-"@a2ui/lit@npm:0.10.2":
-  version: 0.10.2
-  resolution: "@a2ui/lit@npm:0.10.2"
+"@a2ui/lit@npm:0.10.3":
+  version: 0.10.3
+  resolution: "@a2ui/lit@npm:0.10.3"
   dependencies:
-    "@a2ui/web_core": "npm:^0.10.5"
+    "@a2ui/web_core": "npm:^0.10.6"
     "@lit-labs/signals": "npm:^0.3.0"
     "@lit/context": "npm:^1.1.6"
     lit: "npm:^3.3.3"
@@ -39,11 +39,11 @@ __metadata:
   peerDependenciesMeta:
     "@a2ui/markdown-it":
       optional: true
-  checksum: 10c0/2aa2c4ac9e72a5a383dc24d1f97ca318731d55b0ae72623bb907a3646f127951d0247420fe302e7c2f0870ecad3a1e36c68bb2af351d8a9dc6914040aa795525
+  checksum: 10c0/e9abc6d64d75485916caf9b115c0100e0cc0ae841b8d622d6c94feb0dddab166fe71db0ac28970df0a6b489da9a40c2a09ee80d58701cda1a51ba21337a2e47a
   languageName: node
   linkType: hard
 
-"@a2ui/markdown-it@npm:*, @a2ui/markdown-it@npm:0.1.0":
+"@a2ui/markdown-it@npm:*":
   version: 0.1.0
   resolution: "@a2ui/markdown-it@npm:0.1.0"
   dependencies:
@@ -52,6 +52,18 @@ __metadata:
   peerDependencies:
     "@a2ui/web_core": ^0.10.3
   checksum: 10c0/0ac904dac548d100eec1c2794d64b07d32509172af91f82add87c868f7815d2cd7c2c1b6212a14d6b70eba4ac2ca35345e9a9b663e6a1e9123e258d9ed2653b5
+  languageName: node
+  linkType: hard
+
+"@a2ui/markdown-it@npm:0.1.2":
+  version: 0.1.2
+  resolution: "@a2ui/markdown-it@npm:0.1.2"
+  dependencies:
+    dompurify: "npm:3.4.11"
+    markdown-it: "npm:^14.2.0"
+  peerDependencies:
+    "@a2ui/web_core": ^0.11.0
+  checksum: 10c0/0e70f82125d7e784d9bdfa51851790ffdf4779c2632c5b8aeaaa6c188275527d4f6c346ca91182385e4869d2178bc2a8134e3d9cba8034f9dbef4914d3a4a373
   languageName: node
   linkType: hard
 
@@ -6119,7 +6131,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "a2ui-bridge@workspace:bridge"
   dependencies:
-    "@a2ui/web_core": "npm:0.10.5"
+    "@a2ui/web_core": "npm:0.10.7"
     "@angular/core": "npm:22.2.3"
     "@lit/context": "npm:1.1.6"
     "@modelcontextprotocol/sdk": "npm:1.32.1"
@@ -9437,9 +9449,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "lit-basic-catalog@workspace:samples/lit-basic-catalog"
   dependencies:
-    "@a2ui/lit": "npm:0.10.2"
-    "@a2ui/markdown-it": "npm:0.1.0"
-    "@a2ui/web_core": "npm:0.10.5"
+    "@a2ui/lit": "npm:0.10.3"
+    "@a2ui/markdown-it": "npm:0.1.2"
+    "@a2ui/web_core": "npm:0.10.7"
     "@lit-labs/signals": "npm:0.3.0"
     "@lit/context": "npm:1.1.6"
     a2ui-bridge: "npm:0.1.0"
@@ -10098,9 +10110,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "ng-basic-catalog@workspace:samples/ng-basic-catalog"
   dependencies:
-    "@a2ui/angular": "npm:0.10.4"
-    "@a2ui/markdown-it": "npm:0.1.0"
-    "@a2ui/web_core": "npm:0.10.5"
+    "@a2ui/angular": "npm:0.10.7"
+    "@a2ui/markdown-it": "npm:0.1.2"
+    "@a2ui/web_core": "npm:0.10.7"
     "@analogjs/vite-plugin-angular": "npm:2.9.2"
     "@angular-devkit/build-angular": "npm:22.2.4"
     "@angular/animations": "npm:22.2.3"
@@ -11072,9 +11084,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "react-basic-catalog@workspace:samples/react-basic-catalog"
   dependencies:
-    "@a2ui/markdown-it": "npm:0.1.0"
+    "@a2ui/markdown-it": "npm:0.1.2"
     "@a2ui/react": "patch:@a2ui/react@npm%3A0.10.2#~/.yarn/patches/@a2ui-react-npm-0.10.2-877cbd9ad2.patch"
-    "@a2ui/web_core": "npm:0.10.5"
+    "@a2ui/web_core": "npm:0.10.7"
     "@types/react": "npm:19.2.17"
     "@types/react-dom": "npm:19.2.3"
     "@vitejs/plugin-react": "npm:6.0.3"

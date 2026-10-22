@@ -12,9 +12,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@a2ui/angular": "0.10.4",
-    "@a2ui/markdown-it": "0.1.0",
-    "@a2ui/web_core": "0.10.5",
+    "@a2ui/angular": "0.10.7",
+    "@a2ui/markdown-it": "0.1.2",
+    "@a2ui/web_core": "0.10.7",
     "@angular/animations": "22.2.3",
     "@angular/common": "22.2.3",
     "@angular/compiler": "22.2.3",
