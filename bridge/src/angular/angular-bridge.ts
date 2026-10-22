@@ -83,6 +83,8 @@ export class A2uiSandboxConnection implements OnDestroy {
   private readonly injector = inject(Injector);
   private readonly markdownRenderer = inject(MarkdownRenderer, {optional: true});
   private pendingContentRender?: AfterRenderRef;
+  private pendingContentResolve?: () => void;
+  private contentRenderGeneration = 0;
   private destroyed = false;
 
   /**
@@ -97,6 +99,37 @@ export class A2uiSandboxConnection implements OnDestroy {
     } catch {
       // Text falls back to its raw markdown; there is nothing more to wait for.
     }
+  }
+
+  private cancelPendingContentRender(): void {
+    ++this.contentRenderGeneration;
+    const ref = this.pendingContentRender;
+    const resolve = this.pendingContentResolve;
+    this.pendingContentRender = undefined;
+    this.pendingContentResolve = undefined;
+    ref?.destroy();
+    resolve?.();
+  }
+
+  private waitForNextRender(): Promise<void> {
+    return new Promise<void>(resolve => {
+      if (this.destroyed) {
+        resolve();
+        return;
+      }
+      this.pendingContentResolve = resolve;
+      const ref = afterNextRender(
+        () => {
+          if (this.pendingContentRender === ref) {
+            this.pendingContentRender = undefined;
+            this.pendingContentResolve = undefined;
+          }
+          resolve();
+        },
+        {injector: this.injector},
+      );
+      this.pendingContentRender = ref;
+    });
   }
 
   /**
@@ -130,18 +163,15 @@ export class A2uiSandboxConnection implements OnDestroy {
         this.surfaceId.set(surfaceId);
       },
       onInitialRender: async () => {
+        this.cancelPendingContentRender();
+        const generation = this.contentRenderGeneration;
         await this.markdownLoaded();
-        if (this.destroyed) return;
-        await new Promise<void>(resolve => {
-          this.pendingContentRender?.destroy();
-          this.pendingContentRender = afterNextRender(
-            () => {
-              this.pendingContentRender = undefined;
-              resolve();
-            },
-            {injector: this.injector},
-          );
-        });
+        if (this.destroyed || generation !== this.contentRenderGeneration) return;
+        await this.waitForNextRender();
+        if (this.destroyed || generation !== this.contentRenderGeneration) return;
+        await this.markdownLoaded();
+        if (this.destroyed || generation !== this.contentRenderGeneration) return;
+        await this.waitForNextRender();
       },
       onSurfaceCleared: () => {
         this.surfaceId.set('');
@@ -163,8 +193,7 @@ export class A2uiSandboxConnection implements OnDestroy {
    */
   ngOnDestroy(): void {
     this.destroyed = true;
-    this.pendingContentRender?.destroy();
-    this.pendingContentRender = undefined;
+    this.cancelPendingContentRender();
     this.rendererConnection?.unsubscribe();
     this.rendererConnection = null;
   }

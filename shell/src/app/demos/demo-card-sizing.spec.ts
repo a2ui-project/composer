@@ -286,13 +286,42 @@ describe('demo card sizing', () => {
       expect(state.kind).toBe('awaiting');
     });
 
-    it('does not time out a committed card', () => {
-      const state = reduceAll(visibleCard(), [
+    it('does not time out a revealed committed card, but errors if a remounted frame fails or times out while unrevealed', () => {
+      const committed = reduceAll(visibleCard(), [ready(240), {type: 'ReadyTimeout'}]);
+      expect(committed.kind).toBe('committed');
+      expect(committed.height).toBe(240);
+
+      const timedOutRemount = reduceAll(visibleCard(), [
         ready(240),
         {type: 'FrameAttached'},
         {type: 'ReadyTimeout'},
       ]);
-      expect(state.kind).toBe('committed');
+      expect(timedOutRemount.kind).toBe('error');
+      expect(timedOutRemount.height).toBe(240);
+
+      const erroredRemount = reduceAll(visibleCard(), [
+        ready(240),
+        {type: 'FrameAttached'},
+        {type: 'RenderError'},
+      ]);
+      expect(erroredRemount.kind).toBe('error');
+      expect(erroredRemount.height).toBe(240);
+
+      // Resizing an errored remounted card back to its committedFrameWidth (or resizing a scaled
+      // errored remounted card that stays scaled at width.content) must keep kind: 'error'.
+      const widthBouncedTimedOut = reduceAll(timedOutRemount, [
+        {type: 'AvailableWidthChanged', width: 300},
+        {type: 'AvailableWidthChanged', width: 400},
+      ]);
+      expect(widthBouncedTimedOut.kind).toBe('error');
+      expect(widthBouncedTimedOut.height).toBe(240);
+
+      const widthBouncedErrored = reduceAll(erroredRemount, [
+        {type: 'AvailableWidthChanged', width: 300},
+        {type: 'AvailableWidthChanged', width: 400},
+      ]);
+      expect(widthBouncedErrored.kind).toBe('error');
+      expect(widthBouncedErrored.height).toBe(240);
     });
   });
 
@@ -306,6 +335,61 @@ describe('demo card sizing', () => {
       state = reduceAll(state, [notReady(166), ready(388)]);
       expect(state.height).toBe(304);
       expect(state.revealed).toBe(true);
+    });
+
+    it('does not reveal or fresh-commit an older bridge startup report on remount before RENDER_SUCCESS', () => {
+      let sameWidth = reduceAll(visibleCard(), [legacy(166), RENDER_SUCCESS, legacy(304)]);
+      sameWidth = elapse(sameWidth);
+      expect(sameWidth.height).toBe(304);
+
+      sameWidth = reduceAll(sameWidth, [{type: 'FrameAttached'}, VISIBLE, legacy(130)]);
+      expect(sameWidth.revealed).toBe(false);
+      expect(sameWidth.height).toBe(304);
+      expect(sameWidth.frame.latest).toBeNull();
+
+      // RENDER_SUCCESS alone must not reveal prematurely using the ignored pre-render 130px report.
+      sameWidth = reduceSizing(sameWidth, RENDER_SUCCESS);
+      expect(sameWidth.revealed).toBe(false);
+      expect(sameWidth.height).toBe(304);
+
+      sameWidth = reduceSizing(sameWidth, legacy(304));
+      expect(sameWidth.revealed).toBe(true);
+      expect(sameWidth.height).toBe(304);
+
+      let resizedWidth = reduceAll(visibleCard(), [legacy(166), RENDER_SUCCESS, legacy(304)]);
+      resizedWidth = elapse(resizedWidth);
+      resizedWidth = reduceAll(resizedWidth, [
+        {type: 'AvailableWidthChanged', width: 300},
+        {type: 'FrameAttached'},
+        VISIBLE,
+        resize({height: 130, width: 300, viewportWidth: 300}),
+      ]);
+      // Startup screen before RENDER_SUCCESS must not be recorded in frame.latest, reveal, or take acceptsFreshCommit.
+      expect(resizedWidth.frame.latest).toBeNull();
+      expect(resizedWidth.revealed).toBe(false);
+      expect(resizedWidth.height).toBe(304);
+      expect(resizedWidth.kind === 'committed' && resizedWidth.acceptsFreshCommit).toBe(true);
+
+      // Even if a legacyRenderSuccess window elapses without a post-render report, it must not commit 130.
+      const afterRenderSuccessOnly = reduceSizing(resizedWidth, RENDER_SUCCESS);
+      expect(elapse(afterRenderSuccessOnly).height).toBe(304);
+
+      // A post-RENDER_SUCCESS report on an older bridge opens legacySettling (300ms) rather than committing immediately.
+      resizedWidth = reduceAll(afterRenderSuccessOnly, [
+        resize({height: 260, width: 300, viewportWidth: 300}),
+      ]);
+      expect(resizedWidth.kind).toBe('fallbackWindow');
+      expect(windowFor(resizedWidth)!.ms).toBe(SIZING_WINDOW_MS.legacySettling);
+      expect(resizedWidth.height).toBe(304);
+
+      resizedWidth = reduceSizing(
+        resizedWidth,
+        resize({height: 280, width: 300, viewportWidth: 300}),
+      );
+      resizedWidth = elapse(resizedWidth);
+      expect(resizedWidth.kind).toBe('committed');
+      expect(resizedWidth.revealed).toBe(true);
+      expect(resizedWidth.height).toBe(280);
     });
 
     it('starts over for a frame replaced before it committed', () => {
@@ -609,6 +693,49 @@ describe('demo card sizing', () => {
       expect(state.kind === 'committed' && state.acceptsFreshCommit).toBe(true);
       state = reduceSizing(state, ready(290, {width: 300, viewportWidth: 300}));
       expect(state.height).toBe(290);
+    });
+
+    it('discards an in-flight W2 re-measurement when the width changes again to W3', () => {
+      // 1. In-flight hidden awaiting (pending: true) and becameVisible fallbackWindow at W2 = 300
+      let fromVisibleWindow = reduceAll(visibleCard(), [
+        ready(300),
+        HIDDEN,
+        {type: 'AvailableWidthChanged', width: 300},
+        ready(260, {width: 300, viewportWidth: 300}),
+        VISIBLE,
+      ]);
+      expect(fromVisibleWindow.kind).toBe('fallbackWindow');
+
+      fromVisibleWindow = reduceSizing(fromVisibleWindow, {
+        type: 'AvailableWidthChanged',
+        width: 500,
+      });
+      expect(fromVisibleWindow.kind).toBe('committed');
+      expect(fromVisibleWindow.kind === 'committed' && fromVisibleWindow.acceptsFreshCommit).toBe(
+        true,
+      );
+      expect(fromVisibleWindow.height).toBe(300);
+      // If the freshCommit window for W3 = 500 expires without a 500px report, it must keep 300,
+      // not commit the stale 260px report from W2 = 300.
+      fromVisibleWindow = elapse(fromVisibleWindow);
+      expect(fromVisibleWindow.height).toBe(300);
+
+      // 2. In-flight widening at W2 = 300 (overflowed to 345) before changing to W3 = 500
+      let fromWidening = reduceAll(visibleCard(), [
+        ready(300),
+        {type: 'AvailableWidthChanged', width: 300},
+        ready(320, {width: 345, viewportWidth: 300}),
+      ]);
+      expect(fromWidening.kind).toBe('widening');
+
+      fromWidening = reduceSizing(fromWidening, {
+        type: 'AvailableWidthChanged',
+        width: 500,
+      });
+      expect(fromWidening.kind).toBe('committed');
+      expect(fromWidening.kind === 'committed' && fromWidening.acceptsFreshCommit).toBe(true);
+      fromWidening = reduceSizing(fromWidening, ready(220, {width: 500, viewportWidth: 500}));
+      expect(fromWidening.height).toBe(220);
     });
   });
 

@@ -97,13 +97,24 @@ export function waitForContentToSettle({
       }
       const now = Date.now();
       const measured = measure();
-      const current = JSON.stringify(measured);
-      if (measured === null || !fontsLoaded() || !imagesComplete() || current !== last) {
-        last = current;
+      if (measured === null || !fontsLoaded()) {
+        last = null;
         unchangedSince = now;
-      } else if (now - unchangedSince >= CONTENT_QUIET_MS) {
-        resolve('settled');
-        return;
+      } else {
+        const current = JSON.stringify(measured);
+        if (last !== null && current !== last) {
+          last = imagesComplete() ? current : null;
+          unchangedSince = now;
+        } else if (!imagesComplete()) {
+          last = null;
+          unchangedSince = now;
+        } else if (last === null) {
+          last = current;
+          unchangedSince = now;
+        } else if (now - unchangedSince >= CONTENT_QUIET_MS) {
+          resolve('settled');
+          return;
+        }
       }
       if (now - startedAt >= CONTENT_SETTLE_MAX_MS) {
         resolve('capped');
@@ -146,17 +157,23 @@ function fontsLoaded(): boolean {
   return typeof document === 'undefined' || !document.fonts || document.fonts.status !== 'loading';
 }
 
+function isLazyImage(img: HTMLImageElement): boolean {
+  const loading = img.loading || img.getAttribute('loading');
+  return typeof loading === 'string' && loading.toLowerCase() === 'lazy';
+}
+
 /**
- * Whether every image in the document, including those inside open shadow roots
- * (Lit renders into them, and `document.images` doesn't reach them), has loaded or
- * failed to.
+ * Whether every eager image in the document, including those inside open shadow
+ * roots (Lit renders into them, and `document.images` doesn't reach them), has
+ * loaded or failed to. Lazy-loaded images (`loading="lazy"`) are ignored so
+ * offscreen images deferred by the browser do not hold up readiness until the cap.
  */
 function imagesComplete(): boolean {
   if (typeof document === 'undefined') return true;
   const pending: Node[] = [document];
   while (pending.length > 0) {
     const current = pending.pop()!;
-    if (current instanceof HTMLImageElement && !current.complete) {
+    if (current instanceof HTMLImageElement && !isLazyImage(current) && !current.complete) {
       return false;
     }
     if (current instanceof Element && current.shadowRoot) {

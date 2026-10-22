@@ -558,7 +558,7 @@ describe('DemoCard sandboxed live demo frame', () => {
       expect(setTimeoutSpy).not.toHaveBeenCalledWith(expect.any(Function), READY_TIMEOUT_MS);
 
       // Closing the mount gate returns the handshake state to IDLE, and reopening it
-      // on an already-committed card needs no ready timeout.
+      // while the remounted frame is unrevealed arms the ready timeout until it reveals.
       fixture.componentRef.setInput('mount', false);
       fixture.detectChanges();
       expect(fixture.componentInstance.state()).toBe(DemoCardState.IDLE);
@@ -566,7 +566,34 @@ describe('DemoCard sandboxed live demo frame', () => {
       fixture.componentRef.setInput('mount', true);
       fixture.detectChanges();
       expect(fixture.componentInstance.state()).toBe(DemoCardState.MOUNTING);
-      expect(setTimeoutSpy).not.toHaveBeenCalledWith(expect.any(Function), READY_TIMEOUT_MS);
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), READY_TIMEOUT_MS);
+
+      // If the remounted frame times out before revealing, the card enters ERROR while
+      // keeping its committed height.
+      vi.advanceTimersByTime(READY_TIMEOUT_MS);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.state()).toBe(DemoCardState.ERROR);
+      expect(fixture.componentInstance.cardHeight()).toBe(304);
+    });
+
+    it('marks the card hidden when unmounted so an open widening window does not commit while unmounted', async () => {
+      const {fixture, harness} = await visibleCard();
+      const iframe = (await frameOf(harness))!;
+      const surface = await surfaceOf(harness);
+      vi.spyOn(iframe, 'clientWidth', 'get').mockReturnValue(400);
+      vi.spyOn(surface, 'clientWidth', 'get').mockReturnValue(400);
+
+      // Start widening on an overflowing report.
+      resize(fixture, iframe, {height: 500, width: 800, contentReady: true});
+      expect(fixture.componentInstance.cardHeight()).toBeNull();
+
+      // Unmount the card before the widening window elapses.
+      fixture.componentRef.setInput('mount', false);
+      fixture.detectChanges();
+
+      vi.advanceTimersByTime(1000);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.cardHeight()).toBeNull();
     });
 
     it('caps the committed height and publishes the cap to the stylesheet', async () => {
