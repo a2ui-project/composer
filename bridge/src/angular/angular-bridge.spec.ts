@@ -257,6 +257,95 @@ describe('Angular Sandbox Connection Spec', () => {
     expect(connection['pendingContentRender']).toBeUndefined();
   });
 
+  it('resolves a superseded onInitialRender promise and exits without awaiting further renders when cancelled by a newer call or ngOnDestroy', async () => {
+    let renderCalls = 0;
+    const {fixture, config} = renderWithMarkdown(async markdown => {
+      renderCalls++;
+      return markdown;
+    });
+    const connection = fixture.componentInstance.connection;
+
+    let firstResolved = false;
+    const firstPending = config.onInitialRender!().then(() => {
+      firstResolved = true;
+    });
+    // Flush markdownLoaded() microtasks so firstPending is waiting inside the first afterNextRender.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(connection['pendingContentRender']).toBeDefined();
+    expect(firstResolved).toBe(false);
+    expect(renderCalls).toBe(1);
+
+    // A second onInitialRender() call supersedes the first: firstPending resolves immediately
+    // and must exit without calling markdownLoaded() a second time.
+    let secondResolved = false;
+    const secondPending = config.onInitialRender!().then(() => {
+      secondResolved = true;
+    });
+    await firstPending;
+    expect(firstResolved).toBe(true);
+    expect(secondResolved).toBe(false);
+    // Only the initial markdownLoaded() from call #1 and the initial markdownLoaded() from call #2 ran.
+    expect(renderCalls).toBe(2);
+
+    // Destroying the connection while secondPending is waiting inside afterNextRender
+    // must also resolve secondPending instead of leaving it hanging.
+    connection.ngOnDestroy();
+    await secondPending;
+    expect(secondResolved).toBe(true);
+    expect(connection['pendingContentRender']).toBeUndefined();
+    fixture.destroy();
+  });
+
+  it('waits for markdown rendering started during the first render pass and a second afterNextRender pass before resolving onInitialRender', async () => {
+    let finishFirstPassMarkdown!: () => void;
+    const firstPassMarkdownLoaded = new Promise<void>(resolve => {
+      finishFirstPassMarkdown = resolve;
+    });
+    let firstPassStarted = false;
+    const {fixture, config} = renderWithMarkdown(async markdown => {
+      if (firstPassStarted) {
+        await firstPassMarkdownLoaded;
+      }
+      return markdown;
+    });
+    const connection = fixture.componentInstance.connection;
+    const waitSpy = vi.spyOn(
+      connection as unknown as {waitForNextRender: () => Promise<void>},
+      'waitForNextRender',
+    );
+
+    const committed = vi.fn();
+    const pending = config.onInitialRender!().then(committed);
+
+    // Flush the initial markdownLoaded() check before the first render pass completes;
+    // during the first render pass a Text component starts an async markdown render.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(waitSpy).toHaveBeenCalledTimes(1);
+    firstPassStarted = true;
+
+    await fixture.whenStable();
+    for (let flush = 0; flush < 5; flush++) {
+      await Promise.resolve();
+    }
+    expect(committed).not.toHaveBeenCalled();
+
+    // Resolving the async markdown promise allows the second markdownLoaded() to finish,
+    // which must then schedule a second waitForNextRender() pass so Angular flushes
+    // [innerHTML]="resolvedText()" to the DOM before onInitialRender resolves.
+    finishFirstPassMarkdown();
+    for (let flush = 0; flush < 5; flush++) {
+      await Promise.resolve();
+    }
+    expect(waitSpy).toHaveBeenCalledTimes(2);
+    expect(committed).not.toHaveBeenCalled();
+    await fixture.whenStable();
+    await pending;
+    expect(committed).toHaveBeenCalledOnce();
+    fixture.destroy();
+  });
+
   it('configures standalone DI providers via provideA2uiSandbox and routes actions to a2uiBridge.sendAction', () => {
     class MockCatalog {}
     const mockCatalogInstance = new MockCatalog();

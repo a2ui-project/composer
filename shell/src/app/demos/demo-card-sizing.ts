@@ -247,8 +247,9 @@ export type CardSizing =
       acceptsFreshCommit: boolean;
     })
   /**
-   * The demo failed to render, or nothing usable arrived in time. `height` is null:
-   * a committed card doesn't enter this state.
+   * The demo failed to render, or nothing usable arrived in time. `height` is null
+   * before the first commit, or the committed height if a remounted frame fails or
+   * times out before revealing.
    */
   | (SizingBase & {kind: 'error'; reason: 'timeout' | 'render'});
 
@@ -472,6 +473,9 @@ function onResizeCommitted(
   height: number | null,
 ): CardSizing {
   if (height === null || report.contentReady === false) return state;
+  if (!state.frame.marksReadiness && !state.frame.renderSucceeded) {
+    return state;
+  }
   const shown: CardSizing & {kind: 'committed'} = {...state, revealed: true};
   if (!shown.acceptsFreshCommit || laidOutElsewhere(shown.width, report)) return shown;
   const recorded: CardSizing & {kind: 'committed'} = {
@@ -481,6 +485,9 @@ function onResizeCommitted(
   const widened = recordOverflow(recorded, report);
   if (widened && widened.content > recorded.width.content) return widening(recorded, widened);
   const laidOut: CardSizing = {...recorded, width: widened ?? recorded.width};
+  if (!laidOut.frame.marksReadiness) {
+    return openWindow(laidOut, 'legacySettling');
+  }
   // A hidden frame may not have finished laying out; commit once the card is seen.
   return laidOut.visible ? commit(laidOut, height) : awaiting(laidOut, true);
 }
@@ -526,11 +533,21 @@ function onRenderSuccess(state: CardSizing): CardSizing {
       next.frame.marksReadiness ? 'renderSuccessNotReady' : 'legacyRenderSuccess',
     );
   }
+  if (
+    next.kind === 'committed' &&
+    !next.revealed &&
+    !next.frame.marksReadiness &&
+    next.frame.latest !== null
+  ) {
+    return next.acceptsFreshCommit
+      ? openWindow(next, 'legacyRenderSuccess')
+      : {...next, revealed: true};
+  }
   return next;
 }
 
 function onRenderError(state: CardSizing): CardSizing {
-  return state.height === null && state.kind !== 'error'
+  return (state.height === null || !state.revealed) && state.kind !== 'error'
     ? {...base(state), kind: 'error', reason: 'render'}
     : state;
 }
@@ -540,7 +557,8 @@ function onReadyTimeout(state: CardSizing): CardSizing {
     // An older bridge's reports that never stop changing commit as they are.
     return onWindowElapsed(state);
   }
-  return state.kind === 'awaiting' && !state.pending
+  return (state.kind === 'awaiting' && !state.pending) ||
+    (state.kind === 'committed' && !state.revealed)
     ? {...base(state), kind: 'error', reason: 'timeout'}
     : state;
 }
@@ -588,6 +606,7 @@ function onAvailableWidthChanged(state: CardSizing, available: number): CardSizi
   if (available === state.width.available) return state;
   const next: CardSizing = {...state, width: {...state.width, available}};
   if (
+    next.kind !== 'error' &&
     next.height !== null &&
     state.width.available > 0 &&
     frameWidth(next.width) === next.committedFrameWidth
@@ -598,19 +617,25 @@ function onAvailableWidthChanged(state: CardSizing, available: number): CardSizi
       committedFrameWidth: next.committedFrameWidth,
     };
   }
-  if (next.kind !== 'committed') return next;
-  if (state.width.available <= 0) {
-    // Committed before the card was measured: the first width is the committed one.
-    return {...next, committedFrameWidth: frameWidth(next.width)};
+  if (next.height !== null && next.kind !== 'error') {
+    if (state.width.available <= 0) {
+      // Committed before the card was measured: the first width is the committed one.
+      return {...next, committedFrameWidth: frameWidth(next.width)};
+    }
+    if (frameWidth(next.width) === frameWidth(state.width)) return next;
+    return {
+      ...base(next),
+      kind: 'committed',
+      acceptsFreshCommit: true,
+      frame: {...next.frame, latest: null, latestReady: null},
+      width: restartConvergence(next.width),
+      windowToken: next.windowToken + 1,
+    };
   }
-  if (frameWidth(next.width) === frameWidth(state.width)) return next;
-  return {
-    ...next,
-    acceptsFreshCommit: true,
-    frame: {...next.frame, latest: null, latestReady: null},
-    width: restartConvergence(next.width),
-    windowToken: next.windowToken + 1,
-  };
+  if (state.width.available > 0 && frameWidth(next.width) !== frameWidth(state.width)) {
+    return {...next, width: restartConvergence(next.width)};
+  }
+  return next;
 }
 
 function onFrameAttached(state: CardSizing): CardSizing {

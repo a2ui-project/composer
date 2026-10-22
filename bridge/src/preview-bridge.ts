@@ -253,6 +253,7 @@ export class PreviewBridge {
   private forceNextSurfaceResize = false;
   private contentReady?: boolean;
   private awaitingContentRender = false;
+  private settleWhenMeasurable = false;
   private contentRenderGeneration = 0;
 
   /** The registry of active framework surface connections currently linked and managed by the bridge. */
@@ -273,6 +274,10 @@ export class PreviewBridge {
 
   /** Handles DOM mutations and window viewport resizing to broadcast dimension updates to the host. */
   private readonly surfaceResizeObserver = new SurfaceResizeObserver(dimensions => {
+    if (this.settleWhenMeasurable) {
+      this.settleWhenMeasurable = false;
+      this.settleMeasurableContent();
+    }
     this.queueSurfaceResize(
       this.contentReady === undefined
         ? dimensions
@@ -405,12 +410,39 @@ export class PreviewBridge {
   private resetContentReadiness(): void {
     this.contentRenderGeneration++;
     this.awaitingContentRender = false;
+    this.settleWhenMeasurable = false;
     this.contentReady = this.activeRenderer?.config.onInitialRender ? false : undefined;
     if (this.surfaceResizeTimeoutId !== undefined) {
       clearTimeout(this.surfaceResizeTimeoutId);
       this.surfaceResizeTimeoutId = undefined;
     }
     this.forceNextSurfaceResize = false;
+  }
+
+  private settleMeasurableContent(startedAt = Date.now()): void {
+    const renderer = this.activeRenderer;
+    if (this.contentReady !== false || this.awaitingContentRender || !renderer) return;
+    this.awaitingContentRender = true;
+    const generation = this.contentRenderGeneration;
+    const superseded = () =>
+      generation !== this.contentRenderGeneration || renderer !== this.activeRenderer;
+    void (async () => {
+      const outcome = await waitForContentToSettle({
+        measure: () => this.surfaceResizeObserver.measure(),
+        isCancelled: superseded,
+        startedAt,
+      });
+      if (outcome === 'cancelled' || superseded()) return;
+      this.awaitingContentRender = false;
+      if (this.surfaceResizeObserver.measure() === null) {
+        this.settleWhenMeasurable = true;
+        return;
+      }
+      this.contentReady = true;
+      // A readiness transition must reach the host even if the startup screen
+      // and the first rendered content happen to have identical dimensions.
+      this.scheduleSurfaceResize(true);
+    })();
   }
 
   private waitForInitialContent(messages: A2uiMessage[]): void {
@@ -427,6 +459,7 @@ export class PreviewBridge {
     // by the caller's regular scheduleSurfaceResize, so skipping here doesn't skip that.
     if (!hasRoot || !onInitialRender) return;
 
+    this.settleWhenMeasurable = false;
     this.awaitingContentRender = true;
     const generation = this.contentRenderGeneration;
     const superseded = () =>
@@ -438,19 +471,10 @@ export class PreviewBridge {
       try {
         await withinSettleCap(onInitialRender(), startedAt);
         if (superseded()) return;
+        this.awaitingContentRender = false;
         // The first content is in the DOM, but not necessarily at its final size: see
         // content-settle.ts. Readiness is what a host sizes its frame by once.
-        const outcome = await waitForContentToSettle({
-          measure: () => this.surfaceResizeObserver.measure(),
-          isCancelled: superseded,
-          startedAt,
-        });
-        if (outcome === 'cancelled' || superseded()) return;
-        this.awaitingContentRender = false;
-        this.contentReady = true;
-        // A readiness transition must reach the host even if the startup screen
-        // and the first rendered content happen to have identical dimensions.
-        this.scheduleSurfaceResize(true);
+        this.settleMeasurableContent(startedAt);
       } catch (error) {
         if (superseded()) return;
         this.awaitingContentRender = false;
@@ -917,9 +941,11 @@ export class PreviewBridge {
         this.activeRenderer.config.onSurfaceReady(surfaceId);
       }
 
-      // Report readiness once the renderer's first content reaches the DOM (forced there,
-      // because readiness changes even when dimensions don't).
-      this.waitForInitialContent(payload as A2uiMessage[]);
+      if (rendered) {
+        // Report readiness once the renderer's first content reaches the DOM (forced there,
+        // because readiness changes even when dimensions don't).
+        this.waitForInitialContent(payload as A2uiMessage[]);
+      }
       // Measure after every render, on the next tick so asynchronous framework rendering
       // and DOM attachment complete. Not forced: readiness doesn't change here, so a
       // measurement with unchanged dimensions has nothing new to report.

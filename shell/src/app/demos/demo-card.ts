@@ -170,8 +170,10 @@ export class DemoCard {
     equal: (a, b) => a?.token === b?.token,
   });
 
-  /** Whether the card has committed its height and is showing it. */
-  private readonly committed = computed(() => this.sizing().kind === 'committed');
+  /** Whether the card has committed its height and revealed the current frame. */
+  private readonly committed = computed(
+    () => this.sizing().kind === 'committed' && this.sizing().revealed,
+  );
 
   /**
    * Whether the demo payload has already been sent for the frame's current document.
@@ -233,7 +235,7 @@ export class DemoCard {
       onCleanup(() => this.clearReadyTimeout());
     });
 
-    // Once the height is committed, the ready deadline has nothing left to guard.
+    // Once the height is committed and revealed, the ready deadline has nothing left to guard.
     effect(() => {
       if (this.committed()) untracked(() => this.clearReadyTimeout());
     });
@@ -256,6 +258,7 @@ export class DemoCard {
 
       this.payloadSentForCurrentLoad = false;
       this.dispatch({type: 'FrameAttached'});
+      untracked(() => this.startReadyTimeout());
       this.hostCommunication.registerIframe(element, DefaultTarget.KEEP);
       const guestWindow = element.contentWindow;
       const subscription = guestWindow
@@ -269,6 +272,7 @@ export class DemoCard {
         visibility?.disconnect();
         subscription?.unsubscribe();
         this.hostCommunication.unregisterIframe(element);
+        this.dispatch({type: 'VisibilityChanged', visible: false});
       });
     });
 
