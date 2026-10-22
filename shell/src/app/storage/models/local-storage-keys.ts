@@ -45,6 +45,10 @@ export enum LocalStorageKey {
   CUSTOM_RENDERERS = 'a2ui_composer_custom_renderers',
   /** Key for persisting the user selected API key ID. */
   SELECTED_API_KEY = 'a2ui_composer_selected_api_key',
+  /** Key for persisting the user selected LLM model ID (from config.json.models). */
+  SELECTED_MODEL = 'a2ui_composer_selected_model',
+  /** Key for persisting the user selected LLM thinking level. */
+  SELECTED_THINKING_LEVEL = 'a2ui_composer_selected_thinking_level',
   /** Key for storing active A2A agent endpoint URL. */
   A2A_AGENT_URL = 'a2ui_composer_a2a_agent_url',
   /** Key for storing active A2A tenant ID. */

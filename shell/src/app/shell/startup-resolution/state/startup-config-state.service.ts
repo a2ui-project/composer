@@ -37,11 +37,37 @@ export declare interface ApiKeyConfig {
 }
 
 /**
+ * Describes one LLM model the user may select, as declared in
+ * `config.json.models`.
+ */
+export declare interface LlmModelConfig {
+  /** Model identifier passed to the LLM backend (e.g. `gemini-flash-latest`). */
+  model: string;
+  /** Human-friendly label shown in the model selector. */
+  displayName?: string;
+  /**
+   * Thinking levels the model accepts (`minimal`, `low`, `medium`, `high`).
+   * When omitted or empty, the thinking level selector is hidden and the LLM
+   * client uses its backend default.
+   */
+  thinkingLevels?: string[];
+  /** Thinking level preselected when the user has not chosen one. */
+  defaultThinkingLevel?: string;
+  /**
+   * Restricts the entry to one authentication mode (`1p` or `3p`). Entries
+   * without it are offered in every mode. Lets a deployment list internal
+   * backend models alongside public Gemini API models.
+   */
+  authType?: string;
+}
+
+/**
  * Root application configuration format.
  */
 export declare interface AppConfig {
   renderers?: Record<string, RendererConfig>;
   apiKeys?: Record<string, ApiKeyConfig>;
+  models?: LlmModelConfig[];
 }
 
 /**
@@ -55,12 +81,14 @@ export class StartupConfigStateService {
   private readonly _renderers = signal<Record<string, RendererConfig>>({});
   private readonly _selectedRendererId = signal<string | null>(null);
   private readonly _apiKeys = signal<Record<string, ApiKeyConfig>>({});
+  private readonly _models = signal<readonly LlmModelConfig[]>([]);
   private readonly _sharedA2uiPayload = signal<string | null>(null);
   private readonly _sharedA2uiError = signal<string | null>(null);
 
   readonly resolvedUrl = this._resolvedUrl.asReadonly();
   readonly renderers = this._renderers.asReadonly();
   readonly apiKeys = this._apiKeys.asReadonly();
+  readonly models = this._models.asReadonly();
   readonly selectedRendererId = this._selectedRendererId.asReadonly();
   readonly sharedA2uiPayload = this._sharedA2uiPayload.asReadonly();
   readonly sharedA2uiError = this._sharedA2uiError.asReadonly();
@@ -89,6 +117,10 @@ export class StartupConfigStateService {
 
   setApiKeys(apiKeys: Record<string, ApiKeyConfig>): void {
     this._apiKeys.set(apiKeys);
+  }
+
+  setModels(models: readonly LlmModelConfig[]): void {
+    this._models.set(models);
   }
 
   setSharedA2uiPayload(payload: string | null): void {
