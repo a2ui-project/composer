@@ -9898,7 +9898,7 @@ __metadata:
     prettier: "npm:3.9.6"
     typescript: "npm:6.0.3"
     typescript-eslint: "npm:8.65.0"
-    vite: "npm:8.1.5"
+    vite: "npm:8.1.6"
     vitest: "npm:4.1.11"
   languageName: unknown
   linkType: soft
@@ -11659,7 +11659,7 @@ __metadata:
     react-dom: "npm:19.2.8"
     typescript: "npm:6.0.3"
     typescript-eslint: "npm:8.65.0"
-    vite: "npm:8.1.5"
+    vite: "npm:8.1.6"
     vitest: "npm:4.1.11"
     zod: "npm:4.4.3"
   languageName: unknown
@@ -13445,9 +13445,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"vite@npm:8.1.5":
-  version: 8.1.5
-  resolution: "vite@npm:8.1.5"
+"vite@npm:8.1.6":
+  version: 8.1.6
+  resolution: "vite@npm:8.1.6"
   dependencies:
     fsevents: "npm:~2.3.3"
     lightningcss: "npm:^1.32.0"
@@ -13498,7 +13498,7 @@ __metadata:
       optional: true
   bin:
     vite: bin/vite.js
-  checksum: 10c0/3231e24dd4394d0bc8b4f0f5d6d6a2eda8737e5053042892b4163564456a03d67f953c4c7498621f9517eebc30a492ea136c728a767a122eb84bf6d7cf60e1e6
+  checksum: 10c0/d931d627838f1de14e3918972e962118202bf95c266c81125823116d255171e2d5de436cfdddcfef61985741fdb894bd1a03819a651148c9e9b6a886fa5595c9
   languageName: node
   linkType: hard
 
