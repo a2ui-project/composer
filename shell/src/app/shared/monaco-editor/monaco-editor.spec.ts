@@ -927,6 +927,50 @@ describe('MonacoEditor component', () => {
     );
   });
 
+  it('registers the active catalog schema from A2UI_CATALOG for catalog.json references', async () => {
+    fixture = TestBed.createComponent(MonacoEditor);
+    const catalogService = TestBed.inject(CatalogManagement);
+    const activeCatalogSchema: Catalog = {
+      catalogId: 'https://a2ui.org/specification/v0_9/material_catalog.json',
+      components: {
+        MaterialButton: {type: 'object'},
+      },
+      functions: {
+        formatString: {type: 'object', properties: {call: {const: 'formatString'}}},
+        updateDataModel: {type: 'object', properties: {call: {const: 'updateDataModel'}}},
+        callMcpTool: {type: 'object', properties: {call: {const: 'callMcpTool'}}},
+      },
+      $defs: {
+        anyFunction: {
+          anyOf: [
+            {$ref: '#/functions/formatString'},
+            {$ref: '#/functions/updateDataModel'},
+            {$ref: '#/functions/callMcpTool'},
+          ],
+        },
+      },
+    };
+    (catalogService.activeCatalog as WritableSignal<Catalog | null>).set(activeCatalogSchema);
+    fixture.detectChanges();
+
+    await TestbedHarnessEnvironment.harnessForFixture(fixture, MonacoEditorHarness);
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const lastCall = mockSetDiagnosticsOptions.mock.calls.at(-1)?.[0] as {
+      schemas: Array<{uri: string; schema: Record<string, unknown>}>;
+    };
+    const catalogSchemas = lastCall.schemas.filter(
+      s =>
+        s.uri === 'file:///catalog.json' ||
+        s.uri === 'https://a2ui.org/specification/v0_9/catalog.json',
+    );
+    expect(catalogSchemas).toHaveLength(2);
+    for (const entry of catalogSchemas) {
+      expect(entry.schema).toEqual(activeCatalogSchema);
+    }
+  });
+
   it('returns line and column from getFirstErrorMarker when diagnostics are present', async () => {
     fixture = TestBed.createComponent(MonacoEditor);
     fixture.detectChanges();
