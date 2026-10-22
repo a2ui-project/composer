@@ -1323,4 +1323,118 @@ describe('A2aChatView', () => {
         ?.components as Array<Record<string, unknown>>) || [];
     expect(components[0]?.['component']).toBe('Column');
   });
+
+  it('updates open side panel when a later turn updates an existing surface without createSurface', async () => {
+    const turn1CanvasSurface = [
+      {version: 'v0.9', createSurface: {surfaceId: 'canvas-surface-1', catalogId: 'cat-1'}},
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'canvas-surface-1',
+          components: [
+            {
+              id: 'root',
+              component: 'Canvas',
+              cardTitle: 'Experiment Brief',
+              cardDescription: 'Initial brief',
+              children: ['card-1', 'card-2'],
+            },
+            {id: 'card-1', component: 'Card'},
+            {id: 'card-2', component: 'Card'},
+          ],
+        },
+      },
+    ];
+
+    const turn2InlineSurface = [
+      {version: 'v0.9', createSurface: {surfaceId: 'inline-surface-1', catalogId: 'cat-1'}},
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'inline-surface-1',
+          components: [{id: 'root', component: 'Card'}],
+        },
+      },
+    ];
+
+    const turn3CanvasDelta = [
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 'canvas-surface-1',
+          components: [
+            {
+              id: 'root',
+              component: 'Canvas',
+              cardDescription: 'Updated brief',
+              children: ['card-1', 'card-3'],
+            },
+            {id: 'card-3', component: 'Card'},
+          ],
+        },
+      },
+      {
+        version: 'v0.9',
+        updateDataModel: {
+          surfaceId: 'canvas-surface-1',
+          value: {count: 1},
+        },
+      },
+    ];
+
+    let turn = 0;
+    mockA2aTransport.sendMessageStream = vi.fn().mockImplementation(async function* () {
+      turn++;
+      const payload =
+        turn === 1 ? turn1CanvasSurface : turn === 2 ? turn2InlineSurface : turn3CanvasDelta;
+      yield {
+        taskId: `t-${turn}`,
+        contextId: 'c-canvas',
+        message: {
+          role: 'agent',
+          parts: [
+            {text: `Turn ${turn}`},
+            {data: {mimeType: 'application/a2ui+json', data: payload}},
+          ],
+        },
+        final: true,
+      };
+    });
+
+    // Turn 1: creates and opens canvas-surface-1
+    fixture.componentInstance['sendUserMessage']({text: 'Create brief', images: []});
+    await fixture.whenStable();
+    expect(fixture.componentInstance['isCanvasOpen']()).toBe(true);
+    const turn1Active = fixture.componentInstance['activeCanvasPayload']();
+    expect(turn1Active?.[0]?.createSurface?.surfaceId).toBe('canvas-surface-1');
+
+    // Turn 2: unrelated inline surface; side panel stays open on canvas-surface-1
+    fixture.componentInstance['sendUserMessage']({text: 'Show status', images: []});
+    await fixture.whenStable();
+    expect(fixture.componentInstance['isCanvasOpen']()).toBe(true);
+    expect(fixture.componentInstance['activeCanvasPayload']()).toBe(turn1Active);
+
+    // Turn 3: updates canvas-surface-1 with updateComponents + updateDataModel (no createSurface)
+    fixture.componentInstance['sendUserMessage']({text: 'Update brief', images: []});
+    await fixture.whenStable();
+
+    const agentMessages = fixture.componentInstance['messages']().filter(
+      message => message.sender === 'agent',
+    );
+    const turn3Message = agentMessages[2];
+    expect(turn3Message.inlineA2uiPayload).toBeUndefined();
+    expect(turn3Message.canvasArtifacts?.length).toBe(1);
+    expect(turn3Message.canvasArtifacts?.[0].cardTitle).toBe('Experiment Brief');
+    expect(turn3Message.canvasArtifacts?.[0].cardDescription).toBe('Updated brief');
+
+    const turn3Active = fixture.componentInstance['activeCanvasPayload']();
+    expect(turn3Active).not.toBe(turn1Active);
+    expect(turn3Active).toBe(turn3Message.canvasArtifacts?.[0].payload);
+    expect(turn3Active?.[0]?.createSurface?.surfaceId).toBe('canvas-surface-1');
+    expect(turn3Active?.[1]?.updateDataModel?.surfaceId).toBe('canvas-surface-1');
+    expect(turn3Active?.[1]?.updateDataModel?.value).toEqual({count: 1});
+    const turn3Components =
+      (turn3Active?.[2]?.updateComponents?.components as Array<Record<string, unknown>>) || [];
+    expect(turn3Components.map(component => component['id'])).toEqual(['root', 'card-1', 'card-3']);
+  });
 });

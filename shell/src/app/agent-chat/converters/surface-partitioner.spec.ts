@@ -784,5 +784,77 @@ describe('SurfacePartitioner', () => {
         Array<{id: string}> | undefined;
       expect(mergedComponents?.[0].id).toBe('new');
     });
+
+    it('carries forward prior surface items when updating a surface across turns without createSurface', () => {
+      const priorSession = normalizeA2uiItems([
+        {createSurface: {surfaceId: 'surf_1', catalogId: 'c1'}},
+        {
+          updateComponents: {
+            surfaceId: 'surf_1',
+            components: [
+              {
+                id: 'root',
+                component: 'Canvas',
+                cardTitle: 'Flight Details',
+                cardDescription: 'Initial step',
+                cardIcon: 'flight',
+                autoOpen: true,
+                children: ['card-1', 'card-2'],
+              },
+              {id: 'card-1', component: 'Card'},
+              {id: 'card-2', component: 'Card'},
+            ],
+          },
+        },
+        {createSurface: {surfaceId: 'surf_2', catalogId: 'c1'}},
+        {
+          updateComponents: {
+            surfaceId: 'surf_2',
+            components: [{id: 'root', component: 'Card'}],
+          },
+        },
+      ]);
+
+      const delta = normalizeA2uiItems([
+        {
+          updateComponents: {
+            surfaceId: 'surf_1',
+            components: [
+              {
+                id: 'root',
+                component: 'Canvas',
+                cardDescription: 'Updated step',
+                children: ['card-1', 'card-3'],
+              },
+              {id: 'card-3', component: 'Card'},
+            ],
+          },
+        },
+        {updateDataModel: {surfaceId: 'surf_1', value: {count: 1}}},
+      ]);
+
+      const merged = mergeA2uiItems([], delta, priorSession);
+      expect(merged.some(item => item.createSurface?.surfaceId === 'surf_1')).toBe(true);
+      expect(merged.some(item => item.createSurface?.surfaceId === 'surf_2')).toBe(false);
+
+      const partitioned = partitionA2uiSurfacePayload(merged);
+      expect(partitioned.hasCanvas).toBe(true);
+      expect(partitioned.inlinePayload).toBeNull();
+      expect(partitioned.canvasArtifacts.length).toBe(1);
+      expect(partitioned.canvasArtifacts[0].cardTitle).toBe('Flight Details');
+      expect(partitioned.canvasArtifacts[0].cardIcon).toBe('flight');
+      expect(partitioned.canvasArtifacts[0].cardDescription).toBe('Updated step');
+
+      const artifactPayload = partitioned.canvasArtifacts[0].payload;
+      expect(artifactPayload[0].createSurface?.surfaceId).toBe('surf_1');
+      expect(artifactPayload[1].updateDataModel?.surfaceId).toBe('surf_1');
+      const updateComponentsItem = artifactPayload[2].updateComponents;
+      expect(updateComponentsItem?.surfaceId).toBe('surf_1');
+      const componentIds = (updateComponentsItem?.components as Array<Record<string, unknown>>).map(
+        component => component['id'],
+      );
+      expect(componentIds).toEqual(['root', 'card-1', 'card-3']);
+      expect(componentIds).not.toContain('card-2');
+    });
   });
 });
