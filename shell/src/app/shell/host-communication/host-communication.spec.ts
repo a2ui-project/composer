@@ -395,48 +395,6 @@ describe('HostCommunication', () => {
     expect(history[0].type).toBe(PreviewBridgeMessageType.RENDERER_READY);
   });
 
-  it('excludes SURFACE_RESIZE messages from the messageHistoryBuffer but still broadcasts them', () => {
-    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
-    service.registerIframe(mockIframeWindow);
-
-    const emitted: MessageEnvelope[] = [];
-    const sub = service.messageStream$.subscribe(envelope => {
-      emitted.push(envelope);
-    });
-
-    for (let height = 100; height < 200; height++) {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          source: mockIframeWindow,
-          origin: 'http://localhost:3000',
-          data: {
-            type: PreviewBridgeMessageType.SURFACE_RESIZE,
-            payload: {height, width: 320},
-          },
-        }),
-      );
-    }
-
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        source: mockIframeWindow,
-        origin: 'http://localhost:3000',
-        data: {type: PreviewBridgeMessageType.RENDERER_READY},
-      }),
-    );
-
-    const history = service.getEnvelopeHistory();
-    expect(history.length).toBe(1);
-    expect(history[0].type).toBe(PreviewBridgeMessageType.RENDERER_READY);
-
-    // RenderedFrame relies on the stream to size its iframe, so the messages
-    // must still be delivered to subscribers.
-    expect(emitted.length).toBe(101);
-    expect(emitted[0].payload).toEqual({height: 100, width: 320});
-
-    sub.unsubscribe();
-  });
-
   it('keeps SURFACE_RESIZE out of the capped history only, not the stream or latestEnvelope', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);
@@ -636,6 +594,38 @@ describe('HostCommunication', () => {
     expect(history.length).toBe(20);
     expect(history[0].payload).toEqual({index: 5});
     expect(history[19].payload).toEqual({index: 24});
+  });
+
+  it('does not let pre-registration SURFACE_RESIZE messages evict RENDERER_READY from earlyMessageBuffer', () => {
+    const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: mockIframeWindow,
+        origin: 'http://localhost:3000',
+        data: {type: PreviewBridgeMessageType.RENDERER_READY, payload: {status: 'ready'}},
+      }),
+    );
+
+    for (let i = 0; i < 25; i++) {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            type: PreviewBridgeMessageType.SURFACE_RESIZE,
+            payload: {height: 100 + i, width: 320},
+          },
+        }),
+      );
+    }
+
+    service.registerIframe(mockIframeWindow);
+
+    expect(service.isRendererReady()).toBe(true);
+    const history = service.getEnvelopeHistory();
+    expect(history.length).toBe(1);
+    expect(history[0].type).toBe(PreviewBridgeMessageType.RENDERER_READY);
   });
 
   it('broadcasts uncoalesced multi-message stream replay via messageStream$', () => {

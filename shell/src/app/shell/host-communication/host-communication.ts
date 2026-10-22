@@ -63,15 +63,19 @@ export enum DefaultTarget {
 const MAX_HISTORY_BUFFER_SIZE = 100;
 
 /**
- * Message types that are broadcast but never retained in the history buffer.
+ * Message types that are never retained in the history buffer.
  *
  * `SURFACE_RESIZE` is emitted by every inline surface on every layout change,
- * so buffering it evicts the entire history within seconds. `CONSOLE_LOG` is
- * also unbuffered, but its handler returns before reaching the buffer because
- * it is routed to the error logger instead.
+ * so buffering it evicts the entire history within seconds; it still updates
+ * `latestEnvelope` and broadcasts on `messageStream$`. `CONSOLE_LOG` is
+ * intercepted in `messageListener` before `recordEnvelope` (routing to the
+ * error logger and `messageStream$` without updating `latestEnvelope`) and is
+ * listed here as well for defense in depth and to keep pre-registration
+ * traffic out of `earlyMessageBuffer`.
  */
 const UNBUFFERED_MESSAGE_TYPES: ReadonlySet<string> = new Set([
   PreviewBridgeMessageType.SURFACE_RESIZE,
+  PreviewBridgeMessageType.CONSOLE_LOG,
 ]);
 
 /**
@@ -133,8 +137,9 @@ export class HostCommunication implements OnDestroy {
    *
    * Capped at `MAX_HISTORY_BUFFER_SIZE`, so a high-frequency type would evict
    * everything else within seconds. Those types are listed in
-   * `UNBUFFERED_MESSAGE_TYPES` and skipped here, but still update
-   * `latestEnvelope` and are still broadcast on `messageStream$`.
+   * `UNBUFFERED_MESSAGE_TYPES` and skipped here: `SURFACE_RESIZE` still updates
+   * `latestEnvelope` and is broadcast on `messageStream$`, while `CONSOLE_LOG`
+   * is intercepted before envelope dispatch.
    */
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
   private readonly earlyMessageBuffer: MessageEvent[] = [];
@@ -250,7 +255,7 @@ export class HostCommunication implements OnDestroy {
         return;
       }
 
-      if (!isBridgeMessage) {
+      if (!isBridgeMessage || UNBUFFERED_MESSAGE_TYPES.has(event.data.type)) {
         return;
       }
       this.earlyMessageBuffer.push(event);
