@@ -22,6 +22,7 @@ import {
   StartupConfigStateService,
   RendererConfig,
   ApiKeyConfig,
+  LlmModelConfig,
 } from '../../shell/startup-resolution/state/startup-config-state.service';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {describe, it, expect, beforeEach, afterEach, vi, Mock} from 'vitest';
@@ -70,6 +71,7 @@ describe('Settings', () => {
   let mockRenderers: WritableSignal<Record<string, RendererConfig>>;
   let mockSelectedRendererId: WritableSignal<string | null>;
   let mockApiKeys: WritableSignal<Record<string, ApiKeyConfig>>;
+  let mockModels: WritableSignal<readonly LlmModelConfig[]>;
   let mockActiveRenderer: WritableSignal<RendererConfig | null>;
   let mockStartupResolution: {
     getResolvedRendererUrl: Mock<() => string | null>;
@@ -82,6 +84,7 @@ describe('Settings', () => {
     selectedRendererId: Signal<string | null>;
     activeRenderer: Signal<RendererConfig | null>;
     apiKeys: Signal<Record<string, ApiKeyConfig>>;
+    models: Signal<readonly LlmModelConfig[]>;
   };
   let mockLatestEnvelope: WritableSignal<MessageEnvelope | null>;
   let mockIsHandshakeInProgress: WritableSignal<boolean>;
@@ -137,6 +140,7 @@ describe('Settings', () => {
     mockRenderers = signal<Record<string, RendererConfig>>({});
     mockSelectedRendererId = signal<string | null>(null);
     mockApiKeys = signal<Record<string, string>>({});
+    mockModels = signal<readonly LlmModelConfig[]>([]);
     mockActiveRenderer = signal<Record<string, RendererConfig>[string] | null>(null);
 
     mockStartupResolution = {
@@ -153,6 +157,7 @@ describe('Settings', () => {
       selectedRendererId: mockSelectedRendererId.asReadonly(),
       activeRenderer: mockActiveRenderer.asReadonly(),
       apiKeys: mockApiKeys.asReadonly(),
+      models: mockModels.asReadonly(),
     };
     mockLatestEnvelope = signal<MessageEnvelope | null>(null);
     mockIsHandshakeInProgress = signal<boolean>(false);

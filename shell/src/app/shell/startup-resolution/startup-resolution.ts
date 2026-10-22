@@ -33,6 +33,11 @@ import {MatDialog} from '@angular/material/dialog';
 import {firstValueFrom} from 'rxjs';
 import {OriginConfirmationDialog} from './origin-confirmation-dialog/origin-confirmation-dialog';
 
+/** Narrows a config.json value to a non-array object (JSON "object"). */
+function isPlainObject<T extends object>(value: T | null | undefined): value is T {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -292,19 +297,14 @@ export class StartupResolution {
       config = await this.fetchStaticConfig();
     }
 
-    if (config?.apiKeys && typeof config.apiKeys === 'object' && !Array.isArray(config.apiKeys)) {
-      this.startupConfigState.setApiKeys(config.apiKeys);
-    } else {
-      this.startupConfigState.setApiKeys({});
-    }
+    const apiKeys = config?.apiKeys;
+    this.startupConfigState.setApiKeys(isPlainObject(apiKeys) ? apiKeys : {});
+    const models = config?.models;
+    this.startupConfigState.setModels(Array.isArray(models) ? models : []);
 
     let staticRenderers: Record<string, RendererConfig> = {};
     if (config) {
-      if (
-        config.renderers &&
-        typeof config.renderers === 'object' &&
-        !Array.isArray(config.renderers)
-      ) {
+      if (isPlainObject(config.renderers)) {
         staticRenderers = config.renderers;
       }
     } else {

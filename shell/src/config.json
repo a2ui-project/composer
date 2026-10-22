@@ -30,5 +30,19 @@
       "apiKey": "this will not work",
       "displayName": "Fake key"
     }
-  }
+  },
+  "models": [
+    {
+      "model": "gemini-flash-latest",
+      "displayName": "Gemini Flash",
+      "thinkingLevels": ["minimal", "low", "medium", "high"],
+      "defaultThinkingLevel": "medium"
+    },
+    {
+      "model": "gemini-pro-latest",
+      "displayName": "Gemini Pro",
+      "thinkingLevels": ["low", "medium", "high"],
+      "defaultThinkingLevel": "medium"
+    }
+  ]
 }

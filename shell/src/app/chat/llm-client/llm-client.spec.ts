@@ -20,6 +20,11 @@ import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {LlmClient, LlmMessage, LlmResponse, CANCEL_ERROR_NAME} from './llm-client';
 import {Standalone3pLlmClient} from './standalone-3p-llm-client';
 import {AppConfigProvider} from '../../settings/app-config-provider/app-config-provider';
+import {
+  ModelSelectionService,
+  ThinkingLevel,
+} from '../../settings/model-selection/model-selection.service';
+import {StartupConfigStateService} from '../../shell/startup-resolution/state/startup-config-state.service';
 import {MessageRole} from './llm-client';
 import {
   EnvMode,
@@ -236,6 +241,44 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       expect(mockConstructor).toHaveBeenLastCalledWith({
         apiKey: 'mock-key-123',
       });
+    });
+  });
+
+  // ---------------------------------------------------------
+  // MODEL & THINKING LEVEL SELECTION
+  // ---------------------------------------------------------
+
+  describe('Model selection', () => {
+    it('sends the model and thinking level selected in Settings', async () => {
+      mockGenerateContentStream.mockResolvedValue({
+        async *[Symbol.asyncIterator]() {
+          yield {text: 'ok'};
+        },
+      });
+      const configState = TestBed.inject(StartupConfigStateService);
+      configState.setModels([{model: 'gemini-pro-latest', thinkingLevels: ['low', 'high']}]);
+      TestBed.inject(ModelSelectionService).selectThinkingLevel(ThinkingLevel.HIGH);
+
+      await client.chat([{role: MessageRole.USER, content: 'hi'}]);
+
+      const passedParams = mockGenerateContentStream.mock.calls[0][0];
+      expect(passedParams.model).toBe('gemini-pro-latest');
+      expect(passedParams.config?.thinkingConfig?.thinkingLevel).toBe('HIGH');
+    });
+
+    it('omits thinkingConfig when the selected model declares no thinking levels', async () => {
+      mockGenerateContentStream.mockResolvedValue({
+        async *[Symbol.asyncIterator]() {
+          yield {text: 'ok'};
+        },
+      });
+      TestBed.inject(StartupConfigStateService).setModels([{model: 'plain-model'}]);
+
+      await client.chat([{role: MessageRole.USER, content: 'hi'}]);
+
+      const passedParams = mockGenerateContentStream.mock.calls[0][0];
+      expect(passedParams.model).toBe('plain-model');
+      expect(passedParams.config?.thinkingConfig).toBeUndefined();
     });
   });
 
