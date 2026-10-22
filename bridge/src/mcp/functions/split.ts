@@ -27,9 +27,12 @@ import {asyncable, type FunctionApiDefinition, overValue, withSettledArgs} from 
 export const SplitApi: FunctionApiDefinition = {
   name: 'split',
   returnType: 'any',
+  // Computed keys keep argument names stable under Closure Compiler property renaming (payloads
+  // and `validateFunctionArgs` refer to them by their literal string names) without needing
+  // `prettier-ignore` to stop the formatter from unquoting them.
   schema: z.object({
-    value: asyncable(z.any()).describe('The string or array of strings to split.'),
-    separator: asyncable(z.any()).describe(
+    ['value']: asyncable(z.any()).describe('The string or array of strings to split.'),
+    ['separator']: asyncable(z.any()).describe(
       'The delimiter string to split on. An empty string splits into individual characters.',
     ),
   }) as unknown as FunctionApiDefinition['schema'],

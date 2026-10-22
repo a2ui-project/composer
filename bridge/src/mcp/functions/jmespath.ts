@@ -36,11 +36,14 @@ import {asyncable, type FunctionApiDefinition, withSettledArgs} from './common.j
 export const JmespathApi: FunctionApiDefinition = {
   name: 'jmespath',
   returnType: 'any',
+  // Computed keys keep argument names stable under Closure Compiler property renaming (payloads
+  // and `validateFunctionArgs` refer to them by their literal string names) without needing
+  // `prettier-ignore` to stop the formatter from unquoting them.
   schema: z.object({
-    expression: asyncable(z.any()).describe(
+    ['expression']: asyncable(z.any()).describe(
       'A standard JMESPath expression evaluated against `data`.',
     ),
-    data: asyncable(z.any()).describe('The input data to evaluate the expression against.'),
+    ['data']: asyncable(z.any()).describe('The input data to evaluate the expression against.'),
   }) as unknown as FunctionApiDefinition['schema'],
 };
 
@@ -57,7 +60,9 @@ export const JmespathImplementation: FunctionImplementation = createFunctionImpl
   (args, context) => {
     const document = resolveDynamicValueDeep<unknown>(args['data'], context);
     const expression = resolveDynamicValueDeep<unknown>(args['expression'], context);
-    return withSettledArgs({expression, data: document}, settled => {
+    // Computed keys keep these argument names stable under Closure Compiler property renaming.
+    const unsettled = {['expression']: expression, ['data']: document};
+    return withSettledArgs(unsettled, settled => {
       const expr = settled['expression'];
       if (typeof expr !== 'string') {
         const kind = expr === null ? 'null' : Array.isArray(expr) ? 'an array' : `a ${typeof expr}`;
