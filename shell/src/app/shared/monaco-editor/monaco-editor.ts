@@ -37,7 +37,7 @@ import {
   ThemePreference,
 } from '../../settings/app-config-provider/app-config-provider';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
-import {BASIC_CATALOG_SCHEMA} from '../../gallery/schema/basic-catalog-schema';
+import {Catalog} from '../../storage/models/catalog-storage.model';
 
 /**
  * A standalone Angular component that wraps the Monaco Editor.
@@ -493,7 +493,7 @@ export class MonacoEditor {
       jsonContrib.jsonDefaults.setDiagnosticsOptions({
         validate: true,
         schemaValidation: 'error',
-        schemas: this.buildValidationSchemas(layoutSchema, galleryExampleSchema),
+        schemas: this.buildValidationSchemas(layoutSchema, galleryExampleSchema, catalog),
       });
     });
 
@@ -733,14 +733,17 @@ export class MonacoEditor {
    * @param layoutSchema The dynamically generated schema representing the full A2UI layout
    *        structure, including the active catalog's components.
    * @param galleryExampleSchema The schema for Gallery example drafts (`{components, data}`).
+   * @param catalog The active catalog JSON schema received from the renderer (`A2UI_CATALOG`).
    * @return An array of schemas configured with URIs that match `$ref` references
-   *          within the component schemas. We map local constants (like COMMON_TYPES_SCHEMA)
-   *          to both `file:///` and HTTP URIs so the Monaco JSON worker can resolve them
-   *          synchronously without needing an external schema request service.
+   *          within the component and function schemas. We map the active catalog and
+   *          `COMMON_TYPES_SCHEMA` to both `file:///` and HTTP URIs so the Monaco JSON
+   *          worker can resolve them synchronously without needing an external schema
+   *          request service.
    */
   private buildValidationSchemas(
     layoutSchema: unknown,
     galleryExampleSchema: unknown,
+    catalog: Catalog,
   ): monaco.json.DiagnosticsOptions['schemas'] {
     return [
       {
@@ -759,7 +762,7 @@ export class MonacoEditor {
       },
       {
         uri: 'file:///catalog.json',
-        schema: structuredClone(BASIC_CATALOG_SCHEMA),
+        schema: structuredClone(catalog),
       },
       {
         uri: 'https://a2ui.org/specification/v0_9/common_types.json',
@@ -767,11 +770,7 @@ export class MonacoEditor {
       },
       {
         uri: 'https://a2ui.org/specification/v0_9/catalog.json',
-        schema: structuredClone(BASIC_CATALOG_SCHEMA),
-      },
-      {
-        uri: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
-        schema: structuredClone(BASIC_CATALOG_SCHEMA),
+        schema: structuredClone(catalog),
       },
     ];
   }
