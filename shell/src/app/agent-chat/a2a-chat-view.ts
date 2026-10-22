@@ -42,7 +42,7 @@ import {
   A2aBackendMode,
   AppConfigProvider,
 } from '../settings/app-config-provider/app-config-provider';
-import {HostCommunication} from '../shell/host-communication/host-communication';
+import {DefaultTarget, HostCommunication} from '../shell/host-communication/host-communication';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {asRecord} from '../utils/json';
@@ -138,6 +138,7 @@ function resolveUserActionText(action: unknown): string {
   styleUrl: './a2a-chat-view.scss',
 })
 export class A2aChatView implements OnInit {
+  protected readonly DefaultTarget = DefaultTarget;
   protected readonly configProvider = inject(AppConfigProvider);
   private readonly a2aTransport = inject(A2A_TRANSPORT);
   private readonly hostCommunication = inject(HostCommunication);

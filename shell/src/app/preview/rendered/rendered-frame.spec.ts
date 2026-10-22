@@ -23,6 +23,7 @@ import {describe, it, afterEach, expect, beforeEach, vi} from 'vitest';
 import {ReplaySubject, config as rxjsConfig} from 'rxjs';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {
+  DefaultTarget,
   HostCommunication,
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
@@ -95,12 +96,16 @@ describe('RenderedFrame Live Preview Viewport', () => {
   }
 
   /**
-   * Creates a frame with its required `sizing` input set before the first
-   * change detection, as every real host does.
+   * Creates a frame with its required `sizing` and `defaultTarget` inputs set
+   * before the first change detection, as every real host does.
    */
-  function createFrame(sizing: RenderedFrameSizing = 'content'): ComponentFixture<RenderedFrame> {
+  function createFrame(
+    sizing: RenderedFrameSizing = 'content',
+    defaultTarget: DefaultTarget = DefaultTarget.REPLACE,
+  ): ComponentFixture<RenderedFrame> {
     const frameFixture = TestBed.createComponent(RenderedFrame);
     frameFixture.componentRef.setInput('sizing', sizing);
+    frameFixture.componentRef.setInput('defaultTarget', defaultTarget);
     return frameFixture;
   }
 
@@ -305,6 +310,188 @@ describe('RenderedFrame Live Preview Viewport', () => {
     fixture.detectChanges();
 
     expect(await harness.getAppliedHeightPx()).toBeNull();
+  });
+
+  it('forwards its required defaultTarget input (REPLACE or KEEP) to GuestFrame registration', () => {
+    expect(hostCommunicationServiceMock.registerIframe).toHaveBeenCalledWith(
+      expect.anything(),
+      DefaultTarget.REPLACE,
+    );
+
+    vi.mocked(hostCommunicationServiceMock.registerIframe!).mockClear();
+    const keepFixture = createFrame('content', DefaultTarget.KEEP);
+    keepFixture.detectChanges();
+    expect(hostCommunicationServiceMock.registerIframe).toHaveBeenCalledWith(
+      expect.anything(),
+      DefaultTarget.KEEP,
+    );
+    keepFixture.destroy();
+  });
+
+  it('resets the applied height when the resolved renderer URL changes', async () => {
+    emitFromGuest(surfaceResizeEnvelope(420));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(420);
+
+    resolvedUrlSignal.set('http://localhost:4200/other-renderer');
+    fixture.detectChanges();
+
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+  });
+
+  it('ignores pre-render startup SURFACE_RESIZE after RENDERER_READY until RENDER_SUCCESS when payload is bound, and preserves height on duplicate StrictMode RENDERER_READY', async () => {
+    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+    fixture.componentRef.setInput('payload', payload);
+    fixture.detectChanges();
+
+    emitFromGuest(surfaceResizeEnvelope(420));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(420);
+
+    emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    // Startup measurement before RENDER_SUCCESS must not collapse the 280px floor.
+    emitFromGuest(surfaceResizeEnvelope(48));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS));
+    emitFromGuest(surfaceResizeEnvelope(360));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(360);
+
+    // A React StrictMode duplicate RENDERER_READY for the same payload does not
+    // re-send RENDER_A2UI and must not wipe the height or deadlock awaitingRender.
+    emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(360);
+
+    emitFromGuest(surfaceResizeEnvelope(410));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(410);
+  });
+
+  it('guards pre-render SURFACE_RESIZE when payload transitions from null or empty to non-empty after RENDERER_READY', async () => {
+    fixture.componentRef.setInput('payload', null);
+    fixture.detectChanges();
+
+    emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY));
+    fixture.detectChanges();
+
+    // Transitioning from null to a non-empty payload dispatches RENDER_A2UI and
+    // must wait for RENDER_SUCCESS before accepting startup SURFACE_RESIZE.
+    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+    fixture.componentRef.setInput('payload', payload);
+    fixture.detectChanges();
+
+    emitFromGuest(surfaceResizeEnvelope(48));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS));
+    emitFromGuest(surfaceResizeEnvelope(360));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(360);
+  });
+
+  it('resets applied height and ignores SURFACE_RESIZE on RENDER_ERROR until RENDER_SUCCESS arrives', async () => {
+    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+    fixture.componentRef.setInput('payload', payload);
+    fixture.detectChanges();
+    emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDERER_READY));
+    emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS));
+    emitFromGuest(surfaceResizeEnvelope(420));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(420);
+
+    emitFromGuest(
+      bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'Failed to render'}),
+    );
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    emitFromGuest(surfaceResizeEnvelope(60));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS));
+    emitFromGuest(surfaceResizeEnvelope(340));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(340);
+
+    // Updating to a new non-empty payload after RENDER_ERROR keeps ignoring
+    // stale error-banner SURFACE_RESIZE until the new payload emits RENDER_SUCCESS.
+    emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_ERROR, {message: 'Failed again'}));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    fixture.componentRef.setInput('payload', [
+      {version: 'v0.9', createSurface: {surfaceId: 's2', catalogId: 'c1'}},
+    ]);
+    fixture.detectChanges();
+    emitFromGuest(surfaceResizeEnvelope(60));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    emitFromGuest(bridgeEnvelope(PreviewBridgeMessageType.RENDER_SUCCESS));
+    emitFromGuest(surfaceResizeEnvelope(380));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(380);
+  });
+
+  it('resets applied height and ignores SURFACE_RESIZE when payload is null or empty', async () => {
+    const payload = [{version: 'v0.9', createSurface: {surfaceId: 's1', catalogId: 'c1'}}];
+    fixture.componentRef.setInput('payload', payload);
+    fixture.detectChanges();
+    emitFromGuest(surfaceResizeEnvelope(420));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(420);
+
+    fixture.componentRef.setInput('payload', null);
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    emitFromGuest(surfaceResizeEnvelope(180));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    fixture.componentRef.setInput('payload', payload);
+    fixture.detectChanges();
+    emitFromGuest(surfaceResizeEnvelope(400));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(400);
+
+    fixture.componentRef.setInput('payload', []);
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    emitFromGuest(surfaceResizeEnvelope(180));
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+  });
+
+  it('ignores SURFACE_RESIZE when contentReady is false and applies once contentReady is true', async () => {
+    emitFromGuest(
+      bridgeEnvelope(PreviewBridgeMessageType.SURFACE_RESIZE, {
+        height: 180,
+        width: 500,
+        contentReady: false,
+      }),
+    );
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBeNull();
+
+    emitFromGuest(
+      bridgeEnvelope(PreviewBridgeMessageType.SURFACE_RESIZE, {
+        height: 340,
+        width: 500,
+        contentReady: true,
+      }),
+    );
+    fixture.detectChanges();
+    expect(await harness.getAppliedHeightPx()).toBe(340);
   });
 
   /**

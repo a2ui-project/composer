@@ -18,6 +18,7 @@ import {Component, inject, effect, computed, untracked, input, signal} from '@an
 import {type SurfaceResizePayload} from 'a2ui-bridge';
 import {clampContentHeight} from '../content-height';
 import {GuestFrame} from '../guest-frame/guest-frame';
+import {DefaultTarget} from '../../shell/host-communication/host-communication';
 import {ChatState} from '../../chat/chat-state/chat-state';
 import {StateSync} from '../../chat/state-sync/state-sync';
 
@@ -47,9 +48,10 @@ export class RenderedFrame {
   /**
    * The A2UI messages to render in the guest. Sent once the guest's document
    * has announced itself with RENDERER_READY, and again when the content
-   * changes; see GuestFrame.
+   * changes; see GuestFrame. Defaults to `undefined` so the frame can
+   * distinguish an unbound `[payload]` from an explicitly bound `null` or `[]`.
    */
-  readonly payload = input<unknown[] | null | undefined>(null);
+  readonly payload = input<unknown[] | null | undefined>(undefined);
 
   /**
    * How the frame is sized. Required, so that every host chooses explicitly.
@@ -70,12 +72,23 @@ export class RenderedFrame {
   readonly sizing = input.required<RenderedFrameSizing>();
 
   /**
+   * Whether registering this frame replaces `HostCommunication`'s default
+   * target. Required, so that every host chooses explicitly between
+   * `DefaultTarget.REPLACE` (the primary workspace, side canvas, gallery, or
+   * demos coordinator frame) and `DefaultTarget.KEEP` (secondary inline chat
+   * frames that receive their payloads directly via `[payload]`).
+   */
+  readonly defaultTarget = input.required<DefaultTarget>();
+
+  /**
    * Latest surface height reported by the guest renderer frame, in pixels,
    * whatever the sizing mode.
    */
   private readonly reportedHeight = signal<number | null>(null);
 
   private lastHandledResetNonce = this.stateSync.sessionResetNonce();
+  private awaitingRender = false;
+  private hasRenderError = false;
 
   /**
    * Height applied in content sizing, as a CSS length: the latest report
@@ -100,14 +113,50 @@ export class RenderedFrame {
   protected readonly isLocked = this.chatState.isProgrammaticStreamActive;
 
   constructor() {
+    effect(() => {
+      const payload = this.payload();
+      if (payload !== undefined && (!Array.isArray(payload) || payload.length === 0)) {
+        this.awaitingRender = false;
+        this.hasRenderError = false;
+        untracked(() => this.reportedHeight.set(null));
+      }
+    });
+
     // A new session starts from the default size until the guest reports again.
     effect(() => {
       const nonce = this.stateSync.sessionResetNonce();
       if (nonce > this.lastHandledResetNonce) {
         this.lastHandledResetNonce = nonce;
+        this.awaitingRender = false;
+        this.hasRenderError = false;
         untracked(() => this.reportedHeight.set(null));
       }
     });
+  }
+
+  protected onDocumentReplaced(): void {
+    this.awaitingRender = false;
+    this.hasRenderError = false;
+    this.reportedHeight.set(null);
+  }
+
+  protected onPayloadDispatched(initialForDocument: boolean): void {
+    this.awaitingRender = true;
+    if (initialForDocument) {
+      this.hasRenderError = false;
+      this.reportedHeight.set(null);
+    }
+  }
+
+  protected onRenderSuccess(): void {
+    this.awaitingRender = false;
+    this.hasRenderError = false;
+  }
+
+  protected onRenderError(): void {
+    this.awaitingRender = false;
+    this.hasRenderError = true;
+    this.reportedHeight.set(null);
   }
 
   /**
@@ -117,6 +166,16 @@ export class RenderedFrame {
    * for another.
    */
   protected onSurfaceResize(report: SurfaceResizePayload): void {
+    const currentPayload = untracked(() => this.payload());
+    if (
+      this.hasRenderError ||
+      this.awaitingRender ||
+      report.contentReady === false ||
+      (currentPayload !== undefined &&
+        (!Array.isArray(currentPayload) || currentPayload.length === 0))
+    ) {
+      return;
+    }
     this.reportedHeight.set(report.height);
   }
 }

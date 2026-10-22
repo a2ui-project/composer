@@ -555,7 +555,7 @@ test.describe('GuestFrame sends', () => {
       expect(inlineDocs[0].renders, describeDocuments(documents)).toBe(1);
     });
 
-    test('an inline surface that reloads and announces itself before its load gets no payload', async ({
+    test('an inline surface that reloads and announces itself before its load gets one RENDER_A2UI on load', async ({
       page,
     }) => {
       const inline = await showInlineSurface(page, react.url, formPayload());
@@ -578,20 +578,12 @@ test.describe('GuestFrame sends', () => {
           message: 'the reloaded guest should announce itself before its load',
         })
         .toBe(true);
+      await expect(inline.getByRole('textbox').first()).toBeVisible({timeout: 15_000});
       await waitForQuiet(page);
 
-      // Known gap, documented on GuestFrame.onLoad: without a per-document id in
-      // RENDERER_READY, the reloaded document's READY looks like a repeat of the
-      // old document's, and nothing is sent on it. Because the old document also
-      // announced itself before its load, GuestFrame takes that READY for the new
-      // document's and stays ready: the next payload change, or a repeat READY,
-      // would reach it, but its current payload waits for one of those (none comes
-      // here). After an old document that announced itself after its load, the
-      // frame would hold every payload change for good. Expect 1 once READY
-      // carries a per-document id.
       const documents = await guestDocuments(page);
       const inlineDocs = documents.filter(doc => doc.consumer === 'inline');
-      expect(inlineDocs[0].renders, describeDocuments(documents)).toBe(0);
+      expect(inlineDocs[0].renders, describeDocuments(documents)).toBe(1);
     });
 
     test('demo cards get one RENDER_A2UI although their load comes after READY', async ({page}) => {
