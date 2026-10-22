@@ -353,15 +353,21 @@ test.describe('Components Gallery User Journey', () => {
     ).toBeVisible();
   });
 
-  test('keeps the preview card at 400px whatever the component height', async ({page}) => {
+  test('keeps the preview card at its column height (at least 400px) without growing with guest content', async ({
+    page,
+  }) => {
     await trackRendererReady(page);
     await page.goto(`/gallery?renderer=${RENDERER_URLS.angular}`);
     await expect(page.locator('.gallery-container')).toBeVisible();
 
+    const preview = galleryPreview(page);
+    // While no component is selected, `.hidden-frame` collapses the preview
+    // frame to 0px while keeping the iframe mounted for catalog handshakes.
+    expect((await preview.boundingBox())?.height ?? 0).toBe(0);
+
     await page.locator('.catalog-list').getByRole('button', {name: 'Text', exact: true}).click();
     await expect(page.getByRole('heading', {name: 'Text', exact: true})).toBeVisible();
 
-    const preview = galleryPreview(page);
     const guest = preview.locator('iframe.preview-iframe').contentFrame();
     // Wait for the component to render before measuring it.
     await expect
@@ -385,7 +391,8 @@ test.describe('Components Gallery User Journey', () => {
         };
       });
 
-    // A small component: the card does not shrink to it.
+    // A small component: the preview card has a 400px minimum height and
+    // stretches with `.usage-card`, so it does not shrink to the guest content.
     const small = await guestContentHeight(guest);
     const initial = await sizes();
     expect(initial.host).toBeGreaterThanOrEqual(PREVIEW_CARD_HEIGHT_PX);
@@ -395,8 +402,8 @@ test.describe('Components Gallery User Journey', () => {
 
     // A tall component: no component in the basic catalog renders taller than
     // the card at this width, so the guest's content is made taller in place.
-    // The guest reports the new height; the card must not follow it, and the
-    // extra content must scroll inside the frame instead.
+    // The guest reports the new height; the card must not grow with it, and
+    // the extra content must scroll inside the frame instead.
     const tallReport = page.evaluate(
       minHeight =>
         new Promise<number>(resolve => {
@@ -425,7 +432,7 @@ test.describe('Components Gallery User Journey', () => {
     ).toBeGreaterThan(0);
 
     // This frame is the gallery's default bridge target, and in fill mode it
-    // takes its host's height (none while hidden before a selection). It
+    // takes its host's height (0px while hidden before a selection). It
     // must keep answering the catalog handshake either way.
     await expectNoCatalogWatchdog(page);
   });

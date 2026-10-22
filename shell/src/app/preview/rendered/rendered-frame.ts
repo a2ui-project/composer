@@ -72,8 +72,13 @@ export class RenderedFrame implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly logger = this.errorLogger.withTag('[RenderedFrame]');
 
-  /** Optional layout payload to render immediately into the guest iframe. */
-  readonly payload = input<unknown[] | null | undefined>(null);
+  /**
+   * Optional layout payload to render immediately into the guest iframe.
+   * Defaults to `undefined` so the frame can distinguish an unbound `[payload]`
+   * (such as a `fill` host or a test driving heights directly) from an
+   * explicitly bound `[payload]`.
+   */
+  readonly payload = input<unknown[] | null | undefined>(undefined);
 
   /**
    * How the frame is sized. Required, so that every host chooses explicitly.
@@ -100,6 +105,9 @@ export class RenderedFrame implements OnInit {
   private readonly reportedHeight = signal<number | null>(null);
 
   private lastHandledResetNonce = this.stateSync.sessionResetNonce();
+  private lastResolvedUrl = this.startupResolution.resolvedUrl();
+  private awaitingRender = false;
+  private hasRenderError = false;
 
   /**
    * Height applied in content sizing, as a CSS length: the latest report
@@ -155,7 +163,15 @@ export class RenderedFrame implements OnInit {
     // from the host/parent component to the renderer iframe over postMessage whenever
     // the payload input signal emits a non-empty array and the iframe element is available.
     effect(() => {
-      this.dispatchPayload(this.payload(), this.iframeRef()?.nativeElement);
+      const payload = this.payload();
+      const iframe = this.iframeRef()?.nativeElement;
+      if (payload !== undefined && (!Array.isArray(payload) || payload.length === 0)) {
+        this.awaitingRender = false;
+        this.hasRenderError = false;
+        untracked(() => this.reportedHeight.set(null));
+        return;
+      }
+      this.dispatchPayload(payload, iframe);
     });
 
     // A new session starts from the default size until the guest reports again.
@@ -163,6 +179,20 @@ export class RenderedFrame implements OnInit {
       const nonce = this.stateSync.sessionResetNonce();
       if (nonce > this.lastHandledResetNonce) {
         this.lastHandledResetNonce = nonce;
+        this.awaitingRender = false;
+        this.hasRenderError = false;
+        untracked(() => this.reportedHeight.set(null));
+      }
+    });
+
+    // Switching the resolved renderer URL starts from the default size until
+    // the new guest reports.
+    effect(() => {
+      const url = this.startupResolution.resolvedUrl();
+      if (url !== this.lastResolvedUrl) {
+        this.lastResolvedUrl = url;
+        this.awaitingRender = false;
+        this.hasRenderError = false;
         untracked(() => this.reportedHeight.set(null));
       }
     });
@@ -208,20 +238,51 @@ export class RenderedFrame implements OnInit {
       return;
     }
 
-    if (
-      envelope.type === PreviewBridgeMessageType.RENDERER_READY ||
-      envelope.type === PreviewBridgeMessageType.A2UI_CATALOG
-    ) {
+    if (envelope.type === PreviewBridgeMessageType.RENDERER_READY) {
+      const currentPayload = untracked(() => this.payload());
+      this.hasRenderError = false;
+      if (Array.isArray(currentPayload) && currentPayload.length > 0) {
+        this.awaitingRender = true;
+        this.reportedHeight.set(null);
+      }
+      this.dispatchPayload(
+        currentPayload,
+        untracked(() => this.iframeRef()?.nativeElement),
+      );
+    } else if (envelope.type === PreviewBridgeMessageType.A2UI_CATALOG) {
       this.dispatchPayload(
         untracked(() => this.payload()),
         untracked(() => this.iframeRef()?.nativeElement),
       );
+    } else if (envelope.type === PreviewBridgeMessageType.RENDER_SUCCESS) {
+      this.awaitingRender = false;
+      this.hasRenderError = false;
+    } else if (envelope.type === PreviewBridgeMessageType.RENDER_ERROR) {
+      this.awaitingRender = false;
+      this.hasRenderError = true;
+      this.reportedHeight.set(null);
     } else if (envelope.type === PreviewBridgeMessageType.SURFACE_RESIZE) {
       // Stored in either sizing mode; `frameHeightPx` decides whether it applies.
       // A frame that fills its host keeps its default size, and a switch to
       // content sizing applies the latest report without waiting for another.
+      const currentPayload = untracked(() => this.payload());
+      if (
+        this.hasRenderError ||
+        this.awaitingRender ||
+        (currentPayload !== undefined &&
+          (!Array.isArray(currentPayload) || currentPayload.length === 0))
+      ) {
+        return;
+      }
       if (CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
-        const resizePayload = envelope.payload as {height: number; width?: number};
+        const resizePayload = envelope.payload as {
+          height: number;
+          width?: number;
+          contentReady?: boolean;
+        };
+        if (resizePayload.contentReady === false) {
+          return;
+        }
         this.reportedHeight.set(resizePayload.height);
       }
     }

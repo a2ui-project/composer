@@ -397,6 +397,15 @@
   height: 0;
   overflow: hidden;
   pointer-events: none;
+
+  a2ui-composer-rendered-frame {
+    flex: 0 0 0;
+    min-height: 0;
+    height: 0;
+    max-height: 0;
+    padding: 0;
+    overflow: hidden;
+  }
 }
 
 .usage-loading-spinner {
