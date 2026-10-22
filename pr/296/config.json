@@ -1,0 +1,57 @@
+{
+  "renderers": {
+    "default": {
+      "rendererUrl": "https://a2ui-project.github.io/composer/pr/296/samples/ng-basic-catalog/",
+      "displayName": "Angular Basic (github)"
+    },
+    "angular-dev": {
+      "rendererUrl": "http://localhost:4200/samples/ng-basic-catalog/",
+      "displayName": "Angular Basic (local)"
+    },
+    "lit": {
+      "rendererUrl": "https://a2ui-project.github.io/composer/pr/296/samples/lit-basic-catalog/",
+      "displayName": "Lit Basic (github)"
+    },
+    "lit-dev": {
+      "rendererUrl": "http://localhost:4200/samples/lit-basic-catalog/",
+      "displayName": "Lit Basic (local)"
+    },
+    "react": {
+      "rendererUrl": "https://a2ui-project.github.io/composer/pr/296/samples/react-basic-catalog/",
+      "displayName": "React Basic (github)"
+    },
+    "react-dev": {
+      "rendererUrl": "http://localhost:4200/samples/react-basic-catalog/",
+      "displayName": "React Basic (local)"
+    }
+  },
+  "apiKeys": {
+    "fake": {
+      "apiKey": "this will not work",
+      "displayName": "Fake key"
+    }
+  },
+  "models": {
+    "default": {
+      "model": "gemini-flash-latest",
+      "displayName": "Gemini Flash",
+      "thinkingLevels": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "defaultThinkingLevel": "medium"
+    },
+    "gemini-pro": {
+      "model": "gemini-pro-latest",
+      "displayName": "Gemini Pro",
+      "thinkingLevels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "defaultThinkingLevel": "medium"
+    }
+  }
+}
