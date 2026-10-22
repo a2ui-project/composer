@@ -3620,9 +3620,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@modelcontextprotocol/sdk@npm:1.30.0":
-  version: 1.30.0
-  resolution: "@modelcontextprotocol/sdk@npm:1.30.0"
+"@modelcontextprotocol/sdk@npm:1.32.1":
+  version: 1.32.1
+  resolution: "@modelcontextprotocol/sdk@npm:1.32.1"
   dependencies:
     "@hono/node-server": "npm:^1.19.9 || ^2.0.5"
     ajv: "npm:^8.17.1"
@@ -3649,7 +3649,7 @@ __metadata:
       optional: true
     zod:
       optional: false
-  checksum: 10c0/6d12d5c88048b42b0d64906222f804eecbfc0aae02fc42a200d2438f037276cc7863510a8ce649e82c96d5972f62a58bfbdedf79624b0558a607738f5e58b97e
+  checksum: 10c0/8b6c8ff6aa5358aeb316fedfa2094a4241ce12d98a0f818cee42510ec9149fed21fc75244c5f0e8cb453337f243c09fa8a90425cd2533fd481964d8583a1f0c9
   languageName: node
   linkType: hard
 
@@ -6241,7 +6241,7 @@ __metadata:
     "@a2ui/web_core": "npm:0.10.5"
     "@angular/core": "npm:22.0.7"
     "@lit/context": "npm:1.1.6"
-    "@modelcontextprotocol/sdk": "npm:1.30.0"
+    "@modelcontextprotocol/sdk": "npm:1.32.1"
     "@types/jmespath": "npm:0.15.2"
     "@types/react": "npm:19.2.17"
     "@types/react-dom": "npm:19.2.3"
@@ -6308,7 +6308,7 @@ __metadata:
     "@axe-core/playwright": "npm:4.13.0"
     "@copilotkit/angular": "npm:0.5.2"
     "@google/genai": "npm:2.11.0"
-    "@modelcontextprotocol/sdk": "npm:1.30.0"
+    "@modelcontextprotocol/sdk": "npm:1.32.1"
     "@monaco-editor/loader": "npm:1.7.0"
     "@playwright/test": "npm:1.61.1"
     "@types/dompurify": "npm:3.2.0"
