@@ -37,7 +37,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@angular/core": "22.0.7",
+    "@angular/core": "22.2.3",
     "@lit/context": "1.1.6",
     "@types/jmespath": "0.15.2",
     "@types/react": "19.2.17",
