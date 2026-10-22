@@ -31,8 +31,8 @@
       "displayName": "Fake key"
     }
   },
-  "models": {
-    "default": {
+  "models": [
+    {
       "model": "gemini-flash-latest",
       "displayName": "Gemini Flash",
       "thinkingLevels": [
@@ -43,7 +43,7 @@
       ],
       "defaultThinkingLevel": "medium"
     },
-    "gemini-pro": {
+    {
       "model": "gemini-pro-latest",
       "displayName": "Gemini Pro",
       "thinkingLevels": [
@@ -53,5 +53,5 @@
       ],
       "defaultThinkingLevel": "medium"
     }
-  }
+  ]
 }
