@@ -400,9 +400,7 @@ function extractPriorSurfaceItems(
     } else if (item.createSurface) {
       itemsBySurface.set(surfaceId, [item]);
     } else {
-      const surfaceItems = itemsBySurface.get(surfaceId) ?? [];
-      surfaceItems.push(item);
-      itemsBySurface.set(surfaceId, surfaceItems);
+      itemsBySurface.get(surfaceId)?.push(item);
     }
   }
 
