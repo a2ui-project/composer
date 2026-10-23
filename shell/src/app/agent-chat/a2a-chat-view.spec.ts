@@ -268,8 +268,8 @@ describe('A2aChatView', () => {
     // fills the panel instead of following the guest's SURFACE_RESIZE reports.
     const frame = await harness.getSideCanvasFrame();
     expect(frame).not.toBeNull();
-    expect(await frame!.fillsContainer()).toBe(true);
-    expect(await frame!.getFrameHeight()).toBe('100%');
+    expect(await frame!.getSizing()).toBe('fill');
+    expect(await frame!.getAppliedHeightPx()).toBeNull();
   });
 
   it('resets session and clears messages', async () => {

@@ -38,6 +38,7 @@ import {IndexedDbStorage} from '../indexed-db-storage/indexed-db-storage';
 import {StartupResolution} from '../../shell/startup-resolution/startup-resolution';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {stableStringify} from '../stable-stringify/stable-stringify';
+import {CATALOG_WATCHDOG_MESSAGE, CATALOG_WATCHDOG_TIMEOUT_MS} from './catalog-watchdog';
 
 interface HydratedCatalog {
   catalog: Catalog;
@@ -317,13 +318,11 @@ export class CatalogManagement {
                 return;
               }
               this._watchdogFired.set(true);
-              this._catalogError.set(
-                'Watchdog timeout: A2UI_CATALOG not received within 5 seconds.',
-              );
-              this.logger.error('Watchdog timeout: A2UI_CATALOG not received within 5 seconds.');
+              this._catalogError.set(CATALOG_WATCHDOG_MESSAGE);
+              this.logger.error(CATALOG_WATCHDOG_MESSAGE);
               this._isHandshakeInProgress.set(false);
               this.watchdogTimerId = null;
-            }, 5000);
+            }, CATALOG_WATCHDOG_TIMEOUT_MS);
 
             return of(null);
           } else if (envelope.type === PreviewBridgeMessageType.A2UI_CATALOG) {

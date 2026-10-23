@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ComponentHarness} from '@angular/cdk/testing';
+import {ComponentHarness, HarnessPredicate} from '@angular/cdk/testing';
 import {MatNavListHarness} from '@angular/material/list/testing';
 import {MatTableHarness} from '@angular/material/table/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
@@ -43,7 +43,14 @@ export class GalleryHarness extends ComponentHarness {
   );
   private readonly getEmptySubtitle = this.locatorForOptional('.empty-subtitle');
   private readonly getCardTitles = this.locatorForAll('mat-card-title');
-  private readonly getRenderedFrame = this.locatorForOptional(RenderedFrameHarness);
+
+  /**
+   * The Preview card's frame. While no component is selected it is hidden and
+   * acts as the page's default message target. Null if it is not mounted.
+   */
+  readonly getPreviewFrame = this.locatorForOptional(
+    new HarnessPredicate(RenderedFrameHarness, {ancestor: '.preview-card'}),
+  );
 
   /**
    * Retrieves the text labels of all category subheaders.
@@ -195,7 +202,7 @@ export class GalleryHarness extends ComponentHarness {
    * Checks if the sandboxed preview rendered frame is present.
    */
   async hasRenderedFrame(): Promise<boolean> {
-    const frame = await this.getRenderedFrame();
+    const frame = await this.getPreviewFrame();
     return !!frame;
   }
 
