@@ -59,6 +59,25 @@ export enum DefaultTarget {
   KEEP = 'keep',
 }
 
+/** Maximum number of envelopes retained in the message history buffer. */
+const MAX_HISTORY_BUFFER_SIZE = 100;
+
+/**
+ * Message types that are never retained in the history buffer.
+ *
+ * `SURFACE_RESIZE` is emitted by every inline surface on every layout change,
+ * so buffering it evicts the entire history within seconds; it still updates
+ * `latestEnvelope` and broadcasts on `messageStream$`. `CONSOLE_LOG` is
+ * intercepted in `messageListener` before `recordEnvelope` (routing to the
+ * error logger and `messageStream$` without updating `latestEnvelope`) and is
+ * listed here as well for defense in depth and to keep pre-registration
+ * traffic out of `earlyMessageBuffer`.
+ */
+const UNBUFFERED_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+  PreviewBridgeMessageType.SURFACE_RESIZE,
+  PreviewBridgeMessageType.CONSOLE_LOG,
+]);
+
 /**
  * Core service managing cross-frame message passing and event dispatching
  * between the primary workspace shell and rendering client frames.
@@ -112,6 +131,16 @@ export class HostCommunication implements OnDestroy {
     initialValue: null,
   });
 
+  /**
+   * Recent envelopes retained to seed the debug panels (raw messages, events,
+   * data model) when they open.
+   *
+   * Capped at `MAX_HISTORY_BUFFER_SIZE`, so a high-frequency type would evict
+   * everything else within seconds. Those types are listed in
+   * `UNBUFFERED_MESSAGE_TYPES` and skipped here: `SURFACE_RESIZE` still updates
+   * `latestEnvelope` and is broadcast on `messageStream$`, while `CONSOLE_LOG`
+   * is intercepted before envelope dispatch.
+   */
   private readonly messageHistoryBuffer: MessageEnvelope[] = [];
   private readonly earlyMessageBuffer: MessageEvent[] = [];
   /**
@@ -226,7 +255,7 @@ export class HostCommunication implements OnDestroy {
         return;
       }
 
-      if (!isBridgeMessage) {
+      if (!isBridgeMessage || UNBUFFERED_MESSAGE_TYPES.has(event.data.type)) {
         return;
       }
       this.earlyMessageBuffer.push(event);
@@ -363,9 +392,11 @@ export class HostCommunication implements OnDestroy {
   };
 
   private recordEnvelope(envelope: MessageEnvelope): void {
-    this.messageHistoryBuffer.push(envelope);
-    if (this.messageHistoryBuffer.length > 100) {
-      this.messageHistoryBuffer.shift();
+    if (!UNBUFFERED_MESSAGE_TYPES.has(envelope.type)) {
+      this.messageHistoryBuffer.push(envelope);
+      if (this.messageHistoryBuffer.length > MAX_HISTORY_BUFFER_SIZE) {
+        this.messageHistoryBuffer.shift();
+      }
     }
 
     this.latestEnvelopeSignal.set(envelope);
