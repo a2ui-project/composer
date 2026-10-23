@@ -27,7 +27,6 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComposerWorkspaceHarness} from './test/composer-workspace.harness';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {HostCommunication} from '../host-communication/host-communication';
 import {StartupResolution} from '../startup-resolution/startup-resolution';
@@ -129,7 +128,6 @@ describe('ComposerWorkspace Dashboard', () => {
     await TestBed.configureTestingModule({
       imports: [ComposerWorkspace],
       providers: [
-        provideNoopAnimations(),
         provideRouter([]),
         {provide: ChatState, useClass: MockChatState},
         {provide: ChatCoordinator, useClass: MockChatCoordinator},

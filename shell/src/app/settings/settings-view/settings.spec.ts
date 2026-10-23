@@ -17,7 +17,6 @@
 import {TestBed} from '@angular/core/testing';
 import {PlatformLocation} from '@angular/common';
 import {Settings} from './settings';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {
   StartupConfigStateService,
   RendererConfig,
@@ -217,7 +216,6 @@ describe('Settings', () => {
     await TestBed.configureTestingModule({
       imports: [Settings],
       providers: [
-        provideNoopAnimations(),
         {
           provide: StartupResolution,
           useValue: mockStartupResolution,
@@ -359,7 +357,6 @@ describe('Settings', () => {
       await TestBed.configureTestingModule({
         imports: [Settings],
         providers: [
-          provideNoopAnimations(),
           StartupResolution,
           {
             provide: AppConfigProvider,

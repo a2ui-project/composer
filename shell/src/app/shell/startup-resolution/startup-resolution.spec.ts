@@ -21,7 +21,6 @@ import {ComponentHarness} from '@angular/cdk/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {MatButtonHarness} from '@angular/material/button/testing';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {StartupResolution} from './startup-resolution';
 import {EnvironmentContextService} from './state/environment-context.service';
 import {StartupConfigStateService} from './state/startup-config-state.service';
@@ -1731,7 +1730,6 @@ describe('OriginConfirmationDialog', () => {
     await TestBed.configureTestingModule({
       imports: [OriginConfirmationDialog],
       providers: [
-        provideNoopAnimations(),
         {provide: MAT_DIALOG_DATA, useValue: {origin: 'https://external.example.com'}},
         {provide: MatDialogRef, useValue: dialogRef},
       ],

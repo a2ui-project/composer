@@ -17,7 +17,6 @@
 import {TestBed} from '@angular/core/testing';
 import {provideRouter, Router} from '@angular/router';
 import {RouterTestingHarness} from '@angular/router/testing';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {signal} from '@angular/core';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {routes} from './app.routes';
@@ -106,7 +105,6 @@ describe('App Routes Active Verification', () => {
     await TestBed.configureTestingModule({
       providers: [
         provideRouter(routes),
-        provideNoopAnimations(),
         {provide: StartupResolution, useValue: mockStartupResolution},
         {provide: ChatState, useClass: MockChatState},
         {provide: ChatCoordinator, useClass: MockChatCoordinator},

@@ -15,7 +15,6 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal} from '@angular/core';
 import {describe, it, expect, afterEach, beforeEach, vi} from 'vitest';
@@ -340,7 +339,6 @@ describe('Demos Component', () => {
     await TestBed.configureTestingModule({
       imports: [Demos],
       providers: [
-        provideNoopAnimations(),
         {provide: DemosCatalog, useClass: MockDemosCatalog},
         {provide: HostCommunication, useClass: MockHostCommunication},
         {provide: StartupResolution, useClass: MockStartupResolution},

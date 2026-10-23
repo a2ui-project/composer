@@ -15,7 +15,6 @@
  */
 
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {Subject} from 'rxjs';
 import {describe, it, expect, beforeEach, vi, afterEach} from 'vitest';
@@ -63,7 +62,6 @@ describe('DataModel', () => {
     await TestBed.configureTestingModule({
       imports: [DataModel],
       providers: [
-        provideNoopAnimations(),
         {provide: HostCommunication, useValue: mockHostComm},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
       ],
@@ -482,7 +480,6 @@ describe('DataModel', () => {
       await TestBed.configureTestingModule({
         imports: [DataModel, RawMessages],
         providers: [
-          provideNoopAnimations(),
           HostCommunication,
           {
             provide: StartupResolution,

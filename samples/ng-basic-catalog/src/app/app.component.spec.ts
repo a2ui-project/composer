@@ -20,7 +20,6 @@ import {AppComponent} from './app.component';
 import {A2uiSandboxConnection, provideA2uiSandbox} from 'a2ui-bridge/angular';
 import {BasicCatalog} from '@a2ui/angular/v0_9';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideZonelessChangeDetection, WritableSignal} from '@angular/core';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {AppComponentHarness} from './test/app.component.harness';
@@ -49,7 +48,6 @@ describe('AppComponent', () => {
       imports: [AppComponent],
       providers: [
         provideZonelessChangeDetection(),
-        provideNoopAnimations(),
         provideA2uiSandbox([BasicCatalog]),
       ],
     }).compileComponents();

@@ -16,7 +16,6 @@
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {signal, WritableSignal} from '@angular/core';
 import {MonacoEditor} from './monaco-editor';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
@@ -397,7 +396,6 @@ describe('MonacoEditor component', () => {
     TestBed.configureTestingModule({
       imports: [MonacoEditor],
       providers: [
-        provideNoopAnimations(),
         {provide: CatalogManagement, useClass: MockCatalogManagement},
         {provide: AppConfigProvider, useClass: MockAppConfigProvider},
         {provide: ErrorLogger, useClass: MockErrorLogger},

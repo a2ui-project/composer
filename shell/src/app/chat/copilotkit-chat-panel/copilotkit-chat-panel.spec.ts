@@ -24,7 +24,6 @@ import {ChatState, LlmLogEntry, LlmLogType} from '../chat-state/chat-state';
 import {signal, inject, computed} from '@angular/core';
 import {LlmMessage, MessageRole, Attachment} from '../llm-client/llm-client';
 import {PipelineStatus} from '../pipeline-status/pipeline-status';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter} from '@angular/router';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {MatDialogHarness} from '@angular/material/dialog/testing';
@@ -183,7 +182,6 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
             captureScreenshot: vi.fn().mockResolvedValue('data:image/png;base64,mockScreenshot'),
           },
         },
-        provideNoopAnimations(),
         provideRouter([]),
         {provide: ChatCoordinator, useClass: MockChatCoordinator},
         {provide: ChatPromptFactoryService, useClass: MockChatPromptFactoryService},

@@ -20,7 +20,6 @@ import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {By} from '@angular/platform-browser';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {provideRouter, Router, RouterLinkActive} from '@angular/router';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {ChatCoordinator} from '../../chat/chat-coordinator/chat-coordinator';
@@ -123,7 +122,6 @@ describe('ComposerShell Layout', () => {
           {path: 'a2a', component: DummyRouteComponent},
           {path: 'settings', component: DummyRouteComponent},
         ]),
-        provideNoopAnimations(),
         {
           provide: CatalogManagement,
           useValue: catalogManagementServiceMock,

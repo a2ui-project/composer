@@ -16,7 +16,6 @@
 
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {A2aInputArea} from './input-area';
 import {A2aInputAreaHarness} from './test/input-area.harness';
@@ -28,7 +27,6 @@ describe('A2aInputArea', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [A2aInputArea],
-      providers: [provideNoopAnimations()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(A2aInputArea);

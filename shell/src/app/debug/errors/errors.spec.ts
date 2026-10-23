@@ -18,7 +18,6 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {Errors} from './errors';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {ErrorsHarness} from './test/errors.harness';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatTableModule} from '@angular/material/table';
 import {ErrorLogger, ErrorLogItem} from '../error-logger.service';
 import {Subject} from 'rxjs';
@@ -51,7 +50,6 @@ describe('Errors Component', () => {
     await TestBed.configureTestingModule({
       imports: [Errors, MatTableModule],
       providers: [
-        provideNoopAnimations(),
         {provide: ErrorLogger, useValue: mockErrorLogger},
         {provide: UsageTrackingService, useClass: NoopUsageTrackingService},
       ],

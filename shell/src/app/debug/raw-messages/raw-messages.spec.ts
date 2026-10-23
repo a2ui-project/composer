@@ -26,7 +26,6 @@ import {
 } from '../../shell/host-communication/host-communication';
 import {signal, WritableSignal} from '@angular/core';
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
@@ -87,7 +86,6 @@ describe('RawMessages', () => {
     await TestBed.configureTestingModule({
       imports: [RawMessages],
       providers: [
-        provideNoopAnimations(),
         {
           provide: HostCommunication,
           useValue: hostCommMock,
