@@ -96,7 +96,29 @@ export class SurfaceResizeObserver {
    * dispatching a callback only if dimensions have changed since last measurement (or if forced).
    */
   measureAndDispatch(force = false): void {
-    if (typeof document === 'undefined') return;
+    const dimensions = this.measure();
+    if (!dimensions) return;
+    const {height, width, viewportWidth} = dimensions;
+
+    if (
+      force ||
+      height !== this.lastKnownHeight ||
+      width !== this.lastKnownWidth ||
+      viewportWidth !== this.lastKnownViewportWidth
+    ) {
+      this.lastKnownHeight = height;
+      this.lastKnownWidth = width;
+      this.lastKnownViewportWidth = viewportWidth;
+      this.onResize(dimensions);
+    }
+  }
+
+  /**
+   * The dimensions {@link measureAndDispatch} reports for the document as it is laid
+   * out now, or null when there is nothing to report (no document, or no height).
+   */
+  measure(): SurfaceDimensions | null {
+    if (typeof document === 'undefined') return null;
 
     const body = document.body;
     const docEl = document.documentElement;
@@ -109,8 +131,8 @@ export class SurfaceResizeObserver {
     // both track real content in either direction. The width axis drops the same
     // term even though the host ignores `width` today, so that driving the frame
     // width from this payload cannot silently reopen the feedback loop, and so
-    // that a root scroll box following the frame does not trip the dedupe below
-    // while the height stays put.
+    // that a root scroll box following the frame does not trip the dedupe in
+    // measureAndDispatch while the height stays put.
     const height = Math.max(
       // Integer DOM dimensions can round down fractional line heights, leaving a
       // fitted iframe fractionally too short and showing an unnecessary scrollbar.
@@ -122,19 +144,8 @@ export class SurfaceResizeObserver {
     const width = Math.max(body?.scrollWidth || 0, body?.offsetWidth || 0, docEl?.offsetWidth || 0);
     const viewportWidth = docEl?.clientWidth || undefined;
 
-    if (height <= 0) return;
-
-    if (
-      force ||
-      height !== this.lastKnownHeight ||
-      width !== this.lastKnownWidth ||
-      viewportWidth !== this.lastKnownViewportWidth
-    ) {
-      this.lastKnownHeight = height;
-      this.lastKnownWidth = width;
-      this.lastKnownViewportWidth = viewportWidth;
-      this.onResize({height, width, ...(viewportWidth ? {viewportWidth} : {})});
-    }
+    if (height <= 0) return null;
+    return {height, width, ...(viewportWidth ? {viewportWidth} : {})};
   }
 
   /**

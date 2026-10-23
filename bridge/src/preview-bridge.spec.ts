@@ -2481,6 +2481,116 @@ describe('PreviewBridge Core API Runtime', () => {
       bridge.destroy();
       expect(destroySpy).toHaveBeenCalled();
     });
+
+    it('does not start waitForInitialContent when processMessages throws during a streaming render', async () => {
+      vi.useFakeTimers();
+      const onInitialRender = vi.fn().mockResolvedValue(undefined);
+      const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+      const processor = {
+        processMessages: vi.fn(() => {
+          throw new Error('Partial stream error');
+        }),
+      };
+
+      bridge.attachRenderer(processor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+        onInitialRender,
+      });
+
+      Object.defineProperty(document.body, 'scrollHeight', {value: 300, configurable: true});
+      Object.defineProperty(document.body, 'scrollWidth', {value: 600, configurable: true});
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            isStreaming: true,
+            payload: [
+              {version: 'v0.9', createSurface: {surfaceId: 's1'}},
+              {
+                version: 'v0.9',
+                updateComponents: {surfaceId: 's1', components: [{id: 'root', component: 'Text'}]},
+              },
+            ],
+          },
+        }),
+      );
+
+      await vi.advanceTimersByTimeAsync(500);
+      expect(onInitialRender).not.toHaveBeenCalled();
+      expect(bridge['contentReady']).toBe(false);
+      vi.useRealTimers();
+    });
+
+    it('keeps contentReady false when settle caps while unmeasurable and settles once measurable', async () => {
+      vi.useFakeTimers();
+      const spy = vi.spyOn(window.parent, 'postMessage');
+      const resizePayloads = () =>
+        spy.mock.calls
+          .map(([message]) => message as {type: string; payload: Record<string, unknown>})
+          .filter(message => message.type === PreviewBridgeMessageType.SURFACE_RESIZE)
+          .map(message => message.payload);
+
+      const mockGroup = {onSurfaceCreated: {subscribe: vi.fn()}};
+      const processor = {processMessages: vi.fn()};
+
+      // Start hidden (height 0 -> measure() returns null).
+      Object.defineProperty(document.body, 'scrollHeight', {value: 0, configurable: true});
+      Object.defineProperty(document.body, 'scrollWidth', {value: 0, configurable: true});
+
+      bridge.attachRenderer(processor, {
+        surfaceGroup: mockGroup as unknown as SurfaceGroupLike,
+        onSurfaceReady: vi.fn(),
+        onInitialRender: () => Promise.resolve(),
+      });
+      spy.mockClear();
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window.parent,
+          origin: window.location.origin,
+          data: {
+            type: PreviewBridgeMessageType.RENDER_A2UI,
+            payload: [
+              {version: 'v0.9', createSurface: {surfaceId: 's1'}},
+              {
+                version: 'v0.9',
+                updateComponents: {surfaceId: 's1', components: [{id: 'root', component: 'Text'}]},
+              },
+            ],
+          },
+        }),
+      );
+
+      // Exceed CONTENT_SETTLE_MAX_MS (2000ms) while the iframe is still hidden (height 0).
+      await vi.advanceTimersByTimeAsync(2100);
+      expect(bridge['contentReady']).toBe(false);
+      expect(resizePayloads()).toEqual([]);
+
+      // The iframe becomes visible at an initial unconverged height (200px), then grows to 320px.
+      Object.defineProperty(document.body, 'scrollHeight', {value: 200, configurable: true});
+      Object.defineProperty(document.body, 'scrollWidth', {value: 500, configurable: true});
+      bridge.dispatchSurfaceResize();
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(bridge['contentReady']).toBe(false);
+      expect(resizePayloads()).toEqual([{height: 200, width: 500, contentReady: false}]);
+
+      Object.defineProperty(document.body, 'scrollHeight', {value: 320, configurable: true});
+      bridge.dispatchSurfaceResize();
+      await vi.advanceTimersByTimeAsync(50);
+      expect(bridge['contentReady']).toBe(false);
+
+      // Once 320px stays quiet for CONTENT_QUIET_MS (150ms) and scheduleSurfaceResize(true) flushes,
+      // contentReady flips to true.
+      await vi.advanceTimersByTimeAsync(160);
+      expect(bridge['contentReady']).toBe(true);
+      expect(resizePayloads().at(-1)).toEqual({height: 320, width: 500, contentReady: true});
+      vi.useRealTimers();
+    });
   });
   describe('Error Propagation and Handshake', () => {
     let processMessagesMock: ReturnType<typeof vi.fn>;

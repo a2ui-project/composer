@@ -30,6 +30,7 @@ import {
 import {
   A2uiRendererService,
   A2UI_RENDERER_CONFIG,
+  MarkdownRenderer,
   provideMarkdownRenderer,
 } from '@a2ui/angular/v0_9';
 import {Catalog, ComponentApi} from '@a2ui/web_core/v0_9';
@@ -80,7 +81,56 @@ export class A2uiSandboxConnection implements OnDestroy {
   /** The dynamic teardown handle for the active framework renderer connection subscription. */
   private rendererConnection: SurfaceStateSubscription | null = null;
   private readonly injector = inject(Injector);
+  private readonly markdownRenderer = inject(MarkdownRenderer, {optional: true});
   private pendingContentRender?: AfterRenderRef;
+  private pendingContentResolve?: () => void;
+  private contentRenderGeneration = 0;
+  private destroyed = false;
+
+  /**
+   * Resolves once the markdown renderer can render. The default one loads markdown-it
+   * lazily, and body text renders empty until it has; on a slow machine that takes
+   * longer than the bridge waits for the content to stop changing, so content would
+   * be reported ready without its text. Failing to load is the renderer's concern.
+   */
+  private async markdownLoaded(): Promise<void> {
+    try {
+      await this.markdownRenderer?.render('');
+    } catch {
+      // Text falls back to its raw markdown; there is nothing more to wait for.
+    }
+  }
+
+  private cancelPendingContentRender(): void {
+    ++this.contentRenderGeneration;
+    const ref = this.pendingContentRender;
+    const resolve = this.pendingContentResolve;
+    this.pendingContentRender = undefined;
+    this.pendingContentResolve = undefined;
+    ref?.destroy();
+    resolve?.();
+  }
+
+  private waitForNextRender(): Promise<void> {
+    return new Promise<void>(resolve => {
+      if (this.destroyed) {
+        resolve();
+        return;
+      }
+      this.pendingContentResolve = resolve;
+      const ref = afterNextRender(
+        () => {
+          if (this.pendingContentRender === ref) {
+            this.pendingContentRender = undefined;
+            this.pendingContentResolve = undefined;
+          }
+          resolve();
+        },
+        {injector: this.injector},
+      );
+      this.pendingContentRender = ref;
+    });
+  }
 
   /**
    * Initializes a new instance of the sandbox connection, automatically establishing
@@ -112,17 +162,17 @@ export class A2uiSandboxConnection implements OnDestroy {
       onSurfaceReady: (surfaceId: string) => {
         this.surfaceId.set(surfaceId);
       },
-      onInitialRender: () =>
-        new Promise<void>(resolve => {
-          this.pendingContentRender?.destroy();
-          this.pendingContentRender = afterNextRender(
-            () => {
-              this.pendingContentRender = undefined;
-              resolve();
-            },
-            {injector: this.injector},
-          );
-        }),
+      onInitialRender: async () => {
+        this.cancelPendingContentRender();
+        const generation = this.contentRenderGeneration;
+        await this.markdownLoaded();
+        if (this.destroyed || generation !== this.contentRenderGeneration) return;
+        await this.waitForNextRender();
+        if (this.destroyed || generation !== this.contentRenderGeneration) return;
+        await this.markdownLoaded();
+        if (this.destroyed || generation !== this.contentRenderGeneration) return;
+        await this.waitForNextRender();
+      },
       onSurfaceCleared: () => {
         this.surfaceId.set('');
       },
@@ -142,8 +192,8 @@ export class A2uiSandboxConnection implements OnDestroy {
    * to prevent memory leaks and observer bloat in high-frequency test runs.
    */
   ngOnDestroy(): void {
-    this.pendingContentRender?.destroy();
-    this.pendingContentRender = undefined;
+    this.destroyed = true;
+    this.cancelPendingContentRender();
     this.rendererConnection?.unsubscribe();
     this.rendererConnection = null;
   }
