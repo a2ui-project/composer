@@ -14,7 +14,7 @@
       "prefix": "a2ui-composer",
       "architect": {
         "build": {
-          "builder": "@angular-devkit/build-angular:application",
+          "builder": "@angular/build:application",
           "options": {
             "outputPath": "dist/a2ui-composer",
             "index": "src/index.html",
@@ -66,7 +66,7 @@
           }
         },
         "serve": {
-          "builder": "@angular-devkit/build-angular:dev-server",
+          "builder": "@angular/build:dev-server",
           "options": {
             "buildTarget": "a2ui-composer:build:development",
             "prebundle": {
