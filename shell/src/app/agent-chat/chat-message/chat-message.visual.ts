@@ -15,7 +15,8 @@
  */
 
 import {test, expect} from '@playwright/test';
-import {RENDERER_URLS} from '../../../../e2e/helpers';
+import {inlineSurfaceIframe} from '../../preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../../preview/testing/renderer-urls';
 import {connectMockAgent, mockAgentCard, sseEvent, sseFlightBody} from '../test/mock-a2a-agent';
 
 /** Budget for a guest frame to finish its handshake and draw a surface. */
@@ -122,7 +123,7 @@ test.describe('A2aChatMessage Visual Regression & Layout', () => {
     );
 
     // Both guest frames must have drawn their surface before the pictures are taken.
-    const inlineFrames = chatHistory.locator('.inline-surface-card iframe.preview-iframe');
+    const inlineFrames = inlineSurfaceIframe(chatHistory);
     await expect(inlineFrames).toHaveCount(2);
     await expect(inlineFrames.nth(0).contentFrame().getByText('Surface sent first')).toBeVisible({
       timeout: SURFACE_RENDER_TIMEOUT_MS,

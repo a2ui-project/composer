@@ -32,6 +32,7 @@ import {
   sanitizeDownloadFileName,
 } from '../../chat/a2a/a2a-attachments';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
+import {DefaultTarget} from '../../shell/host-communication/host-communication';
 import {renderMarkdown} from '../../utils/markdown';
 import {A2A_PROTOCOL_ICON_URL} from '../converters/a2a-ui-converter';
 import {CanvasArtifact, UiAttachedImage, UiMessage} from './types';
@@ -125,6 +126,7 @@ function imagePreviewSrc(file: UiAttachedImage): string {
   styleUrl: './chat-message.scss',
 })
 export class A2aChatMessage {
+  protected readonly DefaultTarget = DefaultTarget;
   private readonly document = inject(DOCUMENT);
   private readonly snackBar = inject(MatSnackBar);
   private readonly logger = inject(ErrorLogger).withTag('[ChatMessage]');

@@ -27,23 +27,14 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import {DomSanitizer} from '@angular/platform-browser';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
 import {MatIconModule} from '@angular/material/icon';
-import {Demo, PreviewBridgeMessageType, SurfaceResizePayload} from 'a2ui-bridge';
-import {buildRendererUrl} from '../preview/renderer-url';
+import {Demo, SurfaceResizePayload} from 'a2ui-bridge';
 import {MAX_CONTENT_HEIGHT_PX} from '../preview/content-height';
-import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
-import {
-  DefaultTarget,
-  HostCommunication,
-  MessageEnvelope,
-} from '../shell/host-communication/host-communication';
-import {AppConfigProvider} from '../settings/app-config-provider/app-config-provider';
-import {CrossFrameValidator} from '../shell/cross-frame-validator/cross-frame-validator';
+import {GuestFrame} from '../preview/guest-frame/guest-frame';
+import {DefaultTarget} from '../shell/host-communication/host-communication';
 import {DemoLauncher} from './services/demo-launcher';
-import {ErrorLogger} from '../debug/error-logger.service';
 import {
   initialSizing,
   MEASURE_HEIGHT_PX,
@@ -70,8 +61,9 @@ export enum DemoCardState {
  * Renders one live A2UI demo inside its own sandboxed renderer iframe.
  *
  * The frame is only attached once {@link DemoCard.mount} turns true, which keeps
- * a wall of cards lazy, and the demo payload is dispatched exactly once per frame
- * load after that frame's own RENDERER_READY handshake.
+ * a wall of cards lazy. It is a {@link GuestFrame}, which loads the renderer,
+ * registers the frame, sends the demo once per document after that document's
+ * RENDERER_READY, and reports what the guest sends back.
  *
  * The card commits its height once, while it is on screen, from the first report the
  * guest marks ready, and then locks it: content that changes later scrolls inside the
@@ -82,7 +74,7 @@ export enum DemoCardState {
 @Component({
   selector: 'a2ui-composer-demo-card',
   standalone: true,
-  imports: [MatButtonModule, MatCardModule, MatIconModule],
+  imports: [MatButtonModule, MatCardModule, MatIconModule, GuestFrame],
   templateUrl: './demo-card.ng.html',
   styleUrl: './demo-card.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -95,12 +87,7 @@ export enum DemoCardState {
   },
 })
 export class DemoCard {
-  private readonly sanitizer = inject(DomSanitizer);
-  private readonly startupResolution = inject(StartupResolution);
-  private readonly hostCommunication = inject(HostCommunication);
-  private readonly configProvider = inject(AppConfigProvider);
   private readonly demoLauncher = inject(DemoLauncher);
-  private readonly logger = inject(ErrorLogger).withTag('[DemoCard]');
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   /** The demo whose A2UI payload this card renders. */
@@ -111,6 +98,17 @@ export class DemoCard {
 
   protected readonly measureHeightCss = `${MEASURE_HEIGHT_PX}px`;
   protected readonly maxHeightCss = `${MAX_CONTENT_HEIGHT_PX}px`;
+
+  /**
+   * The card's frame registers with DefaultTarget.KEEP. The default target is the frame
+   * that messages sent without a target go to, and on this page that has to stay the
+   * coordinator: CatalogManagement answers every frame's RENDERER_READY with an
+   * untargeted GET_CATALOG. If each card became the default as it mounted, that request
+   * would go to the newest card, wait there if the card had not loaded yet, and be
+   * dropped when the next card registered; CatalogManagement would then report its
+   * 5-second watchdog timeout as a catalog error.
+   */
+  protected readonly frameDefaultTarget = DefaultTarget.KEEP;
 
   /** Where the frame is in its handshake; the sizing state adds the error case. */
   private readonly handshakeState = signal(DemoCardState.IDLE);
@@ -175,29 +173,18 @@ export class DemoCard {
     () => this.sizing().kind === 'committed' && this.sizing().revealed,
   );
 
-  /**
-   * Whether the demo payload has already been sent for the frame's current document.
-   *
-   * Deliberately keyed on the frame's *load*, not on `contentWindow` identity: a
-   * WindowProxy keeps a stable identity across the frame's own navigations, so an
-   * identity-keyed guard cannot tell a re-announcing fresh document apart from a
-   * duplicate handshake. See {@link DemoCard.onFrameLoad}.
-   */
-  private payloadSentForCurrentLoad = false;
-
   private readyTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly surfaceRef = viewChild<ElementRef<HTMLElement>>('demoSurface');
 
-  protected readonly iframeRef = viewChild<ElementRef<HTMLIFrameElement>>('demoIframe');
+  private readonly guestFrame = viewChild<GuestFrame>('guestFrame');
 
-  protected readonly safeRendererUrl = computed(() => {
-    const built = buildRendererUrl(
-      this.startupResolution.resolvedUrl(),
-      untracked(() => this.configProvider.themePreference()),
-      this.logger,
-    );
-    return built ? this.sanitizer.bypassSecurityTrustResourceUrl(built) : null;
+  /**
+   * The card's GuestFrame, as the element the card sizes and scales; its iframe fills
+   * it exactly, so its box is the iframe's.
+   */
+  private readonly frameRef = viewChild<unknown, ElementRef<HTMLElement>>('guestFrame', {
+    read: ElementRef,
   });
 
   /**
@@ -205,11 +192,10 @@ export class DemoCard {
    *
    * It covers an unmounted card, and a mounted card whose frame isn't showing the demo
    * yet: before the commit the frame is held at `--demo-card-measure-h`, and a remounted
-   * frame shows the renderer's own startup screen until it renders the demo again.
+   * frame shows the renderer's own startup screen until it renders the demo again. A
+   * frame with no usable renderer URL never reports, so it is never revealed either.
    */
-  protected readonly showPlaceholder = computed(
-    () => !this.sizing().revealed || !this.mount() || !this.safeRendererUrl(),
-  );
+  protected readonly showPlaceholder = computed(() => !this.sizing().revealed || !this.mount());
 
   constructor() {
     effect(onCleanup => {
@@ -220,9 +206,11 @@ export class DemoCard {
       onCleanup(() => observer.disconnect());
     });
 
-    // Mount gate: opening the gate starts the ready deadline for this card only.
+    // Mount gate: opening the gate starts the ready deadline for this card only when an
+    // iframe is actually rendered inside the guest frame.
     effect(onCleanup => {
-      if (!this.mount()) {
+      const hasIframe = this.guestFrame()?.hasIframe() ?? false;
+      if (!this.mount() || !hasIframe) {
         untracked(() => this.handshakeState.set(DemoCardState.IDLE));
         return;
       }
@@ -240,67 +228,21 @@ export class DemoCard {
       if (this.committed()) untracked(() => this.clearReadyTimeout());
     });
 
-    // Frame binding: registers this card's iframe with HostCommunication and handles
-    // only the envelopes its own guest window sends (handleEnvelope drops the rest).
-    //
-    // The card registers with DefaultTarget.KEEP. The default target is the frame that
-    // messages sent without a target go to, and on this page that has to stay the
-    // coordinator: CatalogManagement answers every frame's RENDERER_READY with an
-    // untargeted GET_CATALOG. If each card became the default as it mounted, that request
-    // would go to the newest card, wait there if the card had not loaded yet, and be
-    // dropped when the next card registered; CatalogManagement would then report its
-    // 5-second watchdog timeout as a catalog error.
+    // Frame binding: a new frame starts its own sizing pass and reports whether it is
+    // on screen. GuestFrame registers it with HostCommunication and passes on only the
+    // messages its own guest window sends.
     effect(onCleanup => {
-      const element = this.iframeRef()?.nativeElement ?? null;
-      if (!element) {
+      const frame = this.frameRef()?.nativeElement;
+      const hasIframe = this.guestFrame()?.hasIframe() ?? false;
+      if (!frame || !hasIframe) {
         return;
       }
-
-      this.payloadSentForCurrentLoad = false;
       this.dispatch({type: 'FrameAttached'});
       untracked(() => this.startReadyTimeout());
-      this.hostCommunication.registerIframe(element, DefaultTarget.KEEP);
-      const guestWindow = element.contentWindow;
-      const subscription = guestWindow
-        ? this.hostCommunication.messageStream$.subscribe(envelope =>
-            untracked(() => this.handleEnvelope(envelope, element, guestWindow)),
-          )
-        : null;
-      const visibility = this.observeVisibility(element);
-
+      const visibility = this.observeVisibility(frame);
       onCleanup(() => {
         visibility?.disconnect();
-        subscription?.unsubscribe();
-        this.hostCommunication.unregisterIframe(element);
         this.dispatch({type: 'VisibilityChanged', visible: false});
-      });
-    });
-
-    // Renderer-switch trigger: switching renderers in Settings is what actually causes
-    // a reload (it changes resolvedUrl(), which changes safeRendererUrl() and thus the
-    // iframe's `src`). Resetting here reacts to that cause directly, instead of relying
-    // on the frame's `load` event as a proxy for it. That matters because `load` and this
-    // load's RENDERER_READY posts are both delivered asynchronously with no ordering
-    // guarantee between them: under React StrictMode, if `load` were to fire between the
-    // two READY posts, a reset keyed only on `load` would re-arm the flag mid-load and
-    // cause a duplicate RENDER_A2UI send that replays createSurface for the same
-    // surfaceId. This effect closes that gap for the actual renderer-switch case; the
-    // `load` listener (see {@link DemoCard.onFrameLoad}) remains as the cover for a
-    // guest-initiated reload that doesn't change safeRendererUrl().
-    effect(() => {
-      const url = this.safeRendererUrl();
-      untracked(() => {
-        this.payloadSentForCurrentLoad = false;
-        // A different renderer lays the same demo out differently, so the height
-        // committed for the outgoing one is not evidence about the incoming one.
-        this.dispatch({type: 'RendererChanged'});
-        const mounting = this.mount() && url !== null;
-        this.handshakeState.set(mounting ? DemoCardState.MOUNTING : DemoCardState.IDLE);
-        if (mounting) {
-          this.startReadyTimeout();
-        } else {
-          this.clearReadyTimeout();
-        }
       });
     });
 
@@ -325,13 +267,13 @@ export class DemoCard {
   /**
    * Reports whether the frame is on screen. Chrome stops rendering a cross-origin frame
    * that is scrolled out of view, so only a frame on screen can be trusted to report
-   * what it shows. The iframe is observed rather than the surface, because the surface
-   * is taller than the measuring frame at its top, and no root margin is used: the
-   * question is whether the frame is on screen, not whether it is near. Where the
-   * platform has no IntersectionObserver, the frame counts as on screen, so the card
-   * still commits.
+   * what it shows. The frame (the GuestFrame its iframe fills) is observed rather than
+   * the surface, because the surface is taller than the measuring frame at its top, and
+   * no root margin is used: the question is whether the frame is on screen, not whether
+   * it is near. Where the platform has no IntersectionObserver, the frame counts as on
+   * screen, so the card still commits.
    */
-  private observeVisibility(frame: HTMLIFrameElement): IntersectionObserver | null {
+  private observeVisibility(frame: HTMLElement): IntersectionObserver | null {
     if (typeof IntersectionObserver === 'undefined') {
       this.dispatch({type: 'VisibilityChanged', visible: true});
       return null;
@@ -345,64 +287,58 @@ export class DemoCard {
   }
 
   /**
-   * Applies a bridge envelope originating from this card's own renderer frame.
-   *
-   * DATA_MODEL_CHANGE and every other message type are deliberately ignored: most
-   * demos request data model echoes that this page has no use for.
+   * The card's guest announced itself, so the ready deadline restarts from here. This
+   * fires for every announcement, a StrictMode repeat included; GuestFrame has sent the
+   * demo by now unless the document already had it.
    */
-  private handleEnvelope(
-    envelope: MessageEnvelope,
-    iframe: HTMLIFrameElement,
-    guestWindow: Window,
-  ): void {
-    if (envelope.sourceWindow !== guestWindow) {
-      return;
-    }
+  protected onRendererReady(): void {
+    this.handshakeState.set(DemoCardState.READY);
+    this.startReadyTimeout();
+  }
 
-    switch (envelope.type) {
-      case PreviewBridgeMessageType.RENDERER_READY: {
-        this.handshakeState.set(DemoCardState.READY);
-        // React renderers under StrictMode announce readiness twice; the payload
-        // must be dispatched exactly once per frame load.
-        if (this.payloadSentForCurrentLoad) {
-          return;
-        }
-        this.payloadSentForCurrentLoad = true;
-        this.startReadyTimeout();
-        // HostCommunication marks this frame ready before it hands the handshake to
-        // subscribers, so the payload is posted at once instead of queued.
-        this.hostCommunication.sendRenderA2UI(this.demo().a2ui, iframe);
-        return;
-      }
-      case PreviewBridgeMessageType.SURFACE_RESIZE: {
-        if (!CrossFrameValidator.validateIncomingMessage(envelope, undefined, this.logger)) {
-          return;
-        }
-        const report = envelope.payload as SurfaceResizePayload;
-        const surface = this.surfaceRef()?.nativeElement;
-        if (surface) this.measureAvailableWidth(surface);
-        // Older bridges don't report their viewport, so fall back to the frame's width.
-        const measuredViewport = report.viewportWidth ?? iframe.clientWidth;
-        this.dispatch({
-          type: 'Resize',
-          report: {
-            height: report.height,
-            width: report.width,
-            viewportWidth: measuredViewport > 0 ? measuredViewport : undefined,
-            contentReady: report.contentReady,
-          },
-        });
-        return;
-      }
-      case PreviewBridgeMessageType.RENDER_SUCCESS:
-        this.dispatch({type: 'RenderSuccess'});
-        return;
-      case PreviewBridgeMessageType.RENDER_ERROR:
-        this.dispatch({type: 'RenderError'});
-        return;
-      default:
-        return;
+  /**
+   * The frame now shows another renderer's document. A different renderer lays the
+   * same demo out differently, so the height committed for the outgoing one is not
+   * evidence about the incoming one. GuestFrame sends the demo again once the new
+   * document announces itself. A card whose frame is unmounted hears nothing; the
+   * renderer can only be switched from other routes, which unmount the whole wall.
+   */
+  protected onDocumentReplaced(): void {
+    this.dispatch({type: 'RendererChanged'});
+    const hasIframe = this.guestFrame()?.hasIframe() ?? false;
+    if (this.mount() && hasIframe) {
+      this.handshakeState.set(DemoCardState.MOUNTING);
+      this.startReadyTimeout();
+    } else {
+      this.handshakeState.set(DemoCardState.IDLE);
+      this.clearReadyTimeout();
     }
+  }
+
+  /** A validated SURFACE_RESIZE report from the card's own guest. */
+  protected onSurfaceResize(report: SurfaceResizePayload): void {
+    const surface = this.surfaceRef()?.nativeElement;
+    if (surface) this.measureAvailableWidth(surface);
+    // Older bridges don't report their viewport, so fall back to the frame's width.
+    const measuredViewport =
+      report.viewportWidth ?? this.frameRef()?.nativeElement.clientWidth ?? 0;
+    this.dispatch({
+      type: 'Resize',
+      report: {
+        height: report.height,
+        width: report.width,
+        viewportWidth: measuredViewport > 0 ? measuredViewport : undefined,
+        contentReady: report.contentReady,
+      },
+    });
+  }
+
+  protected onRenderSuccess(): void {
+    this.dispatch({type: 'RenderSuccess'});
+  }
+
+  protected onRenderError(): void {
+    this.dispatch({type: 'RenderError'});
   }
 
   private measureAvailableWidth(surface: HTMLElement): void {
@@ -420,22 +356,6 @@ export class DemoCard {
    */
   protected openInWorkspace(): void {
     void this.demoLauncher.openInWorkspace(this.demo());
-  }
-
-  /**
-   * Re-arms the payload send for the document the frame has just finished loading.
-   *
-   * Switching renderers in Settings changes {@link StartupResolution.resolvedUrl}, so
-   * every card's iframe `src` changes and the frame reloads: the guest app boots fresh
-   * and emits a new RENDERER_READY. Because `contentWindow` returns a WindowProxy whose
-   * identity is stable across the frame's own navigations, guarding on window identity
-   * suppressed that resend and left the card sitting on the renderer's idle placeholder
-   * with no console error. Resetting only the sent state here lets a reload re-request
-   * the payload while a StrictMode double RENDERER_READY inside one load still collapses
-   * to a single send, and avoids unregister/re-register churn on the subscription.
-   */
-  protected onFrameLoad(): void {
-    this.payloadSentForCurrentLoad = false;
   }
 
   private clearReadyTimeout(): void {

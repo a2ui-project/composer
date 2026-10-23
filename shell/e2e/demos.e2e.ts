@@ -15,12 +15,17 @@
  */
 
 import {test, expect, type Page} from '@playwright/test';
+import {DEMO_CARD_SELECTORS} from '../src/app/demos/test/demo-card-selectors';
+import {RENDERED_FRAME_SELECTORS} from '../src/app/preview/rendered/test/rendered-frame-selectors';
 import {
-  WindowWithMonaco,
+  demoCardFrame,
+  demoCardPlaceholder,
+  demoCardSurface,
   demosCoordinator,
-  expectNoCatalogWatchdog,
-  trackRendererReady,
-} from './helpers';
+  firstPreviewFrame,
+  previewFrame,
+} from '../src/app/preview/testing/preview-frame-locators';
+import {WindowWithMonaco, expectNoCatalogWatchdog, trackRendererReady} from './helpers';
 import {DEMO_CARD_COUNT, cardTitled, revealCard} from './demo-wall-helpers';
 
 /** Text the first demo (Flight status) renders once its guest is live. */
@@ -70,7 +75,7 @@ for (const renderer of [
       const cards = page.locator('a2ui-composer-demo-card');
       await expect(cards).toHaveCount(DEMO_CARD_COUNT);
       await expect(
-        cards.nth(0).frameLocator('iframe').getByText(FIRST_DEMO_MARKER, {exact: true}),
+        demoCardFrame(cards.nth(0)).getByText(FIRST_DEMO_MARKER, {exact: true}),
       ).toBeVisible();
       await expectNoCatalogWatchdog(page);
     });
@@ -89,10 +94,10 @@ for (const renderer of [
       await expect(cards.nth(1).locator('.demo-card-title')).toHaveText('System dashboard');
       await expect(cards.nth(2).locator('.demo-card-title')).toHaveText('Product checkout');
       await expect(cards.nth(3).locator('.demo-card-title')).toHaveText('Optimization plan');
-      const flight = cards.nth(0).frameLocator('iframe');
-      const system = cards.nth(1).frameLocator('iframe');
-      const checkout = cards.nth(2).frameLocator('iframe');
-      const workflow = cards.nth(3).frameLocator('iframe');
+      const flight = demoCardFrame(cards.nth(0));
+      const system = demoCardFrame(cards.nth(1));
+      const checkout = demoCardFrame(cards.nth(2));
+      const workflow = demoCardFrame(cards.nth(3));
       await expect(flight.getByText('VIE', {exact: true})).toBeVisible();
       await expect(flight.getByText('JFK', {exact: true})).toBeVisible();
       await expect(flight.locator('body')).toHaveCSS('font-family', 'Arial, Helvetica, sans-serif');
@@ -107,7 +112,7 @@ for (const renderer of [
       await expect(system.getByRole('img', {name: 'Memory usage: 82 percent'})).toBeVisible();
       // The placeholder covers controls until the initial height measurement settles.
       for (let index = 0; index < 4; index++) {
-        await expect(cards.nth(index).locator('.demo-card-placeholder')).toBeHidden();
+        await expect(demoCardPlaceholder(cards.nth(index))).toBeHidden();
       }
       const input = checkout.locator('input[type="text"]');
       await input.fill('123 Market Street');
@@ -116,12 +121,10 @@ for (const renderer of [
 
       // All four showcase surfaces fit without clipping controls or fractional overflow.
       for (let index = 0; index < 4; index++) {
-        await expect(cards.nth(index).locator('.demo-card-surface')).toHaveClass(/is-measured/);
+        await expect(demoCardSurface(cards.nth(index))).toHaveClass(/is-measured/);
         await expect
           .poll(() =>
-            cards
-              .nth(index)
-              .frameLocator('iframe')
+            demoCardFrame(cards.nth(index))
               .locator('html')
               .evaluate(
                 el =>
@@ -219,9 +222,9 @@ for (const renderer of [
       // Follow the target while newly mounted neighbours establish their height.
       await expect(async () => {
         await card.scrollIntoViewIfNeeded();
-        await expect(card.locator('.demo-card-placeholder')).toBeHidden({timeout: 1000});
+        await expect(demoCardPlaceholder(card)).toBeHidden({timeout: 1000});
       }).toPass();
-      const frame = card.frameLocator('iframe');
+      const frame = demoCardFrame(card);
       await expect(frame.getByText('Invitation Builder', {exact: true})).toBeVisible();
       await frame.locator('input[type="text"]').first().fill('Bento launch');
       await expect(frame.getByText('Bento launch', {exact: true})).toBeVisible();
@@ -247,7 +250,7 @@ for (const renderer of [
       await page.getByRole('link', {name: 'A2UI Demos'}).click();
       await page.getByRole('button', {name: 'Open in Composer: Product checkout'}).click();
       await page.waitForURL(url => url.hash.includes('a2ui=d1.'));
-      const frame = page.frameLocator('iframe.preview-iframe');
+      const frame = previewFrame(page);
       await expect(frame.locator('input[type="text"]')).toBeVisible();
       // Opening a shared design can render the preview more than once; a late render
       // would reset the fields to the demo's defaults after they have been edited.
@@ -286,7 +289,7 @@ for (const renderer of [
 
       // The card's own live demo stays interactive: the "Open" control is an explicit
       // affordance beside the demo, not a click target laid over it.
-      const demoInput = card.frameLocator('iframe').locator('input').first();
+      const demoInput = demoCardFrame(card).locator('input').first();
       await demoInput.fill('composer@example.com');
       await expect(demoInput).toHaveValue('composer@example.com');
 
@@ -313,7 +316,7 @@ for (const renderer of [
           {timeout: 20000},
         )
         .toContain('gallery-simple-login-form');
-      await expect(page.frameLocator('iframe').first().locator('body')).toContainText('Sign In');
+      await expect(firstPreviewFrame(page).locator('body')).toContainText('Sign In');
     });
   });
 }
@@ -332,22 +335,25 @@ const INCREMENTAL_AND_FOLLOWING_DEMOS = [
  * Infinity until all of those cards have measured their demos.
  */
 async function largestStretch(page: Page, titles: readonly string[]): Promise<number> {
-  return page.locator('a2ui-composer-demo-card').evaluateAll((cards, titles) => {
-    let largest = 0;
-    for (const title of titles) {
-      const card = cards.find(
-        candidate => candidate.querySelector('.demo-card-title')?.textContent?.trim() === title,
-      );
-      const surface = card?.querySelector('.demo-card-surface');
-      if (!card || !surface?.classList.contains('is-measured')) {
-        return Infinity;
+  return page.locator('a2ui-composer-demo-card').evaluateAll(
+    (cards, {titles, surfaceSelector}) => {
+      let largest = 0;
+      for (const title of titles) {
+        const card = cards.find(
+          candidate => candidate.querySelector('.demo-card-title')?.textContent?.trim() === title,
+        );
+        const surface = card?.querySelector(surfaceSelector);
+        if (!card || !surface?.classList.contains('is-measured')) {
+          return Infinity;
+        }
+        const cardBox = card.getBoundingClientRect();
+        const contentHeight = surface.getBoundingClientRect().bottom - cardBox.top;
+        largest = Math.max(largest, cardBox.height / contentHeight);
       }
-      const cardBox = card.getBoundingClientRect();
-      const contentHeight = surface.getBoundingClientRect().bottom - cardBox.top;
-      largest = Math.max(largest, cardBox.height / contentHeight);
-    }
-    return largest;
-  }, titles);
+      return largest;
+    },
+    {titles, surfaceSelector: DEMO_CARD_SELECTORS.surface},
+  );
 }
 
 interface WindowWithPreviewActivity extends Window {
@@ -356,16 +362,16 @@ interface WindowWithPreviewActivity extends Window {
 
 /** Waits until the workspace preview has sent the shell no messages for 800ms. */
 async function waitForPreviewToSettle(page: Page): Promise<void> {
-  await page.evaluate(() => {
+  await page.evaluate(iframeSelector => {
     const activity = window as WindowWithPreviewActivity;
     activity.__lastPreviewMessageAt = performance.now();
     window.addEventListener('message', event => {
-      const frame = document.querySelector<HTMLIFrameElement>('iframe.preview-iframe');
+      const frame = document.querySelector<HTMLIFrameElement>(iframeSelector);
       if (frame && event.source === frame.contentWindow) {
         activity.__lastPreviewMessageAt = performance.now();
       }
     });
-  });
+  }, RENDERED_FRAME_SELECTORS.iframe);
   await expect
     .poll(
       () =>

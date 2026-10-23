@@ -15,6 +15,7 @@
  */
 
 import {test, expect, type Page} from '@playwright/test';
+import {DEMO_CARD_SELECTORS} from '../src/app/demos/test/demo-card-selectors';
 import {DEMO_RENDERERS} from './demo-wall-helpers';
 
 /**
@@ -54,14 +55,14 @@ interface ProbeWindow extends Window {
 /** Samples every card's committed height and frame width each animation frame. */
 async function installProbe(page: Page): Promise<void> {
   await page.addInitScript(
-    ({epsilon}) => {
+    ({epsilon, surfaceSelector}) => {
       if (window.top !== window) return;
       localStorage.setItem('a2ui_composer_force_1p', 'true');
       const trace = {cards: {} as Record<string, CardTrace>, lastWidthChangeAt: performance.now()};
       (window as ProbeWindow).__wallTrace = trace;
       const sample = () => {
         for (const card of Array.from(document.querySelectorAll('a2ui-composer-demo-card'))) {
-          const surface = card.querySelector<HTMLElement>('.demo-card-surface.is-measured');
+          const surface = card.querySelector<HTMLElement>(`${surfaceSelector}.is-measured`);
           if (!surface) continue;
           const key = card.getAttribute('data-demo-key') ?? '';
           const scale =
@@ -83,7 +84,7 @@ async function installProbe(page: Page): Promise<void> {
       };
       requestAnimationFrame(sample);
     },
-    {epsilon: COMMIT_EPSILON_PX},
+    {epsilon: COMMIT_EPSILON_PX, surfaceSelector: DEMO_CARD_SELECTORS.surface},
   );
 }
 

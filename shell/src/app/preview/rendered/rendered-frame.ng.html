@@ -20,17 +20,17 @@
   [style.height]="frameHeightPx() ?? '100%'"
   [style.min-height]="frameHeightPx()"
 >
-  @if (safeRendererUrl()) {
-    <iframe
-      #previewIframe
-      [src]="safeRendererUrl()"
-      sandbox="allow-scripts allow-same-origin allow-forms"
-      class="preview-iframe"
-      title="Rendered Preview"
-      [style.min-height]="frameHeightPx()"
-      (load)="syncPayloadOnIframeLoad()"
-    ></iframe>
-  } @else {
+  <a2ui-composer-guest-frame
+    class="preview-frame"
+    [payload]="payload()"
+    [defaultTarget]="defaultTarget()"
+    [frameTitle]="'Rendered Preview'"
+    (documentReplaced)="onDocumentReplaced()"
+    (payloadDispatched)="onPayloadDispatched($event)"
+    (renderSuccess)="onRenderSuccess()"
+    (renderError)="onRenderError()"
+    (surfaceResize)="onSurfaceResize($event)"
+  >
     <div class="rendered-frame-placeholder">Rendered UI Placeholder</div>
-  }
+  </a2ui-composer-guest-frame>
 </div>

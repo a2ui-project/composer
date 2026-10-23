@@ -23,6 +23,7 @@ import {
   type TestInfo,
 } from '@playwright/test';
 import {MAX_CONTENT_HEIGHT_PX} from '../src/app/preview/content-height';
+import {DEMO_CARD_SELECTORS} from '../src/app/demos/test/demo-card-selectors';
 import {
   COMMIT_TOLERANCE_PX,
   DEMO_CARD_COUNT,
@@ -149,8 +150,8 @@ function cardByKey(page: Page, key: string): Locator {
 
 /** The card's committed frame height and the reports its frames sent. */
 function cardState(card: Locator) {
-  return card.evaluate(host => {
-    const iframe = host.querySelector<HTMLIFrameElement>('iframe.demo-card-frame');
+  return card.evaluate((host, iframeSelector) => {
+    const iframe = host.querySelector<HTMLIFrameElement>(iframeSelector);
     const allReports = (window as WindowWithSurfaceReports).__surfaceReports ?? [];
     const reports = allReports.filter(
       report => iframe !== null && report.source === iframe.contentWindow,
@@ -177,7 +178,7 @@ function cardState(card: Locator) {
       ),
       error: host.querySelector('.demo-card-error') !== null,
     };
-  });
+  }, DEMO_CARD_SELECTORS.iframe);
 }
 
 function expectedHeight(content: number): number {
