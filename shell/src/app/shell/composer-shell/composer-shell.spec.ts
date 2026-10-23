@@ -242,10 +242,12 @@ describe('ComposerShell Layout', () => {
     expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
     await harness.clickThemeToggleButton();
     expect(injectedDocument.body.classList.contains('dark-theme')).toBe(true);
+    expect(themeSpy).toHaveBeenCalledTimes(1);
     expect(themeSpy).toHaveBeenCalledWith({theme: ThemePreference.DARK});
 
     await harness.clickThemeToggleButton();
     expect(injectedDocument.body.classList.contains('dark-theme')).toBe(false);
+    expect(themeSpy).toHaveBeenCalledTimes(2);
     expect(themeSpy).toHaveBeenCalledWith({theme: ThemePreference.LIGHT});
   });
 
