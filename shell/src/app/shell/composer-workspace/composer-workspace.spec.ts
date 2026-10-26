@@ -48,6 +48,7 @@ import {signal} from '@angular/core';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {RenderedFrame} from '../../preview/rendered/rendered-frame';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -162,6 +163,17 @@ describe('ComposerWorkspace Dashboard', () => {
     expect(types).toContain('RenderedFrame');
     expect(types).toContain('RawFrame');
     expect(types).toContain('DataModel');
+  });
+
+  it('sizes the docked Rendered panel frame to fill its panel', () => {
+    // Dockview may not attach panels to the jsdom DOM, so read the input off
+    // the instance; reading a required input that was never set would throw.
+    const manager = fixture.debugElement.injector.get(ComposerDockview);
+    const renderedRef = manager.dynamicComponentRefs.find(
+      ref => ref.componentType === RenderedFrame,
+    );
+    expect(renderedRef).toBeDefined();
+    expect((renderedRef!.instance as RenderedFrame).sizing()).toBe('fill');
   });
 
   it('delegates clearLogs to all queried child components when clearAllLogs is called', () => {

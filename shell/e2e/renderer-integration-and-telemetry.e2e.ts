@@ -16,7 +16,19 @@
 
 import {test, expect, Locator, FrameLocator, Page, JSHandle} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {RENDERER_URLS, getMonacoContent, setMonacoContent, waitForPreviewTab} from './helpers';
+import {
+  RENDERER_URLS,
+  dockedPreviewGeometry,
+  getMonacoContent,
+  guestContentHeight,
+  guestScrollRange,
+  inlineSurfaceContainer,
+  setMonacoContent,
+  showInlineSurface,
+  waitForPreviewTab,
+} from './helpers';
+import {CAR_BOOKING} from '../src/app/chat/chat-service/initial-draft';
+import {MAX_CONTENT_HEIGHT_PX} from '../src/app/preview/content-height';
 
 /** A single SURFACE_RESIZE message observed on the postMessage wire. */
 interface SurfaceResizeLogEntry {
@@ -193,22 +205,14 @@ const HEIGHT_STABILITY_TIMEOUT_MS = 5_000;
 const STABILITY_PROBE_INTERVAL_MS = 100;
 
 /**
- * Upper bound for a settled preview frame. The sample content is roughly 280px
- * tall and the test viewport is 800px, so anything beyond this means the frame
- * is still growing under its own resize traffic.
- */
-const MAX_SETTLED_FRAME_HEIGHT_PX = 1500;
-
-/**
  * Upper bound on SURFACE_RESIZE messages recorded for one preview session.
  *
- * Measured at 1280x800, from the postMessage wire:
- *   healthy   Angular 4, React 5, Lit 7  (Lit re-renders twice: 32,148,288,312,148,288,312)
- *   reverted guest CSS, host breaker active   13 and 15
- *   reverted guest CSS, no host breaker       212 and 239
- * The bound has to clear the healthy maximum with margin, so it cannot sit
- * below the breaker's 8-report latch; 10 still separates healthy from broken
- * by three messages on either side.
+ * Measured at 1280x800, from the postMessage wire: healthy guests send
+ * Angular 4, React 4-5, Lit 2-7 (Lit re-renders twice:
+ * 32,148,288,312,148,288,312). 10 is that maximum plus a margin of three. A
+ * guest caught in a feedback loop stops at MAX_CONTENT_HEIGHT_PX, so it may
+ * send fewer than this; under the cap the detectors for it are the
+ * frame-versus-content and below-the-cap assertions.
  */
 const MAX_IDLE_RESIZE_MESSAGES = 10;
 
@@ -222,14 +226,18 @@ const LOOP_CADENCE_GAP_MS = 50;
 /**
  * Upper bound on how many reports may arrive back to back at loop cadence.
  *
- * Measured longest burst: healthy Angular 2, React 2, Lit 3; guest CSS
- * reverted, 8, 8 and 3. Cadence does not give the order of magnitude one might
+ * Measured longest burst against the docked preview: healthy Angular 2,
+ * React 2, Lit 3; guest CSS reverted, 8, 8 and 3. Inline in the chat the
+ * whole healthy session can be one burst (12 runs: Angular 2-4, React 4-5,
+ * Lit 2-3). 5 passed every measured healthy run; 6 adds one report of
+ * headroom and stays below the broken 8, which was measured on the docked
+ * preview only. Cadence does not give the order of magnitude one might
  * expect, because healthy renderers also emit sub-20ms pairs during their
  * initial render; the useful signal is burst LENGTH, not gap size. A broken
  * React guest is caught by neither this bound nor the run-length bound above,
  * only by the frame-versus-content assertion.
  */
-const MAX_LOOP_CADENCE_RUN = 5;
+const MAX_LOOP_CADENCE_RUN = 6;
 
 /** Allowance for sub-pixel rounding between guest and host measurements. */
 const FRAME_HEIGHT_TOLERANCE_PX = 2;
@@ -490,9 +498,7 @@ for (const config of CONFIGS) {
       await expect(searchButton).toBeEnabled();
     });
 
-    test('keeps tall content inside the docked preview and its controls reachable', async ({
-      page,
-    }) => {
+    test('docked preview fills its panel and the guest scrolls', async ({page}) => {
       await page.setViewportSize({width: 1280, height: 480});
       await page.goto(`/?renderer=${config.rendererUrl}`);
       await expect(page.locator('.workspace-container')).toBeVisible();
@@ -500,23 +506,19 @@ for (const config of CONFIGS) {
       const searchButton = iframe.getByRole('button', {name: 'Search Cars'});
       await expect(searchButton).toBeVisible();
 
-      const panel = page.locator('.dockview-root a2ui-composer-rendered-frame');
+      // Exercise real overflow rather than passing because the sample fits the
+      // panel: at this viewport the sample is taller than the docked frame, and
+      // it is the guest's own document that scrolls.
+      await expect.poll(() => guestScrollRange(iframe)).toBeGreaterThan(0);
 
-      // Exercise real overflow rather than passing because the sample fits the panel.
-      await expect
-        .poll(() => panel.evaluate(host => host.scrollHeight - host.clientHeight))
-        .toBeGreaterThan(0);
+      // The frame fills its panel instead of growing with the content, so it
+      // neither extends underneath the adjacent debug panel nor makes its host
+      // scroll.
+      const geometry = await dockedPreviewGeometry(page);
+      expect(geometry.frameBottom - geometry.panelBottom).toBeLessThanOrEqual(1);
+      expect(geometry.hostScrollRange).toBeLessThanOrEqual(1);
 
-      // Content taller than the docked preview must scroll inside its panel,
-      // rather than extending underneath the adjacent debug panel.
-      expect(
-        await panel.evaluate(host => {
-          const group = host.closest('.dv-render-overlay')!;
-          return host.getBoundingClientRect().bottom - group.getBoundingClientRect().bottom;
-        }),
-      ).toBeLessThanOrEqual(1);
-
-      // Clicking scrolls the panel; it fails if another panel intercepts the click.
+      // Clicking scrolls the guest; it fails if another panel intercepts the click.
       await searchButton.click();
       await expect(page.locator('.dv-tab', {hasText: /^Events/})).toContainText('(1)');
     });
@@ -603,32 +605,40 @@ for (const config of CONFIGS) {
     test('settles preview frame height without a SURFACE_RESIZE feedback loop', async ({page}) => {
       test.setTimeout(STABILITY_TEST_TIMEOUT_MS);
 
-      await page.goto(`/?renderer=${config.rendererUrl}`, {waitUntil: 'commit'});
-      const historyHandle = await page.evaluateHandle(() => {
+      // Only a content-sized frame applies the guest's reports, so only there
+      // can a feedback loop form: this runs against an inline chat surface.
+      // The wire tap goes in before any frame exists, on every navigation the
+      // mock agent's connect flow makes, and keeps only the inline guest's
+      // messages.
+      await page.addInitScript(() => {
+        if (window !== window.top) return;
         const log: CapturedBridgeEnvelope[] = [];
-        window.addEventListener('message', e =>
-          log.push({...(e.data || {}), __timeMs: performance.now()}),
-        );
-        return log;
+        (window as unknown as {__inlineBridgeLog: CapturedBridgeEnvelope[]}).__inlineBridgeLog =
+          log;
+        window.addEventListener('message', e => {
+          const source = Array.from(document.querySelectorAll('iframe')).find(
+            frame => frame.contentWindow === e.source,
+          );
+          if (source?.closest('.inline-surface-card')) {
+            log.push({...(e.data || {}), __timeMs: performance.now()});
+          }
+        });
       });
-      await page.waitForLoadState('load');
-      await expect(page.locator('.workspace-container')).toBeVisible();
-
-      const iframe = page.frameLocator('iframe.preview-iframe');
+      const iframe = await showInlineSurface(page, config.rendererUrl, CAR_BOOKING);
+      const historyHandle = await page.evaluateHandle(
+        () =>
+          (window as unknown as {__inlineBridgeLog: CapturedBridgeEnvelope[]}).__inlineBridgeLog,
+      );
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible({
         timeout: PREVIEW_GUEST_READY_TIMEOUT_MS,
       });
 
-      const frameContainer = page.locator('.rendered-frame-container');
+      const frameContainer = inlineSurfaceContainer(page);
 
-      // The bounds below were measured at the configured 1280x800 viewport,
-      // where the preview panel starts SHORTER than the ~312px of sample
-      // content, so a frame tracking the guest is distinguishable from one
-      // merely filling its panel. That geometry is not a constant: the dockview
-      // layout is restored from persisted JSON for real users, while each
-      // Playwright context starts with empty storage and therefore the default
-      // layout. Changing the viewport invalidates the measured bounds rather
-      // than just shifting the numbers.
+      // The bounds below were measured on the sample car booking form (about
+      // 360px) inline in the chat at the configured 1280x800 viewport. The
+      // form is taller than the 280px floor the frame starts from, so a frame
+      // tracking the guest is distinguishable from one stuck at its floor.
       //
       // Icon and text webfonts swap in after first paint and can move the
       // content by more than the 1px settle tolerance, so wait for the swap and
@@ -649,9 +659,11 @@ for (const config of CONFIGS) {
       expect
         .soft(Math.max(...settled) - Math.min(...settled), `heights: ${heights}`)
         .toBeLessThanOrEqual(1);
-      expect
-        .soft(heights[heights.length - 1], `heights: ${heights}`)
-        .toBeLessThan(MAX_SETTLED_FRAME_HEIGHT_PX);
+      // The sample is shorter than the cap, so a frame resting at the cap was
+      // driven there by a feedback loop rather than by the content.
+      expect(heights[heights.length - 1], `heights: ${heights}`).toBeLessThan(
+        MAX_CONTENT_HEIGHT_PX,
+      );
 
       const resizeLog = await page.evaluate((history: CapturedBridgeEnvelope[]) => {
         return history
@@ -682,40 +694,28 @@ for (const config of CONFIGS) {
 
       // The guest document must fit its own viewport, so growing the frame can
       // never grow the reported height again.
-      //
-      // `contentHeight` mirrors measureAndDispatch() in
-      // bridge/src/surface-resize-observer.ts. Deriving it from
-      // body.scrollHeight alone diverges whenever the root element is the
-      // taller box: body margins escape through it, which the bridge unit test
-      // pins at body 290 against documentElement.offsetHeight 390.
-      const guest = await iframe.locator('body').evaluate(() => ({
-        scrollHeight: document.documentElement.scrollHeight,
-        clientHeight: document.documentElement.clientHeight,
-        contentHeight: Math.max(
-          document.body.scrollHeight,
-          document.body.offsetHeight,
-          document.documentElement.offsetHeight,
-        ),
-      }));
-      expect.soft(guest.scrollHeight).toBeLessThanOrEqual(guest.clientHeight + 1);
+      expect.soft(await guestScrollRange(iframe)).toBeLessThanOrEqual(1);
 
       // Settling is not enough: the frame must settle ON THE CONTENT. Comparing
       // against the guest's own content box rather than a literal keeps this
       // valid when the sample payload changes. Hard, not soft: this is the
       // assertion with real margin (off by 16-32px when the fix is reverted)
-      // and it cannot be satisfied by MAX_SURFACE_DIMENSION, by the host growth
-      // breaker, or by the panel geometry of the day. RenderedFrame overrides
-      // the stylesheet min-height once a real content height is reported.
+      // and it cannot be satisfied by MAX_SURFACE_DIMENSION or by the content
+      // height cap, which the sample stays below. In content sizing the 280px
+      // floor in rendered-frame.scss holds only until the first report;
+      // RenderedFrame then applies the reported height as an inline
+      // min-height, which wins over the floor, so a surface shorter than
+      // 280px is still measured on its content.
       //
       // It is also the only thing standing between React and no coverage at
       // all: on a reverted React guest, the message count, run-length and
       // cadence bounds above ALL PASSED, and this assertion alone failed.
       // Making it soft, or comparing against a literal, gives up React.
       const settledHeight = heights[heights.length - 1];
-      const expectedHeight = guest.contentHeight;
+      const expectedHeight = await guestContentHeight(iframe);
       expect(
         Math.abs(settledHeight - expectedHeight),
-        `frame: ${settledHeight}px, guest content: ${guest.contentHeight}px`,
+        `frame: ${settledHeight}px, guest content: ${expectedHeight}px`,
       ).toBeLessThanOrEqual(FRAME_HEIGHT_TOLERANCE_PX);
     });
   });

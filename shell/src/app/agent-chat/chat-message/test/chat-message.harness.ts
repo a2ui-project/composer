@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import {ComponentHarness} from '@angular/cdk/testing';
+import {ComponentHarness, HarnessPredicate} from '@angular/cdk/testing';
 import {MatButtonHarness} from '@angular/material/button/testing';
+import {RenderedFrameHarness} from '../../../preview/rendered/test/rendered-frame.harness';
 
 export class A2aChatMessageHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-chat-message';
@@ -40,6 +41,11 @@ export class A2aChatMessageHarness extends ComponentHarness {
   private getBodyBlocks = this.locatorForAll('.agent-text-content, .inline-surface-card');
   private getInspectMessageButton = this.locatorForOptional(
     MatButtonHarness.with({selector: 'button[aria-label="Inspect message"]'}),
+  );
+
+  /** The rendered frame of the inline surface, or null when the message has none. */
+  readonly getInlineFrame = this.locatorForOptional(
+    new HarnessPredicate(RenderedFrameHarness, {ancestor: '.inline-surface-card'}),
   );
 
   async hasInlineSurface(): Promise<boolean> {

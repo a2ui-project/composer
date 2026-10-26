@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
-import {expect, Page} from '@playwright/test';
+import {expect, type FrameLocator, type Locator, Page} from '@playwright/test';
+import {connectMockAgent, sseEvent} from '../src/app/agent-chat/test/mock-a2a-agent';
+import {
+  CATALOG_WATCHDOG_MESSAGE,
+  CATALOG_WATCHDOG_TIMEOUT_MS,
+} from '../src/app/storage/catalog-management/catalog-watchdog';
 
 export interface MonacoModel {
   getValue(): string;
@@ -166,4 +171,218 @@ export async function useChatPanel(page: Page, panel: ChatPanelKind): Promise<vo
       localStorage.setItem('a2ui_composer_force_plain_chat_panel', 'true');
     }
   }, panel === 'plain');
+}
+
+/** The preview frame host in the Components Gallery's Preview card. */
+export function galleryPreview(page: Page): Locator {
+  return page.locator('.preview-card a2ui-composer-rendered-frame');
+}
+
+/** The hidden preview frame host that coordinates the /demos page. */
+export function demosCoordinator(page: Page): Locator {
+  return page.locator('.coordinator-frame a2ui-composer-rendered-frame');
+}
+
+/** The preview frame host in the composer workspace's "Rendered" Dockview panel. */
+export function dockedPreview(page: Page): Locator {
+  return page.locator('.dockview-root a2ui-composer-rendered-frame');
+}
+
+/** The sized container of the inline chat surface. */
+export function inlineSurfaceContainer(page: Page): Locator {
+  return page.locator('.inline-surface-card .rendered-frame-container');
+}
+
+/** The iframe of the inline chat surface. */
+export function inlineSurfaceIframe(page: Page): Locator {
+  return page.locator('.inline-surface-card iframe.preview-iframe');
+}
+
+/** The guest document of the inline chat surface. */
+export function inlineSurfaceFrame(page: Page): FrameLocator {
+  return inlineSurfaceIframe(page).contentFrame();
+}
+
+/** The chat history's scroll container. */
+export function chatHistory(page: Page): Locator {
+  return page.locator('.chat-history-container');
+}
+
+/**
+ * Renders `payload` as an inline chat surface, the content-sized frame host:
+ * connects the A2A chat to a mock agent whose every reply carries the payload,
+ * against the given renderer, and sends one prompt. Returns the guest document
+ * of the new surface once it exists.
+ */
+export async function showInlineSurface(
+  page: Page,
+  rendererUrl: string,
+  payload: unknown[] | string,
+): Promise<FrameLocator> {
+  // Registered last, so it wins over any config.json route a spec installs.
+  await page.route('**/config.json', route =>
+    route.fulfill({json: {renderers: {default: {rendererUrl}}}}),
+  );
+  const data = typeof payload === 'string' ? payload : JSON.stringify(payload);
+  await connectMockAgent(page, 'http://mock-agent.local', () =>
+    sseEvent({
+      taskId: 'task-inline-surface',
+      contextId: 'ctx-inline-surface',
+      message: {
+        role: 'agent',
+        parts: [{text: 'Inline surface.'}, {data: {mimeType: 'application/json+a2ui', data}}],
+      },
+      final: true,
+    }),
+  );
+  const prompt = page.locator('.prompt-textarea');
+  await prompt.fill('show the surface');
+  await prompt.press('Enter');
+  await expect(page.locator('.inline-surface-card')).toHaveCount(1);
+  return inlineSurfaceFrame(page);
+}
+
+/**
+ * The guest's content height as the bridge reports it. Mirrors
+ * measureAndDispatch() in bridge/src/surface-resize-observer.ts: body margins
+ * escape through the root element, so body.scrollHeight alone can be short.
+ */
+export function guestContentHeight(frame: FrameLocator): Promise<number> {
+  return frame
+    .locator('body')
+    .evaluate(() =>
+      Math.max(
+        Math.ceil(document.body.getBoundingClientRect().height),
+        document.body.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.offsetHeight,
+      ),
+    );
+}
+
+/**
+ * How far the guest's document can scroll: the root element's scrollHeight
+ * minus its clientHeight. Positive means the guest, not the host, scrolls.
+ */
+export function guestScrollRange(frame: FrameLocator): Promise<number> {
+  return frame.locator('html').evaluate(el => el.scrollHeight - el.clientHeight);
+}
+
+/** Geometry of the docked preview against the Dockview group that holds it. */
+export interface DockedPreviewGeometry {
+  /** Rendered height of the preview iframe. */
+  frameHeight: number;
+  /** Bottom edge of the preview iframe. */
+  frameBottom: number;
+  /** Height of the panel's content box, which a filling frame matches. */
+  panelContentHeight: number;
+  /** Bottom edge of the panel group. */
+  panelBottom: number;
+  /** How far the frame's host element itself can scroll. */
+  hostScrollRange: number;
+}
+
+/** Measures the docked preview against its Dockview panel. */
+export function dockedPreviewGeometry(page: Page): Promise<DockedPreviewGeometry> {
+  return dockedPreview(page).evaluate(host => {
+    const frame = host.querySelector('iframe.preview-iframe')!.getBoundingClientRect();
+    const panel = host.closest('.dv-render-overlay')!;
+    const style = getComputedStyle(panel);
+    return {
+      frameHeight: frame.height,
+      frameBottom: frame.bottom,
+      panelContentHeight:
+        panel.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+      panelBottom: panel.getBoundingClientRect().bottom,
+      hostScrollRange: host.scrollHeight - host.clientHeight,
+    };
+  });
+}
+
+/**
+ * Drags the Dockview sash under the docked preview's group by `deltaY` pixels,
+ * resizing the preview group against the debug drawer below it.
+ */
+export async function dragPreviewSplitter(page: Page, deltaY: number): Promise<void> {
+  const {x, y} = await dockedPreview(page).evaluate(host => {
+    const groupBottom = host.closest('.dv-render-overlay')!.getBoundingClientRect().bottom;
+    const sashes = Array.from(
+      document.querySelectorAll(
+        '.dv-split-view-container.dv-vertical > .dv-sash-container > .dv-sash',
+      ),
+    );
+    const sash = sashes
+      .map(el => el.getBoundingClientRect())
+      .find(rect => Math.abs(rect.top + rect.height / 2 - groupBottom) <= rect.height + 2);
+    if (!sash) {
+      throw new Error(`No horizontal sash at the preview group's bottom edge (${groupBottom}px)`);
+    }
+    return {x: sash.left + sash.width / 2, y: sash.top + sash.height / 2};
+  });
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  // One move only: in headless Chromium a pointercancel follows the drag's
+  // second pointermove (also before the sizing change), which ends Dockview's
+  // sash drag after the first step.
+  await page.mouse.move(x, y + deltaY);
+  await page.mouse.up();
+}
+
+/**
+ * Makes the page record when the last RENDERER_READY reached the top window,
+ * for {@link expectNoCatalogWatchdog}. Call before navigating.
+ */
+export async function trackRendererReady(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    if (window !== window.top) return;
+    window.addEventListener('message', event => {
+      if ((event.data as {type?: string} | null)?.type === 'RENDERER_READY') {
+        (window as WindowWithRendererReady).__lastRendererReadyAt = performance.now();
+      }
+    });
+  });
+}
+
+interface WindowWithRendererReady extends Window {
+  __lastRendererReadyAt?: number;
+}
+
+/**
+ * How long after the last RENDERER_READY the catalog watchdog has certainly
+ * either fired or been cleared: its timeout plus a margin.
+ */
+const CATALOG_WATCHDOG_SETTLE_MS = CATALOG_WATCHDOG_TIMEOUT_MS + 500;
+
+/**
+ * Asserts that the catalog handshake never timed out on this page. Waits until
+ * the watchdog of the last RENDERER_READY has had time to fire, then reads the
+ * shell's ErrorLogger history through Angular's dev-mode debugging API.
+ * Requires {@link trackRendererReady} before navigation.
+ */
+export async function expectNoCatalogWatchdog(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const readyAt = (window as WindowWithRendererReady).__lastRendererReadyAt;
+          return readyAt === undefined ? -1 : performance.now() - readyAt;
+        }),
+      {timeout: 20_000, message: 'RENDERER_READY never reached the page, or kept arriving'},
+    )
+    .toBeGreaterThan(CATALOG_WATCHDOG_SETTLE_MS);
+
+  const history = await page.evaluate(() => {
+    const ng = (window as unknown as {ng?: {getComponent(el: Element): unknown}}).ng;
+    const shell = document.querySelector('a2ui-composer-shell');
+    const component =
+      ng && shell
+        ? (ng.getComponent(shell) as {
+            errorLogger?: {getHistory(): Array<{level: string; message: string}>};
+          } | null)
+        : null;
+    return component?.errorLogger?.getHistory() ?? null;
+  });
+  // Tripwire: without the dev-mode API the check below would pass vacuously.
+  expect(history, 'ErrorLogger history is unreadable').not.toBeNull();
+  expect(history!.filter(item => item.message.includes(CATALOG_WATCHDOG_MESSAGE))).toEqual([]);
 }

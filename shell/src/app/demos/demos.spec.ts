@@ -383,6 +383,12 @@ describe('Demos Component', () => {
     expect(await harness.hasCoordinatorFrame()).toBe(true);
   });
 
+  it('sizes the hidden coordinator frame to fill its host', async () => {
+    const coordinator = await harness.getCoordinatorFrame();
+
+    expect(await coordinator!.getSizing()).toBe('fill');
+  });
+
   it('registers the coordinator frame iframe element with the demos service', async () => {
     const coordinatorIframe = (fixture.nativeElement as HTMLElement).querySelector(
       '.coordinator-frame iframe',
