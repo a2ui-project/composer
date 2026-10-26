@@ -25,7 +25,7 @@ import {
 } from '../../shell/host-communication/host-communication';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {GalleryCatalog} from './gallery-catalog';
-import {Catalog} from '../../storage/models/catalog-storage.model';
+import {Catalog, CatalogComponentSchema} from '../../storage/models/catalog-storage.model';
 import {DEFAULT_PRESETS} from './default-presets';
 
 class MockCatalogManagement {
@@ -35,6 +35,15 @@ class MockCatalogManagement {
 class MockHostCommunication {
   sendMessage = vi.fn();
   readonly messageStream$ = new ReplaySubject<MessageEnvelope>(1);
+
+  emit(msg: {type: PreviewBridgeMessageType; payload?: unknown}) {
+    this.messageStream$.next({
+      type: msg.type,
+      payload: msg.payload,
+      origin: 'http://localhost:3000',
+      timestamp: Date.now(),
+    });
+  }
 }
 
 describe('GalleryCatalog', () => {
@@ -850,7 +859,7 @@ describe('GalleryCatalog', () => {
 
       service.setGalleryActive(true);
       TestBed.tick();
-      hostCommunicationMock.messageStream$.next({
+      hostCommunicationMock.emit({
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
         payload: {},
       });
@@ -887,7 +896,7 @@ describe('GalleryCatalog', () => {
 
       service.setGalleryActive(true);
       TestBed.tick();
-      hostCommunicationMock.messageStream$.next({
+      hostCommunicationMock.emit({
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
         payload: {},
       });
@@ -935,7 +944,7 @@ describe('GalleryCatalog', () => {
 
       service.setGalleryActive(true);
       TestBed.tick();
-      hostCommunicationMock.messageStream$.next({
+      hostCommunicationMock.emit({
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
         payload: {},
       });
@@ -988,7 +997,7 @@ describe('GalleryCatalog', () => {
       catalogManagementMock.activeCatalog.set(mockCatalog);
       service.setGalleryActive(true);
       TestBed.tick();
-      hostCommunicationMock.messageStream$.next({
+      hostCommunicationMock.emit({
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
         payload: {},
       });
@@ -1051,7 +1060,7 @@ describe('GalleryCatalog', () => {
       catalogManagementMock.activeCatalog.set(mockCatalog);
       service.setGalleryActive(true);
       TestBed.tick();
-      hostCommunicationMock.messageStream$.next({
+      hostCommunicationMock.emit({
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
         payload: {},
       });
@@ -1118,7 +1127,7 @@ describe('GalleryCatalog', () => {
       catalogManagementMock.activeCatalog.set(mockCatalog);
       service.setGalleryActive(true);
       TestBed.tick();
-      hostCommunicationMock.messageStream$.next({
+      hostCommunicationMock.emit({
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
         payload: {},
       });
@@ -1174,7 +1183,7 @@ describe('GalleryCatalog', () => {
     catalogManagementMock.activeCatalog.set(mockCatalog);
     service.setGalleryActive(true);
     TestBed.tick();
-    hostCommunicationMock.messageStream$.next({
+    hostCommunicationMock.emit({
       type: PreviewBridgeMessageType.COMPONENT_USAGES,
       payload: {},
     });
@@ -1260,7 +1269,7 @@ describe('GalleryCatalog', () => {
     catalogManagementMock.activeCatalog.set(mockCatalog);
     service.setGalleryActive(true);
     TestBed.tick();
-    hostCommunicationMock.messageStream$.next({
+    hostCommunicationMock.emit({
       type: PreviewBridgeMessageType.COMPONENT_USAGES,
       payload: {},
     });
@@ -1329,7 +1338,7 @@ describe('GalleryCatalog', () => {
       catalogManagementMock.activeCatalog.set(mockCatalog);
       service.setGalleryActive(true);
       TestBed.tick();
-      hostCommunicationMock.messageStream$.next({
+      hostCommunicationMock.emit({
         type: PreviewBridgeMessageType.COMPONENT_USAGES,
         payload: {},
       });
@@ -1672,7 +1681,7 @@ describe('GalleryCatalog', () => {
       TestBed.tick();
       hostCommunicationMock.sendMessage.mockClear();
 
-      service.requestComponentUsages();
+      service['requestComponentUsages']();
 
       expect(hostCommunicationMock.sendMessage).toHaveBeenCalledWith({
         type: PreviewBridgeMessageType.GET_COMPONENT_USAGES,

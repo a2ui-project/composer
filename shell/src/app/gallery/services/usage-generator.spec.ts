@@ -52,7 +52,9 @@ describe('UsageGenerator', () => {
 
   it('uses retrievedUsage if present (precedence 1)', () => {
     const resolver = {} as CatalogSchemaResolver;
-    const properties: ParsedProperty[] = [{name: 'text', required: false, type: 'string'}];
+    const properties: ParsedProperty[] = [
+      {name: 'text', description: '', required: false, type: 'string'},
+    ];
     const retrieved: ComponentUsage = {
       usage: [{id: 'target', component: 'Button', text: 'Retrieved'}],
     };
@@ -67,7 +69,9 @@ describe('UsageGenerator', () => {
       usage: [{id: 'target', component: 'TempTest', text: 'Static'}],
     };
     const resolver = {} as CatalogSchemaResolver;
-    const properties: ParsedProperty[] = [{name: 'text', required: false, type: 'string'}];
+    const properties: ParsedProperty[] = [
+      {name: 'text', description: '', required: false, type: 'string'},
+    ];
 
     try {
       const result = generator.getUsage('TempTest', '', 'TempTest', resolver, properties);
@@ -82,7 +86,9 @@ describe('UsageGenerator', () => {
 
   it('delegates to DynamicUsageGenerator if no retrieved or static preset exists (precedence 3)', () => {
     const resolver = {} as CatalogSchemaResolver;
-    const properties: ParsedProperty[] = [{name: 'fallback', required: false, type: 'boolean'}];
+    const properties: ParsedProperty[] = [
+      {name: 'fallback', description: '', required: false, type: 'boolean'},
+    ];
 
     const result = generator.getUsage('UnknownComp', '', 'UnknownComp', resolver, properties);
     expect(result).toEqual({
@@ -103,7 +109,9 @@ describe('UsageGenerator', () => {
       ],
     };
     const resolver = {} as CatalogSchemaResolver;
-    const properties: ParsedProperty[] = [{name: 'children', required: false, type: 'array'}];
+    const properties: ParsedProperty[] = [
+      {name: 'children', description: '', required: false, type: 'array'},
+    ];
 
     try {
       const result = generator.getUsage(
@@ -126,7 +134,9 @@ describe('UsageGenerator', () => {
 
   it('adapts child to children if component expects children', () => {
     const resolver = {} as CatalogSchemaResolver;
-    const properties: ParsedProperty[] = [{name: 'children', required: false, type: 'array'}];
+    const properties: ParsedProperty[] = [
+      {name: 'children', description: '', required: false, type: 'array'},
+    ];
     const retrieved: ComponentUsage = {
       usage: [{id: 'target', component: 'Container', child: 'child1'}],
     };
@@ -146,7 +156,9 @@ describe('UsageGenerator', () => {
 
   it('adapts child to label if component expects label and child is a text component', () => {
     const resolver = {} as CatalogSchemaResolver;
-    const properties: ParsedProperty[] = [{name: 'label', required: false, type: 'string'}];
+    const properties: ParsedProperty[] = [
+      {name: 'label', description: '', required: false, type: 'string'},
+    ];
     const retrieved: ComponentUsage = {
       usage: [
         {id: 'target', component: 'Button', child: 'child1'},
@@ -162,7 +174,9 @@ describe('UsageGenerator', () => {
 
   it('prunes properties not in schema', () => {
     const resolver = {} as CatalogSchemaResolver;
-    const properties: ParsedProperty[] = [{name: 'text', required: false, type: 'string'}];
+    const properties: ParsedProperty[] = [
+      {name: 'text', description: '', required: false, type: 'string'},
+    ];
     const retrieved: ComponentUsage = {
       usage: [{id: 'target', component: 'Button', text: 'Hello', invalidProp: 'value'}],
     };

@@ -20,7 +20,7 @@ import {describe, it, expect, beforeEach} from 'vitest';
 import {DynamicUsageGenerator} from './dynamic-usage-generator';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
 import {CatalogSchemaResolver} from '../schema/catalog-schema-resolver';
-import {Catalog} from '../../storage/models/catalog-storage.model';
+import {Catalog, CatalogComponentSchema} from '../../storage/models/catalog-storage.model';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
 class MockCatalogManagement {

@@ -37,6 +37,7 @@ import {
   AuthType,
   EnvMode,
   ThemePreference,
+  A2aBackendMode,
 } from '../app-config-provider/app-config-provider';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SettingsHarness} from './test/settings.harness';
@@ -101,6 +102,7 @@ describe('Settings', () => {
     setRendererUrl: Mock<(url: string) => void>;
     setGeminiApiKey: Mock<(key: string) => void>;
     setApiKeyFromConfig: Mock<(key: string) => void>;
+    setRuntimeApiKey: Mock<(key: string) => void>;
     setForcedAuthMode: Mock<(mode: AuthType) => void>;
     flushConfig: Mock<() => void>;
     purgeGeminiApiKey: Mock<() => void>;
@@ -135,7 +137,7 @@ describe('Settings', () => {
     mockResolvedUrl = signal<string | null>('http://resolved-url.com');
     mockRenderers = signal<Record<string, RendererConfig>>({});
     mockSelectedRendererId = signal<string | null>(null);
-    mockApiKeys = signal<Record<string, string>>({});
+    mockApiKeys = signal<Record<string, ApiKeyConfig>>({});
     mockActiveRenderer = signal<Record<string, RendererConfig>[string] | null>(null);
 
     mockStartupResolution = {
@@ -259,7 +261,9 @@ describe('Settings', () => {
 
     expect(component.isThirdPartyAuth()).toBe(false);
 
-    const selectSpy = vi.spyOn(component.settingsService, 'selectRenderer').mockResolvedValue(true);
+    const selectSpy = vi
+      .spyOn(component['settingsService'], 'selectRenderer')
+      .mockResolvedValue(true);
     await component.onRendererSelected('dev');
 
     expect(selectSpy).toHaveBeenCalledWith('dev');
@@ -270,9 +274,11 @@ describe('Settings', () => {
     const {component} = await setupComponent();
 
     const selectRendererSpy = vi
-      .spyOn(component.settingsService, 'selectRenderer')
+      .spyOn(component['settingsService'], 'selectRenderer')
       .mockResolvedValue(true);
-    const selectApiKeySpy = vi.spyOn(component.settingsService, 'selectApiKey').mockResolvedValue();
+    const selectApiKeySpy = vi
+      .spyOn(component['settingsService'], 'selectApiKey')
+      .mockResolvedValue();
 
     await component.onRendererSelected('dev');
     await component.onApiKeySelected('custom-1');
@@ -348,6 +354,12 @@ describe('Settings', () => {
     override setRuntimeApiKey = vi.fn();
     override setRendererUrl = vi.fn();
     override setThemePreference = vi.fn();
+    override a2aBackendMode = signal(A2aBackendMode.HTTP_JSONRPC);
+    override a2aAgentUrl = signal('');
+    override a2aTenantId = signal('');
+    override setA2aBackendMode = vi.fn();
+    override setA2aAgentUrl = vi.fn();
+    override setA2aTenantId = vi.fn();
   }
 
   it('renders third-party context layout when a2ui_composer_force_3p storage override key is present using a real StartupResolution', async () => {
@@ -450,7 +462,7 @@ describe('Settings', () => {
     it('sets selectedRendererId when a renderer is selected in <a2ui-composer-renderer-selector>', async () => {
       const {fixture, component} = await setupComponent();
       const selectSpy = vi
-        .spyOn(component.settingsService, 'selectRenderer')
+        .spyOn(component['settingsService'], 'selectRenderer')
         .mockResolvedValue(true);
 
       await component.onRendererSelected('dev');
@@ -513,7 +525,7 @@ describe('Settings', () => {
     it('updates selectedRendererId signal and invokes SettingsService.selectRenderer', async () => {
       const {component} = await setupComponent();
       const selectSpy = vi
-        .spyOn(component.settingsService, 'selectRenderer')
+        .spyOn(component['settingsService'], 'selectRenderer')
         .mockResolvedValue(true);
 
       await component.onRendererSelected('custom-renderer');
@@ -525,7 +537,7 @@ describe('Settings', () => {
     it('reverts selectedRendererId signal if SettingsService.selectRenderer returns false', async () => {
       const {component} = await setupComponent();
       component.selectedRendererId.set('initial-renderer');
-      vi.spyOn(component.settingsService, 'selectRenderer').mockResolvedValue(false);
+      vi.spyOn(component['settingsService'], 'selectRenderer').mockResolvedValue(false);
 
       await component.onRendererSelected('disallowed-renderer');
 
@@ -536,7 +548,7 @@ describe('Settings', () => {
       const {fixture, component, harness} = await setupComponent();
       const message =
         "The renderer selection changed while this one was waiting for approval, so it wasn't applied.";
-      vi.spyOn(component.settingsService, 'selectRenderer').mockImplementation(async () => {
+      vi.spyOn(component['settingsService'], 'selectRenderer').mockImplementation(async () => {
         // Another selection is committed while this one waits for approval.
         mockSelectedRendererId.set('newer-renderer');
         throw new Error(message);
@@ -553,7 +565,7 @@ describe('Settings', () => {
   describe('onApiKeySelected', () => {
     it('updates selectedApiKeyId signal and invokes SettingsService.selectApiKey when API key ID is provided', async () => {
       const {component} = await setupComponent();
-      const selectSpy = vi.spyOn(component.settingsService, 'selectApiKey');
+      const selectSpy = vi.spyOn(component['settingsService'], 'selectApiKey');
 
       await component.onApiKeySelected('api-key-1');
 
@@ -564,7 +576,7 @@ describe('Settings', () => {
     it('updates selectedApiKeyId signal to null and invokes SettingsService.selectApiKey when null is provided', async () => {
       const {component} = await setupComponent();
       await component.onApiKeySelected('api-key-1');
-      const selectSpy = vi.spyOn(component.settingsService, 'selectApiKey');
+      const selectSpy = vi.spyOn(component['settingsService'], 'selectApiKey');
 
       await component.onApiKeySelected(null);
 

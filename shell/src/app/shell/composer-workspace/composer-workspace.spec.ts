@@ -47,7 +47,10 @@ import {signal} from '@angular/core';
 import {UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {ChatPanel} from '../../chat/chat-panel/chat-panel';
 import {RenderedFrame} from '../../preview/rendered/rendered-frame';
+import {RawFrame} from '../../preview/raw/raw-frame';
+import {DataModel} from '../../debug/data-model/data-model';
 
 class MockChatState {
   readonly chatHistory = signal<LlmMessage[]>([]);
@@ -154,13 +157,11 @@ describe('ComposerWorkspace Dashboard', () => {
     const manager = fixture.debugElement.injector.get(ComposerDockview);
     const refs = manager.dynamicComponentRefs;
     expect(refs.length).toBe(7);
-    const types = refs.map(
-      (r: unknown) => (r as {componentType: {name: string}}).componentType.name,
-    );
-    expect(types).toContain('ChatPanel');
-    expect(types).toContain('RenderedFrame');
-    expect(types).toContain('RawFrame');
-    expect(types).toContain('DataModel');
+    const types = refs.map(r => r.componentType);
+    expect(types).toContain(ChatPanel);
+    expect(types).toContain(RenderedFrame);
+    expect(types).toContain(RawFrame);
+    expect(types).toContain(DataModel);
   });
 
   it('sizes the docked Rendered panel frame to fill its panel and replace the default target', () => {

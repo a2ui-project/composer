@@ -134,7 +134,7 @@ describe('SurfacePartitioner', () => {
               surfaceId: 's1',
               catalogId: 'c1',
               component: 'canvas',
-            },
+            } as unknown as RenderA2uiItem['createSurface'],
           },
         ]),
       ).toBe(true);

@@ -38,6 +38,15 @@
             "buildTarget": "ng-basic-catalog:build",
             "port": 3456
           }
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "buildTarget": "ng-basic-catalog:build",
+            "tsConfig": "tsconfig.spec.json",
+            "runnerConfig": "vitest-base.config.ts",
+            "isolate": true
+          }
         }
       }
     }

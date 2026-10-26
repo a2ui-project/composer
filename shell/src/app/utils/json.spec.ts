@@ -97,11 +97,9 @@ describe('JSON Array Parser Utilities', () => {
     const payload = '{"a": 1}\n{"b": 2}\n{"syntax_error": }\n{"d": 4}';
     const result = tryParseJsonArray(payload);
 
-    // @ts-expect-error Types mismatch in tests
     expect(result.success).toBe(false);
-    // @ts-expect-error Types mismatch in tests
+    if (result.success) throw new Error('expected parse failure');
     expect(result.error.line).toBe(3);
-    // @ts-expect-error Types mismatch in tests
     expect(result.error.snippet).toBe('{"syntax_error": }');
   });
 });

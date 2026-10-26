@@ -15,14 +15,14 @@
  */
 
 import {QueryParser} from './query-parser';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi, type Mock} from 'vitest';
 
 describe('QueryParser', () => {
   let mockLogger: {
-    warn: ReturnType<typeof vi.fn>;
-    error: ReturnType<typeof vi.fn>;
-    info: ReturnType<typeof vi.fn>;
-    debug: ReturnType<typeof vi.fn>;
+    warn: Mock<(message: string, ...args: unknown[]) => void>;
+    error: Mock<(message: string, ...args: unknown[]) => void>;
+    info: Mock<(message: string, ...args: unknown[]) => void>;
+    debug: Mock<(message: string, ...args: unknown[]) => void>;
   };
 
   beforeEach(() => {
@@ -165,10 +165,10 @@ describe('QueryParser', () => {
 
       // The point of a single builder is that its output is readable by the parser
       // that shares the file with it, whichever producer called it.
-      const result = await QueryParser.parseSharedA2ui(`#${hash}`);
+      const result = await QueryParser.parseSharedA2ui(`#${hash}`, mockLogger);
       expect(result.error).toBeNull();
       expect(result.payload).toBe(JSON.stringify([{version: 'v0.9', test: true}], null, 2));
-      expect(QueryParser.parseRendererUrl(`#${hash}`)).toBe('http://localhost:3456/');
+      expect(QueryParser.parseRendererUrl(`#${hash}`, mockLogger)).toBe('http://localhost:3456/');
       expect(QueryParser.parseRendererId(`#${hash}`)).toBe('basic');
     });
 

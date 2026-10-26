@@ -23,7 +23,7 @@ import {
 } from '../../settings/app-config-provider/app-config-provider';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {ErrorLogger} from '../../debug/error-logger.service';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi, type Mock} from 'vitest';
 import {effect, signal, WritableSignal} from '@angular/core';
 
 describe('HostCommunication', () => {
@@ -31,10 +31,10 @@ describe('HostCommunication', () => {
   let startupResolutionMock: {getResolvedRendererUrl: ReturnType<typeof vi.fn>};
   let themePreferenceSignal: WritableSignal<ThemePreference>;
   let mockErrorLogger: {
-    log: ReturnType<typeof vi.fn>;
-    error: ReturnType<typeof vi.fn>;
-    warn: ReturnType<typeof vi.fn>;
-    info: ReturnType<typeof vi.fn>;
+    log: Mock<(entry: unknown) => void>;
+    error: Mock<(entry: unknown) => void>;
+    warn: Mock<(entry: unknown) => void>;
+    info: Mock<(entry: unknown) => void>;
     withTag: ReturnType<typeof vi.fn>;
   };
 

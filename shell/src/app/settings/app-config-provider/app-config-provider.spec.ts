@@ -16,7 +16,13 @@
 
 import {signal, Signal, WritableSignal} from '@angular/core';
 import {describe, it, expect} from 'vitest';
-import {AppConfigProvider, EnvMode, AuthType, ThemePreference} from './app-config-provider';
+import {
+  AppConfigProvider,
+  EnvMode,
+  AuthType,
+  ThemePreference,
+  A2aBackendMode,
+} from './app-config-provider';
 
 /**
  * Concrete implementation of AppConfigProvider used solely for testing type bounds.
@@ -31,6 +37,11 @@ class TestConfigProvider extends AppConfigProvider {
   private readonly internalThemePreference: WritableSignal<ThemePreference> = signal(
     ThemePreference.LIGHT,
   );
+  private readonly internalA2aBackendMode: WritableSignal<A2aBackendMode> = signal(
+    A2aBackendMode.HTTP_JSONRPC,
+  );
+  private readonly internalA2aAgentUrl: WritableSignal<string> = signal('http://localhost:8088');
+  private readonly internalA2aTenantId: WritableSignal<string> = signal('');
 
   override readonly envMode: Signal<EnvMode> = this.internalEnvMode.asReadonly();
   override readonly authType: Signal<AuthType> = this.internalAuthType.asReadonly();
@@ -39,6 +50,10 @@ class TestConfigProvider extends AppConfigProvider {
   override readonly themePreference: Signal<ThemePreference> =
     this.internalThemePreference.asReadonly();
   override readonly isApiKeyProvidedByConfig: Signal<boolean> = signal(false).asReadonly();
+  override readonly a2aBackendMode: Signal<A2aBackendMode> =
+    this.internalA2aBackendMode.asReadonly();
+  override readonly a2aAgentUrl: Signal<string> = this.internalA2aAgentUrl.asReadonly();
+  override readonly a2aTenantId: Signal<string> = this.internalA2aTenantId.asReadonly();
 
   override initialize(): void {}
   override purgeGeminiApiKey(): void {}
@@ -59,6 +74,18 @@ class TestConfigProvider extends AppConfigProvider {
 
   override setThemePreference(theme: ThemePreference): void {
     this.internalThemePreference.set(theme);
+  }
+
+  override setA2aBackendMode(mode: A2aBackendMode): void {
+    this.internalA2aBackendMode.set(mode);
+  }
+
+  override setA2aAgentUrl(url: string): void {
+    this.internalA2aAgentUrl.set(url);
+  }
+
+  override setA2aTenantId(tenantId: string): void {
+    this.internalA2aTenantId.set(tenantId);
   }
 
   override flushConfig(): void {

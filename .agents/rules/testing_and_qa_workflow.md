@@ -30,7 +30,7 @@ pipeline.
 
 - **Scope Intermediate Scans**: During intermediate implementation steps, run
   only the unit test files directly affected by the changes (e.g.,
-  `yarn workspace a2ui-composer-shell vitest run <spec_file>`), reserving full
+  `yarn workspace a2ui-composer-shell ng test --no-watch --include <spec_file>`), reserving full
   monorepo test suites (`yarn test`) and Playwright E2E verifications
   (`yarn e2e-headless`) for the final pre-commit checkpoint.
 

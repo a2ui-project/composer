@@ -15,7 +15,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
+import {A2aMessage, AgentCard, AgentSkill, TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
 import {
   a2aCardToUiAgentInfo,
   createErrorEvent,
@@ -160,7 +160,7 @@ describe('A2aUiConverter', () => {
     it('handles card with skills without names', () => {
       const card: AgentCard = {
         name: 'Skill Agent',
-        skills: [{id: 's1'}],
+        skills: [{id: 's1'} as unknown as AgentSkill],
       };
       const info = a2aCardToUiAgentInfo(card, 'http://localhost');
       expect(info.samplePrompts?.length).toBeGreaterThan(0);

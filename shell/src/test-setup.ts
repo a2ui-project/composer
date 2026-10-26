@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import {ANIMATION_MODULE_TYPE} from '@angular/core';
 import {getTestBed} from '@angular/core/testing';
-import {MATERIAL_ANIMATIONS} from '@angular/material/core';
-import {BrowserTestingModule, platformBrowserTesting} from '@angular/platform-browser/testing';
 import {webcrypto} from 'node:crypto';
 import {beforeEach} from 'vitest';
 
@@ -26,19 +23,6 @@ if (typeof window !== 'undefined' && (!window.crypto || !window.crypto.subtle)) 
     value: webcrypto,
     writable: true,
   });
-}
-
-if (!getTestBed().platform) {
-  getTestBed().initTestEnvironment(
-    BrowserTestingModule,
-    platformBrowserTesting([
-      // Replaces provideNoopAnimations(), which also set ANIMATION_MODULE_TYPE.
-      // Material dialogs/CDK overlays otherwise wait on a 75ms exit-animation timer
-      // so afterClosed() doesn't emit within tests.
-      {provide: ANIMATION_MODULE_TYPE, useValue: 'NoopAnimations'},
-      {provide: MATERIAL_ANIMATIONS, useValue: {animationsDisabled: true}},
-    ]),
-  );
 }
 
 beforeEach(() => {

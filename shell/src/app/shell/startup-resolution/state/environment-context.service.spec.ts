@@ -22,7 +22,12 @@ import {LocalStorageKey} from '../../../storage/models/local-storage-keys';
 
 describe('EnvironmentContextService', () => {
   let service: EnvironmentContextService;
-  let mockLocalStorage: unknown;
+  let mockLocalStorage: {
+    getItem: ReturnType<typeof vi.fn>;
+    setItem: ReturnType<typeof vi.fn>;
+    removeItem: ReturnType<typeof vi.fn>;
+    clear: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     mockLocalStorage = {
@@ -89,13 +94,13 @@ describe('EnvironmentContextService', () => {
 
     // Auth override flags in localStorage do not change host environment classification
     hostnameSpy.mockReturnValue('subdomain.google.com');
-    mockLocalStorage.getItem.mockImplementation(key =>
+    mockLocalStorage.getItem.mockImplementation((key: string) =>
       key === LocalStorageKey.FORCE_3P ? 'true' : null,
     );
     expect(service.isThirdPartyEnvironment()).toBe(false);
 
     hostnameSpy.mockReturnValue('external-domain.com');
-    mockLocalStorage.getItem.mockImplementation(key =>
+    mockLocalStorage.getItem.mockImplementation((key: string) =>
       key === LocalStorageKey.FORCE_1P ? 'true' : null,
     );
     expect(service.isThirdPartyEnvironment()).toBe(true);
@@ -112,7 +117,7 @@ describe('EnvironmentContextService', () => {
     expect(service.isExtensionMode()).toBe(true);
 
     searchSpy.mockReturnValue('');
-    mockLocalStorage.getItem.mockImplementation(key =>
+    mockLocalStorage.getItem.mockImplementation((key: string) =>
       key === LocalStorageKey.EXTENSION_MODE ? 'true' : null,
     );
     expect(service.isExtensionMode()).toBe(true);

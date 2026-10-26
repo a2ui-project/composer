@@ -28,7 +28,8 @@ import {
   ThemePreference,
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
-import {A2A_TRANSPORT, A2aTransport} from '../chat/a2a/a2a-transport.token';
+import {A2A_TRANSPORT} from '../chat/a2a/a2a-transport.token';
+import {A2aTransport} from '../chat/a2a/a2a-types';
 import {ErrorLogger} from '../debug/error-logger.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {Catalog} from '../storage/models/catalog-storage.model';
@@ -236,7 +237,7 @@ describe('A2aChatView', () => {
 
     const history = await harness.getHistory();
     expect(await history.getMessageCount()).toBe(2);
-    expect(fixture.componentInstance.messages()[1].sender).toBe('error');
+    expect(fixture.componentInstance['messages']()[1].sender).toBe('error');
   });
 
   it('manages canvas lifecycle', async () => {
@@ -335,7 +336,7 @@ describe('A2aChatView', () => {
     });
 
     expect(mockA2aTransport.sendMessageStream).toHaveBeenCalled();
-    const sentMsg = vi.mocked(mockA2aTransport.sendMessageStream).mock.calls[0][1];
+    const sentMsg = vi.mocked(mockA2aTransport.sendMessageStream!).mock.calls[0][1];
     expect(sentMsg.parts?.[1].kind).toBe('file');
     expect(sentMsg.parts?.[1].raw).toBe('base64imagedata');
     expect(sentMsg.parts?.[1].mediaType).toBe('image/png');

@@ -403,7 +403,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
         role: MessageRole.USER,
         content: undefined as unknown as string,
         attachments: [
-          {name: 'photo.png', mimeType: 'image/png', dataUrl: 'data:image/png;base64,...'},
+          {name: 'photo.png', mimeType: 'image/png', data: 'data:image/png;base64,...'},
         ],
       },
       {
@@ -736,12 +736,12 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
 
   it('builds multimodal system instructions when includeScreenshot is enabled or an image attachment is staged', async () => {
     const component = fixture.componentInstance;
-    expect(component.systemPrompt()).toBe('Initial system prompt instructions block');
+    expect(component['systemPrompt']()).toBe('Initial system prompt instructions block');
 
     // Enabling includeScreenshot switches systemPrompt() to multimodal
     await harness.toggleScreenshot();
     fixture.detectChanges();
-    expect(component.systemPrompt()).toBe('multimodal prompt');
+    expect(component['systemPrompt']()).toBe('multimodal prompt');
     expect(promptFactoryMock.buildSystemPrompt).toHaveBeenCalledWith({
       includeMultimodalGuidelines: true,
     });
@@ -749,10 +749,10 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     // Disabling includeScreenshot switches systemPrompt() back to text-only
     await harness.toggleScreenshot();
     fixture.detectChanges();
-    expect(component.systemPrompt()).toBe('Initial system prompt instructions block');
+    expect(component['systemPrompt']()).toBe('Initial system prompt instructions block');
 
     // Staging a non-image attachment keeps systemPrompt() text-only
-    component.attachedFiles.set([
+    component['attachedFiles'].set([
       {
         name: 'data.json',
         mimeType: 'application/json',
@@ -760,11 +760,11 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       },
     ]);
     fixture.detectChanges();
-    expect(component.systemPrompt()).toBe('Initial system prompt instructions block');
+    expect(component['systemPrompt']()).toBe('Initial system prompt instructions block');
 
     // Staging an image attachment switches systemPrompt() to multimodal
     promptFactoryMock.buildSystemPrompt.mockClear();
-    component.attachedFiles.set([
+    component['attachedFiles'].set([
       {
         name: 'mockup.webp',
         mimeType: 'image/webp',
@@ -969,13 +969,13 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       },
     } as unknown as Event;
 
-    await component.onFilesSelected(event);
+    await component['onFilesSelected'](event);
     fixture.detectChanges();
 
     // Verify files were added to component signal
-    expect(component.attachedFiles().length).toBe(1);
-    expect(component.attachedFiles()[0].name).toBe('test-image.png');
-    expect(component.attachedFiles()[0].mimeType).toBe('image/png');
+    expect(component['attachedFiles']().length).toBe(1);
+    expect(component['attachedFiles']()[0].name).toBe('test-image.png');
+    expect(component['attachedFiles']()[0].mimeType).toBe('image/png');
 
     // Verify previews are rendered using harness
     expect(await harness.hasAttachmentPreviews()).toBe(true);
@@ -986,7 +986,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     await harness.clickRemoveAttachmentAt(0);
     fixture.detectChanges();
 
-    expect(component.attachedFiles().length).toBe(0);
+    expect(component['attachedFiles']().length).toBe(0);
     expect(await harness.hasAttachmentPreviews()).toBe(false);
   });
 
@@ -1008,13 +1008,13 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       preventDefault,
     } as unknown as ClipboardEvent;
 
-    await component.onPaste(pasteEvent);
+    await component['onPaste'](pasteEvent);
     fixture.detectChanges();
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
-    expect(component.attachedFiles().length).toBe(1);
-    expect(component.attachedFiles()[0].name).toBe('clipboard-image.png');
-    expect(component.attachedFiles()[0].mimeType).toBe('image/png');
+    expect(component['attachedFiles']().length).toBe(1);
+    expect(component['attachedFiles']()[0].name).toBe('clipboard-image.png');
+    expect(component['attachedFiles']()[0].mimeType).toBe('image/png');
     expect(await harness.hasAttachmentPreviews()).toBe(true);
     expect(await harness.getAttachmentNames()).toContain('clipboard-image.png');
   });
@@ -1036,11 +1036,11 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       preventDefault,
     } as unknown as ClipboardEvent;
 
-    await component.onPaste(pasteEvent);
+    await component['onPaste'](pasteEvent);
     fixture.detectChanges();
 
     expect(preventDefault).not.toHaveBeenCalled();
-    expect(component.attachedFiles().length).toBe(0);
+    expect(component['attachedFiles']().length).toBe(0);
   });
 
   it('submits prompts with attached files successfully', async () => {
@@ -1048,7 +1048,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     const submitSpy = chatServiceMock.submitPrompt;
 
     // Simulate attached files
-    component.attachedFiles.set([
+    component['attachedFiles'].set([
       {
         name: 'test-image.png',
         mimeType: 'image/png',
@@ -1056,7 +1056,7 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
         previewUrl: 'data:image/png;base64,base64data...',
       },
     ]);
-    component.userPrompt.set('Analyze this image');
+    component['userPrompt'].set('Analyze this image');
     fixture.detectChanges();
 
     await harness.clickSubmit();
@@ -1074,8 +1074,8 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       ],
       undefined,
     );
-    expect(component.attachedFiles().length).toBe(0);
-    expect(component.userPrompt()).toBe('');
+    expect(component['attachedFiles']().length).toBe(0);
+    expect(component['userPrompt']()).toBe('');
   });
 
   describe('Screenshot Integration', () => {
@@ -1087,12 +1087,12 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
     it('toggles setting when checkbox is clicked', async () => {
       const component = fixture.componentInstance;
       expect(await harness.isScreenshotChecked()).toBe(false);
-      expect(component.includeScreenshot()).toBe(false);
+      expect(component['includeScreenshot']()).toBe(false);
 
       await harness.toggleScreenshot();
       fixture.detectChanges();
 
-      expect(component.includeScreenshot()).toBe(true);
+      expect(component['includeScreenshot']()).toBe(true);
       expect(await harness.isScreenshotChecked()).toBe(true);
     });
 
@@ -1101,8 +1101,8 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       const submitSpy = chatServiceMock.submitPrompt;
       const captureSpy = vi.spyOn(screenshotServiceMock, 'captureScreenshot');
 
-      component.includeScreenshot.set(true);
-      component.userPrompt.set('Add button');
+      component['includeScreenshot'].set(true);
+      component['userPrompt'].set('Add button');
       fixture.detectChanges();
 
       await harness.clickSubmit();
@@ -1127,8 +1127,8 @@ describe('ChatPanel Gemini Dialogue Panel Integration', () => {
       const submitSpy = chatServiceMock.submitPrompt;
       const captureSpy = vi.spyOn(screenshotServiceMock, 'captureScreenshot');
 
-      component.includeScreenshot.set(false);
-      component.userPrompt.set('Add button');
+      component['includeScreenshot'].set(false);
+      component['userPrompt'].set('Add button');
       fixture.detectChanges();
 
       await harness.clickSubmit();

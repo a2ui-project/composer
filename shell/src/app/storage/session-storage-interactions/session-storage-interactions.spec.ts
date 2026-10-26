@@ -16,14 +16,14 @@
 
 import {TestBed} from '@angular/core/testing';
 import {SessionStorageInteractions} from './session-storage-interactions';
-import {describe, it, expect, beforeEach, afterEach, vi, SpyInstance} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi, type MockInstance} from 'vitest';
 
 describe('SessionStorageInteractions Specification Context', () => {
   let service: SessionStorageInteractions;
-  let getItemSpy: SpyInstance;
-  let setItemSpy: SpyInstance;
-  let removeItemSpy: SpyInstance;
-  let clearSpy: SpyInstance;
+  let getItemSpy: MockInstance;
+  let setItemSpy: MockInstance;
+  let removeItemSpy: MockInstance;
+  let clearSpy: MockInstance;
 
   beforeEach(() => {
     getItemSpy = vi.spyOn(Storage.prototype, 'getItem');

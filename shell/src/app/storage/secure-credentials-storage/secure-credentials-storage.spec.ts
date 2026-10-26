@@ -23,7 +23,7 @@ import {
   StorageRecord,
 } from './secure-credentials-storage';
 import {SecureCredentialsKey} from '../models/secure-credentials-keys';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi, type Mock} from 'vitest';
 
 class FakeIDBRequest {
   result: unknown;
@@ -207,7 +207,7 @@ describe('SecureCredentialsStorage', () => {
     // Assert that the stored record in 'credentials' is encrypted
     const record = credentialsMap.get('test_crypto_key') as CredentialRecord | undefined;
     expect(record).toBeTruthy();
-    expect((record as Record<string, unknown>)?.['value']).toBeUndefined(); // Plaintext value should be replaced
+    expect((record as unknown as Record<string, unknown>)?.['value']).toBeUndefined(); // Plaintext value should be replaced
     expect(record?.ciphertext?.byteLength).toBeGreaterThan(0);
     expect(record?.iv).toBeInstanceOf(Uint8Array);
 
@@ -270,7 +270,7 @@ describe('SecureCredentialsStorage', () => {
 
   it('closes database and resets promise when onversionchange is triggered', async () => {
     interface MockUpgradableDB {
-      close: vi.Mock;
+      close: Mock;
       objectStoreNames: {contains: () => boolean};
       transaction: () => FakeIDBTransaction;
       onversionchange?: () => void;
@@ -297,13 +297,14 @@ describe('SecureCredentialsStorage', () => {
       configurable: true,
     });
 
-    await service.openDatabase();
+    await service['openDatabase']();
     expect(dbInstance).toBeTruthy();
-    expect(dbInstance?.onversionchange).toBeTruthy();
+    const activeDb = dbInstance as unknown as MockUpgradableDB;
+    expect(activeDb.onversionchange).toBeTruthy();
 
-    dbInstance?.onversionchange?.();
+    activeDb.onversionchange?.();
 
-    expect(dbInstance?.close).toHaveBeenCalled();
+    expect(activeDb.close).toHaveBeenCalled();
   });
 
   it('resets memoized master key promise upon cryptographic key generation failure', async () => {

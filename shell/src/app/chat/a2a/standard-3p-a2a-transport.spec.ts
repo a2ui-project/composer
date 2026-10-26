@@ -675,7 +675,7 @@ describe('Standard3pA2aTransport', () => {
 
     expect(events.length).toBe(1);
     expect(capturedBody).toBeDefined();
-    const sentParts = capturedBody.params.message.parts;
+    const sentParts = capturedBody!.params.message.parts;
     expect(sentParts.length).toBe(3);
     expect(sentParts[0]).toEqual({
       kind: 'file',

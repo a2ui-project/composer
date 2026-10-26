@@ -17,6 +17,13 @@
 import {ComponentHarness} from '@angular/cdk/testing';
 import {MatTableHarness} from '@angular/material/table/testing';
 
+export interface ErrorRowValues {
+  time: string;
+  level: string;
+  source: string;
+  message: string;
+}
+
 export class ErrorsHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-errors';
 
@@ -43,7 +50,7 @@ export class ErrorsHarness extends ComponentHarness {
     return rows.length;
   }
 
-  async getRowValuesAt(index: number): Promise<Record<string, string>> {
+  async getRowValuesAt(index: number): Promise<ErrorRowValues> {
     const rows = await this.getPrimaryRows();
     if (index < 0 || index >= rows.length) {
       throw new Error(`Index ${index} out of bounds for errors log table!`);

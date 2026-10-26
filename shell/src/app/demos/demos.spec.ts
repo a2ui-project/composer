@@ -556,8 +556,8 @@ describe('Demos Component', () => {
     await flushIntersections();
 
     const lateKey = `demo-${demoCount - 1}`;
-    expect(fixture.componentInstance.mountedKeys().has(lateKey)).toBe(false);
-    const mountedBefore = new Set(fixture.componentInstance.mountedKeys());
+    expect(fixture.componentInstance['mountedKeys']().has(lateKey)).toBe(false);
+    const mountedBefore = new Set(fixture.componentInstance['mountedKeys']());
 
     // The reader scrolls the last card to the middle of the viewport; everything
     // holding a slot is now far above it.
@@ -570,7 +570,7 @@ describe('Demos Component', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const mountedAfter = fixture.componentInstance.mountedKeys();
+    const mountedAfter = fixture.componentInstance['mountedKeys']();
     expect(mountedAfter.has(lateKey)).toBe(true);
     expect(mountedAfter.size).toBe(MAX_MOUNTED_CARDS);
     // Exactly one far-away card gave up its slot; the rest kept theirs.
@@ -589,7 +589,7 @@ describe('Demos Component', () => {
     wallObserver().report(entries);
     fixture.detectChanges();
     await fixture.whenStable();
-    const settled = fixture.componentInstance.mountedKeys();
+    const settled = fixture.componentInstance['mountedKeys']();
 
     wallObserver().report(entries);
     wallObserver().report(entries);
@@ -599,7 +599,7 @@ describe('Demos Component', () => {
     // Identity, not equality: an equal set published again would re-render the
     // wall and tear every frame down and back up, which is the churn the reader
     // pays for in a re-measure of every card.
-    expect(fixture.componentInstance.mountedKeys()).toBe(settled);
+    expect(fixture.componentInstance['mountedKeys']()).toBe(settled);
   });
 
   it('does not hand a slot to a card that is only marginally nearer', async () => {
@@ -609,7 +609,7 @@ describe('Demos Component', () => {
     await fixture.whenStable();
     await flushIntersections();
 
-    const mountedBefore = new Set(fixture.componentInstance.mountedKeys());
+    const mountedBefore = new Set(fixture.componentInstance['mountedKeys']());
     const lateKey = `demo-${demoCount - 1}`;
 
     // Every mounted card sits 300px from the reader and the challenger 150px:
@@ -626,8 +626,8 @@ describe('Demos Component', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(fixture.componentInstance.mountedKeys().has(lateKey)).toBe(false);
-    expect([...fixture.componentInstance.mountedKeys()]).toEqual([...mountedBefore]);
+    expect(fixture.componentInstance['mountedKeys']().has(lateKey)).toBe(false);
+    expect([...fixture.componentInstance['mountedKeys']()]).toEqual([...mountedBefore]);
   });
 
   it('gives a slot to a card on screen, taking it from one off screen it barely beats', async () => {
@@ -644,7 +644,7 @@ describe('Demos Component', () => {
     await fixture.whenStable();
     await flushIntersections();
 
-    const mountedBefore = new Set(fixture.componentInstance.mountedKeys());
+    const mountedBefore = new Set(fixture.componentInstance['mountedKeys']());
     const onScreenKey = `demo-${demoCount - 1}`;
     expect(mountedBefore.has(onScreenKey)).toBe(false);
 
@@ -661,7 +661,7 @@ describe('Demos Component', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const mountedAfter = fixture.componentInstance.mountedKeys();
+    const mountedAfter = fixture.componentInstance['mountedKeys']();
     expect(mountedAfter.has(onScreenKey)).toBe(true);
     expect(mountedAfter.size).toBe(MAX_MOUNTED_CARDS);
     // One off-screen card gave up its slot and no more: visibility decides the
@@ -681,7 +681,7 @@ describe('Demos Component', () => {
     await fixture.whenStable();
     await flushIntersections();
 
-    const mountedBefore = new Set(fixture.componentInstance.mountedKeys());
+    const mountedBefore = new Set(fixture.componentInstance['mountedKeys']());
     const offScreenKey = `demo-${demoCount - 1}`;
     const halfViewport = window.innerHeight / 2;
 
@@ -701,8 +701,8 @@ describe('Demos Component', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(fixture.componentInstance.mountedKeys().has(offScreenKey)).toBe(false);
-    expect([...fixture.componentInstance.mountedKeys()]).toEqual([...mountedBefore]);
+    expect(fixture.componentInstance['mountedKeys']().has(offScreenKey)).toBe(false);
+    expect([...fixture.componentInstance['mountedKeys']()]).toEqual([...mountedBefore]);
   });
 
   it('releases the slot of a card that scrolls out of range', async () => {
@@ -712,13 +712,13 @@ describe('Demos Component', () => {
     await flushIntersections();
 
     const cards = placeCards(fixture, {});
-    const mountedBefore = [...fixture.componentInstance.mountedKeys()];
+    const mountedBefore = [...fixture.componentInstance['mountedKeys']()];
     const leaving = mountedBefore[0];
     wallObserver().report([{target: cards.get(leaving)!, isIntersecting: false}]);
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(fixture.componentInstance.mountedKeys().has(leaving)).toBe(false);
+    expect(fixture.componentInstance['mountedKeys']().has(leaving)).toBe(false);
   });
 
   it('re-ranks the wall when a reflow moves a card on screen without an entry', async () => {
@@ -733,7 +733,7 @@ describe('Demos Component', () => {
     await fixture.whenStable();
     await flushIntersections();
 
-    const mountedBefore = new Set(fixture.componentInstance.mountedKeys());
+    const mountedBefore = new Set(fixture.componentInstance['mountedKeys']());
     const arrivingKey = `demo-${demoCount - 1}`;
     expect(mountedBefore.has(arrivingKey)).toBe(false);
 
@@ -749,7 +749,7 @@ describe('Demos Component', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(fixture.componentInstance.mountedKeys().has(arrivingKey)).toBe(true);
+    expect(fixture.componentInstance['mountedKeys']().has(arrivingKey)).toBe(true);
   });
 
   it('shows the loading state while demos are unresolved, before any request is in flight', async () => {

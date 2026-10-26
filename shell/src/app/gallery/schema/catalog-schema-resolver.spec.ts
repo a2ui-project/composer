@@ -344,7 +344,10 @@ describe('CatalogSchemaResolver', () => {
       new CatalogSchemaResolver(null, errorLogger).resolveComponentProperties('Component'),
     ).toEqual([]);
     expect(
-      new CatalogSchemaResolver('invalid', errorLogger).resolveComponentProperties('Component'),
+      new CatalogSchemaResolver(
+        'invalid' as unknown as Catalog,
+        errorLogger,
+      ).resolveComponentProperties('Component'),
     ).toEqual([]);
     expect(
       new CatalogSchemaResolver({}, errorLogger).resolveComponentProperties('Component'),
@@ -564,7 +567,7 @@ describe('CatalogSchemaResolver', () => {
         InvalidComponent: 'not-an-object',
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
+    const resolver = new CatalogSchemaResolver(mockSchema as unknown as Catalog, errorLogger);
     expect(resolver.resolveComponentProperties('InvalidComponent')).toEqual([]);
   });
 
@@ -598,9 +601,10 @@ describe('CatalogSchemaResolver', () => {
   it('returns empty array when components is not an object, is an array, or component is missing', () => {
     // components as string (non-object)
     expect(
-      new CatalogSchemaResolver({components: 'invalid'}, errorLogger).resolveComponentProperties(
-        'Component',
-      ),
+      new CatalogSchemaResolver(
+        {components: 'invalid'} as unknown as Catalog,
+        errorLogger,
+      ).resolveComponentProperties('Component'),
     ).toEqual([]);
     // components as array
     expect(
@@ -762,7 +766,7 @@ describe('CatalogSchemaResolver', () => {
         someStringConstant: 'just-a-string',
       },
     };
-    const resolver = new CatalogSchemaResolver(mockSchema, errorLogger);
+    const resolver = new CatalogSchemaResolver(mockSchema as unknown as Catalog, errorLogger);
     expect(resolver.resolveComponentProperties('TestComponent')).toEqual([]);
   });
 
@@ -1256,9 +1260,14 @@ describe('CatalogSchemaResolver', () => {
   });
 
   it('quotes all property keys in COMMON_TYPES_SCHEMA and BASIC_CATALOG_SCHEMA to preserve keys under Closure compilation', () => {
+    // Under esbuild bundling, __dirname resolves to shell/ rather than the spec dir.
+    // Deriving schemaDir from expect.getState().testPath keeps this location-independent.
+    const schemaDir = expect.getState().testPath
+      ? path.dirname(expect.getState().testPath!)
+      : path.resolve(process.cwd(), 'src/app/gallery/schema');
     const schemaFiles = [
-      path.resolve(__dirname, 'common-types-schema.ts'),
-      path.resolve(__dirname, 'basic-catalog-schema.ts'),
+      path.resolve(schemaDir, 'common-types-schema.ts'),
+      path.resolve(schemaDir, 'basic-catalog-schema.ts'),
     ];
 
     for (const filePath of schemaFiles) {

@@ -25,6 +25,7 @@ import {
   EnvMode,
   AuthType,
   ThemePreference,
+  A2aBackendMode,
 } from '../../settings/app-config-provider/app-config-provider';
 import {appConfig} from '../../app.config';
 
@@ -51,6 +52,10 @@ interface MockContent {
 
 interface MockGenerateContentConfig {
   systemInstruction?: string;
+  thinkingConfig?: {
+    thinkingLevel?: string;
+  };
+  abortSignal?: AbortSignal;
 }
 
 interface MockGenerateContentParameters {
@@ -117,6 +122,10 @@ class MockAppConfigProvider extends AppConfigProvider {
 
   override readonly isApiKeyProvidedByConfig = signal<boolean>(false);
 
+  override readonly a2aBackendMode = signal<A2aBackendMode>(A2aBackendMode.HTTP_JSONRPC);
+  override readonly a2aAgentUrl = signal<string>('');
+  override readonly a2aTenantId = signal<string>('');
+
   override initialize(): void {}
   override purgeGeminiApiKey(): void {}
   override setApiKeyFromConfig(key: string): void {}
@@ -127,6 +136,9 @@ class MockAppConfigProvider extends AppConfigProvider {
   override setThemePreference(theme: ThemePreference): void {
     this.themePreference.set(theme);
   }
+  override setA2aBackendMode(_mode: A2aBackendMode): void {}
+  override setA2aAgentUrl(_url: string): void {}
+  override setA2aTenantId(_tenantId: string): void {}
   override flushConfig(): void {}
 }
 
@@ -657,7 +669,7 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
         [Symbol.asyncIterator]() {
           let calls = 0;
           return {
-            async next() {
+            async next(): Promise<IteratorResult<MockGenerateContentResponse>> {
               calls++;
               if (calls === 1) return promiseChunk1;
               if (calls === 2) return promiseChunk2;
@@ -744,13 +756,13 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
     });
 
     it('supports stream cancellation via cancel()', async () => {
-      let abortSignal!: AbortSignal;
+      let abortSignal: AbortSignal | undefined;
       mockGenerateContentStream.mockImplementation(async params => {
         abortSignal = params.config?.abortSignal;
         return {
           async *[Symbol.asyncIterator]() {
             while (true) {
-              if (abortSignal.aborted) {
+              if (abortSignal?.aborted) {
                 const err =
                   abortSignal.reason ||
                   new DOMException('The user aborted a request.', CANCEL_ERROR_NAME);
@@ -771,13 +783,13 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
       const firstChunk = await iterator.next();
       expect(firstChunk.value).toEqual({content: 'Chunk', thinking: '', isComplete: false});
 
-      expect(abortSignal.aborted).toBe(false);
+      expect(abortSignal?.aborted).toBe(false);
       expect(streamResponse.cancel).toBeDefined();
 
       // Trigger cancel
       streamResponse.cancel?.();
 
-      expect(abortSignal.aborted).toBe(true);
+      expect(abortSignal?.aborted).toBe(true);
 
       // Verify that further iterator pulls reject with CancelError
       await expect(iterator.next()).rejects.toThrow('Cancelled');
@@ -785,13 +797,13 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
     });
 
     it('normalizes SDK AbortError thrown after user cancellation to CancelError', async () => {
-      let abortSignal!: AbortSignal;
+      let abortSignal: AbortSignal | undefined;
       mockGenerateContentStream.mockImplementation(async params => {
         abortSignal = params.config?.abortSignal;
         return {
           async *[Symbol.asyncIterator]() {
             yield {text: 'Chunk'};
-            while (!abortSignal.aborted) {
+            while (!abortSignal?.aborted) {
               await new Promise(resolve => setTimeout(resolve, 0));
             }
             throw new DOMException('signal is aborted without reason', 'AbortError');

@@ -16,7 +16,7 @@
 
 import {Subject, ReplaySubject} from 'rxjs';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {RawMessages} from './raw-messages';
+import {RawMessages, RawLogEntry} from './raw-messages';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawMessagesHarness} from './test/raw-messages.harness';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
@@ -36,7 +36,7 @@ describe('RawMessages', () => {
   let harness: RawMessagesHarness;
   let messageStreamSignal: WritableSignal<MessageEnvelope | null>;
   let hostCommMock: Partial<HostCommunication>;
-  let mockMessageStreamSubject: Subject<unknown>;
+  let mockMessageStreamSubject: Subject<MessageEnvelope>;
   let emitMessage: (env: MessageEnvelope) => void;
 
   let latestLlmLogSignal: WritableSignal<LlmLogEntry | null>;

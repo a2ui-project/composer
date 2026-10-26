@@ -82,6 +82,26 @@
             }
           },
           "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "buildTarget": "a2ui-composer:build",
+            "tsConfig": "tsconfig.spec.json",
+            "runnerConfig": "vitest-base.config.ts",
+            "isolate": true,
+            "include": ["**/*.spec.ts"],
+            "providersFile": "src/test-providers.ts",
+            "setupFiles": ["src/test-setup.ts"],
+            "coverageReporters": ["text", "html", "json-summary"],
+            "coverageExclude": ["src/test-setup.ts", "src/test-providers.ts"],
+            "coverageThresholds": {
+              "statements": 93,
+              "branches": 86,
+              "functions": 93,
+              "lines": 94
+            }
+          }
         }
       }
     }

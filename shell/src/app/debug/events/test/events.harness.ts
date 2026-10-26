@@ -17,6 +17,14 @@
 import {ComponentHarness} from '@angular/cdk/testing';
 import {MatTableHarness} from '@angular/material/table/testing';
 
+export interface EventRowValues {
+  time: string;
+  action: string;
+  surface: string;
+  component: string;
+  context: string;
+}
+
 export class EventsHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-events';
 
@@ -31,7 +39,7 @@ export class EventsHarness extends ComponentHarness {
     return rows.length;
   }
 
-  async getRowValuesAt(index: number): Promise<Record<string, string>> {
+  async getRowValuesAt(index: number): Promise<EventRowValues> {
     const table = await this.getTable();
     if (table === null) {
       throw new Error(`No events log table present to read index ${index}!`);
