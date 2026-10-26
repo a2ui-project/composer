@@ -66,10 +66,28 @@ describe('A2aAgentHeader', () => {
     expect(await harness.getSessionText()).toBeNull();
   });
 
-  it('emits event when inspector toggle button is clicked', async () => {
-    const spy = vi.spyOn(fixture.componentInstance.toggleInspector, 'emit');
-    await harness.clickInspector();
+  it('emits event when message inspector toggle button is clicked', async () => {
+    const spy = vi.spyOn(fixture.componentInstance.toggleMessageInspector, 'emit');
+    await harness.clickMessageInspector();
     expect(spy).toHaveBeenCalled();
+  });
+
+  it('emits event when errors inspector toggle button is clicked', async () => {
+    const spy = vi.spyOn(fixture.componentInstance.toggleErrorsInspector, 'emit');
+    await harness.clickErrorsInspector();
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('displays error count badge on inspect errors button only when unreadErrorsCount > 0', async () => {
+    expect(await harness.getErrorsCountText()).toBeNull();
+
+    fixture.componentRef.setInput('unreadErrorsCount', 3);
+    fixture.detectChanges();
+    expect(await harness.getErrorsCountText()).toBe('3');
+
+    fixture.componentRef.setInput('unreadErrorsCount', 0);
+    fixture.detectChanges();
+    expect(await harness.getErrorsCountText()).toBeNull();
   });
 
   it('emits event when settings button is clicked', async () => {

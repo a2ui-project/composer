@@ -21,15 +21,18 @@
       [agentCard]="agentCard()"
       [activeTaskId]="activeTaskId()"
       [sessionId]="activeContextId()"
-      [isInspectorOpen]="isInspectorOpen()"
-      (toggleInspector)="toggleInspectorDrawer()"
+      [isMessageInspectorOpen]="isMessageInspectorOpen()"
+      [isErrorsInspectorOpen]="isErrorsInspectorOpen()"
+      [unreadErrorsCount]="unreadErrorsCount()"
+      (toggleMessageInspector)="toggleMessageInspector()"
+      (toggleErrorsInspector)="toggleErrorsInspector()"
       (resetSession)="resetActiveSession()"
       (openSettings)="openConfigPanel()"
     ></a2ui-composer-agent-header>
 
     <div
       class="chat-main-layout"
-      [class.with-inspector]="isInspectorOpen()"
+      [class.with-inspector]="isMessageInspectorOpen()"
       [class.with-canvas]="isCanvasOpen()"
     >
       <!-- Left Conversation Stream Area -->
@@ -88,7 +91,7 @@
       }
 
       <!-- Right Inspector Side Drawer with Resizable Splitter Handle -->
-      @if (isInspectorOpen()) {
+      @if (isMessageInspectorOpen() || isErrorsInspectorOpen()) {
         <div
           class="inspector-resize-handle"
           role="separator"
@@ -104,12 +107,18 @@
         </div>
 
         <div class="inspector-column" [style.width.px]="inspectorWidth()">
-          <a2ui-composer-message-inspector
-            [events]="inspectorEvents()"
-            [(searchQuery)]="inspectorSearchQuery"
-            (closeDrawer)="toggleInspectorDrawer()"
-            (clearEvents)="clearInspectorEvents()"
-          ></a2ui-composer-message-inspector>
+          @if (isMessageInspectorOpen()) {
+            <a2ui-composer-message-inspector
+              [events]="inspectorEvents()"
+              [(searchQuery)]="inspectorSearchQuery"
+              (closeDrawer)="toggleMessageInspector()"
+              (clearEvents)="clearInspectorEvents()"
+            ></a2ui-composer-message-inspector>
+          } @else if (isErrorsInspectorOpen()) {
+            <a2ui-composer-errors-inspector
+              (closeDrawer)="toggleErrorsInspector()"
+            ></a2ui-composer-errors-inspector>
+          }
         </div>
       }
     </div>

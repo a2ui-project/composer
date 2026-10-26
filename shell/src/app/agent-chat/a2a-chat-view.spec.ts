@@ -30,6 +30,7 @@ import {
 } from '../settings/app-config-provider/app-config-provider';
 import {ChatState} from '../chat/chat-state/chat-state';
 import {A2A_TRANSPORT, A2aTransport} from '../chat/a2a/a2a-transport.token';
+import {ErrorLogger} from '../debug/error-logger.service';
 import {CatalogManagement} from '../storage/catalog-management/catalog-management';
 import {Catalog} from '../storage/models/catalog-storage.model';
 import {A2aChatView} from './a2a-chat-view';
@@ -215,15 +216,15 @@ describe('A2aChatView', () => {
     expect(await history.getMessageCount()).toBe(2);
   });
 
-  it('toggles inspector side drawer', async () => {
-    expect(await harness.isInspectorOpen()).toBe(false);
+  it('toggles message inspector side drawer', async () => {
+    expect(await harness.isMessageInspectorOpen()).toBe(false);
 
     const header = await harness.getHeader();
-    await header.clickInspector();
-    expect(await harness.isInspectorOpen()).toBe(true);
+    await header.clickMessageInspector();
+    expect(await harness.isMessageInspectorOpen()).toBe(true);
 
-    await header.clickInspector();
-    expect(await harness.isInspectorOpen()).toBe(false);
+    await header.clickMessageInspector();
+    expect(await harness.isMessageInspectorOpen()).toBe(false);
   });
 
   it('handles streaming errors gracefully', async () => {
@@ -642,7 +643,7 @@ describe('A2aChatView', () => {
 
   it('resizes inspector drawer on pointer drag and captures pointer', () => {
     fixture.componentInstance['inspectorWidth'].set(380);
-    fixture.componentInstance['isInspectorOpen'].set(true);
+    fixture.componentInstance['isMessageInspectorOpen'].set(true);
     fixture.detectChanges();
 
     const handle: HTMLElement = fixture.nativeElement.querySelector('.inspector-resize-handle');
@@ -1158,16 +1159,16 @@ describe('A2aChatView', () => {
     const secondErrorMessage = messages[3];
     expect(firstAgentMessage.sender).toBe('agent');
     expect(secondErrorMessage.sender).toBe('error');
-    expect(await harness.isInspectorOpen()).toBe(false);
+    expect(await harness.isMessageInspectorOpen()).toBe(false);
 
     // Inspecting a received agent message filters by its message id.
     fixture.componentInstance['inspectMessage'](firstAgentMessage.id);
     fixture.detectChanges();
 
-    expect(await harness.isInspectorOpen()).toBe(true);
+    expect(await harness.isMessageInspectorOpen()).toBe(true);
     expect(fixture.componentInstance['inspectorSearchQuery']()).toBe(firstAgentMessage.id);
 
-    const inspector = await harness.getInspector();
+    const inspector = await harness.getMessageInspector();
     expect(inspector).not.toBeNull();
     expect(await inspector!.getPanelCount()).toBe(1);
 
@@ -1178,9 +1179,9 @@ describe('A2aChatView', () => {
     expect(fixture.componentInstance['inspectorSearchQuery']()).toBe(secondErrorMessage.id);
     expect(await inspector!.getPanelCount()).toBe(1);
 
-    // Closing the inspector drawer closes the drawer.
-    fixture.componentInstance['toggleInspectorDrawer']();
-    expect(fixture.componentInstance['isInspectorOpen']()).toBe(false);
+    // Closing the message inspector drawer closes the drawer.
+    fixture.componentInstance['toggleMessageInspector']();
+    expect(fixture.componentInstance['isMessageInspectorOpen']()).toBe(false);
   });
 
   it('re-partitions canvas surfaces and updates activeCanvasPayload when activeCatalog resolves with Canvas', async () => {
@@ -1436,5 +1437,63 @@ describe('A2aChatView', () => {
     const turn3Components =
       (turn3Active?.[2]?.updateComponents?.components as Array<Record<string, unknown>>) || [];
     expect(turn3Components.map(component => component['id'])).toEqual(['root', 'card-1', 'card-3']);
+  });
+
+  it('toggles errors inspector mutually exclusively with message inspector', async () => {
+    const header = await harness.getHeader();
+
+    await header.clickErrorsInspector();
+    expect(await harness.isErrorsInspectorOpen()).toBe(true);
+    expect(await harness.isMessageInspectorOpen()).toBe(false);
+
+    await header.clickMessageInspector();
+    expect(await harness.isMessageInspectorOpen()).toBe(true);
+    expect(await harness.isErrorsInspectorOpen()).toBe(false);
+
+    await header.clickErrorsInspector();
+    expect(await harness.isErrorsInspectorOpen()).toBe(true);
+    expect(await harness.isMessageInspectorOpen()).toBe(false);
+
+    fixture.componentInstance['inspectMessage']('msg-123');
+    fixture.detectChanges();
+    expect(await harness.isMessageInspectorOpen()).toBe(true);
+    expect(await harness.isErrorsInspectorOpen()).toBe(false);
+
+    await header.clickErrorsInspector();
+    const errorsInspector = await harness.getErrorsInspector();
+    await errorsInspector!.clickClose();
+    expect(await harness.isErrorsInspectorOpen()).toBe(false);
+  });
+
+  it('tracks unread warn/error count while errors inspector is closed and seeds from history', async () => {
+    const errorLogger = TestBed.inject(ErrorLogger);
+    errorLogger.clear();
+
+    const header = await harness.getHeader();
+    expect(await header.getErrorsCountText()).toBeNull();
+
+    errorLogger.error({message: 'A2UI validation failed', sourceTag: '[Validation]'});
+    errorLogger.warn({message: 'Deprecated property', sourceTag: '[Validation]'});
+    errorLogger.info({message: 'Ignored info log', sourceTag: '[Validation]'});
+    fixture.detectChanges();
+    expect(await header.getErrorsCountText()).toBe('2');
+
+    // Opening the Errors Inspector clears unreadErrorsCount and ignores logs while open.
+    await header.clickErrorsInspector();
+    expect(await header.getErrorsCountText()).toBeNull();
+
+    errorLogger.error({message: 'Error while open', sourceTag: '[Validation]'});
+    fixture.detectChanges();
+    expect(await header.getErrorsCountText()).toBeNull();
+
+    // A newly created A2aChatView seeds unreadErrorsCount from existing warn/error history.
+    const freshFixture = TestBed.createComponent(A2aChatView);
+    freshFixture.detectChanges();
+    const freshHarness = await TestbedHarnessEnvironment.harnessForFixture(
+      freshFixture,
+      A2aChatViewHarness,
+    );
+    const freshHeader = await freshHarness.getHeader();
+    expect(await freshHeader.getErrorsCountText()).toBe('3');
   });
 });

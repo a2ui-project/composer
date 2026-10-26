@@ -20,6 +20,7 @@ import {RenderedFrameHarness} from '../../preview/rendered/test/rendered-frame.h
 import {AgentConfigPanelHarness} from '../agent-config-panel/test/agent-config-panel.harness';
 import {A2aAgentHeaderHarness} from '../agent-header/test/agent-header.harness';
 import {A2aChatHistoryHarness} from '../chat-history/test/chat-history.harness';
+import {A2aErrorsInspectorHarness} from '../errors-inspector/test/errors-inspector.harness';
 import {A2aInputAreaHarness} from '../input-area/test/input-area.harness';
 import {A2aMessageInspectorHarness} from '../message-inspector/test/message-inspector.harness';
 
@@ -29,15 +30,21 @@ export class A2aChatViewHarness extends ComponentHarness {
   readonly getHeader = this.locatorFor(A2aAgentHeaderHarness);
   readonly getHistory = this.locatorFor(A2aChatHistoryHarness);
   readonly getInputArea = this.locatorFor(A2aInputAreaHarness);
-  readonly getInspector = this.locatorForOptional(A2aMessageInspectorHarness);
+  readonly getMessageInspector = this.locatorForOptional(A2aMessageInspectorHarness);
+  readonly getErrorsInspector = this.locatorForOptional(A2aErrorsInspectorHarness);
   readonly getConfigDialog = this.documentRootLocatorFactory().locatorForOptional(MatDialogHarness);
   readonly getConfigPanel =
     this.documentRootLocatorFactory().locatorForOptional(AgentConfigPanelHarness);
   readonly getSideCanvas = this.locatorForOptional('.side-canvas-column');
 
-  async isInspectorOpen(): Promise<boolean> {
-    const inspector = await this.getInspector();
+  async isMessageInspectorOpen(): Promise<boolean> {
+    const inspector = await this.getMessageInspector();
     return inspector !== null;
+  }
+
+  async isErrorsInspectorOpen(): Promise<boolean> {
+    const errors = await this.getErrorsInspector();
+    return errors !== null;
   }
 
   async isConfigDialogOpen(): Promise<boolean> {

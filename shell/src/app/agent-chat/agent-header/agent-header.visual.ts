@@ -27,6 +27,7 @@ test.describe('A2aAgentHeader Visual Regression & Layout', () => {
     await expect(header.locator('.agent-version-chip')).toContainText('1.2.0');
     await expect(header.locator('.endpoint-text')).toContainText('http://mock-agent.local');
     await expect(header.locator('.inspector-toggle-btn')).toBeVisible();
+    await expect(header.locator('.errors-toggle-btn')).toBeVisible();
     await expect(header.locator('.new-session-btn')).toContainText('New conversation');
     await expect(header.locator('.settings-btn')).toBeVisible();
     await expect(header.locator('.settings-btn mat-icon')).toHaveText('build');

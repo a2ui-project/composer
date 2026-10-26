@@ -24,9 +24,13 @@ export class A2aAgentHeaderHarness extends ComponentHarness {
   private getVersionElement = this.locatorForOptional('.agent-version-chip');
   private getEndpointElement = this.locatorFor('.endpoint-text');
   private getSessionElement = this.locatorForOptional('.session-chip');
-  private getInspectorButton = this.locatorFor(
+  private getMessageInspectorButton = this.locatorFor(
     MatButtonHarness.with({selector: '.inspector-toggle-btn'}),
   );
+  private getErrorsInspectorButton = this.locatorFor(
+    MatButtonHarness.with({selector: '.errors-toggle-btn'}),
+  );
+  private getErrorsCountBadge = this.locatorForOptional('.errors-count-badge');
   private getSettingsButton = this.locatorFor(MatButtonHarness.with({selector: '.settings-btn'}));
   private getNewSessionButton = this.locatorFor(
     MatButtonHarness.with({selector: '.new-session-btn'}),
@@ -53,9 +57,19 @@ export class A2aAgentHeaderHarness extends ComponentHarness {
     return el ? el.text() : null;
   }
 
-  async clickInspector(): Promise<void> {
-    const btn = await this.getInspectorButton();
+  async clickMessageInspector(): Promise<void> {
+    const btn = await this.getMessageInspectorButton();
     return btn.click();
+  }
+
+  async clickErrorsInspector(): Promise<void> {
+    const btn = await this.getErrorsInspectorButton();
+    return btn.click();
+  }
+
+  async getErrorsCountText(): Promise<string | null> {
+    const badge = await this.getErrorsCountBadge();
+    return badge ? badge.text() : null;
   }
 
   async clickSettings(): Promise<void> {

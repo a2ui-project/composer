@@ -59,16 +59,35 @@
       mat-stroked-button
       type="button"
       class="action-btn inspector-toggle-btn"
-      [class.active]="isInspectorOpen()"
-      [attr.aria-expanded]="isInspectorOpen()"
+      [class.active]="isMessageInspectorOpen()"
+      [attr.aria-expanded]="isMessageInspectorOpen()"
       aria-label="Toggle A2A protocol message inspector"
-      (click)="toggleInspector.emit()"
+      (click)="toggleMessageInspector.emit()"
       matTooltip="Toggle A2A protocol message inspector"
     >
       <mat-icon>terminal</mat-icon>
       <span class="btn-label">{{
-        isInspectorOpen() ? 'Hide A2A Messages' : 'Inspect A2A Messages'
+        isMessageInspectorOpen() ? 'Hide A2A Messages' : 'Inspect A2A Messages'
       }}</span>
+    </button>
+
+    <button
+      class="action-btn errors-toggle-btn"
+      [class.active]="isErrorsInspectorOpen()"
+      mat-stroked-button
+      type="button"
+      matTooltip="Toggle error logs panel"
+      [attr.aria-expanded]="isErrorsInspectorOpen()"
+      aria-label="Toggle error logs panel"
+      (click)="toggleErrorsInspector.emit()"
+    >
+      <mat-icon aria-hidden="true">error_outline</mat-icon>
+      <span class="btn-label">{{
+        isErrorsInspectorOpen() ? 'Hide Errors' : 'Inspect Errors'
+      }}</span>
+      @if (unreadErrorsCount() > 0) {
+        <span class="errors-count-badge">{{ unreadErrorsCount() }}</span>
+      }
     </button>
 
     <button

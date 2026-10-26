@@ -37,6 +37,7 @@ import {PreviewBridgeMessageType, RenderA2uiItem} from 'a2ui-bridge';
 
 import {A2A_TRANSPORT} from '../chat/a2a/a2a-transport.token';
 import {A2aMessage, AgentCard, TaskStatusUpdateEvent} from '../chat/a2a/a2a-types';
+import {ErrorLogger} from '../debug/error-logger.service';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
 import {
   A2aBackendMode,
@@ -68,6 +69,7 @@ import {
   mergeA2uiItems,
   partitionA2uiSurfacePayload,
 } from './converters/surface-partitioner';
+import {A2aErrorsInspector} from './errors-inspector/errors-inspector';
 import {A2aInputArea, SendMessageEvent} from './input-area/input-area';
 import {A2aMessageInspector} from './message-inspector/message-inspector';
 import {MessageInspectorEvent} from './message-inspector/message-inspector-event';
@@ -129,6 +131,7 @@ function resolveUserActionText(action: unknown): string {
     NgTemplateOutlet,
     A2aAgentHeader,
     A2aChatHistory,
+    A2aErrorsInspector,
     A2aInputArea,
     A2aMessageInspector,
     AgentConfigPanel,
@@ -140,6 +143,7 @@ function resolveUserActionText(action: unknown): string {
 export class A2aChatView implements OnInit {
   protected readonly configProvider = inject(AppConfigProvider);
   private readonly a2aTransport = inject(A2A_TRANSPORT);
+  private readonly errorLogger = inject(ErrorLogger);
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
   /**
@@ -181,7 +185,17 @@ export class A2aChatView implements OnInit {
   /** Connection error string if agent discovery or handshake failed. */
   protected readonly connectionError = signal<string | null>(null);
   /** Whether the message inspector side drawer is open. */
-  protected readonly isInspectorOpen = signal<boolean>(false);
+  protected readonly isMessageInspectorOpen = signal<boolean>(false);
+  /** Whether the error logs side drawer is open. */
+  protected readonly isErrorsInspectorOpen = signal<boolean>(false);
+  /**
+   * Unread error/warning log entries emitted while the errors inspector is
+   * closed.
+   */
+  protected readonly unreadErrorsCount = signal<number>(
+    this.errorLogger.getHistory().filter(log => log.level === 'warn' || log.level === 'error')
+      .length,
+  );
   /** Search query applied in the message inspector side drawer. */
   protected readonly inspectorSearchQuery = signal<string>('');
   /** Whether the agent configuration panel is rendered inline instead of the chat view. */
@@ -211,6 +225,12 @@ export class A2aChatView implements OnInit {
           this.handleSendToServerAction(envelope.payload);
         }
       });
+
+    this.errorLogger.errorStream$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(log => {
+      if ((log.level === 'warn' || log.level === 'error') && !this.isErrorsInspectorOpen()) {
+        this.unreadErrorsCount.update(count => count + 1);
+      }
+    });
 
     // The renderer iframe only mounts when the Canvas panel opens, so the active catalog
     // can resolve after the first streaming turn has already been partitioned. The
@@ -318,6 +338,7 @@ export class A2aChatView implements OnInit {
     this.messages.set([]);
     this.inspectorEvents.set([]);
     this.inspectorSearchQuery.set('');
+    this.unreadErrorsCount.set(0);
     this.activeTaskId.set(null);
     this.activeContextId.set(undefined);
     this.activeCanvasPayload.set(null);
@@ -786,6 +807,7 @@ export class A2aChatView implements OnInit {
     this.cancelActiveGeneration();
     this.messages.set([]);
     this.inspectorSearchQuery.set('');
+    this.unreadErrorsCount.set(0);
     this.activeTaskId.set(null);
     this.activeContextId.set(undefined);
     this.activeCanvasPayload.set(null);
@@ -802,13 +824,21 @@ export class A2aChatView implements OnInit {
     this.activeCanvasPayload.set(null);
   }
 
-  protected toggleInspectorDrawer(): void {
-    this.isInspectorOpen.update(v => !v);
+  protected toggleMessageInspector(): void {
+    this.isErrorsInspectorOpen.set(false);
+    this.isMessageInspectorOpen.update(v => !v);
+  }
+
+  protected toggleErrorsInspector(): void {
+    this.isMessageInspectorOpen.set(false);
+    this.unreadErrorsCount.set(0);
+    this.isErrorsInspectorOpen.update(v => !v);
   }
 
   protected inspectMessage(messageId: string): void {
     this.inspectorSearchQuery.set(messageId);
-    this.isInspectorOpen.set(true);
+    this.isErrorsInspectorOpen.set(false);
+    this.isMessageInspectorOpen.set(true);
   }
 
   protected startInspectorResize(event: PointerEvent): void {

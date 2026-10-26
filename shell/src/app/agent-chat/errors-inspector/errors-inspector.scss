@@ -1,0 +1,76 @@
+/**
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: block;
+  height: 100%;
+}
+
+.errors-inspector {
+  background: var(--mat-sys-surface, #ffffff);
+  border-left: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+
+  .errors-inspector-header {
+    align-items: center;
+    border-bottom: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-between;
+    min-height: 48px;
+    padding: 10px 16px;
+
+    .header-title {
+      align-items: center;
+      display: flex;
+      gap: 8px;
+
+      .header-icon {
+        color: var(--mat-sys-primary, #1a73e8);
+        font-size: 20px;
+        height: 20px;
+        width: 20px;
+      }
+
+      .errors-inspector-title {
+        color: var(--mat-sys-on-surface, #1f1f1f);
+        font-size: var(--mat-sys-title-small-size, 0.95rem);
+        font-weight: var(--mat-sys-title-small-weight, 600);
+        margin: 0;
+      }
+    }
+
+    .header-controls {
+      align-items: center;
+      display: flex;
+      gap: 4px;
+
+      button {
+        color: var(--mat-sys-on-surface-variant, #5f6368);
+      }
+    }
+  }
+
+  .errors-inspector-content {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+}

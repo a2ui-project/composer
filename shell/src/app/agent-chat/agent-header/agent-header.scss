@@ -169,7 +169,8 @@
         height: 18px;
       }
 
-      &.inspector-toggle-btn {
+      &.inspector-toggle-btn,
+      &.errors-toggle-btn {
         border-color: var(--mat-sys-primary);
         color: var(--mat-sys-primary);
 
@@ -178,6 +179,22 @@
           border-color: var(--mat-sys-primary);
           color: var(--mat-sys-on-primary-container);
         }
+      }
+
+      .errors-count-badge {
+        align-items: center;
+        background: var(--mat-sys-primary-container, #dbeafe);
+        border-radius: 10px;
+        color: var(--mat-sys-on-primary-container, #1d4ed8);
+        display: inline-flex;
+        font-size: var(--mat-sys-label-small-size, 0.72rem);
+        font-weight: var(--mat-sys-label-small-weight, 600);
+        justify-content: center;
+        line-height: 1.2;
+        margin-left: 6px;
+        min-width: 14px;
+        padding: 1px 7px;
+        text-align: center;
       }
 
       &.new-session-btn {
