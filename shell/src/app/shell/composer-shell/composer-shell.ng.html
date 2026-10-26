@@ -59,8 +59,6 @@
     class="theme-toggle-button"
     color="primary"
     (click)="toggleTheme()"
-    a2uiComposerTrackEvent="trackThemeToggle"
-    [a2uiComposerTrackParams]="{theme: isDarkTheme() ? 'light' : 'dark'}"
     [attr.aria-label]="isDarkTheme() ? 'Switch to light theme' : 'Switch to dark theme'"
   >
     <mat-icon aria-hidden="true">{{ isDarkTheme() ? 'light_mode' : 'dark_mode' }}</mat-icon>

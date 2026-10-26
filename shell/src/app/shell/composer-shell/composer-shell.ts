@@ -15,7 +15,6 @@
  */
 
 import {DOCUMENT} from '@angular/common';
-import {TrackEventDirective} from '../../usage-tracking/track-event.directive';
 import {Component, computed, effect, inject, signal} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
@@ -63,7 +62,6 @@ const SNACK_BAR_DURATION_MS = 5000;
     RouterLinkActive,
     MatTooltipModule,
     MatSnackBarModule,
-    TrackEventDirective,
   ],
   templateUrl: './composer-shell.ng.html',
   styleUrl: './composer-shell.scss',
