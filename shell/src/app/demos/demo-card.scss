@@ -20,11 +20,11 @@
   min-width: 0;
   height: 100%;
 
-  // Measurement and clamp are in guest pixels, matching demo-card.ts.
-  // Keep the placeholder separate so it cannot inflate the guest's measurements.
-  --demo-card-measure-h: 32px;
+  // The measuring height, --demo-card-measure-h, and the cap, --demo-card-max-h, are
+  // bound on the host from MEASURE_HEIGHT_PX and MAX_CONTENT_HEIGHT_PX, in guest
+  // pixels. Keep the placeholder separate so it cannot inflate the guest's
+  // measurements.
   --demo-card-placeholder-h: 200px;
-  --demo-card-max-h: 560px;
 
   // Runs once per card, independently of frame remounts and height reports.
   animation: demo-card-enter 240ms ease both;

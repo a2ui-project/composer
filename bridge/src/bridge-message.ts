@@ -75,9 +75,11 @@ export declare interface SurfaceResizePayload {
    */
   viewportWidth?: number;
   /**
-   * Whether the renderer has committed the first surface content to the DOM.
-   * False identifies startup/reset measurements. Omitted by renderers that don't
-   * implement `RendererConfig.onInitialRender`, which report dimensions only.
+   * Whether the renderer has committed the first surface content to the DOM and
+   * that content has settled (see content-settle.ts), so the dimensions describe
+   * what the reader will see. False identifies startup/reset measurements and
+   * content still settling. Omitted by renderers that don't implement
+   * `RendererConfig.onInitialRender`, which report dimensions only.
    */
   contentReady?: boolean;
 }
