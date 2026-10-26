@@ -15,6 +15,7 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 
 test.beforeEach(async ({page}) => {
   page.on('pageerror', err => {
@@ -103,7 +104,7 @@ test.describe('Settings and Client Configuration', () => {
 
       await expect(page.locator('.workspace-container')).toBeVisible();
 
-      const iframe = page.frameLocator('iframe.preview-iframe');
+      const iframe = previewFrame(page);
       await expect(iframe.getByRole('button', {name: 'Search Cars'})).toBeVisible();
     });
 

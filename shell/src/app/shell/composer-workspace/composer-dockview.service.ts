@@ -30,6 +30,7 @@ import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {CHAT_PANEL_COMPONENT} from '../../chat/chat-panel/chat-panel-component.token';
 import {RawFrame} from '../../preview/raw/raw-frame';
 import {RenderedFrame, RenderedFrameSizing} from '../../preview/rendered/rendered-frame';
+import {DefaultTarget} from '../host-communication/host-communication';
 import {DataModel} from '../../debug/data-model/data-model';
 import {Events} from '../../debug/events/events';
 import {Errors} from '../../debug/errors/errors';
@@ -389,10 +390,11 @@ export class ComposerDockview {
 
     // A docked preview fills its panel and the guest scrolls inside it. Dockview
     // gives the panel's overlay an explicit pixel size, so the frame's
-    // `height: 100%` resolves. `sizing` is required, so it has to be set before
-    // `init` runs the first change detection.
+    // `height: 100%` resolves. `sizing` and `defaultTarget` are required, so
+    // they have to be set before `init` runs the first change detection.
     if (type === RenderedFrame) {
       componentRef.setInput('sizing', 'fill' satisfies RenderedFrameSizing);
+      componentRef.setInput('defaultTarget', DefaultTarget.REPLACE);
     }
     if (type === DataModel) this.dataModelInstance = componentRef.instance as DataModel;
     if (type === RawMessages) this.rawMessagesInstance = componentRef.instance as RawMessages;

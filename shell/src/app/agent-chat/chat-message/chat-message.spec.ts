@@ -580,9 +580,14 @@ describe('A2aChatMessage', () => {
     expect(await harness.inlineSurfacePrecedesText()).toBe(false);
 
     // The chat history grows with its content, so only the inline frame follows
-    // the guest's reported height.
+    // the guest's reported height, and it registers with KEEP so it does not
+    // steal the bridge's default target.
     const frame = await harness.getInlineFrame();
     expect(await frame!.getSizing()).toBe('content');
+    expect(TestBed.inject(HostCommunication).registerIframe).toHaveBeenCalledWith(
+      expect.anything(),
+      'keep',
+    );
   });
 
   it('renders the inline surface above the text when the surface led the message', async () => {

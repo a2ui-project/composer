@@ -36,6 +36,7 @@ import {DemosCatalog} from './services/demos-catalog';
 import {DemoCard} from './demo-card';
 import {BentoGrid, bentoLayout} from './bento-layout';
 import {RenderedFrame} from '../preview/rendered/rendered-frame';
+import {DefaultTarget} from '../shell/host-communication/host-communication';
 import {StartupResolution} from '../shell/startup-resolution/startup-resolution';
 
 /**
@@ -156,11 +157,11 @@ const DEMO_KEY_ATTRIBUTE = 'data-demo-key';
  * {@link Demos.ensureResizeObserver} for why the second is needed) — and the
  * frames they may keep alive are capped at {@link MAX_MOUNTED_CARDS}; which cards
  * hold those slots is decided by what the reader can see rather than by position
- * in the wall, see {@link Demos.reconcileMountedCards}. The theme broadcast (`HostCommunication
- * .sendTheme`) is not this component's concern: the mounted {@link
- * RenderedFrame} coordinator already runs that effect in its own constructor,
- * so the cost of a theme flip is one broadcast regardless of how many cards
- * happen to be mounted, and {@link DemoCard} deliberately adds none.
+ * in the wall, see {@link Demos.reconcileMountedCards}. The theme broadcast is not
+ * this component's concern: HostCommunication sends each theme change itself, to
+ * every ready frame, cards included, so the cost of a theme flip is one message per
+ * ready frame regardless of how many cards happen to be mounted. Neither the
+ * coordinator nor {@link DemoCard} adds any.
  *
  * Inbound bridge traffic is deliberately not consumed here: DATA_MODEL_CHANGE
  * echoes from card frames are of no use to this page, and each card handles its
@@ -175,6 +176,7 @@ const DEMO_KEY_ATTRIBUTE = 'data-demo-key';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Demos implements OnInit, OnDestroy {
+  protected readonly DefaultTarget = DefaultTarget;
   private readonly demosCatalog = inject(DemosCatalog);
   private readonly startupResolution = inject(StartupResolution);
 
@@ -295,13 +297,13 @@ export class Demos implements OnInit, OnDestroy {
   constructor() {
     // Coordinator registration.
     //
-    // The coordinator's iframe belongs to RenderedFrame's own template and
-    // `RenderedFrame.iframeRef` is protected, so the element cannot be read off the
-    // component instance. Of the two available routes, querying this route's own
-    // wrapper is preferred over `hostCommunication.getIframeElement()`: the latter
-    // returns the default target, which is only the coordinator while every other
-    // frame registers with `DefaultTarget.KEEP`, an invariant owned by other files
-    // (see DemoCard), whereas the wrapper query is scoped to markup this component
+    // The coordinator's iframe belongs to the GuestFrame inside RenderedFrame's
+    // template, and neither component exposes the element. Of the two available
+    // routes, querying this route's own wrapper is preferred over
+    // `hostCommunication.getIframeElement()`: the latter returns the default
+    // target, which is only the coordinator while every other frame registers
+    // with `DefaultTarget.KEEP`, an invariant owned by other files (see
+    // DemoCard), whereas the wrapper query is scoped to markup this component
     // owns outright.
     //
     // `afterRenderEffect` rather than `effect`, because the iframe only exists once

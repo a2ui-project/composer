@@ -15,22 +15,23 @@
  */
 
 import {ComponentHarness, TestElement} from '@angular/cdk/testing';
+import {GuestFrameHarness} from '../../guest-frame/test/guest-frame.harness';
 import type {RenderedFrameSizing} from '../rendered-frame';
+import {RENDERED_FRAME_SELECTORS} from './rendered-frame-selectors';
 
 export class RenderedFrameHarness extends ComponentHarness {
   static hostSelector = 'a2ui-composer-rendered-frame';
 
-  protected getIframeElement = this.locatorForOptional('iframe');
+  private readonly getGuestFrame = this.locatorForOptional(GuestFrameHarness);
+  private readonly getContainer = this.locatorFor(RENDERED_FRAME_SELECTORS.container);
+  private readonly getPlaceholder = this.locatorForOptional(RENDERED_FRAME_SELECTORS.placeholder);
 
   async hasIframe(): Promise<boolean> {
-    const iframe = await this.getIframeElement();
-    return !!iframe;
+    return (await (await this.getGuestFrame())?.hasIframe()) ?? false;
   }
 
   async getIframeSrc(): Promise<string | null> {
-    const iframe = await this.getIframeElement();
-    if (!iframe) return null;
-    return iframe.getAttribute('src');
+    return (await (await this.getGuestFrame())?.getIframeSrc()) ?? null;
   }
 
   /**
@@ -39,11 +40,16 @@ export class RenderedFrameHarness extends ComponentHarness {
    * it with `TestbedHarnessEnvironment.getNativeElement`.
    */
   async getIframe(): Promise<TestElement | null> {
-    return await this.getIframeElement();
+    return (await (await this.getGuestFrame())?.getIframe()) ?? null;
+  }
+
+  /** Whether the placeholder shown while there is no renderer URL is up. */
+  async isPlaceholderShown(): Promise<boolean> {
+    return (await this.getPlaceholder()) !== null;
   }
 
   async isLocked(): Promise<boolean> {
-    const container = await this.locatorFor('.rendered-frame-container')();
+    const container = await this.getContainer();
     return await container.hasClass('is-locked');
   }
 
@@ -52,7 +58,7 @@ export class RenderedFrameHarness extends ComponentHarness {
    * when it follows the guest's reported surface height.
    */
   async getSizing(): Promise<RenderedFrameSizing> {
-    const container = await this.locatorFor('.rendered-frame-container')();
+    const container = await this.getContainer();
     const sizing = await container.getAttribute('data-sizing');
     if (sizing !== 'fill' && sizing !== 'content') {
       throw new Error(`Unexpected data-sizing on the frame container: ${sizing}.`);
@@ -64,35 +70,26 @@ export class RenderedFrameHarness extends ComponentHarness {
    * Guest height applied to the frame, in pixels, or null when none is and
    * the frame takes its host's full height.
    *
-   * A guest height is applied as the container's `height` and `min-height`
-   * and as the iframe's `min-height`, so that it wins over the stylesheet's
-   * floors; this throws if those disagree, which would mean the frame is only
-   * partly sized to the guest. The host sizes the iframe from this value and
-   * the guest measures itself inside it, so it is the observable that
-   * matters, not the signal behind it.
+   * A guest height is applied as the container's `height` and `min-height`,
+   * so that it wins over the stylesheet's floor; this throws if those
+   * disagree, which would mean the frame is only partly sized to the guest.
+   * The iframe fills the container, and the guest measures itself inside it,
+   * so this is the observable that matters, not the signal behind it.
    */
   async getAppliedHeightPx(): Promise<number | null> {
-    const container = await this.locatorFor('.rendered-frame-container')();
-    const iframe = await this.getIframeElement();
+    const container = await this.getContainer();
     const height = await container.getCssValue('height');
     const containerMinHeight = await container.getCssValue('min-height');
-    const iframeMinHeight = iframe ? await iframe.getCssValue('min-height') : height;
 
     if (height === '100%') {
       return null;
     }
-    if (!height.endsWith('px') || containerMinHeight !== height || iframeMinHeight !== height) {
+    if (!height.endsWith('px') || containerMinHeight !== height) {
       throw new Error(
         `Inconsistent applied height: container height ${height}, container min-height ` +
-          `${containerMinHeight}, iframe min-height ${iframeMinHeight}.`,
+          `${containerMinHeight}.`,
       );
     }
     return parseFloat(height);
-  }
-
-  /** Fires the guest iframe's `load` event, as the browser does once a document loads. */
-  async simulateFrameLoad(): Promise<void> {
-    const iframe = await this.locatorFor('iframe')();
-    await iframe.dispatchEvent('load');
   }
 }

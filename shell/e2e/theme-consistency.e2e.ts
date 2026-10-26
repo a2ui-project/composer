@@ -17,6 +17,7 @@
 import {expect, test, type Page} from '@playwright/test';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {connectMockAgent} from '../src/app/agent-chat/test/mock-a2a-agent';
+import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
 import {waitForMonacoEditor} from './helpers';
 
 async function themeColor(page: Page, token: string): Promise<string> {
@@ -89,7 +90,7 @@ test('Composer chat and raw update labels share the workspace palette in both th
     );
   });
   await page.goto('/?renderer=http://theme-renderer.test/index.html');
-  const frame = page.frameLocator('iframe.preview-iframe').locator('body');
+  const frame = previewFrame(page).locator('body');
   await expect(frame).toContainText('Theme preview');
   await expect(page.locator('.disabled-chat-panel')).toBeVisible();
   await frame.evaluate((_, type) => {

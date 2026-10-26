@@ -144,10 +144,8 @@
   }
 }
 
+// The card's GuestFrame; its iframe fills it.
 .demo-card-frame {
-  display: block;
-  border: none;
-  isolation: isolate;
   // Scale and height math share the TypeScript constant published on the host.
   // Top-left origin preserves hit testing through the live preview transform.
   transform-origin: top left;

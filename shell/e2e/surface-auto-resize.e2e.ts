@@ -16,19 +16,22 @@
 
 import {test, expect, type FrameLocator, type Page} from '@playwright/test';
 import {
-  RENDERER_URLS,
   chatHistory,
-  dockedPreview,
   dockedPreviewGeometry,
   dragPreviewSplitter,
   guestContentHeight,
   guestScrollRange,
-  inlineSurfaceContainer,
-  inlineSurfaceIframe,
   setMonacoContent,
   showInlineSurface,
   waitForPreviewTab,
 } from './helpers';
+import {
+  dockedPreview,
+  inlineSurfaceContainer,
+  inlineSurfaceIframe,
+  previewFrame,
+} from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 import {MAX_CONTENT_HEIGHT_PX} from '../src/app/preview/content-height';
 
 /** Guest samples this file exercises, one per renderer. */
@@ -548,7 +551,7 @@ test.describe('Docked Preview Fills Its Panel', () => {
 
     await setMonacoContent(page, generateSurfacePayload(SHORT_ROW_COUNT));
     await waitForPreviewTab(page);
-    const guest = dockedPreview(page).locator('iframe.preview-iframe').contentFrame();
+    const guest = previewFrame(dockedPreview(page));
     await expect(guest.getByText('Row item index 0 ')).toBeVisible({
       timeout: SURFACE_RENDER_TIMEOUT_MS,
     });

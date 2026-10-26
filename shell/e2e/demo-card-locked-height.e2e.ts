@@ -15,7 +15,9 @@
  */
 
 import {test, expect, type Locator, type Page} from '@playwright/test';
-import {RENDERER_URLS} from './helpers';
+import {DEMO_CARD_SELECTORS} from '../src/app/demos/test/demo-card-selectors';
+import {demoCardFrame, demoCardIframe} from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 import {
   COMMIT_TOLERANCE_PX,
   DEMO_RENDERERS,
@@ -92,21 +94,19 @@ async function settledLayout(page: Page): Promise<Record<string, CardBox>> {
 
 /** The tallest SURFACE_RESIZE height the card's current frame has sent. */
 function tallestReport(card: Locator): Promise<number> {
-  return card.evaluate(host => {
-    const frame = host.querySelector<HTMLIFrameElement>('iframe.demo-card-frame');
+  return card.evaluate((host, iframeSelector) => {
+    const frame = host.querySelector<HTMLIFrameElement>(iframeSelector);
     const reports = (window as WindowWithSurfaceReports).__surfaceReports ?? [];
     return Math.max(
       0,
       ...reports.filter(report => report.source === frame?.contentWindow).map(r => r.height),
     );
-  });
+  }, DEMO_CARD_SELECTORS.iframe);
 }
 
 /** The guest document's scroll geometry. */
 function guestScroll(card: Locator) {
-  return card
-    .locator('iframe.demo-card-frame')
-    .contentFrame()
+  return demoCardFrame(card)
     .locator('html')
     .evaluate(root => ({
       scrollHeight: root.scrollHeight,
@@ -147,9 +147,7 @@ for (const renderer of DEMO_RENDERERS) {
       // (their validation messages, tabs and modals keep the document's height), so the
       // demo grows the way a late image or an expanding section would: content is added
       // to its document after the card has committed.
-      await card
-        .locator('iframe.demo-card-frame')
-        .contentFrame()
+      await demoCardFrame(card)
         .locator('body')
         .evaluate(body => {
           const growth = document.createElement('div');
@@ -173,7 +171,7 @@ for (const renderer of DEMO_RENDERERS) {
       expect(await settledLayout(page)).toEqual(before);
 
       // The demo scrolls inside the card instead.
-      const frameElement = card.locator('iframe.demo-card-frame');
+      const frameElement = demoCardIframe(card);
       await expect(async () => {
         await frameElement.scrollIntoViewIfNeeded();
         const box = await frameElement.boundingBox();
@@ -200,7 +198,7 @@ for (const renderer of DEMO_RENDERERS) {
       const scroller = page.locator('.demos-container');
       await expect(async () => {
         await scroller.evaluate(element => element.scrollTo(0, element.scrollHeight));
-        await expect(card.locator('iframe.demo-card-frame')).toHaveCount(0, {timeout: 1000});
+        await expect(demoCardIframe(card)).toHaveCount(0, {timeout: 1000});
       }).toPass({timeout: 30_000});
       expect((await wallLayout(page))[key]).toEqual(box);
 
@@ -235,7 +233,7 @@ test.describe('Demo cards after a renderer change', () => {
     const cards = page.locator('a2ui-composer-demo-card');
     const first = cards.first();
     await revealCard(first);
-    await expect(first.locator('iframe.demo-card-frame')).toHaveAttribute(
+    await expect(demoCardIframe(first)).toHaveAttribute(
       'src',
       new RegExp(`^${RENDERER_URLS.angular}`),
     );
@@ -255,7 +253,7 @@ test.describe('Demo cards after a renderer change', () => {
     for (let index = 0; index < 4; index++) {
       const card = cards.nth(index);
       await revealCard(card);
-      await expect(card.locator('iframe.demo-card-frame')).toHaveAttribute(
+      await expect(demoCardIframe(card)).toHaveAttribute(
         'src',
         new RegExp(`^${RENDERER_URLS.lit}`),
       );

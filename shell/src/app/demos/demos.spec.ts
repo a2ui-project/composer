@@ -762,12 +762,4 @@ describe('Demos Component', () => {
     expect(await harness.getCardCount()).toBe(0);
     expect(await harness.getEmptyStateSubtitleText()).toBeNull();
   });
-
-  it('broadcasts the theme exactly once when the route mounts', () => {
-    const hostCommunicationMock = TestBed.inject(
-      HostCommunication,
-    ) as unknown as MockHostCommunication;
-
-    expect(hostCommunicationMock.sendTheme).toHaveBeenCalledTimes(1);
-  });
 });

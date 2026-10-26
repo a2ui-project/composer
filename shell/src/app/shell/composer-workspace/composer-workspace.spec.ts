@@ -165,7 +165,7 @@ describe('ComposerWorkspace Dashboard', () => {
     expect(types).toContain('DataModel');
   });
 
-  it('sizes the docked Rendered panel frame to fill its panel', () => {
+  it('sizes the docked Rendered panel frame to fill its panel and replace the default target', () => {
     // Dockview may not attach panels to the jsdom DOM, so read the input off
     // the instance; reading a required input that was never set would throw.
     const manager = fixture.debugElement.injector.get(ComposerDockview);
@@ -174,6 +174,7 @@ describe('ComposerWorkspace Dashboard', () => {
     );
     expect(renderedRef).toBeDefined();
     expect((renderedRef!.instance as RenderedFrame).sizing()).toBe('fill');
+    expect((renderedRef!.instance as RenderedFrame).defaultTarget()).toBe('replace');
   });
 
   it('delegates clearLogs to all queried child components when clearAllLogs is called', () => {

@@ -29,7 +29,10 @@
     arrived could never bootstrap.
   -->
   <div #coordinatorHost class="coordinator-frame" aria-hidden="true">
-    <a2ui-composer-rendered-frame sizing="fill"></a2ui-composer-rendered-frame>
+    <a2ui-composer-rendered-frame
+      sizing="fill"
+      [defaultTarget]="DefaultTarget.REPLACE"
+    ></a2ui-composer-rendered-frame>
   </div>
 
   <header class="demos-header">

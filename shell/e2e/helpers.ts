@@ -20,6 +20,12 @@ import {
   CATALOG_WATCHDOG_MESSAGE,
   CATALOG_WATCHDOG_TIMEOUT_MS,
 } from '../src/app/storage/catalog-management/catalog-watchdog';
+import {RENDERED_FRAME_SELECTORS} from '../src/app/preview/rendered/test/rendered-frame-selectors';
+import {
+  dockedPreview,
+  inlineSurfaceFrame,
+  renderedFrameContainer,
+} from '../src/app/preview/testing/preview-frame-locators';
 
 export interface MonacoModel {
   getValue(): string;
@@ -33,18 +39,6 @@ export interface WindowWithMonaco extends Window {
     };
   };
 }
-
-/**
- * Renderer dev servers hosting the guest samples, started by the `webServer`
- * entries in playwright.config.ts. The ports live in both places because the
- * config starts the servers by command line; these are the addresses the tests
- * navigate to.
- */
-export const RENDERER_URLS = {
-  angular: 'http://localhost:3456',
-  lit: 'http://localhost:3457',
-  react: 'http://localhost:3458',
-} as const;
 
 /**
  * Timeout in milliseconds waiting for dockview tabs or frame containers to be visible.
@@ -110,7 +104,7 @@ export async function waitForPreviewTab(page: Page): Promise<void> {
   } catch {
     // If no tab is present, proceed to container check
   }
-  await expect(page.locator('.rendered-frame-container')).toBeVisible({
+  await expect(renderedFrameContainer(page)).toBeVisible({
     timeout: TAB_VISIBILITY_TIMEOUT_MS,
   });
 }
@@ -171,36 +165,6 @@ export async function useChatPanel(page: Page, panel: ChatPanelKind): Promise<vo
       localStorage.setItem('a2ui_composer_force_plain_chat_panel', 'true');
     }
   }, panel === 'plain');
-}
-
-/** The preview frame host in the Components Gallery's Preview card. */
-export function galleryPreview(page: Page): Locator {
-  return page.locator('.preview-card a2ui-composer-rendered-frame');
-}
-
-/** The hidden preview frame host that coordinates the /demos page. */
-export function demosCoordinator(page: Page): Locator {
-  return page.locator('.coordinator-frame a2ui-composer-rendered-frame');
-}
-
-/** The preview frame host in the composer workspace's "Rendered" Dockview panel. */
-export function dockedPreview(page: Page): Locator {
-  return page.locator('.dockview-root a2ui-composer-rendered-frame');
-}
-
-/** The sized container of the inline chat surface. */
-export function inlineSurfaceContainer(page: Page): Locator {
-  return page.locator('.inline-surface-card .rendered-frame-container');
-}
-
-/** The iframe of the inline chat surface. */
-export function inlineSurfaceIframe(page: Page): Locator {
-  return page.locator('.inline-surface-card iframe.preview-iframe');
-}
-
-/** The guest document of the inline chat surface. */
-export function inlineSurfaceFrame(page: Page): FrameLocator {
-  return inlineSurfaceIframe(page).contentFrame();
 }
 
 /** The chat history's scroll container. */
@@ -284,8 +248,8 @@ export interface DockedPreviewGeometry {
 
 /** Measures the docked preview against its Dockview panel. */
 export function dockedPreviewGeometry(page: Page): Promise<DockedPreviewGeometry> {
-  return dockedPreview(page).evaluate(host => {
-    const frame = host.querySelector('iframe.preview-iframe')!.getBoundingClientRect();
+  return dockedPreview(page).evaluate((host, iframeSelector) => {
+    const frame = host.querySelector(iframeSelector)!.getBoundingClientRect();
     const panel = host.closest('.dv-render-overlay')!;
     const style = getComputedStyle(panel);
     return {
@@ -296,7 +260,7 @@ export function dockedPreviewGeometry(page: Page): Promise<DockedPreviewGeometry
       panelBottom: panel.getBoundingClientRect().bottom,
       hostScrollRange: host.scrollHeight - host.clientHeight,
     };
-  });
+  }, RENDERED_FRAME_SELECTORS.iframe);
 }
 
 /**

@@ -15,10 +15,15 @@
  */
 
 import {test, expect} from '@playwright/test';
+import {RENDERED_FRAME_SELECTORS} from '../src/app/preview/rendered/test/rendered-frame-selectors';
 import {
-  RENDERER_URLS,
-  expectNoCatalogWatchdog,
   galleryPreview,
+  previewFrame,
+  previewIframe,
+} from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
+import {
+  expectNoCatalogWatchdog,
   getMonacoContent,
   guestContentHeight,
   guestScrollRange,
@@ -132,7 +137,7 @@ test.describe('Components Gallery User Journey', () => {
     // 8. Assert sandboxed preview frame is mounted and has an iframe on the Preview tab
     const renderedFrame = page.locator('a2ui-composer-rendered-frame');
     await expect(renderedFrame).toBeVisible();
-    const iframe = renderedFrame.locator('iframe');
+    const iframe = previewIframe(renderedFrame);
     await expect(iframe).toBeVisible();
     await iframe.evaluate(el => el.setAttribute('data-test-marker', 'persistent-preview'));
 
@@ -328,7 +333,7 @@ test.describe('Components Gallery User Journey', () => {
     await expect(text).toBeVisible();
     const edited = 'Ready to use from my selected catalog';
     await text.fill(edited);
-    const preview = page.frameLocator('.preview-card iframe');
+    const preview = previewFrame(galleryPreview(page));
     await expect(preview.getByText(edited, {exact: true})).toBeVisible();
 
     await page.getByRole('tab', {name: 'Edit JSON', exact: true}).click();
@@ -349,7 +354,7 @@ test.describe('Components Gallery User Journey', () => {
     expect(new URL(renderer!).origin).toBe('http://localhost:3456');
     await expect(page.locator('.workspace-container')).toBeVisible();
     await expect(
-      page.frameLocator('.workspace-container iframe').getByText(edited, {exact: true}),
+      previewFrame(page.locator('.workspace-container')).getByText(edited, {exact: true}),
     ).toBeVisible();
   });
 
@@ -368,7 +373,7 @@ test.describe('Components Gallery User Journey', () => {
     await page.locator('.catalog-list').getByRole('button', {name: 'Text', exact: true}).click();
     await expect(page.getByRole('heading', {name: 'Text', exact: true})).toBeVisible();
 
-    const guest = preview.locator('iframe.preview-iframe').contentFrame();
+    const guest = previewFrame(preview);
     // Wait for the component to render before measuring it.
     await expect
       .poll(() =>
@@ -380,16 +385,16 @@ test.describe('Components Gallery User Journey', () => {
 
     /** The frame host, its content box, and the iframe inside it, which fills it. */
     const sizes = () =>
-      preview.evaluate(host => {
+      preview.evaluate((host, iframeSelector) => {
         const style = getComputedStyle(host);
         return {
           host: Math.round(host.clientHeight),
           card: Math.round(
             host.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
           ),
-          frame: Math.round(host.querySelector('iframe')!.getBoundingClientRect().height),
+          frame: Math.round(host.querySelector(iframeSelector)!.getBoundingClientRect().height),
         };
-      });
+      }, RENDERED_FRAME_SELECTORS.iframe);
 
     // A small component: the preview card has a 400px minimum height and
     // stretches with `.usage-card`, so it does not shrink to the guest content.

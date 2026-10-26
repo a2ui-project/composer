@@ -27,7 +27,8 @@ import {
   setGeminiScenarios,
   splitTextIntoGeminiChunks,
 } from './helpers/gemini-fixture';
-import {RENDERER_URLS} from './helpers';
+import {previewFrame} from '../src/app/preview/testing/preview-frame-locators';
+import {RENDERER_URLS} from '../src/app/preview/testing/renderer-urls';
 
 const DRAFT_TEXT = 'Ready to use from my selected catalog';
 const MODEL_TEXT = 'Updated by deterministic Gemini fixture';
@@ -106,7 +107,7 @@ async function openDraftInWorkspace(page: Page): Promise<void> {
   );
 
   await expect(
-    page.frameLocator('.workspace-container iframe').getByText(DRAFT_TEXT),
+    previewFrame(page.locator('.workspace-container')).getByText(DRAFT_TEXT),
   ).toBeVisible();
   await expect.poll(() => readRawDraft(page)).toContain(DRAFT_TEXT);
 }
@@ -172,7 +173,7 @@ async function openSampleInWorkspace(page: Page): Promise<void> {
   await page.goto(`/?renderer=${RENDERER_URLS.angular}`);
   await expect(page.locator('.header-title')).toContainText('my_basic_catalog');
   await expect(
-    page.frameLocator('.workspace-container iframe').getByText('Book a Car'),
+    previewFrame(page.locator('.workspace-container')).getByText('Book a Car'),
   ).toBeVisible();
 }
 
@@ -363,7 +364,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
     );
 
     await expect(
-      page.frameLocator('.workspace-container iframe').getByText(MODEL_TEXT),
+      previewFrame(page.locator('.workspace-container')).getByText(MODEL_TEXT),
     ).toBeVisible();
     await expect(chatHistory(page)).toContainText('1 component in this canvas');
     await expect.poll(() => readRawDraft(page)).toContain(MODEL_TEXT);
@@ -384,7 +385,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
     const editedDraft = replaceDraftText(await readRawDraft(page), 'Book a Car', MODEL_TEXT);
     await setGeminiScenarios(page, [{chunks: splitTextIntoGeminiChunks(editedDraft)}]);
     await submitPrompt(page, prompt);
-    const preview = page.frameLocator('.workspace-container iframe');
+    const preview = previewFrame(page.locator('.workspace-container'));
     await expect(preview.getByText(MODEL_TEXT)).toBeVisible();
     await expect(chatHistory(page)).toContainText('7 components in this canvas');
 
@@ -411,7 +412,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
 
     await expect(page.locator('.header-title')).toContainText('Basic Catalog');
     await expect(
-      page.frameLocator('.workspace-container iframe').getByText(LIT_SAMPLE_TEXT),
+      previewFrame(page.locator('.workspace-container')).getByText(LIT_SAMPLE_TEXT),
     ).toBeVisible();
     await expect.poll(() => readRawDraft(page)).toContain(LIT_SAMPLE_TEXT);
     await expect(page.locator('a2ui-composer-chat-panel').getByText(reply)).toBeHidden();
@@ -431,7 +432,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
 
     await expect(parseErrorCard(page)).toBeVisible();
     await expect(
-      page.frameLocator('.workspace-container iframe').getByText(DRAFT_TEXT),
+      previewFrame(page.locator('.workspace-container')).getByText(DRAFT_TEXT),
     ).toBeVisible();
     await expect.poll(() => readRawDraft(page)).toBe(originalDraft);
     await expectGeminiRequestForCurrentDraft(page, DRAFT_TEXT);
@@ -440,7 +441,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
     await submitPrompt(page, 'Recover with valid A2UI JSON for the same selected draft.');
 
     await expect(
-      page.frameLocator('.workspace-container iframe').getByText(RECOVERY_TEXT),
+      previewFrame(page.locator('.workspace-container')).getByText(RECOVERY_TEXT),
     ).toBeVisible();
     await expect.poll(() => readRawDraft(page)).toContain(RECOVERY_TEXT);
     await expectGeminiRequestForCurrentDraft(page, DRAFT_TEXT);
@@ -502,7 +503,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
     ]);
     await submitPrompt(page, 'Update the selected text');
     await expect(
-      page.frameLocator('.workspace-container iframe').getByText(MODEL_TEXT, {exact: true}),
+      previewFrame(page.locator('.workspace-container')).getByText(MODEL_TEXT, {exact: true}),
     ).toBeVisible();
     await expect.poll(() => readRawDraft(page)).toContain('createSurface');
     await expectGeminiRequestForCurrentDraft(page, DRAFT_TEXT);
@@ -525,7 +526,7 @@ test.describe('Copilot assistant replacement browser journey', () => {
 
     await expect(chatHistory(page)).toContainText('You stopped this response');
     await expect(
-      page.frameLocator('.workspace-container iframe').getByText(DRAFT_TEXT),
+      previewFrame(page.locator('.workspace-container')).getByText(DRAFT_TEXT),
     ).toBeVisible();
     await expect.poll(() => readRawDraft(page)).toBe(originalDraft);
     await expectGeminiRequestForCurrentDraft(page, DRAFT_TEXT);
