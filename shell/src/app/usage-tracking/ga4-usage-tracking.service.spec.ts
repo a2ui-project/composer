@@ -18,7 +18,7 @@ import {DOCUMENT} from '@angular/common';
 import {signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi, type Mock} from 'vitest';
 import {
   AppConfigProvider,
   EnvMode,
@@ -44,10 +44,15 @@ describe('Ga4UsageTrackingService', () => {
   let localStorageInteractions: LocalStorageInteractions;
   let mockWindow: {
     dataLayer: unknown[];
-    gtag?: (...args: unknown[]) => void;
+    gtag?: Mock<(...args: unknown[]) => void>;
     location?: Partial<Location>;
   };
-  let mockDocument: Partial<Document>;
+  let mockDocument: {
+    defaultView?: unknown;
+    querySelector: Mock;
+    createElement: Mock;
+    head: {appendChild: Mock};
+  };
 
   const mockStartupResolution = {
     isThirdPartyEnvironment: signal(false),
@@ -81,12 +86,12 @@ describe('Ga4UsageTrackingService', () => {
     };
 
     mockDocument = {
-      defaultView: mockWindow as unknown as Window,
+      defaultView: mockWindow,
       querySelector: vi.fn().mockReturnValue(null),
       createElement: vi.fn().mockImplementation((tag: string) => document.createElement(tag)),
       head: {
         appendChild: vi.fn(),
-      } as unknown as HTMLHeadElement,
+      },
     };
 
     TestBed.configureTestingModule({
@@ -764,9 +769,9 @@ describe('Ga4UsageTrackingService', () => {
       const longTag = '[' + 'a'.repeat(65) + ']'; // length 65
       service.trackComposerError({sourceTag: validTag, errorCategory: 'TEST'});
       service.trackComposerError({sourceTag: longTag, errorCategory: 'TEST'});
-      const calls = mockWindow.gtag.mock.calls;
-      expect(calls[0][2]['source_tag']).toEqual(validTag);
-      expect(calls[1][2]['source_tag']).toEqual('[Unknown]');
+      const calls = mockWindow.gtag!.mock.calls;
+      expect((calls[0][2] as Record<string, unknown>)['source_tag']).toEqual(validTag);
+      expect((calls[1][2] as Record<string, unknown>)['source_tag']).toEqual('[Unknown]');
     });
   });
 });
@@ -776,7 +781,7 @@ describe('Ga4UsageTrackingService (Disabled)', () => {
     const mockWindow = {
       dataLayer: [],
       gtag: vi.fn(),
-    } as unknown as WindowWithGtag;
+    };
     const mockDocument = {
       defaultView: mockWindow,
       querySelector: vi.fn(),

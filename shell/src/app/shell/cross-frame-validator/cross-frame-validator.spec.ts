@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach, type Mock} from 'vitest';
 import {CrossFrameValidator} from './cross-frame-validator';
 import {PreviewBridgeMessageType, ThemePreference} from 'a2ui-bridge';
 
 describe('CrossFrameValidator', () => {
   let mockLogger: {
-    warn: ReturnType<typeof vi.fn>;
-    error: ReturnType<typeof vi.fn>;
-    info: ReturnType<typeof vi.fn>;
-    debug: ReturnType<typeof vi.fn>;
+    warn: Mock<(message: string, ...args: unknown[]) => void>;
+    error: Mock<(message: string, ...args: unknown[]) => void>;
+    info: Mock<(message: string, ...args: unknown[]) => void>;
+    debug: Mock<(message: string, ...args: unknown[]) => void>;
   };
 
   beforeEach(() => {

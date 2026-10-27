@@ -5,10 +5,10 @@
   "scripts": {
     "start": "ng serve --port 3456",
     "build": "yarn lint && ng build",
-    "test": "vitest run",
+    "test": "ng test --no-watch",
     "prettier": "prettier --ignore-path ../../.prettierignore --write . | grep -v '(unchanged)'",
     "prettier:check": "prettier --ignore-path ../../.prettierignore --check .",
-    "clean": "rm -rf dist .angular node_modules/.vite",
+    "clean": "rm -rf dist .angular coverage",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -26,12 +26,10 @@
     "tslib": "2.8.1"
   },
   "devDependencies": {
-    "@analogjs/vite-plugin-angular": "2.9.2",
     "@angular/build": "22.2.4",
     "@angular/cdk": "22.2.4",
     "@angular/cli": "22.2.4",
     "@angular/compiler-cli": "22.2.3",
-    "@angular/platform-browser-dynamic": "22.2.3",
     "@types/jsdom": "28.0.3",
     "angular-eslint": "22.6.0",
     "eslint": "10.7.0",

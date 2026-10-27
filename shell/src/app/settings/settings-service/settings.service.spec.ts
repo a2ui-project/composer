@@ -25,13 +25,16 @@ import {
   RendererConfig,
 } from '../../shell/startup-resolution/state/startup-config-state.service';
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
-import {SecureCredentialsStorage} from '../../storage/secure-credentials-storage/secure-credentials-storage';
+import {
+  SecureCredentialsStorage,
+  CustomApiKey,
+} from '../../storage/secure-credentials-storage/secure-credentials-storage';
 import {LocalStorageInteractions} from '../../storage/local-storage-interactions/local-storage-interactions';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
 import {ApiKeyAction, UsageTrackingService} from '../../usage-tracking/usage-tracking.service';
 import {NoopUsageTrackingService} from '../../usage-tracking/noop-usage-tracking.service';
-import {describe, it, expect, beforeEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi, type Mock} from 'vitest';
 
 describe('SettingsService', () => {
   let service: SettingsService;
@@ -54,12 +57,12 @@ describe('SettingsService', () => {
     purgeGeminiApiKey: ReturnType<typeof vi.fn>;
   };
   let mockSecureStorage: {
-    getCredential: ReturnType<typeof vi.fn>;
-    getCustomApiKeys: ReturnType<typeof vi.fn>;
-    getCustomApiKey: ReturnType<typeof vi.fn>;
-    saveCustomApiKey: ReturnType<typeof vi.fn>;
-    deleteCustomApiKey: ReturnType<typeof vi.fn>;
-    deleteCredential: ReturnType<typeof vi.fn>;
+    getCredential: Mock<() => Promise<string | null>>;
+    getCustomApiKeys: Mock<() => Promise<CustomApiKey[]>>;
+    getCustomApiKey: Mock<(id: string) => Promise<CustomApiKey | null>>;
+    saveCustomApiKey: Mock<(key: CustomApiKey) => Promise<void>>;
+    deleteCustomApiKey: Mock<(id: string) => Promise<void>>;
+    deleteCredential: Mock<(key: string) => Promise<void>>;
   };
   let mockLocalStorage: LocalStorageInteractions;
 

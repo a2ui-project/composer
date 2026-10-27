@@ -342,7 +342,7 @@ describe('IndexedDbStorage Storage Resilience', () => {
       configurable: true,
     });
 
-    await expect(service.openDatabase()).rejects.toThrow('IndexedDB is not supported');
+    await expect(service['openDatabase']()).rejects.toThrow('IndexedDB is not supported');
   });
 
   it('abstracts storage boundaries via interface level spies', async () => {
@@ -393,10 +393,10 @@ describe('IndexedDbStorage Storage Resilience', () => {
     });
 
     // First attempt rejects due to simulated transient lock
-    await expect(service.openDatabase()).rejects.toThrow();
+    await expect(service['openDatabase']()).rejects.toThrow();
 
     // Second attempt recovers and succeeds, confirming dbPromise cache was cleared!
-    const db = await service.openDatabase();
+    const db = await service['openDatabase']();
     expect(db).toBeTruthy();
     expect(openCount).toBe(2);
   });

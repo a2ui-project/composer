@@ -272,8 +272,8 @@ export class ChatPanelHarness extends ComponentHarness {
     }
     const html = await bubbles[index].getProperty<string>('innerHTML');
     return (
-      html.includes('<i>redacted for your protection</i>') ||
-      html.includes('<em>redacted for your protection</em>')
+      /<i\b[^>]*>redacted for your protection<\/i>/.test(html) ||
+      /<em\b[^>]*>redacted for your protection<\/em>/.test(html)
     );
   }
 

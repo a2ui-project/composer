@@ -22,7 +22,7 @@ pipeline.
   `fixture.debugElement.query`.
 - Use CDK Component Harnesses (`@angular/cdk/testing/ComponentHarness`) to
   interact with the DOM in tests.
-- No-op animations are configured globally in `shell/src/test-setup.ts` via
+- No-op animations are configured globally in `shell/src/test-providers.ts` via
   `ANIMATION_MODULE_TYPE` and `MATERIAL_ANIMATIONS`; do not import the
   deprecated `provideNoopAnimations()`.
 
@@ -30,7 +30,7 @@ pipeline.
 
 - **Scope Intermediate Scans**: During intermediate implementation steps, run
   only the unit test files directly affected by the changes (e.g.,
-  `yarn workspace a2ui-composer-shell vitest run <spec_file>`), reserving full
+  `yarn workspace a2ui-composer-shell ng test --no-watch --include <spec_file>`), reserving full
   monorepo test suites (`yarn test`) and Playwright E2E verifications
   (`yarn e2e-headless`) for the final pre-commit checkpoint.
 
@@ -60,7 +60,7 @@ consolidated verification pass:
   - **Test Sufficiency**:
     - Happy/unhappy path unit test coverage and Playwright E2E user journey
       verification.
-    - Sufficient code coverage (as reported by `yarn test --coverage`).
+    - Sufficient code coverage (as reported by `yarn test`).
 
   - **Severity Tiers**: The review partner must classify feedback into:
     - **Blockers** (failing tests, logic bugs, type violations, missing CUJ

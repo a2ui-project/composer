@@ -18,7 +18,7 @@ import {TestBed} from '@angular/core/testing';
 import {RawFrame, IFRAME_UNRESPONSIVE_ERROR_PREFIX} from './raw-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach, type Mock} from 'vitest';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens/environment-tokens';
 import {signal, WritableSignal} from '@angular/core';
 import {Subject} from 'rxjs';
@@ -66,7 +66,7 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     revealPositionInCenterIfOutsideViewport: vi.fn(),
     revealPositionInCenter: vi.fn(),
     focus: vi.fn(),
-    onDidChangeModelContent: vi.fn(() => ({dispose: () => {}})),
+    onDidChangeModelContent: vi.fn((_cb?: () => void) => ({dispose: () => {}})),
     onDidChangeCursorPosition: vi.fn(() => ({dispose: () => {}})),
     onDidChangeCursorSelection: vi.fn(() => ({dispose: () => {}})),
     onKeyDown: vi.fn(() => ({dispose: () => {}})),
@@ -74,7 +74,6 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     onDidChangeMarkers: vi.fn(() => ({dispose: () => {}})),
     getModelMarkers: vi.fn(() => []),
     updateOptions: vi.fn(),
-    dispose: vi.fn(),
     getModel: vi.fn(() => mockModel),
   };
 
@@ -82,7 +81,7 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
     (container: HTMLElement, options: monaco.editor.IStandaloneEditorConstructionOptions) => {
       const textarea = document.createElement('textarea');
       textarea.className = 'mock-monaco-textarea';
-      textarea.value = (options.model as unknown)?.value || '';
+      textarea.value = (options.model as {value?: string} | undefined)?.value || '';
       if (options.readOnly) {
         textarea.readOnly = true;
       }
@@ -107,7 +106,7 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
           if (edits && edits.length > 0) {
             undoStack.push(textarea.value);
             redoStack.length = 0;
-            textarea.value = edits[0].text;
+            textarea.value = edits[0].text ?? '';
             textarea.dispatchEvent(new Event('input'));
           }
           return true;
@@ -126,10 +125,12 @@ const {createMock, mockEditor, mockModel, undoStack, redoStack} = vi.hoisted(() 
           textarea.dispatchEvent(new Event('input'));
         }
       });
-      mockEditor.onDidChangeModelContent.mockImplementation((cb: () => void) => {
-        textarea.addEventListener('input', cb);
+      mockEditor.onDidChangeModelContent.mockImplementation((cb?: () => void) => {
+        if (cb) textarea.addEventListener('input', cb);
         return {
-          dispose: () => textarea.removeEventListener('input', cb),
+          dispose: () => {
+            if (cb) textarea.removeEventListener('input', cb);
+          },
         };
       });
       mockEditor.updateOptions.mockImplementation((newOpts: monaco.editor.IEditorOptions) => {
@@ -170,7 +171,6 @@ vi.mock('@monaco-editor/loader', () => {
             dispose: vi.fn(),
           })),
           EndOfLineSequence: {LF: 0, CRLF: 1},
-          onDidChangeMarkers: vi.fn(() => ({dispose: () => {}})),
           getModelMarkers: vi.fn(() => []),
         },
         languages: {
@@ -309,9 +309,9 @@ describe('RawFrame JSON Source Editor View', () => {
   let snackBarMock: {open: ReturnType<typeof vi.fn>; dismiss: ReturnType<typeof vi.fn>};
   let messageStreamSubject: Subject<unknown>;
   let errorLoggerMock: {
-    error: ReturnType<typeof vi.fn>;
-    warn: ReturnType<typeof vi.fn>;
-    withTag: ReturnType<typeof vi.fn>;
+    error: Mock<(...args: unknown[]) => void>;
+    warn: Mock<(...args: unknown[]) => void>;
+    withTag: Mock<(sourceTag: string) => unknown>;
   };
 
   beforeEach(() => {
@@ -322,7 +322,7 @@ describe('RawFrame JSON Source Editor View', () => {
     snackBarMock = {
       open: vi.fn().mockReturnValue({
         onAction: () => ({
-          subscribe: cb => {
+          subscribe: (cb: () => void) => {
             cb();
             return {unsubscribe: () => {}};
           },
@@ -331,8 +331,8 @@ describe('RawFrame JSON Source Editor View', () => {
       dismiss: vi.fn(),
     };
     errorLoggerMock = {
-      error: vi.fn(),
-      warn: vi.fn(),
+      error: vi.fn((..._args: unknown[]) => {}),
+      warn: vi.fn((..._args: unknown[]) => {}),
       withTag: vi.fn().mockImplementation((sourceTag: string) => ({
         error: (msg: string, ...args: unknown[]) =>
           errorLoggerMock.error({message: msg, sourceTag}, ...args),
@@ -352,7 +352,7 @@ describe('RawFrame JSON Source Editor View', () => {
     mockEditor.updateOptions.mockClear();
     mockEditor.dispose.mockClear();
     mockEditor.getModel.mockClear();
-    mockEditor.getModel.mockReturnValue(mockModel as unknown as monaco.editor.ITextModel);
+    mockEditor.getModel.mockReturnValue(mockModel);
     mockEditor.setPosition.mockClear();
     mockEditor.revealPositionInCenterIfOutsideViewport.mockClear();
     mockEditor.revealPositionInCenter.mockClear();
@@ -784,7 +784,7 @@ describe('RawFrame JSON Source Editor View', () => {
 
   it('falls back to setValue (flushing history) when stateSync activeDraft changes and editor model is missing', async () => {
     const {fixture, harness} = await setup(false);
-    mockEditor.getModel.mockReturnValue(null);
+    mockEditor.getModel.mockReturnValue(null as unknown as typeof mockModel);
 
     const fallbackDraft = '[{"version": "v0.9", "createSurface": {"surfaceId": "fallback-test"}}]';
     stateSyncMock.activeDraftSignal.set(fallbackDraft);
@@ -905,7 +905,7 @@ describe('RawFrame JSON Source Editor View', () => {
     it('logs warning with prefix when renderer is ready but watchdog timeout fires', async () => {
       vi.useFakeTimers();
       const {component} = await setup(false);
-      TestBed.inject(HostCommunication).isRendererReady.mockReturnValue(true);
+      vi.mocked(TestBed.inject(HostCommunication).isRendererReady).mockReturnValue(true);
       component.TEST_ONLY.startWatchdog();
 
       vi.advanceTimersByTime(15000);
@@ -920,7 +920,7 @@ describe('RawFrame JSON Source Editor View', () => {
     it('clears watchdog on RENDER_SUCCESS ping', async () => {
       vi.useFakeTimers();
       const {component} = await setup(false);
-      TestBed.inject(HostCommunication).isRendererReady.mockReturnValue(true);
+      vi.mocked(TestBed.inject(HostCommunication).isRendererReady).mockReturnValue(true);
 
       component.TEST_ONLY.startWatchdog();
       vi.advanceTimersByTime(10000);

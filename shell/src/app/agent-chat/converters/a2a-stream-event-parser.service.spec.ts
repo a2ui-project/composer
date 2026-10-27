@@ -18,7 +18,7 @@ import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {TestBed} from '@angular/core/testing';
 import {A2aStreamEventParser} from './a2a-stream-event-parser.service';
 import {ErrorLogger} from '../../debug/error-logger.service';
-import {TaskStatusUpdateEvent} from '../../chat/a2a/a2a-types';
+import {TaskStatusUpdateEvent, A2aMessage} from '../../chat/a2a/a2a-types';
 
 describe('A2aStreamEventParser', () => {
   let parser: A2aStreamEventParser;
@@ -232,7 +232,10 @@ describe('A2aStreamEventParser', () => {
       artifact: {
         parts: [
           {
-            data: [{createSurface: {surfaceId: 'art-surf-1'}}],
+            data: [{createSurface: {surfaceId: 'art-surf-1'}}] as unknown as Record<
+              string,
+              unknown
+            >,
           },
         ],
       },
@@ -456,7 +459,7 @@ describe('A2aStreamEventParser', () => {
       taskId: 'task-status-fallback',
       status: {
         state: 'working',
-        message: {parts: [{text: 'Working on your request...'}]},
+        message: {role: 'agent', parts: [{text: 'Working on your request...'}]},
       },
     };
 
@@ -568,14 +571,14 @@ describe('A2aStreamEventParser', () => {
       contextId: 'ctx-user-echo',
       message: {
         role: 'ROLE_USER',
-        content: [{text: 'hi'}],
-      },
+        parts: [{text: 'hi'}],
+      } as unknown as A2aMessage,
       status: {
         state: 'TASK_STATE_SUBMITTED',
         message: {
           role: 'ROLE_USER',
-          content: [{text: 'hi'}],
-        },
+          parts: [{text: 'hi'}],
+        } as unknown as A2aMessage,
       },
     };
 
@@ -750,7 +753,14 @@ describe('A2aStreamEventParser', () => {
           ],
         },
         artifact: {
-          parts: [{data: [{createSurface: {surfaceId: 's2', catalogId: 'c2'}}]}],
+          parts: [
+            {
+              data: [{createSurface: {surfaceId: 's2', catalogId: 'c2'}}] as unknown as Record<
+                string,
+                unknown
+              >,
+            },
+          ],
         },
         status: {state: 'SUCCESS'},
       };

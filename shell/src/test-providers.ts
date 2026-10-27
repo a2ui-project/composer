@@ -14,9 +14,15 @@
  * limitations under the License.
  */
 
-import {getTestBed} from '@angular/core/testing';
-import {BrowserTestingModule, platformBrowserTesting} from '@angular/platform-browser/testing';
+import {ANIMATION_MODULE_TYPE, StaticProvider} from '@angular/core';
+import {MATERIAL_ANIMATIONS} from '@angular/material/core';
 
-if (!getTestBed().platform) {
-  getTestBed().initTestEnvironment(BrowserTestingModule, platformBrowserTesting());
-}
+// Replaces provideNoopAnimations(), which also set ANIMATION_MODULE_TYPE.
+// Material dialogs/CDK overlays otherwise wait on a 75ms exit-animation timer
+// so afterClosed() doesn't emit within tests.
+const testProviders: StaticProvider[] = [
+  {provide: ANIMATION_MODULE_TYPE, useValue: 'NoopAnimations'},
+  {provide: MATERIAL_ANIMATIONS, useValue: {animationsDisabled: true}},
+];
+
+export default testProviders;

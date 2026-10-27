@@ -1094,7 +1094,7 @@ I'll output bad JSON.
       const cancelSpy = vi.spyOn(trackingService, 'trackChatCancel');
 
       let cancelCalled = false;
-      const completePromise = new Promise((_, reject) => {
+      const completePromise = new Promise<string>((_, reject) => {
         const check = setInterval(() => {
           if (cancelCalled) {
             clearInterval(check);
@@ -1107,10 +1107,10 @@ I'll output bad JSON.
       completePromise.catch(() => {});
 
       llmClientMock.chatStream = vi.fn(async () => {
-        const contentStream = {
+        const contentStream: AsyncIterable<LlmResponse> = {
           [Symbol.asyncIterator]() {
             return {
-              async next() {
+              async next(): Promise<IteratorResult<LlmResponse>> {
                 if (cancelCalled) {
                   const err = new Error('Cancelled');
                   err.name = CANCEL_ERROR_NAME;
@@ -1643,7 +1643,7 @@ I'll output bad JSON.
       });
       async function* delayedGenerator() {
         const chunk = await streamPromise;
-        yield chunk;
+        yield {content: chunk};
       }
       llmClientMock.chatStream.mockResolvedValueOnce({
         contentStream: delayedGenerator(),

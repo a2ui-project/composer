@@ -88,7 +88,8 @@ describe('DemoLauncher', () => {
 
     // Round-tripping through the parser is the assertion that matters: it proves the
     // fragment is not merely shaped like a shared link but is one.
-    const parsed = await QueryParser.parseSharedA2ui(url.hash);
+    const mockLogger = {warn: vi.fn(), error: vi.fn()};
+    const parsed = await QueryParser.parseSharedA2ui(url.hash, mockLogger);
     expect(parsed.error).toBeNull();
     expect(JSON.parse(parsed.payload!)).toEqual(DEMO.a2ui);
   });

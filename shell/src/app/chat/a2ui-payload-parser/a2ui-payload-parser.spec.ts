@@ -27,12 +27,12 @@ describe('a2ui-payload-parser', () => {
   describe('attemptSyntaxHealing', () => {
     it('heals trailing commas', () => {
       const result = attemptSyntaxHealing('{"a":[1,]}') as unknown;
-      expect((result as Record<string, unknown>).a).toEqual([1]);
+      expect((result as Record<string, unknown>)['a']).toEqual([1]);
     });
 
     it('heals missing braces', () => {
       const result = attemptSyntaxHealing('{"a": {"b": 1') as unknown;
-      expect((result as Record<string, unknown>).a.b).toBe(1);
+      expect(((result as Record<string, unknown>)['a'] as Record<string, unknown>)['b']).toBe(1);
     });
 
     it('returns null if unable to heal', () => {
@@ -66,14 +66,12 @@ describe('a2ui-payload-parser', () => {
 
   describe('parseAndHealJsonLines', () => {
     it('returns conversational result when input is null or undefined', () => {
-      // @ts-expect-error Types mismatch in tests
       expect(parseAndHealJsonLines(null)).toEqual({
         success: true,
         isConversational: true,
         blocks: [],
         count: 0,
       });
-      // @ts-expect-error Types mismatch in tests
       expect(parseAndHealJsonLines(undefined)).toEqual({
         success: true,
         isConversational: true,
@@ -174,7 +172,7 @@ describe('a2ui-payload-parser', () => {
 
     it('returns 0 for non-layout text', () => {
       const parsed = parseAndHealJsonLines('invalid text');
-      expect(parsed?.count).toBe(0);
+      expect(parsed).toMatchObject({success: true, count: 0});
     });
 
     it('ignores single-line parse failures in multi-line JSONL and counts valid lines', () => {
@@ -246,7 +244,9 @@ describe('a2ui-payload-parser', () => {
 
       expect(healed).toBe(true);
       expect(
-        (blocks[0].updateComponents.components[0] as unknown as Record<string, unknown>).component,
+        (blocks[0].updateComponents.components[0] as unknown as Record<string, unknown>)[
+          'component'
+        ],
       ).toBe('TextField');
     });
 

@@ -15,6 +15,7 @@ import {ErrorLogger} from '../../debug/error-logger.service';
  * limitations under the License.
  */
 
+import {type WritableSignal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {LocalStorageKey} from '../../storage/models/local-storage-keys';
@@ -83,11 +84,20 @@ describe('LocalStorageAppConfigProvider', () => {
     warn: vi.fn(),
     info: vi.fn(),
     log: vi.fn(),
+    withTag: () => mockErrorLogger,
   };
-  mockErrorLogger.withTag = () => mockErrorLogger;
 
-  let mockEnvironmentContext: unknown;
-  let mockStartupConfigState: unknown;
+  let mockEnvironmentContext: {
+    isThirdPartyEnvironment: ReturnType<typeof vi.fn>;
+    getWindowHostname: ReturnType<typeof vi.fn>;
+    isExtensionMode: ReturnType<typeof vi.fn>;
+  };
+  let mockStartupConfigState: {
+    apiKeys: WritableSignal<Record<string, unknown>>;
+    renderers: WritableSignal<Record<string, unknown>>;
+    resolvedUrl: WritableSignal<string>;
+    setResolvedUrl: ReturnType<typeof vi.fn>;
+  };
   let mockSecureStorage: MockSecureCredentialsStorage;
 
   beforeEach(() => {
@@ -99,8 +109,8 @@ describe('LocalStorageAppConfigProvider', () => {
       isExtensionMode: vi.fn().mockReturnValue(false),
     };
     mockStartupConfigState = {
-      apiKeys: signal({}),
-      renderers: signal({}),
+      apiKeys: signal<Record<string, unknown>>({}),
+      renderers: signal<Record<string, unknown>>({}),
       resolvedUrl: signal('https://default-renderer.com'),
       setResolvedUrl: vi.fn(),
     };

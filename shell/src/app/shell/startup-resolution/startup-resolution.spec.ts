@@ -290,8 +290,10 @@ describe('StartupResolution', () => {
         },
       });
 
-      service.startupConfigState.setSelectedRendererId('angular-dev');
-      service.startupConfigState.setResolvedUrl('http://localhost:4200/samples/ng-basic-catalog/');
+      service['startupConfigState'].setSelectedRendererId('angular-dev');
+      service['startupConfigState'].setResolvedUrl(
+        'http://localhost:4200/samples/ng-basic-catalog/',
+      );
       localStorage.setItem(LocalStorageKey.SELECTED_RENDERER, 'angular-dev');
 
       const rawJson = '[{"version":"v0.9","createSurface":{"surfaceId":"react-card"}}]';

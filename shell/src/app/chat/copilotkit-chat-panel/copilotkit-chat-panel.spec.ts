@@ -277,10 +277,10 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
   });
 
   it('prevents renderer changes while attachments are being read', async () => {
-    fixture.componentInstance.isReadingFiles.set(true);
+    fixture.componentInstance['isReadingFiles'].set(true);
     fixture.detectChanges();
     expect(await harness.isRendererSelectorDisabled()).toBe(true);
-    fixture.componentInstance.isReadingFiles.set(false);
+    fixture.componentInstance['isReadingFiles'].set(false);
     fixture.detectChanges();
     expect(await harness.isRendererSelectorDisabled()).toBe(false);
   });
@@ -310,7 +310,7 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
       {
         role: MessageRole.MODEL,
         content: invalid,
-        parseError: {error: 'Unexpected token'},
+        parseError: {success: false, error: 'Unexpected token'},
         isRetryable: true,
         originalPrompt: 'Update my layout',
       },
@@ -335,7 +335,11 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
     expect(await harness.hasStopButton()).toBe(true);
     chatStateMock.isProgrammaticStreamActive.set(false);
     chatStateMock.chatHistory.set([
-      {role: MessageRole.MODEL, content: partial, parseError: {error: 'Incomplete response'}},
+      {
+        role: MessageRole.MODEL,
+        content: partial,
+        parseError: {success: false, error: 'Incomplete response'},
+      },
     ]);
     fixture.detectChanges();
     const text = (await harness.getBubblesText()).join(' ');
@@ -572,7 +576,7 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
         role: MessageRole.USER,
         content: undefined as unknown as string,
         attachments: [
-          {name: 'photo.png', mimeType: 'image/png', dataUrl: 'data:image/png;base64,...'},
+          {name: 'photo.png', mimeType: 'image/png', data: 'data:image/png;base64,...'},
         ],
       },
       {
@@ -999,7 +1003,7 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
       false,
     ]);
     chatStateMock.isProgrammaticStreamActive.set(false);
-    fixture.componentInstance.isReadingFiles.set(true);
+    fixture.componentInstance['isReadingFiles'].set(true);
     fixture.detectChanges();
     expect((await harness.getAddPromptActions()).map(action => action.disabled)).toEqual([
       true,
@@ -1145,13 +1149,13 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
       },
     } as unknown as Event;
 
-    await component.onFilesSelected(event);
+    await component['onFilesSelected'](event);
     fixture.detectChanges();
 
     // Verify files were added to component signal
-    expect(component.attachedFiles().length).toBe(1);
-    expect(component.attachedFiles()[0].name).toBe('test-image.png');
-    expect(component.attachedFiles()[0].mimeType).toBe('image/png');
+    expect(component['attachedFiles']().length).toBe(1);
+    expect(component['attachedFiles']()[0].name).toBe('test-image.png');
+    expect(component['attachedFiles']()[0].mimeType).toBe('image/png');
 
     // Verify previews are rendered using harness
     expect(await harness.hasAttachmentPreviews()).toBe(true);
@@ -1162,7 +1166,7 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
     await harness.clickRemoveAttachmentAt(0);
     fixture.detectChanges();
 
-    expect(component.attachedFiles().length).toBe(0);
+    expect(component['attachedFiles']().length).toBe(0);
     expect(await harness.hasAttachmentPreviews()).toBe(false);
   });
 
@@ -1184,13 +1188,13 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
       preventDefault,
     } as unknown as ClipboardEvent;
 
-    await component.onPaste(pasteEvent);
+    await component['onPaste'](pasteEvent);
     fixture.detectChanges();
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
-    expect(component.attachedFiles().length).toBe(1);
-    expect(component.attachedFiles()[0].name).toBe('clipboard-image.png');
-    expect(component.attachedFiles()[0].mimeType).toBe('image/png');
+    expect(component['attachedFiles']().length).toBe(1);
+    expect(component['attachedFiles']()[0].name).toBe('clipboard-image.png');
+    expect(component['attachedFiles']()[0].mimeType).toBe('image/png');
     expect(await harness.hasAttachmentPreviews()).toBe(true);
     expect(await harness.getAttachmentNames()).toContain('clipboard-image.png');
   });
@@ -1212,11 +1216,11 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
       preventDefault,
     } as unknown as ClipboardEvent;
 
-    await component.onPaste(pasteEvent);
+    await component['onPaste'](pasteEvent);
     fixture.detectChanges();
 
     expect(preventDefault).not.toHaveBeenCalled();
-    expect(component.attachedFiles().length).toBe(0);
+    expect(component['attachedFiles']().length).toBe(0);
   });
 
   it('submits prompts with attached files successfully', async () => {
@@ -1224,7 +1228,7 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
     const submitSpy = chatServiceMock.submitPrompt;
 
     // Simulate attached files
-    component.attachedFiles.set([
+    component['attachedFiles'].set([
       {
         name: 'test-image.png',
         mimeType: 'image/png',
@@ -1232,7 +1236,7 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
         previewUrl: 'data:image/png;base64,base64data...',
       },
     ]);
-    component.userPrompt.set('Analyze this image');
+    component['userPrompt'].set('Analyze this image');
     fixture.detectChanges();
 
     await harness.clickSubmit();
@@ -1250,8 +1254,8 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
       ],
       undefined,
     );
-    expect(component.attachedFiles().length).toBe(0);
-    expect(component.userPrompt()).toBe('');
+    expect(component['attachedFiles']().length).toBe(0);
+    expect(component['userPrompt']()).toBe('');
   });
 
   describe('Screenshot Integration', () => {
@@ -1263,12 +1267,12 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
     it('toggles setting when checkbox is clicked', async () => {
       const component = fixture.componentInstance;
       expect(await harness.isScreenshotChecked()).toBe(false);
-      expect(component.includeScreenshot()).toBe(false);
+      expect(component['includeScreenshot']()).toBe(false);
 
       await harness.toggleScreenshot();
       fixture.detectChanges();
 
-      expect(component.includeScreenshot()).toBe(true);
+      expect(component['includeScreenshot']()).toBe(true);
       expect(await harness.isScreenshotChecked()).toBe(true);
       expect(await harness.getAddPromptDescription()).toContain('screenshot will be included');
 
@@ -1282,8 +1286,8 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
       const submitSpy = chatServiceMock.submitPrompt;
       const captureSpy = vi.spyOn(screenshotServiceMock, 'captureScreenshot');
 
-      component.includeScreenshot.set(true);
-      component.userPrompt.set('Add button');
+      component['includeScreenshot'].set(true);
+      component['userPrompt'].set('Add button');
       fixture.detectChanges();
 
       await harness.clickSubmit();
@@ -1308,8 +1312,8 @@ describe('CopilotKitChatPanel Gemini Dialogue Panel Integration', () => {
       const submitSpy = chatServiceMock.submitPrompt;
       const captureSpy = vi.spyOn(screenshotServiceMock, 'captureScreenshot');
 
-      component.includeScreenshot.set(false);
-      component.userPrompt.set('Add button');
+      component['includeScreenshot'].set(false);
+      component['userPrompt'].set('Add button');
       fixture.detectChanges();
 
       await harness.clickSubmit();

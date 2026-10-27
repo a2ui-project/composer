@@ -50,6 +50,7 @@ export enum AuthType {
  */
 export enum A2aBackendMode {
   HTTP_JSONRPC = 'http_jsonrpc',
+  REST = 'rest',
 }
 
 export {ThemePreference};
