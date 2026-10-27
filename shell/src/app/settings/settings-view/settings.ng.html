@@ -33,6 +33,13 @@
           }
         </div>
 
+        @if (hasSelectableModels()) {
+          <div class="form-section">
+            <h3>Model</h3>
+            <a2ui-composer-model-selector />
+          </div>
+        }
+
         @if (isThirdPartyAuth()) {
           <div class="form-section">
             <h3>Gemini API Provisioning</h3>

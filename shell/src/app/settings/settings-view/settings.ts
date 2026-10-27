@@ -43,6 +43,8 @@ import {CatalogManagement} from '../../storage/catalog-management/catalog-manage
 import {AppConfigProvider, AuthType} from '../app-config-provider/app-config-provider';
 import {IS_1P_AUTH_ENABLED} from '../../shell/environment-tokens/environment-tokens';
 import {SettingsService, RendererOption} from '../settings-service/settings.service';
+import {ModelSelectionService} from '../model-selection/model-selection.service';
+import {ModelSelectorComponent} from '../model-selector/model-selector';
 import {RendererSelectorComponent} from '../renderer-selector/renderer-selector';
 import {ApiKeySelectorComponent} from '../api-key-selector/api-key-selector';
 import {McpClientManagerService, McpServerConfig} from '../../mcp/mcp-client-manager.service';
@@ -71,6 +73,7 @@ import {
     MatSlideToggleModule,
     MatTooltipModule,
     MatDialogModule,
+    ModelSelectorComponent,
     RendererSelectorComponent,
     ApiKeySelectorComponent,
   ],
@@ -85,10 +88,14 @@ export class Settings implements OnInit {
   private readonly hostCommunication = inject(HostCommunication);
   private readonly catalogManagement = inject(CatalogManagement);
   private readonly configProvider = inject(AppConfigProvider);
+  private readonly modelSelection = inject(ModelSelectionService);
   protected readonly settingsService = inject(SettingsService);
   protected readonly mcpManager = inject(McpClientManagerService);
 
   protected readonly is1PAuthEnabled = inject(IS_1P_AUTH_ENABLED);
+
+  /** Whether config.json declares models the user can switch between. */
+  readonly hasSelectableModels: Signal<boolean> = this.modelSelection.hasModels;
 
   readonly selectedRendererId: WritableSignal<string | null> = signal<string | null>(null);
   /** Why the last renderer selection failed, shown under the renderer selector. */
