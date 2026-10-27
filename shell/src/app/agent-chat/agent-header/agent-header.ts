@@ -44,10 +44,16 @@ export class A2aAgentHeader {
   /** Active context or session conversation identifier. */
   readonly sessionId = input<string | undefined>(undefined);
   /** Whether the message inspector side drawer is currently open. */
-  readonly isInspectorOpen = input<boolean>(false);
+  readonly isMessageInspectorOpen = input<boolean>(false);
+  /** Whether the error logs side drawer is currently open. */
+  readonly isErrorsInspectorOpen = input<boolean>(false);
+  /** Unread error/warning log entries emitted while the error logs drawer is closed. */
+  readonly unreadErrorsCount = input<number>(0);
 
   /** Emitted when the user toggles the message inspector drawer open or closed. */
-  readonly toggleInspector = output<void>();
+  readonly toggleMessageInspector = output<void>();
+  /** Emitted when the user toggles the error logs drawer open or closed. */
+  readonly toggleErrorsInspector = output<void>();
   /** Emitted when the user clicks the reset conversation session button. */
   readonly resetSession = output<void>();
   /** Emitted when the user clicks the settings button to open the config panel. */
