@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-import {getTestBed} from '@angular/core/testing';
 import {webcrypto} from 'node:crypto';
-import {beforeEach} from 'vitest';
 
 if (typeof window !== 'undefined' && (!window.crypto || !window.crypto.subtle)) {
   Object.defineProperty(window, 'crypto', {
@@ -24,10 +22,6 @@ if (typeof window !== 'undefined' && (!window.crypto || !window.crypto.subtle)) 
     writable: true,
   });
 }
-
-beforeEach(() => {
-  getTestBed().resetTestingModule();
-});
 
 class MockStorage implements Storage {
   private store = new Map<string, string>();

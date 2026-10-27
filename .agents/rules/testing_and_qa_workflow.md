@@ -22,7 +22,7 @@ pipeline.
   `fixture.debugElement.query`.
 - Use CDK Component Harnesses (`@angular/cdk/testing/ComponentHarness`) to
   interact with the DOM in tests.
-- No-op animations are configured globally in `shell/src/test-setup.ts` via
+- No-op animations are configured globally in `shell/src/test-providers.ts` via
   `ANIMATION_MODULE_TYPE` and `MATERIAL_ANIMATIONS`; do not import the
   deprecated `provideNoopAnimations()`.
 
@@ -60,7 +60,7 @@ consolidated verification pass:
   - **Test Sufficiency**:
     - Happy/unhappy path unit test coverage and Playwright E2E user journey
       verification.
-    - Sufficient code coverage (as reported by `yarn test --coverage`).
+    - Sufficient code coverage (as reported by `yarn test`).
 
   - **Severity Tiers**: The review partner must classify feedback into:
     - **Blockers** (failing tests, logic bugs, type violations, missing CUJ

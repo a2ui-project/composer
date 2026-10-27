@@ -520,20 +520,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@angular/platform-browser-dynamic@npm:22.2.3":
-  version: 22.2.3
-  resolution: "@angular/platform-browser-dynamic@npm:22.2.3"
-  dependencies:
-    tslib: "npm:^2.3.0"
-  peerDependencies:
-    "@angular/common": 22.2.3
-    "@angular/compiler": 22.2.3
-    "@angular/core": 22.2.3
-    "@angular/platform-browser": 22.2.3
-  checksum: 10c0/fc2a0e7937b5520c324643bb11407841e032e20fad2f12aad4094cf5b9c364f9d75ae41dc81bd61ac6e88e31e89eb7d9c56abcc9eb21a533b294acf199e09169
-  languageName: node
-  linkType: hard
-
 "@angular/platform-browser@npm:22.2.3":
   version: 22.2.3
   resolution: "@angular/platform-browser@npm:22.2.3"
@@ -3574,7 +3560,6 @@ __metadata:
     "@angular/forms": "npm:22.2.3"
     "@angular/material": "npm:22.2.4"
     "@angular/platform-browser": "npm:22.2.3"
-    "@angular/platform-browser-dynamic": "npm:22.2.3"
     "@angular/router": "npm:22.2.3"
     "@axe-core/playwright": "npm:4.13.0"
     "@copilotkit/angular": "npm:0.5.2"
@@ -6254,7 +6239,6 @@ __metadata:
     "@angular/core": "npm:22.2.3"
     "@angular/forms": "npm:22.2.3"
     "@angular/platform-browser": "npm:22.2.3"
-    "@angular/platform-browser-dynamic": "npm:22.2.3"
     "@angular/router": "npm:22.2.3"
     "@types/jsdom": "npm:28.0.3"
     a2ui-bridge: "npm:0.1.0"
