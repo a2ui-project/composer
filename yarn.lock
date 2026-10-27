@@ -101,15 +101,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@a2ui/web_core@npm:0.10.5":
-  version: 0.10.5
-  resolution: "@a2ui/web_core@npm:0.10.5"
+"@a2ui/web_core@npm:0.10.7":
+  version: 0.10.7
+  resolution: "@a2ui/web_core@npm:0.10.7"
   dependencies:
     "@preact/signals-core": "npm:^1.14.2"
     date-fns: "npm:^4.4.0"
     zod: "npm:^3.25.76"
     zod-to-json-schema: "npm:^3.25.2"
-  checksum: 10c0/597125a15d9be4681ed30cc40d4d038d4d33f19c441aa826c41aaf6f2b801b3eef25959712510768a6b5f972f595310cd5cf822c25a66055b65d6af5a66fb9f7
+  checksum: 10c0/16c3cc6fbedfa22637320523fd6f939acb3ca47dabbd3c76410cbfc2fe7230cdfc7cf010d5a6cbc5a0adeb04d6fc33febf0a45a13b76ffb763aa9d1db93f5e3f
   languageName: node
   linkType: hard
 
@@ -6153,7 +6153,7 @@ __metadata:
     vitest: "npm:4.1.11"
     zod: "npm:4.6.5"
   peerDependencies:
-    "@angular/core": 22.0.7
+    "@angular/core": 22.2.3
     lit: 3.3.3
     react: 19.2.8
     react-dom: 19.2.8

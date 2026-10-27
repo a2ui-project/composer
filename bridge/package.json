@@ -55,7 +55,7 @@
     "vitest": "4.1.11"
   },
   "peerDependencies": {
-    "@angular/core": "22.0.7",
+    "@angular/core": "22.2.3",
     "lit": "3.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8"
