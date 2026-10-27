@@ -65,9 +65,7 @@ describe('RendererSelectorComponent & AddRendererDialogComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [RendererSelectorComponent],
-      providers: [
-        {provide: SettingsService, useValue: mockSettingsService},
-      ],
+      providers: [{provide: SettingsService, useValue: mockSettingsService}],
     }).compileComponents();
 
     fixture = TestBed.createComponent(RendererSelectorComponent);

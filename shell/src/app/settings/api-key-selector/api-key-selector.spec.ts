@@ -63,9 +63,7 @@ describe('ApiKeySelectorComponent & AddApiKeyDialogComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [ApiKeySelectorComponent],
-      providers: [
-        {provide: SettingsService, useValue: mockSettingsService},
-      ],
+      providers: [{provide: SettingsService, useValue: mockSettingsService}],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ApiKeySelectorComponent);
