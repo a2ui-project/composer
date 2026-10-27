@@ -25,7 +25,6 @@ import {
   MessageEnvelope,
 } from '../../shell/host-communication/host-communication';
 import {signal} from '@angular/core';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatTableModule} from '@angular/material/table';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 
@@ -54,7 +53,7 @@ describe('Events', () => {
 
     await TestBed.configureTestingModule({
       imports: [Events, MatTableModule],
-      providers: [provideNoopAnimations(), {provide: HostCommunication, useValue: mockHostComm}],
+      providers: [{provide: HostCommunication, useValue: mockHostComm}],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Events);
@@ -340,7 +339,6 @@ describe('Events', () => {
     await TestBed.configureTestingModule({
       imports: [Events, MatTableModule],
       providers: [
-        provideNoopAnimations(),
         {
           provide: HostCommunication,
           useValue: {

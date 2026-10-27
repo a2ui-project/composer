@@ -17,7 +17,6 @@
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {signal, WritableSignal} from '@angular/core';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {afterEach, beforeEach, describe, expect, it, MockInstance, vi} from 'vitest';
 import {Demo, PreviewBridgeMessageType} from 'a2ui-bridge';
 import {DemoCard, DemoCardState} from './demo-card';
@@ -122,7 +121,6 @@ describe('DemoCard sandboxed live demo frame', () => {
     await TestBed.configureTestingModule({
       imports: [DemoCard],
       providers: [
-        provideNoopAnimations(),
         {provide: StartupResolution, useValue: startupResolutionMock},
         {
           provide: AppConfigProvider,

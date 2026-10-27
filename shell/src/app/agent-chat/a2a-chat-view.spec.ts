@@ -15,7 +15,6 @@
  */
 
 import {signal, WritableSignal} from '@angular/core';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {Subject} from 'rxjs';
@@ -83,7 +82,6 @@ describe('A2aChatView', () => {
     await TestBed.configureTestingModule({
       imports: [A2aChatView],
       providers: [
-        provideNoopAnimations(),
         {provide: A2A_TRANSPORT, useValue: mockA2aTransport},
         {provide: AppConfigProvider, useValue: mockConfigProvider},
         {

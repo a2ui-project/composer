@@ -35,7 +35,6 @@ import {
 import {ChatState, LlmLogEntry, LlmLogType} from '../../chat/chat-state/chat-state';
 import {StateSync} from '../../chat/state-sync/state-sync';
 import {signal, WritableSignal} from '@angular/core';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {PreviewBridgeMessageType} from 'a2ui-bridge';
 import {bridgeEnvelope, surfaceResizeEnvelope} from '../testing/bridge-envelopes';
 import {
@@ -157,7 +156,6 @@ describe('RenderedFrame Live Preview Viewport', () => {
           provide: StateSync,
           useClass: MockStateSync,
         },
-        provideNoopAnimations(),
       ],
     }).compileComponents();
 

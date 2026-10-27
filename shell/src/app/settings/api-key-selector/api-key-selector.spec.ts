@@ -16,7 +16,6 @@
 
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {ApiKeySelectorComponent} from './api-key-selector';
 import {ApiKeySelectorHarness, AddApiKeyDialogHarness} from './test/api-key-selector.harness';
 import {SettingsService, ApiKeyOption} from '../settings-service/settings.service';
@@ -64,10 +63,7 @@ describe('ApiKeySelectorComponent & AddApiKeyDialogComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [ApiKeySelectorComponent],
-      providers: [
-        provideNoopAnimations(),
-        {provide: SettingsService, useValue: mockSettingsService},
-      ],
+      providers: [{provide: SettingsService, useValue: mockSettingsService}],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ApiKeySelectorComponent);

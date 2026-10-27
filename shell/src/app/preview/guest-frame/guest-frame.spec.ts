@@ -17,8 +17,8 @@
 import {Component, signal, WritableSignal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {PreviewBridgeMessageType, type SurfaceResizePayload} from 'a2ui-bridge';
+
 import {ReplaySubject} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
@@ -100,7 +100,6 @@ describe('GuestFrame', () => {
     TestBed.configureTestingModule({
       imports: [TestHost],
       providers: [
-        provideNoopAnimations(),
         {
           provide: StartupResolution,
           useValue: {resolvedUrl, getResolvedRendererUrl: () => resolvedUrl()},

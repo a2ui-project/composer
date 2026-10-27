@@ -17,7 +17,6 @@
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {MAT_DIALOG_DATA, MatDialogModule, MatDialogRef} from '@angular/material/dialog';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import {CustomInstructionsDialog} from './custom-instructions-dialog';
 import {CustomInstructionsDialogHarness} from './test/custom-instructions-dialog.harness';
@@ -34,7 +33,6 @@ describe('CustomInstructionsDialog', () => {
     await TestBed.configureTestingModule({
       imports: [CustomInstructionsDialog, MatDialogModule],
       providers: [
-        provideNoopAnimations(),
         {provide: MAT_DIALOG_DATA, useValue: data},
         {provide: MatDialogRef, useValue: mockDialogRef},
       ],

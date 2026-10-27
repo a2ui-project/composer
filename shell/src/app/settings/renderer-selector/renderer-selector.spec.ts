@@ -16,7 +16,6 @@
 
 import {TestBed, ComponentFixture} from '@angular/core/testing';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {AbstractControl} from '@angular/forms';
 import {RendererSelectorComponent} from './renderer-selector';
 import {RendererSelectorHarness, AddRendererDialogHarness} from './test/renderer-selector.harness';
@@ -66,10 +65,7 @@ describe('RendererSelectorComponent & AddRendererDialogComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [RendererSelectorComponent],
-      providers: [
-        provideNoopAnimations(),
-        {provide: SettingsService, useValue: mockSettingsService},
-      ],
+      providers: [{provide: SettingsService, useValue: mockSettingsService}],
     }).compileComponents();
 
     fixture = TestBed.createComponent(RendererSelectorComponent);

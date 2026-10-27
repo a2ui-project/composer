@@ -20,7 +20,6 @@ import {SystemInstructionsDialog} from './system-instructions-dialog';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {SystemInstructionsDialogHarness} from './test/system-instructions-dialog.harness';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {ErrorLogger} from '../../debug/error-logger.service';
 
@@ -43,7 +42,6 @@ describe('SystemInstructionsDialog', () => {
     await TestBed.configureTestingModule({
       imports: [SystemInstructionsDialog, MatDialogModule],
       providers: [
-        provideNoopAnimations(),
         {provide: MAT_DIALOG_DATA, useValue: mockDialogData},
         {provide: MatDialogRef, useValue: mockDialogRef},
         {provide: MatSnackBar, useValue: mockSnackBar},
@@ -172,7 +170,6 @@ describe('SystemInstructionsDialog with no data', () => {
     await TestBed.configureTestingModule({
       imports: [SystemInstructionsDialog, MatDialogModule],
       providers: [
-        provideNoopAnimations(),
         {provide: MAT_DIALOG_DATA, useValue: null},
         {provide: MatDialogRef, useValue: mockDialogRef},
       ],

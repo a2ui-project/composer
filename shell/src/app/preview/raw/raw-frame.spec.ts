@@ -19,7 +19,6 @@ import {RawFrame, IFRAME_UNRESPONSIVE_ERROR_PREFIX} from './raw-frame';
 import {TestbedHarnessEnvironment} from '@angular/cdk/testing/testbed';
 import {RawFrameHarness} from './test/raw-frame.harness';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {provideNoopAnimations} from '@angular/platform-browser/animations';
 import {IS_EXTENSION_MODE} from '../../shell/environment-tokens/environment-tokens';
 import {signal, WritableSignal} from '@angular/core';
 import {Subject} from 'rxjs';
@@ -374,7 +373,6 @@ describe('RawFrame JSON Source Editor View', () => {
     await TestBed.configureTestingModule({
       imports: [RawFrame],
       providers: [
-        provideNoopAnimations(),
         {provide: IS_EXTENSION_MODE, useValue: signal(isExtension)},
         {
           provide: HostCommunication,
