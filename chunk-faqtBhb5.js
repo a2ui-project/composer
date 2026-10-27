@@ -1,0 +1,1 @@
+import{V as H}from"./chunk-Dai9NyyJ.js";var a={enabled:!0,measurementId:`G-Y72N8M7T12`};var o=new H(`USAGE_TRACKING_CONFIG`,{providedIn:`root`,factory:()=>a});var e=class{};export{o as n,e as t};
