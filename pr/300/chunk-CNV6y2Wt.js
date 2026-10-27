@@ -1,0 +1,1 @@
+import{ri as j}from"./chunk-MYU2BmLU.js";var a={enabled:!1,measurementId:``};var o=new j(`USAGE_TRACKING_CONFIG`,{providedIn:`root`,factory:()=>a});var e=class{};export{o as n,e as t};
