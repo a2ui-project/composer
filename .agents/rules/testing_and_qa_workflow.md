@@ -22,8 +22,9 @@ pipeline.
   `fixture.debugElement.query`.
 - Use CDK Component Harnesses (`@angular/cdk/testing/ComponentHarness`) to
   interact with the DOM in tests.
-- Always configure testing modules with `provideNoopAnimations()` to prevent
-  animation-related failures.
+- No-op animations are configured globally in `shell/src/test-setup.ts` via
+  `ANIMATION_MODULE_TYPE` and `MATERIAL_ANIMATIONS`; do not import the
+  deprecated `provideNoopAnimations()`.
 
 ## Targeted Intermediate Verification
 
