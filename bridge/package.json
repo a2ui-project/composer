@@ -30,14 +30,14 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@a2ui/web_core": "0.10.5",
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@a2ui/web_core": "0.10.7",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "jmespath": "0.16.0",
     "re2js": "2.8.6",
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@angular/core": "22.0.7",
+    "@angular/core": "22.2.3",
     "@lit/context": "1.1.6",
     "@types/jmespath": "0.15.2",
     "@types/react": "19.2.17",
@@ -55,7 +55,7 @@
     "vitest": "4.1.11"
   },
   "peerDependencies": {
-    "@angular/core": "22.0.7",
+    "@angular/core": "22.2.3",
     "lit": "3.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8"
