@@ -761,10 +761,11 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
         abortSignal = params.config?.abortSignal;
         return {
           async *[Symbol.asyncIterator]() {
+            const signal = abortSignal!;
             while (true) {
-              if (abortSignal?.aborted) {
+              if (signal.aborted) {
                 const err =
-                  abortSignal.reason ||
+                  signal.reason ||
                   new DOMException('The user aborted a request.', CANCEL_ERROR_NAME);
                 throw err;
               }
@@ -803,7 +804,8 @@ describe('LlmClient Facade and Standalone Provider Integration', () => {
         return {
           async *[Symbol.asyncIterator]() {
             yield {text: 'Chunk'};
-            while (!abortSignal?.aborted) {
+            const signal = abortSignal!;
+            while (!signal.aborted) {
               await new Promise(resolve => setTimeout(resolve, 0));
             }
             throw new DOMException('signal is aborted without reason', 'AbortError');
