@@ -854,7 +854,7 @@ export class A2aChatView implements OnInit {
     target?.setPointerCapture?.(event.pointerId);
 
     const startX = event.clientX;
-    const startWidth = this.inspectorWidth();
+    const startWidth = target?.nextElementSibling?.clientWidth || this.inspectorWidth();
     const resizeController = new AbortController();
     const {signal} = resizeController;
 
@@ -886,13 +886,15 @@ export class A2aChatView implements OnInit {
   }
 
   protected handleInspectorResizeKey(event: KeyboardEvent): void {
+    const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const currentWidth = target?.nextElementSibling?.clientWidth || this.inspectorWidth();
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
       const maxWidth = Math.max(300, Math.floor(window.innerWidth * 0.7));
-      this.inspectorWidth.update(w => Math.min(w + 24, maxWidth));
+      this.inspectorWidth.set(Math.min(currentWidth + 24, maxWidth));
     } else if (event.key === 'ArrowRight') {
       event.preventDefault();
-      this.inspectorWidth.update(w => Math.max(w - 24, 280));
+      this.inspectorWidth.set(Math.max(currentWidth - 24, 280));
     }
   }
 

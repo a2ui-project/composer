@@ -689,6 +689,38 @@ describe('A2aChatView', () => {
     expect(releasePointerCaptureSpy).toHaveBeenCalledWith(1);
   });
 
+  it('starts inspector keyboard resize from rendered column width', async () => {
+    const header = await harness.getHeader();
+    await header.clickMessageInspector();
+    const inspectorColumn: HTMLElement = fixture.nativeElement.querySelector('.inspector-column');
+    const handle: HTMLElement = fixture.nativeElement.querySelector('.inspector-resize-handle');
+    Object.defineProperty(inspectorColumn, 'clientWidth', {value: 420, configurable: true});
+
+    handle.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowRight'}));
+    fixture.detectChanges();
+
+    expect(inspectorColumn.style.width).toBe('396px');
+  });
+
+  it('starts inspector pointer resize from rendered column width', async () => {
+    const header = await harness.getHeader();
+    await header.clickMessageInspector();
+    const inspectorColumn: HTMLElement = fixture.nativeElement.querySelector('.inspector-column');
+    const handle: HTMLElement = fixture.nativeElement.querySelector('.inspector-resize-handle');
+    Object.defineProperty(inspectorColumn, 'clientWidth', {value: 420, configurable: true});
+
+    handle.dispatchEvent(
+      new PointerEvent('pointerdown', {clientX: 500, pointerId: 1, button: 0, isPrimary: true}),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', {clientX: 550, pointerId: 1, isPrimary: true}),
+    );
+    window.dispatchEvent(new PointerEvent('pointerup', {pointerId: 1, isPrimary: true}));
+    fixture.detectChanges();
+
+    expect(inspectorColumn.style.width).toBe('370px');
+  });
+
   it('aborts active generation when cancelActiveGeneration is called', () => {
     fixture.componentInstance['sendUserMessage']({text: 'Long prompt', images: []});
     expect(fixture.componentInstance['isStreaming']()).toBe(true);
