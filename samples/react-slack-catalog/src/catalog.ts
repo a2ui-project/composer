@@ -260,6 +260,17 @@ interface SlackCatalogJson {
     returnType: A2uiReturnType;
   }>;
   theme?: unknown;
+  /**
+   * The definitions every A2UI catalog document provides for other schemas to reference.
+   * Composer validates the JSON editor against this document as `catalog.json`, and
+   * `common_types.json` refers to `catalog.json#/$defs/anyFunction` for function calls.
+   */
+  $defs: {
+    /** Any of the catalog's components. */
+    anyComponent: {oneOf: Array<{$ref: string}>};
+    /** A call to any of the catalog's functions. */
+    anyFunction: {oneOf: Array<Record<string, unknown>>};
+  };
 }
 
 type JsonSchemaConverter = (
@@ -349,6 +360,27 @@ function functionSchemaFor(
   };
 }
 
+/**
+ * The schema of a call to one function, shaped like the basic catalog's entries under
+ * `functions`. `functions` here is the inline catalog's list, which a `$ref` can't
+ * address by name, so `$defs.anyFunction` inlines these instead.
+ */
+function functionCallSchemaFor(
+  fn: NonNullable<SlackCatalogJson['functions']>[number],
+): Record<string, unknown> {
+  return {
+    type: 'object',
+    ...(fn.description ? {description: fn.description} : {}),
+    properties: {
+      call: {const: fn.name},
+      args: fn.parameters,
+      returnType: {const: fn.returnType},
+    },
+    required: ['call', 'args'],
+    unevaluatedProperties: false,
+  };
+}
+
 function createSlackCatalogJson(catalog: typeof slackCatalog): SlackCatalogJson {
   const components: Record<string, unknown> = {};
   for (const [name, api] of catalog.components.entries()) {
@@ -366,6 +398,10 @@ function createSlackCatalogJson(catalog: typeof slackCatalog): SlackCatalogJson 
     components,
     functions: functions.length > 0 ? functions : undefined,
     theme,
+    $defs: {
+      anyComponent: {oneOf: Object.keys(components).map(name => ({$ref: `#/components/${name}`}))},
+      anyFunction: {oneOf: functions.map(functionCallSchemaFor)},
+    },
   };
 }
 

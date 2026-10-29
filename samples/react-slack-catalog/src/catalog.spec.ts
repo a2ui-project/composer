@@ -197,6 +197,30 @@ describe('Slack catalog schema payload', () => {
     );
   });
 
+  it('defines anyComponent and anyFunction for schemas that reference catalog.json', () => {
+    const {anyComponent, anyFunction} = slackCatalogJson.$defs;
+
+    for (const {$ref} of anyComponent.oneOf) {
+      expect(resolvesLocalRef(slackCatalogJson, $ref), $ref).toBe(true);
+    }
+    expect(anyComponent.oneOf).toHaveLength(Object.keys(slackCatalogJson.components).length);
+    expect(
+      anyFunction.oneOf.map(
+        call => (call as {properties: {call: {const: string}}}).properties.call.const,
+      ),
+    ).toEqual([...slackCatalog.functions.keys()]);
+  });
+
+  it('accepts a call to a Slack function and rejects one to openUrl through anyFunction', () => {
+    const ajv = new Ajv2019({strict: false});
+    ajv.addSchema(COMMON_TYPES_SCHEMA);
+    ajv.addSchema({...slackCatalogJson, $id: 'catalog.json'} as SchemaObject);
+    const validateCall = ajv.compile({$ref: 'catalog.json#/$defs/anyFunction'});
+
+    expect(validateCall({call: 'required', args: {value: 'Pick-up location'}})).toBe(true);
+    expect(validateCall({call: 'openUrl', args: {url: 'https://example.com'}})).toBe(false);
+  });
+
   it('does not publish unresolved component-local refs', () => {
     for (const [name, schema] of Object.entries(slackCatalogJson.components)) {
       const badRefs = collectRefs(schema).filter(
