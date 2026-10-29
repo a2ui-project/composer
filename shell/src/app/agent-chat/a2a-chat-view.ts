@@ -18,6 +18,7 @@ import {NgTemplateOutlet} from '@angular/common';
 import {
   Component,
   DestroyRef,
+  ElementRef,
   computed,
   effect,
   inject,
@@ -162,6 +163,7 @@ export class A2aChatView implements OnInit {
   private readonly initTimestamp = Date.now();
 
   private readonly configPanelTemplate = viewChild.required<TemplateRef<void>>('configPanel');
+  private readonly inspectorColumn = viewChild<ElementRef<HTMLElement>>('inspectorColumn');
 
   /** Discovered A2A AgentCard metadata for the connected agent. */
   protected readonly agentCard = signal<AgentCard | null>(null);
@@ -854,8 +856,8 @@ export class A2aChatView implements OnInit {
     target?.setPointerCapture?.(event.pointerId);
 
     const startX = event.clientX;
-    // Set `startWidth` to the flexbox-constrained width of `.inspector-column` (`target.nextElementSibling`).
-    const startWidth = target?.nextElementSibling?.clientWidth || this.inspectorWidth();
+    // Set `startWidth` to the flexbox-constrained width of `.inspector-column`.
+    const startWidth = this.inspectorColumn()?.nativeElement.clientWidth || this.inspectorWidth();
     const resizeController = new AbortController();
     const {signal} = resizeController;
 
@@ -887,9 +889,8 @@ export class A2aChatView implements OnInit {
   }
 
   protected handleInspectorResizeKey(event: KeyboardEvent): void {
-    const target = event.currentTarget as HTMLElement | null;
-    // Set `currentWidth` to the flexbox-constrained width of `.inspector-column` (`target.nextElementSibling`).
-    const currentWidth = target?.nextElementSibling?.clientWidth || this.inspectorWidth();
+    // Set `currentWidth` to the flexbox-constrained width of `.inspector-column`.
+    const currentWidth = this.inspectorColumn()?.nativeElement.clientWidth || this.inspectorWidth();
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
       const maxWidth = Math.max(300, Math.floor(window.innerWidth * 0.7));
