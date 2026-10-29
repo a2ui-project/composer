@@ -145,6 +145,41 @@ describe('HostCommunication', () => {
     });
   });
 
+  describe('with a renderer URL relative to Composer', () => {
+    let base: HTMLBaseElement;
+
+    beforeEach(() => {
+      base = document.createElement('base');
+      base.href = 'https://composer.example/composer/pr/7/';
+      document.head.appendChild(base);
+      startupResolutionMock.getResolvedRendererUrl.mockReturnValue('samples/bundled-renderer/');
+    });
+
+    afterEach(() => {
+      base.remove();
+    });
+
+    it('exchanges messages with the origin the preview frame resolves it to', () => {
+      const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
+      service.registerIframe(mockIframeWindow);
+
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: mockIframeWindow,
+          origin: 'https://composer.example',
+          data: {type: PreviewBridgeMessageType.RENDERER_READY},
+        }),
+      );
+      service.sendMessage({type: PreviewBridgeMessageType.GET_CATALOG});
+
+      expect(service.latestEnvelope()?.origin).toBe('https://composer.example');
+      expect(mockIframeWindow.postMessage).toHaveBeenCalledWith(
+        {type: PreviewBridgeMessageType.GET_CATALOG},
+        'https://composer.example',
+      );
+    });
+  });
+
   it('assigns undefined payload when incoming message omits payload field', () => {
     const mockIframeWindow = {postMessage: vi.fn()} as unknown as Window;
     service.registerIframe(mockIframeWindow);

@@ -34,6 +34,7 @@ import {
 import {bridgeEnvelope, surfaceResizeEnvelope} from '../testing/bridge-envelopes';
 import {showGuestDocument} from '../testing/guest-document';
 import {buildRendererUrl} from '../renderer-url';
+import {EnvironmentContextService} from '../../shell/startup-resolution/state/environment-context.service';
 import {GuestFrame} from './guest-frame';
 import {GuestFrameHarness} from './test/guest-frame.harness';
 
@@ -174,7 +175,12 @@ describe('GuestFrame', () => {
         const logger = {error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn()};
 
         expect(await harness.getIframeSrc()).toBe(
-          buildRendererUrl(RENDERER_URL, ThemePreference.LIGHT, logger),
+          buildRendererUrl(
+            RENDERER_URL,
+            ThemePreference.LIGHT,
+            TestBed.inject(EnvironmentContextService),
+            logger,
+          ),
         );
         expect(await harness.getIframeSandbox()).toBe(
           'allow-scripts allow-same-origin allow-forms',

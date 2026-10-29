@@ -16,7 +16,7 @@
 
 import {Injectable, computed, inject, signal} from '@angular/core';
 import {CatalogManagement} from '../../storage/catalog-management/catalog-management';
-import {Catalog} from '../../storage/models/catalog-storage.model';
+import {Catalog, getCatalogId} from '../../storage/models/catalog-storage.model';
 import {COMMON_TYPES_SCHEMA} from '../../gallery/schema/common-types-schema';
 import {
   McpClientManagerService,
@@ -106,10 +106,7 @@ export class ChatPromptFactoryService {
 
     return (
       (
-        this.generateSystemPrompt(
-          this.serializeCatalogForPrompt(catalog),
-          includeMultimodalGuidelines,
-        ) + mcpInstructions
+        this.generateSystemPrompt(catalog, includeMultimodalGuidelines) + mcpInstructions
       ).trimEnd() + customPromptSuffix
     );
   }
@@ -286,7 +283,14 @@ export class ChatPromptFactoryService {
     }
   }
 
-  private generateSystemPrompt(catalog: string, includeMultimodalGuidelines = false): string {
+  private generateSystemPrompt(catalog: Catalog, includeMultimodalGuidelines = false): string {
+    const catalogText = this.serializeCatalogForPrompt(catalog);
+    // The examples' createSurface names the active catalog because models copy it, and
+    // a renderer rejects other catalog IDs. 'active-catalog' stands in when the catalog
+    // has no ID.
+    const catalogId = getCatalogId(catalog) || 'active-catalog';
+    const hasIcon = Boolean(catalog.components?.['Icon']);
+    const hasCustomSvg = this.catalogSupportsCustomSvg(catalog);
     const multimodalGuidelinesSection = includeMultimodalGuidelines
       ? `
 
@@ -345,59 +349,13 @@ export class ChatPromptFactoryService {
     from the "components" map in the active catalog schema provided above.
     Never invent or guess component names not present in the active catalog.
 
-  ### 3. Icon Fidelity, Custom SVG & Styling Intent
-  * **Composite Icon & Feature Matching**: Closely examine visual icon
-    shapes for composite features (e.g., a document with an edit badge, a
-    search icon with a filter indicator, or a custom symbol). First check if
-    the active catalog's Icon component includes an exact visual match in
-    its enum.
-  * **Custom SVG Fallback (No Close Icon Match)**: If an icon in the
-    screenshot has distinct visual features that do NOT have a close match
-    in the active catalog's predefined icon list:
-    - **Do NOT** substitute a visually mismatched, generic, or oversimplified
-      placeholder icon.
-    - **Fallback to SVG**: Generate an inline vector graphic instead using
-      one of the mechanisms supported by the active catalog schema:
-      1. If the Icon component in the active catalog accepts custom path
-         data, specify the svgPath property with a valid SVG path d string.
-      2. If an Image component is available in the active catalog, supply an
-         inline SVG Data URL in its url/image source property
-         ("data:image/svg+xml;utf8,<svg ...>...</svg>").
+  ### 3. Icon, Image & Styling Intent
+  ${this.iconGuidance(hasIcon, hasCustomSvg)}
   * **Visual Hierarchy**: Preserve typography scale, text weight, button
     prominence, and color intent using supported catalog properties.
 
   ### 4. Visual Affordance Recognition
-  Recognize common UI visual affordance symbols and map them strictly using
-  components defined in the active catalog schema provided above:
-  * **Downward Chevrons / Disclosure Carets (Collapsible Rows)**:
-    - **Visual Indicator**: Downward-facing arrows (∨, expand_more) at row
-      edges denote expandable/collapsible sections.
-    - **Catalog Mapping**: If the active catalog schema includes an expansion
-      or accordion component, use it. Otherwise, compose the row using
-      layout primitives in the catalog: e.g., a horizontal layout container
-      (Row) holding leading text/icons and a trailing downward icon.
-  * **Search Cues (Search Inputs)**:
-    - **Visual Indicator**: Magnifying glass symbols (🔍) inside or adjacent
-      to text entry boxes.
-    - **Catalog Mapping**: If a search component exists in the active catalog
-      schema, use it; otherwise, use a text input component paired with a
-      search icon.
-  * **Toggle Track & Thumb (Switches & Toggles)**:
-    - **Visual Indicator**: Pill-shaped track with a circular thumb (⚪━━).
-    - **Catalog Mapping**: Use a toggle, switch, or selection control
-      component defined in the active catalog schema.
-  * **Selection Controls (Option Pickers)**:
-    - **Visual Indicator**: Radio circles (◯ / 🔘), checkboxes (☐ / ☑), or
-      dropdown carets.
-    - **Catalog Mapping**: Look up selection, picker, or option components
-      in the active catalog schema; if none exist, compose using interactive
-      button components.
-  * **Pill Badges & Chips (Status & Tags)**:
-    - **Visual Indicator**: Small rounded rectangle or oval containing short
-      text/status labels.
-    - **Catalog Mapping**: Use a chip, badge, or tag component if defined in
-      the active catalog schema; otherwise, compose using a text component
-      inside a container or card.
+  ${this.visualAffordanceGuidance(hasIcon)}
 
   ### 5. Grounding, Data Binding & Sequence
   * **Complete Data Model Extraction**: ALL text strings, label names, image
@@ -421,7 +379,8 @@ export class ChatPromptFactoryService {
   2. **Extract Data**: Extract all visible text strings, values, and list
      items into updateDataModel.
   3. **Build Component Tree**: Map visual elements strictly to active
-     catalog component types with exact icon names/SVGs, full-width
+     catalog component types with
+     ${this.componentTreeMappingGuidance(hasIcon, hasCustomSvg)}, full-width
      properties, and JSON Pointer paths.
   4. **Emit JSONL Messages**: Output the single-line JSONL messages in
      strict sequence (createSurface -> updateComponents -> updateDataModel).`
@@ -445,16 +404,16 @@ export class ChatPromptFactoryService {
   2. **No Hallucinated Component Names**: Never invent, guess, or mix
      component names from other libraries or catalogs. For example, if only
      "Column", "Row", "Text", and "Button" are present in the active catalog
-     schema below, emitting "MaterialColumn", "MaterialText", or "Div" is
-     strictly INVALID.
+     schema below, emitting any prefixed, library-specific, or DOM component
+     name that is absent from the active catalog is strictly INVALID.
   3. **No Hallucinated Properties**: Include ONLY properties explicitly
      defined in the JSON Schema for that specific component type in the
      active catalog. Do NOT emit unauthorized keys (e.g., "rules", "mock*",
-     or unsupported CSS/styling parameters).
+     or unsupported CSS/styling parameters).${this.imageUrlGuidance(catalog)}
 
   ### Active Catalog Schema (Mandatory Allowlist)
   \`\`\`json
-  ${catalog}
+  ${catalogText}
   \`\`\`
 
   ### Common Schema Types
@@ -519,21 +478,21 @@ export class ChatPromptFactoryService {
 
   ## Examples
 
-  **IMPORTANT**: Catalog IDs, component names, and component properties (e.g.,
-  child vs label) below are illustrative; strictly follow the active catalog
-  schema above and omit \`\`\`jsonl fences in output.
+  **IMPORTANT**: The examples use the active catalog's ID. Component names and
+  component properties (e.g., child vs label) below are illustrative; strictly
+  follow the active catalog schema above and omit \`\`\`jsonl fences in output.
 
     * **Form & Action Example**:
       \`\`\`jsonl
-      {"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"MaterialColumn","children":["name_in","btn"]},{"id":"name_in","component":"MaterialInput","label":{"path":"/label"},"value":{"path":"/name"}},{"id":"btn","component":"MaterialButton","label":{"path":"/submitLabel"},"action":{"event":{"name":"submitForm","context":{"name":{"path":"/name"}}}}}]}}
+      {"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"${catalogId}"}}
+      {"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Column","children":["name_in","btn"]},{"id":"name_in","component":"TextField","label":{"path":"/label"},"value":{"path":"/name"}},{"id":"btn","component":"Button","child":"btn_label","action":{"event":{"name":"submitForm","context":{"name":{"path":"/name"}}}}},{"id":"btn_label","component":"Text","text":{"path":"/submitLabel"}}]}}
       {"version":"v0.9","updateDataModel":{"surfaceId":"main","value":{"label":"Name","name":"Alice","submitLabel":"Submit"}}}
       \`\`\`
 
     * **Dynamic List Example**:
       \`\`\`jsonl
-      {"version":"v0.9","createSurface":{"surfaceId":"list","catalogId":"https://a2ui.org/specification/v0_9/material_catalog.json"}}
-      {"version":"v0.9","updateComponents":{"surfaceId":"list","components":[{"id":"root","component":"MaterialColumn","children":{"componentId":"item_template","path":"/items"}},{"id":"item_template","component":"MaterialText","text":{"path":"text"}}]}}
+      {"version":"v0.9","createSurface":{"surfaceId":"list","catalogId":"${catalogId}"}}
+      {"version":"v0.9","updateComponents":{"surfaceId":"list","components":[{"id":"root","component":"Column","children":{"componentId":"item_template","path":"/items"}},{"id":"item_template","component":"Text","text":{"path":"text"}}]}}
       {"version":"v0.9","updateDataModel":{"surfaceId":"list","value":{"items":[{"text":"One"},{"text":"Two"}]}}}
       \`\`\`
 
@@ -564,4 +523,165 @@ export class ChatPromptFactoryService {
   \`\`\`
   `;
   }
+
+  private iconGuidance(hasIcon: boolean, hasCustomSvg: boolean): string {
+    if (!hasIcon || !hasCustomSvg) {
+      return `* The active catalog does not support custom icon drawing. Do NOT invent Icon
+    components, icon names, svgPath fields, inline SVG fields, or
+    data:image/svg+xml fallbacks unless those exact component names and
+    properties appear in the active catalog schema. Omit the icon or represent
+    the meaning with supported Text, Button, Image, or layout components.`;
+    }
+
+    return `* Use Icon components only when the active catalog schema includes the exact
+    icon values and properties you need. Custom SVG fields are allowed only
+    when the Icon schema explicitly defines them.`;
+  }
+
+  /**
+   * The fourth allowlist rule, for a catalog whose Image `url` property declares
+   * a JSON Schema `pattern` for literal URLs, when that pattern rejects data
+   * URLs; empty otherwise. Asked for an image it can't see, a model tends to
+   * invent an inline SVG data URL, which such a catalog doesn't accept. That
+   * happens with text-only prompts too, so the rule is in every prompt, not in
+   * the multimodal guidelines. It quotes the catalog's pattern instead of
+   * describing it, so it holds for any catalog that declares one.
+   */
+  private imageUrlGuidance(catalog: Catalog): string {
+    const pattern = findLiteralStringPattern(
+      findPropertySchema(catalog.components?.['Image'], 'url'),
+    );
+    if (!pattern || !patternRejectsDataUrl(pattern)) {
+      return '';
+    }
+    return `
+  4. **Image URLs**: For Image.url, use only URLs matching \`${pattern}\`. If
+     no suitable URL is provided or visible, omit the Image component instead
+     of inventing a URL.`;
+  }
+
+  /** Whether the catalog's Icon component accepts custom SVG path data (`svgPath`). */
+  private catalogSupportsCustomSvg(catalog: Catalog): boolean {
+    return Boolean(findPropertySchema(catalog.components?.['Icon'], SVG_PATH_PROPERTY));
+  }
+
+  private visualAffordanceGuidance(hasIcon: boolean): string {
+    const disclosureFallback = hasIcon
+      ? `layout primitives in the catalog: e.g., a horizontal layout container
+      (Row) holding leading text/icons and a trailing downward icon.`
+      : `layout primitives in the catalog: e.g., a horizontal layout container
+      (Row) holding the visible label and any supported text marker only when
+      that marker is literally present.`;
+    const searchFallback = hasIcon
+      ? `use a text input component paired with a search icon.`
+      : `use the active catalog's text input component if one exists, or
+      represent the visible search label/placeholder with supported Text and
+      layout components.`;
+
+    return `Recognize common UI visual affordance symbols and map them strictly using
+  components defined in the active catalog schema provided above:
+  * **Downward Chevrons / Disclosure Carets (Collapsible Rows)**:
+    - **Visual Indicator**: Downward-facing arrows (∨, expand_more) at row
+      edges denote expandable/collapsible sections.
+    - **Catalog Mapping**: If the active catalog schema includes an expansion
+      or accordion component, use it. Otherwise, compose the row using
+      ${disclosureFallback}
+  * **Search Cues (Search Inputs)**:
+    - **Visual Indicator**: Magnifying glass symbols (🔍) inside or adjacent
+      to text entry boxes.
+    - **Catalog Mapping**: If a search component exists in the active catalog
+      schema, use it; otherwise, ${searchFallback}
+  * **Toggle Track & Thumb (Switches & Toggles)**:
+    - **Visual Indicator**: Pill-shaped track with a circular thumb (⚪━━).
+    - **Catalog Mapping**: Use a toggle, switch, or selection control
+      component defined in the active catalog schema.
+  * **Selection Controls (Option Pickers)**:
+    - **Visual Indicator**: Radio circles (◯ / 🔘), checkboxes (☐ / ☑), or
+      dropdown carets.
+    - **Catalog Mapping**: Look up selection, picker, or option components
+      in the active catalog schema; if none exist, compose using interactive
+      button components.
+  * **Pill Badges & Chips (Status & Tags)**:
+    - **Visual Indicator**: Small rounded rectangle or oval containing short
+      text/status labels.
+    - **Catalog Mapping**: Use a chip, badge, or tag component if defined in
+      the active catalog schema; otherwise, compose using a text component
+      inside a container or card.`;
+  }
+
+  private componentTreeMappingGuidance(hasIcon: boolean, hasCustomSvg: boolean): string {
+    if (hasIcon && hasCustomSvg) {
+      return 'exact icon names/SVGs';
+    }
+    if (hasIcon) {
+      return 'exact supported icon values';
+    }
+    return 'supported layout and text properties';
+  }
+}
+
+/** The Icon property the basic catalog uses for custom SVG path data. */
+const SVG_PATH_PROPERTY = 'svgPath';
+
+/**
+ * A data URL of the kind a model invents for an image it can't see: an empty
+ * SVG (`<svg/>`), base64-encoded. Checking a catalog's URL pattern against it
+ * tells Composer whether invented data URLs would be accepted.
+ */
+const DATA_URL_PROBE = 'data:image/svg+xml;base64,PHN2Zy8+';
+
+/**
+ * The JSON Schema `pattern` a property declares for literal strings: either on
+ * the property's schema or on the `type: "string"` member of its `anyOf` or
+ * `oneOf`. A2UI properties are often a union of a literal string, a data
+ * binding and a function call, so the pattern sits on the string member.
+ */
+function findLiteralStringPattern(schema: Record<string, unknown> | undefined): string | undefined {
+  if (typeof schema?.['pattern'] === 'string') {
+    return schema['pattern'];
+  }
+  const members = [schema?.['anyOf'], schema?.['oneOf']].flatMap(union =>
+    Array.isArray(union) ? (union as unknown[]) : [],
+  );
+  for (const member of members) {
+    const {type, pattern} = (member ?? {}) as Record<string, unknown>;
+    if (type === 'string' && typeof pattern === 'string') {
+      return pattern;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Whether a JSON Schema `pattern` rejects {@link DATA_URL_PROBE}. A pattern that
+ * JavaScript can't compile counts as not rejecting it: Composer can't tell what
+ * such a pattern accepts, so it gives no guidance rather than guessing.
+ */
+function patternRejectsDataUrl(pattern: string): boolean {
+  try {
+    return !new RegExp(pattern).test(DATA_URL_PROBE);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Finds a property's schema anywhere in a component's schema, including inside
+ * `allOf` or `oneOf` branches, where catalogs usually declare them.
+ */
+function findPropertySchema(schema: unknown, name: string): Record<string, unknown> | undefined {
+  if (!schema || typeof schema !== 'object') {
+    return undefined;
+  }
+  const properties = (schema as {properties?: unknown}).properties;
+  if (properties && typeof properties === 'object' && name in properties) {
+    return (properties as Record<string, Record<string, unknown>>)[name];
+  }
+  for (const value of Object.values(schema)) {
+    const found = findPropertySchema(value, name);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
 }

@@ -19,6 +19,7 @@ import {TestBed} from '@angular/core/testing';
 import {describe, it, expect, vi, afterEach} from 'vitest';
 import {GalleryLauncher} from './gallery-launcher';
 import {QueryParser} from '../shell/query-parser/query-parser';
+import {EnvironmentContextService} from '../shell/startup-resolution/state/environment-context.service';
 
 describe('GalleryLauncher', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -60,9 +61,9 @@ describe('GalleryLauncher', () => {
     const logger = {warn: vi.fn()};
     expect(url.pathname).toBe('/composer/pr/129/');
     expect(url.search).toBe('');
-    expect(QueryParser.parseRendererUrl(url.hash, logger)).toBe(
-      'https://example.com/custom-renderer',
-    );
+    expect(
+      QueryParser.parseRendererUrl(url.hash, TestBed.inject(EnvironmentContextService), logger),
+    ).toBe('https://example.com/custom-renderer');
     expect(QueryParser.parseRendererId(url.hash)).toBe('custom');
     expect(JSON.parse((await QueryParser.parseSharedA2ui(url.hash, logger)).payload!)).toEqual(
       JSON.parse(payload),

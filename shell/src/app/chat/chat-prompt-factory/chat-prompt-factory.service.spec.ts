@@ -118,6 +118,177 @@ describe('ChatPromptFactoryService', () => {
     expect(service.systemPrompt()).not.toContain('http://localhost:3001/mcp');
   });
 
+  it('includes current UI editing guidance in catalog prompts', () => {
+    catalogSpy.activeCatalog.mockReturnValue({components: {Text: {}}});
+
+    const prompt = service.systemPrompt();
+
+    expect(prompt).toContain('Editing the Current UI');
+    expect(prompt).toContain('actual surface IDs, component IDs, and data bindings');
+  });
+
+  it('forbids icon and SVG fallbacks for a catalog without an Icon component', () => {
+    catalogSpy.activeCatalog.mockReturnValue({
+      catalogId: 'https://a2ui-project.github.io/composer/catalogs/slack/v1',
+      components: {
+        Text: {properties: {component: {const: 'Text'}, text: {type: 'string'}}},
+        Image: {
+          properties: {
+            component: {const: 'Image'},
+            url: {
+              anyOf: [
+                {type: 'string', pattern: '^https?://'},
+                {type: 'object', properties: {path: {type: 'string'}}},
+              ],
+              description: 'The HTTP(S) URL of the image to display in Slack.',
+            },
+          },
+        },
+        Column: {properties: {component: {const: 'Column'}, children: {type: 'array'}}},
+        Button: {properties: {component: {const: 'Button'}, child: {type: 'string'}}},
+      },
+    });
+
+    // Icon guidance is part of the multimodal guidelines.
+    const prompt = service.buildSystemPrompt({includeMultimodalGuidelines: true});
+
+    expect(prompt).toContain('Do NOT invent Icon');
+    expect(prompt).toContain('data:image/svg+xml fallbacks');
+    expect(prompt).toContain('For Image.url, use only URLs matching `^https?://`');
+    expect(prompt).not.toContain('Fallback to SVG');
+    expect(prompt).not.toContain('leading text/icons');
+    expect(prompt).not.toContain('trailing downward icon');
+    expect(prompt).not.toContain('search icon');
+    expect(prompt).not.toContain('exact icon names/SVGs');
+    expect(prompt).not.toContain('MaterialColumn');
+    expect(prompt).not.toContain('MaterialText');
+    expect(prompt).not.toContain('MaterialDatepicker');
+    expect(prompt).not.toContain('https://a2ui.org/specification/v0_9/material_catalog.json');
+  });
+
+  it('preserves icon and SVG guidance when the active catalog supports both', () => {
+    catalogSpy.activeCatalog.mockReturnValue({
+      catalogId: 'supported-icon-catalog',
+      components: {
+        Text: {properties: {component: {const: 'Text'}, text: {type: 'string'}}},
+        Row: {properties: {component: {const: 'Row'}, children: {type: 'array'}}},
+        Column: {properties: {component: {const: 'Column'}, children: {type: 'array'}}},
+        Icon: {
+          properties: {
+            component: {const: 'Icon'},
+            name: {enum: ['search', 'expand_more']},
+            svgPath: {type: 'string', description: 'Custom SVG path data.'},
+          },
+        },
+      },
+    });
+
+    const prompt = service.buildSystemPrompt({includeMultimodalGuidelines: true});
+
+    expect(prompt).toContain('Use Icon components only');
+    expect(prompt).toContain('leading text/icons');
+    expect(prompt).toContain('trailing downward icon');
+    expect(prompt).toContain('search icon');
+    expect(prompt).toContain('exact icon names/SVGs');
+  });
+
+  it('reads svgPath from the schema, not from its references', () => {
+    const ref = {
+      $ref: 'https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString',
+    };
+    catalogSpy.activeCatalog.mockReturnValue({
+      catalogId: 'basic-shaped-catalog',
+      components: {
+        Text: {properties: {component: {const: 'Text'}}},
+        Column: {properties: {component: {const: 'Column'}}},
+        Icon: {
+          allOf: [
+            ref,
+            {
+              properties: {
+                component: {const: 'Icon'},
+                name: {
+                  oneOf: [
+                    {type: 'string', enum: ['search']},
+                    {type: 'object', properties: {svgPath: {type: 'string'}}},
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(service.buildSystemPrompt({includeMultimodalGuidelines: true})).toContain(
+      'exact icon names/SVGs',
+    );
+  });
+
+  it('does not treat an Icon that only mentions SVG as accepting custom SVG paths', () => {
+    catalogSpy.activeCatalog.mockReturnValue({
+      components: {
+        Icon: {
+          properties: {
+            component: {const: 'Icon'},
+            name: {type: 'string', description: 'An icon name; SVG files are not accepted.'},
+          },
+        },
+      },
+    });
+
+    const prompt = service.buildSystemPrompt({includeMultimodalGuidelines: true});
+
+    expect(prompt).toContain('exact supported icon values');
+    expect(prompt).not.toContain('exact icon names/SVGs');
+  });
+
+  describe('Image url guidance', () => {
+    /** Makes the active catalog one whose Image `url` property has the given schema. */
+    function useImageUrlSchema(url: Record<string, unknown>): void {
+      catalogSpy.activeCatalog.mockReturnValue({
+        components: {Image: {properties: {component: {const: 'Image'}, url}}},
+      });
+    }
+
+    it('names a pattern declared on the url property itself', () => {
+      useImageUrlSchema({type: 'string', pattern: '^https://'});
+
+      expect(service.systemPrompt()).toContain('For Image.url, use only URLs matching `^https://`');
+    });
+
+    it('names a pattern declared on the string member of a oneOf', () => {
+      useImageUrlSchema({
+        oneOf: [
+          {type: 'object', properties: {path: {type: 'string'}}},
+          {type: 'string', pattern: '^https?://'},
+        ],
+      });
+
+      expect(service.systemPrompt()).toContain(
+        'For Image.url, use only URLs matching `^https?://`',
+      );
+    });
+
+    it('gives no guidance when the url only describes its URLs in prose', () => {
+      useImageUrlSchema({type: 'string', description: 'The HTTP(S) URL of the image.'});
+
+      expect(service.systemPrompt()).not.toContain('For Image.url');
+    });
+
+    it('gives no guidance when the pattern accepts data URLs', () => {
+      useImageUrlSchema({type: 'string', pattern: '^(https?|data):'});
+
+      expect(service.systemPrompt()).not.toContain('For Image.url');
+    });
+
+    it('gives no guidance when the pattern is not a valid regular expression', () => {
+      useImageUrlSchema({type: 'string', pattern: '^https?://('});
+
+      expect(service.systemPrompt()).not.toContain('For Image.url');
+    });
+  });
+
   describe('Custom Instructions', () => {
     it('initializes with empty state when storage is empty or invalid JSON', () => {
       expect(service.customInstructionsState()).toEqual({
@@ -410,6 +581,20 @@ describe('ChatPromptFactoryService', () => {
       expect(serializedExamples).toContain(
         '"children":{"componentId":"item_template","path":"/items"}',
       );
+    });
+
+    it("writes the active catalog's ID into every example", () => {
+      // A renderer rejects a createSurface for any catalog but its own, and models
+      // copy the examples' catalogId.
+      const slackCatalogId = 'https://a2ui-project.github.io/composer/catalogs/slack/v1';
+      catalogSpy.activeCatalog.mockReturnValue({catalogId: slackCatalogId, components: {}});
+
+      const examples = service.systemPrompt().match(/## Examples([\s\S]*?)## Data Binding/)![1];
+
+      expect(Array.from(examples.matchAll(/"catalogId":"([^"]*)"/g), match => match[1])).toEqual([
+        slackCatalogId,
+        slackCatalogId,
+      ]);
     });
   });
 });

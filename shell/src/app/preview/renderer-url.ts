@@ -16,6 +16,7 @@
 
 import {ThemePreference} from 'a2ui-bridge';
 import {TaggedLogger} from '../debug/error-logger.service';
+import type {EnvironmentContextService} from '../shell/startup-resolution/state/environment-context.service';
 import {isValidHttpUrl} from '../utils/url';
 import {PreviewUrlParam} from './preview-url-param';
 
@@ -27,6 +28,7 @@ import {PreviewUrlParam} from './preview-url-param';
 export function buildRendererUrl(
   currentUrl: string | null | undefined,
   theme: ThemePreference,
+  environmentContext: Pick<EnvironmentContextService, 'resolveRendererUrl'>,
   logger: TaggedLogger,
 ): string | null {
   if (!currentUrl) return null;
@@ -36,10 +38,12 @@ export function buildRendererUrl(
     // (e.g., in Server-Side Rendering).
     const baseOrigin = globalThis.location?.origin || undefined;
 
-    // Construct a URL object. Passing baseOrigin as the second argument ensures that
-    // relative URLs (e.g., "/renderer") are parsed correctly relative to the current
-    // domain. Absolute URLs will ignore this base parameter.
-    const url = new URL(currentUrl, baseOrigin);
+    // A page-relative URL resolves against Composer's base URL; see
+    // `RendererConfig.rendererUrl`. Without a page location only absolute URLs
+    // are loaded; parsing a relative one throws.
+    const url = baseOrigin
+      ? environmentContext.resolveRendererUrl(currentUrl)
+      : new URL(currentUrl);
 
     // Prevent unauthorized cross-site framing by appending parent and
     // ancestor origins.

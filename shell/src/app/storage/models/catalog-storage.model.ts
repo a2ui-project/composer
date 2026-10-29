@@ -47,3 +47,11 @@ export declare interface Catalog {
   functions?: {[key: string]: Record<string, unknown>};
   $defs?: {[key: string]: Record<string, unknown>};
 }
+
+/**
+ * The ID a catalog is known by: its `catalogId`, or its JSON Schema `$id` if
+ * it doesn't set one.
+ */
+export function getCatalogId(catalog: Catalog): string | undefined {
+  return catalog.catalogId || catalog.$id;
+}

@@ -31,6 +31,7 @@ import {
   LlmClient,
   LlmMessage,
   LlmStreamResponse,
+  LlmToolCall,
   MessageRole,
   STOPPED_RESPONSE_MESSAGE,
 } from '../llm-client/llm-client';
@@ -44,7 +45,10 @@ import {
 import {ChatPromptFactoryService} from '../chat-prompt-factory/chat-prompt-factory.service';
 import {ChatErrorFormatterService} from '../chat-error-formatter/chat-error-formatter.service';
 import {cleanErrorMessage, redactApiKey} from '../chat-service/error-utils';
+import {RendererSelection} from '../renderer-selection/renderer-selection';
+import {RendererTool} from '../renderer-selection/renderer-tool';
 import {ErrorLogger} from '../../debug/error-logger.service';
+import {getCatalogId} from '../../storage/models/catalog-storage.model';
 
 /** Why a response was cancelled before it finished. */
 enum CancelReason {
@@ -57,8 +61,49 @@ enum CancelReason {
   RENDERER_CHANGED = 'rendererChanged',
 }
 
+/**
+ * The most model requests one prompt makes. The first may switch renderers with the
+ * renderer tool; the second answers with the new catalog and can't switch again, so a
+ * model can't keep cycling between renderers.
+ */
+const MAX_MODEL_REQUESTS_PER_PROMPT = 2;
+
 /** Shown in place of a response cancelled because the renderer changed. */
 const RENDERER_CHANGED_NOTE = '*This response was stopped because the renderer changed.*';
+
+/** A prompt in progress, from when it's submitted until its response ends. */
+interface PromptRun {
+  /** The prompt the user sent, trimmed. */
+  readonly prompt: string;
+  readonly attachments: Attachment[];
+  /** Identifies the prompt in telemetry and in the conversation. */
+  readonly promptId: string;
+  /**
+   * The value of `activeRequestId` when the prompt was submitted. Once they differ,
+   * the conversation was cleared or replaced and the prompt's response is dropped.
+   */
+  readonly requestId: number;
+  /** Cancels a renderer switch the model asked for. */
+  readonly toolSignal: AbortSignal;
+  /** The messages the next model request sends. */
+  context: LlmMessage[];
+  /** The renderer the response is being written for. */
+  rendererUrl: string;
+  /** The ID of the catalog the response is being written for. */
+  catalogId: string;
+  /** The stream of the latest model request, once it has been sent. */
+  responseStream?: LlmStreamResponse;
+}
+
+/** A model request's finished response. */
+interface ModelResponse {
+  /** The response's complete text. */
+  text: string;
+  /** The model's thinking, if it shared any. */
+  thinking: string;
+  /** The tools the model called instead of answering. */
+  toolCalls: LlmToolCall[];
+}
 
 /**
  * Dynamic chat panel coordinator managing system prompt generation using
@@ -75,6 +120,8 @@ export class ChatCoordinator {
   private readonly stateSync = inject(StateSync);
   private readonly chatState = inject(ChatState);
   private readonly llmClient = inject(LlmClient);
+  private readonly rendererTool = inject(RendererTool);
+  private readonly rendererSelection = inject(RendererSelection);
   private readonly errorLogger = inject(ErrorLogger);
   private readonly logger = inject(ErrorLogger).withTag('[ChatCoordinator]');
   private readonly chatCleaner = inject(ChatCleaner);
@@ -112,13 +159,22 @@ export class ChatCoordinator {
   });
 
   private activePromptId: string | null = null;
+  private activeRequestId = 0;
+  private expectedToolRendererUrl: string | undefined;
+  private toolAbortController?: AbortController;
 
   constructor() {
     // Reacts to renderer changes; see handleRendererChange.
     toObservable(this.configProvider.rendererUrl)
       // skip(1) ignores the renderer chosen at startup
       .pipe(skip(1), takeUntilDestroyed())
-      .subscribe(() => {
+      .subscribe(url => {
+        // The renderer tool's own switch is part of the request in flight, which
+        // rebuilds the canvas for the new catalog itself.
+        if (url === this.expectedToolRendererUrl) {
+          this.expectedToolRendererUrl = undefined;
+          return;
+        }
         queueMicrotask(() => this.handleRendererChange());
       });
   }
@@ -145,6 +201,10 @@ export class ChatCoordinator {
   }
 
   private clearConversation(): void {
+    // Invalidate any request still in flight. Its stream and renderer tool call were
+    // cancelled by the cancel that precedes every clear.
+    this.activeRequestId++;
+    this.expectedToolRendererUrl = undefined;
     this.currentTurnIndex.set(0);
     this.activePromptId = null;
     this.activeStreamResponse = undefined;
@@ -302,10 +362,12 @@ export class ChatCoordinator {
    * for is tracked as a chat cancel.
    */
   private cancelStream(reason: CancelReason): void {
-    if (!this.activePromptId) {
+    // A response is cancelled once, for the first reason.
+    if (!this.activePromptId || this.cancelReason !== null) {
       return;
     }
     this.cancelReason = reason;
+    this.toolAbortController?.abort(this.cancelError());
     if (reason === CancelReason.USER) {
       this.usageTrackingService.trackChatCancel({
         promptId: this.activePromptId,
@@ -327,8 +389,7 @@ export class ChatCoordinator {
     const promptTurnIndex = options?.promptTurnIndex ?? this.currentTurnIndex() + 1;
     this.currentTurnIndex.set(promptTurnIndex);
 
-    const catalogObj = this.catalogManagement.activeCatalog();
-    const catalogId = catalogObj ? catalogObj.catalogId || catalogObj.$id || '' : '';
+    const catalogId = this.getActiveCatalogId();
 
     const hasScreenshot = attachments.some(a => this.isImageAttachment(a));
     const nonScreenshotAttachments = attachments.filter(a => !this.isImageAttachment(a));
@@ -375,7 +436,25 @@ export class ChatCoordinator {
     this.stateSync.syncActiveDraftToHistory();
 
     const promptId = this.emitPromptTracking(trimmed, attachments, options);
+    const run = this.beginPrompt(trimmed, attachments, promptId);
+    try {
+      await this.requestResponse(run);
+    } catch (err: unknown) {
+      this.handlePromptError(err, run);
+    } finally {
+      this.endPrompt(run);
+    }
+  }
+
+  /**
+   * Starts a prompt: makes it the active one, locks the chat controls, and adds the
+   * user's turn followed by a placeholder model turn that the response streams into.
+   */
+  private beginPrompt(prompt: string, attachments: Attachment[], promptId: string): PromptRun {
     this.activePromptId = promptId;
+    const requestId = ++this.activeRequestId;
+    const rendererUrl = this.configProvider.rendererUrl();
+    const catalogId = this.getActiveCatalogId();
 
     // Lock UI controls and transition state indicators to receiving stream
     this.chatState.setProgrammaticStreamActive(true);
@@ -385,7 +464,7 @@ export class ChatCoordinator {
       ...h,
       {
         role: MessageRole.USER,
-        content: trimmed,
+        content: prompt,
         attachments: attachments.length > 0 ? attachments : undefined,
         isSnapshot: false,
         promptId,
@@ -393,9 +472,9 @@ export class ChatCoordinator {
     ]);
 
     // Construct system-prepended context matching conversational bounds
-    const fullContext = this.getFullMessageContext();
+    const context = this.getFullMessageContext();
 
-    this.chatState.addRawLlmLog(LlmLogType.REQUEST, fullContext);
+    this.chatState.addRawLlmLog(LlmLogType.REQUEST, context);
 
     // Push initial model turn placeholder with loading pulse indicator to history
     this.chatState.updateChatHistory(h => [
@@ -407,84 +486,249 @@ export class ChatCoordinator {
       },
     ]);
 
-    let responseStream: LlmStreamResponse | undefined;
-    try {
-      this.cancelReason = null;
-      // Trigger streaming GenAI completions call using client facade
-      responseStream = await this.llmClient.chatStream(fullContext);
+    this.cancelReason = null;
+    const toolAbortController = new AbortController();
+    this.toolAbortController = toolAbortController;
+    return {
+      prompt,
+      attachments,
+      promptId,
+      requestId,
+      toolSignal: toolAbortController.signal,
+      context,
+      rendererUrl,
+      catalogId,
+    };
+  }
 
-      if (this.activePromptId !== promptId) {
-        responseStream?.cancel?.();
+  /**
+   * Requests the prompt's response and applies it to the canvas. A model that asks to
+   * switch renderers instead of answering gets the switch, and is asked again with the
+   * new catalog; see MAX_MODEL_REQUESTS_PER_PROMPT.
+   *
+   * @throws If the response is cancelled, the model asks for more than one switch, or
+   *     a request or the switch fails.
+   */
+  private async requestResponse(run: PromptRun): Promise<void> {
+    for (let request = 1; request <= MAX_MODEL_REQUESTS_PER_PROMPT; request++) {
+      const isLastRequest = request === MAX_MODEL_REQUESTS_PER_PROMPT;
+      const response = await this.streamModelResponse(run, isLastRequest);
+      if (!response) {
         return;
       }
 
-      // If a cancel was requested while the stream connection was establishing
-      if (this.cancelReason !== null) {
-        responseStream?.cancel?.();
-        const err = new Error('Cancelled');
-        err.name = CANCEL_ERROR_NAME;
-        throw err;
+      if (!response.toolCalls.length) {
+        await this.applyResponse(response, run.promptId);
+        return;
       }
 
-      this.activeStreamResponse = responseStream;
+      if (isLastRequest || response.toolCalls.length !== 1) {
+        throw new Error('The assistant must request one renderer change at a time.');
+      }
+      const nextContext = await this.switchRendererForToolCall(
+        response.toolCalls[0],
+        run.context,
+        run.requestId,
+        run.rendererUrl,
+        run.toolSignal,
+      );
+      if (!nextContext) {
+        return;
+      }
+      run.context = nextContext;
+      run.rendererUrl = this.configProvider.rendererUrl();
+      run.catalogId = this.getActiveCatalogId();
+    }
+  }
 
-      // Loop asynchronously over incoming stream packets to compile text
-      let accumulatedRawText = '';
-      let accumulatedThinking = '';
-      for await (const chunk of responseStream.contentStream) {
-        if (this.activePromptId !== promptId) return;
-        accumulatedRawText += chunk.content;
-        if (chunk.thinking) {
-          accumulatedThinking += chunk.thinking;
-        }
+  /**
+   * Sends one model request and streams its response into the prompt's model turn.
+   * Every request but the last offers the model the renderer tool.
+   *
+   * @return The finished response, or null if the conversation was cleared first.
+   * @throws If the response is cancelled, including because the renderer changed.
+   */
+  private async streamModelResponse(
+    run: PromptRun,
+    isLastRequest: boolean,
+  ): Promise<ModelResponse | null> {
+    // Trigger streaming GenAI completions call using client facade
+    const responseStream = await this.llmClient.chatStream(
+      run.context,
+      isLastRequest ? undefined : {tools: [this.rendererTool.definition()]},
+    );
+    run.responseStream = responseStream;
 
-        // Update history bubble in real-time with trailing pulse indicator
-        this.updateTargetModelMessage(promptId, {
-          role: MessageRole.MODEL,
-          content: this.chatCleaner.appendPulse(accumulatedRawText),
-          thinking: accumulatedThinking,
-          promptId,
-        });
+    // The conversation was cleared while the stream connection was establishing.
+    if (run.requestId !== this.activeRequestId) {
+      responseStream.cancel?.();
+      return null;
+    }
+
+    // If a cancel was requested while the stream connection was establishing
+    if (this.cancelReason !== null) {
+      responseStream.cancel?.();
+      throw this.cancelError();
+    }
+
+    this.activeStreamResponse = responseStream;
+    this.throwIfRendererChanged(run.rendererUrl, run.catalogId);
+
+    // Loop asynchronously over incoming stream packets to compile text
+    const toolCalls: LlmToolCall[] = [];
+    let accumulatedRawText = '';
+    let accumulatedThinking = '';
+    for await (const chunk of responseStream.contentStream) {
+      if (run.requestId !== this.activeRequestId) {
+        return null;
+      }
+      this.throwIfRendererChanged(run.rendererUrl, run.catalogId);
+      if (chunk.toolCalls) {
+        toolCalls.push(...chunk.toolCalls);
+      }
+      accumulatedRawText += chunk.content;
+      if (chunk.thinking) {
+        accumulatedThinking += chunk.thinking;
       }
 
-      // Stream exhausted, resolve final complete text and remove visual loading indicator
-      const finalRawText = await responseStream.complete;
-      if (this.activePromptId !== promptId) return;
-
-      // Log the raw LLM response telemetry
-      this.chatState.addRawLlmLog(LlmLogType.RESPONSE, finalRawText);
-      this.updateTargetModelMessage(promptId, {
+      // Update history bubble in real-time with trailing pulse indicator
+      this.updateTargetModelMessage(run.promptId, {
         role: MessageRole.MODEL,
-        content: finalRawText,
+        content: this.chatCleaner.appendPulse(accumulatedRawText),
         thinking: accumulatedThinking,
-        promptId,
+        promptId: run.promptId,
       });
+    }
 
-      this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
-      await this.processRawLlmPayload(finalRawText, promptId);
-    } catch (err: unknown) {
-      if (this.activePromptId !== promptId) return;
-      // If it was cancelled, don't show an error. Just leave what was generated or remove the bubble.
-      // But we probably want to just reset the UI lock.
-      if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
-        this.finalizeStream(PipelineStatus.IDLE);
-        // Replace trailing pulse or partial JSON with stopped message, and force non-snapshot
-        this.updateTargetModelMessage(promptId, {
-          content:
-            this.cancelReason === CancelReason.RENDERER_CHANGED
-              ? RENDERER_CHANGED_NOTE
-              : STOPPED_RESPONSE_MESSAGE,
-          isCancelled: true,
-          promptId,
-        });
-      } else {
-        this.handleConnectivityError(err, trimmed, attachments, promptId);
-      }
+    // Stream exhausted, resolve final complete text
+    const text = await responseStream.complete;
+    if (run.requestId !== this.activeRequestId) {
+      return null;
+    }
+    this.throwIfRendererChanged(run.rendererUrl, run.catalogId);
+    return {text, thinking: accumulatedThinking, toolCalls};
+  }
+
+  /**
+   * Shows a finished response in the prompt's model turn, without the loading
+   * indicator, and applies it to the canvas.
+   */
+  private async applyResponse(response: ModelResponse, promptId: string): Promise<void> {
+    // Log the raw LLM response telemetry
+    this.chatState.addRawLlmLog(LlmLogType.RESPONSE, response.text);
+    this.updateTargetModelMessage(promptId, {
+      role: MessageRole.MODEL,
+      content: response.text,
+      thinking: response.thinking,
+      promptId,
+    });
+
+    this.chatState.setPipelineStatus(PipelineStatus.RECEIVED_RAW);
+    await this.processRawLlmPayload(response.text, promptId);
+  }
+
+  /**
+   * Ends a prompt whose response failed. A cancelled response is replaced with a note
+   * saying why it stopped; any other failure is shown as an error. A prompt whose
+   * conversation was cleared is no longer shown, so it's left alone.
+   */
+  private handlePromptError(err: unknown, run: PromptRun): void {
+    if (run.requestId !== this.activeRequestId) {
+      return;
+    }
+    // If it was cancelled, don't show an error. Just leave what was generated or remove the bubble.
+    // But we probably want to just reset the UI lock.
+    if (err && typeof err === 'object' && 'name' in err && err.name === CANCEL_ERROR_NAME) {
+      this.finalizeStream(PipelineStatus.IDLE);
+      // Replace trailing pulse or partial JSON with stopped message, and force non-snapshot
+      this.updateTargetModelMessage(run.promptId, {
+        content:
+          this.cancelReason === CancelReason.RENDERER_CHANGED
+            ? RENDERER_CHANGED_NOTE
+            : STOPPED_RESPONSE_MESSAGE,
+        isCancelled: true,
+        promptId: run.promptId,
+      });
+    } else {
+      this.handleConnectivityError(err, run.prompt, run.attachments, run.promptId);
+    }
+  }
+
+  /**
+   * Lets go of the prompt's renderer-switch controller and stream, unless a newer
+   * request has already replaced them.
+   */
+  private endPrompt(run: PromptRun): void {
+    if (this.activeRequestId === run.requestId) {
+      this.toolAbortController = undefined;
+    }
+    if (
+      this.activeRequestId === run.requestId &&
+      this.activeStreamResponse === run.responseStream
+    ) {
+      this.activeStreamResponse = undefined;
+    }
+  }
+
+  /**
+   * Switches to the renderer the model asked for with the renderer tool, instead of
+   * answering, and returns the request to send next: the same conversation, told to
+   * use the newly selected catalog. The switch is the request's own, so it isn't
+   * handled as a renderer change (see the constructor); the canvas is rebuilt for the
+   * new catalog by the next response.
+   *
+   * @return The next request's messages, or null if the conversation was cleared
+   *     during the switch.
+   * @throws If the call is invalid, the switch fails, or the response is cancelled.
+   */
+  private async switchRendererForToolCall(
+    call: LlmToolCall,
+    context: LlmMessage[],
+    requestId: number,
+    rendererUrlAtSubmit: string,
+    signal: AbortSignal,
+  ): Promise<LlmMessage[] | null> {
+    if (this.cancelReason !== null) {
+      throw this.cancelError();
+    }
+    const renderer = this.rendererTool.rendererFor(call);
+    const changedRenderer = renderer.rendererUrl !== rendererUrlAtSubmit;
+    this.expectedToolRendererUrl = changedRenderer ? renderer.rendererUrl : undefined;
+    try {
+      await this.rendererSelection.selectRenderer(renderer.id, signal);
     } finally {
-      if (this.activeStreamResponse === responseStream) {
-        this.activeStreamResponse = undefined;
+      if (requestId === this.activeRequestId) {
+        this.expectedToolRendererUrl = undefined;
       }
     }
+    if (requestId !== this.activeRequestId) {
+      return null;
+    }
+    if (this.cancelReason !== null) {
+      throw this.cancelError();
+    }
+    if (changedRenderer) {
+      this.stateSync.flushDraft();
+    }
+    // Retain the user's intent and attachments. Earlier layouts remain
+    // reference material, while only the newly selected catalog is allowed.
+    const nextContext: LlmMessage[] = [
+      {
+        role: MessageRole.SYSTEM,
+        content:
+          this.systemPrompt() +
+          '\nThe renderer has been selected. Use only this catalog. Rebuild any prior layout using its supported components and emit a complete createSurface/updateComponents/updateDataModel sequence.',
+      },
+      ...context.filter(message => message.role !== MessageRole.SYSTEM),
+    ];
+    this.chatState.addRawLlmLog(LlmLogType.REQUEST, nextContext);
+    return nextContext;
+  }
+
+  private cancelError(): Error {
+    const error = new Error('Cancelled');
+    error.name = CANCEL_ERROR_NAME;
+    return error;
   }
 
   /**
@@ -588,6 +832,28 @@ export class ChatCoordinator {
       this.finalizeStream(PipelineStatus.FAILED);
       throw err;
     }
+  }
+
+  private getActiveCatalogId(): string {
+    const catalog = this.catalogManagement.activeCatalog();
+    return (catalog && getCatalogId(catalog)) || '';
+  }
+
+  /**
+   * Cancels the response once the renderer, or its catalog, is no longer the one it's
+   * being written for, so it's never applied to the new one. handleRendererChange
+   * cancels it too, but only once the renderer URL change has been observed, and the
+   * response can arrive before then.
+   */
+  private throwIfRendererChanged(rendererUrlAtSubmit: string, catalogIdAtSubmit: string): void {
+    if (
+      this.configProvider.rendererUrl() === rendererUrlAtSubmit &&
+      this.getActiveCatalogId() === catalogIdAtSubmit
+    ) {
+      return;
+    }
+    this.cancelStream(CancelReason.RENDERER_CHANGED);
+    throw this.cancelError();
   }
 
   /**
