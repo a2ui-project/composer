@@ -117,6 +117,7 @@
 
     .inspector-resize-handle {
       width: 10px;
+      flex-shrink: 0;
       height: 100%;
       align-self: stretch;
       margin-left: -5px;
@@ -155,7 +156,6 @@
     }
 
     .inspector-column {
-      flex-shrink: 0;
       height: 100%;
       z-index: 10;
       overflow: hidden;

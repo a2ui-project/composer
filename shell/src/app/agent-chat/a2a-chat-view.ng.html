@@ -107,7 +107,7 @@
           <div class="resize-grip"></div>
         </div>
 
-        <div class="inspector-column" [style.width.px]="inspectorWidth()">
+        <div #inspectorColumn class="inspector-column" [style.width.px]="inspectorWidth()">
           @if (isMessageInspectorOpen()) {
             <a2ui-composer-message-inspector
               [events]="inspectorEvents()"

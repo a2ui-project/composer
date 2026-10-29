@@ -18,6 +18,7 @@ import {NgTemplateOutlet} from '@angular/common';
 import {
   Component,
   DestroyRef,
+  ElementRef,
   computed,
   effect,
   inject,
@@ -162,6 +163,7 @@ export class A2aChatView implements OnInit {
   private readonly initTimestamp = Date.now();
 
   private readonly configPanelTemplate = viewChild.required<TemplateRef<void>>('configPanel');
+  private readonly inspectorColumn = viewChild<ElementRef<HTMLElement>>('inspectorColumn');
 
   /** Discovered A2A AgentCard metadata for the connected agent. */
   protected readonly agentCard = signal<AgentCard | null>(null);
@@ -850,11 +852,12 @@ export class A2aChatView implements OnInit {
     // Capture the pointer on the handle so fast drags over adjacent columns
     // (such as preview iframes) continue routing pointer events here instead of
     // being swallowed by the iframe's browsing context.
-    const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const target = event.currentTarget as HTMLElement | null;
     target?.setPointerCapture?.(event.pointerId);
 
     const startX = event.clientX;
-    const startWidth = this.inspectorWidth();
+    // Set `startWidth` to the flexbox-constrained width of `.inspector-column`.
+    const startWidth = this.inspectorColumn()?.nativeElement.clientWidth || this.inspectorWidth();
     const resizeController = new AbortController();
     const {signal} = resizeController;
 
@@ -886,13 +889,15 @@ export class A2aChatView implements OnInit {
   }
 
   protected handleInspectorResizeKey(event: KeyboardEvent): void {
+    // Set `currentWidth` to the flexbox-constrained width of `.inspector-column`.
+    const currentWidth = this.inspectorColumn()?.nativeElement.clientWidth || this.inspectorWidth();
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
       const maxWidth = Math.max(300, Math.floor(window.innerWidth * 0.7));
-      this.inspectorWidth.update(w => Math.min(w + 24, maxWidth));
+      this.inspectorWidth.set(Math.min(currentWidth + 24, maxWidth));
     } else if (event.key === 'ArrowRight') {
       event.preventDefault();
-      this.inspectorWidth.update(w => Math.max(w - 24, 280));
+      this.inspectorWidth.set(Math.max(currentWidth - 24, 280));
     }
   }
 
