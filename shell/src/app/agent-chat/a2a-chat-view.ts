@@ -850,10 +850,11 @@ export class A2aChatView implements OnInit {
     // Capture the pointer on the handle so fast drags over adjacent columns
     // (such as preview iframes) continue routing pointer events here instead of
     // being swallowed by the iframe's browsing context.
-    const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const target = event.currentTarget as HTMLElement | null;
     target?.setPointerCapture?.(event.pointerId);
 
     const startX = event.clientX;
+    // Set `startWidth` to the flexbox-constrained width of `.inspector-column` (`target.nextElementSibling`).
     const startWidth = target?.nextElementSibling?.clientWidth || this.inspectorWidth();
     const resizeController = new AbortController();
     const {signal} = resizeController;
@@ -886,7 +887,8 @@ export class A2aChatView implements OnInit {
   }
 
   protected handleInspectorResizeKey(event: KeyboardEvent): void {
-    const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const target = event.currentTarget as HTMLElement | null;
+    // Set `currentWidth` to the flexbox-constrained width of `.inspector-column` (`target.nextElementSibling`).
     const currentWidth = target?.nextElementSibling?.clientWidth || this.inspectorWidth();
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
