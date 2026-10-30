@@ -3347,7 +3347,7 @@ __metadata:
     jsdom: "npm:29.1.1"
     lit: "npm:3.3.3"
     prettier: "npm:3.9.6"
-    re2js: "npm:2.8.6"
+    re2js: "npm:2.8.7"
     react: "npm:19.2.8"
     react-dom: "npm:19.2.8"
     typescript: "npm:6.0.3"
@@ -6678,10 +6678,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"re2js@npm:2.8.6":
-  version: 2.8.6
-  resolution: "re2js@npm:2.8.6"
-  checksum: 10c0/70a7ae4778429ddd8dfef6af3ee65e152999e31a894f19f3eb4820f5267d2ac0c5797b60f988139a5d72a9f06bb5c0b7fd05c4aaa6272970b006772aa956fb51
+"re2js@npm:2.8.7":
+  version: 2.8.7
+  resolution: "re2js@npm:2.8.7"
+  checksum: 10c0/ff396923b547b46cd5ade9071e4ee16305e8d64ff46828ae2721d8f6a3c5dbcf564a94b86f5cd55e0ad97dbf37dce7bbb25bb4769bf0f19b76baff74f862647c
   languageName: node
   linkType: hard
 
