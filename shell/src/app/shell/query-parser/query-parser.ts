@@ -15,6 +15,7 @@
  */
 
 import type {TaggedLogger} from '../../debug/error-logger.service';
+import type {EnvironmentContextService} from '../startup-resolution/state/environment-context.service';
 
 export interface SharedA2uiParseResult {
   payload: string | null;
@@ -28,9 +29,16 @@ export interface SharedA2uiParseResult {
 export class QueryParser {
   private static readonly PAYLOAD_PREFIX = 'd1.';
 
-  /** @nocollapse */
+  /**
+   * Returns the first `renderer` parameter that is an HTTP(S) URL, resolved the
+   * same way as a configured renderer URL, so a link may name a renderer
+   * relative to Composer's page (see `RendererConfig.rendererUrl`).
+   *
+   * @nocollapse
+   */
   static parseRendererUrl(
     searchOrHashString: string,
+    environmentContext: Pick<EnvironmentContextService, 'resolveRendererUrl'>,
     logger: Pick<TaggedLogger, 'warn'>,
   ): string | null {
     const clean = searchOrHashString ? searchOrHashString.replace(/^[?#]/, '') : '';
@@ -40,12 +48,9 @@ export class QueryParser {
       return null;
     }
 
-    const baseOrigin = globalThis.location?.origin || '';
     for (const uriCandidate of renderers) {
       try {
-        const validUrl = uriCandidate.startsWith('/')
-          ? new URL(uriCandidate, baseOrigin)
-          : new URL(uriCandidate);
+        const validUrl = environmentContext.resolveRendererUrl(uriCandidate);
         if (validUrl.protocol === 'http:' || validUrl.protocol === 'https:') {
           return validUrl.toString();
         }

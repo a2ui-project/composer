@@ -174,6 +174,32 @@ describe('RendererSelection', () => {
     expect(service.error()).toBeNull();
   });
 
+  it('does not take the catalog of the previous page while the new renderer loads', async () => {
+    // Settings points the iframe at the new renderer before the old page unloads, and
+    // the host still reports the old page as ready until the new one sends its handshake.
+    selectRenderer.mockImplementation(async id => {
+      selectedRendererId.set(id);
+      resolvedUrl.set('/lit/');
+      frame.src = '/lit/?origin=http%3A%2F%2Flocalhost%3A3000&theme=dark';
+      return true;
+    });
+    const switched = vi.fn();
+    const selection = service.selectRenderer('lit').then(switched);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sendMessage).not.toHaveBeenCalledWith({type: PreviewBridgeMessageType.GET_CATALOG});
+    // The old page, still in the iframe's window, sends its own catalog.
+    emit(PreviewBridgeMessageType.A2UI_CATALOG, standardCatalog);
+    activeCatalog.set(structuredClone(standardCatalog));
+    TestBed.flushEffects();
+    await Promise.resolve();
+    expect(switched).not.toHaveBeenCalled();
+    ready();
+    finishCatalog();
+    await selection;
+    expect(switched).toHaveBeenCalledOnce();
+  });
+
   it('rejects unregistered IDs without changing settings', async () => {
     await expect(service.selectRenderer('https://untrusted.example')).rejects.toThrow('registered');
     expect(selectRenderer).not.toHaveBeenCalled();
@@ -200,7 +226,7 @@ describe('RendererSelection', () => {
     TestBed.flushEffects();
     await selection;
     expect(switched).toHaveBeenCalledOnce();
-    expect(selectRenderer).toHaveBeenCalledWith('lit');
+    expect(selectRenderer).toHaveBeenCalledWith('lit', undefined);
     expect(service.isSwitching()).toBe(false);
     expect(service.error()).toBeNull();
   });
@@ -310,6 +336,40 @@ describe('RendererSelection', () => {
     expect(service.isSwitching()).toBe(false);
   });
 
+  it('cancels a pending handshake and does not accept late messages', async () => {
+    const controller = new AbortController();
+    const selection = service.selectRenderer('lit', controller.signal);
+    const cancellation = new Error('Renderer change canceled.');
+    const rejection = expect(selection).rejects.toBe(cancellation);
+    await Promise.resolve();
+    ready();
+    controller.abort(cancellation);
+    await rejection;
+    finishCatalog();
+    expect(service.error()).toContain('canceled');
+    expect(service.isSwitching()).toBe(false);
+  });
+
+  it('does not change settings for an already canceled request', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(service.selectRenderer('lit', controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(selectRenderer).not.toHaveBeenCalled();
+  });
+
+  it('preserves the callers cancellation error', async () => {
+    const controller = new AbortController();
+    const cancellation = new Error('Generation stopped.');
+    cancellation.name = 'CancelError';
+    const selection = service.selectRenderer('lit', controller.signal);
+    const rejection = expect(selection).rejects.toBe(cancellation);
+    await Promise.resolve();
+    controller.abort(cancellation);
+    await rejection;
+  });
+
   it('keeps the active label on the actual renderer when settings deny a new selection', async () => {
     selectRenderer.mockImplementation(async id => {
       selectedRendererId.set(id);
@@ -345,6 +405,25 @@ describe('RendererSelection', () => {
     const selection = service.selectRenderer('lit');
     const rejection = expect(selection).rejects.toThrow('did not become ready');
     await vi.advanceTimersByTimeAsync(15_000);
+    await rejection;
+    expect(service.isSwitching()).toBe(true);
+    approve(false);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(service.isSwitching()).toBe(false);
+  });
+
+  it('keeps selection locked while settings approval is pending after cancellation', async () => {
+    let approve!: (allowed: boolean) => void;
+    selectRenderer.mockReturnValue(
+      new Promise(resolve => {
+        approve = resolve;
+      }),
+    );
+    const controller = new AbortController();
+    const selection = service.selectRenderer('lit', controller.signal);
+    const rejection = expect(selection).rejects.toMatchObject({name: 'AbortError'});
+    controller.abort();
     await rejection;
     expect(service.isSwitching()).toBe(true);
     approve(false);
